@@ -1,0 +1,8 @@
+{% extends "_base.html" %}
+{% block content %}
+<h2>Dashboard</h2>
+<ul>
+  <li>Total cases: {{ cases_count }}</li>
+  <li>Jobs — Pending: {{ jobs_pending }}, Running: {{ jobs_running }}, Done: {{ jobs_done }}, Failed: {{ jobs_failed }}</li>
+</ul>
+{% endblock %}

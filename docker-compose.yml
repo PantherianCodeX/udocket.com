@@ -1,0 +1,35 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.api
+    env_file: .env
+    volumes:
+      - ./storage:/app/storage
+      - ./.env:/app/.env:ro
+    ports:
+      - "${API_PORT:-8080}:8080"
+
+  admin:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.admin
+    env_file: .env
+    volumes:
+      - ./storage:/app/storage
+      - ./.env:/app/.env:ro
+    ports:
+      - "${ADMIN_PORT:-8081}:8081"
+    depends_on:
+      - api
+
+  worker:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.worker
+    env_file: .env
+    volumes:
+      - ./storage:/app/storage
+      - ./.env:/app/.env:ro
+    depends_on:
+      - api

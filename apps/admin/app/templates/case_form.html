@@ -1,0 +1,12 @@
+{% extends "_base.html" %}
+{% block content %}
+<h2>New Case</h2>
+<form action="/admin/cases" method="post">
+  <p>Title: <input name="title" required></p>
+  <p>Reference: <input name="reference"></p>
+  <p>Party 1: <input name="party_1"></p>
+  <p>Party 2: <input name="party_2"></p>
+  <p>Notes:<br><textarea name="notes" rows="5" cols="60"></textarea></p>
+  <p><button type="submit">Create</button></p>
+</form>
+{% endblock %}
