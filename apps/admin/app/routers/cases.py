@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from db.session import SessionLocal
 from db.models.case import Case
 from db.models.job import Job
+from packages.udocket_core.storage.paths import case_dir
 from uuid import uuid4
 from config.settings import settings
 
@@ -29,6 +30,12 @@ def create_case(request: Request, title: str = Form(...), reference: str = Form(
         c = Case(id=cid, title=title.strip(), reference=reference.strip(),
                  party_1=party_1.strip(), party_2=party_2.strip(), notes=notes)
         s.add(c); s.commit()
+    # Proactively create case folder structure on case creation
+    try:
+        case_dir(cid)
+        print(f"[admin] created case folders for {cid}")
+    except Exception as e:
+        print(f"[admin] warning: could not create case folders for {cid}: {e}")
     return RedirectResponse(url=f"/admin/cases/{cid}", status_code=303)
 
 @router.get("/admin/cases/{case_id}")

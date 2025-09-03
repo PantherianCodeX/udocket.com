@@ -1,5 +1,5 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, UploadFile, File, HTTPException, Form
+from typing import Literal
 from uuid import uuid4
 from hashlib import sha256
 from db.session import SessionLocal
@@ -15,7 +15,14 @@ def _mime_allowed(mime: str) -> bool:
     return mime in allowed
 
 @router.post("", status_code=201)
-async def upload(case_id: str, file: UploadFile = File(...)):
+async def upload(
+    case_id: str,
+    transcription_mode: Literal["batch", "on-demand"] = Form("batch"),
+    diarization: bool = Form(False),
+    file: UploadFile = File(...),
+):
+    if diarization and transcription_mode != "batch":
+        raise HTTPException(400, "Diarization only supported in batch mode")
     if not _mime_allowed(file.content_type):
         raise HTTPException(400, f"Unsupported file type: {file.content_type}")
 
@@ -28,8 +35,15 @@ async def upload(case_id: str, file: UploadFile = File(...)):
     dest.write_bytes(data)
 
     with SessionLocal() as s:
-        j = Job(id=job_id, case_id=case_id, audio_path=str(dest), status="PENDING",
-                file_sha256=sha256(data).hexdigest())
+        j = Job(
+            id=job_id,
+            case_id=case_id,
+            audio_path=str(dest),
+            status="PENDING",
+            file_sha256=sha256(data).hexdigest(),
+            transcription_mode=transcription_mode,
+            diarization=diarization,
+        )
         s.add(j); s.commit()
 
     return {"job_id": job_id, "status": "PENDING"}

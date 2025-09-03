@@ -37,6 +37,13 @@ class Settings(BaseSettings):
         "audio/wav,audio/x-wav,audio/mpeg,audio/mp4,audio/aac,audio/ogg,audio/flac,audio/x-flac"
     )
 
+    # Azure Blob Storage (for batch mode)
+    AZURE_BLOB_ACCOUNT: str | None = None
+    AZURE_BLOB_KEY: str | None = None
+    AZURE_BLOB_CONTAINER: str | None = None
+    AZURE_BLOB_CONNECTION_STRING: str | None = None
+    AZURE_BLOB_SAS_TTL_MIN: int = 120
+
     @field_validator("AZURE_SPEECH_REGION")
     def _ca_only(cls, v):
         if v not in ("canadacentral", "canadaeast"):

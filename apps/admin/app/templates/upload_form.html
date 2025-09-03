@@ -3,6 +3,26 @@
 <h2>Upload Audio</h2>
 <form action="/admin/cases/{{ case_id }}/upload-audio" method="post" enctype="multipart/form-data">
   <input type="file" name="file" required>
+  <label for="transcription_mode">Transcription:</label>
+  <select name="transcription_mode" id="transcription_mode">
+    <option value="batch" selected>Batch</option>
+    <option value="on-demand">On-demand</option>
+  </select>
+  <label>
+    <input type="checkbox" name="diarization" id="diarization">
+    Enable diarization
+  </label>
   <button type="submit">Upload</button>
+  <script>
+    const modeSel = document.getElementById('transcription_mode');
+    const diarCb = document.getElementById('diarization');
+    function toggleDiarization() {
+      const isBatch = modeSel.value === 'batch';
+      diarCb.disabled = !isBatch;
+      if (!isBatch) diarCb.checked = false;
+    }
+    modeSel.addEventListener('change', toggleDiarization);
+    toggleDiarization();
+  </script>
 </form>
 {% endblock %}
