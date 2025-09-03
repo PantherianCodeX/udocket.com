@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, Text, ForeignKey, Boolean
+from sqlalchemy import Column, String, DateTime, Text, ForeignKey, Boolean, Integer
 from sqlalchemy.sql import func
 from db.base import Base
 
@@ -14,6 +14,17 @@ class Job(Base):
     file_sha256 = Column(String(64), nullable=True)
     transcription_mode = Column(String(16), nullable=False, default="on-demand")
     diarization = Column(Boolean, nullable=False, default=False)
+    # Persisted metrics
+    audio_bytes = Column(Integer, nullable=True)
+    audio_mime = Column(String(128), nullable=True)
+    audio_ext = Column(String(16), nullable=True)
+    audio_mtime = Column(DateTime(timezone=True), nullable=True)
+    audio_bitrate_kbps = Column(Integer, nullable=True)
+    audio_channels = Column(Integer, nullable=True)
+    audio_duration_sec = Column(Integer, nullable=True)
+    sample_rate_hz = Column(Integer, nullable=True)
+    transcript_words = Column(Integer, nullable=True)
+    transcript_bytes = Column(Integer, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     started_at = Column(DateTime(timezone=True), nullable=True)
     finished_at = Column(DateTime(timezone=True), nullable=True)

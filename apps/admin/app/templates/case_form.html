@@ -1,12 +1,35 @@
 {% extends "_base.html" %}
 {% block content %}
-<h2>New Case</h2>
-<form action="/admin/cases" method="post">
-  <p>Title: <input name="title" required></p>
-  <p>Reference: <input name="reference"></p>
-  <p>Party 1: <input name="party_1"></p>
-  <p>Party 2: <input name="party_2"></p>
-  <p>Notes:<br><textarea name="notes" rows="5" cols="60"></textarea></p>
-  <p><button type="submit">Create</button></p>
-</form>
+<h2 class="text-2xl font-semibold">New Case</h2>
+<form action="/admin/cases" method="post" class="mt-6 grid grid-cols-1 gap-4 max-w-2xl">
+  <div>
+    <label class="block text-sm font-medium text-slate-600 dark:text-slate-300">Title</label>
+    <input name="title" required class="mt-1 w-full rounded-md border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm focus:border-brand-500 focus:ring-brand-500" placeholder="e.g. Smith v. Jones" />
+  </div>
+  <div>
+    <label class="block text-sm font-medium text-slate-600 dark:text-slate-300">Reference</label>
+    <input name="reference" class="mt-1 w-full rounded-md border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm focus:border-brand-500 focus:ring-brand-500" placeholder="Internal reference (optional)" />
+  </div>
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+    <div>
+      <label class="block text-sm font-medium text-slate-600 dark:text-slate-300">Party 1</label>
+      <input name="party_1" class="mt-1 w-full rounded-md border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm focus:border-brand-500 focus:ring-brand-500" />
+    </div>
+    <div>
+      <label class="block text-sm font-medium text-slate-600 dark:text-slate-300">Party 2</label>
+      <input name="party_2" class="mt-1 w-full rounded-md border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm focus:border-brand-500 focus:ring-brand-500" />
+    </div>
+  </div>
+  <div>
+    <label class="block text-sm font-medium text-slate-600 dark:text-slate-300">Notes</label>
+    <textarea name="notes" rows="6" class="mt-1 w-full rounded-md border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm focus:border-brand-500 focus:ring-brand-500" placeholder="Any context or instructions..."></textarea>
+  </div>
+  <div class="pt-2 flex items-center gap-2">
+    <a href="/admin/cases" class="px-3 py-2 rounded-md border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800">Cancel</a>
+    <button type="submit" class="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-brand-600 text-white hover:bg-brand-700">
+      <i class="ph ph-check"></i>
+      Create
+    </button>
+  </div>
+  </form>
 {% endblock %}

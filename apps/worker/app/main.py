@@ -1,8 +1,8 @@
-import time, datetime, sys
+import time, datetime, sys, json, subprocess
 from pathlib import Path
 from sqlalchemy.orm import Session
-from sqlalchemy import select
-from db.session import SessionLocal, engine
+from sqlalchemy import select, update
+from db.session import SessionLocal, engine, ensure_jobs_schema
 from db.base import Base
 from db.models.case import Case  # ensure table is registered
 from db.models.job import Job
@@ -13,14 +13,25 @@ from apps.worker.app.blob_upload import upload_with_sas
 
 # Ensure tables exist (useful when worker starts before API/Admin)
 Base.metadata.create_all(bind=engine)
+ensure_jobs_schema()
 
 def claim_pending(session: Session):
-    job = session.execute(select(Job).where(Job.status=="PENDING")).scalars().first()
-    if job:
-        job.status = "RUNNING"
-        job.started_at = datetime.datetime.utcnow()
-        session.commit()
-    return job
+    # Atomically claim a single pending job to avoid duplicate processing across workers.
+    job_id = session.execute(
+        select(Job.id).where(Job.status == "PENDING").order_by(Job.created_at).limit(1)
+    ).scalar_one_or_none()
+    if not job_id:
+        return None
+    now = datetime.datetime.utcnow()
+    res = session.execute(
+        update(Job)
+        .where(Job.id == job_id, Job.status == "PENDING")
+        .values(status="RUNNING", started_at=now)
+    )
+    session.commit()
+    if res.rowcount == 1:
+        return session.get(Job, job_id)
+    return None
 
 def build_agent_cmd(job: Job) -> str:
     case_directory = case_dir(job.case_id)
@@ -45,8 +56,51 @@ def build_agent_cmd(job: Job) -> str:
         cmd += " --diarization"
     return cmd
 
+def probe_audio(path: str) -> dict:
+    try:
+        # Use ffprobe to get audio stream info
+        cmd = [
+            'ffprobe','-v','error','-print_format','json','-select_streams','a:0','-show_streams','-show_format', path
+        ]
+        out = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+        data = json.loads(out.decode('utf-8', errors='ignore'))
+        stream = (data.get('streams') or [{}])[0]
+        fmt = data.get('format') or {}
+        # Duration preference: stream then format
+        dur = None
+        for key in ('duration','duration_ts'):
+            v = stream.get(key) or fmt.get(key)
+            if v is not None:
+                try:
+                    dur = float(v)
+                    break
+                except Exception:
+                    pass
+        # Bitrate preference: stream then format
+        br = None
+        for key in ('bit_rate',):
+            v = stream.get(key) or fmt.get(key)
+            if v is not None:
+                try:
+                    br = int(v)
+                except Exception:
+                    pass
+        ch = stream.get('channels')
+        sr = stream.get('sample_rate')
+        if isinstance(sr, str):
+            try: sr = int(sr)
+            except Exception: sr = None
+        return {
+            'duration_sec': int(round(dur)) if isinstance(dur, (int,float)) else None,
+            'bitrate_kbps': int(round(br/1000)) if isinstance(br, int) and br > 0 else None,
+            'channels': int(ch) if ch is not None else None,
+            'sample_rate_hz': int(sr) if sr is not None else None,
+        }
+    except Exception:
+        return {'duration_sec': None, 'bitrate_kbps': None, 'channels': None, 'sample_rate_hz': None}
+
 def main():
-    print("[worker] starting; polling for jobs...", file=sys.stderr, flush=True)
+    print("[worker] starting; polling for jobs...", flush=True)
     last_idle_log = 0.0
     while True:
         with SessionLocal() as s:
@@ -54,19 +108,27 @@ def main():
             if not job:
                 now = time.monotonic()
                 if now - last_idle_log > 10:
-                    print("[worker] idle; no pending jobs", file=sys.stderr, flush=True)
+                    print("[worker] idle; no pending jobs", flush=True)
                     last_idle_log = now
                 time.sleep(settings.POLL_INTERVAL_SEC); continue
 
             try:
-                print(f"[worker] claimed job {job.id} case={job.case_id} mode={job.transcription_mode} diar={job.diarization}", file=sys.stderr, flush=True)
+                print(f"[worker] claimed job {job.id} case={job.case_id} mode={job.transcription_mode} diar={job.diarization}", flush=True)
                 cmd = build_agent_cmd(job)
+                # Probe audio technicals if not already set
+                if job.audio_path and (job.audio_bitrate_kbps is None or job.audio_channels is None or job.audio_duration_sec is None):
+                    info = probe_audio(job.audio_path)
+                    job.audio_bitrate_kbps = info.get('bitrate_kbps')
+                    job.audio_channels = info.get('channels')
+                    job.audio_duration_sec = info.get('duration_sec')
+                    job.sample_rate_hz = info.get('sample_rate_hz')
+                    s.commit()
             except Exception as e:
                 job.finished_at = datetime.datetime.utcnow()
                 job.status = "FAILED"
                 job.error_message = (str(e) or "upload/build command failed")[:2000]
                 s.commit()
-                print(f"[worker] job {job.id} failed to build cmd: {job.error_message}", file=sys.stderr, flush=True)
+                print(f"[worker] job {job.id} failed to build cmd: {job.error_message}", flush=True)
                 continue
 
             try:
@@ -76,7 +138,7 @@ def main():
                 job.status = "FAILED"
                 job.error_message = (str(e) or "agent execution failed")[:2000]
                 s.commit()
-                print(f"[worker] job {job.id} execution error: {job.error_message}", file=sys.stderr, flush=True)
+                print(f"[worker] job {job.id} execution error: {job.error_message}", flush=True)
                 continue
 
             job.finished_at = datetime.datetime.utcnow()
@@ -85,13 +147,24 @@ def main():
                 tpath = transcript_path(job.case_id, job.id)
                 if tpath.exists():
                     job.transcript_path = str(tpath)
+                    # Persist transcript stats
+                    try:
+                        st = tpath.stat()
+                        job.transcript_bytes = st.st_size
+                    except Exception:
+                        job.transcript_bytes = None
+                    try:
+                        txt = tpath.read_text(encoding='utf-8', errors='ignore')
+                        job.transcript_words = len([w for w in txt.split() if w])
+                    except Exception:
+                        job.transcript_words = None
                 job.status = "SUCCEEDED"
                 job.error_message = None
-                print(f"[worker] job {job.id} succeeded", file=sys.stderr, flush=True)
+                print(f"[worker] job {job.id} succeeded", flush=True)
             else:
                 job.status = "FAILED"
                 job.error_message = (err or b"").decode("utf-8")[:2000]
-                print(f"[worker] job {job.id} failed: {job.error_message}", file=sys.stderr, flush=True)
+                print(f"[worker] job {job.id} failed: {job.error_message}", flush=True)
             s.commit()
 
 if __name__ == "__main__":

@@ -9,6 +9,7 @@ from db.models.case import Case
 from db.models.job import Job
 from packages.udocket_core.storage.paths import audio_path
 from config.settings import settings
+import os, datetime
 
 router = APIRouter()
 templates = Jinja2Templates(directory="apps/admin/app/templates")
@@ -42,6 +43,13 @@ async def upload_audio(
 
     with SessionLocal() as s:
         if not s.get(Case, case_id): raise HTTPException(404, "Case not found")
+        # Gather audio metadata
+        st = os.stat(dest)
+        audio_bytes = st.st_size
+        audio_mime = file.content_type
+        audio_ext = (file.filename.rsplit('.', 1)[-1] if '.' in file.filename else '').lower()
+        audio_mtime = datetime.datetime.utcfromtimestamp(st.st_mtime)
+
         j = Job(
             id=job_id,
             case_id=case_id,
@@ -50,6 +58,10 @@ async def upload_audio(
             file_sha256=sha256(data).hexdigest(),
             transcription_mode=transcription_mode,
             diarization=diarization,
+            audio_bytes=audio_bytes,
+            audio_mime=audio_mime,
+            audio_ext=audio_ext,
+            audio_mtime=audio_mtime,
         )
         s.add(j); s.commit()
     return RedirectResponse(url=f"/admin/cases/{case_id}", status_code=303)

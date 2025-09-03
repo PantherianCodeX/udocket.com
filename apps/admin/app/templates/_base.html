@@ -1,19 +1,70 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>uDocket Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    html, body { font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', sans-serif; }
+  </style>
   <link rel="stylesheet" href="/static/styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>📄</text></svg>">
+  {% block head %}{% endblock %}
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eef7ff', 100: '#d9ecff', 200: '#baddff', 300: '#8bc7ff', 400: '#52a6ff', 500: '#2b86f6', 600: '#1f6ada', 700: '#1c56b1', 800: '#1c4a8d', 900: '#1b3f73'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <script>
+    function navActive(path) { return location.pathname === path }
+  </script>
+  <meta name="color-scheme" content="light dark">
+  <script>
+    // Simple dark mode toggle persistence
+    document.documentElement.classList.toggle('dark', localStorage.theme === 'dark');
+    function toggleTheme() {
+      const v = localStorage.theme === 'dark' ? 'light' : 'dark';
+      localStorage.theme = v; document.documentElement.classList.toggle('dark', v === 'dark');
+    }
+  </script>
+  <style>
+    .glass { backdrop-filter: saturate(180%) blur(10px); background-color: rgb(255 255 255 / 0.6); }
+    .dark .glass { background-color: rgb(15 23 42 / 0.6); }
+  </style>
+  <link rel="stylesheet" href="/static/styles.css">
+  <meta name="robots" content="noindex">
+  <meta name="referrer" content="no-referrer">
 </head>
-<body>
-  <header>
-    <h1>uDocket Admin</h1>
-    <nav>
-      <a href="/admin">Dashboard</a> |
-      <a href="/admin/cases">Cases</a>
-    </nav>
+<body class="bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100 min-h-screen">
+  <header class="sticky top-0 z-40 border-b border-slate-200/60 dark:border-slate-700/60 bg-white/80 dark:bg-slate-900/80 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center gap-4">
+      <a href="/admin" class="flex items-center gap-2 font-semibold text-slate-800 dark:text-slate-100">
+        <span class="text-2xl">📄</span>
+        <span>uDocket Admin</span>
+      </a>
+      <nav class="ml-auto flex items-center gap-2 text-sm">
+        <a href="/admin" class="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" aria-current="page">Dashboard</a>
+        <a href="/admin/cases" class="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">Cases</a>
+        <button onclick="toggleTheme()" class="ml-2 p-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800" title="Toggle theme">
+          <i class="ph ph-moon-stars text-lg"></i>
+        </button>
+      </nav>
+    </div>
   </header>
-  <main>
+  <main class="max-w-6xl mx-auto px-4 sm:px-6 py-8">
     {% block content %}{% endblock %}
   </main>
 </body>

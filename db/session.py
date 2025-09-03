@@ -2,6 +2,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from pathlib import Path
 from config.settings import settings
+from datetime import datetime
 
 def _ensure_sqlite_parent_dir(db_url: str):
     # Handle file-based SQLite URLs only
@@ -33,3 +34,33 @@ _ensure_sqlite_parent_dir(settings.DATABASE_URL)
 
 engine = create_engine(settings.DATABASE_URL, future=True)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+
+def ensure_jobs_schema():
+    # Add new columns to jobs table on existing SQLite DBs without Alembic.
+    try:
+        if not settings.DATABASE_URL.startswith("sqlite:"):
+            return
+        with engine.begin() as conn:
+            # If table doesn't exist yet, nothing to do; create_all will create with new columns
+            exists = conn.exec_driver_sql("SELECT name FROM sqlite_master WHERE type='table' AND name='jobs'").fetchone()
+            if not exists:
+                return
+            cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(jobs)").fetchall()}
+            want = {
+                "audio_bytes": "INTEGER",
+                "audio_mime": "VARCHAR(128)",
+                "audio_ext": "VARCHAR(16)",
+                "audio_mtime": "DATETIME",
+                "transcript_words": "INTEGER",
+                "transcript_bytes": "INTEGER",
+                "audio_bitrate_kbps": "INTEGER",
+                "audio_channels": "INTEGER",
+                "audio_duration_sec": "INTEGER",
+                "sample_rate_hz": "INTEGER",
+            }
+            for name, ddl in want.items():
+                if name not in cols:
+                    conn.exec_driver_sql(f"ALTER TABLE jobs ADD COLUMN {name} {ddl}")
+    except Exception:
+        # Best-effort; skip on failure
+        pass

@@ -1,0 +1,51 @@
+{% extends "_base.html" %}
+{% block content %}
+<div class="max-w-2xl">
+  <h2 class="text-2xl font-semibold">Delete Case</h2>
+  <div class="mt-4 rounded-xl border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950 p-4">
+    <div class="flex items-start gap-3">
+      <i class="ph ph-warning text-rose-600 text-xl mt-0.5"></i>
+      <div>
+        <div class="font-medium text-rose-700 dark:text-rose-300">This action is permanent</div>
+        <p class="text-sm text-rose-700/90 dark:text-rose-300/90 mt-1">Deleting a case removes all jobs and associated files from storage. Please confirm to proceed.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="mt-6 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6">
+    <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
+      <div>
+        <dt class="text-sm text-slate-500">Case ID</dt>
+        <dd class="mt-1 font-mono text-xs">{{ case.id }}</dd>
+      </div>
+      <div>
+        <dt class="text-sm text-slate-500">Title</dt>
+        <dd class="mt-1 font-medium">{{ case.title }}</dd>
+      </div>
+      <div>
+        <dt class="text-sm text-slate-500">Reference</dt>
+        <dd class="mt-1">{{ case.reference or '-' }}</dd>
+      </div>
+    </dl>
+
+    {% if error %}
+      <div class="mt-4 text-sm text-rose-600 dark:text-rose-400">{{ error }}</div>
+    {% endif %}
+
+    <form method="post" class="mt-6 space-y-4">
+      <div>
+        <label class="block text-sm text-slate-600 dark:text-slate-300">Type the Case ID to confirm deletion</label>
+        <input name="confirm" class="mt-1 w-full rounded-md border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm focus:border-rose-500 focus:ring-rose-500" placeholder="{{ case.id }}" />
+      </div>
+      <div class="flex items-center gap-2">
+        <a href="/admin/cases/{{ case.id }}" class="px-3 py-2 rounded-md border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800">Cancel</a>
+        <button type="submit" class="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-rose-600 text-white hover:bg-rose-700">
+          <i class="ph ph-trash"></i>
+          Permanently Delete Case
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+

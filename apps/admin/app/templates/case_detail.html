@@ -1,52 +1,339 @@
 {% extends "_base.html" %}
 {% block content %}
-<h2>Case: {{ case.title }}</h2>
-<p><strong>Reference:</strong> {{ case.reference or "-" }}</p>
-<p><strong>Parties:</strong> {{ case.party_1 or "-" }} vs {{ case.party_2 or "-" }}</p>
-<p><strong>Notes:</strong> {{ case.notes or "-" }}</p>
+<div class="flex items-baseline justify-between">
+  <h2 class="text-2xl font-semibold">Case: {{ case.title }}</h2>
+  <a href="/admin/cases" class="text-sm text-slate-500 hover:text-slate-700">Back to cases</a>
+</div>
 
-<h3>Upload audio</h3>
-<form action="/admin/cases/{{ case.id }}/upload-audio" method="post" enctype="multipart/form-data">
-  <input type="file" name="file" required>
-  <label for="transcription_mode">Transcription:</label>
-  <select name="transcription_mode" id="transcription_mode">
-    <option value="batch">Batch</option>
-    <option value="on-demand" selected>On-demand</option>
-  </select>
-  <label>
-    <input type="checkbox" name="diarization" id="diarization">
-    Enable diarization
-  </label>
-  <button type="submit">Upload & Create Job</button>
-  <script>
-    const modeSel = document.getElementById('transcription_mode');
-    const diarCb = document.getElementById('diarization');
-    function toggleDiarization() {
-      const isBatch = modeSel.value === 'batch';
-      diarCb.disabled = !isBatch;
-      if (!isBatch) diarCb.checked = false;
-    }
-    modeSel.addEventListener('change', toggleDiarization);
-    toggleDiarization();
-  </script>
-</form>
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
+  <div class="lg:col-span-2 space-y-6">
+    <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6">
+      <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
+        <div>
+          <dt class="text-sm text-slate-500">Reference</dt>
+          <dd class="mt-1 font-medium">{{ case.reference or "-" }}</dd>
+        </div>
+        <div>
+          <dt class="text-sm text-slate-500">Parties</dt>
+          <dd class="mt-1 font-medium">{{ case.party_1 or "-" }} vs {{ case.party_2 or "-" }}</dd>
+        </div>
+        <div class="sm:col-span-2">
+          <dt class="text-sm text-slate-500">Notes</dt>
+          <dd class="mt-1 whitespace-pre-line">{{ case.notes or "-" }}</dd>
+        </div>
+      </dl>
+    </div>
 
-<h3>Jobs</h3>
-<table border="1" cellpadding="6">
-  <tr><th>Job ID</th><th>Status</th><th>Mode</th><th>Diarization</th><th>Transcript</th><th>Error</th></tr>
-  {% for j in jobs %}
-  <tr>
-    <td>{{ j.id }}</td>
-    <td>{{ j.status }}</td>
-    <td>{{ j.transcription_mode or 'batch' }}</td>
-    <td>{{ 'Yes' if j.diarization else 'No' }}</td>
-    <td>
-      {% if j.status == "SUCCEEDED" and j.transcript_path %}
-        <a href="{{ api_base }}/transcriptions/{{ j.id }}/download" target="_blank">Download</a>
-      {% else %}-{% endif %}
-    </td>
-    <td>{{ j.error_message or "" }}</td>
-  </tr>
-  {% endfor %}
-</table>
+    <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6" id="jobs-card">
+      <h3 class="text-lg font-medium">Jobs</h3>
+      <div class="mt-4 overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
+        <table class="min-w-full divide-y divide-slate-200 dark:divide-slate-800" id="jobs-table">
+          <thead class="bg-slate-50 dark:bg-slate-800/40">
+            <tr>
+              <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Description</th>
+              <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Status</th>
+              <th class="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-slate-500">Created</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-200 dark:divide-slate-800" id="jobs-tbody">
+            {% for j in jobs %}
+            {% set desc = (j.audio_path.rsplit('/',1)[-1].split('__',1)[-1]) if j.audio_path else j.id %}
+            <tr class="group cursor-pointer hover:bg-slate-50/40 dark:hover:bg-slate-800/40" data-job-id="{{ j.id }}">
+              <td class="px-4 py-3">
+                <div class="font-medium">{{ desc }}</div>
+                <div class="text-xs text-slate-500">ID: {{ j.id }}</div>
+              </td>
+              <td class="px-4 py-3">
+                {% if j.status == 'SUCCEEDED' %}
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">Succeeded</span>
+                {% elif j.status == 'FAILED' %}
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300">Failed</span>
+                {% elif j.status == 'RUNNING' %}
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300">Running</span>
+                {% else %}
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200">Pending</span>
+                {% endif %}
+              </td>
+              <td class="px-4 py-3 text-right text-slate-500">{{ j.created_at.strftime('%b %d, %Y, %I:%M %p') if j.created_at else '-' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <aside class="space-y-6">
+    <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6">
+      <h3 class="text-lg font-medium">Upload audio</h3>
+      <form class="mt-4 space-y-3" action="/admin/cases/{{ case.id }}/upload-audio" method="post" enctype="multipart/form-data">
+        <div>
+          <input type="file" name="file" required class="block w-full text-sm text-slate-600 dark:text-slate-300 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border file:border-slate-300 dark:file:border-slate-700 file:text-sm file:font-medium file:bg-white dark:file:bg-slate-900 file:text-slate-700 dark:file:text-slate-200 hover:file:bg-slate-50 dark:hover:file:bg-slate-800/80" />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label for="transcription_mode" class="block text-sm text-slate-600 dark:text-slate-300">Transcription</label>
+            <select name="transcription_mode" id="transcription_mode" class="mt-1 w-full rounded-md border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 focus:border-brand-500 focus:ring-brand-500">
+              <option value="batch">Batch</option>
+              <option value="on-demand" selected>On-demand</option>
+            </select>
+          </div>
+          <div class="flex items-end">
+            <label class="inline-flex items-center gap-2 text-sm">
+              <input type="checkbox" name="diarization" id="diarization" class="rounded border-slate-300 text-brand-600 focus:ring-brand-500" />
+              Enable diarization
+            </label>
+          </div>
+        </div>
+        <button type="submit" class="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-brand-600 text-white hover:bg-brand-700">
+          <i class="ph ph-cloud-arrow-up"></i>
+          Upload & Create Job
+        </button>
+        <script>
+          const modeSel = document.getElementById('transcription_mode');
+          const diarCb = document.getElementById('diarization');
+          function toggleDiarization() {
+            const isBatch = modeSel.value === 'batch';
+            diarCb.disabled = !isBatch;
+            if (!isBatch) diarCb.checked = false;
+          }
+          modeSel.addEventListener('change', toggleDiarization);
+          toggleDiarization();
+        </script>
+      </form>
+    </div>
+
+    <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6">
+      <h3 class="text-lg font-medium text-rose-700 dark:text-rose-400">Danger zone</h3>
+      <p class="text-sm text-slate-600 dark:text-slate-400 mt-1">Deleting a case removes all jobs and stored files. This action cannot be undone.</p>
+      <a href="/admin/cases/{{ case.id }}/delete" class="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-md bg-rose-600 text-white hover:bg-rose-700">
+        <i class="ph ph-trash"></i>
+        Delete Case
+      </a>
+    </div>
+  </aside>
+</div>
+<script>
+  // Lightweight polling to keep jobs list fresh + details pane
+  const jobsTbody = document.getElementById('jobs-tbody');
+  const caseId = '{{ case.id }}';
+  const downloadBase = '{{ api_base }}';
+
+  function statusBadge(status) {
+    const cls = {
+      'SUCCEEDED': 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
+      'FAILED': 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300',
+      'RUNNING': 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
+      'PENDING': 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200'
+    }[status] || 'bg-slate-100 text-slate-800';
+    const label = status.charAt(0) + status.slice(1).toLowerCase();
+    return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${cls}">${label}</span>`;
+  }
+
+  function renderRows(items) {
+    return items.map(j => `
+      <tr class="group cursor-pointer hover:bg-slate-50/60 dark:hover:bg-slate-800/50" data-job-id="${j.id}">
+        <td class="px-4 py-3">
+          <div class="font-medium job-desc" data-job-id="${j.id}">${j.description || j.id}</div>
+          <div class="text-xs text-slate-500">ID: ${j.id}</div>
+        </td>
+        <td class="px-4 py-3">${statusBadge(j.status)}</td>
+        <td class="px-4 py-3 text-right text-slate-500">${j.created_at ? formatShort(j.created_at) : '-'}</td>
+      </tr>
+    `).join('');
+  }
+
+  let lastJson = '';
+  let current = [];
+  let selectedId = null;
+
+  function humanSize(bytes) {
+    if (bytes == null) return '-';
+    const units = ['B','KB','MB','GB'];
+    let u = 0; let n = bytes;
+    while (n >= 1024 && u < units.length-1) { n/=1024; u++; }
+    return `${n.toFixed(u===0?0:1)} ${units[u]}`;
+  }
+
+  function formatShort(iso) {
+    try {
+      const d = new Date(iso);
+      return d.toLocaleString(undefined, { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+    } catch { return iso; }
+  }
+
+  function formatFull(iso) {
+    try { return new Date(iso).toLocaleString(); } catch { return iso || '-'; }
+  }
+
+  function detailsRowHTML(job) {
+    return `
+      <tr class="job-details-row bg-slate-50/50 dark:bg-slate-800/30">
+        <td colspan="3" class="px-4 py-4">
+          <div class="flex items-start justify-between">
+            <div>
+              <div class="text-lg font-medium">${job.description || job.id}</div>
+              <div class="mt-1">${statusBadge(job.status)}</div>
+              <div class="mt-2 text-xs text-slate-500">Job ID: <span class="font-mono">${job.id}</span></div>
+            </div>
+            <div class="flex items-center gap-2">
+              <button data-copy-id="${job.id}" class="text-xs px-2 py-1 rounded border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800">Copy Job ID</button>
+              ${job.transcript ? `<a class="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-brand-600 text-white hover:bg-brand-700" target="_blank" href="${downloadBase}/transcriptions/${job.id}/download"><i class=\"ph ph-download-simple\"></i>Download Transcript</a>` : ''}
+            </div>
+          </div>
+          <div class="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
+            <div>
+              <div class="text-slate-500">Diarization</div>
+              <div class="font-medium">${job.diarization ? 'Yes' : 'No'}</div>
+              <div class="mt-3 text-slate-500">Mode</div>
+              <div class="font-medium">${job.mode}</div>
+            </div>
+            <div class="sm:col-span-2 grid grid-cols-3 gap-4">
+              <div>
+                <div class="text-slate-500">Created</div>
+                <div class="font-medium">${job.created_at ? formatFull(job.created_at) : '-'}</div>
+              </div>
+              <div>
+                <div class="text-slate-500">Started</div>
+                <div class="font-medium">${job.started_at ? formatFull(job.started_at) : '-'}</div>
+              </div>
+              <div>
+                <div class="text-slate-500">Finished</div>
+                <div class="font-medium">${job.finished_at ? formatFull(job.finished_at) : '-'}</div>
+              </div>
+            </div>
+          </div>
+          <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+            <div>
+              <div class="text-slate-500">Audio</div>
+              <div class="mt-1">
+                <span class="inline-flex items-center gap-2">
+                  <span class="font-medium underline decoration-dotted underline-offset-4 cursor-help job-audio" data-job-id="${job.id}">${job.description || '-'}</span>
+                  <span class="text-slate-500">(${job.audio_ext || 'file'})</span>
+                </span>
+              </div>
+              <div class="text-xs text-slate-500 mt-1">${humanSize(job.audio_bytes)} • ${job.audio_mime || 'unknown'}</div>
+              <div class="text-xs text-slate-500 mt-1">
+                ${job.audio_duration_sec != null ? (new Date(job.audio_duration_sec * 1000).toISOString().substr(11, 8)) : '--:--:--'}
+                • ${job.audio_bitrate_kbps != null ? job.audio_bitrate_kbps + ' kbps' : '—'}
+                • ${job.audio_channels || '—'} ch
+                ${job.sample_rate_hz ? ' • ' + job.sample_rate_hz.toLocaleString() + ' Hz' : ''}
+              </div>
+              ${job.audio_mtime ? `<div class="text-xs text-slate-500">Modified: ${formatFull(job.audio_mtime)}</div>` : ''}
+              ${job.sha256 ? `<div class="text-xs text-slate-500 break-all">SHA-256: ${job.sha256}</div>` : ''}
+            </div>
+            <div>
+              <div class="text-slate-500">Transcript</div>
+              ${job.transcript ? `
+                <div class="mt-1 text-sm">${job.transcript_words != null ? job.transcript_words.toLocaleString() : '-'} words</div>
+                <div class="text-xs text-slate-500">${humanSize(job.transcript_bytes)}</div>
+              ` : '<div class="mt-1 text-sm">-</div>'}
+              ${job.error ? `<div class="mt-2 text-sm text-rose-600 dark:text-rose-400">${job.error}</div>` : ''}
+            </div>
+          </div>
+        </td>
+      </tr>
+    `;
+  }
+
+  // Tooltip for audio details (single shared element)
+  const tooltip = document.createElement('div');
+  tooltip.className = 'pointer-events-none fixed z-50 hidden px-3 py-2 text-xs rounded-md bg-slate-900/95 text-white shadow-lg border border-slate-700/60 max-w-sm';
+  document.body.appendChild(tooltip);
+
+  function showTooltip(html, x, y) {
+    tooltip.innerHTML = html;
+    tooltip.style.left = (x + 12) + 'px';
+    tooltip.style.top = (y + 12) + 'px';
+    tooltip.classList.remove('hidden');
+  }
+  function hideTooltip() { tooltip.classList.add('hidden'); }
+
+  function bindRowClicks() {
+    document.querySelectorAll('#jobs-tbody tr[data-job-id]').forEach(tr => {
+      const id = tr.getAttribute('data-job-id');
+      tr.addEventListener('click', (e) => {
+        const already = selectedId === id;
+        // Clear any existing detail rows
+        document.querySelectorAll('#jobs-tbody tr.job-details-row').forEach(r => r.remove());
+        document.querySelectorAll('#jobs-tbody tr[data-job-id]').forEach(r => r.classList.remove('selected','ring-1','ring-slate-300','dark:ring-slate-600','bg-slate-100','dark:bg-slate-800'));
+        if (already) { selectedId = null; return; }
+        selectedId = id;
+        const job = current.find(j => j.id === selectedId);
+        // Highlight row
+        tr.classList.add('selected','ring-1','ring-slate-300','dark:ring-slate-600','bg-slate-100','dark:bg-slate-800');
+        // Insert detail row after this row
+        tr.insertAdjacentHTML('afterend', detailsRowHTML(job));
+        // Bind copy button
+        const btn = tr.nextElementSibling.querySelector('[data-copy-id]');
+        if (btn) btn.addEventListener('click', async (ev) => { ev.stopPropagation(); try { await navigator.clipboard.writeText(btn.getAttribute('data-copy-id')); } catch {} });
+        // Bind tooltip on audio
+        const audio = tr.nextElementSibling.querySelector('.job-audio');
+        if (audio) {
+          audio.addEventListener('mouseenter', (ev) => {
+            const j = current.find(x => x.id === id);
+            const tip = `
+              <div class=\"font-medium\">${j.description || '(file)'} </div>
+              <div class=\"text-slate-300\">${j.audio_mime || 'unknown'} • ${humanSize(j.audio_bytes)} • .${j.audio_ext || ''}</div>
+              ${j.audio_mtime ? `<div class=\"text-slate-400\">Modified: ${formatFull(j.audio_mtime)}</div>` : ''}
+              ${j.audio_path ? `<div class=\"text-slate-400 break-all\">${j.audio_path}</div>` : ''}
+            `;
+            showTooltip(tip, ev.clientX, ev.clientY);
+          });
+          audio.addEventListener('mousemove', (ev) => { showTooltip(tooltip.innerHTML, ev.clientX, ev.clientY); });
+          audio.addEventListener('mouseleave', hideTooltip);
+        }
+      });
+    });
+  }
+
+  async function pollJobs() {
+    try {
+      const res = await fetch(`/admin/api/cases/${caseId}/jobs`, { headers: { 'Accept': 'application/json' } });
+      if (!res.ok) return;
+      const data = await res.json();
+      const serialized = JSON.stringify(data);
+      if (serialized !== lastJson) {
+        jobsTbody.innerHTML = renderRows(data);
+        current = data;
+        bindRowClicks();
+        lastJson = serialized;
+      }
+      if (selectedId) {
+        // Re-render the open details row to keep it fresh
+        const job = data.find(j => j.id === selectedId);
+        const open = document.querySelector('#jobs-tbody tr.job-details-row');
+        const anchor = document.querySelector(`#jobs-tbody tr[data-job-id="${selectedId}"]`);
+        if (anchor) anchor.classList.add('selected','ring-1','ring-slate-300','dark:ring-slate-600','bg-slate-100','dark:bg-slate-800');
+        if (open && anchor) {
+          open.outerHTML = detailsRowHTML(job);
+          // Re-bind copy + tooltip
+          const newOpen = anchor.nextElementSibling;
+          const btn = newOpen.querySelector('[data-copy-id]');
+          if (btn) btn.addEventListener('click', async (ev) => { ev.stopPropagation(); try { await navigator.clipboard.writeText(btn.getAttribute('data-copy-id')); } catch {} });
+          const audio = newOpen.querySelector('.job-audio');
+          if (audio) {
+            audio.addEventListener('mouseenter', (ev) => {
+              const j = current.find(x => x.id === selectedId);
+              const tip = `
+                <div class=\"font-medium\">${j.description || '(file)'} </div>
+                <div class=\"text-slate-300\">${j.audio_mime || 'unknown'} • ${humanSize(j.audio_bytes)} • .${j.audio_ext || ''}</div>
+                ${j.audio_mtime ? `<div class=\"text-slate-400\">Modified: ${formatFull(j.audio_mtime)}</div>` : ''}
+                ${j.audio_path ? `<div class=\"text-slate-400 break-all\">${j.audio_path}</div>` : ''}
+              `;
+              showTooltip(tip, ev.clientX, ev.clientY);
+            });
+            audio.addEventListener('mousemove', (ev) => { showTooltip(tooltip.innerHTML, ev.clientX, ev.clientY); });
+            audio.addEventListener('mouseleave', hideTooltip);
+          }
+        }
+      }
+    } catch (e) { /* ignore */ }
+  }
+  setInterval(pollJobs, 3000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) pollJobs(); });
+  window.addEventListener('focus', pollJobs);
+  setTimeout(pollJobs, 1000);
+  // No global copy button; handled per-row
+</script>
 {% endblock %}
