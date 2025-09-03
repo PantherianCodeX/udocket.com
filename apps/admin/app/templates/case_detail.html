@@ -1,17 +1,27 @@
 {% extends "_base.html" %}
 {% block content %}
 <div class="flex items-baseline justify-between">
-  <h2 class="text-2xl font-semibold">Case: {{ case.title }}</h2>
-  <a href="/admin/cases" class="text-sm text-slate-500 hover:text-slate-700">Back to cases</a>
+  <div>
+    <h2 class="text-2xl font-semibold">Case: {{ case.title }}</h2>
+    <div class="text-xs text-slate-500 font-mono mt-1">ID: {{ case.id }}</div>
+  </div>
+  <div class="flex items-center gap-2">
+    <a href="/admin/cases/{{ case.id }}/edit" class="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800">Edit</a>
+    <a href="/admin/cases" class="text-sm text-slate-500 hover:text-slate-700">Back to cases</a>
+  </div>
 </div>
 
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
-  <div class="lg:col-span-2 space-y-6">
+<div class="grid grid-cols-1 gap-6 mt-6">
+  <div class="space-y-6">
     <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6">
       <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
         <div>
           <dt class="text-sm text-slate-500">Reference</dt>
           <dd class="mt-1 font-medium">{{ case.reference or "-" }}</dd>
+        </div>
+        <div>
+          <dt class="text-sm text-slate-500">Client Is</dt>
+          <dd class="mt-1 font-medium">{{ (case.client_role|capitalize) if case.client_role else '-' }}</dd>
         </div>
         <div>
           <dt class="text-sm text-slate-500">Parties</dt>
@@ -23,9 +33,63 @@
         </div>
       </dl>
     </div>
+    <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6">
+      <h3 class="text-lg font-medium">Upload Audio</h3>
+      <form class="mt-4" action="/admin/cases/{{ case.id }}/upload-audio" method="post" enctype="multipart/form-data">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
+          <div class="min-w-0">
+            <input id="file-input" type="file" name="file" required class="hidden" />
+            <button type="button" id="browse-btn" class="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-brand-600 text-white hover:bg-brand-700">
+              <i class="ph ph-upload-simple"></i>
+              Browse
+            </button>
+            <span id="file-name" class="ml-2 text-sm text-slate-600 dark:text-slate-300 truncate">No file selected</span>
+            <div class="mt-4">
+              <label for="transcription_mode" class="block text-sm text-slate-600 dark:text-slate-300">Transcription</label>
+              <select name="transcription_mode" id="transcription_mode" class="mt-1 w-full rounded-md border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 focus:border-brand-500 focus:ring-brand-500">
+                <option value="batch">Batch</option>
+                <option value="on-demand" selected>On-demand</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <button type="submit" class="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-brand-600 text-white hover:bg-brand-700">
+              <i class="ph ph-cloud-arrow-up"></i>
+              Upload & Create Job
+            </button>
+            <div class="mt-4">
+              <label class="inline-flex items-center gap-2 text-sm">
+                <input id="diarization" type="checkbox" name="diarization" value="true" class="rounded border-slate-300 dark:border-slate-700 text-brand-600 focus:ring-brand-500" />
+                Enable diarization (batch only)
+              </label>
+            </div>
+          </div>
+        </div>
+        <script>
+          // Warn if leaving with file/options selected before submitting
+          guardUnsavedChanges('form[action="/admin/cases/{{ case.id }}/upload-audio"]');
+          const fileInput = document.getElementById('file-input');
+          const browseBtn = document.getElementById('browse-btn');
+          const fileName = document.getElementById('file-name');
+          const modeSel = document.getElementById('transcription_mode');
+          const diarCb = document.getElementById('diarization');
+          browseBtn.addEventListener('click', () => fileInput.click());
+          fileInput.addEventListener('change', () => {
+            fileName.textContent = fileInput.files && fileInput.files[0] ? fileInput.files[0].name : 'No file selected';
+          });
+          function toggleDiarization() {
+            const isBatch = modeSel.value === 'batch';
+            diarCb.disabled = !isBatch;
+            if (!isBatch) diarCb.checked = false;
+          }
+          modeSel.addEventListener('change', toggleDiarization);
+          toggleDiarization();
+        </script>
+      </form>
+    </div>
 
     <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6" id="jobs-card">
-      <h3 class="text-lg font-medium">Jobs</h3>
+      <h3 class="text-lg font-medium">Transcriptions</h3>
       <div class="mt-4 overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
         <table class="min-w-full divide-y divide-slate-200 dark:divide-slate-800" id="jobs-table">
           <thead class="bg-slate-50 dark:bg-slate-800/40">
@@ -57,61 +121,16 @@
               <td class="px-4 py-3 text-right text-slate-500">{{ j.created_at.strftime('%b %d, %Y, %I:%M %p') if j.created_at else '-' }}</td>
             </tr>
             {% endfor %}
+            {% if jobs|length == 0 %}
+            <tr>
+              <td colspan="3" class="px-4 py-6 text-center text-slate-500">No transcriptions yet. Upload audio to get started.</td>
+            </tr>
+            {% endif %}
           </tbody>
         </table>
       </div>
     </div>
   </div>
-
-  <aside class="space-y-6">
-    <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6">
-      <h3 class="text-lg font-medium">Upload audio</h3>
-      <form class="mt-4 space-y-3" action="/admin/cases/{{ case.id }}/upload-audio" method="post" enctype="multipart/form-data">
-        <div>
-          <input type="file" name="file" required class="block w-full text-sm text-slate-600 dark:text-slate-300 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border file:border-slate-300 dark:file:border-slate-700 file:text-sm file:font-medium file:bg-white dark:file:bg-slate-900 file:text-slate-700 dark:file:text-slate-200 hover:file:bg-slate-50 dark:hover:file:bg-slate-800/80" />
-        </div>
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label for="transcription_mode" class="block text-sm text-slate-600 dark:text-slate-300">Transcription</label>
-            <select name="transcription_mode" id="transcription_mode" class="mt-1 w-full rounded-md border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 focus:border-brand-500 focus:ring-brand-500">
-              <option value="batch">Batch</option>
-              <option value="on-demand" selected>On-demand</option>
-            </select>
-          </div>
-          <div class="flex items-end">
-            <label class="inline-flex items-center gap-2 text-sm">
-              <input type="checkbox" name="diarization" id="diarization" class="rounded border-slate-300 text-brand-600 focus:ring-brand-500" />
-              Enable diarization
-            </label>
-          </div>
-        </div>
-        <button type="submit" class="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-brand-600 text-white hover:bg-brand-700">
-          <i class="ph ph-cloud-arrow-up"></i>
-          Upload & Create Job
-        </button>
-        <script>
-          const modeSel = document.getElementById('transcription_mode');
-          const diarCb = document.getElementById('diarization');
-          function toggleDiarization() {
-            const isBatch = modeSel.value === 'batch';
-            diarCb.disabled = !isBatch;
-            if (!isBatch) diarCb.checked = false;
-          }
-          modeSel.addEventListener('change', toggleDiarization);
-          toggleDiarization();
-        </script>
-      </form>
-    </div>
-
-    <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6">
-      <h3 class="text-lg font-medium text-rose-700 dark:text-rose-400">Danger zone</h3>
-      <p class="text-sm text-slate-600 dark:text-slate-400 mt-1">Deleting a case removes all jobs and stored files. This action cannot be undone.</p>
-      <a href="/admin/cases/{{ case.id }}/delete" class="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-md bg-rose-600 text-white hover:bg-rose-700">
-        <i class="ph ph-trash"></i>
-        Delete Case
-      </a>
-    </div>
-  </aside>
 </div>
 <script>
   // Lightweight polling to keep jobs list fresh + details pane
@@ -131,6 +150,9 @@
   }
 
   function renderRows(items) {
+    if (!items || items.length === 0) {
+      return `<tr><td colspan="3" class="px-4 py-6 text-center text-slate-500">No transcriptions yet. Upload audio to get started.</td></tr>`;
+    }
     return items.map(j => `
       <tr class="group cursor-pointer hover:bg-slate-50/60 dark:hover:bg-slate-800/50" data-job-id="${j.id}">
         <td class="px-4 py-3">

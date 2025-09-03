@@ -64,3 +64,18 @@ def ensure_jobs_schema():
     except Exception:
         # Best-effort; skip on failure
         pass
+
+def ensure_cases_schema():
+    # Add new columns to cases table on existing SQLite DBs without Alembic.
+    try:
+        if not settings.DATABASE_URL.startswith("sqlite:"):
+            return
+        with engine.begin() as conn:
+            exists = conn.exec_driver_sql("SELECT name FROM sqlite_master WHERE type='table' AND name='cases'").fetchone()
+            if not exists:
+                return
+            cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(cases)").fetchall()}
+            if 'client_role' not in cols:
+                conn.exec_driver_sql("ALTER TABLE cases ADD COLUMN client_role VARCHAR(20)")
+    except Exception:
+        pass

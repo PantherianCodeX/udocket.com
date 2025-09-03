@@ -9,5 +9,6 @@ class Case(Base):
     reference = Column(String(100), nullable=True, index=True)
     party_1 = Column(String(120), nullable=True)
     party_2 = Column(String(120), nullable=True)
+    client_role = Column(String(20), nullable=True)  # 'plaintiff' or 'defendant'
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

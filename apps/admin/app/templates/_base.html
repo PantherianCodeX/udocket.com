@@ -4,6 +4,17 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>uDocket Admin</title>
+  <script>
+    // Apply saved theme early to avoid flash
+    (function() {
+      try {
+        const saved = localStorage.getItem('theme');
+        const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const isDark = saved ? (saved === 'dark') : prefersDark;
+        document.documentElement.classList.toggle('dark', isDark);
+      } catch (e) { /* ignore */ }
+    })();
+  </script>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -16,6 +27,7 @@
   {% block head %}{% endblock %}
   <script>
     tailwind.config = {
+      darkMode: 'class',
       theme: {
         extend: {
           colors: {
@@ -33,11 +45,46 @@
   </script>
   <meta name="color-scheme" content="light dark">
   <script>
-    // Simple dark mode toggle persistence
-    document.documentElement.classList.toggle('dark', localStorage.theme === 'dark');
+    // Theme toggle with persistence + icon update
+    function applyThemeIcon() {
+      const dark = document.documentElement.classList.contains('dark');
+      const icon = document.getElementById('theme-icon');
+      if (!icon) return;
+      icon.className = dark ? 'ph ph-sun text-lg' : 'ph ph-moon-stars text-lg';
+    }
     function toggleTheme() {
-      const v = localStorage.theme === 'dark' ? 'light' : 'dark';
-      localStorage.theme = v; document.documentElement.classList.toggle('dark', v === 'dark');
+      const dark = document.documentElement.classList.toggle('dark');
+      localStorage.setItem('theme', dark ? 'dark' : 'light');
+      applyThemeIcon();
+    }
+    document.addEventListener('DOMContentLoaded', applyThemeIcon);
+  </script>
+  <script>
+    // Reusable unsaved-changes guard for forms
+    function guardUnsavedChanges(selectorOrEl) {
+      try {
+        const form = typeof selectorOrEl === 'string' ? document.querySelector(selectorOrEl) : selectorOrEl;
+        if (!form) return;
+        let dirty = false;
+        let submitting = false;
+        let allowLeaveOnce = false;
+        const markDirty = () => { dirty = true; };
+        form.addEventListener('input', markDirty, true);
+        form.addEventListener('change', markDirty, true);
+        form.addEventListener('submit', () => { submitting = true; });
+        window.addEventListener('beforeunload', function (e) {
+          if (dirty && !submitting && !allowLeaveOnce) { e.preventDefault(); e.returnValue = ''; }
+        });
+        document.addEventListener('click', function (e) {
+          if (!dirty || submitting) return;
+          const a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+          if (a && !a.hasAttribute('download') && a.getAttribute('href') && !a.getAttribute('href').startsWith('#')) {
+            const ok = confirm('You have unsaved changes. Leave this page?');
+            if (!ok) { e.preventDefault(); e.stopPropagation(); return; }
+            allowLeaveOnce = true;
+          }
+        }, true);
+      } catch (e) { /* ignore */ }
     }
   </script>
   <style>
@@ -58,8 +105,8 @@
       <nav class="ml-auto flex items-center gap-2 text-sm">
         <a href="/admin" class="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" aria-current="page">Dashboard</a>
         <a href="/admin/cases" class="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">Cases</a>
-        <button onclick="toggleTheme()" class="ml-2 p-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800" title="Toggle theme">
-          <i class="ph ph-moon-stars text-lg"></i>
+        <button onclick="toggleTheme()" class="ml-2 p-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800" title="Toggle theme" aria-label="Toggle theme">
+          <i id="theme-icon" class="ph ph-moon-stars text-lg"></i>
         </button>
       </nav>
     </div>

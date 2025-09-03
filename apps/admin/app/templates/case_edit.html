@@ -1,0 +1,71 @@
+{% extends "_base.html" %}
+{% block content %}
+<div class="flex items-baseline justify-between">
+  <div>
+    <h2 class="text-2xl font-semibold">Edit Case</h2>
+    <div class="text-xs text-slate-500 font-mono mt-1">ID: {{ case.id }}</div>
+  </div>
+  <a href="/admin/cases/{{ case.id }}" class="text-sm text-slate-500 hover:text-slate-700">Back to case</a>
+  </div>
+
+<form action="/admin/cases/{{ case.id }}" method="post" class="mt-6 grid grid-cols-1 gap-4 max-w-2xl">
+  <div>
+    <label class="block text-sm font-medium text-slate-600 dark:text-slate-300">Title</label>
+    <input name="title" value="{{ case.title }}" required class="mt-1 w-full rounded-md border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm focus:border-brand-500 focus:ring-brand-500" />
+  </div>
+  <div>
+    <label class="block text-sm font-medium text-slate-600 dark:text-slate-300">Reference</label>
+    <input name="reference" value="{{ case.reference or '' }}" class="mt-1 w-full rounded-md border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm focus:border-brand-500 focus:ring-brand-500" />
+  </div>
+  <div>
+    <label class="block text-sm font-medium text-slate-600 dark:text-slate-300">Client Is</label>
+    <select id="client_role" name="client_role" class="mt-1 w-full rounded-md border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 focus:border-brand-500 focus:ring-brand-500">
+      <option value="plaintiff" {% if (case.client_role or 'plaintiff') == 'plaintiff' %}selected{% endif %}>Plaintiff</option>
+      <option value="defendant" {% if (case.client_role or '') == 'defendant' %}selected{% endif %}>Defendant</option>
+    </select>
+  </div>
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+    <div>
+      <label id="client_label" class="block text-sm font-medium text-slate-600 dark:text-slate-300">Client</label>
+      <input name="party_1" value="{{ case.party_1 or '' }}" required class="mt-1 w-full rounded-md border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm focus:border-brand-500 focus:ring-brand-500" placeholder="Client name" />
+    </div>
+    <div>
+      <label id="opposing_label" class="block text-sm font-medium text-slate-600 dark:text-slate-300">Opposing Party</label>
+      <input name="party_2" value="{{ case.party_2 or '' }}" required class="mt-1 w-full rounded-md border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm focus:border-brand-500 focus:ring-brand-500" placeholder="Opposing party name" />
+    </div>
+  </div>
+  <div>
+    <label class="block text-sm font-medium text-slate-600 dark:text-slate-300">Notes</label>
+    <textarea name="notes" rows="6" class="mt-1 w-full rounded-md border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm focus:border-brand-500 focus:ring-brand-500">{{ case.notes or '' }}</textarea>
+  </div>
+  <div class="pt-2 flex items-center gap-2">
+    <a href="/admin/cases/{{ case.id }}" class="px-3 py-2 rounded-md border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800">Cancel</a>
+    <button type="submit" class="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-brand-600 text-white hover:bg-brand-700">
+      <i class="ph ph-check"></i>
+      Save Changes
+    </button>
+  </div>
+</form>
+
+<div class="mt-8 max-w-2xl rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6">
+  <h3 class="text-lg font-medium text-rose-700 dark:text-rose-400">Danger zone</h3>
+  <p class="text-sm text-slate-600 dark:text-slate-400 mt-1">Deleting a case removes all jobs and stored files. This action cannot be undone.</p>
+  <a href="/admin/cases/{{ case.id }}/delete" class="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-md bg-rose-600 text-white hover:bg-rose-700">
+    <i class="ph ph-trash"></i>
+    Delete Case
+  </a>
+</div>
+<script>
+  guardUnsavedChanges('form[action="/admin/cases/{{ case.id }}"]');
+  (function() {
+    const sel = document.getElementById('client_role');
+    const opp = document.getElementById('opposing_label');
+    function updateLabels() {
+      const v = sel.value;
+      opp.textContent = v === 'plaintiff' ? 'Defendant' : 'Plaintiff';
+    }
+    sel.addEventListener('change', updateLabels);
+    updateLabels();
+  })();
+</script>
+{% endblock %}

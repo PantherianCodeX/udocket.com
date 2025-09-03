@@ -30,11 +30,11 @@ def new_case(request: Request):
 
 @router.post("/admin/cases")
 def create_case(request: Request, title: str = Form(...), reference: str = Form(""),
-                party_1: str = Form(""), party_2: str = Form(""), notes: str = Form("")):
+                party_1: str = Form(...), party_2: str = Form(...), notes: str = Form(""), client_role: str = Form(None)):
     cid = str(uuid4())
     with SessionLocal() as s:
         c = Case(id=cid, title=title.strip(), reference=reference.strip(),
-                 party_1=party_1.strip(), party_2=party_2.strip(), notes=notes)
+                 party_1=party_1.strip(), party_2=party_2.strip(), client_role=(client_role or None), notes=notes)
         s.add(c); s.commit()
     # Proactively create case folder structure on case creation
     try:
@@ -52,6 +52,32 @@ def case_detail(request: Request, case_id: str):
         jobs = s.query(Job).filter(Job.case_id==case_id).order_by(Job.created_at.desc()).all()
     api_base = f"http://{request.url.hostname}:{settings.API_PORT}"
     return templates.TemplateResponse("case_detail.html", {"request": request, "case": c, "jobs": jobs, "api_base": api_base})
+
+@router.get("/admin/cases/{case_id}/edit")
+def edit_case(request: Request, case_id: str):
+    with SessionLocal() as s:
+        c = s.get(Case, case_id)
+        if not c:
+            raise HTTPException(404)
+    return templates.TemplateResponse("case_edit.html", {"request": request, "case": c})
+
+@router.post("/admin/cases/{case_id}")
+def update_case(request: Request, case_id: str,
+                title: str = Form(...), reference: str = Form(""),
+                party_1: str = Form(...), party_2: str = Form(...), notes: str = Form(""), client_role: str = Form(None)):
+    with SessionLocal() as s:
+        c = s.get(Case, case_id)
+        if not c:
+            raise HTTPException(404)
+        c.title = title.strip()
+        c.reference = reference.strip()
+        c.party_1 = party_1.strip()
+        c.party_2 = party_2.strip()
+        c.client_role = (client_role or None)
+        c.notes = notes
+        s.add(c)
+        s.commit()
+    return RedirectResponse(url=f"/admin/cases/{case_id}", status_code=303)
 
 @router.get("/admin/api/cases/{case_id}/jobs")
 def case_jobs_json(case_id: str):

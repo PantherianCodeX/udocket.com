@@ -1,12 +1,13 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from apps.admin.app.routers import dashboard, cases, uploads
-from db.session import engine, ensure_jobs_schema
+from db.session import engine, ensure_jobs_schema, ensure_cases_schema
 from db.base import Base
 
 app = FastAPI(title="uDocket Admin", version="0.1.0")
 Base.metadata.create_all(bind=engine)
 ensure_jobs_schema()
+ensure_cases_schema()
 
 app.include_router(dashboard.router)
 app.include_router(cases.router)
