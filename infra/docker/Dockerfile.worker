@@ -3,5 +3,5 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PYTHONPATH=/app
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
 COPY . /app
-RUN pip install --no-cache-dir -r apps/worker/requirements.txt
+RUN pip install -r apps/worker/requirements.txt
 CMD ["python", "apps/worker/app/main.py"]

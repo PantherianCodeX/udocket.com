@@ -1,4 +1,4 @@
-import time, datetime, sys, json, subprocess
+import time, datetime, sys, json, subprocess, logging
 from pathlib import Path
 from sqlalchemy.orm import Session
 from sqlalchemy import select, update
@@ -14,6 +14,15 @@ from apps.worker.app.blob_upload import upload_with_sas
 # Ensure tables exist (useful when worker starts before API/Admin)
 Base.metadata.create_all(bind=engine)
 ensure_jobs_schema()
+
+# Configure process-wide logging once, to stdout, avoiding duplicate handlers
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(process)d %(levelname)s worker: %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)],
+    force=True,
+)
+log = logging.getLogger("worker")
 
 def claim_pending(session: Session):
     # Atomically claim a single pending job to avoid duplicate processing across workers.
@@ -100,7 +109,7 @@ def probe_audio(path: str) -> dict:
         return {'duration_sec': None, 'bitrate_kbps': None, 'channels': None, 'sample_rate_hz': None}
 
 def main():
-    print("[worker] starting; polling for jobs...", flush=True)
+    log.info("starting; polling for jobs...")
     last_idle_log = 0.0
     while True:
         with SessionLocal() as s:
@@ -108,12 +117,12 @@ def main():
             if not job:
                 now = time.monotonic()
                 if now - last_idle_log > 10:
-                    print("[worker] idle; no pending jobs", flush=True)
+                    log.info("idle; no pending jobs")
                     last_idle_log = now
                 time.sleep(settings.POLL_INTERVAL_SEC); continue
 
             try:
-                print(f"[worker] claimed job {job.id} case={job.case_id} mode={job.transcription_mode} diar={job.diarization}", flush=True)
+                log.info(f"claimed job {job.id} case={job.case_id} mode={job.transcription_mode} diar={job.diarization}")
                 cmd = build_agent_cmd(job)
                 # Probe audio technicals if not already set
                 if job.audio_path and (job.audio_bitrate_kbps is None or job.audio_channels is None or job.audio_duration_sec is None):
@@ -128,7 +137,7 @@ def main():
                 job.status = "FAILED"
                 job.error_message = (str(e) or "upload/build command failed")[:2000]
                 s.commit()
-                print(f"[worker] job {job.id} failed to build cmd: {job.error_message}", flush=True)
+                log.error(f"job {job.id} failed to build cmd: {job.error_message}")
                 continue
 
             try:
@@ -138,7 +147,7 @@ def main():
                 job.status = "FAILED"
                 job.error_message = (str(e) or "agent execution failed")[:2000]
                 s.commit()
-                print(f"[worker] job {job.id} execution error: {job.error_message}", flush=True)
+                log.error(f"job {job.id} execution error: {job.error_message}")
                 continue
 
             job.finished_at = datetime.datetime.utcnow()
@@ -160,11 +169,11 @@ def main():
                         job.transcript_words = None
                 job.status = "SUCCEEDED"
                 job.error_message = None
-                print(f"[worker] job {job.id} succeeded", flush=True)
+                log.info(f"job {job.id} succeeded")
             else:
                 job.status = "FAILED"
                 job.error_message = (err or b"").decode("utf-8")[:2000]
-                print(f"[worker] job {job.id} failed: {job.error_message}", flush=True)
+                log.error(f"job {job.id} failed: {job.error_message}")
             s.commit()
 
 if __name__ == "__main__":
