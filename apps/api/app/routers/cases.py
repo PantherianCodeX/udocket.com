@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from typing import Optional, Annotated
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 from sqlalchemy.orm import Session
 from db.session import SessionLocal
 from db.models.case import Case
@@ -8,17 +9,25 @@ from uuid import uuid4
 router = APIRouter()
 
 class CaseIn(BaseModel):
-    title: str
-    reference: str | None = None
-    party_1: str | None = None
-    party_2: str | None = None
-    notes: str | None = None
+    model_config = ConfigDict(frozen=True)
+    title: Annotated[str, Field(min_length=1, max_length=200)]
+    reference: Annotated[Optional[str], Field(default=None, max_length=100)] = None
+    party_1: Annotated[Optional[str], Field(default=None, max_length=120)] = None
+    party_2: Annotated[Optional[str], Field(default=None, max_length=120)] = None
+    notes: Optional[str] = None
+
+    @field_validator('title', 'reference', 'party_1', 'party_2', mode='before')
+    @classmethod
+    def _strip(cls, v):
+        if v is None:
+            return v
+        return str(v).strip()
 
 @router.post("", status_code=201)
 def create_case(body: CaseIn):
     with SessionLocal() as s:
         cid = str(uuid4())
-        c = Case(id=cid, **body.dict())
+        c = Case(id=cid, **body.model_dump())
         s.add(c); s.commit()
         return {"id": cid}
 

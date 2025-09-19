@@ -29,14 +29,16 @@
         </div>
         <div>
           <dt class="text-sm text-slate-500">Updated</dt>
-          <dd class="mt-1 font-medium">{{ case_last_update.strftime('%b %d, %Y, %I:%M %p') if case_last_update else '-' }}</dd>
-        </div>
-        <div class="sm:col-span-2">
-          <dt class="text-sm text-slate-500">Notes</dt>
-          <dd class="mt-1 whitespace-pre-line">{{ case.notes or "-" }}</dd>
+          <dd class="mt-1 font-medium"><span id="case-updated-at" data-case-updated="{{ case_last_update_iso or '' }}">-</span></dd>
         </div>
       </dl>
     </div>
+    {% if case.notes %}
+    <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6">
+      <h3 class="text-lg font-medium">Notes</h3>
+      <div class="mt-2 whitespace-pre-line">{{ case.notes }}</div>
+    </div>
+    {% endif %}
     <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6">
       <h3 class="text-lg font-medium">Upload Audio</h3>
       <form class="mt-4" action="/admin/cases/{{ case.id }}/upload-audio" method="post" enctype="multipart/form-data">
@@ -101,7 +103,10 @@
     </div>
 
     <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6" id="jobs-card">
-      <h3 class="text-lg font-medium">Transcriptions</h3>
+      <div class="flex items-center justify-between">
+        <h3 class="text-lg font-medium">Transcriptions</h3>
+        <div class="text-sm text-slate-500">Updated: <span id="jobs-updated-at">-</span></div>
+      </div>
       <div class="mt-4 overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
         <table class="min-w-full divide-y divide-slate-200 dark:divide-slate-800" id="jobs-table">
           <thead class="bg-slate-50 dark:bg-slate-800/40">
@@ -201,6 +206,7 @@
   function formatFull(iso) {
     try { return new Date(iso).toLocaleString(); } catch { return iso || '-'; }
   }
+
 
   function detailsRowHTML(job) {
     return `
@@ -393,6 +399,12 @@
       if (!res.ok) return;
       const data = await res.json();
       const serialized = JSON.stringify(data);
+      // Update module-level last updated (transcriptions)
+      try {
+        const lastUpd = (window.computeLastUpdate ? window.computeLastUpdate(data) : null);
+        const slot = document.getElementById('jobs-updated-at');
+        if (slot) slot.textContent = lastUpd ? (window.formatFullDate ? window.formatFullDate(lastUpd) : formatFull(lastUpd)) : '-';
+      } catch {}
       if (serialized !== lastJson) {
         jobsTbody.innerHTML = renderRows(data);
         current = data;
@@ -536,6 +548,16 @@
   window.addEventListener('focus', pollJobs);
   setTimeout(pollJobs, 1000);
   // No global copy button; handled per-row
+
+  // Localize case-level Updated at top of page
+  (function() {
+    try {
+      const el = document.getElementById('case-updated-at');
+      if (!el) return;
+      const iso = el.getAttribute('data-case-updated');
+      el.textContent = iso ? (window.formatFullDate ? window.formatFullDate(iso) : formatFull(iso)) : '-';
+    } catch {}
+  })();
 
   // UI helpers
   function shorten(s) {
