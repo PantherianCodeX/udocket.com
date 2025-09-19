@@ -47,8 +47,8 @@
             <div class="mt-4">
               <label for="transcription_mode" class="block text-sm text-slate-600 dark:text-slate-300">Transcription</label>
               <select name="transcription_mode" id="transcription_mode" class="mt-1 w-full rounded-md border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 focus:border-brand-500 focus:ring-brand-500">
-                <option value="batch">Batch</option>
-                <option value="on-demand" selected>On-demand</option>
+                <option value="batch" selected>Batch</option>
+                <option value="on-demand">On-demand</option>
               </select>
             </div>
           </div>
@@ -57,10 +57,16 @@
               <i class="ph ph-cloud-arrow-up"></i>
               Upload & Create Job
             </button>
-            <div class="mt-4">
+            <div class="mt-4" id="diarization-wrap">
               <label class="inline-flex items-center gap-2 text-sm">
                 <input id="diarization" type="checkbox" name="diarization" value="true" class="rounded border-slate-300 dark:border-slate-700 text-brand-600 focus:ring-brand-500" />
-                Enable diarization (batch only)
+                Enable diarization
+              </label>
+            </div>
+            <div class="mt-2">
+              <label class="inline-flex items-center gap-2 text-sm">
+                <input id="diagnostics" type="checkbox" name="diagnostics" value="true" class="rounded border-slate-300 dark:border-slate-700 text-brand-600 focus:ring-brand-500" />
+                Enable diagnostics (richer logs + hashing)
               </label>
             </div>
           </div>
@@ -73,6 +79,7 @@
           const fileName = document.getElementById('file-name');
           const modeSel = document.getElementById('transcription_mode');
           const diarCb = document.getElementById('diarization');
+          const diarWrap = document.getElementById('diarization-wrap');
           browseBtn.addEventListener('click', () => fileInput.click());
           fileInput.addEventListener('change', () => {
             fileName.textContent = fileInput.files && fileInput.files[0] ? fileInput.files[0].name : 'No file selected';
@@ -80,6 +87,7 @@
           function toggleDiarization() {
             const isBatch = modeSel.value === 'batch';
             diarCb.disabled = !isBatch;
+            if (diarWrap) diarWrap.style.display = isBatch ? '' : 'none';
             if (!isBatch) diarCb.checked = false;
           }
           modeSel.addEventListener('change', toggleDiarization);
@@ -168,6 +176,8 @@
   let lastJson = '';
   let current = [];
   let selectedId = null;
+  let openMenuForJobId = null;
+  const openDiagIds = new Set();
 
   function humanSize(bytes) {
     if (bytes == null) return '-';
@@ -196,10 +206,20 @@
             <div>
               <div class="text-lg font-medium">${job.description || job.id}</div>
               <div class="mt-1">${statusBadge(job.status)}</div>
-              <div class="mt-2 text-xs text-slate-500">Job ID: <span class="font-mono">${job.id}</span></div>
+              <div class="mt-2 text-xs text-slate-500">Job ID: <span class="font-mono cursor-pointer underline decoration-dotted underline-offset-4 job-id" title="Click to copy" data-id="${job.id}">${job.id}</span></div>
             </div>
             <div class="flex items-center gap-2">
-              <button data-copy-id="${job.id}" class="text-xs px-2 py-1 rounded border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800">Copy Job ID</button>
+              <div class="relative inline-block text-left">
+                <button data-dd-trigger data-dd-id="${job.id}" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800">
+                  <i class="ph ph-wrench"></i>
+                  Diagnostics
+                  <i class="ph ph-caret-down ml-1"></i>
+                </button>
+                <div data-dd-menu data-dd-id="${job.id}" class="hidden absolute right-0 mt-2 w-56 z-50 origin-top-right rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-lg">
+                  <button data-view-log-id="${job.id}" class="w-full text-left px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2"><i class="ph ph-scroll"></i>View Log</button>
+                  ${job.mode === 'batch' ? `<button data-remote-hash-id=\"${job.id}\" class=\"w-full text-left px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2\"><i class=\\\"ph ph-fingerprint\\\"></i>Get Remote Hashes</button>` : ''}
+                </div>
+              </div>
               ${job.transcript ? `<a class="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-brand-600 text-white hover:bg-brand-700" target="_blank" href="${downloadBase}/transcriptions/${job.id}/download"><i class=\"ph ph-download-simple\"></i>Download Transcript</a>` : ''}
             </div>
           </div>
@@ -241,16 +261,33 @@
                 • ${job.audio_channels || '—'} ch
                 ${job.sample_rate_hz ? ' • ' + job.sample_rate_hz.toLocaleString() + ' Hz' : ''}
               </div>
-              ${job.audio_mtime ? `<div class="text-xs text-slate-500">Modified: ${formatFull(job.audio_mtime)}</div>` : ''}
-              ${job.sha256 ? `<div class="text-xs text-slate-500 break-all">SHA-256: ${job.sha256}</div>` : ''}
+              ${job.audio_mtime ? `<div class=\"text-xs text-slate-500\">Modified: ${formatFull(job.audio_mtime)}</div>` : ''}
+              ${job.sha256 ? `<div class=\"text-xs text-slate-500\">SHA-256 (local): <span class=\"hash mono-hash cursor-pointer\" data-full=\"${job.sha256}\" title=\"${job.sha256}\">${shorten(job.sha256)}</span></div>` : ''}
+              ${job.audio_sha256_remote ? `<div class=\"text-xs text-slate-500\">SHA-256 (remote): <span class=\"hash mono-hash cursor-pointer\" data-full=\"${job.audio_sha256_remote}\" title=\"${job.audio_sha256_remote}\">${shorten(job.audio_sha256_remote)}</span></div>` : ''}
+              ${job.audio_content_md5_b64 ? `<div class=\"text-xs text-slate-500\">Content-MD5: <span class=\"hash mono-hash cursor-pointer\" data-full=\"${job.audio_content_md5_b64}\" title=\"${job.audio_content_md5_b64}\">${shorten(job.audio_content_md5_b64)}</span></div>` : ''}
+              ${job.audio_size_bytes_remote != null ? `<div class=\"text-xs text-slate-500\">Remote size: ${humanSize(job.audio_size_bytes_remote)}</div>` : ''}
             </div>
             <div>
               <div class="text-slate-500">Transcript</div>
               ${job.transcript ? `
-                <div class="mt-1 text-sm">${job.transcript_words != null ? job.transcript_words.toLocaleString() : '-'} words</div>
-                <div class="text-xs text-slate-500">${humanSize(job.transcript_bytes)}</div>
-              ` : '<div class="mt-1 text-sm">-</div>'}
+                <div class=\"mt-1 text-sm\">${job.transcript_words != null ? job.transcript_words.toLocaleString() : '-'} words</div>
+                <div class=\"text-xs text-slate-500\">${humanSize(job.transcript_bytes)}</div>
+                ${job.transcript_sha256 ? `<div class=\"text-xs text-slate-500\">Transcript SHA-256: <span class=\"hash mono-hash cursor-pointer\" data-full=\"${job.transcript_sha256}\" title=\"${job.transcript_sha256}\">${shorten(job.transcript_sha256)}</span></div>` : ''}
+                ${job.num_speakers != null ? `<div class=\"text-xs text-slate-500\">Speakers: ${job.num_speakers}</div>` : ''}
+                ${job.segments != null ? `<div class=\"text-xs text-slate-500\">Segments: ${job.segments}</div>` : ''}
+                ${job.avg_confidence != null ? `<div class=\"text-xs text-slate-500\">Avg confidence: ${(job.avg_confidence*100).toFixed(1)}%</div>` : ''}
+              ` : '<div class=\"mt-1 text-sm\">-</div>'}
               ${job.error ? `<div class="mt-2 text-sm text-rose-600 dark:text-rose-400">${job.error}</div>` : ''}
+              <div class="mt-4">
+                <button class="text-xs px-2 py-1 rounded border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800" data-diag-toggle="${job.id}">Show Diagnostics</button>
+                <div class="mt-2 hidden" data-diag-panel="${job.id}">
+                  <div class="text-xs text-slate-500">Diagnostics: ${job.diagnostics ? 'Enabled' : '—'}</div>
+                  ${job.azure_transcription_url ? `<div class=\"text-xs text-slate-500\">Azure URL: <a class=\"underline\" target=\"_blank\" href=\"${job.azure_transcription_url}\">${job.azure_transcription_url}</a></div>` : ''}
+                  ${job.language ? `<div class=\"text-xs text-slate-500\">Language: ${job.language}</div>` : ''}
+                  ${job.azure_region ? `<div class=\"text-xs text-slate-500\">Region: ${job.azure_region}</div>` : ''}
+                  ${job.attempts_used != null ? `<div class=\"text-xs text-slate-500\">Attempts: ${job.attempts_used}</div>` : ''}
+                </div>
+              </div>
             </div>
           </div>
         </td>
@@ -286,9 +323,46 @@
         tr.classList.add('selected','ring-1','ring-slate-300','dark:ring-slate-600','bg-slate-100','dark:bg-slate-800');
         // Insert detail row after this row
         tr.insertAdjacentHTML('afterend', detailsRowHTML(job));
-        // Bind copy button
-        const btn = tr.nextElementSibling.querySelector('[data-copy-id]');
-        if (btn) btn.addEventListener('click', async (ev) => { ev.stopPropagation(); try { await navigator.clipboard.writeText(btn.getAttribute('data-copy-id')); } catch {} });
+        // Bind Job ID click-to-copy
+        const jid = tr.nextElementSibling.querySelector('.job-id');
+        if (jid) jid.addEventListener('click', async (ev) => { ev.stopPropagation(); const v = jid.getAttribute('data-id'); try { await navigator.clipboard.writeText(v); flashCopied(jid); } catch {} });
+        // Bind Diagnostics toggle
+        const dt = tr.nextElementSibling.querySelector(`[data-diag-toggle="${id}"]`);
+        const dp = tr.nextElementSibling.querySelector(`[data-diag-panel="${id}"]`);
+        if (dt && dp) dt.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          dp.classList.toggle('hidden');
+          const opened = !dp.classList.contains('hidden');
+          dt.textContent = opened ? 'Hide Diagnostics' : 'Show Diagnostics';
+          if (opened) openDiagIds.add(id); else openDiagIds.delete(id);
+        });
+        if (dp && openDiagIds.has(id)) { dp.classList.remove('hidden'); if (dt) dt.textContent = 'Hide Diagnostics'; }
+        // Bind dropdown trigger and items
+        const ddTrig = tr.nextElementSibling.querySelector('[data-dd-trigger]');
+        const ddMenu = tr.nextElementSibling.querySelector('[data-dd-menu]');
+        if (ddTrig && ddMenu) {
+          ddTrig.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            const jid = ddTrig.getAttribute('data-dd-id');
+            const willOpen = ddMenu.classList.contains('hidden');
+            closeAllMenus();
+            if (willOpen) {
+              ddMenu.classList.remove('hidden');
+              openMenuForJobId = jid;
+            } else {
+              ddMenu.classList.add('hidden');
+              openMenuForJobId = null;
+            }
+          });
+        }
+        const vbtn = tr.nextElementSibling.querySelector('[data-view-log-id]');
+        if (vbtn) vbtn.addEventListener('click', async (ev) => { ev.stopPropagation(); const id = vbtn.getAttribute('data-view-log-id'); closeAllMenus(); openLogModal(id); });
+        const rh = tr.nextElementSibling.querySelector('[data-remote-hash-id]');
+        if (rh) rh.addEventListener('click', async (ev) => { ev.stopPropagation(); const id = rh.getAttribute('data-remote-hash-id'); closeAllMenus(); await fetchRemoteHashes(id, rh); });
+        // Bind hash click-to-copy
+        tr.nextElementSibling.querySelectorAll('.hash').forEach(h => {
+          h.addEventListener('click', async (ev) => { ev.stopPropagation(); try { await navigator.clipboard.writeText(h.getAttribute('data-full')); flashCopied(h); } catch {} });
+        });
         // Bind tooltip on audio
         const audio = tr.nextElementSibling.querySelector('.job-audio');
         if (audio) {
@@ -327,12 +401,48 @@
         const open = document.querySelector('#jobs-tbody tr.job-details-row');
         const anchor = document.querySelector(`#jobs-tbody tr[data-job-id="${selectedId}"]`);
         if (anchor) anchor.classList.add('selected','ring-1','ring-slate-300','dark:ring-slate-600','bg-slate-100','dark:bg-slate-800');
-        if (open && anchor) {
-          open.outerHTML = detailsRowHTML(job);
-          // Re-bind copy + tooltip
+        if (anchor && !open) {
+          // Details row was cleared during refresh; re-insert it
+          anchor.insertAdjacentHTML('afterend', detailsRowHTML(job));
           const newOpen = anchor.nextElementSibling;
-          const btn = newOpen.querySelector('[data-copy-id]');
-          if (btn) btn.addEventListener('click', async (ev) => { ev.stopPropagation(); try { await navigator.clipboard.writeText(btn.getAttribute('data-copy-id')); } catch {} });
+          // Re-bind actions for the newly inserted row
+          const jid = newOpen.querySelector('.job-id');
+          if (jid) jid.addEventListener('click', async (ev) => { ev.stopPropagation(); const v = jid.getAttribute('data-id'); try { await navigator.clipboard.writeText(v); flashCopied(jid); } catch {} });
+          const ddTrig = newOpen.querySelector('[data-dd-trigger]');
+          const ddMenu = newOpen.querySelector('[data-dd-menu]');
+          if (ddTrig && ddMenu) {
+            ddTrig.addEventListener('click', (ev) => {
+              ev.stopPropagation();
+              const jid = ddTrig.getAttribute('data-dd-id');
+              const willOpen = ddMenu.classList.contains('hidden');
+              closeAllMenus();
+              if (willOpen) {
+                ddMenu.classList.remove('hidden');
+                openMenuForJobId = jid;
+              } else {
+                ddMenu.classList.add('hidden');
+                openMenuForJobId = null;
+              }
+            });
+          }
+          const vbtn = newOpen.querySelector('[data-view-log-id]');
+          if (vbtn) vbtn.addEventListener('click', async (ev) => { ev.stopPropagation(); const id = vbtn.getAttribute('data-view-log-id'); closeAllMenus(); openLogModal(id); });
+          const rh = newOpen.querySelector('[data-remote-hash-id]');
+          if (rh) rh.addEventListener('click', async (ev) => { ev.stopPropagation(); const id = rh.getAttribute('data-remote-hash-id'); closeAllMenus(); await fetchRemoteHashes(id, rh); });
+          newOpen.querySelectorAll('.hash').forEach(h => {
+            h.addEventListener('click', async (ev) => { ev.stopPropagation(); try { await navigator.clipboard.writeText(h.getAttribute('data-full')); flashCopied(h); } catch {} });
+          });
+          // Re-bind diagnostics toggle and restore state
+          const dtIns = newOpen.querySelector(`[data-diag-toggle="${selectedId}"]`);
+          const dpIns = newOpen.querySelector(`[data-diag-panel="${selectedId}"]`);
+          if (dtIns && dpIns) dtIns.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            dpIns.classList.toggle('hidden');
+            const opened = !dpIns.classList.contains('hidden');
+            dtIns.textContent = opened ? 'Hide Diagnostics' : 'Show Diagnostics';
+            if (opened) openDiagIds.add(selectedId); else openDiagIds.delete(selectedId);
+          });
+          if (dpIns && openDiagIds.has(selectedId)) { dpIns.classList.remove('hidden'); if (dtIns) dtIns.textContent = 'Hide Diagnostics'; }
           const audio = newOpen.querySelector('.job-audio');
           if (audio) {
             audio.addEventListener('mouseenter', (ev) => {
@@ -348,6 +458,71 @@
             audio.addEventListener('mousemove', (ev) => { showTooltip(tooltip.innerHTML, ev.clientX, ev.clientY); });
             audio.addEventListener('mouseleave', hideTooltip);
           }
+          // Re-open diagnostics menu if it was open for this job
+          if (openMenuForJobId && openMenuForJobId === selectedId) {
+            const ddMenu = newOpen.querySelector('[data-dd-menu]');
+            if (ddMenu) ddMenu.classList.remove('hidden');
+          }
+        } else if (open && anchor) {
+          open.outerHTML = detailsRowHTML(job);
+          // Re-bind copy + tooltip
+          const newOpen = anchor.nextElementSibling;
+          // Re-bind actions
+          const jid = newOpen.querySelector('.job-id');
+          if (jid) jid.addEventListener('click', async (ev) => { ev.stopPropagation(); const v = jid.getAttribute('data-id'); try { await navigator.clipboard.writeText(v); flashCopied(jid); } catch {} });
+          const dt = newOpen.querySelector(`[data-diag-toggle="${selectedId}"]`);
+          const dp = newOpen.querySelector(`[data-diag-panel="${selectedId}"]`);
+          if (dt && dp) dt.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            dp.classList.toggle('hidden');
+            const opened = !dp.classList.contains('hidden');
+            dt.textContent = opened ? 'Hide Diagnostics' : 'Show Diagnostics';
+            if (opened) openDiagIds.add(selectedId); else openDiagIds.delete(selectedId);
+          });
+          if (dp && openDiagIds.has(selectedId)) { dp.classList.remove('hidden'); if (dt) dt.textContent = 'Hide Diagnostics'; }
+          const ddTrig = newOpen.querySelector('[data-dd-trigger]');
+          const ddMenu = newOpen.querySelector('[data-dd-menu]');
+          if (ddTrig && ddMenu) {
+            ddTrig.addEventListener('click', (ev) => {
+              ev.stopPropagation();
+              const jid = ddTrig.getAttribute('data-dd-id');
+              const willOpen = ddMenu.classList.contains('hidden');
+              closeAllMenus();
+              if (willOpen) {
+                ddMenu.classList.remove('hidden');
+                openMenuForJobId = jid;
+              } else {
+                ddMenu.classList.add('hidden');
+                openMenuForJobId = null;
+              }
+            });
+          }
+          const vbtn = newOpen.querySelector('[data-view-log-id]');
+          if (vbtn) vbtn.addEventListener('click', async (ev) => { ev.stopPropagation(); const id = vbtn.getAttribute('data-view-log-id'); closeAllMenus(); openLogModal(id); });
+          const rh = newOpen.querySelector('[data-remote-hash-id]');
+          if (rh) rh.addEventListener('click', async (ev) => { ev.stopPropagation(); const id = rh.getAttribute('data-remote-hash-id'); closeAllMenus(); await fetchRemoteHashes(id, rh); });
+          newOpen.querySelectorAll('.hash').forEach(h => {
+            h.addEventListener('click', async (ev) => { ev.stopPropagation(); try { await navigator.clipboard.writeText(h.getAttribute('data-full')); flashCopied(h); } catch {} });
+          });
+          const audio = newOpen.querySelector('.job-audio');
+          if (audio) {
+            audio.addEventListener('mouseenter', (ev) => {
+              const j = current.find(x => x.id === selectedId);
+              const tip = `
+                <div class=\"font-medium\">${j.description || '(file)'} </div>
+                <div class=\"text-slate-300\">${j.audio_mime || 'unknown'} • ${humanSize(j.audio_bytes)} • .${j.audio_ext || ''}</div>
+                ${j.audio_mtime ? `<div class=\"text-slate-400\">Modified: ${formatFull(j.audio_mtime)}</div>` : ''}
+                ${j.audio_path ? `<div class=\"text-slate-400 break-all\">${j.audio_path}</div>` : ''}
+              `;
+              showTooltip(tip, ev.clientX, ev.clientY);
+            });
+            audio.addEventListener('mousemove', (ev) => { showTooltip(tooltip.innerHTML, ev.clientX, ev.clientY); });
+            audio.addEventListener('mouseleave', hideTooltip);
+          }
+          if (openMenuForJobId && openMenuForJobId === selectedId) {
+            const ddMenu = newOpen.querySelector('[data-dd-menu]');
+            if (ddMenu) ddMenu.classList.remove('hidden');
+          }
         }
       }
     } catch (e) { /* ignore */ }
@@ -357,5 +532,109 @@
   window.addEventListener('focus', pollJobs);
   setTimeout(pollJobs, 1000);
   // No global copy button; handled per-row
+
+  // UI helpers
+  function shorten(s) {
+    if (!s) return '';
+    const str = String(s);
+    if (str.length <= 16) return str;
+    return str.slice(0, 10) + '…' + str.slice(-8);
+  }
+  function flashCopied(el) {
+    const orig = el.getAttribute('title') || '';
+    el.setAttribute('title', 'Copied');
+    el.classList.add('ring-1','ring-emerald-400');
+    setTimeout(() => { el.setAttribute('title', orig); el.classList.remove('ring-1','ring-emerald-400'); }, 800);
+    try { showToast('Copied to clipboard'); } catch {}
+  }
+  function closeAllMenus() {
+    document.querySelectorAll('[data-dd-menu]').forEach(m => m.classList.add('hidden'));
+    openMenuForJobId = null;
+  }
+  document.addEventListener('click', (e) => {
+    const t = e.target;
+    if (!t.closest('[data-dd-menu]') && !t.closest('[data-dd-trigger]')) closeAllMenus();
+  });
+
+  async function openLogModal(jobId) {
+    try {
+      const res = await fetch(`/admin/api/cases/${caseId}/jobs/${jobId}/log`, { headers: { 'Accept': 'application/json' } });
+      const data = await res.json();
+      let body = '';
+      if (data.text) body = data.text;
+      else if (data.json) body = JSON.stringify(data.json, null, 2);
+      else body = data.error || 'No log found';
+      showModal(`Transcription Log — ${jobId}`, body);
+    } catch (e) {
+      showModal(`Transcription Log — ${jobId}`, `Failed to load log: ${e}`);
+    }
+  }
+
+  async function fetchRemoteHashes(jobId, btn) {
+    if (!btn) return;
+    const old = btn.innerHTML;
+    btn.disabled = true; btn.innerHTML = '<span class="animate-pulse">Fetching…</span>';
+    try {
+      const res = await fetch(`/admin/api/cases/${caseId}/jobs/${jobId}/refresh-remote`, { method: 'POST' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await res.json();
+      // Force immediate poll to refresh UI
+      await pollJobs();
+    } catch (e) {
+      showModal('Diagnostics', `Failed to fetch remote hashes: ${e}`);
+    } finally {
+      btn.disabled = false; btn.innerHTML = old;
+    }
+  }
+
+  // Simple modal
+  function showModal(title, preText) {
+    const wrap = document.createElement('div');
+    wrap.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/50';
+    wrap.innerHTML = `
+      <div class="mx-4 w-full max-w-3xl rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl">
+        <div class="px-4 py-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+          <div class="font-medium">${title}</div>
+          <div class="flex items-center gap-2">
+            <button class="px-2 py-1 text-slate-500 hover:text-slate-700" data-copy>Copy</button>
+            <button class="px-2 py-1 text-slate-500 hover:text-slate-700" data-close>Close</button>
+          </div>
+        </div>
+        <div class="p-4">
+          <pre class="text-xs overflow-auto max-h-[60vh] whitespace-pre-wrap">${escapeHtml(preText)}</pre>
+        </div>
+      </div>`;
+    wrap.addEventListener('click', async (e) => {
+      if (e.target === wrap || e.target.hasAttribute('data-close')) document.body.removeChild(wrap);
+      if (e.target && e.target.hasAttribute('data-copy')) {
+        const pre = wrap.querySelector('pre');
+        const head = wrap.querySelector('.font-medium');
+        const header = head ? head.textContent : '';
+        const text = header ? header + '\n\n' + pre.innerText : pre.innerText;
+        try { await navigator.clipboard.writeText(text); e.target.textContent = 'Copied'; setTimeout(() => e.target.textContent = 'Copy', 800); showToast('Log copied'); } catch {}
+      }
+    });
+    const onKey = (ev) => { if (ev.key === 'Escape') { try { document.body.removeChild(wrap); } catch {}; document.removeEventListener('keydown', onKey); } };
+    document.addEventListener('keydown', onKey);
+    document.body.appendChild(wrap);
+  }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  }
+
+  // Toasts
+  let toastBox = null;
+  function showToast(msg) {
+    if (!toastBox) {
+      toastBox = document.createElement('div');
+      toastBox.className = 'fixed z-50 bottom-4 right-4 space-y-2';
+      document.body.appendChild(toastBox);
+    }
+    const t = document.createElement('div');
+    t.className = 'px-3 py-2 rounded-md bg-slate-900/90 text-white text-xs shadow-lg border border-slate-700/60';
+    t.textContent = msg;
+    toastBox.appendChild(t);
+    setTimeout(() => { try { toastBox.removeChild(t); } catch {} }, 1500);
+  }
 </script>
 {% endblock %}

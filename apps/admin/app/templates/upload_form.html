@@ -18,10 +18,16 @@
         <i class="ph ph-cloud-arrow-up"></i>
         Upload & Create Job
       </button>
-      <div class="mt-4">
+      <div class="mt-4" id="diarization-wrap">
         <label class="inline-flex items-center gap-2 text-sm">
           <input type="checkbox" name="diarization" id="diarization" class="rounded border-slate-300 dark:border-slate-700 text-brand-600 focus:ring-brand-500" />
-          Enable diarization (batch only)
+          Enable diarization
+        </label>
+      </div>
+      <div class="mt-2">
+        <label class="inline-flex items-center gap-2 text-sm">
+          <input type="checkbox" name="diagnostics" id="diagnostics" class="rounded border-slate-300 dark:border-slate-700 text-brand-600 focus:ring-brand-500" />
+          Enable diagnostics (richer logs + hashing)
         </label>
       </div>
     </div>
@@ -30,9 +36,11 @@
     guardUnsavedChanges('form[action="/admin/cases/{{ case_id }}/upload-audio"]');
     const modeSel = document.getElementById('transcription_mode');
     const diarCb = document.getElementById('diarization');
+    const diarWrap = document.getElementById('diarization-wrap');
     function toggleDiarization() {
       const isBatch = modeSel.value === 'batch';
       diarCb.disabled = !isBatch;
+      if (diarWrap) diarWrap.style.display = isBatch ? '' : 'none';
       if (!isBatch) diarCb.checked = false;
     }
     modeSel.addEventListener('change', toggleDiarization);

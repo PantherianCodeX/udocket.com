@@ -25,8 +25,9 @@ def upload_form(request: Request, case_id: str):
 @router.post("/admin/cases/{case_id}/upload-audio")
 async def upload_audio(
     case_id: str,
-    transcription_mode: Literal["batch", "on-demand"] = Form("on-demand"),
+    transcription_mode: Literal["batch", "on-demand"] = Form("batch"),
     diarization: bool = Form(False),
+    diagnostics: bool = Form(False),
     file: UploadFile = File(...),
 ):
     if diarization and transcription_mode != "batch":
@@ -58,6 +59,7 @@ async def upload_audio(
             file_sha256=sha256(data).hexdigest(),
             transcription_mode=transcription_mode,
             diarization=diarization,
+            diagnostics=diagnostics,
             audio_bytes=audio_bytes,
             audio_mime=audio_mime,
             audio_ext=audio_ext,
