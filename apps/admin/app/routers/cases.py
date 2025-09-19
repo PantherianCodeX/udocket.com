@@ -15,11 +15,24 @@ import base64
 import shutil
 import os
 import mimetypes
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 
 router = APIRouter()
 templates = Jinja2Templates(directory="apps/admin/app/templates")
+
+def _iso_utc(dt: datetime | None) -> str | None:
+    if not dt:
+        return None
+    try:
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=timezone.utc).isoformat()
+        return dt.astimezone(timezone.utc).isoformat()
+    except Exception:
+        try:
+            return dt.isoformat()
+        except Exception:
+            return None
 
 @router.get("/admin/cases")
 def list_cases(request: Request):
@@ -61,11 +74,15 @@ def case_detail(request: Request, case_id: str):
             t = j.finished_at or j.started_at or j.created_at
             if t and (last_update is None or t > last_update):
                 last_update = t
+        # Include case.updated_at as well
+        if getattr(c, 'updated_at', None) is not None:
+            if last_update is None or c.updated_at > last_update:
+                last_update = c.updated_at
     except Exception:
         last_update = None
     return templates.TemplateResponse(
         "case_detail.html",
-        {"request": request, "case": c, "jobs": jobs, "api_base": api_base, "case_last_update": last_update},
+        {"request": request, "case": c, "jobs": jobs, "api_base": api_base, "case_last_update": last_update, "case_last_update_iso": _iso_utc(last_update)},
     )
 
 @router.get("/admin/cases/{case_id}/edit")
@@ -90,6 +107,10 @@ def update_case(request: Request, case_id: str,
         c.party_2 = party_2.strip()
         c.client_role = (client_role or None)
         c.notes = notes
+        try:
+            c.updated_at = datetime.utcnow()
+        except Exception:
+            pass
         s.add(c)
         s.commit()
     return RedirectResponse(url=f"/admin/cases/{case_id}", status_code=303)
@@ -126,13 +147,13 @@ def case_jobs_json(case_id: str):
                 "diagnostics": bool(getattr(j, 'diagnostics', False)),
                 "transcript": bool(j.transcript_path),
                 "error": j.error_message or "",
-                "created_at": j.created_at.isoformat() if j.created_at else None,
-                "started_at": j.started_at.isoformat() if j.started_at else None,
-                "finished_at": j.finished_at.isoformat() if j.finished_at else None,
+                "created_at": _iso_utc(j.created_at),
+                "started_at": _iso_utc(j.started_at),
+                "finished_at": _iso_utc(j.finished_at),
                 "sha256": j.file_sha256 or "",
                 "audio_path": j.audio_path or "",
                 "audio_bytes": j.audio_bytes,
-                "audio_mtime": (j.audio_mtime.isoformat() if j.audio_mtime else None),
+                "audio_mtime": _iso_utc(j.audio_mtime),
                 "audio_mime": j.audio_mime,
                 "audio_ext": j.audio_ext,
                 "audio_bitrate_kbps": j.audio_bitrate_kbps,
@@ -156,6 +177,37 @@ def case_jobs_json(case_id: str):
                 "attempts_used": meta.get("attempts_used"),
             })
     return JSONResponse(payload)
+
+@router.get("/admin/api/cases/jobs-summary")
+def cases_jobs_summary():
+    """Return aggregated job stats per case to avoid N per-row requests on listing.
+
+    Payload: { case_id: { total, succeeded, failed, running, pending, lastUpdate } }
+    """
+    with SessionLocal() as s:
+        # Initialize summaries for all cases so callers can rely on presence
+        cases = {c.id: {"total": 0, "succeeded": 0, "failed": 0, "running": 0, "pending": 0, "lastUpdate": None} for c in s.query(Case.id).all()}
+        for j in s.query(Job).all():
+            cid = j.case_id
+            if cid not in cases:
+                cases[cid] = {"total": 0, "succeeded": 0, "failed": 0, "running": 0, "pending": 0, "lastUpdate": None}
+            rec = cases[cid]
+            rec["total"] += 1
+            if j.status == "SUCCEEDED":
+                rec["succeeded"] += 1
+            elif j.status == "FAILED":
+                rec["failed"] += 1
+            elif j.status == "RUNNING":
+                rec["running"] += 1
+            else:
+                rec["pending"] += 1
+            t = j.finished_at or j.started_at or j.created_at
+            if t is not None:
+                iso = _iso_utc(t)
+                cur = rec["lastUpdate"]
+                if cur is None or iso > cur:
+                    rec["lastUpdate"] = iso
+    return JSONResponse(cases)
 
 @router.get("/admin/api/cases/{case_id}/jobs/{job_id}/log")
 def job_log(case_id: str, job_id: str):

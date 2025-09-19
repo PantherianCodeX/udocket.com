@@ -1,6 +1,6 @@
 python-dotenv
-pydantic
-pydantic-settings
+pydantic>=2.6,<3
+pydantic-settings>=2.2,<3
 sqlalchemy
 # BatchTranscriptionClient available in >=1.42
 azure-cognitiveservices-speech>=1.42
