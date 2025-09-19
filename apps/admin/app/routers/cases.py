@@ -259,9 +259,11 @@ def job_log(case_id: str, job_id: str):
     return JSONResponse({"text": text or "", "json": meta})
 
 def _blob_service_client():
-    # Lazy import to avoid mandatory dependency at process start
+    # Lazy, dynamic import to avoid hard dependency at import time (and silence IDE warnings)
     try:
-        from azure.storage.blob import BlobServiceClient
+        import importlib
+        mod = importlib.import_module("azure.storage.blob")
+        BlobServiceClient = getattr(mod, "BlobServiceClient")
     except Exception as e:
         raise HTTPException(500, f"azure-storage-blob not installed: {e}")
     if settings.AZURE_BLOB_CONNECTION_STRING:
