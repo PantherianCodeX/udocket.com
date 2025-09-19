@@ -27,6 +27,10 @@
           <dt class="text-sm text-slate-500">Parties</dt>
           <dd class="mt-1 font-medium">{{ case.party_1 or "-" }} vs {{ case.party_2 or "-" }}</dd>
         </div>
+        <div>
+          <dt class="text-sm text-slate-500">Updated</dt>
+          <dd class="mt-1 font-medium">{{ case_last_update.strftime('%b %d, %Y, %I:%M %p') if case_last_update else '-' }}</dd>
+        </div>
         <div class="sm:col-span-2">
           <dt class="text-sm text-slate-500">Notes</dt>
           <dd class="mt-1 whitespace-pre-line">{{ case.notes or "-" }}</dd>

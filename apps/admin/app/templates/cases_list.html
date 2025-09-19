@@ -36,7 +36,7 @@
         <td class="px-4 py-3 text-slate-500">{{ c.created_at }}</td>
         <td class="px-4 py-3 text-right">
           <div class="inline-flex items-center gap-2">
-            <a href="/admin/cases/{{ c.id }}" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-md border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800" onclick="event.stopPropagation();">
+            <a href="/admin/cases/{{ c.id }}" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-brand-600 text-white hover:bg-brand-700" onclick="event.stopPropagation();">
               <i class="ph ph-folder-open"></i>
               Open
             </a>
@@ -85,21 +85,7 @@
     return `
       <tr class="case-details-row bg-slate-50/50 dark:bg-slate-800/30">
         <td colspan="4" class="px-4 py-4">
-          <div class="flex items-start justify-between">
-            <div>
-              <div class="text-lg font-medium flex items-center gap-2"><i class="ph ph-folder"></i> ${title}</div>
-              <div class="mt-1 text-xs text-slate-500 font-mono">ID: ${cid}</div>
-            </div>
-            <div class="hidden sm:flex items-center gap-2">
-              <a href="/admin/cases/${cid}" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-brand-600 text-white hover:bg-brand-700">
-                <i class="ph ph-folder-open"></i> Open
-              </a>
-              <a href="/admin/cases/${cid}/edit" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800">
-                <i class="ph ph-pencil-simple"></i> Edit
-              </a>
-            </div>
-          </div>
-          <div class="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
             <div>
               <div class="text-slate-500">Reference</div>
               <div class="font-medium">${reference || '-'}</div>
@@ -130,22 +116,17 @@
   }
 
   function summaryHTML(stats) {
-    const total = stats.total;
-    const succeeded = stats.succeeded;
     const lastUpd = stats.lastUpdate || null;
-    const info = `${succeeded} / ${total} succeeded`;
     return `
       <div class="flex items-start justify-between">
         <div>
           <div class="text-sm text-slate-500">Transcriptions</div>
           <div class="mt-1 flex flex-wrap items-center gap-2">
             ${statusBadges(stats)}
-            <span class="text-slate-400">•</span>
-            <span class="text-sm">${info}</span>
           </div>
         </div>
         <div class="text-right text-sm text-slate-500">
-          <div>Last Update</div>
+          <div>Updated</div>
           <div class="font-medium">${fmtFull(lastUpd)}</div>
         </div>
       </div>

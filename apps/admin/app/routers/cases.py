@@ -54,7 +54,19 @@ def case_detail(request: Request, case_id: str):
         if not c: raise HTTPException(404)
         jobs = s.query(Job).filter(Job.case_id==case_id).order_by(Job.created_at.desc()).all()
     api_base = f"http://{request.url.hostname}:{settings.API_PORT}"
-    return templates.TemplateResponse("case_detail.html", {"request": request, "case": c, "jobs": jobs, "api_base": api_base})
+    # Compute case-level updated timestamp from jobs
+    last_update = None
+    try:
+        for j in jobs:
+            t = j.finished_at or j.started_at or j.created_at
+            if t and (last_update is None or t > last_update):
+                last_update = t
+    except Exception:
+        last_update = None
+    return templates.TemplateResponse(
+        "case_detail.html",
+        {"request": request, "case": c, "jobs": jobs, "api_base": api_base, "case_last_update": last_update},
+    )
 
 @router.get("/admin/cases/{case_id}/edit")
 def edit_case(request: Request, case_id: str):
