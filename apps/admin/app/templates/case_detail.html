@@ -241,15 +241,22 @@
                 • ${job.audio_channels || '—'} ch
                 ${job.sample_rate_hz ? ' • ' + job.sample_rate_hz.toLocaleString() + ' Hz' : ''}
               </div>
-              ${job.audio_mtime ? `<div class="text-xs text-slate-500">Modified: ${formatFull(job.audio_mtime)}</div>` : ''}
-              ${job.sha256 ? `<div class="text-xs text-slate-500 break-all">SHA-256: ${job.sha256}</div>` : ''}
+              ${job.audio_mtime ? `<div class=\"text-xs text-slate-500\">Modified: ${formatFull(job.audio_mtime)}</div>` : ''}
+              ${job.sha256 ? `<div class=\"text-xs text-slate-500 break-all\">SHA-256 (local): ${job.sha256}</div>` : ''}
+              ${job.audio_sha256_remote ? `<div class=\"text-xs text-slate-500 break-all\">SHA-256 (remote): ${job.audio_sha256_remote}</div>` : ''}
+              ${job.audio_content_md5_b64 ? `<div class=\"text-xs text-slate-500 break-all\">Content-MD5: ${job.audio_content_md5_b64}</div>` : ''}
+              ${job.audio_size_bytes_remote != null ? `<div class=\"text-xs text-slate-500\">Remote size: ${humanSize(job.audio_size_bytes_remote)}</div>` : ''}
             </div>
             <div>
               <div class="text-slate-500">Transcript</div>
               ${job.transcript ? `
-                <div class="mt-1 text-sm">${job.transcript_words != null ? job.transcript_words.toLocaleString() : '-'} words</div>
-                <div class="text-xs text-slate-500">${humanSize(job.transcript_bytes)}</div>
-              ` : '<div class="mt-1 text-sm">-</div>'}
+                <div class=\"mt-1 text-sm\">${job.transcript_words != null ? job.transcript_words.toLocaleString() : '-'} words</div>
+                <div class=\"text-xs text-slate-500\">${humanSize(job.transcript_bytes)}</div>
+                ${job.transcript_sha256 ? `<div class=\"text-xs text-slate-500 break-all\">Transcript SHA-256: ${job.transcript_sha256}</div>` : ''}
+                ${job.num_speakers != null ? `<div class=\"text-xs text-slate-500\">Speakers: ${job.num_speakers}</div>` : ''}
+                ${job.segments != null ? `<div class=\"text-xs text-slate-500\">Segments: ${job.segments}</div>` : ''}
+                ${job.avg_confidence != null ? `<div class=\"text-xs text-slate-500\">Avg confidence: ${(job.avg_confidence*100).toFixed(1)}%</div>` : ''}
+              ` : '<div class=\"mt-1 text-sm\">-</div>'}
               ${job.error ? `<div class="mt-2 text-sm text-rose-600 dark:text-rose-400">${job.error}</div>` : ''}
             </div>
           </div>

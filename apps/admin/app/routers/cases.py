@@ -14,6 +14,7 @@ import shutil
 import os
 import mimetypes
 from datetime import datetime
+import json
 
 router = APIRouter()
 templates = Jinja2Templates(directory="apps/admin/app/templates")
@@ -94,6 +95,14 @@ def case_jobs_json(case_id: str):
                 return str(p)
         payload = []
         for j in jobs:
+            # Try to enrich with agent metadata from per-job ops JSON
+            meta = {}
+            try:
+                ops = case_dir(case_id) / 'ops' / f"{j.id}_transcription_log.json"
+                if ops.exists():
+                    meta = json.loads(ops.read_text(encoding='utf-8'))
+            except Exception:
+                meta = {}
             payload.append({
                 "id": j.id,
                 "description": original_name(j.audio_path or ""),
@@ -117,6 +126,18 @@ def case_jobs_json(case_id: str):
                 "sample_rate_hz": j.sample_rate_hz,
                 "transcript_words": j.transcript_words,
                 "transcript_bytes": j.transcript_bytes,
+                # Agent meta (if present)
+                "audio_sha256_remote": meta.get("audio_sha256_remote"),
+                "audio_content_md5_b64": meta.get("audio_content_md5_b64"),
+                "audio_size_bytes_remote": meta.get("audio_size_bytes_remote"),
+                "transcript_sha256": meta.get("transcript_sha256"),
+                "azure_region": meta.get("azure_region"),
+                "language": meta.get("language"),
+                "diarization_enabled": meta.get("diarization_enabled"),
+                "num_speakers": meta.get("num_speakers"),
+                "segments": meta.get("segments"),
+                "avg_confidence": meta.get("avg_confidence"),
+                "azure_transcription_url": meta.get("azure_transcription_url"),
             })
     return JSONResponse(payload)
 

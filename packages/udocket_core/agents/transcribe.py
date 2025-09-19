@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-uDocket Transcription Agent v1.4.2 (Canada-only, WAV conversion, debug-friendly)
+uDocket Transcription Agent v1.4.3 (Canada-only, WAV conversion, debug-friendly)
 
 - File input path uses AudioConfig(filename=...), so we feed PCM WAV (mono, 16 kHz).
 - Non-WAV inputs are converted via ffmpeg (requires ffmpeg installed) to <name>.tmp.wav.
@@ -11,7 +11,7 @@ import os, sys, json, hashlib, subprocess, shlex, threading, shutil, platform, p
 from urllib.parse import urlparse, unquote
 from pathlib import Path
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict, Any, Tuple
 
 try:
     from dotenv import load_dotenv
@@ -159,7 +159,47 @@ def ensure_wav(input_path: Path, case_dir: Path, case_id: str) -> Path:
         err_exit(11, "ffmpeg conversion failed; see ops ffmpeg_error.log")
     return out
 
-def _rest_batch_transcribe(audio_url: str, lang: str, diarization: bool) -> str:
+def _iso8601_to_seconds(val: str) -> float:
+    """Parse a minimal ISO8601 duration like PT1H2M3.45S to seconds."""
+    try:
+        if not isinstance(val, str) or not val.startswith("PT"):
+            return 0.0
+        # Very small parser: PT[H][M][S]
+        h = m = 0.0
+        s = 0.0
+        # Extract hours
+        mobj = re.search(r"(\d+(?:\.\d+)?)H", val)
+        if mobj:
+            h = float(mobj.group(1))
+        mobj = re.search(r"(\d+(?:\.\d+)?)M", val)
+        if mobj:
+            m = float(mobj.group(1))
+        mobj = re.search(r"(\d+(?:\.\d+)?)S", val)
+        if mobj:
+            s = float(mobj.group(1))
+        return h * 3600.0 + m * 60.0 + s
+    except Exception:
+        return 0.0
+
+def _to_seconds(val) -> float:
+    """Best-effort conversion of Azure Speech offsets/durations to seconds."""
+    try:
+        if val is None:
+            return 0.0
+        if isinstance(val, (int, float)):
+            # Heuristic: Azure often reports ticks (100ns). If it looks big, assume ticks.
+            if val > 1_000_000:
+                return float(val) / 10_000_000.0
+            return float(val)
+        if isinstance(val, str):
+            if val.startswith("PT"):
+                return _iso8601_to_seconds(val)
+            return float(val)
+    except Exception:
+        return 0.0
+    return 0.0
+
+def _rest_batch_transcribe(audio_url: str, lang: str, diarization: bool) -> Tuple[str, Optional[float], Dict[str, Any]]:
     base = f"https://{SPEECH_REGION}.api.cognitive.microsoft.com/speechtotext/v3.2"
     create_url = base + "/transcriptions"
     headers = {"Ocp-Apim-Subscription-Key": SPEECH_KEY, "Content-Type": "application/json"}
@@ -230,68 +270,106 @@ def _rest_batch_transcribe(audio_url: str, lang: str, diarization: bool) -> str:
     # Try to convert JSON content to plain text if needed
     try:
         jd = tresp.json()
-        lines = []
-        crp = jd.get("combinedRecognizedPhrases") or []
-        for p in crp:
-            t = (p.get("display") or p.get("lexical") or "").strip()
-            if t:
-                lines.append(t)
-        rp = jd.get("recognizedPhrases") or []
-        if not lines and rp:
+        meta: Dict[str, Any] = {"diarization": diarization, "azure_transcription_url": loc}
+        # Compute duration from phrases
+        dur_s: Optional[float] = None
+        try:
+            rp = jd.get("recognizedPhrases") or []
+            max_end = 0.0
+            seg_count = 0
             for p in rp:
-                nb = p.get("nBest") or []
-                if nb:
-                    t = (nb[0].get("display") or nb[0].get("lexical") or "").strip()
-                    if t:
-                        lines.append(t)
-        if lines:
-            return "\n".join(lines)
-    except Exception:
-        pass
-    return tresp.text
+                off = _to_seconds(p.get("offset") or p.get("offsetInTicks"))
+                dur = _to_seconds(p.get("duration") or p.get("durationInTicks"))
+                max_end = max(max_end, off + dur)
+                seg_count += 1
+                # If not present on phrase, attempt via words list
+                if not p.get("duration") and not p.get("durationInTicks"):
+                    words = p.get("nBest", [{}])[0].get("words") or []
+                    if words:
+                        for w in words:
+                            woff = _to_seconds(w.get("offset") or w.get("offsetInTicks"))
+                            wdur = _to_seconds(w.get("duration") or w.get("durationInTicks"))
+                            max_end = max(max_end, off + woff + wdur)
+            if max_end > 0:
+                dur_s = max_end
+            meta["segments"] = seg_count
+        except Exception:
+            dur_s = None
 
-def batch_transcribe(audio: str | Path, lang: str, diarization: bool) -> str:
-    # Prefer SDK client when available; otherwise fallback to REST API
-    if _HAS_BATCH:
-        speech_config = speechsdk.SpeechConfig(subscription=SPEECH_KEY, region=SPEECH_REGION)
-        client = speechsdk.transcription.BatchTranscriptionClient(speech_config=speech_config)
-        if isinstance(audio, Path):
-            source_uri = audio.as_uri()
-        else:
-            source_uri = audio
-        recording = speechsdk.transcription.TranscriptionRecording(source_uri)
-        definition = speechsdk.transcription.TranscriptionDefinition(locale=lang, recordings=[recording])
+        # Build text output
+        lines: list[str] = []
+        avg_conf = None
+        conf_sum = 0.0
+        conf_n = 0
         if diarization:
-            try:
-                definition.properties[speechsdk.PropertyId.SpeechServiceResponse_EnableDiarization] = "true"
-            except Exception:
-                pass
-        transcription = client.create_transcription(definition)
-        while True:
-            info = client.get_transcription(transcription.id)
-            if info.status in (
-                speechsdk.transcription.TranscriptionStatus.Succeeded,
-                speechsdk.transcription.TranscriptionStatus.Failed,
-            ):
-                break
-            time.sleep(5)
-        if info.status != speechsdk.transcription.TranscriptionStatus.Succeeded:
-            raise RuntimeError(f"{getattr(info, 'error_details', '') or 'Azure batch returned non-success status'}")
-        files = client.get_transcription_files(info.id)
-        text = None
-        for f in files:
-            if f.kind == speechsdk.transcription.TranscriptionFileKind.Transcription:
-                text = requests.get(f.links.content_url).text
-                break
-        if not text:
-            raise RuntimeError("No transcription result returned")
-        return text
+            # Prefer diarized speaker-attributed phrases
+            rp = jd.get("recognizedPhrases") or []
+            # Sort by offset
+            def sort_key(p):
+                return _to_seconds(p.get("offset") or p.get("offsetInTicks"))
+
+            rp_sorted = sorted(rp, key=sort_key)
+            spk_ids = set()
+            for p in rp_sorted:
+                nbest = p.get("nBest") or []
+                best = nbest[0] if nbest else {}
+                text = (best.get("display") or best.get("lexical") or "").strip()
+                if not text:
+                    continue
+                try:
+                    c = best.get("confidence")
+                    if isinstance(c, (int, float)):
+                        conf_sum += float(c)
+                        conf_n += 1
+                except Exception:
+                    pass
+                spk = p.get("speaker")
+                if spk is None:
+                    spk = p.get("channel")
+                if spk is not None:
+                    spk_ids.add(spk)
+                off = _to_seconds(p.get("offset") or p.get("offsetInTicks"))
+                mm = int(off // 60)
+                ss = int(off % 60)
+                if spk is not None:
+                    lines.append(f"[{mm:02d}:{ss:02d}] SPK_{spk}: {text}")
+                else:
+                    lines.append(f"[{mm:02d}:{ss:02d}] {text}")
+            meta["num_speakers"] = len(spk_ids) if spk_ids else None
+        if not lines:
+            # Fallback: combined phrases or basic text
+            crp = jd.get("combinedRecognizedPhrases") or []
+            for p in crp:
+                t = (p.get("display") or p.get("lexical") or "").strip()
+                if t:
+                    lines.append(t)
+            rp = jd.get("recognizedPhrases") or []
+            if not lines and rp:
+                for p in rp:
+                    nb = p.get("nBest") or []
+                    if nb:
+                        t = (nb[0].get("display") or nb[0].get("lexical") or "").strip()
+                        if t:
+                            lines.append(t)
+        if conf_n > 0:
+            avg_conf = conf_sum / conf_n
+        meta["avg_confidence"] = avg_conf
+        if lines:
+            return ("\n".join(lines), dur_s, meta)
+        return (tresp.text, dur_s, meta)
+    except Exception:
+        return (tresp.text, None, {"diarization": diarization, "azure_transcription_url": loc})
+
+def batch_transcribe(audio: str | Path, lang: str, diarization: bool) -> Tuple[str, Optional[float], Dict[str, Any]]:
+    """Use REST API for batch transcription for consistent diarization support.
+
+    Returns (text, duration_seconds|None)
+    """
+    if isinstance(audio, Path):
+        source_uri = audio.as_uri()
     else:
-        if isinstance(audio, Path):
-            source_uri = audio.as_uri()
-        else:
-            source_uri = audio
-        return _rest_batch_transcribe(source_uri, lang, diarization)
+        source_uri = audio
+    return _rest_batch_transcribe(source_uri, lang, diarization)
 
 class Transcriber:
     def __init__(self, audio: Path, lang: str, case_dir: Path, case_id: str, diarization: bool = False):
@@ -473,6 +551,12 @@ def main():
     converted = False
     try:
         dur = None
+        # Remote hashing controls (for URL inputs)
+        remote_sha256 = None
+        remote_md5_b64 = None
+        remote_size = None
+        HASH_REMOTE = os.getenv("BATCH_HASH_REMOTE", "0").strip() == "1"
+        HASH_MAX_MB = int(os.getenv("BATCH_HASH_MAX_MB", "200"))
         if not locals().get('is_url'):
             audio_sha = sha256sum(audio_in)
             if audio_in.suffix.lower() != ".wav":
@@ -501,7 +585,29 @@ def main():
                 if args.mode == "batch":
                     # With worker upload, input will be an HTTPS URL
                     if locals().get('is_url'):
-                        text_raw = batch_transcribe(audio_url, lang, args.diarization)
+                        # Optionally hash remote audio (size-limited)
+                        if HASH_REMOTE:
+                            try:
+                                hr = requests.head(audio_url, timeout=15)
+                                remote_md5_b64 = hr.headers.get("Content-MD5") or hr.headers.get("x-ms-blob-content-md5")
+                                if hr.ok:
+                                    try:
+                                        remote_size = int(hr.headers.get("Content-Length", "0"))
+                                    except Exception:
+                                        remote_size = None
+                                if remote_size is None or remote_size <= HASH_MAX_MB * 1024 * 1024:
+                                    h = hashlib.sha256()
+                                    with requests.get(audio_url, stream=True, timeout=60) as gr:
+                                        gr.raise_for_status()
+                                        for chunk in gr.iter_content(chunk_size=262144):
+                                            if chunk:
+                                                h.update(chunk)
+                                    remote_sha256 = h.hexdigest()
+                            except Exception:
+                                remote_sha256 = None
+                        text_raw, remote_dur, rest_meta = batch_transcribe(audio_url, lang, args.diarization)
+                        if remote_dur and not dur:
+                            dur = remote_dur
                     else:
                         # Local batch not supported; to reach here means someone ran agent directly
                         err_exit(11, "Batch mode requires HTTPS URL input (use worker upload)")
@@ -577,11 +683,13 @@ def main():
                 pass
             err_exit(2, msg)
 
-        text_ts = insert_timestamps(text_raw, TIMESTAMP_SEC)
+        # Respect diarization: avoid interval timestamps when diarized text already has timing/speakers
+        interval = 0 if args.diarization else TIMESTAMP_SEC
+        text_ts = insert_timestamps(text_raw, interval)
         transcript_out = next_versioned(transcript_out)
         header = "\n".join([
             "DRAFT — LEGAL INFORMATION ONLY — CLIENT REVIEW REQUIRED",
-            f"Case: {case_id}", f"Audio: {src_name}", f"SHA256: {audio_sha or 'n/a (remote)'}",
+            f"Case: {case_id}", f"Audio: {src_name}", f"SHA256: {audio_sha or remote_sha256 or 'n/a (remote)'}",
             f"Region: {SPEECH_REGION}", f"Language: {lang}", f"Duration: {human_dur(dur)}",
             f"Transcribed: {now_utc()}", "-" * 72
         ])
@@ -595,6 +703,22 @@ def main():
             "sdk_path": sdk_version(), "python": sys.version.split()[0], "platform": platform.platform(),
             "converted_temp_wav": converted, "timestamp_utc": now_utc()
         }
+        # Enrich meta for batch mode with diarization metrics and remote hashes
+        if args.mode == "batch":
+            meta["diarization_enabled"] = bool(args.diarization)
+            try:
+                meta["num_speakers"] = rest_meta.get("num_speakers")
+                meta["segments"] = rest_meta.get("segments")
+                meta["avg_confidence"] = rest_meta.get("avg_confidence")
+                meta["azure_transcription_url"] = rest_meta.get("azure_transcription_url")
+            except Exception:
+                pass
+            if remote_sha256:
+                meta["audio_sha256_remote"] = remote_sha256
+            if remote_md5_b64:
+                meta["audio_content_md5_b64"] = remote_md5_b64
+            if remote_size is not None:
+                meta["audio_size_bytes_remote"] = remote_size
         write_text(log_json, json.dumps(meta, indent=2, ensure_ascii=False))
         write_text(log_json_job, json.dumps(meta, indent=2, ensure_ascii=False))
         append_jsonl(audit_jsonl, {"ts": now_utc(), "case_id": case_id, "event": "transcribed", "exit": 0, **meta})

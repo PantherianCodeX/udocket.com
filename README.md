@@ -1,4 +1,4 @@
-# uDocket MVP Skeleton (Dockerized) — v0.11
+# uDocket MVP Skeleton (Dockerized) — v0.12
 
 This package includes fixes for Pydantic v2 (uses `pydantic-settings`), explicit `PYTHONPATH=/app`,
 and module discovery (`db/__init__.py`, `config/__init__.py`).
@@ -25,9 +25,17 @@ and module discovery (`db/__init__.py`, `config/__init__.py`).
     - `AZURE_BLOB_CONTAINER` (e.g., `udocket-audio`)
     - Optional: `AZURE_BLOB_SAS_TTL_MIN` (default 120)
   - In Admin UI, pick “Batch” and optionally enable “Diarization”.
+  - Requires Azure Speech resource tier Standard (S0). Free (F0) keys are rejected by the Batch API.
+  - Diarization is supported only in Batch mode in this project. Output includes per-utterance timestamps and `SPK_n` labels.
+  - Duration in the transcript header is computed from the Batch result (offset + duration), so it’s accurate for remote files.
+  - Optional hashing of remote audio for provenance:
+    - `BATCH_HASH_REMOTE=1` to stream and compute SHA256 of the source URL prior to transcription
+    - `BATCH_HASH_MAX_MB=200` caps hashing to URLs ≤ this many MB (default 200)
+    - If available, Blob `Content-MD5` is also captured.
 - On-demand: the agent streams local audio via the Speech SDK recognizer (fast, no Blob required).
 
 ## Azure Setup (batch mode)
 1) Create a Storage account and a private container (e.g., `udocket-audio`).
 2) Add env vars in `.env` as above; rebuild worker: `docker compose build worker`.
 3) Run: `docker compose up -d`. The worker uploads audio and passes a SAS URL to the agent.
+4) Create an Azure Speech resource in the same Canada region (canadacentral/canadaeast) with tier Standard (S0) and set `AZURE_SPEECH_KEY`/`AZURE_SPEECH_REGION`.
