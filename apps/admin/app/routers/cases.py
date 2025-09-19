@@ -10,6 +10,8 @@ from packages.udocket_core.storage.paths import case_dir
 from uuid import uuid4
 from config.settings import settings
 from pathlib import Path
+from typing import Optional
+import base64
 import shutil
 import os
 import mimetypes
@@ -109,6 +111,7 @@ def case_jobs_json(case_id: str):
                 "status": j.status,
                 "mode": j.transcription_mode or "batch",
                 "diarization": bool(j.diarization),
+                "diagnostics": bool(getattr(j, 'diagnostics', False)),
                 "transcript": bool(j.transcript_path),
                 "error": j.error_message or "",
                 "created_at": j.created_at.isoformat() if j.created_at else None,
@@ -138,8 +141,156 @@ def case_jobs_json(case_id: str):
                 "segments": meta.get("segments"),
                 "avg_confidence": meta.get("avg_confidence"),
                 "azure_transcription_url": meta.get("azure_transcription_url"),
+                "attempts_used": meta.get("attempts_used"),
             })
     return JSONResponse(payload)
+
+@router.get("/admin/api/cases/{case_id}/jobs/{job_id}/log")
+def job_log(case_id: str, job_id: str):
+    """Return human-readable transcription log text for a job, enriched with JSON metadata if present."""
+    ops_dir = case_dir(case_id) / 'ops'
+    text_path = ops_dir / f"{job_id}_transcription.log"
+    json_path = ops_dir / f"{job_id}_transcription_log.json"
+    text = None
+    meta = None
+    if text_path.exists():
+        try:
+            text = text_path.read_text(encoding='utf-8')
+        except Exception:
+            text = None
+    if json_path.exists():
+        try:
+            meta = json.loads(json_path.read_text(encoding='utf-8'))
+        except Exception:
+            meta = None
+    if not text and not meta:
+        return JSONResponse({"error": "no_log_found"}, status_code=404)
+    # Enrich: append a compact summary of meta for readability
+    if meta:
+        fields = [
+            ("status", meta.get("status")),
+            ("error_message", meta.get("error_message")),
+            ("language", meta.get("language")),
+            ("azure_region", meta.get("azure_region")),
+            ("diarization", meta.get("diarization_enabled")),
+            ("audio_file", meta.get("audio_file")),
+            ("audio_sha256", meta.get("audio_sha256")),
+            ("audio_sha256_remote", meta.get("audio_sha256_remote")),
+            ("audio_content_md5_b64", meta.get("audio_content_md5_b64")),
+            ("audio_size_bytes_remote", meta.get("audio_size_bytes_remote")),
+            ("transcript_file", meta.get("transcript_file")),
+            ("transcript_sha256", meta.get("transcript_sha256")),
+            ("word_count", meta.get("word_count")),
+            ("attempts_used", meta.get("attempts_used")),
+            ("azure_transcription_url", meta.get("azure_transcription_url")),
+            ("timestamp_utc", meta.get("timestamp_utc")),
+        ]
+        lines = ["", "--- Details ------------------------------------------------------------"]
+        for k, v in fields:
+            if v is not None and v != "":
+                lines.append(f"{k}: {v}")
+        if not text:
+            text = ""  # fallback
+        text = text.rstrip() + "\n" + "\n".join(lines) + "\n"
+    return JSONResponse({"text": text or "", "json": meta})
+
+def _blob_service_client():
+    # Lazy import to avoid mandatory dependency at process start
+    try:
+        from azure.storage.blob import BlobServiceClient
+    except Exception as e:
+        raise HTTPException(500, f"azure-storage-blob not installed: {e}")
+    if settings.AZURE_BLOB_CONNECTION_STRING:
+        return BlobServiceClient.from_connection_string(settings.AZURE_BLOB_CONNECTION_STRING)
+    if not settings.AZURE_BLOB_ACCOUNT or not settings.AZURE_BLOB_KEY:
+        raise HTTPException(500, "Missing Azure Blob credentials (AZURE_BLOB_ACCOUNT/AZURE_BLOB_KEY or connection string)")
+    account_url = f"https://{settings.AZURE_BLOB_ACCOUNT}.blob.core.windows.net"
+    return BlobServiceClient(account_url=account_url, credential=settings.AZURE_BLOB_KEY)
+
+def _original_from_path(p: str) -> Optional[str]:
+    try:
+        base = str(p).rsplit("/", 1)[-1]
+        return base.split("__", 1)[-1] if "__" in base else base
+    except Exception:
+        return None
+
+@router.post("/admin/api/cases/{case_id}/jobs/{job_id}/refresh-remote")
+def refresh_remote_hashes(case_id: str, job_id: str):
+    """Best-effort: fetch remote blob size + hashes and persist to per-job ops JSON.
+    Requires Azure Blob credentials configured for the admin service.
+    """
+    # Look up job to get original name
+    with SessionLocal() as s:
+        j = s.get(Job, job_id)
+        if not j or j.case_id != case_id:
+            raise HTTPException(404)
+        original = _original_from_path(j.audio_path or "")
+        if not original:
+            raise HTTPException(400, "job has no audio_path")
+
+    if not settings.AZURE_BLOB_CONTAINER:
+        raise HTTPException(500, "AZURE_BLOB_CONTAINER is not configured")
+    blob_name = f"cases/{case_id}/audio/{job_id}__{original}"
+
+    try:
+        bsc = _blob_service_client()
+        container = bsc.get_container_client(settings.AZURE_BLOB_CONTAINER)
+        blob = container.get_blob_client(blob_name)
+        props = blob.get_blob_properties()
+        # Content-MD5 is bytes; encode to base64 if present
+        md5_b64 = None
+        try:
+            raw_md5 = getattr(props, 'content_settings', None).content_md5 if getattr(props, 'content_settings', None) else None
+            if raw_md5:
+                md5_b64 = base64.b64encode(raw_md5).decode('ascii')
+        except Exception:
+            md5_b64 = None
+        size = getattr(props, 'size', None) or getattr(props, 'blob_size', None)
+
+        # Compute SHA-256 if size <= threshold (default 200 MB)
+        import hashlib
+        import os
+        max_mb = int(os.getenv("BATCH_HASH_MAX_MB", "200"))
+        remote_sha256 = None
+        if size is None or size <= max_mb * 1024 * 1024:
+            h = hashlib.sha256()
+            stream = blob.download_blob()
+            for chunk in stream.chunks():
+                if chunk:
+                    h.update(chunk)
+            remote_sha256 = h.hexdigest()
+
+        # Persist into per-job JSON meta so polling UI picks it up
+        ops_dir = case_dir(case_id) / 'ops'
+        ops_dir.mkdir(parents=True, exist_ok=True)
+        json_path = ops_dir / f"{job_id}_transcription_log.json"
+        data = {}
+        try:
+            if json_path.exists():
+                data = json.loads(json_path.read_text(encoding='utf-8'))
+        except Exception:
+            data = {}
+        if remote_sha256 is not None:
+            data["audio_sha256_remote"] = remote_sha256
+        if md5_b64 is not None:
+            data["audio_content_md5_b64"] = md5_b64
+        if size is not None:
+            data["audio_size_bytes_remote"] = size
+        try:
+            json_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding='utf-8')
+        except Exception:
+            # Non-fatal; still return values
+            pass
+
+        return JSONResponse({
+            "audio_sha256_remote": remote_sha256,
+            "audio_content_md5_b64": md5_b64,
+            "audio_size_bytes_remote": size,
+        })
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"refresh_remote_failed: {e}")
 
 @router.get("/admin/cases/{case_id}/delete")
 def delete_case_confirm(request: Request, case_id: str):

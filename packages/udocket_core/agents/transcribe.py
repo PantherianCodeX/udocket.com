@@ -455,6 +455,7 @@ def parse_args():
     p.add_argument("--language", dest="language")
     p.add_argument("--mode", dest="mode", choices=["batch", "on-demand"], default="on-demand")
     p.add_argument("--diarization", action="store_true", help="Enable speaker diarization")
+    p.add_argument("--diagnostics", action="store_true", help="Enable verbose diagnostics and remote hashing")
     return p.parse_args()
 
 def main():
@@ -540,8 +541,8 @@ def main():
     log_txt_job = ops_dir / f"{job_id}_transcription.log"
     log_json_job = ops_dir / f"{job_id}_transcription_log.json"
 
-    write_text(log_txt, f"{now_utc()} START | file={src_name}\n")
-    write_text(log_txt_job, f"{now_utc()} START | file={src_name}\n")
+    write_text(log_txt, f"{now_utc()} START | file={src_name} mode={args.mode} diar={bool(args.diarization)} lang={(args.language or LANGUAGE)} region={SPEECH_REGION}\n")
+    write_text(log_txt_job, f"{now_utc()} START | file={src_name} mode={args.mode} diar={bool(args.diarization)} lang={(args.language or LANGUAGE)} region={SPEECH_REGION}\n")
     if not locals().get('is_url'):
         if audio_in.suffix.lower() not in AUDIO_EXTS:
             err_exit(11, f"Unsupported audio extension: {audio_in.suffix}")
@@ -555,10 +556,16 @@ def main():
         remote_sha256 = None
         remote_md5_b64 = None
         remote_size = None
-        HASH_REMOTE = os.getenv("BATCH_HASH_REMOTE", "0").strip() == "1"
+        DIAG = bool(getattr(args, 'diagnostics', False)) or (os.getenv("DIAGNOSTICS", "0").strip() == "1")
+        HASH_REMOTE = DIAG or (os.getenv("BATCH_HASH_REMOTE", "0").strip() == "1")
         HASH_MAX_MB = int(os.getenv("BATCH_HASH_MAX_MB", "200"))
         if not locals().get('is_url'):
             audio_sha = sha256sum(audio_in)
+            try:
+                with open(log_txt_job, "a", encoding="utf-8") as f:
+                    f.write(f"{now_utc()} INFO | local_sha256 {audio_sha}\n")
+            except Exception:
+                pass
             if audio_in.suffix.lower() != ".wav":
                 wav = ensure_wav(audio_in, case_dir, case_id)
                 converted = True
@@ -595,6 +602,11 @@ def main():
                                         remote_size = int(hr.headers.get("Content-Length", "0"))
                                     except Exception:
                                         remote_size = None
+                                try:
+                                    with open(log_txt_job, "a", encoding="utf-8") as f:
+                                        f.write(f"{now_utc()} INFO | remote_head size={remote_size} md5={remote_md5_b64 or '-'}\n")
+                                except Exception:
+                                    pass
                                 if remote_size is None or remote_size <= HASH_MAX_MB * 1024 * 1024:
                                     h = hashlib.sha256()
                                     with requests.get(audio_url, stream=True, timeout=60) as gr:
@@ -603,6 +615,11 @@ def main():
                                             if chunk:
                                                 h.update(chunk)
                                     remote_sha256 = h.hexdigest()
+                                    try:
+                                        with open(log_txt_job, "a", encoding="utf-8") as f:
+                                            f.write(f"{now_utc()} INFO | remote_sha256 {remote_sha256}\n")
+                                    except Exception:
+                                        pass
                             except Exception:
                                 remote_sha256 = None
                         text_raw, remote_dur, rest_meta = batch_transcribe(audio_url, lang, args.diarization)
@@ -620,6 +637,11 @@ def main():
                 })
                 text_raw = None
                 last_error_msg = str(e)
+                try:
+                    with open(log_txt_job, "a", encoding="utf-8") as f:
+                        f.write(f"{now_utc()} ERROR | {e}\n")
+                except Exception:
+                    pass
             if text_raw:
                 break
             if args.mode == "batch":
@@ -723,9 +745,9 @@ def main():
         write_text(log_json_job, json.dumps(meta, indent=2, ensure_ascii=False))
         append_jsonl(audit_jsonl, {"ts": now_utc(), "case_id": case_id, "event": "transcribed", "exit": 0, **meta})
         with open(log_txt, "a", encoding="utf-8") as f:
-            f.write(f"{now_utc()} DONE | out={transcript_out.name}\n")
+            f.write(f"{now_utc()} DONE | out={transcript_out.name} words={meta.get('word_count')} dur_s={dur} diar={bool(args.diarization)}\n")
         with open(log_txt_job, "a", encoding="utf-8") as f:
-            f.write(f"{now_utc()} DONE | out={transcript_out.name}\n")
+            f.write(f"{now_utc()} DONE | out={transcript_out.name} words={meta.get('word_count')} dur_s={dur} diar={bool(args.diarization)}\n")
 
         # One-line JSON for stdout
         summary = {

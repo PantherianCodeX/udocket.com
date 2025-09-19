@@ -63,6 +63,8 @@ def build_agent_cmd(job: Job) -> str:
     cmd += f' --mode "{job.transcription_mode}"'
     if job.transcription_mode == "batch" and job.diarization:
         cmd += " --diarization"
+    if getattr(job, 'diagnostics', False):
+        cmd += " --diagnostics"
     return cmd
 
 def probe_audio(path: str) -> dict:

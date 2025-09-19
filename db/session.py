@@ -57,6 +57,7 @@ def ensure_jobs_schema():
                 "audio_channels": "INTEGER",
                 "audio_duration_sec": "INTEGER",
                 "sample_rate_hz": "INTEGER",
+                "diagnostics": "BOOLEAN",
             }
             for name, ddl in want.items():
                 if name not in cols:

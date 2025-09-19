@@ -6,3 +6,4 @@ pydantic
 pydantic-settings
 sqlalchemy
 python-multipart
+azure-storage-blob
