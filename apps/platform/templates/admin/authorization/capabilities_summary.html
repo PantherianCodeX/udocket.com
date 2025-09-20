@@ -1,0 +1,27 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+  <h1>Effective Capabilities</h1>
+  <p>This view shows default system roles and any DB overrides.</p>
+  <table class="admin-cap-table" style="width:100%; border-collapse: collapse;">
+    <thead>
+      <tr>
+        <th style="text-align:left; border-bottom: 1px solid #ccc;">Role</th>
+        <th style="text-align:left; border-bottom: 1px solid #ccc;">System</th>
+        <th style="text-align:left; border-bottom: 1px solid #ccc;">Capabilities</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in role_rows %}
+      <tr>
+        <td style="vertical-align: top; padding: 4px 8px;">{{ row.slug }} ({{ row.name }})</td>
+        <td style="vertical-align: top; padding: 4px 8px;">{{ row.system }}</td>
+        <td style="vertical-align: top; padding: 4px 8px;">
+          {% for cap in row.caps %}
+            <code style="margin-right:8px; display:inline-block;">{{ cap }}</code>
+          {% endfor %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endblock %}
