@@ -226,3 +226,5 @@ OIDC_OP_DISCOVERY_ENDPOINT = env("OIDC_DISCOVERY_URL", default=None)
 LOGIN_URL = "/oidc/authenticate/"
 LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/"
+# Development/open access toggle (bypasses auth policies when true)
+PLATFORM_DEV_OPEN = env.bool("PLATFORM_DEV_OPEN", default=True)

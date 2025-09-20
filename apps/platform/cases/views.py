@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from rest_framework import viewsets
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import AllowAny
+from django.conf import settings
 
 from apps.platform.cases.models import Case
 from apps.platform.cases.serializers import CaseSerializer
@@ -17,4 +18,5 @@ class CaseViewSet(viewsets.ModelViewSet):
         user = getattr(self.request, "user", None)
         if user and user.is_authenticated:
             return qs.filter(memberships__user=user).distinct()
-        return qs
+        # Anonymous users only see data when PLATFORM_DEV_OPEN is enabled
+        return qs if getattr(settings, "PLATFORM_DEV_OPEN", True) else qs.none()

@@ -1,4 +1,5 @@
 from django.db import models
+from django.conf import settings
 
 
 class CaseArtifact(models.Model):
@@ -23,3 +24,21 @@ class CaseArtifact(models.Model):
     def __str__(self) -> str:  # pragma: no cover - trivial
         return f"{self.case_id}:{self.type}:{self.title or self.path}"
 
+
+class FieldVisibilityRule(models.Model):
+    """Defines which roles can see which fields on an artifact type.
+
+    Example: type='TRANSCRIPT', field_name='path', allowed_roles=['OWNER','CONTRIBUTOR']
+    """
+
+    type = models.CharField(max_length=32)
+    field_name = models.CharField(max_length=64)
+    allowed_roles = models.JSONField(default=list, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("type", "field_name")
+        indexes = [models.Index(fields=["type", "field_name"])]
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return f"{self.type}:{self.field_name}"
