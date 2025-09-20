@@ -22,6 +22,18 @@ User = get_user_model()
 
 
 class KeycloakOIDCBackend(OIDCAuthenticationBackend):
+    def get_username(self, claims):  # type: ignore[override]
+        email = (claims.get("email") or "").strip()
+        preferred = (claims.get("preferred_username") or "").strip()
+        if email:
+            return email
+        if preferred:
+            return preferred
+        sub = claims.get("sub")
+        if sub:
+            return sub
+        return super().get_username(claims)
+
     def verify_claims(self, claims):  # type: ignore[override]
         issuer = claims.get("iss")
         expected = getattr(settings, "OIDC_ISSUER", None)
