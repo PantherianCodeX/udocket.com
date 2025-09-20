@@ -33,3 +33,67 @@ services:
       - ./.env:/app/.env:ro
     depends_on:
       - api
+
+  # New Django ASGI platform (UI + API + Channels)
+  platform:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.platform
+    env_file: .env
+    environment:
+      DJANGO_SETTINGS_MODULE: apps.platform.config.settings.prod
+      STORAGE_ROOT: /app/storage
+      DATABASE_URL: sqlite:////app/storage/udocket_django.db
+      REDIS_URL: redis://redis:6379/1
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: django-db
+    volumes:
+      - ./storage:/app/storage
+      - ./.env:/app/.env:ro
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+
+  platform_worker:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.platform
+    env_file: .env
+    environment:
+      DJANGO_SETTINGS_MODULE: apps.platform.config.settings.prod
+      STORAGE_ROOT: /app/storage
+      DATABASE_URL: sqlite:////app/storage/udocket_django.db
+      REDIS_URL: redis://redis:6379/1
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: django-db
+    command: sh -lc "python manage.py migrate && celery -A apps.platform.config.celery worker -l info"
+    volumes:
+      - ./storage:/app/storage
+      - ./.env:/app/.env:ro
+    depends_on:
+      - redis
+
+  platform_beat:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.platform
+    env_file: .env
+    environment:
+      DJANGO_SETTINGS_MODULE: apps.platform.config.settings.prod
+      STORAGE_ROOT: /app/storage
+      DATABASE_URL: sqlite:////app/storage/udocket_django.db
+      REDIS_URL: redis://redis:6379/1
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: django-db
+    command: sh -lc "python manage.py migrate && celery -A apps.platform.config.celery beat -l info"
+    volumes:
+      - ./storage:/app/storage
+      - ./.env:/app/.env:ro
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"

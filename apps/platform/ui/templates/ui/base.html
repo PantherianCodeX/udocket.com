@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>uDocket Platform</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 24px; }
+    header { margin-bottom: 16px; }
+    .container { max-width: 960px; margin: 0 auto; }
+    .error { color: #b00020; }
+    .ok { color: #006400; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { padding: 8px; border-bottom: 1px solid #ddd; text-align: left; }
+    code { background: #f6f6f6; padding: 2px 4px; }
+  </style>
+  <script>
+    // Render ISO timestamps to the browser's local time
+    function renderLocalTimes(){
+      document.querySelectorAll('time[data-ts]').forEach(el => {
+        const iso = el.getAttribute('data-ts');
+        if(!iso) return;
+        const d = new Date(iso);
+        if(!isNaN(d.getTime())){
+          el.textContent = d.toLocaleString();
+          el.title = d.toISOString();
+        }
+      });
+    }
+    window.addEventListener('DOMContentLoaded', renderLocalTimes);
+  </script>
+  {% block head %}{% endblock %}
+  {% csrf_token %}
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1><a href="/">uDocket Platform</a></h1>
+      <nav>
+        <a href="/">Cases</a> · <a href="/jobs/">Jobs</a>
+        <span style="float:right">
+          {% if request.user.is_authenticated %}
+            {{ request.user.display_name|default:request.user.username }} · <a href="/logout/">Logout</a>
+          {% else %}
+            <a href="/oidc/authenticate/">Login</a>
+          {% endif %}
+        </span>
+      </nav>
+    </header>
+    {% if error %}<p class="error">{{ error }}</p>{% endif %}
+    {% block content %}{% endblock %}
+  </div>
+</body>
+</html>

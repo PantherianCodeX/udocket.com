@@ -1,0 +1,8 @@
+<tr data-job="{{ j.id }}">
+  <td><code>{{ j.id }}</code></td>
+  <td>{{ j.mode }}</td>
+  <td id="job-status-{{ j.id }}">{{ j.status }}</td>
+  <td id="job-transcript-{{ j.id }}">{% if j.transcript_path %}<a href="/api/v1/jobs/{{ j.id }}/download/">download</a>{% else %}—{% endif %}</td>
+  <td><a href="/api/v1/jobs/{{ j.id }}/logs/">view</a></td>
+  <td><time data-ts="{{ j.created_at|date:'c' }}"></time></td>
+</tr>

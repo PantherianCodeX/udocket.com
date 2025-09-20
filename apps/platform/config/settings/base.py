@@ -1,0 +1,228 @@
+from __future__ import annotations
+
+import os
+from pathlib import Path
+import environ
+
+
+BASE_DIR = Path(__file__).resolve().parents[4]  # repo root (/app)
+env = environ.Env()
+
+# Load .env from repo root, but only if present (avoid noisy log)
+_env_path = BASE_DIR / ".env"
+if _env_path.exists():
+    environ.Env.read_env(str(_env_path))
+
+
+SECRET_KEY = env("DJANGO_SECRET_KEY", default="dev-insecure-secret-key")
+DEBUG = env.bool("DJANGO_DEBUG", default=True)
+
+ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["*"])
+
+INSTALLED_APPS = [
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
+    # Third-party
+    "rest_framework",
+    "drf_spectacular",
+    "django_filters",
+    "guardian",
+    "rules",
+    "mozilla_django_oidc",
+    "apps.platform.jobs",
+    "django_celery_results",
+    "django_celery_beat",
+    # Channels (ASGI)
+    "channels",
+    # Local apps
+    "apps.platform.accounts",
+    "apps.platform.cases",
+    "apps.platform.artifacts",
+    "apps.platform.operations",
+    "apps.platform.ui",
+]
+
+AUTH_USER_MODEL = "accounts.User"
+
+MIDDLEWARE = [
+    "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+]
+
+ROOT_URLCONF = "apps.platform.config.urls"
+
+TEMPLATES = [
+    {
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [str(BASE_DIR / "apps" / "platform" / "templates")],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.debug",
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
+            ],
+        },
+    },
+]
+
+WSGI_APPLICATION = None  # ASGI-first
+ASGI_APPLICATION = "apps.platform.config.asgi.application"
+
+
+# Database: honor DATABASE_URL; default to local sqlite under storage root
+default_storage = (BASE_DIR / "storage").resolve()
+sr_env = env("STORAGE_ROOT", default=str(default_storage))
+storage_root = Path(sr_env).resolve()
+# Ensure storage root exists; if not creatable, fall back to repo storage/
+_ok = True
+try:
+    storage_root.mkdir(parents=True, exist_ok=True)
+except Exception:
+    _ok = False
+if not _ok or not storage_root.exists():
+    storage_root = default_storage
+    try:
+        storage_root.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
+default_sqlite_path = storage_root / "udocket_django.db"
+DATABASES = {
+    "default": env.db(
+        "DATABASE_URL",
+        default=f"sqlite:///{default_sqlite_path}",
+    )
+}
+
+
+# Password validation
+AUTH_PASSWORD_VALIDATORS = [
+    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+]
+
+
+LANGUAGE_CODE = env("DJANGO_LANGUAGE_CODE", default="en-ca")
+TIME_ZONE = env("DJANGO_TIME_ZONE", default="UTC")
+USE_I18N = True
+USE_TZ = True
+
+
+STATIC_URL = "/static/"
+STATIC_ROOT = str(BASE_DIR / "static")
+
+MEDIA_URL = "/media/"
+MEDIA_ROOT = str(storage_root / "media")
+
+
+# DRF
+REST_FRAMEWORK = {
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "rest_framework.authentication.SessionAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+}
+
+SPECTACULAR_SETTINGS = {"TITLE": "uDocket API", "VERSION": "1.0.0"}
+
+
+# Channels layer: use Redis if REDIS_URL set, else in-memory
+_redis_url = env("REDIS_URL", default=None)
+if _redis_url:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {"hosts": [_redis_url]},
+        }
+    }
+else:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels.layers.InMemoryChannelLayer",
+        }
+    }
+
+
+# Security defaults (override in prod.py)
+SECURE_SSL_REDIRECT = env.bool("SECURE_SSL_REDIRECT", default=False)
+SESSION_COOKIE_SECURE = env.bool("SESSION_COOKIE_SECURE", default=False)
+CSRF_COOKIE_SECURE = env.bool("CSRF_COOKIE_SECURE", default=False)
+CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
+SECURE_HSTS_SECONDS = env.int("SECURE_HSTS_SECONDS", default=0)
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_BROWSER_XSS_FILTER = True
+
+
+# Guardian object-perms
+ANONYMOUS_USER_NAME = None
+
+# Guardian backend for object permissions (warning silence)
+AUTHENTICATION_BACKENDS = (
+    "django.contrib.auth.backends.ModelBackend",
+    "guardian.backends.ObjectPermissionBackend",
+    "apps.platform.accounts.auth.KeycloakOIDCBackend",
+)
+
+
+# Celery
+CELERY_BROKER_URL = env("CELERY_BROKER_URL", default=env("REDIS_URL", default="redis://localhost:6379/1"))
+CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND", default="django-db")
+CELERY_TASK_ALWAYS_EAGER = env.bool("CELERY_TASK_ALWAYS_EAGER", default=False)
+CELERY_TASK_TIME_LIMIT = env.int("CELERY_TASK_TIME_LIMIT", default=7200)
+CELERY_TASK_SOFT_TIME_LIMIT = env.int("CELERY_TASK_SOFT_TIME_LIMIT", default=7100)
+
+# Logging to stdout
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": True,
+    "formatters": {
+        "simple": {"format": "%(asctime)s %(levelname)s %(name)s: %(message)s"},
+    },
+    "handlers": {
+        "console": {"class": "logging.StreamHandler", "formatter": "simple"},
+    },
+    "root": {"handlers": ["console"], "level": env("DJANGO_LOG_LEVEL", default="INFO")},
+    "loggers": {
+        "apps.platform": {"handlers": ["console"], "level": env("PLATFORM_LOG_LEVEL", default="DEBUG"), "propagate": False},
+        "azure": {"handlers": ["console"], "level": env("AZURE_LOG_LEVEL", default="WARNING"), "propagate": False},
+    },
+}
+
+# Azure Blob env passthrough (for batch upload convenience)
+AZURE_BLOB_ACCOUNT = env("AZURE_BLOB_ACCOUNT", default=None)
+AZURE_BLOB_KEY = env("AZURE_BLOB_KEY", default=None)
+AZURE_BLOB_CONNECTION_STRING = env("AZURE_BLOB_CONNECTION_STRING", default=None)
+AZURE_BLOB_CONTAINER = env("AZURE_BLOB_CONTAINER", default=None)
+AZURE_BLOB_SAS_TTL_MIN = env.int("AZURE_BLOB_SAS_TTL_MIN", default=120)
+
+# SimpleJWT (accept Keycloak JWTs via remote JWKS)
+SIMPLE_JWT = {
+    "JWK_URL": env("OIDC_JWKS_URL", default=None),
+    "ALGORITHMS": ["RS256"],
+    "AUDIENCE": env("OIDC_AUDIENCE", default=None),
+    "ISSUER": env("OIDC_ISSUER", default=None),
+}
+
+# OIDC for browser SSO (Keycloak)
+OIDC_RP_CLIENT_ID = env("OIDC_CLIENT_ID", default=None)
+OIDC_RP_CLIENT_SECRET = env("OIDC_CLIENT_SECRET", default=None)
+OIDC_OP_DISCOVERY_ENDPOINT = env("OIDC_DISCOVERY_URL", default=None)
+LOGIN_URL = "/oidc/authenticate/"
+LOGIN_REDIRECT_URL = "/"
+LOGOUT_REDIRECT_URL = "/"

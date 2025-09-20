@@ -1,0 +1,90 @@
+{% extends "ui/base.html" %}
+{% block head %}
+<script src="https://unpkg.com/htmx.org@1.9.12"></script>
+<script>
+  window.jobPollers = window.jobPollers || {};
+  function connectWS(jobId) {
+    const el = document.getElementById('job-status-' + jobId);
+    const linkEl = document.getElementById('job-transcript-' + jobId);
+    const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws/jobs/' + jobId + '/';
+    const ws = new WebSocket(url);
+    ws.onmessage = (ev) => {
+      try {
+        const data = JSON.parse(ev.data);
+        if (data.status && el) {
+          el.textContent = data.status;
+        }
+        const tfile = data.transcript_file || data.transcript_path;
+        if (linkEl && (tfile || (el && el.textContent === 'SUCCEEDED'))) {
+          linkEl.innerHTML = '<a href="/api/v1/jobs/' + (data.job_id || jobId) + '/download/">download</a>';
+        }
+        if (el && (el.textContent === 'SUCCEEDED' || el.textContent === 'FAILED')) {
+          if (window.jobPollers[jobId]) { clearInterval(window.jobPollers[jobId]); delete window.jobPollers[jobId]; }
+        }
+      } catch (e) {}
+    };
+  }
+
+  async function pollJob(jobId) {
+    try {
+      const resp = await fetch('/api/v1/jobs/' + jobId + '/status/');
+      if (!resp.ok) return;
+      const data = await resp.json();
+      const el = document.getElementById('job-status-' + jobId);
+      const linkEl = document.getElementById('job-transcript-' + jobId);
+      if (el && data.status) el.textContent = data.status;
+      const tfile = data.transcript_path;
+      if (linkEl && (tfile || (el && el.textContent === 'SUCCEEDED'))) {
+        linkEl.innerHTML = '<a href="/api/v1/jobs/' + jobId + '/download/">download</a>';
+      }
+      if (el && (el.textContent === 'SUCCEEDED' || el.textContent === 'FAILED')) {
+        if (window.jobPollers[jobId]) { clearInterval(window.jobPollers[jobId]); delete window.jobPollers[jobId]; }
+      }
+    } catch (e) { }
+  }
+
+  function ensurePolling(jobId) {
+    if (window.jobPollers[jobId]) return;
+    const el = document.getElementById('job-status-' + jobId);
+    if (!el) return;
+    if (el.textContent === 'SUCCEEDED' || el.textContent === 'FAILED') return;
+    window.jobPollers[jobId] = setInterval(() => pollJob(jobId), 2000);
+  }
+  window.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('[data-job]').forEach(n => {
+      const jid = n.dataset.job;
+      if (!n.dataset.ws) { connectWS(jid); n.dataset.ws='1'; }
+      ensurePolling(jid);
+    });
+  });
+  document.addEventListener('htmx:afterSwap', (e) => {
+    document.querySelectorAll('tr[data-job]').forEach(n => {
+      const jid = n.dataset.job;
+      if (!n.dataset.ws) { connectWS(jid); n.dataset.ws='1'; }
+      ensurePolling(jid);
+    });
+    if (window.renderLocalTimes) window.renderLocalTimes();
+  });
+</script>
+{% endblock %}
+{% block content %}
+  <h2>Jobs</h2>
+  <table>
+    <thead><tr><th>ID</th><th>Case</th><th>Mode</th><th>Status</th><th>Transcript</th><th>Logs</th><th>Created</th></tr></thead>
+    <tbody id="jobs-body">
+      {% for j in jobs %}
+        <tr data-job="{{ j.id }}">
+          <td><code>{{ j.id }}</code></td>
+          <td><a href="/cases/{{ j.case_id }}/">{{ j.case_id }}</a></td>
+          <td>{{ j.mode }}</td>
+          <td id="job-status-{{ j.id }}">{{ j.status }}</td>
+          <td id="job-transcript-{{ j.id }}">{% if j.transcript_path %}<a href="/api/v1/jobs/{{ j.id }}/download/">download</a>{% else %}—{% endif %}</td>
+          <td><a href="/api/v1/jobs/{{ j.id }}/logs/">view</a></td>
+          <td><time data-ts="{{ j.created_at|date:'c' }}"></time></td>
+        </tr>
+      {% empty %}
+      <tr><td colspan="7">No jobs yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endblock %}

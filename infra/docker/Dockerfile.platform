@@ -1,0 +1,28 @@
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Install platform requirements first for better layer caching
+COPY apps/platform/requirements.txt /tmp/requirements.txt
+RUN python -m pip install --upgrade pip \
+    && pip install -r /tmp/requirements.txt \
+    && rm -f /tmp/requirements.txt
+
+# Copy project
+COPY . /app
+
+EXPOSE 8000
+
+# Default to prod settings; override in compose if needed
+ENV DJANGO_SETTINGS_MODULE=apps.platform.config.settings.prod
+
+CMD ["sh", "-lc", "python manage.py migrate && daphne -b 0.0.0.0 -p 8000 apps.platform.config.asgi:application"]
+

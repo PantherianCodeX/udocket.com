@@ -1,0 +1,50 @@
+# Django core
+Django>=4.2,<4.3
+django-environ>=0.11
+pydantic-settings>=2.4
+
+# API & schema
+djangorestframework>=3.14
+drf-spectacular>=0.26
+django-filter>=24.2
+
+# AuthN/Z
+django-guardian>=2.4
+rules>=3.4
+drf-access-policy>=1.5
+mozilla-django-oidc>=4.0
+djangorestframework-simplejwt[crypto]>=5.3
+
+# Realtime
+channels>=4.1
+channels-redis>=4.2
+asgiref>=3.8
+redis>=5.0
+daphne>=4.1
+
+# Background jobs
+celery>=5.3
+django-celery-beat>=2.6
+django-celery-results>=2.5
+azure-storage-blob>=12.19
+azure-cognitiveservices-speech>=1.38
+
+# Integrity / audit helpers
+django-auditlog>=2.3
+django-simple-history>=3.5
+django-cleanup>=8.1
+django-anymail[mailgun]>=10.3
+django-axes>=6.5
+
+# Dev / testing
+pytest>=8.2
+pytest-django>=4.7
+pytest-asyncio>=0.24
+factory-boy>=3.3
+model-bakery>=1.17
+mypy>=1.11
+django-stubs[compatible-mypy]>=5.0
+flake8>=7.1
+black>=24.8
+bandit>=1.7
+django-upgrade>=1.16
