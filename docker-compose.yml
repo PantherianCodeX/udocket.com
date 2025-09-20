@@ -98,16 +98,41 @@ services:
     ports:
       - "6379:6379"
 
+  postgres-keycloak:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloakpass
+    volumes:
+      - keycloak-db-data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+
   keycloak:
     image: quay.io/keycloak/keycloak:24.0.1
     command: start-dev --import-realm
     env_file: .env
     environment:
-      KC_DB: dev-file
+      KC_DB: postgres
+      KC_DB_URL_HOST: postgres-keycloak
+      KC_DB_URL_PORT: 5432
+      KC_DB_URL_DATABASE: keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloakpass
+      # Expose on 8085 and advertise public URL for browser redirects
       KC_HTTP_PORT: 8085
+      KC_HOSTNAME_URL: http://localhost:8085
+      KC_PROXY: edge
     ports:
       - "8085:8085"
     volumes:
       - ./infra/docker/keycloak/udocker-realm.json:/opt/keycloak/data/import/udocker-realm.json:ro
     depends_on:
+      - postgres-keycloak
       - redis
+
+volumes:
+  keycloak-db-data:
+    driver: local
