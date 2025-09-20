@@ -2,7 +2,50 @@
 
 from django.db import migrations, models
 import django.db.models.deletion
-from django.db.models import F
+
+
+def backfill(apps, schema_editor):
+    CaseArtifact = apps.get_model("artifacts", "CaseArtifact")
+    Case = apps.get_model("cases", "Case")
+    db = schema_editor.connection.alias
+
+    # First, leverage case_fk when available (covers all current records after migration 0005)
+    for pk, case_fk_id in CaseArtifact.objects.using(db).filter(
+        organization__isnull=True, case_fk__isnull=False
+    ).values_list("pk", "case_fk_id"):
+        if not case_fk_id:
+            continue
+        org_id = (
+            Case.objects.using(db)
+            .filter(pk=case_fk_id)
+            .values_list("organization_id", flat=True)
+            .first()
+        )
+        if org_id:
+            CaseArtifact.objects.using(db).filter(pk=pk).update(organization_id=org_id)
+
+    # Some legacy rows may still lack case_fk but retain case_id. Only attempt when column exists.
+    try:
+        with schema_editor.connection.cursor() as cursor:
+            cols = {c.name for c in schema_editor.connection.introspection.get_table_description(cursor, CaseArtifact._meta.db_table)}
+    except Exception:
+        cols = set()
+    if "case_id" not in cols:
+        return
+
+    for pk, case_id in CaseArtifact.objects.using(db).filter(
+        organization__isnull=True, case_fk__isnull=True
+    ).values_list("pk", "case_id"):
+        if not case_id:
+            continue
+        org_id = (
+            Case.objects.using(db)
+            .filter(pk=case_id)
+            .values_list("organization_id", flat=True)
+            .first()
+        )
+        if org_id:
+            CaseArtifact.objects.using(db).filter(pk=pk).update(organization_id=org_id)
 
 
 class Migration(migrations.Migration):
@@ -38,29 +81,5 @@ class Migration(migrations.Migration):
                 to="accounts.organization",
             ),
         ),
-        migrations.RunPython(code="apps.platform.artifacts.migrations.0010_caseartifact_organization_and_more.backfill", reverse_code=migrations.RunPython.noop),
+        migrations.RunPython(code=backfill, reverse_code=migrations.RunPython.noop),
     ]
-
-
-def backfill(apps, schema_editor):
-    CaseArtifact = apps.get_model("artifacts", "CaseArtifact")
-    Case = apps.get_model("cases", "Case")
-    # Try to backfill via FK when present
-    try:
-        CaseArtifact.objects.filter(organization__isnull=True, case_fk__isnull=False).update(
-            organization=F("case_fk__organization")
-        )
-    except Exception:
-        for a in CaseArtifact.objects.filter(organization__isnull=True, case_fk__isnull=False).select_related("case_fk"):
-            a.organization_id = getattr(a.case_fk, "organization_id", None)
-            a.save(update_fields=["organization"])
-    # For artifacts without case_fk, use case_id lookup
-    for a in CaseArtifact.objects.filter(organization__isnull=True, case_fk__isnull=True).iterator():
-        org_id = None
-        try:
-            org_id = Case.objects.filter(id=a.case_id).values_list("organization_id", flat=True).first()
-        except Exception:
-            pass
-        if org_id:
-            a.organization_id = org_id
-            a.save(update_fields=["organization"])
