@@ -7,6 +7,10 @@ class CaseArtifact(models.Model):
 
     id = models.BigAutoField(primary_key=True)
     case_id = models.CharField(max_length=36)
+    # Optional FK for normalization; kept nullable for backcompat while migrating
+    case_fk = models.ForeignKey(
+        "cases.Case", on_delete=models.PROTECT, related_name="artifacts", null=True, blank=True
+    )
     job_id = models.CharField(max_length=36, null=True, blank=True)
     type = models.CharField(max_length=32)
     title = models.CharField(max_length=200, blank=True)

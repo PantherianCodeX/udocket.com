@@ -7,8 +7,10 @@ from apps.platform.artifacts.models import CaseArtifact, FieldVisibilityRule
 from apps.platform.cases.models import CaseMembership
 
 
-def _user_role_for_case(user, case_id: str) -> str | None:
+def _user_role_for_case(user, case_id: str | None) -> str | None:
     try:
+                if not case_id:
+            return None
         m = CaseMembership.objects.filter(user=user, case_id=case_id).first()
         return m.role if m else None
     except Exception:
@@ -22,7 +24,7 @@ class FieldPermissionSerializerMixin:
             user = getattr(self.context.get("request"), "user", None)
         if not user or not getattr(user, "is_authenticated", False):
             return data
-        role = _user_role_for_case(user, instance.case_id)
+        role = _user_role_for_case(user, getattr(instance, 'case_fk_id', None) or instance.case_id)
         if not role:
             return data
         rules = {r.field_name: set(r.allowed_roles or []) for r in FieldVisibilityRule.objects.filter(type=instance.type)}

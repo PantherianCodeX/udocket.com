@@ -70,12 +70,29 @@
     // Render local times
     if (window.renderLocalTimes) window.renderLocalTimes();
   });
+
+  // Upload progress bar for the job form
+  document.addEventListener('htmx:xhr:progress', function (evt) {
+    try {
+      const el = evt.target;
+      if (!el || el.id !== 'job-form') return;
+      const loaded = evt.detail && evt.detail.loaded ? evt.detail.loaded : 0;
+      const total = evt.detail && evt.detail.total ? evt.detail.total : 1;
+      const pct = Math.max(0, Math.min(100, Math.round((loaded / total) * 100)));
+      const bar = document.querySelector('#upload-progress .bar');
+      const info = document.getElementById('upload-info');
+      if (bar) bar.style.width = pct + '%';
+      if (info) info.textContent = pct + '%';
+    } catch (_) {}
+  });
 </script>
 <style>
   .hidden { display:none; }
   .htmx-request .hide-during-request { display:none; }
   .htmx-request .show-during-request { display:inline; }
   .show-during-request { display:none; }
+  .progress { width: 320px; height: 8px; background: #eee; border-radius: 4px; overflow: hidden; display: inline-block; vertical-align: middle; margin-left: 8px; }
+  .progress .bar { height: 100%; width: 0%; background: #3b82f6; transition: width 0.1s linear; }
 </style>
 {% endblock %}
 {% block content %}
@@ -83,7 +100,7 @@
   <p>{{ case.title }}</p>
 
   <h3>Create Transcription Job</h3>
-  <form method="post" enctype="multipart/form-data"
+  <form id="job-form" method="post" enctype="multipart/form-data"
         hx-post="/cases/{{ case.id }}/jobs/new"
         hx-encoding="multipart/form-data"
         hx-target="#jobs-body" hx-swap="afterbegin">
@@ -103,7 +120,8 @@
       <label>SAS URL: <input type="url" name="audio_url" placeholder="https://...?"></label>
     </details>
     <button type="submit" class="hide-during-request">Start Job</button>
-    <span class="show-during-request">Uploading…</span>
+    <span class="show-during-request">Uploading… <span id="upload-info"></span></span>
+    <div id="upload-progress" class="progress show-during-request"><div class="bar"></div></div>
   </form>
 
   <h3>Jobs</h3>

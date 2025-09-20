@@ -153,6 +153,7 @@ def transcribe_job(
                     h.update(chunk)
             CaseArtifact.objects.create(
                 case_id=str(case_id),
+                case_fk=Job.objects.filter(pk=job_id).values_list('case', flat=True).first(),
                 job_id=str(job_id),
                 type="TRANSCRIPT",
                 title=f"Transcript {job_id}",
