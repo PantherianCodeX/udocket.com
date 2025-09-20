@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from rest_framework import viewsets
 from rest_framework.permissions import AllowAny
+from apps.platform.authorization.access_policies import ArtifactAccessPolicy
 from django.conf import settings
 
 from apps.platform.artifacts.models import CaseArtifact
@@ -11,7 +12,7 @@ from apps.platform.artifacts.serializers import CaseArtifactSerializer
 class ArtifactViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = CaseArtifact.objects.all()
     serializer_class = CaseArtifactSerializer
-    permission_classes = [AllowAny]
+    permission_classes = [ArtifactAccessPolicy]
 
     def get_queryset(self):  # type: ignore[override]
         qs = super().get_queryset()
@@ -23,4 +24,3 @@ class ArtifactViewSet(viewsets.ReadOnlyModelViewSet):
         if user and getattr(user, "is_authenticated", False):
             return qs
         return qs if getattr(settings, "PLATFORM_DEV_OPEN", True) else qs.none()
-

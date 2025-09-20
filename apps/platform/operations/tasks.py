@@ -16,6 +16,7 @@ from apps.platform.jobs.models import Job
 from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.operations.blob_upload import upload_with_sas
 from apps.platform.operations.models import TaskRun
+from apps.platform.cases.models import Case
 import logging
 
 log = logging.getLogger("apps.platform.operations.tasks")

@@ -4,6 +4,7 @@ from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny
+from apps.platform.authorization.access_policies import JobAccessPolicy
 from django.conf import settings
 from rest_framework.response import Response
 from django.http import FileResponse, Http404
@@ -18,7 +19,7 @@ from apps.platform.operations.tasks import transcribe_job
 class JobViewSet(viewsets.ModelViewSet):
     queryset = Job.objects.all()
     serializer_class = JobSerializer
-    permission_classes = [AllowAny]  # TODO: replace with proper auth/policy
+    permission_classes = [JobAccessPolicy]
 
     def get_serializer_class(self):  # type: ignore[override]
         if self.action in ("create", "transcribe"):
