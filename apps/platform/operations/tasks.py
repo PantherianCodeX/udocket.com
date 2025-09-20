@@ -18,6 +18,7 @@ from apps.platform.operations.blob_upload import upload_with_sas
 from apps.platform.operations.models import TaskRun
 from apps.platform.cases.models import Case
 from apps.platform.operations.audit import emit as audit_emit
+from apps.platform.operations.storage import ensure_case_dirs, tenant_case_root, ops_dir as storage_ops_dir
 import re
 import json
 import logging
@@ -40,18 +41,26 @@ def transcribe_job(
 
     Arguments are explicit to decouple from legacy DB schema.
     """
-    case_dir = Path(settings.MEDIA_ROOT) / "cases" / case_id
+    org_id: Optional[str] = None
+    try:
+        job_obj = Job.objects.select_related("case").get(pk=job_id)
+        job_obj.status = Job.Status.RUNNING
+        job_obj.started_at = timezone.now()
+        job_obj.save(update_fields=["status", "started_at"])
+        org_id = job_obj.organization_id or getattr(job_obj.case, "organization_id", None)
+    except Exception:
+        job_obj = None
+    if org_id is None:
+        org_id = (
+            Case.objects.filter(pk=case_id)
+            .values_list("organization_id", flat=True)
+            .first()
+        )
+    case_dir = ensure_case_dirs(case_id, org_id)
     cfg = TranscriptionConfig.from_env()
     agent = TranscriptionAgent(cfg)
 
     # Update DB status and notify; record TaskRun
-    try:
-        job_obj = Job.objects.get(pk=job_id)
-        job_obj.status = Job.Status.RUNNING
-        job_obj.started_at = timezone.now()
-        job_obj.save(update_fields=["status", "started_at"])
-    except Exception:
-        job_obj = None
     log.info("job claimed", extra={"job_id": job_id, "case_id": case_id, "mode": mode, "diarization": diarization})
     send_job_update(job_id, event="job.started", status="RUNNING", case_id=case_id)
 
@@ -76,7 +85,7 @@ def transcribe_job(
         if mode == "batch" and not (str(audio_input).startswith("http://") or str(audio_input).startswith("https://")):
             try:
                 log.info("uploading source to blob", extra={"job_id": job_id})
-                ai = upload_with_sas(Path(audio_input), case_id, job_id)
+                ai = upload_with_sas(Path(audio_input), case_id, job_id, organization_id=org_id)
                 log.info("uploaded source to blob", extra={"job_id": job_id})
             except Exception:
                 try:
@@ -196,17 +205,17 @@ def transcribe_job(
 # Analysis task helpers
 # ----------------------
 
-def _case_paths(case_id: str) -> tuple[Path, Path, Path]:
-    base = Path(settings.MEDIA_ROOT) / "cases" / case_id
+def _case_paths(case_id: str, organization_id: str | None = None) -> tuple[Path, Path, Path]:
+    base = ensure_case_dirs(case_id, organization_id)
     return base, base / "transcript", base / "analysis"
 
 
-def _ops_dir(case_id: str) -> Path:
-    return (Path(settings.MEDIA_ROOT) / "cases" / case_id / "ops").resolve()
+def _ops_dir(case_id: str, organization_id: str | None = None) -> Path:
+    return storage_ops_dir(case_id, organization_id)
 
 
-def _latest_transcript(case_id: str) -> Path | None:
-    _, tdir, _ = _case_paths(case_id)
+def _latest_transcript(case_id: str, organization_id: str | None = None) -> Path | None:
+    _, tdir, _ = _case_paths(case_id, organization_id)
     if not tdir.exists():
         return None
     fx = sorted((p for p in tdir.glob("*__transcript.txt") if p.is_file()), key=lambda p: p.stat().st_mtime, reverse=True)
@@ -226,9 +235,10 @@ def _append_jsonl(p: Path, data: Any) -> None:
 
 @shared_task(bind=True)
 def summarize_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
-    case_dir, _, analysis_dir = _case_paths(case_id)
-    job = Job.objects.get(pk=job_id)
-    src = Path(job.transcript_path) if job.transcript_path else _latest_transcript(case_id)
+    job = Job.objects.select_related("case").get(pk=job_id)
+    org_id = job.organization_id or job.case.organization_id
+    case_dir, _, analysis_dir = _case_paths(case_id, org_id)
+    src = Path(job.transcript_path) if job.transcript_path else _latest_transcript(case_id, org_id)
     if not src or not src.exists():
         raise RuntimeError("No transcript found to summarize")
 
@@ -267,7 +277,7 @@ def summarize_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
     audit_emit(None, case_id=case_id, event="analysis.summary.created", data={"job_id": job_id, "file": str(out)})
     # Ops logs
     try:
-        opsd = _ops_dir(case_id)
+        opsd = _ops_dir(case_id, org_id)
         meta = {
             "case_id": case_id,
             "job_id": job_id,
@@ -291,9 +301,10 @@ def summarize_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
 
 @shared_task(bind=True)
 def timeline_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
-    _, _, analysis_dir = _case_paths(case_id)
-    job = Job.objects.get(pk=job_id)
-    src = Path(job.transcript_path) if job.transcript_path else _latest_transcript(case_id)
+    job = Job.objects.select_related("case").get(pk=job_id)
+    org_id = job.organization_id or job.case.organization_id
+    _, _, analysis_dir = _case_paths(case_id, org_id)
+    src = Path(job.transcript_path) if job.transcript_path else _latest_transcript(case_id, org_id)
     if not src or not src.exists():
         raise RuntimeError("No transcript found to build timeline")
     rx = re.compile(r"^\[(\d{2}):(\d{2})\]\s+(?:SPK_(\d+):\s+)?(.*)$")
@@ -335,7 +346,7 @@ def timeline_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
         pass
     audit_emit(None, case_id=case_id, event="analysis.timeline.created", data={"job_id": job_id, "events": len(events)})
     try:
-        opsd = _ops_dir(case_id)
+        opsd = _ops_dir(case_id, org_id)
         meta = {
             "case_id": case_id,
             "job_id": job_id,
@@ -360,9 +371,10 @@ def timeline_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
 
 @shared_task(bind=True)
 def graph_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
-    _, _, analysis_dir = _case_paths(case_id)
-    job = Job.objects.get(pk=job_id)
-    src = Path(job.transcript_path) if job.transcript_path else _latest_transcript(case_id)
+    job = Job.objects.select_related("case").get(pk=job_id)
+    org_id = job.organization_id or job.case.organization_id
+    _, _, analysis_dir = _case_paths(case_id, org_id)
+    src = Path(job.transcript_path) if job.transcript_path else _latest_transcript(case_id, org_id)
     if not src or not src.exists():
         raise RuntimeError("No transcript found to extract entities/graph")
     text = src.read_text(encoding="utf-8", errors="ignore")
@@ -411,7 +423,7 @@ def graph_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
         pass
     audit_emit(None, case_id=case_id, event="analysis.graph.created", data={"job_id": job_id, "entities": len(entities)})
     try:
-        opsd = _ops_dir(case_id)
+        opsd = _ops_dir(case_id, org_id)
         meta = {
             "case_id": case_id,
             "job_id": job_id,

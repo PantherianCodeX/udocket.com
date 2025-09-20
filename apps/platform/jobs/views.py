@@ -9,9 +9,8 @@ from apps.platform.authorization.access_policies import JobAccessPolicy
 from django.conf import settings
 from rest_framework.response import Response
 from django.http import FileResponse, Http404
-from django.conf import settings
-from pathlib import Path
 
+from apps.platform.cases.models import Case
 from apps.platform.jobs.models import Job
 from apps.platform.jobs.serializers import JobCreateSerializer, JobSerializer
 from apps.platform.operations.tasks import transcribe_job
@@ -19,6 +18,7 @@ from apps.platform.operations.audit import emit as audit_emit
 from django.db import transaction
 from apps.platform.operations.tasks import summarize_job, timeline_job, graph_job
 from apps.platform.tenancy import scope_jobs
+from apps.platform.operations.storage import ensure_case_dirs, ops_dir as storage_ops_dir
 
 
 class JobViewSet(viewsets.ModelViewSet):
@@ -86,7 +86,7 @@ class JobViewSet(viewsets.ModelViewSet):
     def logs(self, request, pk=None):
         job = self.get_object()
         case_id = str(job.case_id)
-        ops = Path(settings.MEDIA_ROOT) / "cases" / case_id / "ops" / f"{job.id}_transcription.log"
+        ops = storage_ops_dir(case_id, job.case.organization_id) / f"{job.id}_transcription.log"
         if not ops.exists():
             raise Http404
         audit_emit(request, case_id=case_id, event="job.download_logs", data={"job_id": str(job.id)})
@@ -133,7 +133,7 @@ class JobViewSet(viewsets.ModelViewSet):
         case_id = request.data.get("case")
         if not case_id:
             return Response({"detail": "Missing case"}, status=status.HTTP_400_BAD_REQUEST)
-        get_object_or_404(Case, pk=case_id)
+        case = get_object_or_404(Case.objects.select_related("organization"), pk=case_id)
         mode = request.data.get("mode", Job.Mode.ON_DEMAND)
         diarization = str(request.data.get("diarization", "false")).lower() in ("1", "true", "yes")
         language = request.data.get("language", "en-CA")
@@ -146,12 +146,11 @@ class JobViewSet(viewsets.ModelViewSet):
             return Response({"detail": "Provide 'audio' file or 'audio_url'"}, status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():
-            job = Job.objects.create(case_id=case_id, audio_input="", mode=mode, diarization=diarization, language=language)
+            job = Job.objects.create(case=case, audio_input="", mode=mode, diarization=diarization, language=language)
             # Determine audio_input
             if file_obj:
-                case_dir = Path(settings.MEDIA_ROOT) / "cases" / str(case_id)
+                case_dir = ensure_case_dirs(case_id, job.organization_id)
                 audio_dir = case_dir / "audio"
-                audio_dir.mkdir(parents=True, exist_ok=True)
                 dest = audio_dir / f"{job.id}__{file_obj.name}"
                 # Stream to disk
                 with open(dest, "wb") as out:

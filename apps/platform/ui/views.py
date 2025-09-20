@@ -1,9 +1,6 @@
 from __future__ import annotations
 
 import uuid
-from pathlib import Path
-
-from django.conf import settings
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_http_methods
@@ -11,6 +8,7 @@ from django.views.decorators.http import require_http_methods
 from apps.platform.cases.models import Case
 from apps.platform.jobs.models import Job
 from apps.platform.operations.tasks import transcribe_job
+from apps.platform.operations.storage import ensure_case_dirs
 from django.contrib.auth import logout
 import logging
 
@@ -73,9 +71,8 @@ def create_job(request: HttpRequest, case_id: str) -> HttpResponse:
     sas_url = (request.POST.get("audio_url") or "").strip()
 
     job_id = uuid.uuid4()
-    case_dir = Path(settings.MEDIA_ROOT) / "cases" / case_id
+    case_dir = ensure_case_dirs(case_id, case.organization_id)
     audio_dir = case_dir / "audio"
-    audio_dir.mkdir(parents=True, exist_ok=True)
     audio_input: str
 
     if up:

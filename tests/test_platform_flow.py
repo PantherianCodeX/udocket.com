@@ -12,6 +12,7 @@ from apps.platform.cases.models import Case
 from apps.platform.jobs.models import Job
 from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.operations import tasks as op_tasks
+from apps.platform.operations.storage import tenant_case_root
 
 
 @pytest.fixture(autouse=True)
@@ -58,7 +59,7 @@ def test_jobs_upload_file_creates_job_and_saves_file(db, settings):
 
 
 def _make_transcript(settings, case_id: str, job_id: str) -> Path:
-    base = Path(settings.MEDIA_ROOT) / "cases" / case_id
+    base = tenant_case_root(case_id)
     tdir = base / "transcript"
     tdir.mkdir(parents=True, exist_ok=True)
     p = tdir / f"{job_id}__transcript.txt"

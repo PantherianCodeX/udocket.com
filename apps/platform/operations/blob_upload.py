@@ -20,7 +20,14 @@ def _parse_conn_string(cs: str) -> dict[str, str]:
     return kv
 
 
-def upload_with_sas(local_file: Path, case_id: str, job_id: str, original_name: Optional[str] = None) -> str:
+def upload_with_sas(
+    local_file: Path,
+    case_id: str,
+    job_id: str,
+    *,
+    organization_id: Optional[str] = None,
+    original_name: Optional[str] = None,
+) -> str:
     from azure.storage.blob import (
         BlobServiceClient,
         ContentSettings,
@@ -34,7 +41,8 @@ def upload_with_sas(local_file: Path, case_id: str, job_id: str, original_name: 
         raise RuntimeError("AZURE_BLOB_CONTAINER is not configured")
 
     original = original_name or local_file.name
-    blob_name = f"cases/{case_id}/audio/{job_id}__{original}"
+    org_segment = organization_id or "unassigned"
+    blob_name = f"tenants/{org_segment}/cases/{case_id}/audio/{job_id}__{original}"
 
     conn_str = getattr(settings, "AZURE_BLOB_CONNECTION_STRING", None)
     account = getattr(settings, "AZURE_BLOB_ACCOUNT", None)
