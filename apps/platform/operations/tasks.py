@@ -15,6 +15,7 @@ from apps.platform.operations.channels import send_job_update, send_case_update
 from apps.platform.jobs.models import Job
 from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.operations.blob_upload import upload_with_sas
+from apps.platform.operations.models import TaskRun
 import logging
 
 log = logging.getLogger("apps.platform.operations.tasks")
@@ -39,7 +40,7 @@ def transcribe_job(
     cfg = TranscriptionConfig.from_env()
     agent = TranscriptionAgent(cfg)
 
-    # Update DB status and notify
+    # Update DB status and notify; record TaskRun
     try:
         job_obj = Job.objects.get(pk=job_id)
         job_obj.status = Job.Status.RUNNING
@@ -49,6 +50,20 @@ def transcribe_job(
         job_obj = None
     log.info("job claimed", extra={"job_id": job_id, "case_id": case_id, "mode": mode, "diarization": diarization})
     send_job_update(job_id, event="job.started", status="RUNNING", case_id=case_id)
+
+    # Create a TaskRun row for reproducibility
+    tr = TaskRun(
+        task_name="transcribe_job",
+        task_id=getattr(self.request, "id", None) or "",
+        status="RUNNING",
+        job_id=job_id,
+        case_id=case_id,
+        meta={"mode": mode, "diarization": diarization, "language": language},
+    )
+    try:
+        tr.save()
+    except Exception:
+        tr = None
 
     # Run the agent; only this block determines success vs. failure
     try:
@@ -94,6 +109,13 @@ def transcribe_job(
             job_obj.finished_at = timezone.now()
             job_obj.error_message = payload["error"]
             job_obj.save(update_fields=["status", "finished_at", "error_message"])
+        except Exception:
+            pass
+        try:
+            if tr is not None:
+                tr.status = "FAILED"
+                tr.finished_at = timezone.now()
+                tr.save(update_fields=["status", "finished_at"])
         except Exception:
             pass
         try:
@@ -147,6 +169,13 @@ def transcribe_job(
     except Exception:
         pass
     log.info("job succeeded", extra={"job_id": job_id, "transcript": str(result.transcript_file)})
+    try:
+        if tr is not None:
+            tr.status = "SUCCEEDED"
+            tr.finished_at = timezone.now()
+            tr.save(update_fields=["status", "finished_at"])
+    except Exception:
+        pass
     try:
         send_job_update(job_id, event="job.succeeded", **payload)
     except Exception:
