@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from rest_framework import viewsets
 from rest_framework.permissions import AllowAny
-from drf_access_policy import AccessPolicy
 from apps.platform.authorization.access_policies import CaseAccessPolicy
 from django.conf import settings
 

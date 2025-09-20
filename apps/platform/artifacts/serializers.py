@@ -9,7 +9,7 @@ from apps.platform.cases.models import CaseMembership
 
 def _user_role_for_case(user, case_id: str | None) -> str | None:
     try:
-                if not case_id:
+        if not case_id:
             return None
         m = CaseMembership.objects.filter(user=user, case_id=case_id).first()
         return m.role if m else None
