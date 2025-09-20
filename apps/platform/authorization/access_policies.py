@@ -78,7 +78,7 @@ class CaseAccessPolicy(_MembershipMixin, AccessPolicy):
 class JobAccessPolicy(_MembershipMixin, AccessPolicy):
     statements = [
         {"action": ["list", "retrieve"], "principal": "*", "effect": "allow", "condition": "is_case_member"},
-        {"action": ["create"], "principal": "*", "effect": "allow", "condition": "can_contribute"},
+        {"action": ["create", "upload"], "principal": "*", "effect": "allow", "condition": "can_contribute"},
         {"action": ["status", "download", "logs"], "principal": "*", "effect": "allow", "condition": "is_case_member"},
         {"action": ["destroy", "update", "partial_update"], "principal": "*", "effect": "deny"},
     ]
