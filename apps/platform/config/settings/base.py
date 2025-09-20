@@ -136,7 +136,7 @@ MEDIA_ROOT = str(storage_root / "media")
 REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "apps.platform.accounts.auth.KeycloakJWTAuthentication",
         "rest_framework.authentication.SessionAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
@@ -236,3 +236,9 @@ LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/"
 # Development/open access toggle (bypasses auth policies when true)
 PLATFORM_DEV_OPEN = env.bool("PLATFORM_DEV_OPEN", default=True)
+
+# Optional: sync case memberships from Keycloak group claims
+OIDC_SYNC_MEMBERSHIPS = env.bool("OIDC_SYNC_MEMBERSHIPS", default=False)
+OIDC_CASE_GROUP_PREFIX = env("OIDC_CASE_GROUP_PREFIX", default="case:")
+OIDC_CASE_GROUP_SEPARATOR = env("OIDC_CASE_GROUP_SEPARATOR", default=":")
+OIDC_CASE_DEFAULT_ROLE = env("OIDC_CASE_DEFAULT_ROLE", default="REVIEWER")
