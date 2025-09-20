@@ -12,6 +12,7 @@ from apps.platform.authorization.models import (
     PresetCapability,
     PresetFieldPolicy,
 )
+from apps.platform.artifacts.registry import artifact_field
 
 
 class Command(BaseCommand):
@@ -49,7 +50,13 @@ class Command(BaseCommand):
                     PresetCapability.objects.create(preset=preset, capability=c)
                 PresetCapability.objects.filter(preset=preset, capability__in=list(have_caps - want_caps)).delete()
                 # Field policies
-                want_fps = {(fp.get("type"), fp.get("field")): fp.get("actions", []) for fp in (p.get("field_policies") or [])}
+                want_fps = {}
+                for fp in (p.get("field_policies") or []):
+                    typ = (fp.get("type") or "").upper()
+                    field = (fp.get("field") or "").strip()
+                    if artifact_field(typ, field) is None:
+                        raise CommandError(f"Unknown artifact field in preset '{preset.slug}': {typ}.{field}")
+                    want_fps[(typ, field)] = fp.get("actions", []) or []
                 have = {(fp.type, fp.field_name): fp for fp in PresetFieldPolicy.objects.filter(preset=preset)}
                 # Upsert
                 for (typ, field), actions in want_fps.items():
@@ -74,4 +81,3 @@ class Command(BaseCommand):
                 preset_objs = list(PermissionPreset.objects.filter(slug__in=preset_slugs))
                 r.presets.set(preset_objs)
         self.stdout.write(self.style.SUCCESS("Presets imported and bindings applied."))
-

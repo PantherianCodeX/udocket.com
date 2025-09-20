@@ -4,6 +4,7 @@ from typing import Iterable
 from django.conf import settings
 from apps.platform.cases.models import CaseMembership
 from apps.platform.authorization.models import Role, RoleCapability, PermissionPreset, PresetCapability, PresetFieldPolicy
+from apps.platform.artifacts.registry import artifact_field
 
 
 # Hard-coded defaults as a safe baseline; DB can override/extend
@@ -68,9 +69,14 @@ def allowed_field_actions(role_slug: str | None, artifact_type: str, field_name:
         if not r:
             return set()
         acts: set[str] = set()
-        for fp in PresetFieldPolicy.objects.filter(preset__in=r.presets.all(), type=artifact_type, field_name=field_name):
+        for fp in PresetFieldPolicy.objects.filter(
+            preset__in=r.presets.all(), type=artifact_type, field_name=field_name
+        ):
             acts.update(a.lower() for a in (fp.actions or []))
-        return acts
+        if acts:
+            return acts
+        meta = artifact_field(artifact_type, field_name)
+        return set(a.lower() for a in (meta.default_actions if meta else []))
     except Exception:
         return set()
 

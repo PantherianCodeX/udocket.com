@@ -4,6 +4,7 @@ from django.urls import path
 from django.http import HttpRequest, HttpResponse
 from django.template.response import TemplateResponse
 from apps.platform.authorization.models import Role, RoleCapability, PermissionPreset, PresetCapability, PresetFieldPolicy
+from apps.platform.artifacts.registry import artifact_field, artifact_types
 from apps.platform.authorization.capabilities import CAPABILITY_CHOICES
 
 
@@ -61,11 +62,32 @@ class RoleAdmin(admin.ModelAdmin):
 class PresetCapabilityInline(admin.TabularInline):
     model = PresetCapability
     extra = 1
+class PresetFieldPolicyForm(forms.ModelForm):
+    type = forms.ChoiceField(choices=(), required=True)
+
+    class Meta:
+        model = PresetFieldPolicy
+        fields = ["type", "field_name", "actions"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["type"].choices = [(t, t) for t in sorted(artifact_types())]
+        self.fields["field_name"].help_text = "Must match a registered artifact field name."
+        self.fields["actions"].help_text = "JSON list of allowed actions (view, download, update, create, delete)."
+
+    def clean(self):
+        cleaned = super().clean()
+        atype = cleaned.get("type")
+        fname = cleaned.get("field_name")
+        if atype and fname and artifact_field(atype, fname) is None:
+            raise forms.ValidationError(f"Unknown artifact field: {atype}.{fname}")
+        return cleaned
 
 
 class PresetFieldPolicyInline(admin.TabularInline):
     model = PresetFieldPolicy
     extra = 1
+    form = PresetFieldPolicyForm
 
 
 @admin.register(PermissionPreset)
