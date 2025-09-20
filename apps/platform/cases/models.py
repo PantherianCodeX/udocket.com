@@ -1,6 +1,7 @@
 from django.db import models
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from simple_history.models import HistoricalRecords
 
 
 class Case(models.Model):
@@ -10,6 +11,7 @@ class Case(models.Model):
     title = models.CharField(max_length=200)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    history = HistoricalRecords()
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return f"{self.id} — {self.title}"

@@ -1,5 +1,6 @@
 from django.db import models
 from django.conf import settings
+from simple_history.models import HistoricalRecords
 
 
 class CaseArtifact(models.Model):
@@ -19,6 +20,7 @@ class CaseArtifact(models.Model):
     schema_version = models.CharField(max_length=16, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     metadata = models.JSONField(default=dict, blank=True)
+    history = HistoricalRecords()
 
     class Meta:
         indexes = [
