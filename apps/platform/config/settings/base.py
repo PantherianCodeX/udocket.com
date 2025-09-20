@@ -101,12 +101,21 @@ if not _ok or not storage_root.exists():
     except Exception:
         pass
 default_sqlite_path = storage_root / "udocket_django.db"
-DATABASES = {
-    "default": env.db(
-        "DATABASE_URL",
-        default=f"sqlite:///{default_sqlite_path}",
-    )
-}
+
+# Robust DB config with local fallback when DATABASE_URL points to an
+# unavailable path (e.g., host dev using container-oriented /app/storage).
+_db_url = env("DATABASE_URL", default=f"sqlite:///{default_sqlite_path}")
+if isinstance(_db_url, str) and _db_url.startswith("sqlite:///"):
+    _sqlite_path = Path(_db_url.replace("sqlite:///", "")).resolve()
+    try:
+        _sqlite_path.parent.mkdir(parents=True, exist_ok=True)
+        DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": str(_sqlite_path)}}
+    except Exception:
+        # Fall back to repo-local storage path
+        DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": str(default_sqlite_path)}}
+else:
+    # Delegate to environ for non-sqlite URLs
+    DATABASES = {"default": env.db("DATABASE_URL", default=_db_url)}
 
 
 # Password validation
