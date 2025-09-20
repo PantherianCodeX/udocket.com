@@ -17,6 +17,7 @@ from apps.platform.jobs.serializers import JobCreateSerializer, JobSerializer
 from apps.platform.operations.tasks import transcribe_job
 from apps.platform.operations.audit import emit as audit_emit
 from django.db import transaction
+from apps.platform.operations.tasks import summarize_job, timeline_job, graph_job
 
 
 class JobViewSet(viewsets.ModelViewSet):
@@ -91,6 +92,27 @@ class JobViewSet(viewsets.ModelViewSet):
             raise Http404
         audit_emit(request, case_id=case_id, event="job.download_logs", data={"job_id": str(job.id)})
         return FileResponse(open(ops, "rb"), filename=f"{job.id}_transcription.log", content_type="text/plain")
+
+    @action(detail=True, methods=["post"], url_path="analyze/summary")
+    def analyze_summary(self, request, pk=None):
+        job = self.get_object()
+        summarize_job.delay(case_id=str(job.case_id), job_id=str(job.id))
+        audit_emit(request, case_id=str(job.case_id), event="analysis.summary.requested", data={"job_id": str(job.id)})
+        return Response({"status": "queued"}, status=status.HTTP_202_ACCEPTED)
+
+    @action(detail=True, methods=["post"], url_path="analyze/timeline")
+    def analyze_timeline(self, request, pk=None):
+        job = self.get_object()
+        timeline_job.delay(case_id=str(job.case_id), job_id=str(job.id))
+        audit_emit(request, case_id=str(job.case_id), event="analysis.timeline.requested", data={"job_id": str(job.id)})
+        return Response({"status": "queued"}, status=status.HTTP_202_ACCEPTED)
+
+    @action(detail=True, methods=["post"], url_path="analyze/graph")
+    def analyze_graph(self, request, pk=None):
+        job = self.get_object()
+        graph_job.delay(case_id=str(job.case_id), job_id=str(job.id))
+        audit_emit(request, case_id=str(job.case_id), event="analysis.graph.requested", data={"job_id": str(job.id)})
+        return Response({"status": "queued"}, status=status.HTTP_202_ACCEPTED)
 
     @action(detail=False, methods=["post"], url_path="upload")
     def upload(self, request):

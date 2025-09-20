@@ -17,6 +17,8 @@ from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.operations.blob_upload import upload_with_sas
 from apps.platform.operations.models import TaskRun
 from apps.platform.cases.models import Case
+from apps.platform.operations.audit import emit as audit_emit
+import re
 import logging
 
 log = logging.getLogger("apps.platform.operations.tasks")
@@ -187,3 +189,185 @@ def transcribe_job(
     except Exception:
         pass
     return payload
+
+
+# ----------------------
+# Analysis task helpers
+# ----------------------
+
+def _case_paths(case_id: str) -> tuple[Path, Path, Path]:
+    base = Path(settings.MEDIA_ROOT) / "cases" / case_id
+    return base, base / "transcript", base / "analysis"
+
+
+def _latest_transcript(case_id: str) -> Path | None:
+    _, tdir, _ = _case_paths(case_id)
+    if not tdir.exists():
+        return None
+    fx = sorted((p for p in tdir.glob("*__transcript.txt") if p.is_file()), key=lambda p: p.stat().st_mtime, reverse=True)
+    return fx[0] if fx else None
+
+
+def _write_json(p: Path, data: Any) -> None:
+    import json
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+@shared_task(bind=True)
+def summarize_job(self, *, case_id: str, job_id: str) -> Dict[str, Any]:
+    case_dir, _, analysis_dir = _case_paths(case_id)
+    job = Job.objects.get(pk=job_id)
+    src = Path(job.transcript_path) if job.transcript_path else _latest_transcript(case_id)
+    if not src or not src.exists():
+        raise RuntimeError("No transcript found to summarize")
+
+    out = analysis_dir / f"{job_id}__summary_v1.md"
+    text = Path(src).read_text(encoding="utf-8", errors="ignore")
+    # Simple offline summary: first 200 lines or 2000 chars
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    head = "\n".join(lines[:200])
+    if len(head) > 2000:
+        head = head[:2000] + "\n…"
+    content = f"# Summary for {job_id}\n\nGenerated from transcript: {src.name}\n\n{head}\n"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(content, encoding="utf-8")
+
+    # Register artifact
+    try:
+        import hashlib
+
+        h = hashlib.sha256()
+        with open(out, "rb") as f:
+            for ch in iter(lambda: f.read(65536), b""):
+                h.update(ch)
+        CaseArtifact.objects.create(
+            case_id=case_id,
+            case_fk=job.case,
+            job_id=str(job_id),
+            type="SUMMARY",
+            title=f"Summary {job_id}",
+            path=str(out),
+            checksum=h.hexdigest(),
+            schema_version="v1",
+            metadata={"source_transcript": str(src)},
+        )
+    except Exception:
+        pass
+    audit_emit(None, case_id=case_id, event="analysis.summary.created", data={"job_id": job_id, "file": str(out)})
+    try:
+        send_case_update(case_id, event="artifact.created", kind="summary", job_id=job_id)
+    except Exception:
+        pass
+    return {"status": "ok", "summary_file": str(out)}
+
+
+@shared_task(bind=True)
+def timeline_job(self, *, case_id: str, job_id: str) -> Dict[str, Any]:
+    _, _, analysis_dir = _case_paths(case_id)
+    job = Job.objects.get(pk=job_id)
+    src = Path(job.transcript_path) if job.transcript_path else _latest_transcript(case_id)
+    if not src or not src.exists():
+        raise RuntimeError("No transcript found to build timeline")
+    rx = re.compile(r"^\[(\d{2}):(\d{2})\]\s+(?:SPK_(\d+):\s+)?(.*)$")
+    events: list[dict[str, Any]] = []
+    for ln in src.read_text(encoding="utf-8", errors="ignore").splitlines():
+        m = rx.match(ln.strip())
+        if not m:
+            continue
+        mm, ss, spk, text = m.groups()
+        ts = int(mm) * 60 + int(ss)
+        events.append({
+            "ts_start": ts,
+            "ts_end": None,
+            "speaker": f"SPK_{spk}" if spk else None,
+            "text": text.strip(),
+            "labels": [],
+        })
+    out = analysis_dir / f"{job_id}__timeline_v1.json"
+    _write_json(out, events)
+    try:
+        import hashlib
+
+        h = hashlib.sha256()
+        with open(out, "rb") as f:
+            for ch in iter(lambda: f.read(65536), b""):
+                h.update(ch)
+        CaseArtifact.objects.create(
+            case_id=case_id,
+            case_fk=job.case,
+            job_id=str(job_id),
+            type="TIMELINE",
+            title=f"Timeline {job_id}",
+            path=str(out),
+            checksum=h.hexdigest(),
+            schema_version="v1",
+            metadata={"source_transcript": str(src), "events": len(events)},
+        )
+    except Exception:
+        pass
+    audit_emit(None, case_id=case_id, event="analysis.timeline.created", data={"job_id": job_id, "events": len(events)})
+    try:
+        send_case_update(case_id, event="artifact.created", kind="timeline", job_id=job_id)
+    except Exception:
+        pass
+    return {"status": "ok", "timeline_file": str(out), "events": len(events)}
+
+
+@shared_task(bind=True)
+def graph_job(self, *, case_id: str, job_id: str) -> Dict[str, Any]:
+    _, _, analysis_dir = _case_paths(case_id)
+    job = Job.objects.get(pk=job_id)
+    src = Path(job.transcript_path) if job.transcript_path else _latest_transcript(case_id)
+    if not src or not src.exists():
+        raise RuntimeError("No transcript found to extract entities/graph")
+    text = src.read_text(encoding="utf-8", errors="ignore")
+    # Extremely lightweight: pick capitalized tokens as candidate entities (demo only)
+    tokens = re.findall(r"\b([A-Z][a-zA-Z]{2,})\b", text)
+    names = sorted(set(tokens))[:50]
+    entities = [{
+        "id": f"E{i+1}",
+        "name": n,
+        "type": "OTHER",
+        "mentions": [],
+    } for i, n in enumerate(names)]
+    graph = {"nodes": [{"id": e["id"], "label": e["name"], "type": e["type"]} for e in entities], "edges": []}
+    entities_file = analysis_dir / f"{job_id}__entities_v1.json"
+    graph_file = analysis_dir / f"{job_id}__graph_v1.json"
+    _write_json(entities_file, {"entities": entities})
+    _write_json(graph_file, graph)
+    try:
+        import hashlib
+
+        h1 = hashlib.sha256(entities_file.read_bytes()).hexdigest()
+        h2 = hashlib.sha256(graph_file.read_bytes()).hexdigest()
+        CaseArtifact.objects.create(
+            case_id=case_id,
+            case_fk=job.case,
+            job_id=str(job_id),
+            type="ENTITIES",
+            title=f"Entities {job_id}",
+            path=str(entities_file),
+            checksum=h1,
+            schema_version="v1",
+            metadata={"source_transcript": str(src), "entities": len(entities)},
+        )
+        CaseArtifact.objects.create(
+            case_id=case_id,
+            case_fk=job.case,
+            job_id=str(job_id),
+            type="GRAPH",
+            title=f"Graph {job_id}",
+            path=str(graph_file),
+            checksum=h2,
+            schema_version="v1",
+            metadata={"source_transcript": str(src), "nodes": len(graph["nodes"]), "edges": 0},
+        )
+    except Exception:
+        pass
+    audit_emit(None, case_id=case_id, event="analysis.graph.created", data={"job_id": job_id, "entities": len(entities)})
+    try:
+        send_case_update(case_id, event="artifact.created", kind="graph", job_id=job_id)
+    except Exception:
+        pass
+    return {"status": "ok", "entities_file": str(entities_file), "graph_file": str(graph_file), "entities": len(entities), "edges": 0}
