@@ -57,7 +57,7 @@ class _MembershipMixin:
                 case_id = getattr(case, "id", None)
         if case_id is None:
             return True
-                try:
+        try:
             if has_capability(user, case_id, "case.update"):
                 return True
         except Exception:
