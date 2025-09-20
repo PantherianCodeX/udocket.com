@@ -4,5 +4,8 @@
   "python.testing.pytestArgs": [
     "tests"
   ],
-  "python.testing.pytestPath": "${workspaceFolder}/scripts/pytest-in-container.sh"
+  "python.testing.pytestEnv": {
+    "DATABASE_URL": "sqlite:///./pytest-vscode.db",
+    "ENV_READ_DOTENV": "0"
+  }
 }

@@ -17,7 +17,7 @@ and module discovery (`db/__init__.py`, `config/__init__.py`).
 ## Notes
 - Postgres is now the default application database. Per-organization row-level security is enforced via `python manage.py enable_rls`.
 - Media storage is tenant-aware: artifacts for organization `ORG123` live under `/media/tenants/ORG123/cases/<CASE_ID>/...`.
-- Run tests inside Docker (parity with deployed env) using `./scripts/pytest-in-container.sh` or configure VS Code to use that script (`.vscode/settings.json`).
+- Run tests inside Docker (parity with deployed env) using `./scripts/pytest-in-container.sh`. VS Code's built-in discovery runs against a local sqlite DB (see `.vscode/settings.json` for the lightweight override).
 - Worker calls your agent using `AGENT_CMD_TEMPLATE` from `.env`.
 - Admin/API uploads let you choose `batch` (default) or `on-demand` transcription.
 - Batch mode optionally enables speaker diarization via UI toggle or `--diarization` flag.
