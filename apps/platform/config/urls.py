@@ -8,4 +8,5 @@ urlpatterns = [
     path("api/v1/", include("apps.platform.cases.urls")),
     path("api/v1/", include("apps.platform.jobs.urls")),
     path("api/v1/", include("apps.platform.artifacts.urls")),
+    path("api/v1/", include("apps.platform.operations.urls")),
 ]

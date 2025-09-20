@@ -32,6 +32,15 @@ class KeycloakOIDCBackend(OIDCAuthenticationBackend):
             user.email = email
         if name and hasattr(user, "display_name"):
             user.display_name = name
+        # Optional staff mapping: mark staff if user is in admin group
+        is_staff = getattr(user, "is_staff", False)
+        try:
+            groups = claims.get("groups") or []
+            if any(g in ("/udocket-admin", "udocket-admin", "admin") for g in groups):
+                is_staff = True
+        except Exception:
+            pass
+        user.is_staff = is_staff
         user.save()
         # Optional: sync memberships from group claims (format: case:<CASE_ID>:<ROLE>)
         if getattr(settings, "OIDC_SYNC_MEMBERSHIPS", False):
