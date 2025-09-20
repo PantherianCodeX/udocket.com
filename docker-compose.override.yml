@@ -69,7 +69,7 @@ services:
     environment:
       DJANGO_SETTINGS_MODULE: apps.platform.config.settings.dev
       CELERY_TASK_ALWAYS_EAGER: "0"
-    command: sh -lc "python manage.py migrate && celery -A apps.platform.config.celery worker -l info"
+    command: sh -lc "python -m pip install -q --no-input watchfiles && celery -A apps.platform.config.celery worker -l info"
     develop:
       watch:
         - path: infra/docker/Dockerfile.platform
@@ -83,7 +83,7 @@ services:
     environment:
       DJANGO_SETTINGS_MODULE: apps.platform.config.settings.dev
       CELERY_TASK_ALWAYS_EAGER: "0"
-    command: sh -lc "python manage.py migrate && celery -A apps.platform.config.celery beat -l info"
+    command: sh -lc "celery -A apps.platform.config.celery beat -l info"
     develop:
       watch:
         - path: infra/docker/Dockerfile.platform

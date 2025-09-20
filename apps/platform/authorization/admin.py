@@ -24,6 +24,9 @@ class RoleCapabilityInline(admin.TabularInline):
 @admin.register(Role)
 class RoleAdmin(admin.ModelAdmin):
     list_display = ("slug", "name", "system", "created_at")
+    list_filter = ("system", "created_at")
+    date_hierarchy = "created_at"
+    ordering = ("slug",)
     search_fields = ("slug", "name")
     inlines = [RoleCapabilityInline]
 
