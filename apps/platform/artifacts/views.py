@@ -17,14 +17,19 @@ class ArtifactViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [ArtifactAccessPolicy]
 
     def get_queryset(self):  # type: ignore[override]
-        qs = super().get_queryset()
+        qs = super().get_queryset().select_related("case_fk", "case_fk__organization")
         user = getattr(self.request, "user", None)
         # Filter by case when provided
         case_id = self.request.query_params.get("case")
         if case_id:
             qs = qs.filter(Q(case_id=case_id) | Q(case_fk__id=case_id))
         if user and getattr(user, "is_authenticated", False):
-            return qs
+            from django.db.models import Q
+            return qs.filter(
+                Q(case_fk__memberships__user=user)
+                | Q(case_fk__organization__memberships__user=user)
+                | Q(case_id__in=user.case_memberships.values_list("case_id", flat=True))
+            ).distinct()
         return qs if getattr(settings, "PLATFORM_DEV_OPEN", True) else qs.none()
 
     def retrieve(self, request, *args, **kwargs):  # type: ignore[override]

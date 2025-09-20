@@ -20,10 +20,11 @@ class CaseViewSet(viewsets.ModelViewSet):
     permission_classes = [CaseAccessPolicy]
 
     def get_queryset(self):  # type: ignore[override]
-        qs = super().get_queryset()
+        qs = super().get_queryset().select_related("organization")
         user = getattr(self.request, "user", None)
         if user and user.is_authenticated:
-            return qs.filter(memberships__user=user).distinct()
+            from django.db.models import Q
+            return qs.filter(Q(memberships__user=user) | Q(organization__memberships__user=user)).distinct()
         # Anonymous users only see data when PLATFORM_DEV_OPEN is enabled
         return qs if getattr(settings, "PLATFORM_DEV_OPEN", True) else qs.none()
 

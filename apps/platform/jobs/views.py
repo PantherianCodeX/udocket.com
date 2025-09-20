@@ -31,10 +31,11 @@ class JobViewSet(viewsets.ModelViewSet):
         return JobSerializer
 
     def get_queryset(self):  # type: ignore[override]
-        qs = super().get_queryset().select_related("case")
+        qs = super().get_queryset().select_related("case", "case__organization")
         user = getattr(self.request, "user", None)
         if user and user.is_authenticated:
-            return qs.filter(case__memberships__user=user).distinct()
+            from django.db.models import Q
+            return qs.filter(Q(case__memberships__user=user) | Q(case__organization__memberships__user=user)).distinct()
         return qs if getattr(settings, "PLATFORM_DEV_OPEN", True) else qs.none()
 
     def create(self, request, *args, **kwargs):  # type: ignore[override]

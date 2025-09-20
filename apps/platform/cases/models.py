@@ -9,6 +9,10 @@ class Case(models.Model):
 
     id = models.CharField(primary_key=True, max_length=36)
     title = models.CharField(max_length=200)
+    # Optional organization scoping (null during migration phase)
+    organization = models.ForeignKey(
+        "accounts.Organization", on_delete=models.PROTECT, related_name="cases", null=True, blank=True
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     history = HistoricalRecords()

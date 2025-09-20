@@ -237,6 +237,21 @@ LOGOUT_REDIRECT_URL = "/"
 # Development/open access toggle (bypasses auth policies when true)
 PLATFORM_DEV_OPEN = env.bool("PLATFORM_DEV_OPEN", default=True)
 
+# If discovery is not set, derive OP endpoints from OIDC_ISSUER when provided
+OIDC_ISSUER = env("OIDC_ISSUER", default=None)
+_op_auth = env("OIDC_OP_AUTHORIZATION_ENDPOINT", default=None)
+_op_token = env("OIDC_OP_TOKEN_ENDPOINT", default=None)
+_op_user = env("OIDC_OP_USER_ENDPOINT", default=None)
+if not _op_auth and OIDC_ISSUER:
+    OIDC_OP_AUTHORIZATION_ENDPOINT = OIDC_ISSUER.rstrip("/") + "/protocol/openid-connect/auth"
+if not _op_token and OIDC_ISSUER:
+    OIDC_OP_TOKEN_ENDPOINT = OIDC_ISSUER.rstrip("/") + "/protocol/openid-connect/token"
+if not _op_user and OIDC_ISSUER:
+    OIDC_OP_USER_ENDPOINT = OIDC_ISSUER.rstrip("/") + "/protocol/openid-connect/userinfo"
+
+# Default OIDC scopes for browser SSO
+OIDC_RP_SCOPES = env("OIDC_RP_SCOPES", default="openid email profile")
+
 # Optional: sync case memberships from Keycloak group claims
 OIDC_SYNC_MEMBERSHIPS = env.bool("OIDC_SYNC_MEMBERSHIPS", default=False)
 OIDC_CASE_GROUP_PREFIX = env("OIDC_CASE_GROUP_PREFIX", default="case:")

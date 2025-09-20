@@ -12,11 +12,11 @@ class CaseMembershipInline(admin.TabularInline):
 
 @admin.register(Case)
 class CaseAdmin(SimpleHistoryAdmin):
-    list_display = ("id", "title", "created_at", "updated_at")
-    list_filter = ("created_at",)
+    list_display = ("id", "title", "organization", "created_at", "updated_at")
+    list_filter = ("organization", "created_at",)
     date_hierarchy = "created_at"
     ordering = ("-created_at",)
     search_fields = ("id", "title")
     readonly_fields = ("created_at", "updated_at")
-    fieldsets = ((None, {"fields": ("id", "title", "created_at", "updated_at")}),)
+    fieldsets = ((None, {"fields": ("id", "title", "organization", "created_at", "updated_at")}),)
     inlines = [CaseMembershipInline]
