@@ -6,6 +6,7 @@ from apps.platform.authorization.access_policies import ArtifactAccessPolicy
 from django.conf import settings
 
 from apps.platform.artifacts.models import CaseArtifact
+from django.db.models import Q
 from apps.platform.artifacts.serializers import CaseArtifactSerializer
 
 
@@ -20,7 +21,7 @@ class ArtifactViewSet(viewsets.ReadOnlyModelViewSet):
         # Filter by case when provided
         case_id = self.request.query_params.get("case")
         if case_id:
-            qs = qs.filter(case_id=case_id)
+            qs = qs.filter(Q(case_id=case_id) | Q(case_fk__id=case_id))
         if user and getattr(user, "is_authenticated", False):
             return qs
         return qs if getattr(settings, "PLATFORM_DEV_OPEN", True) else qs.none()
