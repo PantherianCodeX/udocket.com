@@ -124,11 +124,11 @@ services:
       # Expose on 8085 and advertise browser-accessible hostname (localhost)
       KC_HTTP_PORT: 8085
       KC_HOSTNAME: localhost
-      KC_HOSTNAME_URL: http://localhost:8085
+      KC_HOSTNAME_PORT: 8085
       KC_HOSTNAME_STRICT: "false"
       KC_HOSTNAME_STRICT_HTTPS: "false"
-    ports:
-      - "8085:8085"
+      ports:
+        - "8085:8085"
     volumes:
       - ./infra/docker/keycloak/udocker-realm.json:/opt/keycloak/data/import/udocker-realm.json:ro
     depends_on:
