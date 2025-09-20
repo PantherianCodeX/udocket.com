@@ -257,6 +257,7 @@ OIDC_ISSUER = env("OIDC_ISSUER", default=None)
 _op_auth = env("OIDC_OP_AUTHORIZATION_ENDPOINT", default=None)
 _op_token = env("OIDC_OP_TOKEN_ENDPOINT", default=None)
 _op_user = env("OIDC_OP_USER_ENDPOINT", default=None)
+_op_jwks = env("OIDC_OP_JWKS_ENDPOINT", default=None)
 if _op_auth:
     OIDC_OP_AUTHORIZATION_ENDPOINT = _op_auth
 elif OIDC_ISSUER:
@@ -269,6 +270,12 @@ if _op_user:
     OIDC_OP_USER_ENDPOINT = _op_user
 elif OIDC_ISSUER:
     OIDC_OP_USER_ENDPOINT = OIDC_ISSUER.rstrip("/") + "/protocol/openid-connect/userinfo"
+if _op_jwks:
+    OIDC_OP_JWKS_ENDPOINT = _op_jwks
+else:
+    jwks_fallback = env("OIDC_JWKS_URL", default=None)
+    if jwks_fallback:
+        OIDC_OP_JWKS_ENDPOINT = jwks_fallback
 
 # Default OIDC scopes for browser SSO
 OIDC_RP_SCOPES = env("OIDC_RP_SCOPES", default="openid email profile")
