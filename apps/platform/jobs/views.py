@@ -18,6 +18,7 @@ from apps.platform.operations.tasks import transcribe_job
 from apps.platform.operations.audit import emit as audit_emit
 from django.db import transaction
 from apps.platform.operations.tasks import summarize_job, timeline_job, graph_job
+from apps.platform.tenancy import scope_jobs
 
 
 class JobViewSet(viewsets.ModelViewSet):
@@ -33,10 +34,7 @@ class JobViewSet(viewsets.ModelViewSet):
     def get_queryset(self):  # type: ignore[override]
         qs = super().get_queryset().select_related("case", "case__organization")
         user = getattr(self.request, "user", None)
-        if user and user.is_authenticated:
-            from django.db.models import Q
-            return qs.filter(Q(case__memberships__user=user) | Q(case__organization__memberships__user=user)).distinct()
-        return qs if getattr(settings, "PLATFORM_DEV_OPEN", True) else qs.none()
+        return scope_jobs(qs, user)
 
     def create(self, request, *args, **kwargs):  # type: ignore[override]
         """Create a job and immediately enqueue transcription."""

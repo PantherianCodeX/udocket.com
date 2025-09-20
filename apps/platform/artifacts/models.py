@@ -3,6 +3,13 @@ from django.conf import settings
 from simple_history.models import HistoricalRecords
 
 
+class CaseArtifactQuerySet(models.QuerySet):
+    def for_user(self, user):
+        from apps.platform import tenancy
+
+        return tenancy.scope_artifacts(self, user)
+
+
 class CaseArtifact(models.Model):
     """Generic artifact record; full schema to follow in Step 4."""
 
@@ -11,6 +18,14 @@ class CaseArtifact(models.Model):
     # Optional FK for normalization; kept nullable for backcompat while migrating
     case_fk = models.ForeignKey(
         "cases.Case", on_delete=models.PROTECT, related_name="artifacts", null=True, blank=True
+    )
+    organization = models.ForeignKey(
+        "accounts.Organization",
+        on_delete=models.PROTECT,
+        related_name="artifacts",
+        null=True,
+        blank=True,
+        editable=False,
     )
     job_id = models.CharField(max_length=36, null=True, blank=True)
     type = models.CharField(max_length=32)
@@ -22,6 +37,8 @@ class CaseArtifact(models.Model):
     metadata = models.JSONField(default=dict, blank=True)
     history = HistoricalRecords()
 
+    objects = CaseArtifactQuerySet.as_manager()
+
     class Meta:
         indexes = [
             models.Index(fields=["case_id", "type"], name="artifact_case_type_idx"),
@@ -31,6 +48,22 @@ class CaseArtifact(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return f"{self.case_id}:{self.type}:{self.title or self.path}"
+
+    def save(self, *args, **kwargs):  # type: ignore[override]
+        if self.organization_id is None:
+            org_id = None
+            try:
+                if self.case_fk_id:
+                    org_id = self.case_fk.organization_id
+                elif self.case_id:
+                    from apps.platform.cases.models import Case  # local import to avoid circular
+
+                    org_id = Case.objects.filter(id=self.case_id).values_list("organization_id", flat=True).first()
+            except Exception:
+                org_id = None
+            if org_id:
+                self.organization_id = org_id
+        super().save(*args, **kwargs)
 
 
 class FieldVisibilityRule(models.Model):

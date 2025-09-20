@@ -1,7 +1,15 @@
 from __future__ import annotations
 
 import uuid
+
 from django.db import models
+
+
+class JobQuerySet(models.QuerySet):
+    def for_user(self, user):
+        from apps.platform import tenancy
+
+        return tenancy.scope_jobs(self, user)
 
 
 class Job(models.Model):
@@ -17,6 +25,14 @@ class Job(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     case = models.ForeignKey("cases.Case", on_delete=models.PROTECT, related_name="jobs")
+    organization = models.ForeignKey(
+        "accounts.Organization",
+        on_delete=models.PROTECT,
+        related_name="jobs",
+        null=True,
+        blank=True,
+        editable=False,
+    )
     audio_input = models.TextField()
     mode = models.CharField(max_length=16, choices=Mode.choices, default=Mode.ON_DEMAND)
     diarization = models.BooleanField(default=False)
@@ -32,5 +48,15 @@ class Job(models.Model):
     class Meta:
         ordering = ["-created_at"]
 
+    objects = JobQuerySet.as_manager()
+
     def __str__(self) -> str:  # pragma: no cover - trivial
         return f"{self.id} {self.status}"
+
+    def save(self, *args, **kwargs):  # type: ignore[override]
+        if self.case_id and self.organization_id is None:
+            try:
+                self.organization_id = self.case.organization_id
+            except Exception:
+                pass
+        super().save(*args, **kwargs)

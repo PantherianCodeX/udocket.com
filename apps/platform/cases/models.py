@@ -4,6 +4,16 @@ from django.contrib.auth import get_user_model
 from simple_history.models import HistoricalRecords
 
 
+class CaseQuerySet(models.QuerySet):
+    def for_user(self, user):
+        from apps.platform import tenancy
+
+        return tenancy.scope_cases(self, user)
+
+
+CaseManager = CaseQuerySet.as_manager()
+
+
 class Case(models.Model):
     """Initial placeholder; full schema to follow in Step 4."""
 
@@ -16,6 +26,8 @@ class Case(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     history = HistoricalRecords()
+
+    objects = CaseManager
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return f"{self.id} — {self.title}"

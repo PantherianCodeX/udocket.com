@@ -4,6 +4,7 @@ from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from apps.platform.authorization.access_policies import CaseAccessPolicy
 from django.conf import settings
 
@@ -12,6 +13,8 @@ from apps.platform.cases.serializers import CaseSerializer
 from apps.platform.cases.models import CaseMembership
 from apps.platform.authorization.capabilities import role_capabilities
 from apps.platform.operations.audit import emit as audit_emit
+from apps.platform.tenancy import scope_cases
+from apps.platform.accounts.models import OrganizationMembership
 
 
 class CaseViewSet(viewsets.ModelViewSet):
@@ -22,11 +25,7 @@ class CaseViewSet(viewsets.ModelViewSet):
     def get_queryset(self):  # type: ignore[override]
         qs = super().get_queryset().select_related("organization")
         user = getattr(self.request, "user", None)
-        if user and user.is_authenticated:
-            from django.db.models import Q
-            return qs.filter(Q(memberships__user=user) | Q(organization__memberships__user=user)).distinct()
-        # Anonymous users only see data when PLATFORM_DEV_OPEN is enabled
-        return qs if getattr(settings, "PLATFORM_DEV_OPEN", True) else qs.none()
+        return scope_cases(qs, user)
 
     @action(detail=True, methods=["get"], url_path="capabilities")
     def capabilities(self, request, pk=None):
@@ -59,3 +58,17 @@ class CaseViewSet(viewsets.ModelViewSet):
         except Exception:
             pass
         return resp
+
+    def perform_create(self, serializer):  # type: ignore[override]
+        user = getattr(self.request, "user", None)
+        organization = serializer.validated_data.get("organization")
+        if organization is None:
+            raise ValidationError({"organization": "This field is required."})
+        if not user or not getattr(user, "is_authenticated", False):
+            if getattr(settings, "PLATFORM_DEV_OPEN", False):
+                serializer.save()
+                return
+            raise PermissionDenied("Authentication required to create cases.")
+        if not OrganizationMembership.objects.filter(user=user, organization=organization).exists():
+            raise PermissionDenied("User is not a member of the selected organization.")
+        serializer.save()
