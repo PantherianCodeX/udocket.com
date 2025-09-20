@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 import uuid
+import pytest
+from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
+
+from apps.platform.accounts.models import Organization, OrganizationMembership
 from apps.platform.cases.models import Case
 from apps.platform.jobs.models import Job
 
@@ -26,3 +30,38 @@ def test_job_status_minimal(db, settings):
     data = resp.json()
     assert data["id"] == str(job.id)
     assert data["status"] == Job.Status.PENDING
+
+
+@pytest.mark.django_db
+def test_case_create_requires_org_membership(db, settings):
+    settings.PLATFORM_DEV_OPEN = False
+    User = get_user_model()
+    user = User.objects.create_user(username="creator")
+    org = Organization.objects.create(id="ORG-CASE", name="Org Case")
+    OrganizationMembership.objects.create(
+        organization=org,
+        user=user,
+        role=OrganizationMembership.Role.MANAGER,
+    )
+
+    client = APIClient()
+    client.force_authenticate(user=user)
+    payload = {"id": "CASE-MEM", "title": "Member Case", "organization": org.id}
+    resp = client.post("/api/v1/cases/", payload, format="json")
+    assert resp.status_code == 201
+    assert resp.data["id"] == "CASE-MEM"
+    assert resp.data["organization"] == org.id
+
+
+@pytest.mark.django_db
+def test_case_create_rejects_non_member(db, settings):
+    settings.PLATFORM_DEV_OPEN = False
+    User = get_user_model()
+    user = User.objects.create_user(username="outsider")
+    org = Organization.objects.create(id="ORG-NO", name="Org No Access")
+
+    client = APIClient()
+    client.force_authenticate(user=user)
+    payload = {"id": "CASE-NON", "title": "Blocked Case", "organization": org.id}
+    resp = client.post("/api/v1/cases/", payload, format="json")
+    assert resp.status_code == 403

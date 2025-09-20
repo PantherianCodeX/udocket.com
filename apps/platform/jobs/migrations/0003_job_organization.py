@@ -5,6 +5,16 @@ import django.db.models.deletion
 from django.db.models import F
 
 
+def backfill(apps, schema_editor):
+    Job = apps.get_model("jobs", "Job")
+    try:
+        Job.objects.filter(organization__isnull=True).update(organization=F("case__organization"))
+    except Exception:
+        for j in Job.objects.filter(organization__isnull=True).select_related("case"):
+            j.organization_id = getattr(j.case, "organization_id", None)
+            j.save(update_fields=["organization"])
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -25,16 +35,5 @@ class Migration(migrations.Migration):
                 to="accounts.organization",
             ),
         ),
-        migrations.RunPython(code="apps.platform.jobs.migrations.0003_job_organization.backfill", reverse_code=migrations.RunPython.noop),
+        migrations.RunPython(code=backfill, reverse_code=migrations.RunPython.noop),
     ]
-
-
-def backfill(apps, schema_editor):
-    Job = apps.get_model("jobs", "Job")
-    # Fast path: update via join when supported; fallback to per-row in SQLite
-    try:
-        Job.objects.filter(organization__isnull=True).update(organization=F("case__organization"))
-    except Exception:
-        for j in Job.objects.filter(organization__isnull=True).select_related("case"):
-            j.organization_id = getattr(j.case, "organization_id", None)
-            j.save(update_fields=["organization"])
