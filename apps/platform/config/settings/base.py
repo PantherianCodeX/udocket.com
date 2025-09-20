@@ -10,7 +10,10 @@ env = environ.Env()
 
 # Load .env from repo root, but only if present (avoid noisy log)
 _env_path = BASE_DIR / ".env"
-if _env_path.exists():
+# Only auto-read .env when explicitly enabled. In Docker, compose already
+# provides env vars via env_file, and in local pytest discovery we avoid
+# binding to container-only values (e.g., Postgres host).
+if os.environ.get("ENV_READ_DOTENV") == "1" and _env_path.exists():
     environ.Env.read_env(str(_env_path))
 
 
@@ -104,18 +107,29 @@ default_sqlite_path = storage_root / "udocket_django.db"
 
 # Robust DB config with local fallback when DATABASE_URL points to an
 # unavailable path (e.g., host dev using container-oriented /app/storage).
-_db_url = env("DATABASE_URL", default=f"sqlite:///{default_sqlite_path}")
-if isinstance(_db_url, str) and _db_url.startswith("sqlite:///"):
-    _sqlite_path = Path(_db_url.replace("sqlite:///", "")).resolve()
-    try:
+if os.environ.get("PYTEST_CURRENT_TEST"):
+    test_url = (
+        os.environ.get("TEST_DATABASE_URL")
+        or os.environ.get("DATABASE_URL")
+        or f"sqlite:///{default_sqlite_path}"
+    )
+    if test_url.startswith("sqlite:///"):
+        _sqlite_path = Path(test_url.replace("sqlite:///", "")).resolve()
         _sqlite_path.parent.mkdir(parents=True, exist_ok=True)
         DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": str(_sqlite_path)}}
-    except Exception:
-        # Fall back to repo-local storage path
-        DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": str(default_sqlite_path)}}
+    else:
+        DATABASES = {"default": environ.Env.db_url_config(test_url)}
 else:
-    # Delegate to environ for non-sqlite URLs
-    DATABASES = {"default": env.db("DATABASE_URL", default=_db_url)}
+    _db_url = env("DATABASE_URL", default=f"sqlite:///{default_sqlite_path}")
+    if isinstance(_db_url, str) and _db_url.startswith("sqlite:///"):
+        _sqlite_path = Path(_db_url.replace("sqlite:///", "")).resolve()
+        try:
+            _sqlite_path.parent.mkdir(parents=True, exist_ok=True)
+            DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": str(_sqlite_path)}}
+        except Exception:
+            DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": str(default_sqlite_path)}}
+    else:
+        DATABASES = {"default": env.db("DATABASE_URL", default=_db_url)}
 
 
 # Password validation
