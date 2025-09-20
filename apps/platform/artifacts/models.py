@@ -18,8 +18,10 @@ class CaseArtifact(models.Model):
 
     class Meta:
         indexes = [
-            models.Index(fields=["case_id", "type"]),
+            models.Index(fields=["case_id", "type"], name="artifact_case_type_idx"),
+            models.Index(fields=["created_at"], name="artifact_created_idx"),
         ]
+        unique_together = ("case_id", "type", "title")
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return f"{self.case_id}:{self.type}:{self.title or self.path}"
