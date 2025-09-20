@@ -11,6 +11,7 @@ from apps.platform.cases.models import Case
 from apps.platform.cases.serializers import CaseSerializer
 from apps.platform.cases.models import CaseMembership
 from apps.platform.authorization.capabilities import role_capabilities
+from apps.platform.operations.audit import emit as audit_emit
 
 
 class CaseViewSet(viewsets.ModelViewSet):
@@ -40,3 +41,20 @@ class CaseViewSet(viewsets.ModelViewSet):
             role = m.role if m else None
         caps = sorted(list(role_capabilities(role))) if role else []
         return Response({"case": str(case.id), "role": role, "capabilities": caps})
+
+    def retrieve(self, request, *args, **kwargs):  # type: ignore[override]
+        resp = super().retrieve(request, *args, **kwargs)
+        try:
+            obj = self.get_object()
+            audit_emit(request, case_id=str(obj.id), event="case.retrieve", data={})
+        except Exception:
+            pass
+        return resp
+
+    def list(self, request, *args, **kwargs):  # type: ignore[override]
+        resp = super().list(request, *args, **kwargs)
+        try:
+            audit_emit(request, case_id=None, event="case.list", data={"count": len(resp.data) if hasattr(resp, 'data') else None})
+        except Exception:
+            pass
+        return resp

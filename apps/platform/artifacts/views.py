@@ -8,6 +8,7 @@ from django.conf import settings
 from apps.platform.artifacts.models import CaseArtifact
 from django.db.models import Q
 from apps.platform.artifacts.serializers import CaseArtifactSerializer
+from apps.platform.operations.audit import emit as audit_emit
 
 
 class ArtifactViewSet(viewsets.ReadOnlyModelViewSet):
@@ -25,3 +26,21 @@ class ArtifactViewSet(viewsets.ReadOnlyModelViewSet):
         if user and getattr(user, "is_authenticated", False):
             return qs
         return qs if getattr(settings, "PLATFORM_DEV_OPEN", True) else qs.none()
+
+    def retrieve(self, request, *args, **kwargs):  # type: ignore[override]
+        resp = super().retrieve(request, *args, **kwargs)
+        try:
+            obj = self.get_object()
+            audit_emit(request, case_id=obj.case_id, event="artifact.retrieve", data={"artifact_id": obj.id, "type": obj.type})
+        except Exception:
+            pass
+        return resp
+
+    def list(self, request, *args, **kwargs):  # type: ignore[override]
+        resp = super().list(request, *args, **kwargs)
+        try:
+            case_id = request.query_params.get("case")
+            audit_emit(request, case_id=case_id, event="artifact.list", data={"count": len(resp.data) if hasattr(resp, 'data') else None})
+        except Exception:
+            pass
+        return resp

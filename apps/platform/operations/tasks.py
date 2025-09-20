@@ -19,6 +19,7 @@ from apps.platform.operations.models import TaskRun
 from apps.platform.cases.models import Case
 from apps.platform.operations.audit import emit as audit_emit
 import re
+import json
 import logging
 
 log = logging.getLogger("apps.platform.operations.tasks")
@@ -200,6 +201,10 @@ def _case_paths(case_id: str) -> tuple[Path, Path, Path]:
     return base, base / "transcript", base / "analysis"
 
 
+def _ops_dir(case_id: str) -> Path:
+    return (Path(settings.MEDIA_ROOT) / "cases" / case_id / "ops").resolve()
+
+
 def _latest_transcript(case_id: str) -> Path | None:
     _, tdir, _ = _case_paths(case_id)
     if not tdir.exists():
@@ -209,9 +214,14 @@ def _latest_transcript(case_id: str) -> Path | None:
 
 
 def _write_json(p: Path, data: Any) -> None:
-    import json
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _append_jsonl(p: Path, data: Any) -> None:
+    p.parent.mkdir(parents=True, exist_ok=True)
+    with open(p, "a", encoding="utf-8") as f:
+        f.write(json.dumps(data, ensure_ascii=False) + "\n")
 
 
 @shared_task(bind=True)
@@ -255,6 +265,23 @@ def summarize_job(self, *, case_id: str, job_id: str) -> Dict[str, Any]:
     except Exception:
         pass
     audit_emit(None, case_id=case_id, event="analysis.summary.created", data={"job_id": job_id, "file": str(out)})
+    # Ops logs
+    try:
+        opsd = _ops_dir(case_id)
+        meta = {
+            "case_id": case_id,
+            "job_id": job_id,
+            "artifact": str(out),
+            "checksum": h.hexdigest() if 'h' in locals() else None,
+            "source_transcript": str(src),
+            "ts": timezone.now().isoformat(),
+            "schema_version": "v1",
+            "status": "ok",
+        }
+        _write_json(opsd / f"{job_id}__summary_log.json", meta)
+        _append_jsonl(opsd / "ops_summary.jsonl", meta)
+    except Exception:
+        pass
     try:
         send_case_update(case_id, event="artifact.created", kind="summary", job_id=job_id)
     except Exception:
@@ -307,6 +334,23 @@ def timeline_job(self, *, case_id: str, job_id: str) -> Dict[str, Any]:
     except Exception:
         pass
     audit_emit(None, case_id=case_id, event="analysis.timeline.created", data={"job_id": job_id, "events": len(events)})
+    try:
+        opsd = _ops_dir(case_id)
+        meta = {
+            "case_id": case_id,
+            "job_id": job_id,
+            "artifact": str(out),
+            "checksum": h.hexdigest() if 'h' in locals() else None,
+            "source_transcript": str(src),
+            "events": len(events),
+            "ts": timezone.now().isoformat(),
+            "schema_version": "v1",
+            "status": "ok",
+        }
+        _write_json(opsd / f"{job_id}__timeline_log.json", meta)
+        _append_jsonl(opsd / "ops_timeline.jsonl", meta)
+    except Exception:
+        pass
     try:
         send_case_update(case_id, event="artifact.created", kind="timeline", job_id=job_id)
     except Exception:
@@ -366,6 +410,26 @@ def graph_job(self, *, case_id: str, job_id: str) -> Dict[str, Any]:
     except Exception:
         pass
     audit_emit(None, case_id=case_id, event="analysis.graph.created", data={"job_id": job_id, "entities": len(entities)})
+    try:
+        opsd = _ops_dir(case_id)
+        meta = {
+            "case_id": case_id,
+            "job_id": job_id,
+            "entities_file": str(entities_file),
+            "graph_file": str(graph_file),
+            "entities_checksum": h1 if 'h1' in locals() else None,
+            "graph_checksum": h2 if 'h2' in locals() else None,
+            "source_transcript": str(src),
+            "entities": len(entities),
+            "edges": 0,
+            "ts": timezone.now().isoformat(),
+            "schema_version": "v1",
+            "status": "ok",
+        }
+        _write_json(opsd / f"{job_id}__graph_log.json", meta)
+        _append_jsonl(opsd / "ops_graph.jsonl", meta)
+    except Exception:
+        pass
     try:
         send_case_update(case_id, event="artifact.created", kind="graph", job_id=job_id)
     except Exception:
