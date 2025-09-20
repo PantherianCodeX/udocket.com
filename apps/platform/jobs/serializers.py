@@ -18,13 +18,14 @@ class JobCreateSerializer(serializers.ModelSerializer):
 
 
 class JobSerializer(serializers.ModelSerializer):
-    case_id = serializers.CharField(source="case_id", read_only=True)
+    case_id = serializers.CharField(read_only=True)
 
     class Meta:
         model = Job
         fields = [
             "id",
             "case",
+            "case_id",
             "audio_input",
             "mode",
             "diarization",
@@ -46,4 +47,3 @@ class JobSerializer(serializers.ModelSerializer):
             "started_at",
             "finished_at",
         ]
-

@@ -57,6 +57,7 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "simple_history.middleware.HistoryRequestMiddleware",
+    "apps.platform.middleware.org_session_middleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -117,6 +118,10 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+
+# Organization scoping header (used by middleware to set DB session var for RLS)
+ORG_HEADER_NAME = env("ORG_HEADER_NAME", default="HTTP_X_ORGANIZATION_ID")
 
 
 LANGUAGE_CODE = env("DJANGO_LANGUAGE_CODE", default="en-ca")

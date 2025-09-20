@@ -225,7 +225,7 @@ def _append_jsonl(p: Path, data: Any) -> None:
 
 
 @shared_task(bind=True)
-def summarize_job(self, *, case_id: str, job_id: str) -> Dict[str, Any]:
+def summarize_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
     case_dir, _, analysis_dir = _case_paths(case_id)
     job = Job.objects.get(pk=job_id)
     src = Path(job.transcript_path) if job.transcript_path else _latest_transcript(case_id)
@@ -290,7 +290,7 @@ def summarize_job(self, *, case_id: str, job_id: str) -> Dict[str, Any]:
 
 
 @shared_task(bind=True)
-def timeline_job(self, *, case_id: str, job_id: str) -> Dict[str, Any]:
+def timeline_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
     _, _, analysis_dir = _case_paths(case_id)
     job = Job.objects.get(pk=job_id)
     src = Path(job.transcript_path) if job.transcript_path else _latest_transcript(case_id)
@@ -359,7 +359,7 @@ def timeline_job(self, *, case_id: str, job_id: str) -> Dict[str, Any]:
 
 
 @shared_task(bind=True)
-def graph_job(self, *, case_id: str, job_id: str) -> Dict[str, Any]:
+def graph_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
     _, _, analysis_dir = _case_paths(case_id)
     job = Job.objects.get(pk=job_id)
     src = Path(job.transcript_path) if job.transcript_path else _latest_transcript(case_id)
