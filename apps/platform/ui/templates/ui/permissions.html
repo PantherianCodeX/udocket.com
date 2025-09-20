@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Permission Catalog</title>
+  <style>
+    body { font-family: sans-serif; margin: 2rem; }
+    h1 { margin-bottom: 0.5rem; }
+    section { margin-bottom: 2rem; }
+    pre { background-color: #f4f4f4; padding: 1rem; overflow-x: auto; }
+    table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
+    th, td { border: 1px solid #ddd; padding: 0.5rem; text-align: left; }
+    th { background-color: #fafafa; }
+  </style>
+</head>
+<body>
+  <h1>Permission Catalog</h1>
+  <p>This read-only view summarizes artifact fields, presets, and roles to help configure permission bundles.
+     Use Django Admin for editing.</p>
+
+  <section>
+    <h2>Artifact Field Registry</h2>
+    {% for artifact, fields in registry.items %}
+      <h3>{{ artifact }}</h3>
+      <table>
+        <thead><tr><th>Field</th><th>Default Actions</th><th>Description</th></tr></thead>
+        <tbody>
+        {% for name, meta in fields.items %}
+          <tr>
+            <td>{{ name }}</td>
+            <td>{{ meta.default_actions|join:", " }}</td>
+            <td>{{ meta.description|default:"" }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    {% empty %}
+      <p>No registry entries.</p>
+    {% endfor %}
+  </section>
+
+  <section>
+    <h2>Permission Presets</h2>
+    {% if presets %}
+      {% for preset in presets %}
+        <h3>{{ preset.name }} ({{ preset.slug }})</h3>
+        <p>{{ preset.description }}</p>
+        <strong>Capabilities:</strong> {{ preset.capabilities|join:", " }}
+        {% if preset.field_policies %}
+          <table>
+            <thead><tr><th>Artifact Type</th><th>Field</th><th>Actions</th></tr></thead>
+            <tbody>
+              {% for policy in preset.field_policies %}
+              <tr>
+                <td>{{ policy.type }}</td>
+                <td>{{ policy.field }}</td>
+                <td>{{ policy.actions|join:", " }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% endif %}
+      {% endfor %}
+    {% else %}
+      <p>No presets configured.</p>
+    {% endif %}
+  </section>
+
+  <section>
+    <h2>Roles</h2>
+    {% if roles %}
+      <table>
+        <thead><tr><th>Role</th><th>Presets</th><th>Capabilities</th></tr></thead>
+        <tbody>
+          {% for role in roles %}
+          <tr>
+            <td>{{ role.name }} ({{ role.slug }})</td>
+            <td>{{ role.presets|join:", " }}</td>
+            <td>{{ role.capabilities|join:", " }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p>No roles defined.</p>
+    {% endif %}
+  </section>
+</body>
+</html>

@@ -4,11 +4,20 @@ import uuid
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_http_methods
+from django.views.decorators.cache import cache_page
 
 from apps.platform.cases.models import Case
 from apps.platform.jobs.models import Job
 from apps.platform.operations.tasks import transcribe_job
 from apps.platform.operations.storage import ensure_case_dirs
+from apps.platform.authorization.models import (
+    PermissionPreset,
+    PresetCapability,
+    PresetFieldPolicy,
+    Role,
+)
+from apps.platform.authorization.capabilities import role_capabilities
+from apps.platform.artifacts.registry import ARTIFACT_FIELD_REGISTRY
 from django.contrib.auth import logout
 import logging
 
@@ -49,6 +58,60 @@ def case_detail(request: HttpRequest, case_id: str) -> HttpResponse:
 def jobs(request: HttpRequest) -> HttpResponse:
     all_jobs = Job.objects.select_related("case").all()[:200]
     return render(request, "ui/jobs.html", {"jobs": all_jobs})
+
+
+@require_http_methods(["GET"])
+@cache_page(30)
+def permissions_overview(request: HttpRequest) -> HttpResponse:
+    registry = {
+        artifact_type: {
+            field: {
+                "default_actions": list(meta.default_actions or ()),
+                "description": meta.description,
+            }
+            for field, meta in fields.items()
+        }
+        for artifact_type, fields in ARTIFACT_FIELD_REGISTRY.items()
+    }
+
+    presets = []
+    for preset in PermissionPreset.objects.all().order_by("slug"):
+        caps = list(
+            PresetCapability.objects.filter(preset=preset).values_list("capability", flat=True)
+        )
+        policies = [
+            {
+                "type": fp.type,
+                "field": fp.field_name,
+                "actions": list(fp.actions or []),
+            }
+            for fp in PresetFieldPolicy.objects.filter(preset=preset)
+        ]
+        presets.append(
+            {
+                "slug": preset.slug,
+                "name": preset.name,
+                "description": preset.description,
+                "system": preset.system,
+                "capabilities": caps,
+                "field_policies": policies,
+            }
+        )
+
+    roles = []
+    for role in Role.objects.all().prefetch_related("presets").order_by("slug"):
+        roles.append(
+            {
+                "slug": role.slug,
+                "name": role.name,
+                "system": role.system,
+                "presets": [p.slug for p in role.presets.all()],
+                "capabilities": sorted(role_capabilities(role.slug)),
+            }
+        )
+
+    context = {"registry": registry, "presets": presets, "roles": roles}
+    return render(request, "ui/permissions.html", context)
 
 
 def logout_view(request: HttpRequest) -> HttpResponse:
