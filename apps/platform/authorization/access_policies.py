@@ -15,6 +15,7 @@ except Exception:  # Fallback when dependency unavailable (dev bootstrap)
 
 from django.conf import settings
 from apps.platform.cases.models import CaseMembership
+from apps.platform.authorization.capabilities import has_capability
 
 
 class _MembershipMixin:
@@ -56,6 +57,11 @@ class _MembershipMixin:
                 case_id = getattr(case, "id", None)
         if case_id is None:
             return True
+                try:
+            if has_capability(user, case_id, "case.update"):
+                return True
+        except Exception:
+            pass
         return CaseMembership.objects.filter(case_id=case_id, user=user, role__in=[
             CaseMembership.Role.OWNER, CaseMembership.Role.CONTRIBUTOR
         ]).exists()
