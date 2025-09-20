@@ -22,6 +22,23 @@ User = get_user_model()
 
 
 class KeycloakOIDCBackend(OIDCAuthenticationBackend):
+    def filter_users_by_claims(self, claims):  # type: ignore[override]
+        """Find existing users by Keycloak subject first, then email/username.
+
+        This prevents duplicate local users when usernames are derived from `sub`.
+        """
+        sub = (claims.get("sub") or "").strip() or None
+        email = (claims.get("email") or "").strip() or None
+        preferred = (claims.get("preferred_username") or "").strip() or None
+        qs = User.objects.none()
+        if sub:
+            qs = User.objects.filter(kc_sub=sub) | User.objects.filter(username=sub)
+        elif email:
+            qs = User.objects.filter(email__iexact=email) | User.objects.filter(username__iexact=email)
+        elif preferred:
+            qs = User.objects.filter(username__iexact=preferred)
+        return qs.distinct()
+
     def get_username(self, claims):  # type: ignore[override]
         email = (claims.get("email") or "").strip()
         preferred = (claims.get("preferred_username") or "").strip()
