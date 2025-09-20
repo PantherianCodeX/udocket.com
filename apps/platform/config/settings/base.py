@@ -32,7 +32,6 @@ INSTALLED_APPS = [
     "django_filters",
     "guardian",
     "rules",
-    "simple_history",
     "mozilla_django_oidc",
     "apps.platform.jobs",
     "django_celery_results",
