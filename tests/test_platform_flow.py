@@ -7,6 +7,7 @@ import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework.test import APIClient
 
+from apps.platform.accounts.models import Organization
 from apps.platform.cases.models import Case
 from apps.platform.jobs.models import Job
 from apps.platform.artifacts.models import CaseArtifact
@@ -21,7 +22,8 @@ def _is_dev_open(settings, tmp_path):
 
 
 def test_jobs_upload_file_creates_job_and_saves_file(db, settings):
-    case = Case.objects.create(id="CASE-T1", title="Upload Test")
+    org = Organization.objects.create(id="ORG-FLOW1", name="Flow Org 1")
+    case = Case.objects.create(id="CASE-T1", title="Upload Test", organization=org)
     client = APIClient()
 
     audio_bytes = b"RIFF....WAVEfmt "  # minimal header-ish; we only check file persisted
@@ -74,7 +76,8 @@ def _make_transcript(settings, case_id: str, job_id: str) -> Path:
 
 
 def test_analysis_tasks_generate_artifacts(db, settings):
-    case = Case.objects.create(id="CASE-T2", title="Analysis Test")
+    org = Organization.objects.create(id="ORG-FLOW2", name="Flow Org 2")
+    case = Case.objects.create(id="CASE-T2", title="Analysis Test", organization=org)
     job = Job.objects.create(case=case, audio_input="/tmp/a.wav")
     transcript = _make_transcript(settings, str(case.id), str(job.id))
     job.transcript_path = str(transcript)
@@ -93,4 +96,3 @@ def test_analysis_tasks_generate_artifacts(db, settings):
     arts = list(CaseArtifact.objects.filter(case_id=str(case.id)))
     kinds = sorted(a.type for a in arts)
     assert set(kinds) >= {"SUMMARY", "TIMELINE", "ENTITIES", "GRAPH"}
-

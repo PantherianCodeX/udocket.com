@@ -23,8 +23,6 @@ class CaseArtifact(models.Model):
         "accounts.Organization",
         on_delete=models.PROTECT,
         related_name="artifacts",
-        null=True,
-        blank=True,
         editable=False,
     )
     job_id = models.CharField(max_length=36, null=True, blank=True)

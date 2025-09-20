@@ -21,7 +21,7 @@ class Case(models.Model):
     title = models.CharField(max_length=200)
     # Optional organization scoping (null during migration phase)
     organization = models.ForeignKey(
-        "accounts.Organization", on_delete=models.PROTECT, related_name="cases", null=True, blank=True
+        "accounts.Organization", on_delete=models.PROTECT, related_name="cases"
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

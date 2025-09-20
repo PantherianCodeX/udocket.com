@@ -29,8 +29,6 @@ class Job(models.Model):
         "accounts.Organization",
         on_delete=models.PROTECT,
         related_name="jobs",
-        null=True,
-        blank=True,
         editable=False,
     )
     audio_input = models.TextField()

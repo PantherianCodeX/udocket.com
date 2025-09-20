@@ -12,7 +12,8 @@ from apps.platform.jobs.models import Job
 
 def test_cases_list_anonymous(db, settings):
     settings.PLATFORM_DEV_OPEN = True
-    Case.objects.create(id="CASE-1", title="Demo")
+    org = Organization.objects.create(id="ORG-ANON", name="Anon Org")
+    Case.objects.create(id="CASE-1", title="Demo", organization=org)
     client = APIClient()
     resp = client.get("/api/v1/cases/")
     assert resp.status_code == 200
@@ -22,7 +23,8 @@ def test_cases_list_anonymous(db, settings):
 
 def test_job_status_minimal(db, settings):
     settings.PLATFORM_DEV_OPEN = True
-    case = Case.objects.create(id="CASE-2", title="Demo2")
+    org = Organization.objects.create(id="ORG-STATUS", name="Status Org")
+    case = Case.objects.create(id="CASE-2", title="Demo2", organization=org)
     job = Job.objects.create(case=case, audio_input="/tmp/a.wav")
     client = APIClient()
     resp = client.get(f"/api/v1/jobs/{job.id}/status/")

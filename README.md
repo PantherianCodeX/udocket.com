@@ -7,13 +7,15 @@ and module discovery (`db/__init__.py`, `config/__init__.py`).
 1) Copy your **pilot agent** into:
    packages/udocket_core/agents/transcribe.py
 2) Copy `.env.example` to `.env` and fill required values.
-3) Build & run:
+   - Postgres defaults are provided; start the bundled database with `docker compose up -d postgres`.
+   - Run `python manage.py migrate && python manage.py enable_rls` inside the `platform` container (idempotent; the entrypoint does this on boot).
+3) Build & run the stack:
    docker compose up --build
 - API   → http://localhost:8080
 - Admin → http://localhost:8081
 
 ## Notes
-- SQLite by default; for Postgres, set `DATABASE_URL` and run Alembic.
+- Postgres is now the default application database. Per-organization row-level security is enforced via `python manage.py enable_rls`.
 - Worker calls your agent using `AGENT_CMD_TEMPLATE` from `.env`.
 - Admin/API uploads let you choose `batch` (default) or `on-demand` transcription.
 - Batch mode optionally enables speaker diarization via UI toggle or `--diarization` flag.
