@@ -157,4 +157,4 @@ The repository is ready to host additional agents that consume transcripts and e
 - Timelines: merge diarized offsets and transcript segments into normalized events with speakers and labels.
 - Relationships: derive entities and edges with evidence back-pointers to transcript timestamps.
 - All of the above should follow the contract here to ensure the Admin UI and API can surface artifacts consistently as features land.
-
+ - Platform migration to Django/DRF/Channels and end-to-end authorization/IAM integration: see `docs/ROADMAP.md`.

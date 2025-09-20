@@ -1,13 +1,24 @@
 from django.contrib import admin
+from django import forms
 from django.urls import path
 from django.http import HttpRequest, HttpResponse
 from django.template.response import TemplateResponse
 from apps.platform.authorization.models import Role, RoleCapability
+from apps.platform.authorization.capabilities import CAPABILITY_CHOICES
+
+
+class RoleCapabilityForm(forms.ModelForm):
+    capability = forms.ChoiceField(choices=CAPABILITY_CHOICES)
+
+    class Meta:
+        model = RoleCapability
+        fields = ["capability"]
 
 
 class RoleCapabilityInline(admin.TabularInline):
     model = RoleCapability
     extra = 1
+    form = RoleCapabilityForm
 
 
 @admin.register(Role)

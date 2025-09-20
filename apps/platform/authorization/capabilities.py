@@ -48,6 +48,11 @@ def role_capabilities(role_slug: str) -> set[str]:
     return caps
 
 
+# Present allow-listed capability choices in admin/forms
+CAPABILITIES: set[str] = set().union(*DEFAULT_CAPS.values())
+CAPABILITY_CHOICES: list[tuple[str, str]] = sorted(((c, c) for c in CAPABILITIES), key=lambda x: x[0])
+
+
 def has_capability(user, case_id: str | None, capability: str) -> bool:
     if not user or not getattr(user, "is_authenticated", False):
         return bool(getattr(settings, "PLATFORM_DEV_OPEN", True))

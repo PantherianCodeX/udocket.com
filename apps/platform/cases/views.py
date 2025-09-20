@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 from rest_framework import viewsets
+from rest_framework.decorators import action
+from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 from apps.platform.authorization.access_policies import CaseAccessPolicy
 from django.conf import settings
 
 from apps.platform.cases.models import Case
 from apps.platform.cases.serializers import CaseSerializer
+from apps.platform.cases.models import CaseMembership
+from apps.platform.authorization.capabilities import role_capabilities
 
 
 class CaseViewSet(viewsets.ModelViewSet):
@@ -21,3 +25,18 @@ class CaseViewSet(viewsets.ModelViewSet):
             return qs.filter(memberships__user=user).distinct()
         # Anonymous users only see data when PLATFORM_DEV_OPEN is enabled
         return qs if getattr(settings, "PLATFORM_DEV_OPEN", True) else qs.none()
+
+    @action(detail=True, methods=["get"], url_path="capabilities")
+    def capabilities(self, request, pk=None):
+        """Return the effective capabilities for the current user on this case.
+
+        Useful for UI gating without exposing sensitive fields.
+        """
+        case = self.get_object()
+        user = getattr(request, "user", None)
+        role = None
+        if user and getattr(user, "is_authenticated", False):
+            m = CaseMembership.objects.filter(case=case, user=user).first()
+            role = m.role if m else None
+        caps = sorted(list(role_capabilities(role))) if role else []
+        return Response({"case": str(case.id), "role": role, "capabilities": caps})

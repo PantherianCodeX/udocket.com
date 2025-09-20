@@ -39,3 +39,6 @@ and module discovery (`db/__init__.py`, `config/__init__.py`).
 2) Add env vars in `.env` as above; rebuild worker: `docker compose build worker`.
 3) Run: `docker compose up -d`. The worker uploads audio and passes a SAS URL to the agent.
 4) Create an Azure Speech resource in the same Canada region (canadacentral/canadaeast) with tier Standard (S0) and set `AZURE_SPEECH_KEY`/`AZURE_SPEECH_REGION`.
+
+## Roadmap
+- Platform migration and consolidation plan: see `docs/ROADMAP.md`.

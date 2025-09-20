@@ -56,6 +56,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "simple_history.middleware.HistoryRequestMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -177,11 +178,13 @@ SECURE_BROWSER_XSS_FILTER = True
 ANONYMOUS_USER_NAME = None
 
 # Guardian backend for object permissions (warning silence)
+# Enable OIDC backend only when OIDC is configured (discovery or explicit endpoints)
+_oidc_enabled = bool(env("OIDC_DISCOVERY_URL", default=None) or env("OIDC_OP_TOKEN_ENDPOINT", default=None))
+
 AUTHENTICATION_BACKENDS = (
     "django.contrib.auth.backends.ModelBackend",
     "guardian.backends.ObjectPermissionBackend",
-    "apps.platform.accounts.auth.KeycloakOIDCBackend",
-)
+) + (("apps.platform.accounts.auth.KeycloakOIDCBackend",) if _oidc_enabled else tuple())
 
 
 # Celery
@@ -227,7 +230,8 @@ SIMPLE_JWT = {
 OIDC_RP_CLIENT_ID = env("OIDC_CLIENT_ID", default=None)
 OIDC_RP_CLIENT_SECRET = env("OIDC_CLIENT_SECRET", default=None)
 OIDC_OP_DISCOVERY_ENDPOINT = env("OIDC_DISCOVERY_URL", default=None)
-LOGIN_URL = "/oidc/authenticate/"
+# Route login via OIDC only when enabled; otherwise use Django admin/login
+LOGIN_URL = "/oidc/authenticate/" if _oidc_enabled else "/admin/login/"
 LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/"
 # Development/open access toggle (bypasses auth policies when true)
