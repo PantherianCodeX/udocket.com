@@ -244,6 +244,7 @@ SIMPLE_JWT = {
 OIDC_RP_CLIENT_ID = env("OIDC_CLIENT_ID", default=None)
 OIDC_RP_CLIENT_SECRET = env("OIDC_CLIENT_SECRET", default=None)
 OIDC_OP_DISCOVERY_ENDPOINT = env("OIDC_DISCOVERY_URL", default=None)
+OIDC_RP_SIGN_ALGO = env("OIDC_RP_SIGN_ALGO", default="RS256")
 # Route login via OIDC only when enabled; otherwise use Django admin/login
 LOGIN_URL = "/oidc/authenticate/" if _oidc_enabled else "/admin/login/"
 LOGIN_REDIRECT_URL = "/"
