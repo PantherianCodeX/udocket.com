@@ -24,6 +24,13 @@ class JobViewSet(viewsets.ModelViewSet):
             return JobCreateSerializer
         return JobSerializer
 
+    def get_queryset(self):  # type: ignore[override]
+        qs = super().get_queryset().select_related("case")
+        user = getattr(self.request, "user", None)
+        if user and user.is_authenticated:
+            return qs.filter(case__memberships__user=user).distinct()
+        return qs
+
     def create(self, request, *args, **kwargs):  # type: ignore[override]
         """Create a job and immediately enqueue transcription."""
         ser = JobCreateSerializer(data=request.data)

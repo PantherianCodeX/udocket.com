@@ -6,3 +6,5 @@ class CasesConfig(AppConfig):
     name = "apps.platform.cases"
     label = "cases"
 
+    def ready(self):  # pragma: no cover - signal wiring
+        from . import signals  # noqa: F401
