@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     "apps.platform.cases",
     "apps.platform.artifacts",
     "apps.platform.operations",
+    "apps.platform.authorization",
     "apps.platform.ui",
 ]
 
