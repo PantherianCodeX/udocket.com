@@ -256,11 +256,17 @@ OIDC_ISSUER = env("OIDC_ISSUER", default=None)
 _op_auth = env("OIDC_OP_AUTHORIZATION_ENDPOINT", default=None)
 _op_token = env("OIDC_OP_TOKEN_ENDPOINT", default=None)
 _op_user = env("OIDC_OP_USER_ENDPOINT", default=None)
-if not _op_auth and OIDC_ISSUER:
+if _op_auth:
+    OIDC_OP_AUTHORIZATION_ENDPOINT = _op_auth
+elif OIDC_ISSUER:
     OIDC_OP_AUTHORIZATION_ENDPOINT = OIDC_ISSUER.rstrip("/") + "/protocol/openid-connect/auth"
-if not _op_token and OIDC_ISSUER:
+if _op_token:
+    OIDC_OP_TOKEN_ENDPOINT = _op_token
+elif OIDC_ISSUER:
     OIDC_OP_TOKEN_ENDPOINT = OIDC_ISSUER.rstrip("/") + "/protocol/openid-connect/token"
-if not _op_user and OIDC_ISSUER:
+if _op_user:
+    OIDC_OP_USER_ENDPOINT = _op_user
+elif OIDC_ISSUER:
     OIDC_OP_USER_ENDPOINT = OIDC_ISSUER.rstrip("/") + "/protocol/openid-connect/userinfo"
 
 # Default OIDC scopes for browser SSO
