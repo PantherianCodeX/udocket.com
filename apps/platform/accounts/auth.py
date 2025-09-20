@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+import logging
+
 from django.contrib.auth import get_user_model
 from mozilla_django_oidc.auth import OIDCAuthenticationBackend
 from django.conf import settings
@@ -13,10 +15,27 @@ from rest_framework import exceptions
 from apps.platform.cases.models import CaseMembership, Case
 
 
+log = logging.getLogger("apps.platform.accounts.auth")
+
+
 User = get_user_model()
 
 
 class KeycloakOIDCBackend(OIDCAuthenticationBackend):
+    def verify_claims(self, claims):  # type: ignore[override]
+        issuer = claims.get("iss")
+        expected = getattr(settings, "OIDC_ISSUER", None)
+        if expected and issuer and issuer.rstrip("/") != expected.rstrip("/"):
+            log.warning("OIDC issuer mismatch: expected %s, got %s", expected, issuer)
+            return False
+        if "sub" not in claims:
+            log.warning("OIDC claims missing subject")
+            return False
+        scopes = (self.get_settings("OIDC_RP_SCOPES", "openid email profile") or "")
+        if "email" in scopes.split() and not claims.get("email"):
+            log.warning("OIDC claims missing email; proceeding with subject %s", claims.get("sub"))
+        return True
+
     def create_user(self, claims: dict[str, Any]) -> Any:  # type: ignore[override]
         user = super().create_user(claims)
         return self.update_user(user, claims)
