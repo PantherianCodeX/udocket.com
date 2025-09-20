@@ -2,6 +2,7 @@
 
 from django.db import migrations, models
 import django.db.models.deletion
+from django.db.models import F
 
 
 class Migration(migrations.Migration):
@@ -24,4 +25,16 @@ class Migration(migrations.Migration):
                 to="accounts.organization",
             ),
         ),
+        migrations.RunPython(code="apps.platform.jobs.migrations.0003_job_organization.backfill", reverse_code=migrations.RunPython.noop),
     ]
+
+
+def backfill(apps, schema_editor):
+    Job = apps.get_model("jobs", "Job")
+    # Fast path: update via join when supported; fallback to per-row in SQLite
+    try:
+        Job.objects.filter(organization__isnull=True).update(organization=F("case__organization"))
+    except Exception:
+        for j in Job.objects.filter(organization__isnull=True).select_related("case"):
+            j.organization_id = getattr(j.case, "organization_id", None)
+            j.save(update_fields=["organization"])
