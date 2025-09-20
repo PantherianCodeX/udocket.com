@@ -14,6 +14,9 @@ class Role(models.Model):
     description = models.TextField(blank=True)
     system = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
+    # Attach preset bundles to roles
+    # Defined below but string-referenced to avoid ordering issues
+    presets = models.ManyToManyField("authorization.PermissionPreset", blank=True, related_name="roles")
 
     class Meta:
         ordering = ["slug"]
@@ -42,3 +45,44 @@ class RoleCapability(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return f"{self.role.slug}:{self.capability}"
+
+
+class PermissionPreset(models.Model):
+    slug = models.SlugField(max_length=64, unique=True)
+    name = models.CharField(max_length=120)
+    description = models.TextField(blank=True)
+    system = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["slug"]
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return self.name or self.slug
+
+
+class PresetCapability(models.Model):
+    preset = models.ForeignKey(PermissionPreset, on_delete=models.CASCADE, related_name="capabilities")
+    capability = models.CharField(max_length=100, db_index=True)
+
+    class Meta:
+        unique_together = ("preset", "capability")
+        indexes = [models.Index(fields=["capability"])]
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return f"{self.preset.slug}:{self.capability}"
+
+
+class PresetFieldPolicy(models.Model):
+    preset = models.ForeignKey(PermissionPreset, on_delete=models.CASCADE, related_name="field_policies")
+    type = models.CharField(max_length=32)  # artifact type
+    field_name = models.CharField(max_length=64)
+    actions = models.JSONField(default=list, blank=True)  # e.g., ["view", "update", "create", "download"]
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("preset", "type", "field_name")
+        indexes = [models.Index(fields=["type", "field_name"])]
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return f"{self.preset.slug}:{self.type}.{self.field_name}"

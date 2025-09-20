@@ -26,6 +26,7 @@ daphne>=4.1
 celery>=5.3
 django-celery-beat>=2.6
 django-celery-results>=2.5
+PyYAML>=6.0
 azure-storage-blob>=12.19
 azure-cognitiveservices-speech>=1.38
 

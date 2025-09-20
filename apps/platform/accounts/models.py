@@ -4,6 +4,18 @@ from django.contrib.auth.models import AbstractUser
 from django.db import models
 
 
+class Organization(models.Model):
+    id = models.CharField(primary_key=True, max_length=64)
+    name = models.CharField(max_length=200)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return self.name
+
+
 class User(AbstractUser):
     """Custom user storing Keycloak subject ID and local profile info.
 
@@ -16,3 +28,22 @@ class User(AbstractUser):
     def __str__(self) -> str:  # pragma: no cover - trivial
         return self.username or self.email or f"user:{self.pk}"
 
+
+class OrganizationMembership(models.Model):
+    class Role(models.TextChoices):
+        ADMIN = "ADMIN", "Admin"
+        MANAGER = "MANAGER", "Manager"
+        MEMBER = "MEMBER", "Member"
+
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="memberships")
+    user = models.ForeignKey("accounts.User", on_delete=models.CASCADE, related_name="org_memberships")
+    role = models.CharField(max_length=16, choices=Role.choices, default=Role.MEMBER)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("organization", "user")
+        verbose_name = "Organization membership"
+        verbose_name_plural = "Organization memberships"
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return f"{self.organization_id}:{self.user_id}:{self.role}"

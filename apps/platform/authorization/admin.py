@@ -3,7 +3,7 @@ from django import forms
 from django.urls import path
 from django.http import HttpRequest, HttpResponse
 from django.template.response import TemplateResponse
-from apps.platform.authorization.models import Role, RoleCapability
+from apps.platform.authorization.models import Role, RoleCapability, PermissionPreset, PresetCapability, PresetFieldPolicy
 from apps.platform.authorization.capabilities import CAPABILITY_CHOICES
 
 
@@ -28,6 +28,7 @@ class RoleAdmin(admin.ModelAdmin):
     date_hierarchy = "created_at"
     ordering = ("slug",)
     search_fields = ("slug", "name")
+    filter_horizontal = ("presets",)
     inlines = [RoleCapabilityInline]
 
     def get_urls(self):
@@ -55,3 +56,22 @@ class RoleAdmin(admin.ModelAdmin):
             seen.add(r.slug)
         ctx = {**self.admin_site.each_context(request), "title": "Effective Capabilities", "role_rows": role_rows}
         return TemplateResponse(request, "admin/authorization/capabilities_summary.html", ctx)
+
+
+class PresetCapabilityInline(admin.TabularInline):
+    model = PresetCapability
+    extra = 1
+
+
+class PresetFieldPolicyInline(admin.TabularInline):
+    model = PresetFieldPolicy
+    extra = 1
+
+
+@admin.register(PermissionPreset)
+class PermissionPresetAdmin(admin.ModelAdmin):
+    list_display = ("slug", "name", "system", "created_at")
+    search_fields = ("slug", "name")
+    list_filter = ("system", "created_at")
+    date_hierarchy = "created_at"
+    inlines = [PresetCapabilityInline, PresetFieldPolicyInline]

@@ -5,6 +5,7 @@ from rest_framework import serializers
 
 from apps.platform.artifacts.models import CaseArtifact, FieldVisibilityRule
 from apps.platform.cases.models import CaseMembership
+from apps.platform.authorization.capabilities import allowed_field_actions
 
 
 def _user_role_for_case(user, case_id: str | None) -> str | None:
@@ -28,10 +29,15 @@ class FieldPermissionSerializerMixin:
         if not role:
             return data
         rules = {r.field_name: set(r.allowed_roles or []) for r in FieldVisibilityRule.objects.filter(type=instance.type)}
-        # If rule exists and role not allowed, drop the field
+        # FieldVisibilityRule: if rule exists and role not allowed, drop the field
         for fname in list(data.keys()):
-            allowed = rules.get(fname)
-            if allowed is not None and role not in allowed:
+            allowed_roles = rules.get(fname)
+            if allowed_roles is not None and role not in allowed_roles:
+                data.pop(fname, None)
+                continue
+            # Preset policies: require 'view' action when policies exist
+            acts = allowed_field_actions(role, instance.type, fname)
+            if acts and "view" not in acts:
                 data.pop(fname, None)
         return data
 
@@ -55,4 +61,3 @@ class CaseArtifactSerializer(FieldPermissionSerializerMixin, serializers.ModelSe
     def to_representation(self, instance):  # type: ignore[override]
         raw = super().to_representation(instance)
         return self._prune_fields(instance, raw)
-

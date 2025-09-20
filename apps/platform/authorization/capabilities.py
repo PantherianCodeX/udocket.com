@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Iterable
 from django.conf import settings
 from apps.platform.cases.models import CaseMembership
-from apps.platform.authorization.models import Role, RoleCapability
+from apps.platform.authorization.models import Role, RoleCapability, PermissionPreset, PresetCapability, PresetFieldPolicy
 
 
 # Hard-coded defaults as a safe baseline; DB can override/extend
@@ -45,7 +45,34 @@ def _caps_from_db(role_slug: str) -> set[str]:
 def role_capabilities(role_slug: str) -> set[str]:
     caps = set(DEFAULT_CAPS.get(role_slug, set()))
     caps.update(_caps_from_db(role_slug))
+    # From presets attached to role
+    try:
+        r = Role.objects.filter(slug=role_slug).prefetch_related("presets__capabilities").first()
+        if r:
+            pcaps = PresetCapability.objects.filter(preset__in=r.presets.all()).values_list("capability", flat=True)
+            caps.update(pcaps)
+    except Exception:
+        pass
     return caps
+
+
+def allowed_field_actions(role_slug: str | None, artifact_type: str, field_name: str) -> set[str]:
+    """Return allowed actions for a type.field based on attached presets.
+
+    If no presets found, return an empty set (caller may fall back to default rules).
+    """
+    if not role_slug:
+        return set()
+    try:
+        r = Role.objects.filter(slug=role_slug).prefetch_related("presets__field_policies").first()
+        if not r:
+            return set()
+        acts: set[str] = set()
+        for fp in PresetFieldPolicy.objects.filter(preset__in=r.presets.all(), type=artifact_type, field_name=field_name):
+            acts.update(a.lower() for a in (fp.actions or []))
+        return acts
+    except Exception:
+        return set()
 
 
 # Present allow-listed capability choices in admin/forms
