@@ -1,93 +1,136 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title>Permission Catalog</title>
-  <style>
-    body { font-family: sans-serif; margin: 2rem; }
-    h1 { margin-bottom: 0.5rem; }
-    section { margin-bottom: 2rem; }
-    pre { background-color: #f4f4f4; padding: 1rem; overflow-x: auto; }
-    table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
-    th, td { border: 1px solid #ddd; padding: 0.5rem; text-align: left; }
-    th { background-color: #fafafa; }
-  </style>
-</head>
-<body>
-  <h1>Permission Catalog</h1>
-  <p>This read-only view summarizes artifact fields, presets, and roles to help configure permission bundles.
-     Use Django Admin for editing.</p>
+{% extends "ui/base.html" %}
+{% block content %}
+  <section class="space-y-6">
+    <div class="rounded-2xl border border-white/10 bg-white/10 p-6 shadow-lg shadow-black/30">
+      <h1 class="text-3xl font-semibold text-white">Permission catalog</h1>
+      <p class="mt-2 text-sm text-slate-300">Browse artifact fields, presets, and roles. Editing remains in the legacy admin while we finalize parity.</p>
+    </div>
 
-  <section>
-    <h2>Artifact Field Registry</h2>
-    {% for artifact, fields in registry.items %}
-      <h3>{{ artifact }}</h3>
-      <table>
-        <thead><tr><th>Field</th><th>Default Actions</th><th>Description</th></tr></thead>
-        <tbody>
-        {% for name, meta in fields.items %}
-          <tr>
-            <td>{{ name }}</td>
-            <td>{{ meta.default_actions|join:", " }}</td>
-            <td>{{ meta.description|default:"" }}</td>
-          </tr>
-        {% endfor %}
-        </tbody>
-      </table>
-    {% empty %}
-      <p>No registry entries.</p>
-    {% endfor %}
-  </section>
-
-  <section>
-    <h2>Permission Presets</h2>
-    {% if presets %}
-      {% for preset in presets %}
-        <h3>{{ preset.name }} <small style="color:#666;">{{ preset.uuid }}</small></h3>
-        {% if preset.organization_name %}
-          <p><strong>Organization:</strong> {{ preset.organization_name }} ({{ preset.organization }})</p>
-        {% endif %}
-        <p>{{ preset.description }}</p>
-        <strong>Capabilities:</strong> {{ preset.capabilities|join:", " }}
-        {% if preset.field_policies %}
-          <table>
-            <thead><tr><th>Resource</th><th>Type</th><th>Field</th><th>Actions</th></tr></thead>
-            <tbody>
-              {% for policy in preset.field_policies %}
-              <tr>
-                <td>{{ policy.resource }}</td>
-                <td>{{ policy.type }}</td>
-                <td>{{ policy.field }}</td>
-                <td>{{ policy.actions|join:", " }}</td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        {% endif %}
-      {% endfor %}
-    {% else %}
-      <p>No presets configured.</p>
-    {% endif %}
-  </section>
-
-  <section>
-    <h2>Roles</h2>
-    {% if roles %}
-      <table>
-        <thead><tr><th>Role</th><th>Presets</th><th>Capabilities</th></tr></thead>
-        <tbody>
-          {% for role in roles %}
-          <tr>
-            <td>{{ role.name }}<br><small style="color:#666;">{{ role.uuid }}</small>{% if role.organization_name %}<br><small style="color:#888;">{{ role.organization_name }} ({{ role.organization }})</small>{% endif %}</td>
-            <td>{{ role.presets|join:", " }}</td>
-            <td>{{ role.capabilities|join:", " }}</td>
-          </tr>
+    <div class="grid gap-6 lg:grid-cols-2">
+      <div class="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-black/25">
+        <h2 class="text-lg font-semibold text-white">Artifact field registry</h2>
+        <p class="mt-2 text-sm text-slate-300">Expand a section to review default actions and descriptions for each artifact type.</p>
+        <div class="mt-4 space-y-3">
+          {% for artifact, fields in registry.items %}
+            <details class="group rounded-xl border border-white/10 bg-slate-900/60">
+              <summary class="flex cursor-pointer items-center justify-between px-4 py-3 text-sm font-semibold text-slate-100">
+                <span>{{ artifact }}</span>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 01.832.445l4.5 6.5a1 1 0 01-.832 1.555H5.5a1 1 0 01-.832-1.555l4.5-6.5A1 1 0 0110 3z" clip-rule="evenodd"/></svg>
+              </summary>
+              <div class="border-t border-white/10">
+                <table class="min-w-full divide-y divide-white/10 text-xs">
+                  <thead class="bg-white/5 text-left uppercase tracking-wide text-slate-400">
+                    <tr>
+                      <th class="px-4 py-2">Field</th>
+                      <th class="px-4 py-2">Default actions</th>
+                      <th class="px-4 py-2">Description</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-white/5 bg-slate-900/60 text-slate-200">
+                    {% for name, meta in fields.items %}
+                      <tr>
+                        <td class="px-4 py-2 font-mono text-xs text-primary-200">{{ name }}</td>
+                        <td class="px-4 py-2">{{ meta.default_actions|join:", " }}</td>
+                        <td class="px-4 py-2">{{ meta.description|default:"—" }}</td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          {% empty %}
+            <p class="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-300">No registry entries.</p>
           {% endfor %}
-        </tbody>
-      </table>
-    {% else %}
-      <p>No roles defined.</p>
-    {% endif %}
+        </div>
+      </div>
+
+      <div class="space-y-6">
+        <div class="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-black/25">
+          <h2 class="text-lg font-semibold text-white">Permission presets</h2>
+          <p class="mt-2 text-sm text-slate-300">Presets bundle capabilities and field policies. Hover to reveal details.</p>
+          <div class="mt-4 space-y-3">
+            {% for preset in presets %}
+              <div class="rounded-xl border border-white/10 bg-slate-900/60 p-4 text-sm text-slate-200">
+                <div class="flex items-start justify-between gap-3">
+                  <div>
+                    <p class="font-semibold text-white">{{ preset.name }}</p>
+                    <p class="text-xs text-slate-400">UUID: {{ preset.uuid }}</p>
+                    {% if preset.organization_name %}
+                      <p class="mt-1 text-xs text-slate-400">{{ preset.organization_name }} ({{ preset.organization }})</p>
+                    {% endif %}
+                  </div>
+                  <span class="rounded-full border border-primary-400/40 bg-primary-500/10 px-3 py-1 text-xs font-semibold text-primary-100">{{ preset.capabilities|length }} capabilities</span>
+                </div>
+                {% if preset.capabilities %}
+                  <p class="mt-3 text-xs text-slate-300">Capabilities: {{ preset.capabilities|join:", " }}</p>
+                {% endif %}
+                {% if preset.field_policies %}
+                  <details class="mt-3 rounded-lg border border-white/10 bg-slate-900/50">
+                    <summary class="cursor-pointer px-3 py-2 text-xs font-semibold">Field policies</summary>
+                    <table class="min-w-full divide-y divide-white/5 text-xs">
+                      <thead class="bg-white/5 text-left uppercase tracking-wide text-slate-400">
+                        <tr>
+                          <th class="px-3 py-2">Resource</th>
+                          <th class="px-3 py-2">Type</th>
+                          <th class="px-3 py-2">Field</th>
+                          <th class="px-3 py-2">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody class="divide-y divide-white/5 bg-slate-900/40 text-slate-200">
+                        {% for policy in preset.field_policies %}
+                          <tr>
+                            <td class="px-3 py-2">{{ policy.resource }}</td>
+                            <td class="px-3 py-2">{{ policy.type }}</td>
+                            <td class="px-3 py-2">{{ policy.field }}</td>
+                            <td class="px-3 py-2">{{ policy.actions|join:", " }}</td>
+                          </tr>
+                        {% endfor %}
+                      </tbody>
+                    </table>
+                  </details>
+                {% endif %}
+              </div>
+            {% empty %}
+              <p class="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-300">No presets configured.</p>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-black/25">
+          <h2 class="text-lg font-semibold text-white">Roles</h2>
+          <div class="mt-4 space-y-3 text-sm text-slate-200">
+            {% for role in roles %}
+              <div class="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+                <div class="flex items-start justify-between gap-3">
+                  <div>
+                    <p class="font-semibold text-white">{{ role.name }}</p>
+                    <p class="text-xs text-slate-400">UUID: {{ role.uuid }}</p>
+                    {% if role.organization_name %}
+                      <p class="text-xs text-slate-400">{{ role.organization_name }} ({{ role.organization }})</p>
+                    {% endif %}
+                  </div>
+                  <span class="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold text-slate-200">{{ role.capabilities|length }} caps</span>
+                </div>
+                {% if role.presets %}
+                  <p class="mt-2 text-xs text-slate-300">Presets: {{ role.presets|join:", " }}</p>
+                {% endif %}
+                {% if role.capabilities %}
+                  <details class="mt-2 rounded-lg border border-white/10 bg-slate-900/50 text-xs">
+                    <summary class="cursor-pointer px-3 py-2 font-semibold">Capabilities</summary>
+                    <ul class="space-y-1 px-3 py-2 text-slate-200">
+                      {% for cap in role.capabilities %}
+                        <li>{{ cap }}</li>
+                      {% endfor %}
+                    </ul>
+                  </details>
+                {% endif %}
+              </div>
+            {% empty %}
+              <p class="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-300">No roles defined.</p>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
   </section>
-</body>
-</html>
+{% endblock %}

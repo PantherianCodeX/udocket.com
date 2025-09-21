@@ -69,17 +69,75 @@
         <div class="rounded-2xl border border-white/10 bg-gradient-to-br from-primary-600/70 via-primary-500/70 to-primary-700/70 p-6 shadow-xl shadow-primary-800/40">
           <h3 class="text-lg font-semibold text-white">Create a case</h3>
           {% if active_org %}
-            <p class="mt-2 text-sm text-primary-50/80">New cases will live inside <span class="font-medium text-white">{{ active_org.name }}</span>. IDs become storage folder names, so keep them concise.</p>
+            <p class="mt-2 text-sm text-primary-50/80">Cases created here belong to <span class="font-medium text-white">{{ active_org.name }}</span>. Provide the relevant metadata to keep hearings organized.</p>
             <form method="post" class="mt-6 space-y-4">
               {% csrf_token %}
-              <div>
-                <label class="text-xs font-semibold uppercase tracking-wide text-primary-100">Case ID</label>
-                <input type="text" name="case_id" required maxlength="36" class="mt-1 block w-full rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-primary-100/50 focus:border-white focus:outline-none">
+              <div class="grid gap-4 md:grid-cols-2">
+                <label class="text-xs font-semibold uppercase tracking-wide text-primary-100">Title
+                  <input type="text" name="title" class="mt-1 block w-full rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-primary-100/50 focus:border-white focus:outline-none">
+                </label>
+                <label class="text-xs font-semibold uppercase tracking-wide text-primary-100">Client name
+                  <input type="text" name="client_name" class="mt-1 block w-full rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-primary-100/50 focus:border-white focus:outline-none">
+                </label>
+                <label class="text-xs font-semibold uppercase tracking-wide text-primary-100">Opposing party
+                  <input type="text" name="opposing_party" class="mt-1 block w-full rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-primary-100/50 focus:border-white focus:outline-none">
+                </label>
+                <label class="text-xs font-semibold uppercase tracking-wide text-primary-100">Client position
+                  <select name="client_position" class="mt-1 block w-full rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white focus:border-white focus:outline-none">
+                    <option value="">Select role…</option>
+                    {% for value, label in client_position_choices %}
+                      <option value="{{ value }}">{{ label }}</option>
+                    {% endfor %}
+                  </select>
+                </label>
+                <label class="text-xs font-semibold uppercase tracking-wide text-primary-100">Court location
+                  <input type="text" name="court_location" class="mt-1 block w-full rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-primary-100/50 focus:border-white focus:outline-none">
+                </label>
+                <label class="text-xs font-semibold uppercase tracking-wide text-primary-100">Court level
+                  <select name="court_level" class="mt-1 block w-full rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white focus:border-white focus:outline-none">
+                    <option value="">Select level…</option>
+                    {% for value, label in court_level_choices %}
+                      <option value="{{ value }}">{{ label }}</option>
+                    {% endfor %}
+                  </select>
+                </label>
+                <label class="text-xs font-semibold uppercase tracking-wide text-primary-100">Division
+                  <select name="court_division" class="mt-1 block w-full rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white focus:border-white focus:outline-none">
+                    <option value="">Select division…</option>
+                    {% for value, label in court_division_choices %}
+                      <option value="{{ value }}">{{ label }}</option>
+                    {% endfor %}
+                  </select>
+                </label>
+                <label class="text-xs font-semibold uppercase tracking-wide text-primary-100">Court case number
+                  <input type="text" name="court_case_number" class="mt-1 block w-full rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-primary-100/50 focus:border-white focus:outline-none">
+                </label>
+                <label class="text-xs font-semibold uppercase tracking-wide text-primary-100">Representation
+                  <select name="representation" class="mt-1 block w-full rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white focus:border-white focus:outline-none">
+                    <option value="">Select representation…</option>
+                    {% for value, label in representation_choices %}
+                      <option value="{{ value }}">{{ label }}</option>
+                    {% endfor %}
+                  </select>
+                </label>
+                <label class="text-xs font-semibold uppercase tracking-wide text-primary-100">Court date
+                  <input type="datetime-local" name="court_date" class="mt-1 block w-full rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white focus:border-white focus:outline-none">
+                </label>
+                <label class="text-xs font-semibold uppercase tracking-wide text-primary-100">Filing deadline
+                  <input type="date" name="filing_deadline" class="mt-1 block w-full rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white focus:border-white focus:outline-none">
+                </label>
               </div>
-              <div>
-                <label class="text-xs font-semibold uppercase tracking-wide text-primary-100">Title</label>
-                <input type="text" name="title" class="mt-1 block w-full rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-primary-100/50 focus:border-white focus:outline-none">
+              <div class="grid gap-4 md:grid-cols-2">
+                <label class="inline-flex items-center gap-2 text-sm text-primary-100">
+                  <input type="checkbox" name="legal_aid" class="h-4 w-4 rounded border-white/30 bg-white/10 text-primary-200 focus:ring-white"> Legal aid
+                </label>
+                <label class="inline-flex items-center gap-2 text-sm text-primary-100">
+                  <input type="checkbox" name="pro_bono" class="h-4 w-4 rounded border-white/30 bg-white/10 text-primary-200 focus:ring-white"> Pro bono
+                </label>
               </div>
+              <label class="text-xs font-semibold uppercase tracking-wide text-primary-100">Notes
+                <textarea name="notes" rows="3" class="mt-1 block w-full rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-primary-100/50 focus:border-white focus:outline-none"></textarea>
+              </label>
               <button type="submit" class="inline-flex w-full items-center justify-center rounded-lg bg-white/90 px-4 py-2 text-sm font-semibold text-primary-700 shadow-lg shadow-primary-900/30 transition hover:bg-white">Create case</button>
             </form>
           {% else %}

@@ -15,14 +15,57 @@ CaseManager = CaseQuerySet.as_manager()
 
 
 class Case(models.Model):
-    """Initial placeholder; full schema to follow in Step 4."""
+    class ClientPosition(models.TextChoices):
+        PLAINTIFF = "PLAINTIFF", "Plaintiff"
+        DEFENDANT = "DEFENDANT", "Defendant"
+        APPLICANT = "APPLICANT", "Applicant"
+        RESPONDENT = "RESPONDENT", "Respondent"
+        PROSECUTION = "PROSECUTION", "Prosecution"
+        DEFENCE = "DEFENCE", "Defence"
+        OTHER = "OTHER", "Other"
+
+    class CourtLevel(models.TextChoices):
+        PROVINCIAL = "PROVINCIAL", "Provincial"
+        KINGS_BENCH = "KINGS_BENCH", "King's Bench"
+        APPEAL = "APPEAL", "Court of Appeal"
+        SUPREME = "SUPREME", "Supreme Court"
+        FEDERAL = "FEDERAL", "Federal Court"
+        OTHER = "OTHER", "Other"
+
+    class CourtDivision(models.TextChoices):
+        CIVIL = "CIVIL", "Civil"
+        FAMILY = "FAMILY", "Family"
+        CRIMINAL = "CRIMINAL", "Criminal"
+        TRAFFIC = "TRAFFIC", "Traffic"
+        IMMIGRATION = "IMMIGRATION", "Immigration"
+        ADMINISTRATIVE = "ADMIN", "Administrative"
+        OTHER = "OTHER", "Other"
+
+    class Representation(models.TextChoices):
+        SELF = "SELF", "Self-represented"
+        LAWYER = "LAWYER", "Lawyer"
+        PARALEGAL = "PARALEGAL", "Paralegal"
+        ADVOCATE = "ADVOCATE", "Advocate / Representative"
+        OTHER = "OTHER", "Other"
 
     id = models.CharField(primary_key=True, max_length=36)
     title = models.CharField(max_length=200)
-    # Optional organization scoping (null during migration phase)
     organization = models.ForeignKey(
         "accounts.Organization", on_delete=models.PROTECT, related_name="cases"
     )
+    client_name = models.CharField(max_length=200, blank=True)
+    opposing_party = models.CharField(max_length=200, blank=True)
+    client_position = models.CharField(max_length=20, choices=ClientPosition.choices, blank=True)
+    court_location = models.CharField(max_length=200, blank=True)
+    court_level = models.CharField(max_length=20, choices=CourtLevel.choices, blank=True)
+    court_division = models.CharField(max_length=20, choices=CourtDivision.choices, blank=True)
+    court_case_number = models.CharField(max_length=100, blank=True)
+    representation = models.CharField(max_length=20, choices=Representation.choices, blank=True)
+    legal_aid = models.BooleanField(default=False)
+    pro_bono = models.BooleanField(default=False)
+    court_date = models.DateTimeField(null=True, blank=True)
+    filing_deadline = models.DateField(null=True, blank=True)
+    notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     history = HistoricalRecords()

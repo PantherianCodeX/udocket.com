@@ -126,6 +126,43 @@
       </div>
     </div>
 
+    <div class="grid gap-4 md:grid-cols-3">
+      <div class="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-200">
+        <p class="text-xs uppercase tracking-wide text-slate-400">Client</p>
+        <p class="mt-1 text-slate-100">{{ case.client_name|default:"—" }}</p>
+        <p class="mt-3 text-xs uppercase tracking-wide text-slate-400">Opposing party</p>
+        <p class="mt-1 text-slate-100">{{ case.opposing_party|default:"—" }}</p>
+      </div>
+      <div class="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-200">
+        <p class="text-xs uppercase tracking-wide text-slate-400">Client position</p>
+        <p class="mt-1 text-slate-100">{{ case.get_client_position_display|default:"—" }}</p>
+        <p class="mt-3 text-xs uppercase tracking-wide text-slate-400">Representation</p>
+        <p class="mt-1 text-slate-100">{{ case.get_representation_display|default:"—" }}</p>
+        <div class="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-200">
+          {% if case.legal_aid %}<span class="rounded-full border border-emerald-400/40 bg-emerald-500/10 px-3 py-1 font-semibold text-emerald-200">Legal aid</span>{% endif %}
+          {% if case.pro_bono %}<span class="rounded-full border border-primary-400/40 bg-primary-500/10 px-3 py-1 font-semibold text-primary-100">Pro bono</span>{% endif %}
+        </div>
+      </div>
+      <div class="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-200">
+        <p class="text-xs uppercase tracking-wide text-slate-400">Court</p>
+        <p class="mt-1 text-slate-100">{{ case.court_location|default:"—" }}</p>
+        <p class="mt-1 text-slate-100">{{ case.get_court_level_display|default:"—" }}</p>
+        <p class="mt-1 text-slate-100">{{ case.get_court_division_display|default:"" }}</p>
+        <p class="mt-3 text-xs uppercase tracking-wide text-slate-400">Case number</p>
+        <p class="mt-1 text-slate-100">{{ case.court_case_number|default:"—" }}</p>
+        <p class="mt-3 text-xs uppercase tracking-wide text-slate-400">Key dates</p>
+        <p class="mt-1 text-slate-100">Court date: {% if case.court_date %}<time data-ts="{{ case.court_date|date:'c' }}">{{ case.court_date }}</time>{% else %}—{% endif %}</p>
+        <p class="mt-1 text-slate-100">Filing deadline: {% if case.filing_deadline %}{{ case.filing_deadline }}{% else %}—{% endif %}</p>
+      </div>
+    </div>
+
+    {% if case.notes %}
+      <div class="rounded-2xl border border-white/10 bg-white/5 p-6 text-sm text-slate-100">
+        <p class="text-xs uppercase tracking-wide text-slate-400">Notes</p>
+        <p class="mt-2 whitespace-pre-line">{{ case.notes }}</p>
+      </div>
+    {% endif %}
+
     <div class="grid gap-6 lg:grid-cols-[3fr,2fr]">
       <div class="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-black/25">
         <h2 class="text-lg font-semibold text-white">Launch transcription</h2>

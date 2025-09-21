@@ -6,3 +6,4 @@ sqlalchemy
 azure-cognitiveservices-speech>=1.42
 requests
 azure-storage-blob
+psycopg2-binary

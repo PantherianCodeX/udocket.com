@@ -7,3 +7,4 @@ pydantic-settings>=2.2,<3
 sqlalchemy
 python-multipart
 azure-storage-blob
+psycopg2-binary
