@@ -166,8 +166,12 @@
         const data = JSON.parse(ev.data);
         if (data.status && statusEl) statusEl.textContent = data.status;
         const transcriptPath = data.transcript_file || data.transcript_path;
-        if (transcriptEl && (transcriptPath || (statusEl && statusEl.textContent === 'SUCCEEDED'))) {
-          transcriptEl.innerHTML = `<a class="font-medium text-primary-300 underline" href="/api/v1/jobs/${data.job_id || jobId}/download/">Download</a>`;
+        if (transcriptEl) {
+          if (transcriptPath) {
+            transcriptEl.innerHTML = `<a class="font-medium text-primary-300 underline" href="/api/v1/jobs/${data.job_id || jobId}/download/">TRANSCRIPT</a>`;
+          } else {
+            transcriptEl.textContent = '—';
+          }
         }
         window.udocketUpdateTranscriptionStatus(jobId, data);
         if (statusEl && ['SUCCEEDED', 'FAILED'].includes(statusEl.textContent)) {
@@ -187,7 +191,7 @@
       const transcriptEl = document.getElementById(`job-output-${jobId}`);
       if (statusEl && data.status) statusEl.textContent = data.status;
       if (transcriptEl && (data.transcript_path || (statusEl && statusEl.textContent === 'SUCCEEDED'))) {
-        transcriptEl.innerHTML = `<a class="font-medium text-primary-300 underline" href="/api/v1/jobs/${jobId}/download/">Download</a>`;
+        transcriptEl.innerHTML = `<a class="font-medium text-primary-300 underline" href="/api/v1/jobs/${jobId}/download/">TRANSCRIPT</a>`;
       }
       window.udocketUpdateTranscriptionStatus(jobId, data);
       if (statusEl && ['SUCCEEDED', 'FAILED'].includes(statusEl.textContent)) {
