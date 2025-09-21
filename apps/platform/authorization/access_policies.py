@@ -197,7 +197,7 @@ class _MembershipMixin:
 
 class CaseAccessPolicy(_MembershipMixin, AccessPolicy):
     statements = [
-        {"action": ["list", "retrieve"], "principal": "*", "effect": "allow", "condition": "is_case_member"},
+        {"action": ["list", "retrieve", "jobs_summary", "jobs_detail"], "principal": "*", "effect": "allow", "condition": "is_case_member"},
         {"action": ["create"], "principal": "*", "effect": "allow", "condition": "can_create_case"},
         {"action": ["update", "partial_update"], "principal": "*", "effect": "allow", "condition": "can_manage_case"},
         {"action": ["destroy"], "principal": "*", "effect": "deny"},
@@ -206,7 +206,7 @@ class CaseAccessPolicy(_MembershipMixin, AccessPolicy):
 
 class JobAccessPolicy(_MembershipMixin, AccessPolicy):
     statements = [
-        {"action": ["list", "retrieve"], "principal": "*", "effect": "allow", "condition": "is_case_member"},
+        {"action": ["list", "retrieve", "detail"], "principal": "*", "effect": "allow", "condition": "is_case_member"},
         {"action": ["create", "upload", "analyze_summary", "analyze_timeline", "analyze_graph"], "principal": "*", "effect": "allow", "condition": "can_manage_jobs"},
         {"action": ["status"], "principal": "*", "effect": "allow", "condition": "is_case_member"},
         {"action": ["download", "logs"], "principal": "*", "effect": "allow", "condition": "can_download_artifacts"},

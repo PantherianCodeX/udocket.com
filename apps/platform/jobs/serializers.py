@@ -5,6 +5,85 @@ from rest_framework import serializers
 
 from apps.platform.authorization.capabilities import has_capability
 from apps.platform.jobs.models import Job
+from apps.platform.jobs.telemetry import job_telemetry
+
+
+class JobTelemetrySerializer(serializers.Serializer):
+    """Enriched job diagnostics payload mirroring worker metadata."""
+
+    def to_representation(self, instance: Job) -> dict:  # type: ignore[override]
+        request = self.context.get("request") if hasattr(self, "context") else None
+        user = getattr(request, "user", None)
+        dev_open = bool(getattr(settings, "PLATFORM_DEV_OPEN", True))
+
+        allow_audio = dev_open
+        allow_transcript = dev_open
+        case_id = str(getattr(instance, "case_id", "")) if instance else ""
+
+        if user and getattr(user, "is_authenticated", False) and case_id:
+            allow_audio = has_capability(user, case_id, "artifact.download")
+            allow_transcript = has_capability(user, case_id, "artifact.view")
+            if allow_transcript and not has_capability(user, case_id, "artifact.field.path.view"):
+                # permit metadata but not raw path
+                allow_transcript_path = False
+            else:
+                allow_transcript_path = allow_transcript
+        else:
+            allow_transcript_path = allow_transcript
+            if not dev_open:
+                allow_audio = False
+                allow_transcript = False
+                allow_transcript_path = False
+
+        telem = job_telemetry(instance)
+        audio_payload = telem.audio_payload(include_paths=allow_audio)
+        transcript_payload = telem.transcript_payload(include_paths=allow_transcript_path)
+        agent_payload = telem.agent_payload()
+
+        error_message = instance.error_message
+        if error_message and not allow_transcript and not allow_audio:
+            # expose minimal error when user lacks artifact rights
+            error_message = "Restricted"
+
+        data = {
+            "id": str(instance.id),
+            "case_id": str(instance.case_id),
+            "status": instance.status,
+            "mode": instance.mode,
+            "language": instance.language,
+            "diarization": instance.diarization,
+            "duration_s": instance.duration_s,
+            "created_at": instance.created_at,
+            "started_at": instance.started_at,
+            "finished_at": instance.finished_at,
+            "error_message": error_message,
+            "audio": audio_payload if (allow_audio or any(audio_payload.values())) else None,
+            "transcript": transcript_payload if allow_transcript else None,
+            "agent": agent_payload,
+            "artifacts": [],
+        }
+
+        if allow_transcript:
+            transcript_entry = {
+                "type": transcript_payload.get("artifact_type", "TRANSCRIPT"),
+                "path": transcript_payload.get("path") if allow_transcript_path else None,
+                "download_url": None,
+            }
+            if allow_audio and request is not None:
+                try:
+                    from rest_framework.reverse import reverse
+
+                    download_href = reverse("job-download", kwargs={"pk": instance.pk}, request=request)
+                    transcript_entry["download_url"] = download_href
+                except Exception:
+                    transcript_entry["download_url"] = None
+            data["artifacts"].append(transcript_entry)
+
+        log_excerpt = telem.log_excerpt()
+        if log_excerpt:
+            data["log_excerpt"] = log_excerpt
+
+        return data
 
 
 class JobCreateSerializer(serializers.ModelSerializer):

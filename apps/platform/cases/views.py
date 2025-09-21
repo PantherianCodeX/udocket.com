@@ -13,8 +13,11 @@ from apps.platform.cases.serializers import CaseSerializer
 from apps.platform.cases.models import CaseMembership
 from apps.platform.authorization.capabilities import role_capabilities
 from apps.platform.operations.audit import emit as audit_emit
-from apps.platform.tenancy import scope_cases
+from apps.platform.tenancy import scope_cases, scope_jobs
 from apps.platform.accounts.models import OrganizationMembership
+from apps.platform.jobs.models import Job
+from apps.platform.jobs.serializers import JobTelemetrySerializer
+from apps.platform.jobs.telemetry import summarize_jobs
 
 
 class CaseViewSet(viewsets.ModelViewSet):
@@ -76,3 +79,25 @@ class CaseViewSet(viewsets.ModelViewSet):
         if not OrganizationMembership.objects.filter(user=user, organization=organization).exists():
             raise PermissionDenied("User is not a member of the selected organization.")
         serializer.save()
+
+    @action(detail=True, methods=["get"], url_path="jobs/summary")
+    def jobs_summary(self, request, pk=None):
+        case = self.get_object()
+        jobs = scope_jobs(
+            Job.objects.filter(case=case).select_related("case", "case__organization").order_by("-created_at"),
+            getattr(request, "user", None),
+        )
+        summary = summarize_jobs(jobs)
+        last_update = summary.get("last_update")
+        summary["last_update"] = last_update.isoformat() if last_update else None
+        return Response(summary)
+
+    @action(detail=True, methods=["get"], url_path="jobs/detail")
+    def jobs_detail(self, request, pk=None):
+        case = self.get_object()
+        jobs = scope_jobs(
+            Job.objects.filter(case=case).select_related("case", "case__organization").order_by("-created_at"),
+            getattr(request, "user", None),
+        )
+        serializer = JobTelemetrySerializer(jobs, many=True, context={"request": request})
+        return Response({"jobs": serializer.data})

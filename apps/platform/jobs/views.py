@@ -12,7 +12,11 @@ from django.http import FileResponse, Http404
 
 from apps.platform.cases.models import Case
 from apps.platform.jobs.models import Job
-from apps.platform.jobs.serializers import JobCreateSerializer, JobSerializer
+from apps.platform.jobs.serializers import (
+    JobCreateSerializer,
+    JobSerializer,
+    JobTelemetrySerializer,
+)
 from apps.platform.operations.tasks import transcribe_job
 from apps.platform.operations.audit import emit as audit_emit
 from django.db import transaction
@@ -73,6 +77,14 @@ class JobViewSet(viewsets.ModelViewSet):
             "finished_at": job.finished_at,
         }
         return Response(payload)
+
+    @action(detail=True, methods=["get"], url_path="detail")
+    def detail(self, request, pk=None):
+        """Return enriched job telemetry mixing model fields and ops metadata."""
+
+        job = self.get_object()
+        serializer = JobTelemetrySerializer(job, context={"request": request})
+        return Response(serializer.data)
 
     @action(detail=True, methods=["get"], url_path="download")
     def download(self, request, pk=None):
