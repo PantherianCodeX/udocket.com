@@ -182,11 +182,13 @@ def case_detail(request: HttpRequest, case_id: str) -> HttpResponse:
     ).data
     telemetry_map = {item.get("id"): item for item in telemetry}
     job_insights = []
+    job_rows = []
     for job in jobs_list:
         key = str(job.id)
         data = telemetry_map.get(key)
         if data:
             job_insights.append(data)
+        job_rows.append({"job": job, "telemetry": data})
     latest_job = jobs_list[0] if jobs_list else None
     latest_job_telemetry = telemetry_map.get(str(latest_job.id)) if latest_job else None
     latest_activity_ts = None
@@ -198,6 +200,7 @@ def case_detail(request: HttpRequest, case_id: str) -> HttpResponse:
         "job_summary": job_summary,
         "job_telemetry": telemetry_map,
         "job_insights": job_insights,
+        "job_rows": job_rows,
         "latest_job": latest_job,
         "latest_job_telemetry": latest_job_telemetry,
         "latest_activity_ts": latest_activity_ts,
@@ -417,8 +420,8 @@ def create_job(request: HttpRequest, case_id: str) -> HttpResponse:
         language=language,
     )
 
-    # HTMX partial for immediate row insert
-    response = render(request, "ui/_job_row.html", {"j": job})
+    telemetry = JobTelemetrySerializer(job, context={"request": request, "ui_mode": True}).data
+    response = render(request, "ui/_job_row.html", {"j": job, "telem": telemetry})
     if request.headers.get("HX-Request"):
         trigger = {"job-enqueued": {"job_id": str(job.id), "status": job.status}}
         response["HX-Trigger"] = json.dumps(trigger)

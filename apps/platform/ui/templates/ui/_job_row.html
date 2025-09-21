@@ -1,10 +1,25 @@
+{% with telem=telem|default_if_none:None %}
 <tr data-job="{{ j.id }}" class="transition hover:bg-white/10">
-  <td class="px-4 py-3 font-mono text-xs text-primary-200">{{ j.id }}</td>
-  <td class="px-4 py-3 text-slate-200 capitalize">{{ j.mode }}</td>
-  <td class="px-4 py-3 text-slate-100" id="job-status-{{ j.id }}">{{ j.status }}</td>
-  <td class="px-4 py-3 text-slate-200" id="job-transcript-{{ j.id }}">
-    {% if j.transcript_path %}
-      <a class="font-medium text-primary-300 underline" href="/api/v1/jobs/{{ j.id }}/download/">Download</a>
+  <td class="px-4 py-3" id="job-status-{{ j.id }}">
+    <div class="flex items-center gap-2">
+      <span class="inline-flex min-w-[6rem] items-center justify-center rounded-full border border-white/10 bg-white/10 px-2 py-1 text-xs font-semibold text-slate-200">{{ telem.status|default:j.status }}</span>
+    </div>
+    <p class="mt-1 font-mono text-[10px] text-slate-400">#{{ j.id }}</p>
+  </td>
+  <td class="px-4 py-3 text-slate-200">
+    {{ telem.agent.type|default:j.mode|title }}
+  </td>
+  <td class="px-4 py-3 text-slate-200" id="job-output-{{ j.id }}">
+    {% if telem and telem.artifacts %}
+      {% with art=telem.artifacts.0 %}
+        {% if art.download_url %}
+          <a class="font-medium text-primary-300 underline" href="{{ art.download_url }}">{{ art.type|default:"Output" }}</a>
+        {% elif art.path %}
+          <span class="font-medium text-slate-200">{{ art.type|default:"Output" }}</span>
+        {% else %}
+          {{ art.type|default:"Output" }}
+        {% endif %}
+      {% endwith %}
     {% else %}—{% endif %}
   </td>
   <td class="px-4 py-3 text-primary-200"><a class="underline" href="/api/v1/jobs/{{ j.id }}/logs/">Logs</a></td>
@@ -13,3 +28,4 @@
     <button type="button" class="inline-flex items-center rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-primary-400 hover:text-white" hx-get="/jobs/{{ j.id }}/detail-panel/" hx-target="#job-detail-modal-body" hx-swap="innerHTML">Details</button>
   </td>
 </tr>
+{% endwith %}

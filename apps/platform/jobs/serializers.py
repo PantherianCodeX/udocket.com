@@ -45,6 +45,20 @@ class JobTelemetrySerializer(serializers.Serializer):
         agent_payload = telem.agent_payload()
         meta_payload = dict(telem.meta) if isinstance(telem.meta, dict) else {}
 
+        agent_type = (
+            meta_payload.get("agent_type")
+            or meta_payload.get("agent_name")
+            or meta_payload.get("agent")
+            or agent_payload.get("type")
+        )
+        if not agent_type:
+            mode = getattr(instance, "mode", "") or ""
+            if mode in (getattr(Job.Mode, "ON_DEMAND", "on-demand"), getattr(Job.Mode, "BATCH", "batch")):
+                agent_type = "Transcription"
+            elif mode:
+                agent_type = mode.replace("_", " ").replace("-", " ").title()
+        agent_payload["type"] = agent_type or "Unknown"
+
         if meta_payload:
             if not allow_audio:
                 for key in list(meta_payload.keys()):
@@ -78,6 +92,7 @@ class JobTelemetrySerializer(serializers.Serializer):
             "transcript": transcript_payload if allow_transcript else None,
             "agent": agent_payload,
             "artifacts": [],
+            "agent_label": agent_type or "Unknown",
         }
 
         if allow_transcript:

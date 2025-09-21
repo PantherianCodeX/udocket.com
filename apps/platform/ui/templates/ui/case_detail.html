@@ -106,7 +106,7 @@
     if (jobId !== activeTranscriptionJobId) {
       if (terminal.includes(status)) {
         const label = status === 'SUCCEEDED' ? 'Transcript ready' : `Job ${status.toLowerCase()}`;
-        const finishedAt = data.finished_at || data.completed_at || data.timestamp_utc;
+        const finishedAt = payload.finished_at || payload.completed_at || payload.timestamp_utc;
         if (finishedAt) {
           setTranscriptionSummary(`${label} · ${new Date(finishedAt).toLocaleTimeString()}`);
         } else {
@@ -158,7 +158,7 @@
 
   function connectWS(jobId) {
     const statusEl = document.getElementById(`job-status-${jobId}`);
-    const transcriptEl = document.getElementById(`job-transcript-${jobId}`);
+    const transcriptEl = document.getElementById(`job-output-${jobId}`);
     const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + `/ws/jobs/${jobId}/`;
     const ws = new WebSocket(url);
     ws.onmessage = (ev) => {
@@ -184,7 +184,7 @@
       if (!resp.ok) return;
       const data = await resp.json();
       const statusEl = document.getElementById(`job-status-${jobId}`);
-      const transcriptEl = document.getElementById(`job-transcript-${jobId}`);
+      const transcriptEl = document.getElementById(`job-output-${jobId}`);
       if (statusEl && data.status) statusEl.textContent = data.status;
       if (transcriptEl && (data.transcript_path || (statusEl && statusEl.textContent === 'SUCCEEDED'))) {
         transcriptEl.innerHTML = `<a class="font-medium text-primary-300 underline" href="/api/v1/jobs/${jobId}/download/">Download</a>`;
@@ -294,6 +294,17 @@
     if (evt.target.id === 'module-transcription-url') {
       updateStartAvailability();
     }
+  });
+
+  document.addEventListener('click', (evt) => {
+    const copyTarget = evt.target.closest('[data-copy-text]');
+    if (!copyTarget) return;
+    const value = copyTarget.getAttribute('data-copy-text');
+    if (!value || !navigator.clipboard) return;
+    navigator.clipboard.writeText(value).then(() => {
+      copyTarget.classList.add('ring-1', 'ring-primary-300');
+      setTimeout(() => copyTarget.classList.remove('ring-1', 'ring-primary-300'), 750);
+    }).catch(() => {});
   });
 
   document.body.addEventListener('htmx:beforeRequest', (evt) => {
@@ -451,25 +462,18 @@
               </button>
               <div class="flex flex-wrap items-center gap-3" data-module-quick>
                 <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-xs font-semibold text-slate-100 transition hover:border-primary-400 hover:text-white" data-file-trigger data-file-input="module-transcription-file">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M8.257 3.099c.366-.446.957-.678 1.57-.678s1.203.232 1.57.678l6.4 7.8c.585.713.68 1.698.241 2.39-.438.691-1.249 1.084-2.08 1.084H2.706c-.831 0-1.642-.393-2.08-1.084-.439-.692-.344-1.677.241-2.39l6.39-7.8z"/></svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 3h7l5 5v11a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12.5c1.5-1 3.5-1 5 0M9 16c1.5-1 3.5-1 5 0M12 9h.01" />
+                  </svg>
                   Upload
                 </button>
                 <span id="module-transcription-file-name" class="text-xs text-slate-300">No file selected.</span>
                 <button type="submit" class="inline-flex items-center gap-2 rounded-lg bg-primary-500 px-3 py-2 text-xs font-semibold text-white shadow-lg shadow-primary-500/30 transition hover:bg-primary-400 disabled:cursor-not-allowed disabled:opacity-60" data-transcription-start disabled>
-                  Start
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path d="M6.5 4.5l9 5.5-9 5.5v-11z" /></svg>
+                  Upload &amp; Start
                 </button>
               </div>
-            </div>
-          </div>
-
-          <div id="module-transcription-status" class="rounded-xl border border-white/10 bg-slate-900/60 p-4 text-sm text-slate-200">
-            <p class="font-semibold text-white" data-status-text>Ready to launch</p>
-            <p class="mt-1 text-xs text-slate-300" data-status-detail>Select audio or paste a SAS URL to start Azure Speech.</p>
-            <div id="module-transcription-progress" class="mt-3 hidden">
-              <div class="h-2 w-full rounded-full bg-white/10">
-                <div class="progress h-full w-0 rounded-full bg-primary-400 transition-all"></div>
-              </div>
-              <p class="mt-2 text-xs text-slate-300" id="module-transcription-progress-text"></p>
             </div>
           </div>
 
@@ -507,6 +511,17 @@
               </div>
             </div>
           </div>
+
+          <div id="module-transcription-status" class="rounded-xl border border-white/10 bg-slate-900/60 p-4 text-sm text-slate-200">
+            <p class="font-semibold text-white" data-status-text>Ready to launch</p>
+            <p class="mt-1 text-xs text-slate-300" data-status-detail>Select audio or paste a SAS URL to start Azure Speech.</p>
+            <div id="module-transcription-progress" class="mt-3 hidden">
+              <div class="h-2 w-full rounded-full bg-white/10">
+                <div class="progress h-full w-0 rounded-full bg-primary-400 transition-all"></div>
+              </div>
+              <p class="mt-2 text-xs text-slate-300" id="module-transcription-progress-text"></p>
+            </div>
+          </div>
         </div>
       </form>
     </div>
@@ -520,21 +535,20 @@
         <table class="min-w-full divide-y divide-white/10 text-sm">
           <thead class="bg-white/5 text-left text-xs uppercase tracking-wide text-slate-400">
             <tr>
-              <th class="px-4 py-3">ID</th>
-              <th class="px-4 py-3">Mode</th>
               <th class="px-4 py-3">Status</th>
-              <th class="px-4 py-3">Transcript</th>
+              <th class="px-4 py-3">Agent</th>
+              <th class="px-4 py-3">Output</th>
               <th class="px-4 py-3">Logs</th>
               <th class="px-4 py-3">Created</th>
               <th class="px-4 py-3 text-right">Details</th>
             </tr>
           </thead>
           <tbody id="jobs-body" class="divide-y divide-white/5 bg-slate-900/40 text-slate-100">
-            {% for j in jobs %}
-              {% include "ui/_job_row.html" with j=j %}
+            {% for row in job_rows %}
+              {% include "ui/_job_row.html" with j=row.job telem=row.telemetry %}
             {% empty %}
             <tr>
-              <td colspan="7" class="px-4 py-6 text-center text-slate-400">No jobs yet.</td>
+              <td colspan="6" class="px-4 py-6 text-center text-slate-400">No activity yet.</td>
             </tr>
             {% endfor %}
           </tbody>
