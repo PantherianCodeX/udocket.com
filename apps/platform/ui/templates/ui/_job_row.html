@@ -1,8 +1,9 @@
 {% with telem=telem|default_if_none:None %}
-<tr data-job="{{ j.id }}" data-job-row class="cursor-pointer transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400" tabindex="0" aria-expanded="false" data-review-status="{{ j.review_status|default:'PENDING' }}">
+{% with status=telem.status|default:j.status %}
+<tr data-job="{{ j.id }}" data-job-row data-job-status="{{ status }}" class="cursor-pointer transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400" tabindex="0" aria-expanded="false" data-review-status="{{ j.review_status|default:'PENDING' }}">
   <td class="px-4 py-3" id="job-status-{{ j.id }}">
     <div class="flex items-center gap-2">
-      <span class="inline-flex min-w-[6rem] items-center justify-center rounded-full border border-white/10 bg-white/10 px-2 py-1 text-xs font-semibold text-slate-200">{{ telem.status|default:j.status }}</span>
+      <span class="inline-flex min-w-[6rem] items-center justify-center rounded-full border border-white/10 bg-white/10 px-2 py-1 text-xs font-semibold text-slate-200">{{ status }}</span>
       {% with review=j.review_status %}
         <span id="job-review-badge-{{ j.id }}" data-review-badge class="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase {% if review == 'APPROVED' %}border-emerald-400/40 bg-emerald-500/10 text-emerald-200{% elif review == 'REJECTED' %}border-rose-400/40 bg-rose-500/10 text-rose-200{% else %}hidden{% endif %}">
           {% if review == 'APPROVED' %}Approved{% elif review == 'REJECTED' %}Rejected{% endif %}
@@ -25,6 +26,16 @@
   </td>
   <td class="px-4 py-3 text-primary-200"><a class="underline" href="/api/v1/jobs/{{ j.id }}/logs/" data-job-link>Logs</a></td>
   <td class="px-4 py-3 text-slate-300"><time data-ts="{{ j.created_at|date:'c' }}">{{ j.created_at }}</time></td>
+  <td class="px-4 py-3">
+    <div class="flex items-center justify-end gap-2">
+      <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-rose-400/40 bg-rose-500/10 px-3 py-1.5 text-xs font-semibold text-rose-100 transition hover:bg-rose-500/30 disabled:opacity-60 {% if status != 'RUNNING' and status != 'PENDING' and status != 'QUEUED' %}hidden{% endif %}" data-job-cancel="{{ j.id }}">
+        <span>Cancel</span>
+      </button>
+      <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-slate-300/40 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-100 transition hover:border-primary-400 hover:text-white disabled:opacity-60 {% if status == 'RUNNING' or status == 'PENDING' or status == 'QUEUED' %}hidden{% endif %}" data-job-restart="{{ j.id }}">
+        <span>Restart</span>
+      </button>
+    </div>
+  </td>
   <td class="px-4 py-3 text-right text-slate-300">
     <svg xmlns="http://www.w3.org/2000/svg" class="ml-auto h-4 w-4 transition-transform duration-150" viewBox="0 0 20 20" fill="currentColor" data-job-chevron>
       <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.27a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
@@ -32,8 +43,9 @@
   </td>
 </tr>
 <tr class="hidden bg-slate-900/50" data-job-detail="{{ j.id }}">
-  <td colspan="6" class="px-6 py-4">
+  <td colspan="7" class="px-6 py-4">
     <div class="rounded-xl border border-white/10 bg-slate-900/80 p-4" data-job-detail-container="{{ j.id }}"></div>
   </td>
 </tr>
+{% endwith %}
 {% endwith %}
