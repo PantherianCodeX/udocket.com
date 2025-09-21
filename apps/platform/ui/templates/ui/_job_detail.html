@@ -1,0 +1,94 @@
+<div class="job-detail">
+  <div class="job-detail-header">
+    <div>
+      <h2>Job <code>{{ job.id }}</code></h2>
+      <p>{{ telemetry.mode|title }} · {{ telemetry.language|default:"—" }} · Status: <strong>{{ telemetry.status }}</strong></p>
+    </div>
+    <button type="button" class="job-detail-close" onclick="window.udocketCloseJobDetail()">×</button>
+  </div>
+
+  <section class="job-detail-grid">
+    <div>
+      <span class="label">Created</span>
+      <span>{% if telemetry.created_at %}<time datetime="{{ telemetry.created_at|date:'c' }}">{{ telemetry.created_at }}</time>{% else %}—{% endif %}</span>
+    </div>
+    <div>
+      <span class="label">Started</span>
+      <span>{% if telemetry.started_at %}<time datetime="{{ telemetry.started_at|date:'c' }}">{{ telemetry.started_at }}</time>{% else %}—{% endif %}</span>
+    </div>
+    <div>
+      <span class="label">Finished</span>
+      <span>{% if telemetry.finished_at %}<time datetime="{{ telemetry.finished_at|date:'c' }}">{{ telemetry.finished_at }}</time>{% else %}—{% endif %}</span>
+    </div>
+    <div>
+      <span class="label">Duration</span>
+      <span>{% if telemetry.duration_s %}{{ telemetry.duration_s|floatformat:1 }} s{% else %}—{% endif %}</span>
+    </div>
+    <div>
+      <span class="label">Diarization</span>
+      <span>{% if telemetry.diarization %}Enabled{% else %}Disabled{% endif %}</span>
+    </div>
+    <div>
+      <span class="label">Error</span>
+      <span>{% if telemetry.error_message %}{{ telemetry.error_message }}{% else %}—{% endif %}</span>
+    </div>
+  </section>
+
+  {% if telemetry.audio %}
+  <section>
+    <h3>Audio</h3>
+    <dl class="detail-list">
+      <div><dt>Original Name</dt><dd>{{ telemetry.audio.original_name|default:"—" }}</dd></div>
+      <div><dt>Path</dt><dd>{% if telemetry.audio.path %}<code>{{ telemetry.audio.path }}</code>{% else %}—{% endif %}</dd></div>
+      <div><dt>SHA-256</dt><dd>{{ telemetry.audio.sha256|default:"—" }}</dd></div>
+      <div><dt>Remote SHA-256</dt><dd>{{ telemetry.audio.remote_sha256|default:"—" }}</dd></div>
+      <div><dt>Remote Size</dt><dd>{% if telemetry.audio.size_bytes_remote %}{{ telemetry.audio.size_bytes_remote }} bytes{% else %}—{% endif %}</dd></div>
+      <div><dt>Sample Rate</dt><dd>{% if telemetry.audio.sample_rate_hz %}{{ telemetry.audio.sample_rate_hz }} Hz{% else %}—{% endif %}</dd></div>
+      <div><dt>Channels</dt><dd>{{ telemetry.audio.channels|default:"—" }}</dd></div>
+      <div><dt>Bitrate</dt><dd>{% if telemetry.audio.bitrate_kbps %}{{ telemetry.audio.bitrate_kbps }} kbps{% else %}—{% endif %}</dd></div>
+      <div><dt>MIME</dt><dd>{{ telemetry.audio.mime|default:"—" }}</dd></div>
+    </dl>
+  </section>
+  {% endif %}
+
+  {% if telemetry.transcript %}
+  <section>
+    <h3>Transcript</h3>
+    <dl class="detail-list">
+      <div><dt>Path</dt><dd>{% if telemetry.transcript.path %}<code>{{ telemetry.transcript.path }}</code>{% else %}—{% endif %}</dd></div>
+      <div><dt>SHA-256</dt><dd>{{ telemetry.transcript.sha256|default:"—" }}</dd></div>
+      <div><dt>Words</dt><dd>{{ telemetry.transcript.words|default:"—" }}</dd></div>
+      <div><dt>Bytes</dt><dd>{% if telemetry.transcript.bytes %}{{ telemetry.transcript.bytes }}{% else %}—{% endif %}</dd></div>
+      <div><dt>Average Confidence</dt><dd>{% if telemetry.transcript.avg_confidence %}{{ telemetry.transcript.avg_confidence|floatformat:3 }}{% else %}—{% endif %}</dd></div>
+    </dl>
+    {% if telemetry.artifacts %}
+      <p>
+        {% for artifact in telemetry.artifacts %}
+          {% if artifact.download_url %}
+            <a class="btn" href="{{ artifact.download_url }}">Download {{ artifact.type|title }}</a>
+          {% endif %}
+        {% endfor %}
+      </p>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  <section>
+    <h3>Agent</h3>
+    <dl class="detail-list">
+      <div><dt>Region</dt><dd>{{ telemetry.agent.region|default:"—" }}</dd></div>
+      <div><dt>Attempts Used</dt><dd>{{ telemetry.agent.attempts_used|default:"—" }}</dd></div>
+      <div><dt>Diarization Speakers</dt><dd>{{ telemetry.agent.diarization_speakers|default:"—" }}</dd></div>
+      <div><dt>Azure URL</dt><dd>{% if telemetry.agent.azure_transcription_url %}<a href="{{ telemetry.agent.azure_transcription_url }}" target="_blank" rel="noopener">View</a>{% else %}—{% endif %}</dd></div>
+      <div><dt>Timestamp (UTC)</dt><dd>{{ telemetry.agent.timestamp_utc|default:"—" }}</dd></div>
+    </dl>
+  </section>
+
+  {% if telemetry.log_excerpt %}
+  <section>
+    <h3>Log Excerpt</h3>
+    <pre class="log-excerpt">{{ telemetry.log_excerpt }}</pre>
+    <p><a class="btn" href="/api/v1/jobs/{{ job.id }}/logs/">Download full log</a></p>
+  </section>
+  {% endif %}
+</div>

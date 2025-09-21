@@ -18,7 +18,9 @@ from apps.platform.authorization.models import PermissionPreset, Role
 from apps.platform.authorization.capabilities import role_capabilities
 from apps.platform.artifacts.registry import ARTIFACT_FIELD_REGISTRY
 from django.contrib.auth import logout
-from apps.platform.tenancy import accessible_organization_ids
+from apps.platform.tenancy import accessible_organization_ids, scope_jobs
+from apps.platform.jobs.serializers import JobTelemetrySerializer
+from apps.platform.jobs.telemetry import summarize_jobs
 import logging
 
 log = logging.getLogger("apps.platform.ui")
@@ -137,9 +139,28 @@ def case_detail(request: HttpRequest, case_id: str) -> HttpResponse:
             return response
         return redirect("ui-case-detail", case_id=case_id)
 
-    jobs_qs = Job.objects.select_related("case")
-    jobs = jobs_qs.for_user(getattr(request, "user", None)).filter(case=case)
-    return render(request, "ui/case_detail.html", {"case": case, "jobs": jobs})
+    jobs_qs = Job.objects.select_related("case", "case__organization").filter(case=case).order_by("-created_at")
+    jobs_scoped = scope_jobs(jobs_qs, getattr(request, "user", None))
+    jobs_list = list(jobs_scoped)
+    job_summary = summarize_jobs(jobs_list)
+    last_update = job_summary.get("last_update")
+    job_summary["last_update"] = last_update.isoformat() if last_update else None
+    telemetry = JobTelemetrySerializer(jobs_list, many=True, context={"request": request}).data
+    telemetry_map = {item.get("id"): item for item in telemetry}
+    job_insights = []
+    for job in jobs_list:
+        key = str(job.id)
+        data = telemetry_map.get(key)
+        if data:
+            job_insights.append(data)
+    context = {
+        "case": case,
+        "jobs": jobs_list,
+        "job_summary": job_summary,
+        "job_telemetry": telemetry_map,
+        "job_insights": job_insights,
+    }
+    return render(request, "ui/case_detail.html", context)
 
 
 def jobs(request: HttpRequest) -> HttpResponse:
@@ -150,6 +171,25 @@ def jobs(request: HttpRequest) -> HttpResponse:
     jobs_qs = Job.objects.select_related("case")
     all_jobs = jobs_qs.for_user(getattr(request, "user", None))[:200]
     return render(request, "ui/jobs.html", {"jobs": all_jobs})
+
+
+@require_http_methods(["GET"])
+def job_detail_panel(request: HttpRequest, job_id: str) -> HttpResponse:
+    auth_response = _ensure_authenticated(request)
+    if auth_response:
+        return auth_response
+
+    jobs_qs = Job.objects.select_related("case", "case__organization").filter(pk=job_id)
+    job = scope_jobs(jobs_qs, getattr(request, "user", None)).first()
+    if not job:
+        raise Http404
+    telemetry = JobTelemetrySerializer(job, context={"request": request}).data
+    context = {
+        "case": job.case,
+        "job": job,
+        "telemetry": telemetry,
+    }
+    return render(request, "ui/_job_detail.html", context)
 
 
 @require_http_methods(["GET"])

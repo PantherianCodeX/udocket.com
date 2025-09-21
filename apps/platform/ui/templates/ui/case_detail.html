@@ -67,6 +67,9 @@
       if (!n.dataset.ws) { connectWS(jid); n.dataset.ws='1'; }
       ensurePolling(jid);
     });
+    if (e.target && e.target.id === 'job-detail-modal-body') {
+      window.udocketShowJobDetail();
+    }
     // Render local times
     if (window.renderLocalTimes) window.renderLocalTimes();
   });
@@ -85,6 +88,24 @@
       if (info) info.textContent = pct + '%';
     } catch (_) {}
   });
+
+  window.udocketShowJobDetail = function () {
+    const modal = document.getElementById('job-detail-modal');
+    if (modal) modal.classList.remove('hidden');
+  };
+
+  window.udocketCloseJobDetail = function () {
+    const modal = document.getElementById('job-detail-modal');
+    if (modal) modal.classList.add('hidden');
+    const body = document.getElementById('job-detail-modal-body');
+    if (body) body.innerHTML = '';
+  };
+
+  document.addEventListener('keydown', function (evt) {
+    if (evt.key === 'Escape') {
+      window.udocketCloseJobDetail();
+    }
+  });
 </script>
 <style>
   .hidden { display:none; }
@@ -93,11 +114,50 @@
   .show-during-request { display:none; }
   .progress { width: 320px; height: 8px; background: #eee; border-radius: 4px; overflow: hidden; display: inline-block; vertical-align: middle; margin-left: 8px; }
   .progress .bar { height: 100%; width: 0%; background: #3b82f6; transition: width 0.1s linear; }
+  .job-summary { display: flex; flex-wrap: wrap; gap: 12px; margin: 16px 0; }
+  .job-summary .card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px 16px; flex: 1 1 140px; min-width: 140px; }
+  .job-summary .label { display: block; font-size: 0.75rem; color: #475569; text-transform: uppercase; letter-spacing: 0.05em; }
+  .job-summary .value { display: block; font-size: 1.6rem; font-weight: 600; color: #0f172a; }
+  .job-summary-meta { margin-top: -8px; margin-bottom: 16px; color: #475569; font-size: 0.9rem; }
+  .job-cards { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); margin: 24px 0; }
+  .job-card { border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px 16px; background: #fff; }
+  .job-card h4 { margin: 0 0 6px; font-size: 1rem; }
+  .job-card .status { font-weight: 600; color: #0f172a; }
+  .job-card dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 8px 0 0 0; font-size: 0.85rem; }
+  .job-card dt { color: #64748b; }
+  .job-card dd { margin: 0; color: #0f172a; }
+  .job-detail-modal { position: fixed; inset: 0; z-index: 100; display: flex; align-items: flex-start; justify-content: center; }
+  .job-detail-modal .backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.55); }
+  .job-detail-modal .dialog { position: relative; margin: 48px auto; max-width: 720px; width: 90%; background: #fff; border-radius: 8px; box-shadow: 0 20px 45px rgba(15, 23, 42, 0.18); overflow: hidden; z-index: 1; }
+  .job-detail-modal.hidden { display: none !important; }
+  .job-detail-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; border-bottom: 1px solid #e2e8f0; }
+  .job-detail-header h2 { margin: 0; font-size: 1.1rem; }
+  .job-detail-close { border: none; background: transparent; font-size: 1.4rem; cursor: pointer; line-height: 1; }
+  #job-detail-modal-body { max-height: 70vh; overflow-y: auto; }
+  #job-detail-modal-body .job-detail { padding: 20px 24px; }
+  .job-detail-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; margin: 16px 0; }
+  .job-detail-grid .label { display: block; font-size: 0.75rem; text-transform: uppercase; color: #475569; letter-spacing: 0.05em; }
+  .detail-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px 16px; }
+  .detail-list dt { font-size: 0.75rem; color: #475569; text-transform: uppercase; letter-spacing: 0.05em; }
+  .detail-list dd { margin: 0; font-size: 0.9rem; color: #0f172a; }
+  .log-excerpt { background: #0f172a; color: #e2e8f0; padding: 12px; border-radius: 4px; max-height: 200px; overflow: auto; }
+  .btn { display: inline-block; background: #2563eb; color: #fff; padding: 6px 12px; border-radius: 4px; text-decoration: none; font-size: 0.9rem; border: none; cursor: pointer; }
 </style>
 {% endblock %}
 {% block content %}
   <h2>Case {{ case.id }}</h2>
   <p>{{ case.title }}</p>
+
+  {% if job_summary %}
+  <section class="job-summary">
+    <div class="card"><span class="label">Jobs</span><span class="value">{{ job_summary.total|default:0 }}</span></div>
+    <div class="card"><span class="label">Succeeded</span><span class="value">{{ job_summary.succeeded|default:0 }}</span></div>
+    <div class="card"><span class="label">Running</span><span class="value">{{ job_summary.running|default:0 }}</span></div>
+    <div class="card"><span class="label">Pending</span><span class="value">{{ job_summary.pending|default:0 }}</span></div>
+    <div class="card"><span class="label">Failed</span><span class="value">{{ job_summary.failed|default:0 }}</span></div>
+  </section>
+  <p class="job-summary-meta">Last updated: {% if job_summary.last_update %}<time datetime="{{ job_summary.last_update }}">{{ job_summary.last_update }}</time>{% else %}—{% endif %}</p>
+  {% endif %}
 
   <h3>Create Transcription Job</h3>
   <form id="job-form" method="post" enctype="multipart/form-data"
@@ -126,13 +186,38 @@
 
   <h3>Jobs</h3>
   <table>
-    <thead><tr><th>ID</th><th>Mode</th><th>Status</th><th>Transcript</th><th>Logs</th><th>Created</th></tr></thead>
+    <thead><tr><th>ID</th><th>Mode</th><th>Status</th><th>Transcript</th><th>Logs</th><th>Created</th><th>Details</th></tr></thead>
     <tbody id="jobs-body">
       {% for j in jobs %}
         {% include "ui/_job_row.html" with j=j %}
       {% empty %}
-      <tr><td colspan="6">No jobs yet.</td></tr>
+      <tr><td colspan="7">No jobs yet.</td></tr>
       {% endfor %}
     </tbody>
   </table>
+
+  {% if job_insights %}
+  <h3>Recent Diagnostics</h3>
+  <div class="job-cards">
+    {% for info in job_insights|slice:":4" %}
+      <div class="job-card">
+        <h4><code>{{ info.id }}</code></h4>
+        <div class="status">{{ info.status }}</div>
+        <dl>
+          <dt>Audio</dt><dd>{% if info.audio %}{{ info.audio.original_name|default:"—" }}{% else %}—{% endif %}</dd>
+          <dt>Region</dt><dd>{% if info.agent %}{{ info.agent.region|default:"—" }}{% else %}—{% endif %}</dd>
+          <dt>Words</dt><dd>{% if info.transcript %}{{ info.transcript.words|default:"—" }}{% else %}—{% endif %}</dd>
+          <dt>Diarization</dt><dd>{% if info.diarization %}Yes{% else %}No{% endif %}</dd>
+        </dl>
+      </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div id="job-detail-modal" class="job-detail-modal hidden">
+    <div class="backdrop" onclick="window.udocketCloseJobDetail()"></div>
+    <div class="dialog">
+      <div id="job-detail-modal-body"></div>
+    </div>
+  </div>
 {% endblock %}

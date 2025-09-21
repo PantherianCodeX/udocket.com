@@ -5,4 +5,7 @@
   <td id="job-transcript-{{ j.id }}">{% if j.transcript_path %}<a href="/api/v1/jobs/{{ j.id }}/download/">download</a>{% else %}—{% endif %}</td>
   <td><a href="/api/v1/jobs/{{ j.id }}/logs/">view</a></td>
   <td><time data-ts="{{ j.created_at|date:'c' }}"></time></td>
+  <td>
+    <button type="button" class="btn" hx-get="/jobs/{{ j.id }}/detail-panel/" hx-target="#job-detail-modal-body" hx-swap="innerHTML">View</button>
+  </td>
 </tr>
