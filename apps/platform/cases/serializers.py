@@ -2,21 +2,18 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
-from apps.platform.accounts.models import Organization
 from apps.platform.artifacts.models import FieldVisibilityRule
 from apps.platform.authorization.capabilities import allowed_field_actions
 from apps.platform.cases.models import Case, CaseMembership
 
 
 class CaseSerializer(serializers.ModelSerializer):
-    organization = serializers.PrimaryKeyRelatedField(
-        queryset=Organization.objects.all(), allow_null=True, required=False
-    )
+    organization = serializers.PrimaryKeyRelatedField(read_only=True)
 
     class Meta:
         model = Case
         fields = ["id", "title", "organization", "created_at", "updated_at"]
-        read_only_fields = ["created_at", "updated_at"]
+        read_only_fields = ["organization", "created_at", "updated_at"]
 
     def to_representation(self, instance):  # type: ignore[override]
         data = super().to_representation(instance)

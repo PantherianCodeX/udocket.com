@@ -9,8 +9,7 @@ from django.shortcuts import redirect, render
 from django.views.decorators.http import require_http_methods
 
 from apps.platform.cases.models import Case, CaseMembership
-from apps.platform.accounts.models import Organization
-from apps.platform.accounts.utils import user_accessible_organizations
+from apps.platform.accounts.utils import resolve_request_organization
 from apps.platform.jobs.models import Job
 from apps.platform.operations.tasks import transcribe_job
 from apps.platform.operations.storage import ensure_case_dirs
@@ -40,53 +39,32 @@ def _ensure_authenticated(request: HttpRequest) -> HttpResponse | None:
     return HttpResponse("Authentication required", status=401)
 
 
-def _accessible_organizations(request: HttpRequest):
-    """Return organizations current request may interact with."""
-
-    user = getattr(request, "user", None)
-    if user and getattr(user, "is_authenticated", False):
-        if getattr(user, "is_superuser", False):
-            return Organization.objects.all().order_by("name")
-        return user_accessible_organizations(user)
-    if getattr(settings, "PLATFORM_DEV_OPEN", False):
-        return Organization.objects.all().order_by("name")
-    return Organization.objects.none()
-
-
 @require_http_methods(["GET", "POST"])
 def index(request: HttpRequest) -> HttpResponse:
     auth_response = _ensure_authenticated(request)
     if auth_response:
         return auth_response
 
-    org_qs = _accessible_organizations(request)
-    organizations = list(org_qs)
+    organization = resolve_request_organization(request, required=False)
     cases_qs = Case.objects.select_related("organization")
     cases = cases_qs.for_user(getattr(request, "user", None)).order_by("-created_at")
 
     if request.method == "POST":
         case_id = (request.POST.get("case_id") or "").strip()
         title = (request.POST.get("title") or "").strip() or case_id
-        org_id = (request.POST.get("organization_id") or "").strip()
-
         if not case_id:
             context = {
                 "cases": cases,
-                "organizations": organizations,
-                "selected_org_id": org_id,
+                "active_org": organization,
                 "error": "Case ID is required",
             }
             return render(request, "ui/index.html", context)
 
-        organization = None
-        if org_id:
-            organization = next((org for org in organizations if str(org.id) == org_id), None)
         if organization is None:
             context = {
                 "cases": cases,
-                "organizations": organizations,
-                "selected_org_id": org_id,
-                "error": "Select a valid organization",
+                "active_org": None,
+                "error": "Select an organization before creating cases.",
             }
             return render(request, "ui/index.html", context)
 
@@ -95,8 +73,7 @@ def index(request: HttpRequest) -> HttpResponse:
             if existing.organization_id != organization.id:
                 context = {
                     "cases": cases,
-                    "organizations": organizations,
-                    "selected_org_id": org_id,
+                    "active_org": organization,
                     "error": "Case already exists in a different organization.",
                 }
                 return render(request, "ui/index.html", context)
@@ -114,8 +91,7 @@ def index(request: HttpRequest) -> HttpResponse:
 
     context = {
         "cases": cases,
-        "organizations": organizations,
-        "selected_org_id": None,
+        "active_org": organization,
     }
     return render(request, "ui/index.html", context)
 

@@ -18,22 +18,15 @@
   </table>
 
   <h3>Create Case</h3>
-  {% if organizations %}
+  {% if active_org %}
+    <p>New cases will be created in <strong>{{ active_org.name }}</strong>.</p>
     <form method="post">
       {% csrf_token %}
       <label>Case ID: <input type="text" name="case_id" required></label>
       <label>Title: <input type="text" name="title"></label>
-      <label>Organization:
-        <select name="organization_id" required>
-          <option value="">Select organization…</option>
-          {% for org in organizations %}
-            <option value="{{ org.id }}" {% if selected_org_id == org.id|stringformat:"s" %}selected{% endif %}>{{ org.name }}</option>
-          {% endfor %}
-        </select>
-      </label>
       <button type="submit">Create</button>
     </form>
   {% else %}
-    <p>You do not have access to any organizations to create cases.</p>
+    <p>Select an organization before creating cases. Use the admin organization switcher or include the organization header when making requests.</p>
   {% endif %}
 {% endblock %}

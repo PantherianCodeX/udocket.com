@@ -4,6 +4,8 @@ from typing import Iterable, Optional
 
 from django.contrib.auth import get_user_model
 from django.db import models
+from django.core.exceptions import PermissionDenied
+from django.conf import settings
 
 from apps.platform.accounts.models import Organization, OrganizationMembership
 
@@ -74,3 +76,49 @@ def set_active_admin_org_id(request, org_id: Optional[str]) -> None:
 def admin_org_choices(request) -> list[AdminOrgChoice]:
     orgs = user_accessible_organizations(getattr(request, "user", None))
     return [{"id": org.id, "name": org.name} for org in orgs]
+
+
+def resolve_request_organization(request, *, required: bool = True) -> Optional[Organization]:
+    """Resolve the active organization for the current request.
+
+    Preference order:
+      1. Explicit header (`ORG_HEADER_NAME`) when the authenticated user is a
+         member (or superuser).
+      2. Admin-selected organization stored in session.
+      3. Single accessible organization for the user.
+
+    Raises PermissionDenied when `required` and no organization can be
+    determined.
+    """
+
+    user = getattr(request, "user", None)
+    header_name = getattr(settings, "ORG_HEADER_NAME", "HTTP_X_ORGANIZATION_ID")
+    header_org_id = request.META.get(header_name)
+
+    def _get_org(org_id: str | None) -> Optional[Organization]:
+        if not org_id:
+            return None
+        return Organization.objects.filter(id=org_id).first()
+
+    if header_org_id:
+        org = _get_org(header_org_id)
+        if org and user and getattr(user, "is_authenticated", False):
+            if getattr(user, "is_superuser", False):
+                return org
+            if OrganizationMembership.objects.filter(organization=org, user=user).exists():
+                return org
+        # Ignore spoofed headers when unauthenticated or not a member.
+
+    active = get_active_admin_org(request)
+    if active is not None:
+        return active
+
+    if user and getattr(user, "is_authenticated", False):
+        accessible = user_accessible_organizations(user)
+        count = accessible.count()
+        if count == 1:
+            return accessible.first()
+
+    if required:
+        raise PermissionDenied("Organization context is required for this action.")
+    return None
