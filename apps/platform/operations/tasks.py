@@ -2,6 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, Dict, Optional
+import hashlib
+import json
+import logging
+import mimetypes
+import subprocess
 
 from celery import shared_task
 from django.conf import settings
@@ -20,10 +25,90 @@ from apps.platform.cases.models import Case
 from apps.platform.operations.audit import emit as audit_emit
 from apps.platform.operations.storage import ensure_case_dirs, tenant_case_root, ops_dir as storage_ops_dir
 import re
-import json
-import logging
 
 log = logging.getLogger("apps.platform.operations.tasks")
+
+
+def _sha256_file(path: Path) -> Optional[str]:
+    try:
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+    except Exception:
+        return None
+
+
+def _probe_audio_metadata(path: Path) -> Dict[str, Optional[int]]:
+    try:
+        cmd = [
+            "ffprobe",
+            "-v",
+            "error",
+            "-print_format",
+            "json",
+            "-select_streams",
+            "a:0",
+            "-show_streams",
+            "-show_format",
+            str(path),
+        ]
+        data = json.loads(subprocess.check_output(cmd, stderr=subprocess.STDOUT).decode("utf-8", errors="ignore"))
+        stream = (data.get("streams") or [{}])[0]
+        fmt = data.get("format") or {}
+
+        def _parse_float(value):
+            try:
+                return float(value)
+            except Exception:
+                return None
+
+        duration = _parse_float(stream.get("duration")) or _parse_float(fmt.get("duration"))
+        bitrate_raw = stream.get("bit_rate") or fmt.get("bit_rate")
+        try:
+            bitrate = int(bitrate_raw) if bitrate_raw is not None else None
+        except Exception:
+            bitrate = None
+        channels = stream.get("channels")
+        sample_rate = stream.get("sample_rate")
+        try:
+            sample_rate = int(sample_rate) if sample_rate is not None else None
+        except Exception:
+            sample_rate = None
+        return {
+            "audio_duration_s": int(round(duration)) if duration is not None else None,
+            "audio_bitrate_kbps": int(round(bitrate / 1000)) if isinstance(bitrate, int) and bitrate > 0 else None,
+            "audio_channels": int(channels) if channels is not None else None,
+            "audio_sample_rate_hz": sample_rate,
+        }
+    except Exception:
+        return {}
+
+
+def _update_job_meta(case_id: str, organization_id: Optional[str], job_id: str, updates: Dict[str, Any]) -> None:
+    if not updates:
+        return
+    ops_path = storage_ops_dir(case_id, organization_id) / f"{job_id}_transcription_log.json"
+    try:
+        if ops_path.exists():
+            current = json.loads(ops_path.read_text(encoding="utf-8"))
+        else:
+            current = {}
+    except Exception:
+        current = {}
+    changed = False
+    for key, value in updates.items():
+        if value is None:
+            continue
+        if current.get(key) != value:
+            current[key] = value
+            changed = True
+    if changed:
+        try:
+            ops_path.write_text(json.dumps(current, indent=2, ensure_ascii=False), encoding="utf-8")
+        except Exception:
+            pass
 
 
 @shared_task(bind=True)
@@ -44,6 +129,9 @@ def transcribe_job(
     org_id: Optional[str] = None
     try:
         job_obj = Job.objects.select_related("case").get(pk=job_id)
+        if job_obj.status == Job.Status.CANCELLED:
+            log.info("job already cancelled before execution", extra={"job_id": job_id})
+            return {"status": Job.Status.CANCELLED, "job_id": job_id, "case_id": case_id}
         job_obj.status = Job.Status.RUNNING
         job_obj.started_at = timezone.now()
         job_obj.save(update_fields=["status", "started_at"])
@@ -59,6 +147,20 @@ def transcribe_job(
     case_dir = ensure_case_dirs(case_id, org_id)
     cfg = TranscriptionConfig.from_env()
     agent = TranscriptionAgent(cfg)
+
+    audio_meta_updates: Dict[str, Any] = {}
+    try:
+        if isinstance(audio_input, str) and audio_input and not audio_input.startswith("http"):
+            audio_path = Path(audio_input)
+            if audio_path.exists():
+                audio_meta_updates = {
+                    "audio_sha256": _sha256_file(audio_path),
+                    "audio_size_bytes": audio_path.stat().st_size,
+                    "audio_mime": mimetypes.guess_type(audio_path.name)[0],
+                }
+                audio_meta_updates.update(_probe_audio_metadata(audio_path))
+    except Exception:
+        audio_meta_updates = {}
 
     # Update DB status and notify; record TaskRun
     log.info("job claimed", extra={"job_id": job_id, "case_id": case_id, "mode": mode, "diarization": diarization})
@@ -118,10 +220,11 @@ def transcribe_job(
         try:
             if job_obj is None:
                 job_obj = Job.objects.get(pk=job_id)
-            job_obj.status = Job.Status.FAILED
-            job_obj.finished_at = timezone.now()
-            job_obj.error_message = payload["error"]
-            job_obj.save(update_fields=["status", "finished_at", "error_message"])
+            if job_obj.status != Job.Status.CANCELLED:
+                job_obj.status = Job.Status.FAILED
+                job_obj.finished_at = timezone.now()
+                job_obj.error_message = payload["error"]
+                job_obj.save(update_fields=["status", "finished_at", "error_message"])
         except Exception:
             pass
         try:
@@ -133,6 +236,10 @@ def transcribe_job(
             pass
         try:
             send_job_update(job_id, event="job.failed", **payload)
+        except Exception:
+            pass
+        try:
+            _update_job_meta(case_id, org_id, job_id, audio_meta_updates)
         except Exception:
             pass
         raise
@@ -150,19 +257,25 @@ def transcribe_job(
     try:
         if job_obj is None:
             job_obj = Job.objects.get(pk=job_id)
+        if job_obj.status == Job.Status.CANCELLED:
+            log.info("job cancelled during execution; ignoring transcription output", extra={"job_id": job_id})
+            return {"status": Job.Status.CANCELLED, "job_id": job_id, "case_id": case_id}
         job_obj.status = Job.Status.SUCCEEDED
         job_obj.finished_at = timezone.now()
         job_obj.transcript_path = str(result.transcript_file)
         job_obj.duration_s = result.duration_s
         job_obj.save(update_fields=["status", "finished_at", "transcript_path", "duration_s"])
+        transcript_checksum: Optional[str] = None
+        transcript_bytes: Optional[int] = None
+        transcript_path_obj = Path(result.transcript_file)
+        if transcript_path_obj.exists():
+            try:
+                transcript_bytes = transcript_path_obj.stat().st_size
+            except Exception:
+                transcript_bytes = None
+            transcript_checksum = _sha256_file(transcript_path_obj)
         # Register artifact with checksum
         try:
-            import hashlib
-
-            h = hashlib.sha256()
-            with open(result.transcript_file, "rb") as f:
-                for chunk in iter(lambda: f.read(65536), b""):
-                    h.update(chunk)
             CaseArtifact.objects.create(
                 case_id=str(case_id),
                 case_fk=Job.objects.filter(pk=job_id).values_list('case', flat=True).first(),
@@ -170,7 +283,7 @@ def transcribe_job(
                 type="TRANSCRIPT",
                 title=f"Transcript {job_id}",
                 path=str(result.transcript_file),
-                checksum=h.hexdigest(),
+                checksum=transcript_checksum or "",
                 schema_version="v1",
                 metadata={
                     "language": result.language,
@@ -178,6 +291,17 @@ def transcribe_job(
                     "duration_s": result.duration_s,
                 },
             )
+        except Exception:
+            pass
+        meta_updates = dict(audio_meta_updates)
+        meta_updates.update(
+            {
+                "transcript_sha256": transcript_checksum,
+                "transcript_bytes": transcript_bytes,
+            }
+        )
+        try:
+            _update_job_meta(case_id, org_id, job_id, meta_updates)
         except Exception:
             pass
     except Exception:

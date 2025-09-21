@@ -87,13 +87,32 @@ class JobTelemetrySerializer(serializers.Serializer):
             "created_at": instance.created_at,
             "started_at": instance.started_at,
             "finished_at": instance.finished_at,
+            "review_status": getattr(instance, "review_status", None),
+            "reviewed_at": getattr(instance, "reviewed_at", None),
             "error_message": error_message,
             "audio": audio_payload if (allow_audio or any(audio_payload.values())) else None,
             "transcript": transcript_payload if allow_transcript else None,
             "agent": agent_payload,
             "artifacts": [],
             "agent_label": agent_type or "Unknown",
+            "review_comment": getattr(instance, "review_comment", ""),
+            "review_activity_id": getattr(instance, "review_activity_id", None),
         }
+
+        reviewer = getattr(instance, "reviewed_by", None)
+        if reviewer:
+            reviewer_label = (
+                getattr(reviewer, "display_name", None)
+                or reviewer.get_full_name()
+                or getattr(reviewer, "email", None)
+                or getattr(reviewer, "username", None)
+            )
+            data["reviewed_by"] = {
+                "id": str(reviewer.pk),
+                "label": reviewer_label,
+            }
+        else:
+            data["reviewed_by"] = None
 
         if allow_transcript:
             transcript_entry = {
@@ -101,7 +120,9 @@ class JobTelemetrySerializer(serializers.Serializer):
                 "path": transcript_payload.get("path") if allow_transcript_path else None,
                 "download_url": None,
             }
-            if allow_audio and request is not None:
+            # Only expose a download link when a transcript exists and job succeeded
+            has_transcript = bool(getattr(instance, "transcript_path", None)) or bool(transcript_payload.get("path"))
+            if allow_audio and request is not None and has_transcript and str(instance.status).upper() == "SUCCEEDED":
                 try:
                     from rest_framework.reverse import reverse
 

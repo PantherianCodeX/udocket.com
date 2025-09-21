@@ -20,7 +20,32 @@
       fileName: document.getElementById('module-transcription-file-name'),
       quickSection: document.querySelector('[data-module-quick]'),
       summaryText: document.getElementById('module-transcription-summary-text'),
+      cancelButton: document.querySelector('[data-transcription-cancel]'),
+      restartButton: document.querySelector('[data-transcription-restart]'),
+      container: document.querySelector('[data-current-job-id]'),
     };
+  }
+
+  function getCSRFToken() {
+    const match = document.cookie.match(/csrftoken=([^;]+)/);
+    return match ? decodeURIComponent(match[1]) : '';
+  }
+
+  function currentJobId() {
+    if (activeTranscriptionJobId) return activeTranscriptionJobId;
+    const { container } = getTranscriptionElements();
+    if (!container) return null;
+    const value = container.getAttribute('data-current-job-id');
+    return value && value.length ? value : null;
+  }
+
+  function setCurrentJob(jobId, status) {
+    const { container } = getTranscriptionElements();
+    if (!container) return;
+    container.setAttribute('data-current-job-id', jobId || '');
+    if (typeof status === 'string' && status.length) {
+      container.setAttribute('data-current-job-status', status);
+    }
   }
 
   function updateStartAvailability() {
@@ -76,20 +101,145 @@
     }
 
     if (startButtons && startButtons.length) {
-      if (state === 'idle') {
-        startButtons.forEach((btn) => {
-          btn.classList.remove('hidden');
-        });
-        updateStartAvailability();
-      } else {
-        startButtons.forEach((btn) => {
-          btn.classList.add('hidden');
-        });
-      }
+      startButtons.forEach((btn) => {
+        btn.disabled = state === 'running';
+      });
     }
   }
 
-  window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
+  function updateTranscriptionControls(status) {
+    const {
+      startButtons,
+      cancelButton,
+      restartButton,
+    } = getTranscriptionElements();
+    const normalized = (status || '').toUpperCase();
+    const runningStates = ['RUNNING', 'PENDING'];
+    const terminalStates = ['SUCCEEDED', 'FAILED', 'CANCELLED'];
+
+    if (startButtons && startButtons.length) {
+      startButtons.forEach((btn) => {
+        btn.disabled = runningStates.includes(normalized);
+      });
+    }
+    if (cancelButton) {
+      cancelButton.classList.toggle('hidden', !runningStates.includes(normalized));
+      cancelButton.disabled = !runningStates.includes(normalized);
+    }
+    if (restartButton) {
+      restartButton.classList.toggle('hidden', !terminalStates.includes(normalized));
+      restartButton.disabled = !terminalStates.includes(normalized);
+    }
+  }
+
+  function updateTranscriptionConfig() {
+    const configEl = document.querySelector('[data-transcription-config]');
+    if (!configEl) return;
+    const modeInput = document.querySelector('input[name="mode"]');
+    const diarCheckbox = document.querySelector('input[name="diarization"]');
+    const languageInput = document.querySelector('input[name="language"]');
+    const mode = (modeInput ? modeInput.value : 'batch') || 'batch';
+    const modeLabel = mode === 'on-demand' ? 'On-demand mode' : 'Batch mode';
+    const diarEnabled = diarCheckbox ? diarCheckbox.checked : false;
+    const diarLabel = diarEnabled ? 'diarization enabled' : 'diarization off';
+    const language = (languageInput ? languageInput.value : 'en-CA') || 'en-CA';
+    configEl.textContent = `${modeLabel} · ${diarLabel} · ${language}`;
+  }
+
+  const REVIEW_CLASS_MAP = {
+    APPROVED: ['border-emerald-400/40', 'bg-emerald-500/10', 'text-emerald-200'],
+    REJECTED: ['border-rose-400/40', 'bg-rose-500/10', 'text-rose-200'],
+  };
+
+  function updateJobReview(jobId, payload) {
+    if (!jobId) return;
+    const normalized = ((payload.review_status || payload.reviewStatus || '') || '').toUpperCase();
+    const comment = payload.review_comment ?? payload.reviewComment ?? '';
+    const reviewerLabel = (payload.reviewed_by && (payload.reviewed_by.label || payload.reviewed_by)) || payload.reviewedBy || '';
+    const reviewedAt = payload.reviewed_at || payload.reviewedAt || '';
+
+    const row = document.querySelector(`[data-job="${jobId}"]`);
+    if (row) {
+      row.setAttribute('data-review-status', normalized || 'PENDING');
+    }
+
+    const badge = document.getElementById(`job-review-badge-${jobId}`);
+    if (badge) {
+      badge.classList.remove('hidden', ...REVIEW_CLASS_MAP.APPROVED, ...REVIEW_CLASS_MAP.REJECTED);
+      if (normalized === 'APPROVED') {
+        badge.classList.add(...REVIEW_CLASS_MAP.APPROVED);
+        badge.textContent = 'Approved';
+      } else if (normalized === 'REJECTED') {
+        badge.classList.add(...REVIEW_CLASS_MAP.REJECTED);
+        badge.textContent = 'Rejected';
+      } else {
+        badge.classList.add('hidden');
+        badge.textContent = '';
+      }
+    }
+
+    const statusPill = document.querySelector('[data-review-status-pill]');
+    if (statusPill) {
+      statusPill.classList.remove('border-white/20', 'bg-white/5', 'text-slate-300', ...REVIEW_CLASS_MAP.APPROVED, ...REVIEW_CLASS_MAP.REJECTED);
+      if (normalized === 'APPROVED') {
+        statusPill.classList.add(...REVIEW_CLASS_MAP.APPROVED);
+        statusPill.textContent = 'Approved';
+      } else if (normalized === 'REJECTED') {
+        statusPill.classList.add(...REVIEW_CLASS_MAP.REJECTED);
+        statusPill.textContent = 'Rejected';
+      } else {
+        statusPill.classList.add('border-white/20', 'bg-white/5', 'text-slate-300');
+        statusPill.textContent = 'Pending';
+      }
+    }
+
+    const detailRow = document.querySelector(`[data-job-detail="${jobId}"]`);
+    if (detailRow) {
+      const statusEl = detailRow.querySelector('[data-review-status-text]');
+      const commentEl = detailRow.querySelector('[data-review-comment]');
+      const metaEl = detailRow.querySelector('[data-review-meta]');
+      if (statusEl) {
+        statusEl.textContent = normalized === 'APPROVED' ? 'Approved' : normalized === 'REJECTED' ? 'Rejected' : 'Pending';
+      }
+      if (commentEl) {
+        commentEl.textContent = comment;
+      }
+      if (metaEl) {
+        if (reviewerLabel || reviewedAt) {
+          let html = '';
+          if (reviewerLabel) {
+            html += `Reviewed by <span class="font-semibold text-slate-100">${reviewerLabel}</span>`;
+          }
+          if (reviewedAt) {
+            const ts = new Date(reviewedAt).toISOString();
+            html += ` · <time data-ts="${ts}">${ts}</time>`;
+          }
+          metaEl.innerHTML = html;
+          metaEl.classList.remove('text-slate-500');
+          metaEl.classList.add('text-slate-400');
+        } else {
+          metaEl.textContent = 'Awaiting reviewer decision.';
+          metaEl.classList.remove('text-slate-400');
+          metaEl.classList.add('text-slate-500');
+        }
+      }
+      const approveBtn = detailRow.querySelector('[data-job-approve]');
+      const rejectBtn = detailRow.querySelector('[data-job-reject]');
+      if (approveBtn) approveBtn.disabled = false;
+      if (rejectBtn) rejectBtn.disabled = false;
+    }
+
+    if (normalized === 'APPROVED') {
+      const label = reviewerLabel ? ` by ${reviewerLabel}` : '';
+      setTranscriptionSummary(`Transcript approved${label}`);
+    } else if (normalized === 'REJECTED') {
+      const label = reviewerLabel ? ` by ${reviewerLabel}` : '';
+      setTranscriptionSummary(`Transcript rejected${label}`);
+    }
+
+    if (window.renderLocalTimes) window.renderLocalTimes();
+  }
+window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
     const status = (payload.status || '').toUpperCase() || 'PENDING';
     const progressValue =
       payload.progress_percent ??
@@ -97,6 +247,11 @@
       (typeof payload.progress === 'number'
         ? payload.progress * (payload.progress <= 1 ? 100 : 1)
         : null);
+
+    const trackedJobId = currentJobId();
+    if (!trackedJobId || trackedJobId === jobId) {
+      setCurrentJob(jobId, status);
+    }
 
     if (!activeTranscriptionJobId) {
       activeTranscriptionJobId = jobId;
@@ -145,6 +300,7 @@
       progress: progressValue,
       state,
     });
+    updateTranscriptionControls(status);
 
     if (terminal.includes(status)) {
       const finishedAt = payload.finished_at || payload.completed_at || payload.timestamp_utc;
@@ -174,7 +330,8 @@
           }
         }
         window.udocketUpdateTranscriptionStatus(jobId, data);
-        if (statusEl && ['SUCCEEDED', 'FAILED'].includes(statusEl.textContent)) {
+        updateJobReview(jobId, data);
+        if (statusEl && ['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(statusEl.textContent)) {
           clearInterval(window.jobPollers[jobId]);
           delete window.jobPollers[jobId];
         }
@@ -194,7 +351,8 @@
         transcriptEl.innerHTML = `<a class="font-medium text-primary-300 underline" href="/api/v1/jobs/${jobId}/download/">TRANSCRIPT</a>`;
       }
       window.udocketUpdateTranscriptionStatus(jobId, data);
-      if (statusEl && ['SUCCEEDED', 'FAILED'].includes(statusEl.textContent)) {
+      updateJobReview(jobId, data);
+      if (statusEl && ['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(statusEl.textContent)) {
         clearInterval(window.jobPollers[jobId]);
         delete window.jobPollers[jobId];
       }
@@ -205,8 +363,66 @@
     if (window.jobPollers[jobId]) return;
     const statusEl = document.getElementById(`job-status-${jobId}`);
     if (!statusEl) return;
-    if (['SUCCEEDED', 'FAILED'].includes(statusEl.textContent)) return;
+    if (['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(statusEl.textContent)) return;
     window.jobPollers[jobId] = setInterval(() => pollJob(jobId), 2000);
+  }
+
+  async function ensureJobDetail(jobId) {
+    const container = document.querySelector(`[data-job-detail-container="${jobId}"]`);
+    if (!container) return;
+    if (container.dataset.loaded === '1' || container.dataset.loading === '1') return;
+    container.dataset.loading = '1';
+    container.innerHTML = '<div class="flex items-center gap-2 text-xs text-slate-300"><svg class="h-3 w-3 animate-spin text-primary-300" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle class="opacity-30" cx="12" cy="12" r="10" stroke-width="2"></circle><path d="M22 12a10 10 0 00-10-10" stroke-width="2" stroke-linecap="round"></path></svg><span>Loading details…</span></div>';
+    try {
+      const resp = await fetch(`/jobs/${jobId}/detail-panel/`, {
+        headers: {
+          'HX-Request': 'true',
+        },
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const html = await resp.text();
+      container.innerHTML = html;
+      container.dataset.loaded = '1';
+      delete container.dataset.loading;
+      if (window.renderLocalTimes) window.renderLocalTimes();
+    } catch (error) {
+      console.error('Failed to load job detail', error);
+      container.innerHTML = '<p class="text-xs text-rose-200">Unable to load job detail. Try again later.</p>';
+      delete container.dataset.loading;
+    }
+  }
+
+  function setJobRowExpanded(row, expanded) {
+    if (!row) return;
+    const jobId = row.dataset.job;
+    const detailRow = document.querySelector(`[data-job-detail="${jobId}"]`);
+    if (detailRow) {
+      detailRow.classList.toggle('hidden', !expanded);
+    }
+    row.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    row.classList.toggle('bg-white/10', expanded);
+    const chevron = row.querySelector('[data-job-chevron]');
+    if (chevron) chevron.classList.toggle('rotate-180', expanded);
+  }
+
+  function collapseOtherJobRows(activeRow) {
+    document.querySelectorAll('[data-job-row]').forEach((row) => {
+      if (row !== activeRow) {
+        setJobRowExpanded(row, false);
+      }
+    });
+  }
+
+  async function toggleJobRow(row) {
+    const detailRow = row ? document.querySelector(`[data-job-detail="${row.dataset.job}"]`) : null;
+    if (!detailRow) return;
+    const isExpanded = !detailRow.classList.contains('hidden');
+    const shouldExpand = !isExpanded;
+    if (shouldExpand) {
+      collapseOtherJobRows(row);
+      await ensureJobDetail(row.dataset.job);
+    }
+    setJobRowExpanded(row, shouldExpand);
   }
 
   function bootstrapJobs() {
@@ -220,33 +436,44 @@
     });
     updateFileLabel();
     updateStartAvailability();
+    updateTranscriptionConfig();
+    const { container } = getTranscriptionElements();
+    if (container) {
+      const jobId = container.dataset.currentJobId || '';
+      const status = (container.dataset.currentJobStatus || 'IDLE').toUpperCase();
+      if (jobId && ['RUNNING', 'PENDING', 'QUEUED'].includes(status)) {
+        activeTranscriptionJobId = jobId;
+      }
+      if (!jobId) {
+        activeTranscriptionJobId = null;
+      }
+      updateTranscriptionControls(status || 'IDLE');
+    }
   }
 
   window.addEventListener('DOMContentLoaded', bootstrapJobs);
 
   document.addEventListener('htmx:afterSwap', (evt) => {
     bootstrapJobs();
-    if (evt.target && evt.target.id === 'job-detail-modal-body') {
-      document.getElementById('job-detail-modal')?.classList.remove('hidden');
-    }
     if (window.renderLocalTimes) window.renderLocalTimes();
   });
 
-  document.addEventListener('keydown', (evt) => {
-    if (evt.key === 'Escape') {
-      window.udocketCloseJobDetail();
-    }
+  document.addEventListener('click', async (evt) => {
+    const row = evt.target.closest('[data-job-row]');
+    if (!row) return;
+    if (evt.target.closest('a, button, [data-job-link], [data-job-action], input, select, textarea')) return;
+    evt.preventDefault();
+    await toggleJobRow(row);
   });
 
-  window.udocketShowJobDetail = function () {
-    document.getElementById('job-detail-modal')?.classList.remove('hidden');
-  };
-
-  window.udocketCloseJobDetail = function () {
-    document.getElementById('job-detail-modal')?.classList.add('hidden');
-    const body = document.getElementById('job-detail-modal-body');
-    if (body) body.innerHTML = '';
-  };
+  document.addEventListener('keydown', async (evt) => {
+    if (!(evt.key === 'Enter' || evt.key === ' ')) return;
+    const row = evt.target.closest('[data-job-row]');
+    if (!row) return;
+    if (evt.target.closest('a, button, [data-job-link], [data-job-action], input, select, textarea')) return;
+    evt.preventDefault();
+    await toggleJobRow(row);
+  });
 
   document.addEventListener('click', (evt) => {
     if (evt.target.closest('[data-module-quick]')) return;
@@ -280,6 +507,146 @@
     }
   });
 
+  document.addEventListener('click', async (evt) => {
+    const cancelBtn = evt.target.closest('[data-transcription-cancel]');
+    if (cancelBtn) {
+      evt.preventDefault();
+      evt.stopPropagation();
+      const jobId = currentJobId();
+      if (!jobId) return;
+      if (!window.confirm('Cancel the running transcription?')) return;
+      cancelBtn.disabled = true;
+      try {
+        const resp = await fetch(`/api/v1/jobs/${jobId}/cancel/`, {
+          method: 'POST',
+          headers: {
+            'X-CSRFToken': getCSRFToken(),
+            'Accept': 'application/json',
+          },
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          activeTranscriptionJobId = null;
+          setCurrentJob(jobId, data.status || 'CANCELLED');
+          setTranscriptionStatus({
+            title: 'Cancellation requested',
+            detail: 'Stopping transcription run.',
+            progress: null,
+            state: 'idle',
+          });
+          updateTranscriptionControls(data.status || 'CANCELLED');
+        }
+      } catch (error) {
+        console.error('Cancel transcription failed', error);
+      } finally {
+        cancelBtn.disabled = false;
+      }
+      return;
+    }
+
+    const restartBtn = evt.target.closest('[data-transcription-restart]');
+    if (restartBtn) {
+      evt.preventDefault();
+      evt.stopPropagation();
+      const jobId = currentJobId();
+      if (!jobId) return;
+      if (!window.confirm('Restart transcription? Previous output will be replaced.')) return;
+      restartBtn.disabled = true;
+      try {
+        const resp = await fetch(`/api/v1/jobs/${jobId}/restart/`, {
+          method: 'POST',
+          headers: {
+            'X-CSRFToken': getCSRFToken(),
+            'Accept': 'application/json',
+          },
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          activeTranscriptionJobId = jobId;
+          setCurrentJob(jobId, data.status || 'PENDING');
+          setTranscriptionStatus({
+            title: 'Restarting transcription…',
+            detail: 'Azure Speech will process the audio again.',
+            progress: null,
+            state: 'running',
+          });
+          updateTranscriptionControls(data.status || 'PENDING');
+        }
+      } catch (error) {
+        console.error('Restart transcription failed', error);
+      } finally {
+        restartBtn.disabled = false;
+      }
+      return;
+    }
+
+    const approveBtn = evt.target.closest('[data-job-approve]');
+    if (approveBtn) {
+      evt.preventDefault();
+      evt.stopPropagation();
+      const jobId = approveBtn.getAttribute('data-job-approve');
+      if (!jobId) return;
+      approveBtn.disabled = true;
+      try {
+        const resp = await fetch(`/api/v1/jobs/${jobId}/approve/`, {
+          method: 'POST',
+          headers: {
+            'X-CSRFToken': getCSRFToken(),
+            'Accept': 'application/json',
+          },
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          updateJobReview(jobId, data);
+          pollJob(jobId);
+        } else {
+          console.error('Approve transcription failed', await resp.text());
+        }
+      } catch (error) {
+        console.error('Approve transcription failed', error);
+      } finally {
+        approveBtn.disabled = false;
+      }
+      return;
+    }
+
+    const rejectBtn = evt.target.closest('[data-job-reject]');
+    if (rejectBtn) {
+      evt.preventDefault();
+      evt.stopPropagation();
+      const jobId = rejectBtn.getAttribute('data-job-reject');
+      if (!jobId) return;
+      const reason = window.prompt('Provide a reason for rejection (optional):', '');
+      if (reason === null) {
+        return;
+      }
+      rejectBtn.disabled = true;
+      try {
+        const resp = await fetch(`/api/v1/jobs/${jobId}/reject/`, {
+          method: 'POST',
+          headers: {
+            'X-CSRFToken': getCSRFToken(),
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ comment: reason }),
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          updateJobReview(jobId, data);
+          pollJob(jobId);
+        } else {
+          console.error('Reject transcription failed', await resp.text());
+        }
+      } catch (error) {
+        console.error('Reject transcription failed', error);
+      } finally {
+        rejectBtn.disabled = false;
+      }
+      return;
+    }
+  });
+
   document.addEventListener('click', (evt) => {
     const trigger = evt.target.closest('[data-file-trigger]');
     if (!trigger) return;
@@ -289,6 +656,9 @@
   });
 
   document.addEventListener('change', (evt) => {
+    if (evt.target && evt.target.name === 'diarization') {
+      updateTranscriptionConfig();
+    }
     if (evt.target.id === 'module-transcription-file') {
       updateFileLabel();
       updateStartAvailability();
@@ -296,6 +666,9 @@
   });
 
   document.addEventListener('input', (evt) => {
+    if (evt.target && evt.target.name === 'language') {
+      updateTranscriptionConfig();
+    }
     if (evt.target.id === 'module-transcription-url') {
       updateStartAvailability();
     }
@@ -320,6 +693,7 @@
         progress: 5,
         state: 'running',
       });
+      updateTranscriptionControls('RUNNING');
     }
   });
 
@@ -335,6 +709,7 @@
       progress: pct,
       state: 'running',
     });
+    updateTranscriptionControls('RUNNING');
   });
 
   document.body.addEventListener('htmx:afterRequest', (evt) => {
@@ -344,6 +719,7 @@
     if (urlInput) urlInput.value = '';
     if (fileName) fileName.textContent = 'No file selected.';
     updateStartAvailability();
+    updateTranscriptionConfig();
 
     let payload;
     try {
@@ -361,6 +737,8 @@
         progress: null,
         state: 'running',
       });
+      setCurrentJob(jobInfo.job_id, 'PENDING');
+      updateTranscriptionControls('PENDING');
       setTranscriptionSummary('Job queued · awaiting Azure updates');
       const panel = document.getElementById('module-transcription');
       if (quickSection && panel && panel.classList.contains('hidden')) {
@@ -373,6 +751,9 @@
         progress: null,
         state: 'idle',
       });
+      activeTranscriptionJobId = null;
+      setCurrentJob('', 'IDLE');
+      updateTranscriptionControls('IDLE');
     }
   });
 </script>
@@ -427,6 +808,8 @@
       </div>
     </div>
 
+    {% include "ui/_case_progress.html" %}
+
     {% if case.notes %}
       <div class="rounded-2xl border border-white/10 bg-white/5 p-6 text-sm text-slate-100">
         <p class="text-xs uppercase tracking-wide text-slate-400">Notes</p>
@@ -444,11 +827,11 @@
         {% csrf_token %}
         <input type="hidden" name="mode" value="batch">
         <div class="flex flex-col gap-4">
-          <div class="rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-3">
-            <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between" data-module-target="module-transcription" aria-expanded="false">
+        <div class="rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-3" data-module-target="module-transcription" aria-expanded="false" data-current-job-id="{{ latest_job.id|default:'' }}" data-current-job-status="{{ latest_job_telemetry.status|default:'IDLE' }}">
+            <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div class="flex flex-1 flex-col gap-1">
                 <p class="text-xs uppercase tracking-wide text-slate-400">Transcription</p>
-                <p class="text-xs text-slate-300">Azure Speech · Batch with diarization</p>
+                <p class="text-xs text-slate-300" data-transcription-config>Batch mode with diarization</p>
                 <p class="text-xs text-slate-300" id="module-transcription-summary-text">
                   {% if latest_job %}
                     Last status: <span class="font-semibold text-primary-200">{{ latest_job_telemetry.status }}</span>{% if latest_activity_ts %} · <time data-ts="{{ latest_activity_ts|date:'c' }}">{{ latest_activity_ts }}</time>{% endif %}
@@ -457,7 +840,7 @@
                   {% endif %}
                 </p>
               </div>
-              <div class="flex flex-wrap items-center gap-3 md:justify-end" data-module-quick>
+              <div class="flex flex-wrap items-center gap-3 lg:justify-end" data-module-quick>
                 <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-xs font-semibold text-slate-100 transition hover:border-primary-400 hover:text-white" data-file-trigger data-file-input="module-transcription-file">
                   <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 3h7l5 5v11a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2z" />
@@ -470,9 +853,11 @@
                   <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path d="M6.5 4.5l9 5.5-9 5.5v-11z" /></svg>
                   Upload &amp; Start
                 </button>
+                <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-xs font-semibold text-rose-100 transition hover:bg-rose-500/30 disabled:opacity-60" data-transcription-cancel hidden>Cancel</button>
+                <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-slate-300/40 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-100 transition hover:border-primary-400 hover:text-white disabled:opacity-60" data-transcription-restart hidden>Restart</button>
               </div>
-              <div class="hidden md:block">
-                <svg xmlns="http://www.w3.org/2000/svg" class="module-arrow h-4 w-4 text-slate-300 transition-transform duration-150" viewBox="0 0 20 20" fill="currentColor" data-module-arrow>
+              <div class="hidden lg:flex items-center text-slate-300 pointer-events-none">
+                <svg xmlns="http://www.w3.org/2000/svg" class="module-arrow h-4 w-4 transition-transform duration-150" viewBox="0 0 20 20" fill="currentColor" data-module-arrow>
                   <path fill-rule="evenodd" d="M10 3a1 1 0 01.832.445l4.5 6.5a1 1 0 01-.832 1.555H5.5a1 1 0 01-.832-1.555l4.5-6.5A1 1 0 0110 3z" clip-rule="evenodd" />
                 </svg>
               </div>
@@ -514,16 +899,6 @@
             </div>
           </div>
 
-          <div id="module-transcription-status" class="rounded-xl border border-white/10 bg-slate-900/60 p-4 text-sm text-slate-200">
-            <p class="font-semibold text-white" data-status-text>Ready to launch</p>
-            <p class="mt-1 text-xs text-slate-300" data-status-detail>Select audio or paste a SAS URL to start Azure Speech.</p>
-            <div id="module-transcription-progress" class="mt-3 hidden">
-              <div class="h-2 w-full rounded-full bg-white/10">
-                <div class="progress h-full w-0 rounded-full bg-primary-400 transition-all"></div>
-              </div>
-              <p class="mt-2 text-xs text-slate-300" id="module-transcription-progress-text"></p>
-            </div>
-          </div>
         </div>
       </form>
     </div>
@@ -542,7 +917,7 @@
               <th class="px-4 py-3">Output</th>
               <th class="px-4 py-3">Logs</th>
               <th class="px-4 py-3">Created</th>
-              <th class="px-4 py-3 text-right">Details</th>
+              <th class="px-4 py-3 text-right">&nbsp;</th>
             </tr>
           </thead>
           <tbody id="jobs-body" class="divide-y divide-white/5 bg-slate-900/40 text-slate-100">
@@ -559,10 +934,4 @@
     </div>
   </section>
 
-  <div id="job-detail-modal" class="hidden fixed inset-0 z-50 items-start justify-center">
-    <div class="fixed inset-0 bg-slate-950/70 backdrop-blur" onclick="window.udocketCloseJobDetail()"></div>
-    <div class="relative mx-auto mt-16 w-full max-w-3xl rounded-2xl border border-white/10 bg-slate-900/95 shadow-2xl shadow-black/50">
-      <div id="job-detail-modal-body" class="max-h-[70vh] overflow-y-auto"></div>
-    </div>
-  </div>
 {% endblock %}

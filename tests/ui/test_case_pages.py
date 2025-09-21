@@ -22,7 +22,7 @@ def test_case_detail_renders_modern_layout(settings):
     resp = client.get(f"/cases/{case.id}/")
     assert resp.status_code == 200
     html = resp.content.decode()
-    assert "Launch transcription" in html
+    assert "Transcription workflow" in html
     assert "Live updates" in html
 
 

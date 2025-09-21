@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 
+from django.conf import settings
 from django.db import models
 
 
@@ -18,10 +19,16 @@ class Job(models.Model):
         RUNNING = "RUNNING"
         SUCCEEDED = "SUCCEEDED"
         FAILED = "FAILED"
+        CANCELLED = "CANCELLED"
 
     class Mode(models.TextChoices):
         BATCH = "batch"
         ON_DEMAND = "on-demand"
+
+    class ReviewStatus(models.TextChoices):
+        PENDING = "PENDING", "Pending"
+        APPROVED = "APPROVED", "Approved"
+        REJECTED = "REJECTED", "Rejected"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     case = models.ForeignKey("cases.Case", on_delete=models.PROTECT, related_name="jobs")
@@ -42,6 +49,22 @@ class Job(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     started_at = models.DateTimeField(null=True, blank=True, db_index=True)
     finished_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    review_status = models.CharField(
+        max_length=16,
+        choices=ReviewStatus.choices,
+        default=ReviewStatus.PENDING,
+        db_index=True,
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="reviewed_jobs",
+    )
+    review_comment = models.TextField(blank=True)
+    review_activity_id = models.UUIDField(null=True, blank=True, editable=False)
 
     class Meta:
         ordering = ["-created_at"]

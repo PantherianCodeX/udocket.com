@@ -1,12 +1,39 @@
 <div class="flex flex-col gap-6">
-  <div class="flex items-start justify-between border-b border-white/10 bg-white/5 px-6 py-4">
-    <div>
-      <p class="text-xs uppercase tracking-wide text-slate-400">Job</p>
-      <h2 class="mt-1 text-lg font-semibold text-white">{{ telemetry.mode|title }} · {{ telemetry.language|default:"—" }}</h2>
-      <p class="text-sm text-slate-300">Status: <span class="font-semibold text-primary-200">{{ telemetry.status }}</span></p>
-    </div>
-    <button type="button" onclick="window.udocketCloseJobDetail()" class="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-sm font-semibold text-slate-200 transition hover:border-primary-400 hover:text-white">Close</button>
+  <div class="border-b border-white/10 bg-white/5 px-6 py-4">
+    <p class="text-xs uppercase tracking-wide text-slate-400">Job</p>
+    <h2 class="mt-1 text-lg font-semibold text-white">{{ telemetry.mode|title }} · {{ telemetry.language|default:"—" }}</h2>
+    <p class="text-sm text-slate-300">Status: <span class="font-semibold text-primary-200">{{ telemetry.status }}</span></p>
   </div>
+
+  <section class="flex flex-col gap-3 border-b border-white/10 px-6 py-4 text-sm text-slate-200">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <p class="text-xs uppercase tracking-wide text-slate-400">Review Status</p>
+        <p class="mt-1 text-sm font-semibold text-white" data-review-status-text>
+          {% if telemetry.review_status == 'APPROVED' %}Approved{% elif telemetry.review_status == 'REJECTED' %}Rejected{% else %}Pending{% endif %}
+        </p>
+        {% if telemetry.review_comment %}
+          <p class="mt-1 text-xs text-slate-300" data-review-comment>{{ telemetry.review_comment }}</p>
+        {% else %}
+          <p class="mt-1 text-xs text-slate-400" data-review-comment></p>
+        {% endif %}
+        {% if telemetry.reviewed_by %}
+          <p class="mt-2 text-xs text-slate-400" data-review-meta>
+            Reviewed by <span class="font-semibold text-slate-100">{{ telemetry.reviewed_by.label }}</span>
+            {% if telemetry.reviewed_at %} · <time data-ts="{{ telemetry.reviewed_at|date:'c' }}">{{ telemetry.reviewed_at }}</time>{% endif %}
+          </p>
+        {% else %}
+          <p class="mt-2 text-xs text-slate-500" data-review-meta>Awaiting reviewer decision.</p>
+        {% endif %}
+      </div>
+      {% if user_can_review and telemetry.status == 'SUCCEEDED' %}
+        <div class="flex flex-wrap items-center gap-2">
+          <button type="button" class="inline-flex items-center rounded-lg border border-emerald-400/40 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-500/25 disabled:opacity-60" data-job-approve="{{ job.id }}"{% if telemetry.review_status == 'APPROVED' %} disabled{% endif %}>Approve</button>
+          <button type="button" class="inline-flex items-center rounded-lg border border-rose-400/40 bg-rose-500/10 px-3 py-1.5 text-xs font-semibold text-rose-100 transition hover:bg-rose-500/25 disabled:opacity-60" data-job-reject="{{ job.id }}"{% if telemetry.review_status == 'REJECTED' %} disabled{% endif %}>Reject</button>
+        </div>
+      {% endif %}
+    </div>
+  </section>
 
   <section class="grid grid-cols-2 gap-4 px-6 text-sm text-slate-200 md:grid-cols-3">
     <div class="rounded-xl border border-white/10 bg-slate-900/60 p-4">

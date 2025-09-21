@@ -69,7 +69,7 @@ except Exception:  # Fallback when dependency unavailable (dev bootstrap)
                     delattr(request, "_access_policy_obj")
 
 from django.conf import settings
-from apps.platform.cases.models import CaseMembership
+from apps.platform.cases.models import Case, CaseMembership
 from apps.platform.authorization.capabilities import has_capability
 
 
@@ -134,7 +134,7 @@ class _MembershipMixin:
             return self._is_dev_open()
         case_id = self._resolve_case_id(request, view)
         if not case_id:
-            return False
+            return True
         try:
             return has_capability(user, case_id, capability)
         except Exception:
@@ -173,6 +173,25 @@ class _MembershipMixin:
         role = self._membership_role(user, case_id)
         return role in {CaseMembership.Role.OWNER, CaseMembership.Role.CONTRIBUTOR}
 
+    def can_review_job(self, request, view, action) -> bool:
+        user = getattr(request, "user", None)
+        if not user or not getattr(user, "is_authenticated", False):
+            return self._is_dev_open()
+        case_id = self._resolve_case_id(request, view)
+        if not case_id:
+            return False
+        if self._has_cap(request, view, "case.update"):
+            return True
+        if CaseMembership.objects.filter(case_id=case_id, user=user, role=CaseMembership.Role.REVIEWER).exists():
+            return True
+        try:
+            case = Case.objects.get(pk=case_id)
+            if case.reviewer_id and str(case.reviewer_id) == str(user.id):
+                return True
+        except Case.DoesNotExist:
+            return False
+        return False
+
     def can_download_artifacts(self, request, view, action) -> bool:
         user = getattr(request, "user", None)
         if not user or not getattr(user, "is_authenticated", False):
@@ -210,6 +229,7 @@ class JobAccessPolicy(_MembershipMixin, AccessPolicy):
         {"action": ["create", "upload", "analyze_summary", "analyze_timeline", "analyze_graph"], "principal": "*", "effect": "allow", "condition": "can_manage_jobs"},
         {"action": ["status"], "principal": "*", "effect": "allow", "condition": "is_case_member"},
         {"action": ["download", "logs"], "principal": "*", "effect": "allow", "condition": "can_download_artifacts"},
+        {"action": ["approve", "reject"], "principal": "*", "effect": "allow", "condition": "is_case_member"},
         {"action": ["destroy", "update", "partial_update"], "principal": "*", "effect": "deny"},
     ]
 

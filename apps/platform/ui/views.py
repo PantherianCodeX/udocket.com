@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 from django.core.exceptions import PermissionDenied
 
@@ -15,7 +16,7 @@ from django.views.decorators.http import require_http_methods
 from django.utils import timezone
 
 from apps.platform.cases.models import Case, CaseMembership
-from apps.platform.accounts.models import OrganizationMembership
+from apps.platform.accounts.models import OrganizationMembership, User
 from apps.platform.accounts.utils import (
     resolve_request_organization,
     set_active_admin_org_id,
@@ -25,7 +26,7 @@ from apps.platform.jobs.models import Job
 from apps.platform.operations.tasks import transcribe_job
 from apps.platform.operations.storage import ensure_case_dirs
 from apps.platform.authorization.models import PermissionPreset, Role
-from apps.platform.authorization.capabilities import role_capabilities
+from apps.platform.authorization.capabilities import role_capabilities, has_capability
 from apps.platform.artifacts.registry import ARTIFACT_FIELD_REGISTRY
 from django.contrib.auth import logout
 from apps.platform.tenancy import accessible_organization_ids, scope_jobs
@@ -34,6 +35,202 @@ from apps.platform.jobs.telemetry import summarize_jobs
 import logging
 
 log = logging.getLogger("apps.platform.ui")
+
+
+STATUS_CLASS_MAP = {
+    "Approved": "border-emerald-400/40 bg-emerald-500/10 text-emerald-200",
+    "Created": "border-white/20 bg-white/5 text-slate-200",
+    "Running": "border-primary-400/40 bg-primary-500/10 text-primary-200",
+    "Rejected": "border-rose-400/40 bg-rose-500/10 text-rose-200",
+}
+
+
+def _status_class(status: str) -> str:
+    return STATUS_CLASS_MAP.get(status, "border-white/20 bg-white/5 text-slate-200")
+
+
+def _user_label(user: User) -> str:
+    return (
+        user.display_name
+        or user.get_full_name()
+        or user.email
+        or user.username
+        or str(user.pk)
+    )
+
+
+def _job_most_recent_timestamp(job: Job) -> datetime:
+    return job.finished_at or job.started_at or job.created_at
+
+
+def _agent_key(telem: Optional[Dict[str, Any]], job: Optional[Job] = None) -> str:
+    if not telem:
+        telem = {}
+    agent = telem.get("agent") or {}
+    raw = agent.get("type") or agent.get("name") or telem.get("agent_label") or ""
+    if not raw and job is not None:
+        raw = job.mode or ""
+    normalized = str(raw).strip().lower()
+    normalized = normalized.replace("agent", "").replace("analysis", "")
+    normalized = normalized.replace(" ", "_")
+    return normalized
+
+
+def _latest_jobs_by_agent(jobs: List[Job], telemetry_map: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    latest: Dict[str, Dict[str, Any]] = {}
+    for job in jobs:
+        key = str(job.id)
+        telem = telemetry_map.get(key) or {}
+        agent_key = _agent_key(telem, job)
+        if not agent_key:
+            agent_key = job.mode.lower() if job.mode else "unknown"
+        existing = latest.get(agent_key)
+        if not existing:
+            latest[agent_key] = {"job": job, "telemetry": telem}
+            continue
+        current_ts = _job_most_recent_timestamp(existing["job"])
+        new_ts = _job_most_recent_timestamp(job)
+        if new_ts and new_ts > current_ts:
+            latest[agent_key] = {"job": job, "telemetry": telem}
+    return latest
+
+
+def _select_agent(latest: Dict[str, Dict[str, Any]], keywords: tuple[str, ...]) -> Optional[Dict[str, Any]]:
+    for key, payload in latest.items():
+        if any(word in key for word in keywords):
+            return payload
+    return None
+
+
+def _map_job_status(job: Job) -> str:
+    status = str(job.status or "").upper()
+    if status in {Job.Status.RUNNING, Job.Status.PENDING}:
+        return "Running"
+    if status == Job.Status.SUCCEEDED:
+        return "Created"
+    if status in {Job.Status.FAILED, getattr(Job.Status, "CANCELLED", "CANCELLED")}:
+        return "Rejected"
+    return "Created"
+
+
+def _build_case_progress(case: Case, jobs: List[Job], telemetry_map: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
+    latest = _latest_jobs_by_agent(jobs, telemetry_map)
+    items: List[Dict[str, Any]] = []
+
+    setup_status = "Approved" if case.reviewer_id and case.client_user_id else "Created"
+    setup_detail_parts: List[str] = []
+    if case.reviewer:
+        setup_detail_parts.append(f"Reviewer: {case.reviewer.get_full_name() or case.reviewer.display_name or case.reviewer.username}")
+    if case.client_user:
+        setup_detail_parts.append(f"Client: {case.client_user.get_full_name() or case.client_user.display_name or case.client_user.username}")
+    if not setup_detail_parts:
+        setup_detail_parts.append("Assign reviewer and client")
+    items.append(
+        {
+            "key": "case_setup",
+            "label": "Case Setup",
+            "status": setup_status,
+            "status_class": _status_class(setup_status),
+            "detail": " · ".join(setup_detail_parts),
+            "updated": case.updated_at,
+            "job": None,
+            "telemetry": None,
+        }
+    )
+
+    mappings = [
+        ("transcription", "Transcription", ("transcription", "speech", "audio")),
+        ("summary", "Summary", ("summary",)),
+        ("timeline", "Timeline", ("timeline", "events")),
+    ]
+
+    for key, label, keywords in mappings:
+        payload = _select_agent(latest, keywords)
+        if payload:
+            job = payload.get("job")
+            telem = payload.get("telemetry")
+            status = _map_job_status(job)
+            if key == "transcription":
+                review_state = getattr(job, "review_status", None)
+                if review_state == Job.ReviewStatus.APPROVED:
+                    status = "Approved"
+                elif review_state == Job.ReviewStatus.REJECTED:
+                    status = "Rejected"
+            items.append(
+                {
+                    "key": key,
+                    "label": label,
+                    "status": status,
+                    "status_class": _status_class(status),
+                    "job": job,
+                    "telemetry": telem,
+                    "updated": _job_most_recent_timestamp(job),
+                }
+            )
+        else:
+            items.append(
+                {
+                    "key": key,
+                    "label": label,
+                    "status": "Created",
+                    "status_class": _status_class("Created"),
+                    "job": None,
+                    "telemetry": None,
+                    "updated": None,
+                }
+            )
+
+    return items
+
+
+def _case_assignment_lists(case: Case) -> Dict[str, List[Dict[str, Any]]]:
+    memberships = case.memberships.select_related("user").all()
+    reviewers = [m.user for m in memberships if m.role == CaseMembership.Role.REVIEWER]
+    clients = [m.user for m in memberships if m.role == CaseMembership.Role.CLIENT]
+
+    def _package(users: List[User]) -> List[Dict[str, Any]]:
+        output: List[Dict[str, Any]] = []
+        seen: set[str] = set()
+        for u in users:
+            if not u:
+                continue
+            key = str(u.pk)
+            if key in seen:
+                continue
+            seen.add(key)
+            output.append({"user": u, "id": key, "label": _user_label(u)})
+        return output
+
+    return {
+        "reviewer_candidates": _package(reviewers),
+        "client_candidates": _package(clients),
+    }
+
+
+def _case_progress_context(case: Case, jobs: List[Job], telemetry_map: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+    assignments = _case_assignment_lists(case)
+    progress_items = _build_case_progress(case, jobs, telemetry_map)
+    transcription_item = next((item for item in progress_items if item.get("key") == "transcription"), None)
+    return {
+        "progress_items": progress_items,
+        "reviewer_candidates": assignments["reviewer_candidates"],
+        "client_candidates": assignments["client_candidates"],
+        "current_reviewer_label": _user_label(case.reviewer) if case.reviewer else None,
+        "current_client_label": _user_label(case.client_user) if case.client_user else None,
+        "transcription_review_status": transcription_item.get("status") if transcription_item else None,
+    }
+
+
+def _get_case_and_org(request: HttpRequest, case_id: str) -> tuple[Case, Any]:
+    try:
+        active_org = resolve_request_organization(request, required=True)
+    except PermissionDenied:
+        raise Http404
+    cases_qs = Case.objects.select_related("organization")
+    case = cases_qs.for_user(getattr(request, "user", None)).filter(pk=case_id).first()
+    if not case or case.organization_id != getattr(active_org, "id", None):
+        raise Http404
+    return case, active_org
 
 
 def _ensure_authenticated(request: HttpRequest) -> HttpResponse | None:
@@ -169,7 +366,11 @@ def case_detail(request: HttpRequest, case_id: str) -> HttpResponse:
             return response
         return redirect("ui-case-detail", case_id=case_id)
 
-    jobs_qs = Job.objects.select_related("case", "case__organization").filter(case=case).order_by("-created_at")
+    jobs_qs = (
+        Job.objects.select_related("case", "case__organization", "reviewed_by")
+        .filter(case=case)
+        .order_by("-created_at")
+    )
     jobs_scoped = scope_jobs(jobs_qs, getattr(request, "user", None))
     jobs_list = list(jobs_scoped)
     job_summary = summarize_jobs(jobs_list)
@@ -201,6 +402,19 @@ def case_detail(request: HttpRequest, case_id: str) -> HttpResponse:
         latest_job = jobs_sorted[0]
         latest_job_telemetry = telemetry_map.get(str(latest_job.id))
         latest_activity_ts = latest_job.finished_at or latest_job.started_at or latest_job.created_at
+    progress_ctx = _case_progress_context(case, jobs_list, telemetry_map)
+
+    user_can_review = False
+    dev_open = getattr(settings, "PLATFORM_DEV_OPEN", False)
+    if dev_open:
+        user_can_review = True
+    else:
+        user_obj = getattr(request, "user", None)
+        if user_obj and getattr(user_obj, "is_authenticated", False):
+            if case.reviewer_id and str(user_obj.id) == str(case.reviewer_id):
+                user_can_review = True
+            elif has_capability(user_obj, str(case.id), "case.update"):
+                user_can_review = True
     context = {
         "case": case,
         "jobs": jobs_list,
@@ -211,8 +425,152 @@ def case_detail(request: HttpRequest, case_id: str) -> HttpResponse:
         "latest_job": latest_job,
         "latest_job_telemetry": latest_job_telemetry,
         "latest_activity_ts": latest_activity_ts,
+        **progress_ctx,
+        "user_can_review": user_can_review,
     }
     return render(request, "ui/case_detail.html", context)
+
+
+@require_http_methods(["POST"])
+def case_assign_reviewer(request: HttpRequest, case_id: str) -> HttpResponse:
+    auth_response = _ensure_authenticated(request)
+    if auth_response:
+        return auth_response
+
+    case, _ = _get_case_and_org(request, case_id)
+
+    dev_open = getattr(settings, "PLATFORM_DEV_OPEN", False)
+    user = getattr(request, "user", None)
+    if not dev_open:
+        if not user or not getattr(user, "is_authenticated", False) or not has_capability(user, str(case.id), "case.update"):
+            return HttpResponse("Forbidden", status=403)
+
+    reviewer_id = (request.POST.get("reviewer_id") or "").strip()
+    if reviewer_id:
+        try:
+            reviewer = User.objects.get(pk=reviewer_id)
+        except User.DoesNotExist:
+            return HttpResponse("Reviewer not found", status=404)
+        OrganizationMembership.objects.get_or_create(
+            organization=case.organization,
+            user=reviewer,
+            defaults={"role": OrganizationMembership.Role.MEMBER},
+        )
+        membership, created = CaseMembership.objects.get_or_create(
+            case=case,
+            user=reviewer,
+            defaults={"role": CaseMembership.Role.REVIEWER},
+        )
+        if not created and membership.role != CaseMembership.Role.REVIEWER:
+            membership.role = CaseMembership.Role.REVIEWER
+            membership.save(update_fields=["role"])
+        case.reviewer = reviewer
+        case.save(update_fields=["reviewer", "updated_at"])
+    else:
+        if case.reviewer_id is not None:
+            case.reviewer = None
+            case.save(update_fields=["reviewer", "updated_at"])
+
+    jobs_qs = (
+        Job.objects.select_related("case", "case__organization", "reviewed_by")
+        .filter(case=case)
+        .order_by("-created_at")
+    )
+    jobs_list = list(scope_jobs(jobs_qs, getattr(request, "user", None)))
+    telemetry = JobTelemetrySerializer(
+        jobs_list,
+        many=True,
+        context={"request": request, "ui_mode": True},
+    ).data
+    telemetry_map = {item.get("id"): item for item in telemetry}
+    context = {"case": case, **_case_progress_context(case, jobs_list, telemetry_map)}
+    return render(request, "ui/_case_progress.html", context)
+
+
+@require_http_methods(["POST"])
+def case_assign_client(request: HttpRequest, case_id: str) -> HttpResponse:
+    auth_response = _ensure_authenticated(request)
+    if auth_response:
+        return auth_response
+
+    case, _ = _get_case_and_org(request, case_id)
+
+    dev_open = getattr(settings, "PLATFORM_DEV_OPEN", False)
+    user = getattr(request, "user", None)
+    if not dev_open:
+        if not user or not getattr(user, "is_authenticated", False) or not has_capability(user, str(case.id), "case.update"):
+            return HttpResponse("Forbidden", status=403)
+
+    client_id = (request.POST.get("client_id") or "").strip()
+    email = (request.POST.get("client_email") or "").strip()
+    name = (request.POST.get("client_name") or "").strip()
+
+    client_user: Optional[User] = None
+    if client_id:
+        try:
+            client_user = User.objects.get(pk=client_id)
+        except User.DoesNotExist:
+            return HttpResponse("Client not found", status=404)
+    else:
+        if not email:
+            return HttpResponse("Client email is required", status=400)
+        client_user = User.objects.filter(email__iexact=email).first()
+        if client_user is None:
+            username = email or f"client-{uuid.uuid4().hex[:10]}"
+            base_username = username
+            idx = 1
+            while User.objects.filter(username=username).exists():
+                username = f"{base_username}-{idx}"[:150]
+                idx += 1
+            client_user = User.objects.create_user(username=username, email=email, password=None)
+            if name:
+                client_user.first_name = name.split(" ")[0]
+                if " " in name.strip():
+                    client_user.last_name = name.strip().split(" ", 1)[1]
+                client_user.display_name = name
+                client_user.save(update_fields=["first_name", "last_name", "display_name"])
+        elif name:
+            if not client_user.display_name:
+                client_user.display_name = name
+                client_user.save(update_fields=["display_name"])
+
+    assert client_user is not None  # for mypy-like reasoning
+
+    OrganizationMembership.objects.get_or_create(
+        organization=case.organization,
+        user=client_user,
+        defaults={"role": OrganizationMembership.Role.MEMBER},
+    )
+    membership, created = CaseMembership.objects.get_or_create(
+        case=case,
+        user=client_user,
+        defaults={"role": CaseMembership.Role.CLIENT},
+    )
+    if not created and membership.role != CaseMembership.Role.CLIENT:
+        membership.role = CaseMembership.Role.CLIENT
+        membership.save(update_fields=["role"])
+
+    case.client_user = client_user
+    if name and not case.client_name:
+        case.client_name = name
+        case.save(update_fields=["client_user", "client_name", "updated_at"])
+    else:
+        case.save(update_fields=["client_user", "updated_at"])
+
+    jobs_qs = (
+        Job.objects.select_related("case", "case__organization", "reviewed_by")
+        .filter(case=case)
+        .order_by("-created_at")
+    )
+    jobs_list = list(scope_jobs(jobs_qs, getattr(request, "user", None)))
+    telemetry = JobTelemetrySerializer(
+        jobs_list,
+        many=True,
+        context={"request": request, "ui_mode": True},
+    ).data
+    telemetry_map = {item.get("id"): item for item in telemetry}
+    context = {"case": case, **_case_progress_context(case, jobs_list, telemetry_map)}
+    return render(request, "ui/_case_progress.html", context)
 
 
 def jobs(request: HttpRequest) -> HttpResponse:
@@ -241,15 +599,29 @@ def job_detail_panel(request: HttpRequest, job_id: str) -> HttpResponse:
         organization = resolve_request_organization(request, required=True)
     except PermissionDenied:
         raise Http404
-    jobs_qs = Job.objects.select_related("case", "case__organization").filter(pk=job_id)
+    jobs_qs = (
+        Job.objects.select_related("case", "case__organization", "reviewed_by")
+        .filter(pk=job_id)
+    )
     job = scope_jobs(jobs_qs, getattr(request, "user", None)).first()
     if not job or job.organization_id != getattr(organization, "id", None):
         raise Http404
     telemetry = JobTelemetrySerializer(job, context={"request": request, "ui_mode": True}).data
+    user_obj = getattr(request, "user", None)
+    dev_open = getattr(settings, "PLATFORM_DEV_OPEN", False)
+    can_review = False
+    if dev_open:
+        can_review = True
+    elif user_obj and getattr(user_obj, "is_authenticated", False):
+        if job.case.reviewer_id and str(user_obj.id) == str(job.case.reviewer_id):
+            can_review = True
+        elif has_capability(user_obj, str(job.case_id), "case.update"):
+            can_review = True
     context = {
         "case": job.case,
         "job": job,
         "telemetry": telemetry,
+        "user_can_review": can_review,
     }
     return render(request, "ui/_job_detail.html", context)
 

@@ -66,6 +66,20 @@ class Case(models.Model):
     court_date = models.DateTimeField(null=True, blank=True)
     filing_deadline = models.DateField(null=True, blank=True)
     notes = models.TextField(blank=True)
+    reviewer = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="cases_reviewing",
+    )
+    client_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="cases_as_client",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     history = HistoricalRecords()

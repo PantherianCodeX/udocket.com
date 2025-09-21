@@ -16,8 +16,8 @@ def _create_case_with_members(settings):
     settings.PLATFORM_DEV_OPEN = False
     org = Organization.objects.create(id="ORG-TEL", name="Telemetry Org")
     case = Case.objects.create(id="CASE-TEL", title="Telemetry Case", organization=org)
-    owner = User.objects.create_user(username="owner_tele", password="x")
-    reviewer = User.objects.create_user(username="reviewer_tele", password="x")
+    owner = User.objects.create_user(username="owner_tele", password="x", display_name="Owner Tele")
+    reviewer = User.objects.create_user(username="reviewer_tele", password="x", display_name="Reviewer Tele")
     outsider = User.objects.create_user(username="outsider_tele", password="x")
     CaseMembership.objects.create(case=case, user=owner, role=CaseMembership.Role.OWNER)
     CaseMembership.objects.create(case=case, user=reviewer, role=CaseMembership.Role.REVIEWER)
@@ -38,6 +38,7 @@ def _write_ops_payload(case: Case, job: Job, *, with_remote: bool = True) -> Non
         "audio_channels": 1,
         "audio_bitrate_kbps": 64,
         "audio_mime": "audio/wav",
+        "audio_size_bytes": 2048,
         "word_count": 123,
         "transcript_sha256": "transcript-sha",
         "avg_confidence": 0.9123,
@@ -79,6 +80,11 @@ def _create_job(case: Case, *, status: str = Job.Status.SUCCEEDED) -> Job:
 def test_job_detail_endpoint_returns_full_telemetry(db, settings):
     case, owner, reviewer, _ = _create_case_with_members(settings)
     job = _create_job(case)
+    job.review_status = Job.ReviewStatus.APPROVED
+    job.reviewed_by = reviewer
+    job.reviewed_at = timezone.now()
+    job.review_comment = "looks great"
+    job.save(update_fields=["review_status", "reviewed_by", "reviewed_at", "review_comment"])
 
     client = APIClient()
     client.force_authenticate(user=owner)
@@ -91,6 +97,9 @@ def test_job_detail_endpoint_returns_full_telemetry(db, settings):
     assert data["agent"]["region"] == "canadacentral"
     assert data["artifacts"] and data["artifacts"][0]["download_url"]
     assert "line two" in data["log_excerpt"]
+    assert data["review_status"] == "APPROVED"
+    assert data["review_comment"] == "looks great"
+    assert data["reviewed_by"]["label"] == "Reviewer Tele"
 
 
 def test_job_detail_endpoint_hides_paths_without_download_cap(db, settings):

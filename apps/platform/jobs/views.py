@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import uuid
+
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -10,6 +12,8 @@ from django.conf import settings
 from rest_framework.response import Response
 from django.http import FileResponse, Http404
 
+from apps.platform.authorization.capabilities import has_capability
+from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.cases.models import Case
 from apps.platform.jobs.models import Job
 from apps.platform.jobs.serializers import (
@@ -18,6 +22,7 @@ from apps.platform.jobs.serializers import (
     JobTelemetrySerializer,
 )
 from apps.platform.operations.tasks import transcribe_job
+from apps.platform.operations.channels import send_job_update
 from apps.platform.operations.audit import emit as audit_emit
 from django.db import transaction
 from apps.platform.operations.tasks import summarize_job, timeline_job, graph_job
@@ -36,7 +41,7 @@ class JobViewSet(viewsets.ModelViewSet):
         return JobSerializer
 
     def get_queryset(self):  # type: ignore[override]
-        qs = super().get_queryset().select_related("case", "case__organization")
+        qs = super().get_queryset().select_related("case", "case__organization", "reviewed_by")
         user = getattr(self.request, "user", None)
         return scope_jobs(qs, user)
 
@@ -75,8 +80,171 @@ class JobViewSet(viewsets.ModelViewSet):
             "status": job.status,
             "transcript_path": job.transcript_path,
             "finished_at": job.finished_at,
+            "review_status": job.review_status,
+            "review_comment": job.review_comment,
+            "reviewed_at": job.reviewed_at,
+            "reviewed_by": self._user_label(job.reviewed_by),
+            "review_activity_id": str(job.review_activity_id) if job.review_activity_id else None,
         }
         return Response(payload)
+
+    def _can_review(self, request, job: Job) -> bool:
+        user = getattr(request, "user", None)
+        if getattr(settings, "PLATFORM_DEV_OPEN", False):
+            return True
+        if not user or not getattr(user, "is_authenticated", False):
+            return False
+        if job.case.reviewer_id and str(user.id) == str(job.case.reviewer_id):
+            return True
+        return has_capability(user, str(job.case_id), "case.update")
+
+    @staticmethod
+    def _user_label(user) -> str:
+        if not user:
+            return ""
+        return (
+            getattr(user, "display_name", None)
+            or user.get_full_name()
+            or getattr(user, "email", None)
+            or getattr(user, "username", None)
+            or str(user.pk)
+        )
+
+    def _artifact_defaults(self, job: Job, checksum: str, activity_id: uuid.UUID, reviewer) -> dict:
+        return {
+            "case_fk": job.case,
+            "organization": job.organization,
+            "job_id": str(job.id),
+            "path": job.transcript_path or "",
+            "checksum": checksum,
+            "schema_version": "v1",
+            "metadata": {
+                "activity_uuid": str(activity_id),
+                "approved_by": self._user_label(reviewer),
+                "approved_at": timezone.now().isoformat(),
+            },
+        }
+
+    def _ensure_approval_artifact(self, job: Job, reviewer) -> None:
+        if not job.transcript_path:
+            return
+        base_artifact = (
+            CaseArtifact.objects.filter(case_id=str(job.case_id), job_id=str(job.id), type="TRANSCRIPT")
+            .order_by("-created_at")
+            .first()
+        )
+        checksum = base_artifact.checksum if base_artifact else ""
+        if not checksum and os.path.exists(job.transcript_path):
+            import hashlib
+
+            digest = hashlib.sha256()
+            try:
+                with open(job.transcript_path, "rb") as fh:
+                    for chunk in iter(lambda: fh.read(65536), b""):
+                        digest.update(chunk)
+                checksum = digest.hexdigest()
+            except Exception:
+                checksum = ""
+
+        CaseArtifact.objects.update_or_create(
+            case_id=str(job.case_id),
+            type="TRANSCRIPT_APPROVED",
+            title=f"{job.id}__approval",
+            defaults=self._artifact_defaults(job, checksum, job.review_activity_id, reviewer),
+        )
+
+    @action(detail=True, methods=["post"], url_path="approve")
+    def approve(self, request, pk=None):
+        job = self.get_object()
+        if not self._can_review(request, job):
+            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+        if job.status != Job.Status.SUCCEEDED:
+            return Response({"detail": "Job must succeed before approval."}, status=status.HTTP_400_BAD_REQUEST)
+        if not job.transcript_path:
+            return Response({"detail": "Transcript not available."}, status=status.HTTP_400_BAD_REQUEST)
+
+        comment = (request.data.get("comment") or "").strip()
+        activity_id = job.review_activity_id or uuid.uuid4()
+        reviewer = getattr(request, "user", None)
+        job.review_status = Job.ReviewStatus.APPROVED
+        job.reviewed_at = timezone.now()
+        job.reviewed_by = reviewer if reviewer and getattr(reviewer, "is_authenticated", False) else None
+        job.review_comment = comment
+        job.review_activity_id = activity_id
+        job.save(update_fields=["review_status", "reviewed_at", "reviewed_by", "review_comment", "review_activity_id"])
+
+        try:
+            self._ensure_approval_artifact(job, reviewer)
+        except Exception:
+            pass
+
+        audit_emit(request, case_id=str(job.case_id), event="job.approved", data={"job_id": str(job.id), "activity_uuid": str(activity_id)})
+        response_payload = {
+            "job_id": str(job.id),
+            "status": job.status,
+            "review_status": job.review_status,
+            "reviewed_at": job.reviewed_at,
+            "reviewed_by": self._user_label(job.reviewed_by),
+            "review_comment": job.review_comment,
+            "review_activity_id": str(activity_id),
+        }
+        send_job_update(
+            str(job.id),
+            event="job.review",
+            status=job.status,
+            case_id=str(job.case_id),
+            review_status=job.review_status,
+            reviewed_at=job.reviewed_at.isoformat() if job.reviewed_at else None,
+            reviewed_by=response_payload["reviewed_by"],
+            review_comment=job.review_comment,
+            review_activity_id=str(activity_id),
+        )
+        return Response(response_payload)
+
+    @action(detail=True, methods=["post"], url_path="reject")
+    def reject(self, request, pk=None):
+        job = self.get_object()
+        if not self._can_review(request, job):
+            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+
+        comment = (request.data.get("comment") or "").strip()
+        activity_id = uuid.uuid4()
+        reviewer = getattr(request, "user", None)
+        job.review_status = Job.ReviewStatus.REJECTED
+        job.reviewed_at = timezone.now()
+        job.reviewed_by = reviewer if reviewer and getattr(reviewer, "is_authenticated", False) else None
+        job.review_comment = comment
+        job.review_activity_id = activity_id
+        job.save(update_fields=["review_status", "reviewed_at", "reviewed_by", "review_comment", "review_activity_id"])
+
+        CaseArtifact.objects.filter(
+            case_id=str(job.case_id),
+            job_id=str(job.id),
+            type="TRANSCRIPT_APPROVED",
+        ).delete()
+
+        audit_emit(request, case_id=str(job.case_id), event="job.rejected", data={"job_id": str(job.id), "activity_uuid": str(activity_id)})
+        response_payload = {
+            "job_id": str(job.id),
+            "status": job.status,
+            "review_status": job.review_status,
+            "reviewed_at": job.reviewed_at,
+            "reviewed_by": self._user_label(job.reviewed_by),
+            "review_comment": job.review_comment,
+            "review_activity_id": str(activity_id),
+        }
+        send_job_update(
+            str(job.id),
+            event="job.review",
+            status=job.status,
+            case_id=str(job.case_id),
+            review_status=job.review_status,
+            reviewed_at=job.reviewed_at.isoformat() if job.reviewed_at else None,
+            reviewed_by=response_payload["reviewed_by"],
+            review_comment=job.review_comment,
+            review_activity_id=str(activity_id),
+        )
+        return Response(response_payload)
 
     @action(detail=True, methods=["get"], url_path="detail", url_name="detail")
     def telemetry(self, request, pk=None):
@@ -93,6 +261,54 @@ class JobViewSet(viewsets.ModelViewSet):
             raise Http404
         audit_emit(request, case_id=str(job.case_id), event="job.download_transcript", data={"job_id": str(job.id)})
         return FileResponse(open(job.transcript_path, "rb"), filename=f"{job.id}__transcript.txt", content_type="text/plain")
+
+    @action(detail=True, methods=["post"], url_path="cancel")
+    def cancel(self, request, pk=None):
+        job = self.get_object()
+        if job.status not in {Job.Status.PENDING, Job.Status.RUNNING}:
+            return Response({"detail": "Job is not cancellable."}, status=status.HTTP_400_BAD_REQUEST)
+        job.status = Job.Status.CANCELLED
+        job.finished_at = timezone.now()
+        job.error_message = "Cancelled by user"
+        job.save(update_fields=["status", "finished_at", "error_message"])
+        audit_emit(request, case_id=str(job.case_id), event="job.cancelled", data={"job_id": str(job.id)})
+        send_job_update(str(job.id), event="job.cancelled", status=Job.Status.CANCELLED, case_id=str(job.case_id))
+        return Response({"status": Job.Status.CANCELLED})
+
+    @action(detail=True, methods=["post"], url_path="restart")
+    def restart(self, request, pk=None):
+        job = self.get_object()
+        if job.status == Job.Status.RUNNING:
+            return Response({"detail": "Job is currently running."}, status=status.HTTP_400_BAD_REQUEST)
+        if not job.audio_input:
+            return Response({"detail": "Original audio input is missing."}, status=status.HTTP_400_BAD_REQUEST)
+
+        job.status = Job.Status.PENDING
+        job.error_message = ""
+        job.started_at = None
+        job.finished_at = None
+        job.duration_s = None
+        job.transcript_path = None
+        job.save(update_fields=[
+            "status",
+            "error_message",
+            "started_at",
+            "finished_at",
+            "duration_s",
+            "transcript_path",
+        ])
+
+        transcribe_job.delay(
+            case_id=str(job.case_id),
+            job_id=str(job.id),
+            audio_input=job.audio_input,
+            mode=job.mode,
+            diarization=job.diarization,
+            language=job.language,
+        )
+        audit_emit(request, case_id=str(job.case_id), event="job.restarted", data={"job_id": str(job.id)})
+        send_job_update(str(job.id), event="job.restarted", status=Job.Status.PENDING, case_id=str(job.case_id))
+        return Response({"status": Job.Status.PENDING})
 
     @action(detail=True, methods=["get"], url_path="logs")
     def logs(self, request, pk=None):

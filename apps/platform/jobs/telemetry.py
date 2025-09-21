@@ -71,7 +71,7 @@ class JobTelemetry:
         meta = self.meta
         sha256 = meta.get("audio_sha256")
         remote_sha = meta.get("audio_sha256_remote")
-        size_remote = meta.get("audio_size_bytes_remote")
+        size_remote = meta.get("audio_size_bytes_remote") or meta.get("audio_size_bytes")
         local_sha = None
         local_size = None
         local_path: Optional[Path] = None
@@ -88,6 +88,7 @@ class JobTelemetry:
             "remote_sha256": remote_sha or sha256,
             "content_md5_b64": meta.get("audio_content_md5_b64"),
             "size_bytes_remote": size_remote or local_size,
+            "size_bytes_local": local_size,
             "duration_s": meta.get("audio_duration_s") or self.job.duration_s,
             "sample_rate_hz": meta.get("sample_rate_hz") or meta.get("audio_sample_rate_hz"),
             "channels": meta.get("audio_channels") or meta.get("channels"),
@@ -163,6 +164,8 @@ def summarize_jobs(jobs: Iterable[Job]) -> Dict[str, Any]:
         if status == Job.Status.SUCCEEDED:
             summary["succeeded"] += 1
         elif status == Job.Status.FAILED:
+            summary["failed"] += 1
+        elif status == Job.Status.CANCELLED:
             summary["failed"] += 1
         elif status == Job.Status.RUNNING:
             summary["running"] += 1
