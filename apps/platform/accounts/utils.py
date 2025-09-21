@@ -8,6 +8,7 @@ from django.core.exceptions import PermissionDenied
 from django.conf import settings
 
 from apps.platform.accounts.models import Organization, OrganizationMembership
+from apps.platform.cases.models import CaseMembership
 
 AdminOrgChoice = dict[str, str]
 
@@ -20,7 +21,13 @@ def user_accessible_organizations(user) -> models.QuerySet[Organization]:
         return Organization.objects.none()
     if getattr(user, "is_superuser", False):
         return Organization.objects.all().order_by("name")
-    org_ids = OrganizationMembership.objects.filter(user=user).values_list("organization_id", flat=True)
+    direct_ids = OrganizationMembership.objects.filter(user=user).values_list("organization_id", flat=True)
+    case_ids = (
+        CaseMembership.objects.filter(user=user)
+        .values_list("case__organization_id", flat=True)
+        .distinct()
+    )
+    org_ids = set(direct_ids) | set(case_ids)
     return Organization.objects.filter(id__in=org_ids).order_by("name")
 
 

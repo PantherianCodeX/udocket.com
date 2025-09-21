@@ -4,12 +4,18 @@ import uuid
 
 from django.conf import settings
 from django.db import models
-from django.http import Http404, HttpRequest, HttpResponse
+from django.http import Http404, HttpRequest, HttpResponse, HttpResponseRedirect
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.views.decorators.http import require_http_methods
 
 from apps.platform.cases.models import Case, CaseMembership
-from apps.platform.accounts.utils import resolve_request_organization
+from apps.platform.accounts.models import OrganizationMembership
+from apps.platform.accounts.utils import (
+    resolve_request_organization,
+    set_active_admin_org_id,
+    user_accessible_organizations,
+)
 from apps.platform.jobs.models import Job
 from apps.platform.operations.tasks import transcribe_job
 from apps.platform.operations.storage import ensure_case_dirs
@@ -48,6 +54,8 @@ def index(request: HttpRequest) -> HttpResponse:
     organization = resolve_request_organization(request, required=False)
     cases_qs = Case.objects.select_related("organization")
     cases = cases_qs.for_user(getattr(request, "user", None)).order_by("-created_at")
+    if organization is not None:
+        cases = cases.filter(organization=organization)
 
     if request.method == "POST":
         case_id = (request.POST.get("case_id") or "").strip()
@@ -144,8 +152,12 @@ def jobs(request: HttpRequest) -> HttpResponse:
     if auth_response:
         return auth_response
 
-    jobs_qs = Job.objects.select_related("case")
-    all_jobs = jobs_qs.for_user(getattr(request, "user", None))[:200]
+    organization = resolve_request_organization(request, required=False)
+    jobs_qs = Job.objects.select_related("case", "case__organization")
+    scoped = scope_jobs(jobs_qs, getattr(request, "user", None))
+    if organization is not None:
+        scoped = scoped.filter(organization=organization)
+    all_jobs = list(scoped[:200])
     return render(request, "ui/jobs.html", {"jobs": all_jobs})
 
 
@@ -255,6 +267,26 @@ def permissions_overview(request: HttpRequest) -> HttpResponse:
 def logout_view(request: HttpRequest) -> HttpResponse:
     logout(request)
     return redirect("ui-index")
+
+
+@require_http_methods(["POST"])
+def select_organization(request: HttpRequest) -> HttpResponse:
+    user = getattr(request, "user", None)
+    if not user or not getattr(user, "is_authenticated", False):
+        return redirect("ui-index")
+
+    org_id = (request.POST.get("organization_id") or "").strip()
+    next_url = request.POST.get("next") or request.META.get("HTTP_REFERER") or reverse("ui-index")
+
+    if not org_id:
+        set_active_admin_org_id(request, None)
+        return HttpResponseRedirect(next_url)
+
+    accessible = user_accessible_organizations(user).values_list("id", flat=True)
+    if org_id in accessible or getattr(user, "is_superuser", False):
+        set_active_admin_org_id(request, org_id)
+
+    return HttpResponseRedirect(next_url)
 
 
 @require_http_methods(["POST"])

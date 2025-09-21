@@ -1,82 +1,181 @@
 {% extends "ui/base.html" %}
 {% block content %}
-  <section class="grid gap-6 lg:grid-cols-[2fr,1fr]">
-    <div class="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-xl shadow-black/10">
-      <div class="flex items-center justify-between">
+  <section class="space-y-6">
+    <div class="rounded-2xl border border-white/10 bg-white/10 p-6 shadow-lg shadow-black/25">
+      <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <p class="text-sm uppercase tracking-wide text-slate-400">Active organization</p>
-          <h2 class="mt-1 text-2xl font-semibold text-white">{{ active_org.name|default:"No organization selected" }}</h2>
+          <p class="text-xs uppercase tracking-wide text-slate-300">Active organization</p>
+          <h2 class="text-3xl font-semibold text-white">{{ active_org.name|default:"Select an organization" }}</h2>
+          <p class="mt-2 text-sm text-slate-300">Cases, transcripts, and analytics are isolated per tenant. Choose a case below to manage transcription jobs.</p>
         </div>
-        <div class="rounded-full border border-primary-500/40 bg-primary-500/20 px-3 py-1 text-xs font-semibold text-primary-100">
-          {{ cases|length }} case{{ cases|length|pluralize }}
+        <div class="rounded-xl border border-white/10 bg-slate-900/60 px-4 py-3 text-center text-sm text-slate-200">
+          <p class="text-xs uppercase tracking-wide text-slate-400">Cases</p>
+          <p class="mt-1 text-xl font-semibold text-white">{{ cases|length }}</p>
         </div>
-      </div>
-      <p class="mt-4 text-sm text-slate-300">
-        Cases keep transcripts, AI analyses, and operational logs scoped to their organization. Select a case below to manage jobs and diagnostics.
-      </p>
-      <div class="mt-6 overflow-hidden rounded-xl border border-white/10">
-        <table class="min-w-full divide-y divide-white/10">
-          <thead class="bg-white/5 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
-          <tr>
-            <th class="px-4 py-3">Case</th>
-            <th class="px-4 py-3">Title</th>
-            <th class="px-4 py-3">Created</th>
-            <th class="px-4 py-3 text-right">Actions</th>
-          </tr>
-          </thead>
-          <tbody class="divide-y divide-white/5 bg-slate-900/40 text-sm">
-          {% for c in cases %}
-            <tr class="transition hover:bg-white/10">
-              <td class="px-4 py-3 font-mono text-xs text-primary-200">{{ c.id }}</td>
-              <td class="px-4 py-3 text-slate-100">{{ c.title }}</td>
-              <td class="px-4 py-3 text-slate-300"><time data-ts="{{ c.created_at|date:'c' }}">{{ c.created_at }}</time></td>
-              <td class="px-4 py-3 text-right">
-                <a href="/cases/{{ c.id }}/" class="inline-flex items-center rounded-lg border border-primary-500/50 bg-primary-500/30 px-3 py-1.5 text-xs font-semibold text-primary-50 transition hover:bg-primary-500/50">Open</a>
-              </td>
-            </tr>
-          {% empty %}
-            <tr>
-              <td colspan="4" class="px-4 py-6 text-center text-slate-400">No cases yet. Create one to get started.</td>
-            </tr>
-          {% endfor %}
-          </tbody>
-        </table>
       </div>
     </div>
 
-    <div class="flex flex-col gap-6">
-      <div class="rounded-2xl border border-white/10 bg-gradient-to-br from-primary-600/70 via-primary-500/70 to-primary-700/70 p-6 shadow-xl shadow-primary-800/40">
-        <h3 class="text-lg font-semibold text-white">Create a Case</h3>
-        {% if active_org %}
-          <p class="mt-2 text-sm text-primary-50/80">New cases will be created inside <span class="font-medium text-white">{{ active_org.name }}</span>. Case IDs become folder names across storage, so keep them succinct.</p>
-          <form method="post" class="mt-6 space-y-4">
-            {% csrf_token %}
-            <div>
-              <label class="text-xs font-semibold uppercase tracking-wide text-primary-100">Case ID</label>
-              <input type="text" name="case_id" required maxlength="36" class="mt-1 block w-full rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-primary-100/50 focus:border-white focus:outline-none">
-            </div>
-            <div>
-              <label class="text-xs font-semibold uppercase tracking-wide text-primary-100">Title</label>
-              <input type="text" name="title" class="mt-1 block w-full rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-primary-100/50 focus:border-white focus:outline-none">
-            </div>
-            <button type="submit" class="inline-flex w-full items-center justify-center rounded-lg bg-white/90 px-4 py-2 text-sm font-semibold text-primary-700 shadow-lg shadow-primary-900/30 transition hover:bg-white">Create case</button>
-          </form>
-        {% else %}
-          <div class="mt-4 rounded-xl border border-white/20 bg-white/10 p-4 text-sm text-primary-50">
-            Select an organization in the admin header or include the <code class="rounded bg-primary-900/60 px-1 text-primary-100">X-Organization-Id</code> header when making API calls. Once selected, the UI will create and display cases for that tenant.
-          </div>
-        {% endif %}
+    <div class="grid gap-6 lg:grid-cols-[3fr,2fr]">
+      <div class="rounded-2xl border border-white/10 bg-white/5 shadow-xl shadow-black/30">
+        <div class="flex items-center justify-between border-b border-white/10 px-6 py-4">
+          <h3 class="text-lg font-semibold text-white">Cases</h3>
+          <span class="text-xs uppercase tracking-wide text-slate-400">Click a row for details</span>
+        </div>
+        <div class="overflow-hidden">
+          <table class="min-w-full divide-y divide-white/10 text-sm">
+            <thead class="bg-white/5 text-left text-xs uppercase tracking-wide text-slate-400">
+              <tr>
+                <th class="px-4 py-3">Title</th>
+                <th class="px-4 py-3">Created</th>
+                <th class="px-4 py-3">Jobs</th>
+                <th class="px-4 py-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="cases-table" class="divide-y divide-white/5 bg-slate-900/40 text-slate-100">
+              {% for c in cases %}
+              <tr data-case-row
+                  data-case-id="{{ c.id }}"
+                  data-title="{{ c.title|default:c.id }}"
+                  data-created="{{ c.created_at|date:'c' }}"
+                  class="cursor-pointer transition hover:bg-white/10">
+                <td class="px-4 py-3 flex items-center gap-2">
+                  <span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-primary-500/20 text-primary-200">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 7.5A2.5 2.5 0 015.5 5h4.379a1 1 0 01.707.293l1.121 1.121a1 1 0 00.707.293H18.5A2.5 2.5 0 0121 9.207V17.5A2.5 2.5 0 0118.5 20h-13A2.5 2.5 0 013 17.5v-10z"/>
+                    </svg>
+                  </span>
+                  <span class="font-medium">{{ c.title|default:c.id }}</span>
+                </td>
+                <td class="px-4 py-3 text-slate-300"><time data-ts="{{ c.created_at|date:'c' }}">{{ c.created_at }}</time></td>
+                <td class="px-4 py-3 text-slate-300" data-case-jobs="loading">—</td>
+                <td class="px-4 py-3 text-right">
+                  <div class="inline-flex items-center gap-2" onclick="event.stopPropagation();">
+                    <a href="/cases/{{ c.id }}/" class="inline-flex items-center gap-2 rounded-lg border border-primary-500/50 bg-primary-500/30 px-3 py-1.5 text-xs font-semibold text-primary-50 transition hover:bg-primary-500/50">Open</a>
+                    <a href="/admin/cases/{{ c.id }}/edit" class="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-primary-400 hover:text-white" target="_blank" rel="noopener">Edit</a>
+                  </div>
+                </td>
+              </tr>
+              {% empty %}
+              <tr>
+                <td colspan="4" class="px-4 py-6 text-center text-slate-400">No cases yet. Create one to get started.</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      <div class="rounded-2xl border border-white/10 bg-white/5 p-6 text-sm text-slate-200">
-        <h3 class="text-lg font-semibold text-white">Need the legacy admin?</h3>
-        <p class="mt-2">FastAPI admin remains available at <a class="font-semibold text-primary-300 underline" href="/admin/" target="_blank" rel="noopener">/admin</a> while we continue iterating on this experience.</p>
-        <p class="mt-4 text-xs uppercase tracking-wide text-slate-400">Shortcuts</p>
-        <ul class="mt-2 space-y-1 text-sm">
-          <li>• Public API docs: <span class="font-mono text-primary-200">http://localhost:8080/docs</span></li>
-          <li>• Legacy admin UI: <span class="font-mono text-primary-200">http://localhost:8081/</span></li>
-        </ul>
+      <div class="space-y-4">
+        <div class="rounded-2xl border border-white/10 bg-gradient-to-br from-primary-600/70 via-primary-500/70 to-primary-700/70 p-6 shadow-xl shadow-primary-800/40">
+          <h3 class="text-lg font-semibold text-white">Create a case</h3>
+          {% if active_org %}
+            <p class="mt-2 text-sm text-primary-50/80">New cases will live inside <span class="font-medium text-white">{{ active_org.name }}</span>. IDs become storage folder names, so keep them concise.</p>
+            <form method="post" class="mt-6 space-y-4">
+              {% csrf_token %}
+              <div>
+                <label class="text-xs font-semibold uppercase tracking-wide text-primary-100">Case ID</label>
+                <input type="text" name="case_id" required maxlength="36" class="mt-1 block w-full rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-primary-100/50 focus:border-white focus:outline-none">
+              </div>
+              <div>
+                <label class="text-xs font-semibold uppercase tracking-wide text-primary-100">Title</label>
+                <input type="text" name="title" class="mt-1 block w-full rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-primary-100/50 focus:border-white focus:outline-none">
+              </div>
+              <button type="submit" class="inline-flex w-full items-center justify-center rounded-lg bg-white/90 px-4 py-2 text-sm font-semibold text-primary-700 shadow-lg shadow-primary-900/30 transition hover:bg-white">Create case</button>
+            </form>
+          {% else %}
+            <div class="mt-4 rounded-xl border border-white/20 bg-white/10 p-4 text-sm text-primary-50">
+              Select an organization from the profile menu before creating cases.
+            </div>
+          {% endif %}
+        </div>
+
+        <div class="rounded-2xl border border-white/10 bg-white/5 p-6 text-sm text-slate-200">
+          <h3 class="text-lg font-semibold text-white">Need the legacy admin?</h3>
+          <p class="mt-2">FastAPI admin remains available at <a class="font-semibold text-primary-300 underline" href="/admin/" target="_blank" rel="noopener">/admin</a> while this UI evolves.</p>
+          <p class="mt-4 text-xs uppercase tracking-wide text-slate-400">Shortcuts</p>
+          <ul class="mt-2 space-y-1 text-sm">
+            <li>• Public API docs: <span class="font-mono text-primary-200">http://localhost:8080/docs</span></li>
+            <li>• Legacy admin UI: <span class="font-mono text-primary-200">http://localhost:8081/</span></li>
+          </ul>
+        </div>
       </div>
     </div>
   </section>
+
+  <script>
+    const tbody = document.getElementById('cases-table');
+    let openCaseRow = null;
+
+    function closeDetails() {
+      if (openCaseRow) {
+        const detailRow = openCaseRow.nextElementSibling;
+        if (detailRow && detailRow.dataset.caseDetails === '1') detailRow.remove();
+        openCaseRow = null;
+      }
+    }
+
+    async function fetchSummary(caseId) {
+      try {
+        const resp = await fetch(`/api/v1/cases/${caseId}/jobs/summary/`, { headers: { 'Accept': 'application/json' } });
+        if (!resp.ok) return null;
+        return await resp.json();
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function summaryBadges(stats) {
+      if (!stats) return '<span class="text-slate-400">No summary</span>';
+      const pieces = [];
+      pieces.push(`<span class="rounded-full border border-emerald-400/40 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-200">${stats.succeeded} succeeded</span>`);
+      if (stats.running) pieces.push(`<span class="rounded-full border border-blue-400/40 bg-blue-500/10 px-3 py-1 text-xs font-semibold text-blue-200">${stats.running} running</span>`);
+      if (stats.pending) pieces.push(`<span class="rounded-full border border-slate-400/40 bg-slate-500/10 px-3 py-1 text-xs font-semibold text-slate-200">${stats.pending} pending</span>`);
+      if (stats.failed) pieces.push(`<span class="rounded-full border border-rose-400/40 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-200">${stats.failed} failed</span>`);
+      return pieces.join(' ');
+    }
+
+    function detailTemplate(row, stats) {
+      const caseId = row.dataset.caseId;
+      const created = row.dataset.created;
+      return `
+        <tr data-case-details="1" class="bg-slate-900/60">
+          <td colspan="4" class="px-6 py-4">
+            <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p class="text-xs uppercase tracking-wide text-slate-400">Case ID</p>
+                <p class="font-mono text-sm text-primary-200">${caseId}</p>
+                <p class="mt-2 text-xs uppercase tracking-wide text-slate-400">Created</p>
+                <p class="text-sm text-slate-200">${created ? new Date(created).toLocaleString() : '—'}</p>
+              </div>
+              <div class="flex flex-wrap gap-2">${summaryBadges(stats || { succeeded:0, running:0, pending:0, failed:0 })}</div>
+              <div class="flex gap-2">
+                <a href="/cases/${caseId}/" class="inline-flex items-center gap-2 rounded-lg border border-primary-500/50 bg-primary-500/30 px-3 py-1.5 text-xs font-semibold text-primary-50 transition hover:bg-primary-500/50">Open case</a>
+                <a href="/admin/cases/${caseId}" class="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-primary-400 hover:text-white" target="_blank" rel="noopener">Legacy view</a>
+              </div>
+            </div>
+          </td>
+        </tr>`;
+    }
+
+    async function handleRowClick(event) {
+      const row = event.currentTarget;
+      if (openCaseRow === row) {
+        closeDetails();
+        return;
+      }
+      closeDetails();
+      openCaseRow = row;
+      const caseId = row.dataset.caseId;
+      const stats = await fetchSummary(caseId);
+      row.insertAdjacentHTML('afterend', detailTemplate(row, stats));
+      if (stats) {
+        const cell = row.querySelector('[data-case-jobs]');
+        if (cell) cell.textContent = stats.total;
+      }
+    }
+
+    tbody.querySelectorAll('[data-case-row]').forEach(row => {
+      row.addEventListener('click', handleRowClick);
+    });
+  </script>
 {% endblock %}
