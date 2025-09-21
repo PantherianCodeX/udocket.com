@@ -93,6 +93,8 @@ class JobTelemetry:
             "sample_rate_hz": meta.get("sample_rate_hz") or meta.get("audio_sample_rate_hz"),
             "channels": meta.get("audio_channels") or meta.get("channels"),
             "bitrate_kbps": meta.get("audio_bitrate_kbps") or meta.get("bitrate_kbps"),
+            "codec": meta.get("audio_codec"),
+            "channel_layout": meta.get("audio_channel_layout"),
             "mime": meta.get("audio_mime"),
         }
 
@@ -101,6 +103,13 @@ class JobTelemetry:
         transcript_path = self.job.transcript_path if include_paths else None
         transcript_sha = meta.get("transcript_sha256")
         transcript_bytes = meta.get("transcript_bytes")
+        avg_conf = meta.get("avg_confidence")
+        avg_conf_pct = None
+        try:
+            if isinstance(avg_conf, (int, float)):
+                avg_conf_pct = float(avg_conf) * 100.0
+        except Exception:
+            avg_conf_pct = None
         if include_paths and transcript_path:
             path = Path(transcript_path)
             if path.exists():
@@ -114,7 +123,8 @@ class JobTelemetry:
             "words": meta.get("word_count") or meta.get("transcript_words"),
             "bytes": transcript_bytes,
             "segments": meta.get("segments"),
-            "avg_confidence": meta.get("avg_confidence"),
+            "avg_confidence": avg_conf,
+            "avg_confidence_pct": avg_conf_pct,
             "language": meta.get("language") or self.job.language,
             "artifact_type": "TRANSCRIPT",
         }
