@@ -1,94 +1,148 @@
-<div class="job-detail">
-  <div class="job-detail-header">
+<div class="flex flex-col gap-6">
+  <div class="flex items-start justify-between border-b border-white/10 bg-white/5 px-6 py-4">
     <div>
-      <h2>Job <code>{{ job.id }}</code></h2>
-      <p>{{ telemetry.mode|title }} · {{ telemetry.language|default:"—" }} · Status: <strong>{{ telemetry.status }}</strong></p>
+      <p class="text-xs uppercase tracking-wide text-slate-400">Job</p>
+      <h2 class="mt-1 text-lg font-semibold text-white">{{ telemetry.mode|title }} · {{ telemetry.language|default:"—" }}</h2>
+      <p class="text-sm text-slate-300">Status: <span class="font-semibold text-primary-200">{{ telemetry.status }}</span></p>
     </div>
-    <button type="button" class="job-detail-close" onclick="window.udocketCloseJobDetail()">×</button>
+    <button type="button" onclick="window.udocketCloseJobDetail()" class="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-sm font-semibold text-slate-200 transition hover:border-primary-400 hover:text-white">Close</button>
   </div>
 
-  <section class="job-detail-grid">
-    <div>
-      <span class="label">Created</span>
-      <span>{% if telemetry.created_at %}<time datetime="{{ telemetry.created_at|date:'c' }}">{{ telemetry.created_at }}</time>{% else %}—{% endif %}</span>
+  <section class="grid grid-cols-2 gap-4 px-6 text-sm text-slate-200 md:grid-cols-3">
+    <div class="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+      <p class="text-xs uppercase tracking-wide text-slate-400">Created</p>
+      <p class="mt-1 text-slate-100">{% if telemetry.created_at %}<time data-ts="{{ telemetry.created_at|date:'c' }}">{{ telemetry.created_at }}</time>{% else %}—{% endif %}</p>
     </div>
-    <div>
-      <span class="label">Started</span>
-      <span>{% if telemetry.started_at %}<time datetime="{{ telemetry.started_at|date:'c' }}">{{ telemetry.started_at }}</time>{% else %}—{% endif %}</span>
+    <div class="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+      <p class="text-xs uppercase tracking-wide text-slate-400">Started</p>
+      <p class="mt-1 text-slate-100">{% if telemetry.started_at %}<time data-ts="{{ telemetry.started_at|date:'c' }}">{{ telemetry.started_at }}</time>{% else %}—{% endif %}</p>
     </div>
-    <div>
-      <span class="label">Finished</span>
-      <span>{% if telemetry.finished_at %}<time datetime="{{ telemetry.finished_at|date:'c' }}">{{ telemetry.finished_at }}</time>{% else %}—{% endif %}</span>
+    <div class="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+      <p class="text-xs uppercase tracking-wide text-slate-400">Finished</p>
+      <p class="mt-1 text-slate-100">{% if telemetry.finished_at %}<time data-ts="{{ telemetry.finished_at|date:'c' }}">{{ telemetry.finished_at }}</time>{% else %}—{% endif %}</p>
     </div>
-    <div>
-      <span class="label">Duration</span>
-      <span>{% if telemetry.duration_s %}{{ telemetry.duration_s|floatformat:1 }} s{% else %}—{% endif %}</span>
+    <div class="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+      <p class="text-xs uppercase tracking-wide text-slate-400">Duration</p>
+      <p class="mt-1 text-slate-100">{% if telemetry.duration_s %}{{ telemetry.duration_s|floatformat:1 }} s{% else %}—{% endif %}</p>
     </div>
-    <div>
-      <span class="label">Diarization</span>
-      <span>{% if telemetry.diarization %}Enabled{% else %}Disabled{% endif %}</span>
+    <div class="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+      <p class="text-xs uppercase tracking-wide text-slate-400">Diarization</p>
+      <p class="mt-1 text-slate-100">{% if telemetry.diarization %}Enabled{% else %}Disabled{% endif %}</p>
     </div>
-    <div>
-      <span class="label">Error</span>
-      <span>{% if telemetry.error_message %}{{ telemetry.error_message }}{% else %}—{% endif %}</span>
+    <div class="rounded-xl border border-rose-500/40 bg-rose-500/10 p-4">
+      <p class="text-xs uppercase tracking-wide text-rose-200">Error</p>
+      <p class="mt-1 text-slate-100">{% if telemetry.error_message %}{{ telemetry.error_message }}{% else %}—{% endif %}</p>
     </div>
   </section>
 
   {% if telemetry.audio %}
-  <section>
-    <h3>Audio</h3>
-    <dl class="detail-list">
-      <div><dt>Original Name</dt><dd>{{ telemetry.audio.original_name|default:"—" }}</dd></div>
-      <div><dt>Path</dt><dd>{% if telemetry.audio.path %}<code>{{ telemetry.audio.path }}</code>{% else %}—{% endif %}</dd></div>
-      <div><dt>SHA-256</dt><dd>{{ telemetry.audio.sha256|default:"—" }}</dd></div>
-      <div><dt>Remote SHA-256</dt><dd>{{ telemetry.audio.remote_sha256|default:"—" }}</dd></div>
-      <div><dt>Remote Size</dt><dd>{% if telemetry.audio.size_bytes_remote %}{{ telemetry.audio.size_bytes_remote }} bytes{% else %}—{% endif %}</dd></div>
-      <div><dt>Sample Rate</dt><dd>{% if telemetry.audio.sample_rate_hz %}{{ telemetry.audio.sample_rate_hz }} Hz{% else %}—{% endif %}</dd></div>
-      <div><dt>Channels</dt><dd>{{ telemetry.audio.channels|default:"—" }}</dd></div>
-      <div><dt>Bitrate</dt><dd>{% if telemetry.audio.bitrate_kbps %}{{ telemetry.audio.bitrate_kbps }} kbps{% else %}—{% endif %}</dd></div>
-      <div><dt>MIME</dt><dd>{{ telemetry.audio.mime|default:"—" }}</dd></div>
-    </dl>
+  <section class="space-y-3 px-6">
+    <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-300">Audio</h3>
+    <div class="grid gap-3 text-xs text-slate-200 md:grid-cols-2">
+      <div class="rounded-lg border border-white/10 bg-slate-900/60 p-3">
+        <p class="text-slate-400">Original name</p>
+        <p class="mt-1 font-medium text-slate-100">{{ telemetry.audio.original_name|default:"—" }}</p>
+      </div>
+      <div class="rounded-lg border border-white/10 bg-slate-900/60 p-3">
+        <p class="text-slate-400">Path</p>
+        <p class="mt-1 font-mono text-primary-200">{% if telemetry.audio.path %}{{ telemetry.audio.path }}{% else %}—{% endif %}</p>
+      </div>
+      <div class="rounded-lg border border-white/10 bg-slate-900/60 p-3">
+        <p class="text-slate-400">SHA-256</p>
+        <p class="mt-1 font-mono text-primary-200">{{ telemetry.audio.sha256|default:"—" }}</p>
+      </div>
+      <div class="rounded-lg border border-white/10 bg-slate-900/60 p-3">
+        <p class="text-slate-400">Remote SHA-256</p>
+        <p class="mt-1 font-mono text-primary-200">{{ telemetry.audio.remote_sha256|default:"—" }}</p>
+      </div>
+      <div class="rounded-lg border border-white/10 bg-slate-900/60 p-3">
+        <p class="text-slate-400">Remote size</p>
+        <p class="mt-1">{% if telemetry.audio.size_bytes_remote %}{{ telemetry.audio.size_bytes_remote }} bytes{% else %}—{% endif %}</p>
+      </div>
+      <div class="rounded-lg border border-white/10 bg-slate-900/60 p-3">
+        <p class="text-slate-400">Sample rate</p>
+        <p class="mt-1">{% if telemetry.audio.sample_rate_hz %}{{ telemetry.audio.sample_rate_hz }} Hz{% else %}—{% endif %}</p>
+      </div>
+      <div class="rounded-lg border border-white/10 bg-slate-900/60 p-3">
+        <p class="text-slate-400">Channels</p>
+        <p class="mt-1">{{ telemetry.audio.channels|default:"—" }}</p>
+      </div>
+      <div class="rounded-lg border border-white/10 bg-slate-900/60 p-3">
+        <p class="text-slate-400">Bitrate</p>
+        <p class="mt-1">{% if telemetry.audio.bitrate_kbps %}{{ telemetry.audio.bitrate_kbps }} kbps{% else %}—{% endif %}</p>
+      </div>
+    </div>
   </section>
   {% endif %}
 
   {% if telemetry.transcript %}
-  <section>
-    <h3>Transcript</h3>
-    <dl class="detail-list">
-      <div><dt>Path</dt><dd>{% if telemetry.transcript.path %}<code>{{ telemetry.transcript.path }}</code>{% else %}—{% endif %}</dd></div>
-      <div><dt>SHA-256</dt><dd>{{ telemetry.transcript.sha256|default:"—" }}</dd></div>
-      <div><dt>Words</dt><dd>{{ telemetry.transcript.words|default:"—" }}</dd></div>
-      <div><dt>Bytes</dt><dd>{% if telemetry.transcript.bytes %}{{ telemetry.transcript.bytes }}{% else %}—{% endif %}</dd></div>
-      <div><dt>Average Confidence</dt><dd>{% if telemetry.transcript.avg_confidence %}{{ telemetry.transcript.avg_confidence|floatformat:3 }}{% else %}—{% endif %}</dd></div>
-    </dl>
-    {% if telemetry.artifacts %}
-      <p>
-        {% for artifact in telemetry.artifacts %}
-          {% if artifact.download_url %}
-            <a class="btn" href="{{ artifact.download_url }}">Download {{ artifact.type|title }}</a>
-          {% endif %}
-        {% endfor %}
-      </p>
-    {% endif %}
+  <section class="space-y-3 px-6">
+    <div class="flex items-center justify-between">
+      <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-300">Transcript</h3>
+      {% for artifact in telemetry.artifacts %}
+        {% if artifact.download_url %}
+          <a class="inline-flex items-center rounded-lg border border-primary-400/50 bg-primary-500/30 px-3 py-1.5 text-xs font-semibold text-primary-50 transition hover:bg-primary-500/50" href="{{ artifact.download_url }}">Download {{ artifact.type|title }}</a>
+        {% endif %}
+      {% endfor %}
+    </div>
+    <div class="grid gap-3 text-xs text-slate-200 md:grid-cols-2">
+      <div class="rounded-lg border border-white/10 bg-slate-900/60 p-3">
+        <p class="text-slate-400">Path</p>
+        <p class="mt-1 font-mono text-primary-200">{% if telemetry.transcript.path %}{{ telemetry.transcript.path }}{% else %}—{% endif %}</p>
+      </div>
+      <div class="rounded-lg border border-white/10 bg-slate-900/60 p-3">
+        <p class="text-slate-400">SHA-256</p>
+        <p class="mt-1 font-mono text-primary-200">{{ telemetry.transcript.sha256|default:"—" }}</p>
+      </div>
+      <div class="rounded-lg border border-white/10 bg-slate-900/60 p-3">
+        <p class="text-slate-400">Words</p>
+        <p class="mt-1">{{ telemetry.transcript.words|default:"—" }}</p>
+      </div>
+      <div class="rounded-lg border border-white/10 bg-slate-900/60 p-3">
+        <p class="text-slate-400">Bytes</p>
+        <p class="mt-1">{% if telemetry.transcript.bytes %}{{ telemetry.transcript.bytes }}{% else %}—{% endif %}</p>
+      </div>
+      <div class="rounded-lg border border-white/10 bg-slate-900/60 p-3">
+        <p class="text-slate-400">Average confidence</p>
+        <p class="mt-1">{% if telemetry.transcript.avg_confidence %}{{ telemetry.transcript.avg_confidence|floatformat:3 }}{% else %}—{% endif %}</p>
+      </div>
+    </div>
   </section>
   {% endif %}
 
-  <section>
-    <h3>Agent</h3>
-    <dl class="detail-list">
-      <div><dt>Region</dt><dd>{{ telemetry.agent.region|default:"—" }}</dd></div>
-      <div><dt>Attempts Used</dt><dd>{{ telemetry.agent.attempts_used|default:"—" }}</dd></div>
-      <div><dt>Diarization Speakers</dt><dd>{{ telemetry.agent.diarization_speakers|default:"—" }}</dd></div>
-      <div><dt>Azure URL</dt><dd>{% if telemetry.agent.azure_transcription_url %}<a href="{{ telemetry.agent.azure_transcription_url }}" target="_blank" rel="noopener">View</a>{% else %}—{% endif %}</dd></div>
-      <div><dt>Timestamp (UTC)</dt><dd>{{ telemetry.agent.timestamp_utc|default:"—" }}</dd></div>
-    </dl>
+  <section class="space-y-3 px-6">
+    <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-300">Agent telemetry</h3>
+    <div class="grid gap-3 text-xs text-slate-200 md:grid-cols-2">
+      <div class="rounded-lg border border-white/10 bg-slate-900/60 p-3">
+        <p class="text-slate-400">Azure region</p>
+        <p class="mt-1">{{ telemetry.agent.region|default:"—" }}</p>
+      </div>
+      <div class="rounded-lg border border-white/10 bg-slate-900/60 p-3">
+        <p class="text-slate-400">Attempts used</p>
+        <p class="mt-1">{{ telemetry.agent.attempts_used|default:"—" }}</p>
+      </div>
+      <div class="rounded-lg border border-white/10 bg-slate-900/60 p-3">
+        <p class="text-slate-400">Diarization speakers</p>
+        <p class="mt-1">{{ telemetry.agent.diarization_speakers|default:"—" }}</p>
+      </div>
+      <div class="rounded-lg border border-white/10 bg-slate-900/60 p-3">
+        <p class="text-slate-400">Azure transcription URL</p>
+        <p class="mt-1">{% if telemetry.agent.azure_transcription_url %}<a class="text-primary-300 underline" href="{{ telemetry.agent.azure_transcription_url }}" target="_blank" rel="noopener">Open in Azure</a>{% else %}—{% endif %}</p>
+      </div>
+      <div class="rounded-lg border border-white/10 bg-slate-900/60 p-3">
+        <p class="text-slate-400">Timestamp (UTC)</p>
+        <p class="mt-1">{{ telemetry.agent.timestamp_utc|default:"—" }}</p>
+      </div>
+    </div>
   </section>
 
   {% if telemetry.log_excerpt %}
-  <section>
-    <h3>Log Excerpt</h3>
-    <pre class="log-excerpt">{{ telemetry.log_excerpt }}</pre>
-    <p><a class="btn" href="/api/v1/jobs/{{ job.id }}/logs/">Download full log</a></p>
+  <section class="space-y-3 px-6 pb-6">
+    <div class="flex items-center justify-between">
+      <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-300">Agent log excerpt</h3>
+      <a class="inline-flex items-center rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-primary-400 hover:text-white" href="/api/v1/jobs/{{ job.id }}/logs/">Download full log</a>
+    </div>
+    <pre class="max-h-64 overflow-y-auto rounded-lg border border-white/10 bg-slate-950/70 p-4 text-xs text-slate-100">{{ telemetry.log_excerpt }}</pre>
   </section>
   {% endif %}
 </div>

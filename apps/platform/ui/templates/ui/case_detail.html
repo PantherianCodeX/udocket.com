@@ -5,219 +5,258 @@
   window.jobPollers = window.jobPollers || {};
 
   function connectWS(jobId) {
-    const el = document.getElementById('job-status-' + jobId);
-    const linkEl = document.getElementById('job-transcript-' + jobId);
-    const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws/jobs/' + jobId + '/';
+    const statusEl = document.getElementById(`job-status-${jobId}`);
+    const transcriptEl = document.getElementById(`job-transcript-${jobId}`);
+    const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + `/ws/jobs/${jobId}/`;
     const ws = new WebSocket(url);
     ws.onmessage = (ev) => {
       try {
         const data = JSON.parse(ev.data);
-        if (data.status && el) {
-          el.textContent = data.status;
+        if (data.status && statusEl) statusEl.textContent = data.status;
+        const transcriptPath = data.transcript_file || data.transcript_path;
+        if (transcriptEl && (transcriptPath || (statusEl && statusEl.textContent === 'SUCCEEDED'))) {
+          transcriptEl.innerHTML = `<a class="font-medium text-primary-300 underline" href="/api/v1/jobs/${data.job_id || jobId}/download/">Download</a>`;
         }
-        const tfile = data.transcript_file || data.transcript_path;
-        if (linkEl && (tfile || (el && el.textContent === 'SUCCEEDED'))) {
-          linkEl.innerHTML = '<a href="/api/v1/jobs/' + (data.job_id || jobId) + '/download/">download</a>';
+        if (statusEl && ['SUCCEEDED', 'FAILED'].includes(statusEl.textContent)) {
+          clearInterval(window.jobPollers[jobId]);
+          delete window.jobPollers[jobId];
         }
-        if (el && (el.textContent === 'SUCCEEDED' || el.textContent === 'FAILED')) {
-          // stop polling if running
-          if (window.jobPollers[jobId]) { clearInterval(window.jobPollers[jobId]); delete window.jobPollers[jobId]; }
-        }
-      } catch (e) {}
+      } catch (_) {}
     };
-    ws.onclose = () => {};
   }
 
   async function pollJob(jobId) {
     try {
-      const resp = await fetch('/api/v1/jobs/' + jobId + '/status/');
+      const resp = await fetch(`/api/v1/jobs/${jobId}/status/`);
       if (!resp.ok) return;
       const data = await resp.json();
-      const el = document.getElementById('job-status-' + jobId);
-      const linkEl = document.getElementById('job-transcript-' + jobId);
-      if (el && data.status) el.textContent = data.status;
-      const tfile = data.transcript_path;
-      if (linkEl && (tfile || (el && el.textContent === 'SUCCEEDED'))) {
-        linkEl.innerHTML = '<a href="/api/v1/jobs/' + jobId + '/download/">download</a>';
+      const statusEl = document.getElementById(`job-status-${jobId}`);
+      const transcriptEl = document.getElementById(`job-transcript-${jobId}`);
+      if (statusEl && data.status) statusEl.textContent = data.status;
+      if (transcriptEl && (data.transcript_path || (statusEl && statusEl.textContent === 'SUCCEEDED'))) {
+        transcriptEl.innerHTML = `<a class="font-medium text-primary-300 underline" href="/api/v1/jobs/${jobId}/download/">Download</a>`;
       }
-      if (el && (el.textContent === 'SUCCEEDED' || el.textContent === 'FAILED')) {
-        if (window.jobPollers[jobId]) { clearInterval(window.jobPollers[jobId]); delete window.jobPollers[jobId]; }
+      if (statusEl && ['SUCCEEDED', 'FAILED'].includes(statusEl.textContent)) {
+        clearInterval(window.jobPollers[jobId]);
+        delete window.jobPollers[jobId];
       }
-    } catch (e) { /* ignore */ }
+    } catch (_) {}
   }
 
   function ensurePolling(jobId) {
     if (window.jobPollers[jobId]) return;
-    const el = document.getElementById('job-status-' + jobId);
-    if (!el) return;
-    if (el.textContent === 'SUCCEEDED' || el.textContent === 'FAILED') return;
+    const statusEl = document.getElementById(`job-status-${jobId}`);
+    if (!statusEl) return;
+    if (['SUCCEEDED', 'FAILED'].includes(statusEl.textContent)) return;
     window.jobPollers[jobId] = setInterval(() => pollJob(jobId), 2000);
   }
-  window.addEventListener('DOMContentLoaded', () => {
-    document.querySelectorAll('[data-job]').forEach(n => {
-      const jid = n.dataset.job;
-      if (!n.dataset.ws) { connectWS(jid); n.dataset.ws = '1'; }
-      ensurePolling(jid);
+
+  function bootstrapJobs() {
+    document.querySelectorAll('[data-job]').forEach(row => {
+      const jobId = row.dataset.job;
+      if (!row.dataset.ws) {
+        connectWS(jobId);
+        row.dataset.ws = '1';
+      }
+      ensurePolling(jobId);
     });
-  });
-  document.addEventListener('htmx:afterSwap', (e) => {
-    // Connect WS and polling for any newly added job rows
-    document.querySelectorAll('tr[data-job]').forEach(n => {
-      const jid = n.dataset.job;
-      if (!n.dataset.ws) { connectWS(jid); n.dataset.ws='1'; }
-      ensurePolling(jid);
-    });
-    if (e.target && e.target.id === 'job-detail-modal-body') {
-      window.udocketShowJobDetail();
+  }
+
+  window.addEventListener('DOMContentLoaded', bootstrapJobs);
+
+  document.addEventListener('htmx:afterSwap', (evt) => {
+    bootstrapJobs();
+    if (evt.target && evt.target.id === 'job-detail-modal-body') {
+      document.getElementById('job-detail-modal')?.classList.remove('hidden');
     }
-    // Render local times
     if (window.renderLocalTimes) window.renderLocalTimes();
   });
 
-  // Upload progress bar for the job form
-  document.addEventListener('htmx:xhr:progress', function (evt) {
-    try {
-      const el = evt.target;
-      if (!el || el.id !== 'job-form') return;
-      const loaded = evt.detail && evt.detail.loaded ? evt.detail.loaded : 0;
-      const total = evt.detail && evt.detail.total ? evt.detail.total : 1;
-      const pct = Math.max(0, Math.min(100, Math.round((loaded / total) * 100)));
-      const bar = document.querySelector('#upload-progress .bar');
-      const info = document.getElementById('upload-info');
-      if (bar) bar.style.width = pct + '%';
-      if (info) info.textContent = pct + '%';
-    } catch (_) {}
+  document.addEventListener('htmx:xhr:progress', (evt) => {
+    const target = evt.target;
+    if (!target || target.id !== 'job-form') return;
+    const loaded = evt.detail?.loaded ?? 0;
+    const total = evt.detail?.total ?? 1;
+    const pct = Math.max(0, Math.min(100, Math.round((loaded / total) * 100)));
+    const bar = document.querySelector('#upload-progress .progress-bar');
+    const info = document.getElementById('upload-info');
+    if (bar) bar.style.width = `${pct}%`;
+    if (info) info.textContent = `${pct}%`;
+    document.getElementById('upload-progress')?.classList.remove('hidden');
   });
 
   window.udocketShowJobDetail = function () {
-    const modal = document.getElementById('job-detail-modal');
-    if (modal) modal.classList.remove('hidden');
-  };
+    document.getElementById('job-detail-modal')?.classList.remove('hidden');
+  }
 
   window.udocketCloseJobDetail = function () {
-    const modal = document.getElementById('job-detail-modal');
-    if (modal) modal.classList.add('hidden');
+    document.getElementById('job-detail-modal')?.classList.add('hidden');
     const body = document.getElementById('job-detail-modal-body');
     if (body) body.innerHTML = '';
-  };
+  }
 
-  document.addEventListener('keydown', function (evt) {
+  document.addEventListener('keydown', (evt) => {
     if (evt.key === 'Escape') {
       window.udocketCloseJobDetail();
     }
   });
 </script>
-<style>
-  .hidden { display:none; }
-  .htmx-request .hide-during-request { display:none; }
-  .htmx-request .show-during-request { display:inline; }
-  .show-during-request { display:none; }
-  .progress { width: 320px; height: 8px; background: #eee; border-radius: 4px; overflow: hidden; display: inline-block; vertical-align: middle; margin-left: 8px; }
-  .progress .bar { height: 100%; width: 0%; background: #3b82f6; transition: width 0.1s linear; }
-  .job-summary { display: flex; flex-wrap: wrap; gap: 12px; margin: 16px 0; }
-  .job-summary .card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px 16px; flex: 1 1 140px; min-width: 140px; }
-  .job-summary .label { display: block; font-size: 0.75rem; color: #475569; text-transform: uppercase; letter-spacing: 0.05em; }
-  .job-summary .value { display: block; font-size: 1.6rem; font-weight: 600; color: #0f172a; }
-  .job-summary-meta { margin-top: -8px; margin-bottom: 16px; color: #475569; font-size: 0.9rem; }
-  .job-cards { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); margin: 24px 0; }
-  .job-card { border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px 16px; background: #fff; }
-  .job-card h4 { margin: 0 0 6px; font-size: 1rem; }
-  .job-card .status { font-weight: 600; color: #0f172a; }
-  .job-card dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 8px 0 0 0; font-size: 0.85rem; }
-  .job-card dt { color: #64748b; }
-  .job-card dd { margin: 0; color: #0f172a; }
-  .job-detail-modal { position: fixed; inset: 0; z-index: 100; display: flex; align-items: flex-start; justify-content: center; }
-  .job-detail-modal .backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.55); }
-  .job-detail-modal .dialog { position: relative; margin: 48px auto; max-width: 720px; width: 90%; background: #fff; border-radius: 8px; box-shadow: 0 20px 45px rgba(15, 23, 42, 0.18); overflow: hidden; z-index: 1; }
-  .job-detail-modal.hidden { display: none !important; }
-  .job-detail-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; border-bottom: 1px solid #e2e8f0; }
-  .job-detail-header h2 { margin: 0; font-size: 1.1rem; }
-  .job-detail-close { border: none; background: transparent; font-size: 1.4rem; cursor: pointer; line-height: 1; }
-  #job-detail-modal-body { max-height: 70vh; overflow-y: auto; }
-  #job-detail-modal-body .job-detail { padding: 20px 24px; }
-  .job-detail-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; margin: 16px 0; }
-  .job-detail-grid .label { display: block; font-size: 0.75rem; text-transform: uppercase; color: #475569; letter-spacing: 0.05em; }
-  .detail-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px 16px; }
-  .detail-list dt { font-size: 0.75rem; color: #475569; text-transform: uppercase; letter-spacing: 0.05em; }
-  .detail-list dd { margin: 0; font-size: 0.9rem; color: #0f172a; }
-  .log-excerpt { background: #0f172a; color: #e2e8f0; padding: 12px; border-radius: 4px; max-height: 200px; overflow: auto; }
-  .btn { display: inline-block; background: #2563eb; color: #fff; padding: 6px 12px; border-radius: 4px; text-decoration: none; font-size: 0.9rem; border: none; cursor: pointer; }
-</style>
 {% endblock %}
 {% block content %}
-  <h2>Case {{ case.id }}</h2>
-  <p>{{ case.title }}</p>
-
-  {% if job_summary %}
-  <section class="job-summary">
-    <div class="card"><span class="label">Jobs</span><span class="value">{{ job_summary.total|default:0 }}</span></div>
-    <div class="card"><span class="label">Succeeded</span><span class="value">{{ job_summary.succeeded|default:0 }}</span></div>
-    <div class="card"><span class="label">Running</span><span class="value">{{ job_summary.running|default:0 }}</span></div>
-    <div class="card"><span class="label">Pending</span><span class="value">{{ job_summary.pending|default:0 }}</span></div>
-    <div class="card"><span class="label">Failed</span><span class="value">{{ job_summary.failed|default:0 }}</span></div>
-  </section>
-  <p class="job-summary-meta">Last updated: {% if job_summary.last_update %}<time datetime="{{ job_summary.last_update }}">{{ job_summary.last_update }}</time>{% else %}—{% endif %}</p>
-  {% endif %}
-
-  <h3>Create Transcription Job</h3>
-  <form id="job-form" method="post" enctype="multipart/form-data"
-        hx-post="/cases/{{ case.id }}/jobs/new"
-        hx-encoding="multipart/form-data"
-        hx-target="#jobs-body" hx-swap="afterbegin">
-    {% csrf_token %}
-    <label>Mode:
-      <select name="mode">
-        <option value="on-demand">On-demand</option>
-        <option value="batch">Batch (Diarization supported)</option>
-      </select>
-    </label>
-    <label>Language: <input type="text" name="language" value="en-CA"></label>
-    <label><input type="checkbox" name="diarization"> Diarization (batch only)</label>
-    <br>
-    <label>Audio file: <input type="file" name="audio" accept="audio/*"></label>
-    <details>
-      <summary>Or use SAS URL</summary>
-      <label>SAS URL: <input type="url" name="audio_url" placeholder="https://...?"></label>
-    </details>
-    <button type="submit" class="hide-during-request">Start Job</button>
-    <span class="show-during-request">Uploading… <span id="upload-info"></span></span>
-    <div id="upload-progress" class="progress show-during-request"><div class="bar"></div></div>
-  </form>
-
-  <h3>Jobs</h3>
-  <table>
-    <thead><tr><th>ID</th><th>Mode</th><th>Status</th><th>Transcript</th><th>Logs</th><th>Created</th><th>Details</th></tr></thead>
-    <tbody id="jobs-body">
-      {% for j in jobs %}
-        {% include "ui/_job_row.html" with j=j %}
-      {% empty %}
-      <tr><td colspan="7">No jobs yet.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-
-  {% if job_insights %}
-  <h3>Recent Diagnostics</h3>
-  <div class="job-cards">
-    {% for info in job_insights|slice:":4" %}
-      <div class="job-card">
-        <h4><code>{{ info.id }}</code></h4>
-        <div class="status">{{ info.status }}</div>
-        <dl>
-          <dt>Audio</dt><dd>{% if info.audio %}{{ info.audio.original_name|default:"—" }}{% else %}—{% endif %}</dd>
-          <dt>Region</dt><dd>{% if info.agent %}{{ info.agent.region|default:"—" }}{% else %}—{% endif %}</dd>
-          <dt>Words</dt><dd>{% if info.transcript %}{{ info.transcript.words|default:"—" }}{% else %}—{% endif %}</dd>
-          <dt>Diarization</dt><dd>{% if info.diarization %}Yes{% else %}No{% endif %}</dd>
-        </dl>
+  <section class="space-y-6">
+    <div class="flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/10 p-6 shadow-lg shadow-black/30 lg:flex-row lg:items-center lg:justify-between">
+      <div>
+        <p class="text-xs uppercase tracking-wide text-slate-300">Case</p>
+        <h1 class="mt-1 text-3xl font-semibold text-white">{{ case.title|default:case.id }}</h1>
+        <p class="mt-2 text-sm text-slate-300">Managed by {{ case.organization.name }} · ID <span class="font-mono text-primary-200">{{ case.id }}</span></p>
       </div>
-    {% endfor %}
-  </div>
-  {% endif %}
+      <div class="flex gap-4 text-sm text-slate-200">
+        <div class="rounded-xl border border-white/10 bg-slate-900/60 px-4 py-3 text-center">
+          <p class="text-xs uppercase tracking-wide text-slate-400">Created</p>
+          <time class="mt-1 block text-white" data-ts="{{ case.created_at|date:'c' }}">{{ case.created_at }}</time>
+        </div>
+        <div class="rounded-xl border border-primary-500/40 bg-primary-500/20 px-4 py-3 text-center">
+          <p class="text-xs uppercase tracking-wide text-primary-200">Jobs</p>
+          <p class="mt-1 text-xl font-semibold text-white">{{ job_summary.total|default:0 }}</p>
+        </div>
+        <div class="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-center">
+          <p class="text-xs uppercase tracking-wide text-emerald-200">Succeeded</p>
+          <p class="mt-1 text-xl font-semibold text-emerald-100">{{ job_summary.succeeded|default:0 }}</p>
+        </div>
+      </div>
+    </div>
 
-  <div id="job-detail-modal" class="job-detail-modal hidden">
-    <div class="backdrop" onclick="window.udocketCloseJobDetail()"></div>
-    <div class="dialog">
-      <div id="job-detail-modal-body"></div>
+    <div class="grid gap-6 lg:grid-cols-[3fr,2fr]">
+      <div class="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-black/25">
+        <h2 class="text-lg font-semibold text-white">Launch transcription</h2>
+        <p class="mt-2 text-sm text-slate-300">Upload an audio file or provide a SAS URL. Selecting diarization automatically switches to batch mode.</p>
+        <form id="job-form" method="post" enctype="multipart/form-data" class="mt-6 space-y-5"
+              hx-post="/cases/{{ case.id }}/jobs/new"
+              hx-encoding="multipart/form-data"
+              hx-target="#jobs-body" hx-swap="afterbegin">
+          {% csrf_token %}
+          <div class="grid gap-4 md:grid-cols-2">
+            <label class="flex flex-col text-sm text-slate-200">Mode
+              <select name="mode" class="mt-1 rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-sm focus:border-primary-400 focus:outline-none">
+                <option value="on-demand">On-demand</option>
+                <option value="batch">Batch (supports diarization)</option>
+              </select>
+            </label>
+            <label class="flex flex-col text-sm text-slate-200">Language
+              <input type="text" name="language" value="en-CA" class="mt-1 rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-sm focus:border-primary-400 focus:outline-none">
+            </label>
+          </div>
+          <label class="inline-flex items-center gap-2 text-sm text-slate-200">
+            <input type="checkbox" name="diarization" class="h-4 w-4 rounded border-white/20 bg-slate-900/70 text-primary-500 focus:ring-primary-400">
+            Enable diarization (auto-switches to batch)
+          </label>
+          <div class="grid gap-4 md:grid-cols-2">
+            <label class="flex flex-col text-sm text-slate-200">Audio file
+              <input type="file" name="audio" accept="audio/*" class="mt-1 w-full cursor-pointer rounded-lg border border-dashed border-white/20 bg-slate-900/50 px-3 py-3 text-sm text-slate-200 file:mr-4 file:rounded-md file:border-0 file:bg-primary-500 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-primary-400">
+            </label>
+            <label class="flex flex-col text-sm text-slate-200">Or SAS URL
+              <input type="url" name="audio_url" placeholder="https://storage.azure.com/..." class="mt-1 rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-sm focus:border-primary-400 focus:outline-none">
+            </label>
+          </div>
+          <div class="flex items-center justify-between rounded-xl border border-white/10 bg-slate-900/60 px-4 py-3 text-xs text-slate-300">
+            <div>
+              <span class="font-semibold text-primary-200">Tip:</span> Azure batch mode supports long hearings and diarization.
+            </div>
+            <div id="upload-progress" class="hidden h-2 w-28 rounded-full bg-white/10">
+              <div class="progress-bar h-full w-0 rounded-full bg-primary-400 transition-all"></div>
+            </div>
+          </div>
+          <div class="flex justify-end gap-3">
+            <button type="submit" class="hide-during-request inline-flex items-center gap-2 rounded-lg bg-primary-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-primary-500/30 transition hover:bg-primary-400">
+              Launch transcription
+            </button>
+            <span class="show-during-request hidden items-center gap-2 text-sm text-slate-200">
+              <svg class="h-4 w-4 animate-spin text-primary-300" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke-width="4"></circle>
+                <path class="opacity-75" d="M4 12a8 8 0 018-8" stroke-width="4"></path>
+              </svg>
+              Uploading… <span id="upload-info"></span>
+            </span>
+          </div>
+        </form>
+      </div>
+
+      <div class="space-y-4">
+        <div class="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-black/25">
+          <h2 class="text-lg font-semibold text-white">Last activity</h2>
+          <p class="mt-1 text-sm text-slate-300">{% if job_summary.last_update %}Updated <time data-ts="{{ job_summary.last_update }}">{{ job_summary.last_update }}</time>{% else %}No jobs yet.{% endif %}</p>
+          <div class="mt-4 space-y-3 text-sm text-slate-200">
+            <div class="rounded-xl border border-white/10 bg-slate-900/50 p-4">
+              <p class="text-xs uppercase tracking-wide text-slate-400">Case ID</p>
+              <p class="mt-1 font-mono text-primary-200">{{ case.id }}</p>
+            </div>
+            <div class="rounded-xl border border-white/10 bg-slate-900/50 p-4">
+              <p class="text-xs uppercase tracking-wide text-slate-400">Organization</p>
+              <p class="mt-1 text-slate-100">{{ case.organization.name }}</p>
+            </div>
+          </div>
+        </div>
+
+        {% if job_insights %}
+        <div class="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-black/25">
+          <h2 class="text-lg font-semibold text-white">Recent diagnostics</h2>
+          <div class="mt-4 space-y-3">
+            {% for info in job_insights|slice:":5" %}
+            <div class="rounded-xl border border-white/10 bg-slate-900/50 p-4">
+              <div class="flex items-center justify-between">
+                <code class="text-xs text-primary-200">{{ info.id }}</code>
+                <span class="rounded-full border border-white/10 bg-white/10 px-2 py-0.5 text-xs text-slate-200">{{ info.status }}</span>
+              </div>
+              <dl class="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs text-slate-300">
+                <div><dt class="uppercase tracking-wide text-slate-500">Region</dt><dd class="text-slate-200">{{ info.agent.region|default:"—" }}</dd></div>
+                <div><dt class="uppercase tracking-wide text-slate-500">Words</dt><dd class="text-slate-200">{{ info.transcript.words|default:"—" }}</dd></div>
+                <div><dt class="uppercase tracking-wide text-slate-500">Audio</dt><dd class="text-slate-200">{{ info.audio.original_name|default:"—" }}</dd></div>
+                <div><dt class="uppercase tracking-wide text-slate-500">Diarization</dt><dd class="text-slate-200">{% if info.diarization %}Yes{% else %}No{% endif %}</dd></div>
+              </dl>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="rounded-2xl border border-white/10 bg-white/5 shadow-xl shadow-black/30">
+      <div class="flex items-center justify-between border-b border-white/10 px-6 py-4">
+        <h2 class="text-lg font-semibold text-white">Jobs</h2>
+        <span class="text-xs uppercase tracking-wide text-slate-400">Live updates</span>
+      </div>
+      <div class="overflow-hidden">
+        <table class="min-w-full divide-y divide-white/10 text-sm">
+          <thead class="bg-white/5 text-left text-xs uppercase tracking-wide text-slate-400">
+            <tr>
+              <th class="px-4 py-3">ID</th>
+              <th class="px-4 py-3">Mode</th>
+              <th class="px-4 py-3">Status</th>
+              <th class="px-4 py-3">Transcript</th>
+              <th class="px-4 py-3">Logs</th>
+              <th class="px-4 py-3">Created</th>
+              <th class="px-4 py-3 text-right">Details</th>
+            </tr>
+          </thead>
+          <tbody id="jobs-body" class="divide-y divide-white/5 bg-slate-900/40 text-slate-100">
+            {% for j in jobs %}
+              {% include "ui/_job_row.html" with j=j %}
+            {% empty %}
+            <tr>
+              <td colspan="7" class="px-4 py-6 text-center text-slate-400">No jobs yet.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <div id="job-detail-modal" class="hidden fixed inset-0 z-50 items-start justify-center">
+    <div class="fixed inset-0 bg-slate-950/70 backdrop-blur" onclick="window.udocketCloseJobDetail()"></div>
+    <div class="relative mx-auto mt-16 w-full max-w-3xl rounded-2xl border border-white/10 bg-slate-900/95 shadow-2xl shadow-black/50">
+      <div id="job-detail-modal-body" class="max-h-[70vh] overflow-y-auto"></div>
     </div>
   </div>
 {% endblock %}

@@ -1,54 +1,93 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="h-full">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>uDocket Platform</title>
-  <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 24px; }
-    header { margin-bottom: 16px; }
-    .container { max-width: 960px; margin: 0 auto; }
-    .error { color: #b00020; }
-    .ok { color: #006400; }
-    table { border-collapse: collapse; width: 100%; }
-    th, td { padding: 8px; border-bottom: 1px solid #ddd; text-align: left; }
-    code { background: #f6f6f6; padding: 2px 4px; }
-  </style>
+  <script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio"></script>
   <script>
-    // Render ISO timestamps to the browser's local time
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              50: '#ecf3ff',
+              100: '#dae7ff',
+              200: '#b9d1ff',
+              300: '#8eb4ff',
+              400: '#5b8bff',
+              500: '#3363f5',
+              600: '#2648d1',
+              700: '#1f3ab1',
+              800: '#1d338d',
+              900: '#1b2e72',
+            }
+          }
+        }
+      }
+    }
+
     function renderLocalTimes(){
-      document.querySelectorAll('time[data-ts]').forEach(el => {
+      document.querySelectorAll('[data-ts]').forEach(el => {
         const iso = el.getAttribute('data-ts');
-        if(!iso) return;
+        if (!iso) return;
         const d = new Date(iso);
-        if(!isNaN(d.getTime())){
+        if (!isNaN(d.getTime())) {
           el.textContent = d.toLocaleString();
-          el.title = d.toISOString();
+          el.setAttribute('title', d.toISOString());
         }
       });
     }
     window.addEventListener('DOMContentLoaded', renderLocalTimes);
   </script>
+  <style>
+    .htmx-request .hide-during-request { display: none !important; }
+    .show-during-request { display: none !important; }
+    .htmx-request .show-during-request { display: inline-flex !important; }
+  </style>
   {% block head %}{% endblock %}
   {% csrf_token %}
 </head>
-<body>
-  <div class="container">
-    <header>
-      <h1><a href="/">uDocket Platform</a></h1>
-      <nav>
-        <a href="/">Cases</a> · <a href="/jobs/">Jobs</a>
-        <span style="float:right">
+<body class="min-h-full bg-slate-900 text-slate-100">
+  <div class="relative min-h-screen pb-24">
+    <div class="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-900 to-slate-950"></div>
+    <header class="relative z-10 border-b border-white/10 bg-white/5 backdrop-blur">
+      <div class="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+        <a href="/" class="flex items-center gap-3 text-lg font-semibold text-white">
+          <span class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-500/90 text-white shadow-lg">uD</span>
+          <span>uDocket Platform</span>
+        </a>
+        <nav class="flex items-center gap-6 text-sm font-medium text-slate-200">
+          <a href="/" class="transition hover:text-white">Cases</a>
+          <a href="/jobs/" class="transition hover:text-white">Jobs</a>
+          <a href="/permissions/" class="transition hover:text-white">Permissions</a>
+        </nav>
+        <div class="flex items-center gap-4 text-sm text-slate-200">
           {% if request.user.is_authenticated %}
-            {{ request.user.display_name|default:request.user.username }} · <a href="/logout/">Logout</a>
+            <div class="flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1">
+              <span class="inline-flex h-2 w-2 rounded-full bg-emerald-400"></span>
+              {{ request.user.display_name|default:request.user.username }}
+            </div>
+            <a href="/logout/" class="rounded-md border border-white/10 px-3 py-1 text-slate-200 transition hover:border-primary-400 hover:text-white">Logout</a>
           {% else %}
-            <a href="/oidc/authenticate/">Login</a>
+            <a href="/oidc/authenticate/" class="rounded-md bg-primary-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-primary-500/30 transition hover:bg-primary-400">Login</a>
           {% endif %}
-        </span>
-      </nav>
+        </div>
+      </div>
     </header>
-    {% if error %}<p class="error">{{ error }}</p>{% endif %}
-    {% block content %}{% endblock %}
+
+    <main class="relative z-10 mx-auto max-w-6xl px-6 py-8">
+      {% if error %}
+        <div class="mb-6 rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+          {{ error }}
+        </div>
+      {% endif %}
+      {% block content %}{% endblock %}
+    </main>
+
+    <footer class="relative z-10 mt-12 border-t border-white/10 bg-white/5 py-6 text-center text-xs text-slate-400">
+      uDocket Platform · Build resilient case operations with trustworthy transcripts & analysis
+    </footer>
   </div>
 </body>
 </html>

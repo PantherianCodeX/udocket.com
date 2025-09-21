@@ -3,88 +3,123 @@
 <script src="https://unpkg.com/htmx.org@1.9.12"></script>
 <script>
   window.jobPollers = window.jobPollers || {};
+
   function connectWS(jobId) {
-    const el = document.getElementById('job-status-' + jobId);
-    const linkEl = document.getElementById('job-transcript-' + jobId);
-    const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws/jobs/' + jobId + '/';
+    const statusEl = document.getElementById(`job-status-${jobId}`);
+    const transcriptEl = document.getElementById(`job-transcript-${jobId}`);
+    const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + `/ws/jobs/${jobId}/`;
     const ws = new WebSocket(url);
     ws.onmessage = (ev) => {
       try {
         const data = JSON.parse(ev.data);
-        if (data.status && el) {
-          el.textContent = data.status;
+        if (data.status && statusEl) statusEl.textContent = data.status;
+        const transcriptPath = data.transcript_file || data.transcript_path;
+        if (transcriptEl && (transcriptPath || (statusEl && statusEl.textContent === 'SUCCEEDED'))) {
+          transcriptEl.innerHTML = `<a class="font-medium text-primary-300 underline" href="/api/v1/jobs/${data.job_id || jobId}/download/">Download</a>`;
         }
-        const tfile = data.transcript_file || data.transcript_path;
-        if (linkEl && (tfile || (el && el.textContent === 'SUCCEEDED'))) {
-          linkEl.innerHTML = '<a href="/api/v1/jobs/' + (data.job_id || jobId) + '/download/">download</a>';
+        if (statusEl && ['SUCCEEDED', 'FAILED'].includes(statusEl.textContent)) {
+          clearInterval(window.jobPollers[jobId]);
+          delete window.jobPollers[jobId];
         }
-        if (el && (el.textContent === 'SUCCEEDED' || el.textContent === 'FAILED')) {
-          if (window.jobPollers[jobId]) { clearInterval(window.jobPollers[jobId]); delete window.jobPollers[jobId]; }
-        }
-      } catch (e) {}
+      } catch (_) {}
     };
   }
 
   async function pollJob(jobId) {
     try {
-      const resp = await fetch('/api/v1/jobs/' + jobId + '/status/');
+      const resp = await fetch(`/api/v1/jobs/${jobId}/status/`);
       if (!resp.ok) return;
       const data = await resp.json();
-      const el = document.getElementById('job-status-' + jobId);
-      const linkEl = document.getElementById('job-transcript-' + jobId);
-      if (el && data.status) el.textContent = data.status;
-      const tfile = data.transcript_path;
-      if (linkEl && (tfile || (el && el.textContent === 'SUCCEEDED'))) {
-        linkEl.innerHTML = '<a href="/api/v1/jobs/' + jobId + '/download/">download</a>';
+      const statusEl = document.getElementById(`job-status-${jobId}`);
+      const transcriptEl = document.getElementById(`job-transcript-${jobId}`);
+      if (statusEl && data.status) statusEl.textContent = data.status;
+      if (transcriptEl && (data.transcript_path || (statusEl && statusEl.textContent === 'SUCCEEDED'))) {
+        transcriptEl.innerHTML = `<a class="font-medium text-primary-300 underline" href="/api/v1/jobs/${jobId}/download/">Download</a>`;
       }
-      if (el && (el.textContent === 'SUCCEEDED' || el.textContent === 'FAILED')) {
-        if (window.jobPollers[jobId]) { clearInterval(window.jobPollers[jobId]); delete window.jobPollers[jobId]; }
+      if (statusEl && ['SUCCEEDED', 'FAILED'].includes(statusEl.textContent)) {
+        clearInterval(window.jobPollers[jobId]);
+        delete window.jobPollers[jobId];
       }
-    } catch (e) { }
+    } catch (_) {}
   }
 
   function ensurePolling(jobId) {
     if (window.jobPollers[jobId]) return;
-    const el = document.getElementById('job-status-' + jobId);
-    if (!el) return;
-    if (el.textContent === 'SUCCEEDED' || el.textContent === 'FAILED') return;
+    const statusEl = document.getElementById(`job-status-${jobId}`);
+    if (!statusEl) return;
+    if (['SUCCEEDED', 'FAILED'].includes(statusEl.textContent)) return;
     window.jobPollers[jobId] = setInterval(() => pollJob(jobId), 2000);
   }
-  window.addEventListener('DOMContentLoaded', () => {
-    document.querySelectorAll('[data-job]').forEach(n => {
-      const jid = n.dataset.job;
-      if (!n.dataset.ws) { connectWS(jid); n.dataset.ws='1'; }
-      ensurePolling(jid);
+
+  function bootstrapJobs() {
+    document.querySelectorAll('[data-job]').forEach(row => {
+      const jobId = row.dataset.job;
+      if (!row.dataset.ws) {
+        connectWS(jobId);
+        row.dataset.ws = '1';
+      }
+      ensurePolling(jobId);
     });
-  });
-  document.addEventListener('htmx:afterSwap', (e) => {
-    document.querySelectorAll('tr[data-job]').forEach(n => {
-      const jid = n.dataset.job;
-      if (!n.dataset.ws) { connectWS(jid); n.dataset.ws='1'; }
-      ensurePolling(jid);
-    });
-    if (window.renderLocalTimes) window.renderLocalTimes();
-  });
+  }
+
+  window.addEventListener('DOMContentLoaded', bootstrapJobs);
+
+  document.addEventListener('htmx:afterSwap', bootstrapJobs);
 </script>
 {% endblock %}
 {% block content %}
-  <h2>Jobs</h2>
-  <table>
-    <thead><tr><th>ID</th><th>Case</th><th>Mode</th><th>Status</th><th>Transcript</th><th>Logs</th><th>Created</th></tr></thead>
-    <tbody id="jobs-body">
-      {% for j in jobs %}
-        <tr data-job="{{ j.id }}">
-          <td><code>{{ j.id }}</code></td>
-          <td><a href="/cases/{{ j.case_id }}/">{{ j.case_id }}</a></td>
-          <td>{{ j.mode }}</td>
-          <td id="job-status-{{ j.id }}">{{ j.status }}</td>
-          <td id="job-transcript-{{ j.id }}">{% if j.transcript_path %}<a href="/api/v1/jobs/{{ j.id }}/download/">download</a>{% else %}—{% endif %}</td>
-          <td><a href="/api/v1/jobs/{{ j.id }}/logs/">view</a></td>
-          <td><time data-ts="{{ j.created_at|date:'c' }}"></time></td>
-        </tr>
-      {% empty %}
-      <tr><td colspan="7">No jobs yet.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <section class="space-y-6">
+    <div class="rounded-2xl border border-white/10 bg-white/10 p-6 shadow-lg shadow-black/30">
+      <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p class="text-xs uppercase tracking-wide text-slate-300">Global Jobs</p>
+          <h1 class="text-3xl font-semibold text-white">Recent transcription jobs</h1>
+          <p class="mt-2 text-sm text-slate-300">Monitoring all tenant jobs helps operations respond quickly to failures and long-running tasks.</p>
+        </div>
+        <div class="rounded-xl border border-white/10 bg-slate-900/60 px-4 py-3 text-center text-sm text-slate-200">
+          <p class="text-xs uppercase tracking-wide text-slate-400">Displayed</p>
+          <p class="mt-1 text-xl font-semibold text-white">{{ jobs|length }}</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="rounded-2xl border border-white/10 bg-white/5 shadow-xl shadow-black/30">
+      <div class="flex items-center justify-between border-b border-white/10 px-6 py-4">
+        <h2 class="text-lg font-semibold text-white">Jobs</h2>
+        <span class="text-xs uppercase tracking-wide text-slate-400">Live updates</span>
+      </div>
+      <div class="overflow-hidden">
+        <table class="min-w-full divide-y divide-white/10 text-sm">
+          <thead class="bg-white/5 text-left text-xs uppercase tracking-wide text-slate-400">
+            <tr>
+              <th class="px-4 py-3">ID</th>
+              <th class="px-4 py-3">Case</th>
+              <th class="px-4 py-3">Mode</th>
+              <th class="px-4 py-3">Status</th>
+              <th class="px-4 py-3">Transcript</th>
+              <th class="px-4 py-3">Logs</th>
+              <th class="px-4 py-3">Created</th>
+            </tr>
+          </thead>
+          <tbody id="jobs-body" class="divide-y divide-white/5 bg-slate-900/40 text-slate-100">
+            {% for j in jobs %}
+            <tr data-job="{{ j.id }}" class="transition hover:bg-white/10">
+              <td class="px-4 py-3 font-mono text-xs text-primary-200">{{ j.id }}</td>
+              <td class="px-4 py-3 text-primary-200"><a class="underline" href="/cases/{{ j.case_id }}/">{{ j.case_id }}</a></td>
+              <td class="px-4 py-3 text-slate-200 capitalize">{{ j.mode }}</td>
+              <td class="px-4 py-3" id="job-status-{{ j.id }}">{{ j.status }}</td>
+              <td class="px-4 py-3" id="job-transcript-{{ j.id }}">{% if j.transcript_path %}<a class="font-medium text-primary-300 underline" href="/api/v1/jobs/{{ j.id }}/download/">Download</a>{% else %}—{% endif %}</td>
+              <td class="px-4 py-3 text-primary-200"><a class="underline" href="/api/v1/jobs/{{ j.id }}/logs/">Logs</a></td>
+              <td class="px-4 py-3 text-slate-300"><time data-ts="{{ j.created_at|date:'c' }}">{{ j.created_at }}</time></td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="7" class="px-4 py-6 text-center text-slate-400">No jobs yet.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
 {% endblock %}
