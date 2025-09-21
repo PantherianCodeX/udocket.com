@@ -246,6 +246,11 @@ def transcribe_job(
     try:
         if job_obj is None:
             job_obj = Job.objects.get(pk=job_id)
+        else:
+            try:
+                job_obj.refresh_from_db()
+            except Exception:
+                job_obj = Job.objects.get(pk=job_id)
         if job_obj.status == Job.Status.CANCELLED:
             log.info("job cancelled during execution; ignoring transcription output", extra={"job_id": job_id})
             return {"status": Job.Status.CANCELLED, "job_id": job_id, "case_id": case_id}
