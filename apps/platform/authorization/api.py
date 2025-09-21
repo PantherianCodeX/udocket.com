@@ -27,17 +27,18 @@ def registry_fields(_request):
 @permission_classes([AllowAny])
 def list_presets(_request):
     presets = []
-    for p in PermissionPreset.objects.all().order_by("slug"):
+    for p in PermissionPreset.objects.all().order_by("name"):
         caps = list(PresetCapability.objects.filter(preset=p).values_list("capability", flat=True))
         fps = [
             {"type": fp.type, "field": fp.field_name, "actions": list(fp.actions or [])}
             for fp in PresetFieldPolicy.objects.filter(preset=p)
         ]
         presets.append({
-            "slug": p.slug,
+            "uuid": str(p.uuid),
             "name": p.name,
             "description": p.description,
             "system": p.system,
+            "organization": p.organization_id,
             "capabilities": caps,
             "field_policies": fps,
         })
@@ -48,12 +49,14 @@ def list_presets(_request):
 @permission_classes([AllowAny])
 def list_roles(_request):
     roles = []
-    for r in Role.objects.all().prefetch_related("presets").order_by("slug"):
+    for r in Role.objects.all().prefetch_related("presets").order_by("name"):
+        caps = role_capabilities(r.name, organization_id=r.organization_id)
         roles.append({
-            "slug": r.slug,
+            "uuid": str(r.uuid),
             "name": r.name,
             "system": r.system,
-            "presets": [p.slug for p in r.presets.all()],
-            "capabilities": sorted(list(role_capabilities(r.slug))),
+            "organization": r.organization_id,
+            "presets": [p.name for p in r.presets.all()],
+            "capabilities": sorted(list(caps)),
         })
     return Response({"roles": roles})

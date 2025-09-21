@@ -75,12 +75,13 @@ def permissions_overview(request: HttpRequest) -> HttpResponse:
     }
 
     presets = []
-    for preset in PermissionPreset.objects.all().order_by("slug"):
+    for preset in PermissionPreset.objects.all().order_by("name"):
         caps = list(
             PresetCapability.objects.filter(preset=preset).values_list("capability", flat=True)
         )
         policies = [
             {
+                "resource": fp.resource,
                 "type": fp.type,
                 "field": fp.field_name,
                 "actions": list(fp.actions or []),
@@ -89,24 +90,27 @@ def permissions_overview(request: HttpRequest) -> HttpResponse:
         ]
         presets.append(
             {
-                "slug": preset.slug,
+                "uuid": str(preset.uuid),
                 "name": preset.name,
                 "description": preset.description,
                 "system": preset.system,
+                "organization": preset.organization_id,
                 "capabilities": caps,
                 "field_policies": policies,
             }
         )
 
     roles = []
-    for role in Role.objects.all().prefetch_related("presets").order_by("slug"):
+    for role in Role.objects.all().prefetch_related("presets").order_by("name"):
+        caps = role_capabilities(role.name, organization_id=role.organization_id)
         roles.append(
             {
-                "slug": role.slug,
+                "uuid": str(role.uuid),
                 "name": role.name,
                 "system": role.system,
-                "presets": [p.slug for p in role.presets.all()],
-                "capabilities": sorted(role_capabilities(role.slug)),
+                "organization": role.organization_id,
+                "presets": [p.name for p in role.presets.all()],
+                "capabilities": sorted(caps),
             }
         )
 

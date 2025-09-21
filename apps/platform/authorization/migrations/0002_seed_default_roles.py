@@ -12,7 +12,7 @@ def seed_roles(apps, schema_editor):
         },
         'CONTRIBUTOR': {
             'name': 'Contributor', 'system': True,
-            'caps': ['case.view','case.update','job.create','artifact.view','artifact.download','artifact.field.path.view','artifact.field.checksum.view']
+            'caps': ['case.view','job.create','artifact.view','artifact.download','artifact.field.path.view','artifact.field.checksum.view']
         },
         'REVIEWER': {
             'name': 'Reviewer', 'system': True,
@@ -25,6 +25,10 @@ def seed_roles(apps, schema_editor):
         'EXTERNAL': {
             'name': 'External', 'system': True,
             'caps': ['case.view','artifact.view']
+        },
+        'CLIENT': {
+            'name': 'Client', 'system': True,
+            'caps': ['case.view','artifact.view','artifact.download']
         },
     }
     for slug, cfg in defaults.items():

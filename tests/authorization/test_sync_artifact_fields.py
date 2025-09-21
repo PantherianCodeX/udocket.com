@@ -9,7 +9,7 @@ from apps.platform.artifacts.registry import artifact_field_keys
 
 class SyncArtifactFieldsCommandTests(TestCase):
     def setUp(self) -> None:
-        self.preset = PermissionPreset.objects.create(slug="test", name="Test Preset")
+        self.preset = PermissionPreset.objects.create(name="Test Preset")
 
     def test_check_detects_missing(self) -> None:
         with self.assertRaises(CommandError):
@@ -19,7 +19,8 @@ class SyncArtifactFieldsCommandTests(TestCase):
         call_command("sync_artifact_fields")
         expected = artifact_field_keys()
         actual = set(
-            PresetFieldPolicy.objects.filter(preset=self.preset).values_list("type", "field_name")
+            PresetFieldPolicy.objects.filter(preset=self.preset, resource="ARTIFACT")
+            .values_list("type", "field_name")
         )
         self.assertEqual(expected, actual)
         for policy in PresetFieldPolicy.objects.filter(preset=self.preset):
@@ -32,6 +33,7 @@ class SyncArtifactFieldsCommandTests(TestCase):
             [
                 PresetFieldPolicy(
                     preset=self.preset,
+                    resource="ARTIFACT",
                     type="UNKNOWN",
                     field_name="foo",
                     actions=["view"],
@@ -48,6 +50,7 @@ class SyncArtifactFieldsCommandTests(TestCase):
         call_command("sync_artifact_fields", "--no-apply")
         expected = artifact_field_keys()
         remaining = set(
-            PresetFieldPolicy.objects.filter(preset=self.preset).values_list("type", "field_name")
+            PresetFieldPolicy.objects.filter(preset=self.preset, resource="ARTIFACT")
+            .values_list("type", "field_name")
         )
         self.assertEqual(set(), remaining)

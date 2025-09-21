@@ -40,6 +40,7 @@ class CaseMembership(models.Model):
         REVIEWER = "REVIEWER", "Reviewer"
         AUDITOR = "AUDITOR", "Auditor"
         EXTERNAL = "EXTERNAL", "External"
+        CLIENT = "CLIENT", "Client"
 
     case = models.ForeignKey(Case, on_delete=models.CASCADE, related_name="memberships")
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="case_memberships")

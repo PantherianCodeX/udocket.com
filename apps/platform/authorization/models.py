@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import uuid
+
 from django.core.exceptions import ValidationError
 from django.db import models
 
@@ -7,6 +9,11 @@ from apps.platform.artifacts.registry import artifact_field
 
 
 FIELD_ACTION_ALLOWLIST = {"view", "download", "update", "create", "delete"}
+
+FIELD_RESOURCE_CHOICES = (
+    ("ARTIFACT", "Artifact"),
+    ("CASE", "Case"),
+)
 
 
 def _normalize_actions(actions: list[str] | tuple[str, ...] | None) -> list[str]:
@@ -23,26 +30,43 @@ def _normalize_actions(actions: list[str] | tuple[str, ...] | None) -> list[str]
             normalized.append(sval)
     return normalized
 
+
 class Role(models.Model):
     """Global role catalog for configurable RBAC.
 
-    These roles can be mapped to external IAM roles or to CaseMemberships.
+    These roles can be mapped to external IAM roles or CaseMemberships.
     """
 
-    slug = models.SlugField(max_length=50, unique=True)
+    uuid = models.UUIDField(editable=False, unique=True, null=True, blank=True)
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
     system = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
+    organization = models.ForeignKey(
+        "accounts.Organization",
+        on_delete=models.CASCADE,
+        related_name="authorization_roles",
+        null=True,
+        blank=True,
+    )
     # Attach preset bundles to roles
     # Defined below but string-referenced to avoid ordering issues
     presets = models.ManyToManyField("authorization.PermissionPreset", blank=True, related_name="roles")
 
     class Meta:
-        ordering = ["slug"]
+        ordering = ["name"]
+        unique_together = ("organization", "name")
 
     def __str__(self) -> str:  # pragma: no cover - trivial
-        return self.name or self.slug
+        label = self.name or str(self.uuid)
+        if self.organization_id:
+            return f"{label} ({self.organization_id})"
+        return label
+
+    def save(self, *args, **kwargs):  # type: ignore[override]
+        if not self.uuid:
+            self.uuid = uuid.uuid4()
+        super().save(*args, **kwargs)
 
 
 class RoleCapability(models.Model):
@@ -64,21 +88,34 @@ class RoleCapability(models.Model):
         indexes = [models.Index(fields=["capability"])]
 
     def __str__(self) -> str:  # pragma: no cover - trivial
-        return f"{self.role.slug}:{self.capability}"
+        return f"{self.role.name}:{self.capability}"
 
 
 class PermissionPreset(models.Model):
-    slug = models.SlugField(max_length=64, unique=True)
+    uuid = models.UUIDField(editable=False, unique=True, null=True, blank=True)
     name = models.CharField(max_length=120)
     description = models.TextField(blank=True)
     system = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
+    organization = models.ForeignKey(
+        "accounts.Organization",
+        on_delete=models.CASCADE,
+        related_name="authorization_presets",
+        null=True,
+        blank=True,
+    )
 
     class Meta:
-        ordering = ["slug"]
+        ordering = ["name"]
+        unique_together = ("organization", "name")
 
     def __str__(self) -> str:  # pragma: no cover - trivial
-        return self.name or self.slug
+        return self.name or str(self.uuid)
+
+    def save(self, *args, **kwargs):  # type: ignore[override]
+        if not self.uuid:
+            self.uuid = uuid.uuid4()
+        super().save(*args, **kwargs)
 
 
 class PresetCapability(models.Model):
@@ -90,22 +127,23 @@ class PresetCapability(models.Model):
         indexes = [models.Index(fields=["capability"])]
 
     def __str__(self) -> str:  # pragma: no cover - trivial
-        return f"{self.preset.slug}:{self.capability}"
+        return f"{self.preset.name}:{self.capability}"
 
 
 class PresetFieldPolicy(models.Model):
     preset = models.ForeignKey(PermissionPreset, on_delete=models.CASCADE, related_name="field_policies")
-    type = models.CharField(max_length=32)  # artifact type
+    resource = models.CharField(max_length=32, choices=FIELD_RESOURCE_CHOICES, default="ARTIFACT")
+    type = models.CharField(max_length=64)  # artifact or resource subtype
     field_name = models.CharField(max_length=64)
     actions = models.JSONField(default=list, blank=True)  # e.g., ["view", "update", "create", "download"]
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        unique_together = ("preset", "type", "field_name")
-        indexes = [models.Index(fields=["type", "field_name"])]
+        unique_together = ("preset", "resource", "type", "field_name")
+        indexes = [models.Index(fields=["resource", "type", "field_name"])]
 
     def __str__(self) -> str:  # pragma: no cover - trivial
-        return f"{self.preset.slug}:{self.type}.{self.field_name}"
+        return f"{self.preset.name}:{self.resource}:{self.type}.{self.field_name}"
 
     def clean(self) -> None:  # pragma: no cover - validated in tests
         super().clean()
@@ -116,7 +154,7 @@ class PresetFieldPolicy(models.Model):
             raise ValidationError({"field_name": "Field name is required."})
         if artifact_field(self.type, self.field_name) is None:
             raise ValidationError({
-                "field_name": f"Unknown artifact field: {self.type}.{self.field_name}",
+                "field_name": f"Unknown field: {self.type}.{self.field_name}",
             })
         raw_actions = self.actions
         if raw_actions in (None, ""):

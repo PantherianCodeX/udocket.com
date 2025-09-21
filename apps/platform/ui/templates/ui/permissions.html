@@ -43,15 +43,16 @@
     <h2>Permission Presets</h2>
     {% if presets %}
       {% for preset in presets %}
-        <h3>{{ preset.name }} ({{ preset.slug }})</h3>
+        <h3>{{ preset.name }} <small style="color:#666;">{{ preset.uuid }}</small></h3>
         <p>{{ preset.description }}</p>
         <strong>Capabilities:</strong> {{ preset.capabilities|join:", " }}
         {% if preset.field_policies %}
           <table>
-            <thead><tr><th>Artifact Type</th><th>Field</th><th>Actions</th></tr></thead>
+            <thead><tr><th>Resource</th><th>Type</th><th>Field</th><th>Actions</th></tr></thead>
             <tbody>
               {% for policy in preset.field_policies %}
               <tr>
+                <td>{{ policy.resource }}</td>
                 <td>{{ policy.type }}</td>
                 <td>{{ policy.field }}</td>
                 <td>{{ policy.actions|join:", " }}</td>
@@ -74,7 +75,7 @@
         <tbody>
           {% for role in roles %}
           <tr>
-            <td>{{ role.name }} ({{ role.slug }})</td>
+            <td>{{ role.name }}<br><small style="color:#666;">{{ role.uuid }}</small></td>
             <td>{{ role.presets|join:", " }}</td>
             <td>{{ role.capabilities|join:", " }}</td>
           </tr>

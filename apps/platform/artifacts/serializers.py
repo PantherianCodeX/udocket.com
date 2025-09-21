@@ -28,15 +28,28 @@ class FieldPermissionSerializerMixin:
         role = _user_role_for_case(user, getattr(instance, 'case_fk_id', None) or instance.case_id)
         if not role:
             return data
-        rules = {r.field_name: set(r.allowed_roles or []) for r in FieldVisibilityRule.objects.filter(type=instance.type)}
+        rules = {
+            r.field_name: set(r.allowed_roles or [])
+            for r in FieldVisibilityRule.objects.filter(
+                resource=FieldVisibilityRule.Resource.ARTIFACT,
+                type=instance.type,
+            )
+        }
         # FieldVisibilityRule: if rule exists and role not allowed, drop the field
+        org_id = getattr(instance, "organization_id", None)
         for fname in list(data.keys()):
             allowed_roles = rules.get(fname)
             if allowed_roles is not None and role not in allowed_roles:
                 data.pop(fname, None)
                 continue
             # Preset policies: require 'view' action when policies exist
-            acts = allowed_field_actions(role, instance.type, fname)
+            acts = allowed_field_actions(
+                role,
+                instance.type,
+                fname,
+                organization_id=org_id,
+                resource=FieldVisibilityRule.Resource.ARTIFACT,
+            )
             if acts and "view" not in acts:
                 data.pop(fname, None)
         return data

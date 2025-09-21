@@ -65,19 +65,21 @@ class CaseArtifact(models.Model):
 
 
 class FieldVisibilityRule(models.Model):
-    """Defines which roles can see which fields on an artifact type.
+    """Defines which roles can see fields across resources (artifacts, cases, etc.)."""
 
-    Example: type='TRANSCRIPT', field_name='path', allowed_roles=['OWNER','CONTRIBUTOR']
-    """
+    class Resource(models.TextChoices):
+        ARTIFACT = "ARTIFACT", "Artifact"
+        CASE = "CASE", "Case"
 
-    type = models.CharField(max_length=32)
+    resource = models.CharField(max_length=32, choices=Resource.choices, default=Resource.ARTIFACT)
+    type = models.CharField(max_length=64)
     field_name = models.CharField(max_length=64)
     allowed_roles = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        unique_together = ("type", "field_name")
-        indexes = [models.Index(fields=["type", "field_name"])]
+        unique_together = ("resource", "type", "field_name")
+        indexes = [models.Index(fields=["resource", "type", "field_name"])]
 
     def __str__(self) -> str:  # pragma: no cover - trivial
-        return f"{self.type}:{self.field_name}"
+        return f"{self.resource}:{self.type}:{self.field_name}"

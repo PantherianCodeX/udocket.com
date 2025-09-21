@@ -42,9 +42,9 @@ class Command(BaseCommand):
         for preset in presets:
             existing = set((fp.type, fp.field_name) for fp in preset.field_policies.all())
             for key in registry_keys - existing:
-                missing[preset.slug].add(key)
+                missing[preset.name].add(key)
             for key in existing - registry_keys:
-                stale[preset.slug].add(key)
+                stale[preset.name].add(key)
 
         if check_only:
             if missing or (stale and not delete_stale):
@@ -53,14 +53,14 @@ class Command(BaseCommand):
                     problems.append(
                         "missing: "
                         + ", ".join(
-                            f"{slug} -> {sorted(list(keys))}" for slug, keys in sorted(missing.items())
+                            f"{name} -> {sorted(list(keys))}" for name, keys in sorted(missing.items())
                         )
                     )
                 if stale and not delete_stale:
                     problems.append(
                         "stale: "
                         + ", ".join(
-                            f"{slug} -> {sorted(list(keys))}" for slug, keys in sorted(stale.items())
+                            f"{name} -> {sorted(list(keys))}" for name, keys in sorted(stale.items())
                         )
                     )
                 raise CommandError("; ".join(problems))
@@ -72,7 +72,7 @@ class Command(BaseCommand):
         with transaction.atomic():
             if apply_missing and missing:
                 for preset in presets:
-                    todo = missing.get(preset.slug)
+                    todo = missing.get(preset.name)
                     if not todo:
                         continue
                     for artifact_type, field_name in sorted(todo):
@@ -87,7 +87,7 @@ class Command(BaseCommand):
                         created += 1
             if delete_stale and stale:
                 for preset in presets:
-                    extraneous = stale.get(preset.slug)
+                    extraneous = stale.get(preset.name)
                     if not extraneous:
                         continue
                     deleted += PresetFieldPolicy.objects.filter(
@@ -111,4 +111,3 @@ class Command(BaseCommand):
             self.stdout.write(
                 self.style.WARNING("Stale policies remain; rerun with --delete-stale to remove them."),
             )
-

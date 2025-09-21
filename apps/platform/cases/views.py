@@ -37,9 +37,13 @@ class CaseViewSet(viewsets.ModelViewSet):
         user = getattr(request, "user", None)
         role = None
         if user and getattr(user, "is_authenticated", False):
-            m = CaseMembership.objects.filter(case=case, user=user).first()
+            m = CaseMembership.objects.filter(case=case, user=user).select_related("case__organization").first()
             role = m.role if m else None
-        caps = sorted(list(role_capabilities(role))) if role else []
+            org_id = m.case.organization_id if m and m.case_id else None
+        else:
+            role = None
+            org_id = None
+        caps = sorted(list(role_capabilities(role, organization_id=org_id))) if role else []
         return Response({"case": str(case.id), "role": role, "capabilities": caps})
 
     def retrieve(self, request, *args, **kwargs):  # type: ignore[override]

@@ -1,19 +1,39 @@
 from __future__ import annotations
 
+import uuid
+
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 
 
 class Organization(models.Model):
     id = models.CharField(primary_key=True, max_length=64)
+    uid = models.UUIDField(editable=False, unique=True, null=True, blank=True)
     name = models.CharField(max_length=200)
+    display_name = models.CharField(max_length=200, blank=True)
+    address_line1 = models.CharField(max_length=200, blank=True)
+    address_line2 = models.CharField(max_length=200, blank=True)
+    city = models.CharField(max_length=120, blank=True)
+    province = models.CharField(max_length=120, blank=True)
+    postal_code = models.CharField(max_length=20, blank=True)
+    country = models.CharField(max_length=120, blank=True)
+    contact_name = models.CharField(max_length=120, blank=True)
+    contact_email = models.EmailField(blank=True)
+    contact_phone = models.CharField(max_length=50, blank=True)
+    notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["name"]
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return self.name
+
+    def save(self, *args, **kwargs):  # type: ignore[override]
+        if not self.uid:
+            self.uid = uuid.uuid4()
+        super().save(*args, **kwargs)
 
 
 class User(AbstractUser):

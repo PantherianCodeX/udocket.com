@@ -23,4 +23,9 @@ def test_authz_presets_and_roles_endpoints(db, settings):
     roles = rr.json().get("roles")
     assert isinstance(presets, list)
     assert isinstance(roles, list)
-
+    if presets:
+        assert "organization" in presets[0]
+        assert "uuid" in presets[0]
+    if roles:
+        assert "organization" in roles[0]
+        assert "uuid" in roles[0]

@@ -7,3 +7,4 @@ storage/
 .DS_Store
 *.patch
 *.zip
+celerybeat-schedule

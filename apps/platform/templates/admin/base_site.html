@@ -1,0 +1,22 @@
+{% extends "admin/base.html" %}
+
+{% block nav-global %}
+  {% if admin_org_choices %}
+    <div class="admin-org-switcher" style="display:inline-block; margin-right:1em;">
+      <form method="post" action="{% url 'admin:select_organization' %}">
+        {% csrf_token %}
+        <label style="font-weight:bold; margin-right:4px;">Organization:</label>
+        <select name="organization" onchange="this.form.submit()" style="min-width:180px;">
+          {% if request.user.is_superuser %}
+            <option value="__all__" {% if not admin_active_org_id %}selected{% endif %}>All organizations</option>
+          {% endif %}
+          {% for org in admin_org_choices %}
+            <option value="{{ org.id }}" {% if admin_active_org_id == org.id %}selected{% endif %}>{{ org.name }}</option>
+          {% endfor %}
+        </select>
+        <input type="hidden" name="next" value="{{ request.get_full_path }}" />
+      </form>
+    </div>
+  {% endif %}
+  {{ block.super }}
+{% endblock %}

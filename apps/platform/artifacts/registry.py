@@ -21,6 +21,33 @@ class ArtifactField:
 
 
 ARTIFACT_FIELD_REGISTRY: Dict[str, Dict[str, ArtifactField]] = {
+    "CASE": {
+        "id": ArtifactField(
+            name="id",
+            default_actions=("view",),
+            description="Case identifier",
+        ),
+        "title": ArtifactField(
+            name="title",
+            default_actions=("view",),
+            description="Case title",
+        ),
+        "organization": ArtifactField(
+            name="organization",
+            default_actions=("view",),
+            description="Owning organization identifier",
+        ),
+        "created_at": ArtifactField(
+            name="created_at",
+            default_actions=("view",),
+            description="Case creation timestamp",
+        ),
+        "updated_at": ArtifactField(
+            name="updated_at",
+            default_actions=("view",),
+            description="Case last update timestamp",
+        ),
+    },
     "TRANSCRIPT": {
         "path": ArtifactField(
             name="path",
@@ -82,12 +109,14 @@ def artifact_field(artifact_type: str, field_name: str) -> ArtifactField | None:
 def artifact_field_keys() -> set[tuple[str, str]]:
     """Convenience set of (type, field) keys."""
 
-    return {(atype, field.name) for atype, field in iter_artifact_fields()}
+    return {
+        (atype, field.name)
+        for atype, field in iter_artifact_fields()
+        if atype != "CASE"
+    }
 
 
 def artifact_types() -> Iterable[str]:
     """Return all known artifact types."""
 
     return ARTIFACT_FIELD_REGISTRY.keys()
-
-

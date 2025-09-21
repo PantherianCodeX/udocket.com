@@ -13,7 +13,15 @@
     <tbody>
       {% for row in role_rows %}
       <tr>
-        <td style="vertical-align: top; padding: 4px 8px;">{{ row.slug }} ({{ row.name }})</td>
+        <td style="vertical-align: top; padding: 4px 8px;">
+          {{ row.name }}
+          {% if row.organization %}
+            <small style="color:#555;">({{ row.organization }})</small>
+          {% endif %}
+          {% if row.uuid %}
+            <br><small style="color:#777;">{{ row.uuid }}</small>
+          {% endif %}
+        </td>
         <td style="vertical-align: top; padding: 4px 8px;">{{ row.system }}</td>
         <td style="vertical-align: top; padding: 4px 8px;">
           {% for cap in row.caps %}
