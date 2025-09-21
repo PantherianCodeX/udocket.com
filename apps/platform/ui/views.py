@@ -432,6 +432,22 @@ def case_detail(request: HttpRequest, case_id: str) -> HttpResponse:
 
 
 @require_http_methods(["POST"])
+def case_update_title(request: HttpRequest, case_id: str) -> HttpResponse:
+    auth_response = _ensure_authenticated(request)
+    if auth_response:
+        return auth_response
+
+    case, _ = _get_case_and_org(request, case_id)
+    new_title = (request.POST.get("title") or "").strip()
+    if not new_title:
+        new_title = case.title or case.id
+    if new_title != case.title:
+        case.title = new_title
+        case.save(update_fields=["title"])
+    return render(request, "ui/_case_title.html", {"case": case})
+
+
+@require_http_methods(["POST"])
 def case_assign_reviewer(request: HttpRequest, case_id: str) -> HttpResponse:
     auth_response = _ensure_authenticated(request)
     if auth_response:

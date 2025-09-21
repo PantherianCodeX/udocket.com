@@ -163,6 +163,28 @@
     configEl.textContent = `${modeLabel} · ${diarLabel} · ${language}`;
   }
 
+  function toggleCaseTitleEditor(show) {
+    const wrapper = document.getElementById('case-title-wrapper');
+    if (!wrapper) return;
+    const display = wrapper.querySelector('[data-case-title-display]');
+    const form = wrapper.querySelector('[data-case-title-form]');
+    if (!display || !form) return;
+    if (show) {
+      display.classList.add('hidden');
+      form.classList.remove('hidden');
+      const input = form.querySelector('input[name="title"]');
+      if (input) {
+        requestAnimationFrame(() => {
+          input.focus();
+          input.select();
+        });
+      }
+    } else {
+      display.classList.remove('hidden');
+      form.classList.add('hidden');
+    }
+  }
+
   function updateJobActionButtons(jobId, status) {
     if (!jobId) return;
     const normalized = (status || '').toUpperCase();
@@ -366,21 +388,12 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
 
   function connectWS(jobId) {
     const statusEl = document.getElementById(`job-status-${jobId}`);
-    const transcriptEl = document.getElementById(`job-output-${jobId}`);
     const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + `/ws/jobs/${jobId}/`;
     const ws = new WebSocket(url);
     ws.onmessage = (ev) => {
       try {
         const data = JSON.parse(ev.data);
         if (data.status && statusEl) statusEl.textContent = data.status;
-        const transcriptPath = data.transcript_file || data.transcript_path;
-        if (transcriptEl) {
-          if (transcriptPath) {
-            transcriptEl.innerHTML = `<a class="font-medium text-primary-300 underline" href="/api/v1/jobs/${data.job_id || jobId}/download/">TRANSCRIPT</a>`;
-          } else {
-            transcriptEl.textContent = '—';
-          }
-        }
         window.udocketUpdateTranscriptionStatus(jobId, data);
         updateJobReview(jobId, data);
         if (statusEl && ['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(statusEl.textContent)) {
@@ -397,11 +410,7 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
       if (!resp.ok) return;
       const data = await resp.json();
       const statusEl = document.getElementById(`job-status-${jobId}`);
-      const transcriptEl = document.getElementById(`job-output-${jobId}`);
       if (statusEl && data.status) statusEl.textContent = data.status;
-      if (transcriptEl && (data.transcript_path || (statusEl && statusEl.textContent === 'SUCCEEDED'))) {
-        transcriptEl.innerHTML = `<a class="font-medium text-primary-300 underline" href="/api/v1/jobs/${jobId}/download/">TRANSCRIPT</a>`;
-      }
       window.udocketUpdateTranscriptionStatus(jobId, data);
       updateJobReview(jobId, data);
       if (statusEl && ['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(statusEl.textContent)) {
@@ -623,21 +632,26 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
         if (resp.ok) {
           const data = await resp.json();
           const status = (data.status || 'PENDING').toUpperCase();
-          activeTranscriptionJobId = jobId;
-          setCurrentJob(jobId, status);
-         setTranscriptionStatus({
-           title: 'Restarting transcription…',
-           detail: 'Azure Speech will process the audio again.',
-           progress: null,
+          const replacementId = data.job_id || jobId;
+          if (replacementId && replacementId !== jobId) {
+            window.location.reload();
+            return;
+          }
+          activeTranscriptionJobId = replacementId;
+          setCurrentJob(replacementId, status);
+          setTranscriptionStatus({
+            title: 'Restarting transcription…',
+            detail: 'Azure Speech will process the audio again.',
+            progress: null,
             state: 'running',
             statusName: status,
           });
           setTranscriptionSummary('Job restarting…');
           updateTranscriptionControls(status);
-          updateJobActionButtons(jobId, status);
-          const row = document.querySelector(`[data-job="${jobId}"]`);
+          updateJobActionButtons(replacementId, status);
+          const row = document.querySelector(`[data-job="${replacementId}"]`);
           if (row) row.dataset.jobStatus = status;
-          ensurePolling(jobId);
+          ensurePolling(replacementId);
         }
       } catch (error) {
         console.error('Restart transcription failed', error);
@@ -720,6 +734,20 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
     const inputId = trigger.getAttribute('data-file-input');
     const input = document.getElementById(inputId);
     if (input) input.click();
+  });
+
+  document.addEventListener('click', (evt) => {
+    const editBtn = evt.target.closest('[data-edit-case-title]');
+    if (editBtn) {
+      evt.preventDefault();
+      toggleCaseTitleEditor(true);
+      return;
+    }
+    const cancelBtn = evt.target.closest('[data-cancel-case-title]');
+    if (cancelBtn) {
+      evt.preventDefault();
+      toggleCaseTitleEditor(false);
+    }
   });
 
   document.addEventListener('change', (evt) => {
@@ -827,6 +855,12 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
       updateTranscriptionControls('IDLE');
     }
   });
+
+  document.body.addEventListener('htmx:afterSwap', (evt) => {
+    if (evt.target && evt.target.id === 'case-title-wrapper') {
+      toggleCaseTitleEditor(false);
+    }
+  });
 </script>
 {% endblock %}
 {% block content %}
@@ -834,7 +868,9 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
     <div class="flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/10 p-6 shadow-lg shadow-black/30 lg:flex-row lg:items-stretch">
       <div class="flex-1">
         <p class="text-xs uppercase tracking-wide text-slate-300">Case</p>
-        <h1 class="mt-1 text-3xl font-semibold text-white">{{ case.title|default:case.id }}</h1>
+        <div id="case-title-wrapper" class="mt-1">
+          {% include "ui/_case_title.html" %}
+        </div>
         <p class="mt-2 text-sm text-slate-300">Managed by {{ case.organization.name }} · ID <span class="font-mono text-primary-200">{{ case.id }}</span></p>
         <dl class="mt-4 grid gap-3 text-xs text-slate-300 sm:grid-cols-3">
           <div>
@@ -999,10 +1035,10 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
         <table class="min-w-full divide-y divide-white/10 text-sm">
           <thead class="bg-white/5 text-left text-xs uppercase tracking-wide text-slate-400">
             <tr>
+              <th class="px-4 py-3">Title</th>
               <th class="px-4 py-3">Status</th>
+              <th class="px-4 py-3">Approval</th>
               <th class="px-4 py-3">Agent</th>
-              <th class="px-4 py-3">Output</th>
-              <th class="px-4 py-3">Logs</th>
               <th class="px-4 py-3">Created</th>
               <th class="px-4 py-3 text-right">Actions</th>
               <th class="px-4 py-3 text-right">&nbsp;</th>
@@ -1013,7 +1049,7 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
               {% include "ui/_job_row.html" with j=row.job telem=row.telemetry %}
             {% empty %}
             <tr>
-              <td colspan="6" class="px-4 py-6 text-center text-slate-400">No activity yet.</td>
+              <td colspan="7" class="px-4 py-6 text-center text-slate-400">No activity yet.</td>
             </tr>
             {% endfor %}
           </tbody>

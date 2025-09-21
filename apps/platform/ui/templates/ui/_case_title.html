@@ -1,0 +1,14 @@
+<div class="flex flex-col gap-2" data-case-title-display>
+  <div class="flex items-center gap-3">
+    <h1 class="text-3xl font-semibold text-white" title="{{ case.title|default:case.id }}">{{ case.title|default:case.id }}</h1>
+    <button type="button" class="inline-flex items-center gap-1 rounded border border-white/20 bg-white/10 px-2 py-1 text-xs font-semibold text-slate-200 transition hover:border-primary-400 hover:text-white" data-edit-case-title>Edit</button>
+  </div>
+</div>
+<form class="hidden items-center gap-2" data-case-title-form hx-post="/cases/{{ case.id }}/title" hx-target="#case-title-wrapper" hx-swap="innerHTML">
+  {% csrf_token %}
+  <input type="text" name="title" value="{{ case.title }}" class="w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-white focus:border-primary-400 focus:outline-none" placeholder="Enter case title">
+  <div class="flex items-center gap-2">
+    <button type="submit" class="inline-flex items-center rounded-lg border border-primary-400/40 bg-primary-500/10 px-3 py-1.5 text-xs font-semibold text-primary-100 transition hover:bg-primary-500/25">Save</button>
+    <button type="button" class="inline-flex items-center rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-primary-400 hover:text-white" data-cancel-case-title>Cancel</button>
+  </div>
+</form>
