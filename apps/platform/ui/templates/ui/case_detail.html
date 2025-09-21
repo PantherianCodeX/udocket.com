@@ -20,9 +20,8 @@
       fileName: document.getElementById('module-transcription-file-name'),
       quickSection: document.querySelector('[data-module-quick]'),
       summaryText: document.getElementById('module-transcription-summary-text'),
-      cancelButton: document.querySelector('[data-transcription-cancel]'),
-      restartButton: document.querySelector('[data-transcription-restart]'),
       container: document.querySelector('[data-current-job-id]'),
+      statusPill: document.querySelector('[data-transcription-status-pill]'),
     };
   }
 
@@ -74,7 +73,7 @@
     summaryText.textContent = text;
   }
 
-  function setTranscriptionStatus({ title, detail, progress, state }) {
+  function setTranscriptionStatus({ title, detail, progress, state, statusName }) {
     const {
       statusBox,
       statusTitle,
@@ -83,6 +82,7 @@
       progressBar,
       progressText,
       startButtons,
+      statusPill,
     } = getTranscriptionElements();
 
     if (!statusBox) return;
@@ -105,30 +105,47 @@
         btn.disabled = state === 'running';
       });
     }
+
+    if (statusPill) {
+      const normalized = (statusName || title || '').toUpperCase();
+      const CLASS_MAP = {
+        SUCCEEDED: ['border-emerald-400/40', 'bg-emerald-500/10', 'text-emerald-200'],
+        APPROVED: ['border-emerald-400/40', 'bg-emerald-500/10', 'text-emerald-200'],
+        FAILED: ['border-rose-400/40', 'bg-rose-500/10', 'text-rose-200'],
+        REJECTED: ['border-rose-400/40', 'bg-rose-500/10', 'text-rose-200'],
+        RUNNING: ['border-primary-400/40', 'bg-primary-500/10', 'text-primary-100'],
+        PENDING: ['border-amber-400/40', 'bg-amber-500/10', 'text-amber-100'],
+        QUEUED: ['border-amber-400/40', 'bg-amber-500/10', 'text-amber-100'],
+        CANCELLED: ['border-slate-400/40', 'bg-slate-500/20', 'text-slate-100'],
+        CANCELED: ['border-slate-400/40', 'bg-slate-500/20', 'text-slate-100'],
+      };
+      statusPill.classList.remove(
+        'border-emerald-400/40', 'bg-emerald-500/10', 'text-emerald-200',
+        'border-rose-400/40', 'bg-rose-500/10', 'text-rose-200',
+        'border-primary-400/40', 'bg-primary-500/10', 'text-primary-100',
+        'border-amber-400/40', 'bg-amber-500/10', 'text-amber-100',
+        'border-slate-400/40', 'bg-slate-500/20', 'text-slate-100',
+        'border-white/20', 'bg-white/5', 'text-slate-300'
+      );
+      const next = CLASS_MAP[normalized] || ['border-white/20', 'bg-white/5', 'text-slate-300'];
+      statusPill.classList.add(...next);
+      let displayStatus = title || (statusName || 'Status');
+      if (statusName) {
+        const lower = statusName.toLowerCase();
+        displayStatus = lower.charAt(0).toUpperCase() + lower.slice(1);
+      }
+      statusPill.textContent = displayStatus;
+    }
   }
 
   function updateTranscriptionControls(status) {
-    const {
-      startButtons,
-      cancelButton,
-      restartButton,
-    } = getTranscriptionElements();
+    const { startButtons } = getTranscriptionElements();
     const normalized = (status || '').toUpperCase();
     const runningStates = ['RUNNING', 'PENDING'];
-    const terminalStates = ['SUCCEEDED', 'FAILED', 'CANCELLED'];
-
     if (startButtons && startButtons.length) {
       startButtons.forEach((btn) => {
         btn.disabled = runningStates.includes(normalized);
       });
-    }
-    if (cancelButton) {
-      cancelButton.classList.toggle('hidden', !runningStates.includes(normalized));
-      cancelButton.disabled = !runningStates.includes(normalized);
-    }
-    if (restartButton) {
-      restartButton.classList.toggle('hidden', !terminalStates.includes(normalized));
-      restartButton.disabled = !terminalStates.includes(normalized);
     }
   }
 
@@ -144,6 +161,25 @@
     const diarLabel = diarEnabled ? 'diarization enabled' : 'diarization off';
     const language = (languageInput ? languageInput.value : 'en-CA') || 'en-CA';
     configEl.textContent = `${modeLabel} · ${diarLabel} · ${language}`;
+  }
+
+  function updateJobActionButtons(jobId, status) {
+    if (!jobId) return;
+    const normalized = (status || '').toUpperCase();
+    const cancelBtn = document.querySelector(`[data-job-cancel="${jobId}"]`);
+    const restartBtn = document.querySelector(`[data-job-restart="${jobId}"]`);
+    const runningStates = ['RUNNING', 'PENDING', 'QUEUED'];
+    const restartStates = ['SUCCEEDED', 'FAILED', 'CANCELLED', 'CANCELED'];
+    if (cancelBtn) {
+      const shouldShowCancel = runningStates.includes(normalized);
+      cancelBtn.classList.toggle('hidden', !shouldShowCancel);
+      cancelBtn.disabled = !shouldShowCancel;
+    }
+    if (restartBtn) {
+      const shouldShowRestart = restartStates.includes(normalized);
+      restartBtn.classList.toggle('hidden', !shouldShowRestart);
+      restartBtn.disabled = !shouldShowRestart;
+    }
   }
 
   const REVIEW_CLASS_MAP = {
@@ -248,6 +284,21 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
         ? payload.progress * (payload.progress <= 1 ? 100 : 1)
         : null);
 
+    const row = document.querySelector(`[data-job="${jobId}"]`);
+    if (row) {
+      row.dataset.jobStatus = status;
+    }
+    updateJobActionButtons(jobId, status);
+    const detailRow = document.querySelector(`[data-job-detail="${jobId}"]`);
+    const container = detailRow ? detailRow.querySelector(`[data-job-detail-container="${jobId}"]`) : null;
+    if (container) {
+      if (detailRow && !detailRow.classList.contains('hidden') && container.dataset.loaded === '1') {
+        loadJobDetail(jobId, { force: true });
+      } else {
+        delete container.dataset.loaded;
+      }
+    }
+
     const trackedJobId = currentJobId();
     if (!trackedJobId || trackedJobId === jobId) {
       setCurrentJob(jobId, status);
@@ -299,6 +350,7 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
       detail,
       progress: progressValue,
       state,
+      statusName: status,
     });
     updateTranscriptionControls(status);
 
@@ -367,10 +419,10 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
     window.jobPollers[jobId] = setInterval(() => pollJob(jobId), 2000);
   }
 
-  async function ensureJobDetail(jobId) {
+  async function loadJobDetail(jobId, { force = false } = {}) {
     const container = document.querySelector(`[data-job-detail-container="${jobId}"]`);
     if (!container) return;
-    if (container.dataset.loaded === '1' || container.dataset.loading === '1') return;
+    if (!force && (container.dataset.loaded === '1' || container.dataset.loading === '1')) return;
     container.dataset.loading = '1';
     container.innerHTML = '<div class="flex items-center gap-2 text-xs text-slate-300"><svg class="h-3 w-3 animate-spin text-primary-300" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle class="opacity-30" cx="12" cy="12" r="10" stroke-width="2"></circle><path d="M22 12a10 10 0 00-10-10" stroke-width="2" stroke-linecap="round"></path></svg><span>Loading details…</span></div>';
     try {
@@ -420,7 +472,7 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
     const shouldExpand = !isExpanded;
     if (shouldExpand) {
       collapseOtherJobRows(row);
-      await ensureJobDetail(row.dataset.job);
+      await loadJobDetail(row.dataset.job);
     }
     setJobRowExpanded(row, shouldExpand);
   }
@@ -433,6 +485,7 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
         row.dataset.ws = '1';
       }
       ensurePolling(jobId);
+      updateJobActionButtons(jobId, row.getAttribute('data-job-status'));
     });
     updateFileLabel();
     updateStartAvailability();
@@ -508,13 +561,13 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
   });
 
   document.addEventListener('click', async (evt) => {
-    const cancelBtn = evt.target.closest('[data-transcription-cancel]');
+    const cancelBtn = evt.target.closest('[data-job-cancel]');
     if (cancelBtn) {
       evt.preventDefault();
       evt.stopPropagation();
-      const jobId = currentJobId();
+      const jobId = cancelBtn.getAttribute('data-job-cancel');
       if (!jobId) return;
-      if (!window.confirm('Cancel the running transcription?')) return;
+      if (!window.confirm('Cancel this transcription job?')) return;
       cancelBtn.disabled = true;
       try {
         const resp = await fetch(`/api/v1/jobs/${jobId}/cancel/`, {
@@ -526,15 +579,22 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
         });
         if (resp.ok) {
           const data = await resp.json();
-          activeTranscriptionJobId = null;
-          setCurrentJob(jobId, data.status || 'CANCELLED');
-          setTranscriptionStatus({
-            title: 'Cancellation requested',
-            detail: 'Stopping transcription run.',
-            progress: null,
+          const status = (data.status || 'CANCELLED').toUpperCase();
+          activeTranscriptionJobId = activeTranscriptionJobId === jobId ? null : activeTranscriptionJobId;
+          setCurrentJob(jobId, status);
+         setTranscriptionStatus({
+           title: 'Cancellation requested',
+           detail: 'Stopping transcription run.',
+           progress: null,
             state: 'idle',
+            statusName: status,
           });
-          updateTranscriptionControls(data.status || 'CANCELLED');
+          setTranscriptionSummary('Cancellation requested');
+          updateTranscriptionControls(status);
+          updateJobActionButtons(jobId, status);
+          const row = document.querySelector(`[data-job="${jobId}"]`);
+          if (row) row.dataset.jobStatus = status;
+          pollJob(jobId);
         }
       } catch (error) {
         console.error('Cancel transcription failed', error);
@@ -544,11 +604,11 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
       return;
     }
 
-    const restartBtn = evt.target.closest('[data-transcription-restart]');
+    const restartBtn = evt.target.closest('[data-job-restart]');
     if (restartBtn) {
       evt.preventDefault();
       evt.stopPropagation();
-      const jobId = currentJobId();
+      const jobId = restartBtn.getAttribute('data-job-restart');
       if (!jobId) return;
       if (!window.confirm('Restart transcription? Previous output will be replaced.')) return;
       restartBtn.disabled = true;
@@ -562,15 +622,22 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
         });
         if (resp.ok) {
           const data = await resp.json();
+          const status = (data.status || 'PENDING').toUpperCase();
           activeTranscriptionJobId = jobId;
-          setCurrentJob(jobId, data.status || 'PENDING');
-          setTranscriptionStatus({
-            title: 'Restarting transcription…',
-            detail: 'Azure Speech will process the audio again.',
-            progress: null,
+          setCurrentJob(jobId, status);
+         setTranscriptionStatus({
+           title: 'Restarting transcription…',
+           detail: 'Azure Speech will process the audio again.',
+           progress: null,
             state: 'running',
+            statusName: status,
           });
-          updateTranscriptionControls(data.status || 'PENDING');
+          setTranscriptionSummary('Job restarting…');
+          updateTranscriptionControls(status);
+          updateJobActionButtons(jobId, status);
+          const row = document.querySelector(`[data-job="${jobId}"]`);
+          if (row) row.dataset.jobStatus = status;
+          ensurePolling(jobId);
         }
       } catch (error) {
         console.error('Restart transcription failed', error);
@@ -692,6 +759,7 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
         detail: 'Sending media to the platform.',
         progress: 5,
         state: 'running',
+        statusName: 'RUNNING',
       });
       updateTranscriptionControls('RUNNING');
     }
@@ -708,6 +776,7 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
       detail: 'Sending media to the platform.',
       progress: pct,
       state: 'running',
+      statusName: 'RUNNING',
     });
     updateTranscriptionControls('RUNNING');
   });
@@ -736,6 +805,7 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
         detail: 'Azure Speech accepted the transcription job.',
         progress: null,
         state: 'running',
+        statusName: 'PENDING',
       });
       setCurrentJob(jobInfo.job_id, 'PENDING');
       updateTranscriptionControls('PENDING');
@@ -750,6 +820,7 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
         detail: 'Select audio or paste a SAS URL to start Azure Speech.',
         progress: null,
         state: 'idle',
+        statusName: 'IDLE',
       });
       activeTranscriptionJobId = null;
       setCurrentJob('', 'IDLE');
@@ -818,89 +889,105 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
     {% endif %}
 
     <div class="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-black/25">
-      <h2 class="text-lg font-semibold text-white">Transcription workflow</h2>
-      <p class="mt-2 text-sm text-slate-300">Use quick launch for fast uploads or expand the module to adjust advanced options.</p>
-      <form id="job-form" method="post" enctype="multipart/form-data" class="mt-4 space-y-5"
-            hx-post="/cases/{{ case.id }}/jobs/new"
-            hx-encoding="multipart/form-data"
-            hx-target="#jobs-body" hx-swap="afterbegin">
-        {% csrf_token %}
-        <input type="hidden" name="mode" value="batch">
-        <div class="flex flex-col gap-4">
-        <div class="rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-3" data-module-target="module-transcription" aria-expanded="false" data-current-job-id="{{ latest_job.id|default:'' }}" data-current-job-status="{{ latest_job_telemetry.status|default:'IDLE' }}">
-            <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div class="flex flex-1 flex-col gap-1">
-                <p class="text-xs uppercase tracking-wide text-slate-400">Transcription</p>
-                <p class="text-xs text-slate-300" data-transcription-config>Batch mode with diarization</p>
-                <p class="text-xs text-slate-300" id="module-transcription-summary-text">
-                  {% if latest_job %}
-                    Last status: <span class="font-semibold text-primary-200">{{ latest_job_telemetry.status }}</span>{% if latest_activity_ts %} · <time data-ts="{{ latest_activity_ts|date:'c' }}">{{ latest_activity_ts }}</time>{% endif %}
-                  {% else %}
-                    Ready for the first transcription.
-                  {% endif %}
-                </p>
-              </div>
-              <div class="flex flex-wrap items-center gap-3 lg:justify-end" data-module-quick>
-                <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-xs font-semibold text-slate-100 transition hover:border-primary-400 hover:text-white" data-file-trigger data-file-input="module-transcription-file">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 3h7l5 5v11a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2z" />
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12.5c1.5-1 3.5-1 5 0M9 16c1.5-1 3.5-1 5 0M12 9h.01" />
-                  </svg>
-                  Upload
-                </button>
-                <span id="module-transcription-file-name" class="text-xs text-slate-300">No file selected.</span>
-                <button type="submit" class="inline-flex items-center gap-2 rounded-lg bg-primary-500 px-3 py-2 text-xs font-semibold text-white shadow-lg shadow-primary-500/30 transition hover:bg-primary-400 disabled:cursor-not-allowed disabled:opacity-60" data-transcription-start disabled>
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path d="M6.5 4.5l9 5.5-9 5.5v-11z" /></svg>
-                  Upload &amp; Start
-                </button>
-                <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-xs font-semibold text-rose-100 transition hover:bg-rose-500/30 disabled:opacity-60" data-transcription-cancel hidden>Cancel</button>
-                <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-slate-300/40 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-100 transition hover:border-primary-400 hover:text-white disabled:opacity-60" data-transcription-restart hidden>Restart</button>
-              </div>
-              <div class="hidden lg:flex items-center text-slate-300 pointer-events-none">
-                <svg xmlns="http://www.w3.org/2000/svg" class="module-arrow h-4 w-4 transition-transform duration-150" viewBox="0 0 20 20" fill="currentColor" data-module-arrow>
-                  <path fill-rule="evenodd" d="M10 3a1 1 0 01.832.445l4.5 6.5a1 1 0 01-.832 1.555H5.5a1 1 0 01-.832-1.555l4.5-6.5A1 1 0 0110 3z" clip-rule="evenodd" />
-                </svg>
-              </div>
-            </div>
-          </div>
-
-          <div id="module-transcription" data-module-panel class="hidden rounded-xl border border-white/10 bg-slate-900/80 p-4">
-            <div class="space-y-5">
-              <div class="grid gap-4 md:grid-cols-2">
-                <label class="flex flex-col text-sm text-slate-200">Audio file
-                  <input type="file" name="audio" id="module-transcription-file" accept="audio/*" class="mt-2 rounded-lg border border-dashed border-white/20 bg-slate-900/60 px-3 py-3 text-sm focus:border-primary-400 focus:outline-none text-slate-200">
-                </label>
-                <label class="flex flex-col text-sm text-slate-200">Or SAS URL
-                  <input type="url" name="audio_url" id="module-transcription-url" placeholder="https://storage.azure.com/..." class="mt-2 rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm focus:border-primary-400 focus:outline-none">
-                </label>
-              </div>
-              <div class="grid gap-4 md:grid-cols-2">
-                <label class="inline-flex items-center gap-2 text-sm text-slate-200">
-                  <input type="checkbox" name="diarization" value="on" checked class="h-4 w-4 rounded border-white/20 bg-slate-900/70 text-primary-500 focus:ring-primary-400">
-                  Enable diarization (recommended)
-                </label>
-                <label class="flex flex-col text-sm text-slate-200">
-                  Language
-                  <input type="text" name="language" value="en-CA" class="mt-2 rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm focus:border-primary-400 focus:outline-none">
-                </label>
-              </div>
-              <details class="rounded-lg border border-white/10 bg-slate-900/60 text-sm text-slate-200">
-                <summary class="cursor-pointer px-3 py-2 font-semibold">Advanced options</summary>
-                <div class="border-t border-white/10 px-3 py-3 space-y-3 text-xs text-slate-300">
-                  <p>Batch mode with diarization is the default. Additional controls such as speaker labels and redaction will appear here as the platform evolves.</p>
+      <h2 class="text-lg font-semibold text-white">Tools</h2>
+      <p class="mt-2 text-sm text-slate-300">Launch automated agents or review upcoming features for this case.</p>
+      <div class="mt-4 grid gap-6 lg:grid-cols-3">
+        <div class="lg:col-span-2">
+          <form id="job-form" method="post" enctype="multipart/form-data" class="space-y-5"
+                hx-post="/cases/{{ case.id }}/jobs/new"
+                hx-encoding="multipart/form-data"
+                hx-target="#jobs-body" hx-swap="afterbegin">
+            {% csrf_token %}
+            <input type="hidden" name="mode" value="batch">
+            <div class="flex flex-col gap-4">
+              <div class="rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-3" data-module-target="module-transcription" aria-expanded="false" data-current-job-id="{{ latest_job.id|default:'' }}" data-current-job-status="{{ latest_job_telemetry.status|default:'IDLE' }}">
+                <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div class="flex flex-1 flex-col gap-1">
+                    <p class="text-xs uppercase tracking-wide text-slate-400">Transcription</p>
+                    <p class="text-xs text-slate-300" data-transcription-config>Batch mode with diarization</p>
+                    <p class="text-xs text-slate-300">
+                      {% if latest_job %}
+                        Last status: <span class="font-semibold text-primary-200">{{ latest_job_telemetry.status }}</span>{% if latest_activity_ts %} · <time data-ts="{{ latest_activity_ts|date:'c' }}">{{ latest_activity_ts }}</time>{% endif %}
+                      {% else %}
+                        Ready for the first transcription.
+                      {% endif %}
+                    </p>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-3 lg:justify-end" data-module-quick>
+                    <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-xs font-semibold text-slate-100 transition hover:border-primary-400 hover:text-white" data-file-trigger data-file-input="module-transcription-file">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 3h7l5 5v11a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12.5c1.5-1 3.5-1 5 0M9 16c1.5-1 3.5-1 5 0M12 9h.01" />
+                      </svg>
+                      Upload
+                    </button>
+                    <span id="module-transcription-file-name" class="text-xs text-slate-300">No file selected.</span>
+                    <button type="submit" class="inline-flex items-center gap-2 rounded-lg bg-primary-500 px-3 py-2 text-xs font-semibold text-white shadow-lg shadow-primary-500/30 transition hover:bg-primary-400 disabled:cursor-not-allowed disabled:opacity-60" data-transcription-start disabled>
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path d="M6.5 4.5l9 5.5-9 5.5v-11z" /></svg>
+                      Upload &amp; Start
+                    </button>
+                  </div>
+                  <div class="hidden lg:flex items-center text-slate-300 pointer-events-none">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="module-arrow h-4 w-4 transition-transform duration-150" viewBox="0 0 20 20" fill="currentColor" data-module-arrow>
+                      <path fill-rule="evenodd" d="M10 3a1 1 0 01.832.445l4.5 6.5a1 1 0 01-.832 1.555H5.5a1 1 0 01-.832-1.555l4.5-6.5A1 1 0 0110 3z" clip-rule="evenodd" />
+                    </svg>
+                  </div>
                 </div>
-              </details>
-              <div class="flex items-center gap-3">
-                <button type="submit" class="inline-flex items-center gap-2 rounded-lg bg-primary-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-primary-500/30 transition hover:bg-primary-400 disabled:cursor-not-allowed disabled:opacity-60" data-transcription-start disabled>
-                  Start transcription
-                </button>
-                <span class="text-xs text-slate-400">Jobs run asynchronously and can be monitored below.</span>
+              </div>
+              <div id="module-transcription" data-module-panel class="hidden rounded-xl border border-white/10 bg-slate-900/80 p-4">
+                <div class="space-y-5">
+                  <div class="grid gap-4 md:grid-cols-2">
+                    <label class="flex flex-col text-sm text-slate-200">Audio file
+                      <input type="file" name="audio" id="module-transcription-file" accept="audio/*" class="mt-2 rounded-lg border border-dashed border-white/20 bg-slate-900/60 px-3 py-3 text-sm focus:border-primary-400 focus:outline-none text-slate-200">
+                    </label>
+                    <label class="flex flex-col text-sm text-slate-200">Or SAS URL
+                      <input type="url" name="audio_url" id="module-transcription-url" placeholder="https://storage.azure.com/..." class="mt-2 rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm focus:border-primary-400 focus:outline-none">
+                    </label>
+                  </div>
+                  <div class="grid gap-4 md:grid-cols-2">
+                    <label class="inline-flex items-center gap-2 text-sm text-slate-200">
+                      <input type="checkbox" name="diarization" value="on" checked class="h-4 w-4 rounded border-white/20 bg-slate-900/70 text-primary-500 focus:ring-primary-400">
+                      Enable diarization (recommended)
+                    </label>
+                    <label class="flex flex-col text-sm text-slate-200">
+                      Language
+                      <input type="text" name="language" value="en-CA" class="mt-2 rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm focus:border-primary-400 focus:outline-none">
+                    </label>
+                  </div>
+                  <details class="rounded-lg border border-white/10 bg-slate-900/60 text-sm text-slate-200">
+                    <summary class="cursor-pointer px-3 py-2 font-semibold">Advanced options</summary>
+                    <div class="border-t border-white/10 px-3 py-3 space-y-3 text-xs text-slate-300">
+                      <p>Batch mode with diarization is the default. Additional controls such as speaker labels and redaction will appear here as the platform evolves.</p>
+                    </div>
+                  </details>
+                  <div class="flex items-center gap-3">
+                    <button type="submit" class="inline-flex items-center gap-2 rounded-lg bg-primary-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-primary-500/30 transition hover:bg-primary-400 disabled:cursor-not-allowed disabled:opacity-60" data-transcription-start disabled>
+                      Start transcription
+                    </button>
+                    <span class="text-xs text-slate-400">Jobs run asynchronously and can be monitored below.</span>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-
+          </form>
         </div>
-      </form>
+        <div class="flex flex-col gap-4 text-sm text-slate-200">
+          <div class="rounded-2xl border border-dashed border-white/15 bg-slate-900/40 p-4">
+            <p class="text-xs uppercase tracking-wide text-slate-400">Summarization</p>
+            <p class="mt-2 text-xs text-slate-300">Generate layered summaries of transcripts with AI assistance. This module will activate once summaries are available.</p>
+            <button type="button" class="mt-4 inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold text-slate-200 opacity-70" disabled>
+              Coming soon
+            </button>
+          </div>
+          <div class="rounded-2xl border border-dashed border-white/15 bg-slate-900/40 p-4">
+            <p class="text-xs uppercase tracking-wide text-slate-400">Timeline</p>
+            <p class="mt-2 text-xs text-slate-300">An AI-powered event timeline, anchored to transcript timestamps, will be available here in an upcoming release.</p>
+            <button type="button" class="mt-4 inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold text-slate-200 opacity-70" disabled>
+              Coming soon
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="rounded-2xl border border-white/10 bg-white/5 shadow-xl shadow-black/30">
@@ -917,6 +1004,7 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
               <th class="px-4 py-3">Output</th>
               <th class="px-4 py-3">Logs</th>
               <th class="px-4 py-3">Created</th>
+              <th class="px-4 py-3 text-right">Actions</th>
               <th class="px-4 py-3 text-right">&nbsp;</th>
             </tr>
           </thead>
