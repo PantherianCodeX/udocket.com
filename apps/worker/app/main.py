@@ -1,4 +1,4 @@
-import time, datetime, sys, json, subprocess, logging
+import time, datetime, sys, json, logging
 from pathlib import Path
 from sqlalchemy.orm import Session
 from sqlalchemy import select, update
@@ -10,6 +10,7 @@ from packages.udocket_core.storage.paths import transcript_path, case_dir
 from config.settings import settings
 from apps.worker.app.runner import run_cmd
 from apps.worker.app.blob_upload import upload_with_sas
+from packages.udocket_core.audio import probe_audio_metadata
 
 # Ensure tables exist (useful when worker starts before API/Admin)
 Base.metadata.create_all(bind=engine)
@@ -23,6 +24,15 @@ logging.basicConfig(
     force=True,
 )
 log = logging.getLogger("worker")
+
+
+def is_job_cancelled(job_id: str) -> bool:
+    try:
+        with SessionLocal() as session:
+            obj = session.get(Job, job_id)
+            return obj is None or obj.status == "CANCELLED"
+    except Exception:
+        return False
 
 def claim_pending(session: Session):
     # Atomically claim a single pending job to avoid duplicate processing across workers.
@@ -69,46 +79,19 @@ def build_agent_cmd(job: Job) -> str:
 
 def probe_audio(path: str) -> dict:
     try:
-        # Use ffprobe to get audio stream info
-        cmd = [
-            'ffprobe','-v','error','-print_format','json','-select_streams','a:0','-show_streams','-show_format', path
-        ]
-        out = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
-        data = json.loads(out.decode('utf-8', errors='ignore'))
-        stream = (data.get('streams') or [{}])[0]
-        fmt = data.get('format') or {}
-        # Duration preference: stream then format
-        dur = None
-        for key in ('duration','duration_ts'):
-            v = stream.get(key) or fmt.get(key)
-            if v is not None:
-                try:
-                    dur = float(v)
-                    break
-                except Exception:
-                    pass
-        # Bitrate preference: stream then format
-        br = None
-        for key in ('bit_rate',):
-            v = stream.get(key) or fmt.get(key)
-            if v is not None:
-                try:
-                    br = int(v)
-                except Exception:
-                    pass
-        ch = stream.get('channels')
-        sr = stream.get('sample_rate')
-        if isinstance(sr, str):
-            try: sr = int(sr)
-            except Exception: sr = None
-        return {
-            'duration_sec': int(round(dur)) if isinstance(dur, (int,float)) else None,
-            'bitrate_kbps': int(round(br/1000)) if isinstance(br, int) and br > 0 else None,
-            'channels': int(ch) if ch is not None else None,
-            'sample_rate_hz': int(sr) if sr is not None else None,
-        }
+        meta = probe_audio_metadata(path)
     except Exception:
+        meta = {}
+    if not meta:
         return {'duration_sec': None, 'bitrate_kbps': None, 'channels': None, 'sample_rate_hz': None}
+    dur = meta.get('audio_duration_s')
+    br = meta.get('audio_bitrate_kbps')
+    return {
+        'duration_sec': int(round(dur)) if isinstance(dur, (int, float)) else None,
+        'bitrate_kbps': int(br) if isinstance(br, (int, float)) else None,
+        'channels': meta.get('audio_channels'),
+        'sample_rate_hz': meta.get('audio_sample_rate_hz'),
+    }
 
 def main():
     log.info("starting; polling for jobs...")
@@ -134,6 +117,15 @@ def main():
                     job.audio_duration_sec = info.get('duration_sec')
                     job.sample_rate_hz = info.get('sample_rate_hz')
                     s.commit()
+                try:
+                    s.refresh(job)
+                except Exception:
+                    pass
+                if job.status == "CANCELLED":
+                    job.finished_at = datetime.datetime.utcnow()
+                    s.commit()
+                    log.info(f"job {job.id} cancellation detected before execution; skipping")
+                    continue
             except Exception as e:
                 job.finished_at = datetime.datetime.utcnow()
                 job.status = "FAILED"
@@ -143,7 +135,7 @@ def main():
                 continue
 
             try:
-                rc, out, err = run_cmd(cmd, settings.JOB_TIMEOUT_SEC)
+                rc, out, err = run_cmd(cmd, settings.JOB_TIMEOUT_SEC, cancel_check=lambda job_id=job.id: is_job_cancelled(job_id))
             except Exception as e:
                 job.finished_at = datetime.datetime.utcnow()
                 job.status = "FAILED"
@@ -153,6 +145,18 @@ def main():
                 continue
 
             job.finished_at = datetime.datetime.utcnow()
+            try:
+                s.refresh(job)
+            except Exception:
+                pass
+
+            if job.status == "CANCELLED" or rc == 125:
+                job.status = "CANCELLED"
+                if not job.error_message:
+                    job.error_message = "Cancelled by user"
+                s.commit()
+                log.info(f"job {job.id} cancelled")
+                continue
 
             if rc == 0:
                 tpath = transcript_path(job.case_id, job.id)

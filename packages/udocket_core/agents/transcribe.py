@@ -28,6 +28,12 @@ except Exception as e:
 
 load_dotenv()
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.append(str(REPO_ROOT))
+
+from packages.udocket_core.audio import probe_audio_metadata
+
 # Accept both AZURE_* and legacy SPEECH_* env names
 SPEECH_KEY              = (os.getenv("AZURE_SPEECH_KEY") or os.getenv("SPEECH_KEY") or "").strip()
 SPEECH_REGION           = (os.getenv("AZURE_SPEECH_REGION") or os.getenv("SPEECH_REGION") or "canadacentral").strip().lower()
@@ -550,6 +556,7 @@ def main():
     audio_sha = None
     wav = None
     converted = False
+    audio_meta: Dict[str, Any] = {}
     try:
         dur = None
         # Remote hashing controls (for URL inputs)
@@ -566,6 +573,10 @@ def main():
                     f.write(f"{now_utc()} INFO | local_sha256 {audio_sha}\n")
             except Exception:
                 pass
+            try:
+                audio_meta = probe_audio_metadata(audio_in)
+            except Exception:
+                audio_meta = {}
             if audio_in.suffix.lower() != ".wav":
                 wav = ensure_wav(audio_in, case_dir, case_id)
                 converted = True
@@ -582,10 +593,16 @@ def main():
             dur = get_duration_seconds(wav) or get_duration_seconds(audio_in)
             if dur and dur / 60.0 > MAX_MINUTES:
                 err_exit(13, f"Audio too long ({human_dur(dur)}) > MAX_MINUTES={MAX_MINUTES}")
+            if (not dur) and audio_meta.get("audio_duration_s"):
+                try:
+                    dur = float(audio_meta.get("audio_duration_s"))
+                except Exception:
+                    pass
 
         attempts = 0
         text_raw = None
         last_error_msg = None
+        rest_meta: Dict[str, Any] = {}
         for attempt in range(RETRY_MAX):
             attempts = attempt + 1
             try:
@@ -693,6 +710,16 @@ def main():
                 "error_message": msg,
                 "timestamp_utc": now_utc(),
             }
+            if audio_meta:
+                for key, value in audio_meta.items():
+                    if value is not None and meta_fail.get(key) is None:
+                        meta_fail[key] = value
+            if remote_sha256:
+                meta_fail.setdefault("audio_sha256_remote", remote_sha256)
+            if remote_md5_b64:
+                meta_fail.setdefault("audio_content_md5_b64", remote_md5_b64)
+            if remote_size is not None:
+                meta_fail.setdefault("audio_size_bytes_remote", remote_size)
             try:
                 write_text(log_json, json.dumps(meta_fail, indent=2, ensure_ascii=False))
                 write_text(log_json_job, json.dumps(meta_fail, indent=2, ensure_ascii=False))
@@ -718,29 +745,38 @@ def main():
         write_text(transcript_out, header + "\n" + text_ts + "\n")
 
         meta = {
-            "case_id": case_id, "audio_file": src_name, "audio_sha256": audio_sha,
-            "transcript_file": transcript_out.name, "transcript_sha256": sha256sum(transcript_out),
-            "azure_region": SPEECH_REGION, "language": lang, "audio_duration_s": dur,
-            "word_count": len(text_raw.split()), "attempts_used": attempts,
-            "sdk_path": sdk_version(), "python": sys.version.split()[0], "platform": platform.platform(),
-            "converted_temp_wav": converted, "timestamp_utc": now_utc()
+            "case_id": case_id,
+            "audio_file": src_name,
+            "audio_sha256": audio_sha,
+            "transcript_file": transcript_out.name,
+            "transcript_sha256": sha256sum(transcript_out),
+            "azure_region": SPEECH_REGION,
+            "language": lang,
+            "audio_duration_s": dur,
+            "word_count": len(text_raw.split()),
+            "attempts_used": attempts,
+            "sdk_path": sdk_version(),
+            "python": sys.version.split()[0],
+            "platform": platform.platform(),
+            "converted_temp_wav": converted,
+            "timestamp_utc": now_utc(),
+            "diarization_enabled": bool(args.diarization),
+            "status": "succeeded",
         }
-        # Enrich meta for batch mode with diarization metrics and remote hashes
-        if args.mode == "batch":
-            meta["diarization_enabled"] = bool(args.diarization)
-            try:
-                meta["num_speakers"] = rest_meta.get("num_speakers")
-                meta["segments"] = rest_meta.get("segments")
-                meta["avg_confidence"] = rest_meta.get("avg_confidence")
-                meta["azure_transcription_url"] = rest_meta.get("azure_transcription_url")
-            except Exception:
-                pass
-            if remote_sha256:
-                meta["audio_sha256_remote"] = remote_sha256
-            if remote_md5_b64:
-                meta["audio_content_md5_b64"] = remote_md5_b64
-            if remote_size is not None:
-                meta["audio_size_bytes_remote"] = remote_size
+        if audio_meta:
+            for key, value in audio_meta.items():
+                if value is None:
+                    continue
+                if meta.get(key) is None:
+                    meta[key] = value
+        if rest_meta:
+            meta.update(rest_meta)
+        if remote_sha256:
+            meta["audio_sha256_remote"] = remote_sha256
+        if remote_md5_b64:
+            meta["audio_content_md5_b64"] = remote_md5_b64
+        if remote_size is not None:
+            meta["audio_size_bytes_remote"] = remote_size
         write_text(log_json, json.dumps(meta, indent=2, ensure_ascii=False))
         write_text(log_json_job, json.dumps(meta, indent=2, ensure_ascii=False))
         append_jsonl(audit_jsonl, {"ts": now_utc(), "case_id": case_id, "event": "transcribed", "exit": 0, **meta})

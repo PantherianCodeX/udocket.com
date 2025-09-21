@@ -14,6 +14,8 @@ from typing import Any, Dict, Iterable, Optional, Tuple
 
 import requests
 
+from ..audio import probe_audio_metadata
+
 
 def _now_utc() -> str:
     return datetime.utcnow().isoformat(timespec="seconds") + "Z"
@@ -505,6 +507,7 @@ class TranscriptionAgent:
         audio_sha = None
         wav: Optional[Path] = None
         converted = False
+        audio_meta: Dict[str, Any] = {}
         if not is_url:
             assert audio_in is not None
             if audio_in.suffix.lower() not in self.AUDIO_EXTS:
@@ -515,6 +518,10 @@ class TranscriptionAgent:
                     f.write(f"{_now_utc()} INFO | local_sha256 {audio_sha}\n")
             except Exception:
                 pass
+            try:
+                audio_meta = probe_audio_metadata(audio_in)
+            except Exception:
+                audio_meta = {}
             if audio_in.suffix.lower() != ".wav":
                 wav = _ensure_wav(audio_in, case_dir, case_id)
                 converted = True
@@ -539,6 +546,11 @@ class TranscriptionAgent:
         if not is_url:
             assert audio_in is not None
             dur = _get_duration_seconds(wav or audio_in) or _get_duration_seconds(audio_in)
+            if not dur and audio_meta.get("audio_duration_s"):
+                try:
+                    dur = float(audio_meta.get("audio_duration_s"))
+                except Exception:
+                    pass
             if dur and dur / 60.0 > cfg.max_minutes:
                 raise RuntimeError(
                     f"Audio too long ({int(dur)//60:02d}:{int(dur)%60:02d}) > MAX_MINUTES={cfg.max_minutes}"
@@ -548,6 +560,7 @@ class TranscriptionAgent:
         attempts = 0
         text_raw: Optional[str] = None
         last_error: Optional[str] = None
+        rest_meta: Dict[str, Any] = {}
         for attempt in range(cfg.retry_max):
             attempts = attempt + 1
             try:
@@ -592,6 +605,10 @@ class TranscriptionAgent:
                 "error_message": msg,
                 "timestamp_utc": _now_utc(),
             }
+            if audio_meta:
+                for key, value in audio_meta.items():
+                    if value is not None and meta_fail.get(key) is None:
+                        meta_fail[key] = value
             import json
 
             for pth in (log_json, log_json_job):
@@ -648,7 +665,17 @@ class TranscriptionAgent:
             "platform": platform.platform(),
             "converted_temp_wav": converted,
             "timestamp_utc": _now_utc(),
+            "diarization_enabled": bool(diarization),
+            "status": "succeeded",
         }
+        if audio_meta:
+            for key, value in audio_meta.items():
+                if value is None:
+                    continue
+                if meta.get(key) is None:
+                    meta[key] = value
+        if rest_meta:
+            meta.update(rest_meta)
         try:
             log_json.write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
             log_json_job.write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -681,4 +708,3 @@ class TranscriptionAgent:
             meta_log=log_txt_job,
             audit_jsonl=audit_jsonl,
         )
-

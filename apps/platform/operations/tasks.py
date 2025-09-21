@@ -16,6 +16,7 @@ from packages.udocket_core.agents import (
     TranscriptionAgent,
     TranscriptionConfig,
 )
+from packages.udocket_core.audio import probe_audio_metadata
 from apps.platform.operations.channels import send_job_update, send_case_update
 from apps.platform.jobs.models import Job
 from apps.platform.artifacts.models import CaseArtifact
@@ -39,51 +40,6 @@ def _sha256_file(path: Path) -> Optional[str]:
     except Exception:
         return None
 
-
-def _probe_audio_metadata(path: Path) -> Dict[str, Optional[int]]:
-    try:
-        cmd = [
-            "ffprobe",
-            "-v",
-            "error",
-            "-print_format",
-            "json",
-            "-select_streams",
-            "a:0",
-            "-show_streams",
-            "-show_format",
-            str(path),
-        ]
-        data = json.loads(subprocess.check_output(cmd, stderr=subprocess.STDOUT).decode("utf-8", errors="ignore"))
-        stream = (data.get("streams") or [{}])[0]
-        fmt = data.get("format") or {}
-
-        def _parse_float(value):
-            try:
-                return float(value)
-            except Exception:
-                return None
-
-        duration = _parse_float(stream.get("duration")) or _parse_float(fmt.get("duration"))
-        bitrate_raw = stream.get("bit_rate") or fmt.get("bit_rate")
-        try:
-            bitrate = int(bitrate_raw) if bitrate_raw is not None else None
-        except Exception:
-            bitrate = None
-        channels = stream.get("channels")
-        sample_rate = stream.get("sample_rate")
-        try:
-            sample_rate = int(sample_rate) if sample_rate is not None else None
-        except Exception:
-            sample_rate = None
-        return {
-            "audio_duration_s": int(round(duration)) if duration is not None else None,
-            "audio_bitrate_kbps": int(round(bitrate / 1000)) if isinstance(bitrate, int) and bitrate > 0 else None,
-            "audio_channels": int(channels) if channels is not None else None,
-            "audio_sample_rate_hz": sample_rate,
-        }
-    except Exception:
-        return {}
 
 
 def _update_job_meta(case_id: str, organization_id: Optional[str], job_id: str, updates: Dict[str, Any]) -> None:
@@ -158,7 +114,7 @@ def transcribe_job(
                     "audio_size_bytes": audio_path.stat().st_size,
                     "audio_mime": mimetypes.guess_type(audio_path.name)[0],
                 }
-                audio_meta_updates.update(_probe_audio_metadata(audio_path))
+                audio_meta_updates.update(probe_audio_metadata(audio_path))
     except Exception:
         audio_meta_updates = {}
 
