@@ -106,7 +106,12 @@
     if (jobId !== activeTranscriptionJobId) {
       if (terminal.includes(status)) {
         const label = status === 'SUCCEEDED' ? 'Transcript ready' : `Job ${status.toLowerCase()}`;
-        setTranscriptionSummary(`${label} · ${new Date().toLocaleTimeString()}`);
+        const finishedAt = data.finished_at || data.completed_at || data.timestamp_utc;
+        if (finishedAt) {
+          setTranscriptionSummary(`${label} · ${new Date(finishedAt).toLocaleTimeString()}`);
+        } else {
+          setTranscriptionSummary(label);
+        }
       }
       return;
     }
@@ -142,7 +147,12 @@
     });
 
     if (terminal.includes(status)) {
-      setTranscriptionSummary(`${title} · ${new Date().toLocaleTimeString()}`);
+      const finishedAt = payload.finished_at || payload.completed_at || payload.timestamp_utc;
+      if (finishedAt) {
+        setTranscriptionSummary(`${title} · ${new Date(finishedAt).toLocaleTimeString()}`);
+      } else {
+        setTranscriptionSummary(title);
+      }
     }
   };
 
@@ -418,35 +428,37 @@
         {% csrf_token %}
         <input type="hidden" name="mode" value="batch">
         <div class="flex flex-col gap-4">
-          <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <button type="button" class="flex w-full items-center justify-between gap-4 rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-left text-sm font-semibold text-slate-100 transition hover:bg-white/5 focus:outline-none" data-module-target="module-transcription" aria-expanded="false">
-              <div>
-                <p class="text-xs uppercase tracking-wide text-slate-400">Transcription</p>
-                <p class="mt-1 text-slate-200">Azure Speech · Batch with diarization</p>
-                <span class="sr-only">Launch transcription</span>
-              </div>
-              <div class="text-right text-xs text-slate-300" id="module-transcription-summary">
-                <p id="module-transcription-summary-text">
-                  {% if latest_job %}
-                    Last status: <span class="font-semibold text-primary-200">{{ latest_job_telemetry.status }}</span>{% if latest_activity_ts %} · <time data-ts="{{ latest_activity_ts|date:'c' }}">{{ latest_activity_ts }}</time>{% endif %}
-                  {% else %}
-                    Ready for the first transcription.
-                  {% endif %}
-                </p>
-              </div>
-              <svg xmlns="http://www.w3.org/2000/svg" class="module-arrow h-4 w-4 text-slate-300 transition-transform duration-150" viewBox="0 0 20 20" fill="currentColor" data-module-arrow>
-                <path fill-rule="evenodd" d="M10 3a1 1 0 01.832.445l4.5 6.5a1 1 0 01-.832 1.555H5.5a1 1 0 01-.832-1.555l4.5-6.5A1 1 0 0110 3z" clip-rule="evenodd" />
-              </svg>
-            </button>
-            <div class="flex flex-wrap items-center gap-3" data-module-quick>
-              <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:border-primary-400 hover:text-white" data-file-trigger data-file-input="module-transcription-file">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M8.257 3.099c.366-.446.957-.678 1.57-.678s1.203.232 1.57.678l6.4 7.8c.585.713.68 1.698.241 2.39-.438.691-1.249 1.084-2.08 1.084H2.706c-.831 0-1.642-.393-2.08-1.084-.439-.692-.344-1.677.241-2.39l6.39-7.8z"/></svg>
-                Quick upload
+          <div class="rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3">
+            <div class="flex flex-col gap-3 md:flex-row md:items-center md:gap-4">
+              <button type="button" class="flex flex-1 items-center justify-between text-left text-sm font-semibold text-slate-100 transition hover:text-white focus:outline-none" data-module-target="module-transcription" aria-expanded="false">
+                <div>
+                  <p class="text-xs uppercase tracking-wide text-slate-400">Transcription</p>
+                  <p class="mt-1 text-slate-200">Azure Speech · Batch with diarization</p>
+                  <span class="sr-only">Launch transcription</span>
+                </div>
+                <div class="text-right text-xs text-slate-300" id="module-transcription-summary">
+                  <p id="module-transcription-summary-text">
+                    {% if latest_job %}
+                      Last status: <span class="font-semibold text-primary-200">{{ latest_job_telemetry.status }}</span>{% if latest_activity_ts %} · <time data-ts="{{ latest_activity_ts|date:'c' }}">{{ latest_activity_ts }}</time>{% endif %}
+                    {% else %}
+                      Ready for the first transcription.
+                    {% endif %}
+                  </p>
+                </div>
+                <svg xmlns="http://www.w3.org/2000/svg" class="module-arrow h-4 w-4 text-slate-300 transition-transform duration-150" viewBox="0 0 20 20" fill="currentColor" data-module-arrow>
+                  <path fill-rule="evenodd" d="M10 3a1 1 0 01.832.445l4.5 6.5a1 1 0 01-.832 1.555H5.5a1 1 0 01-.832-1.555l4.5-6.5A1 1 0 0110 3z" clip-rule="evenodd" />
+                </svg>
               </button>
-              <span id="module-transcription-file-name" class="text-sm text-slate-300">No file selected.</span>
-              <button type="submit" class="inline-flex items-center gap-2 rounded-lg bg-primary-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-primary-500/30 transition hover:bg-primary-400 disabled:cursor-not-allowed disabled:opacity-60" data-transcription-start disabled>
-                Upload &amp; start
-              </button>
+              <div class="flex flex-wrap items-center gap-3" data-module-quick>
+                <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-xs font-semibold text-slate-100 transition hover:border-primary-400 hover:text-white" data-file-trigger data-file-input="module-transcription-file">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M8.257 3.099c.366-.446.957-.678 1.57-.678s1.203.232 1.57.678l6.4 7.8c.585.713.68 1.698.241 2.39-.438.691-1.249 1.084-2.08 1.084H2.706c-.831 0-1.642-.393-2.08-1.084-.439-.692-.344-1.677.241-2.39l6.39-7.8z"/></svg>
+                  Upload
+                </button>
+                <span id="module-transcription-file-name" class="text-xs text-slate-300">No file selected.</span>
+                <button type="submit" class="inline-flex items-center gap-2 rounded-lg bg-primary-500 px-3 py-2 text-xs font-semibold text-white shadow-lg shadow-primary-500/30 transition hover:bg-primary-400 disabled:cursor-not-allowed disabled:opacity-60" data-transcription-start disabled>
+                  Start
+                </button>
+              </div>
             </div>
           </div>
 
@@ -501,7 +513,7 @@
 
     <div class="rounded-2xl border border-white/10 bg-white/5 shadow-xl shadow-black/30">
       <div class="flex items-center justify-between border-b border-white/10 px-6 py-4">
-        <h2 class="text-lg font-semibold text-white">Jobs</h2>
+        <h2 class="text-lg font-semibold text-white">Case activity</h2>
         <span class="text-xs uppercase tracking-wide text-slate-400">Live updates</span>
       </div>
       <div class="overflow-hidden">
