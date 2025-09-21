@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import json
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional
+import hashlib
 
 from django.utils.functional import cached_property
 
@@ -68,28 +69,49 @@ class JobTelemetry:
     def audio_payload(self, *, include_paths: bool) -> Dict[str, Any]:
         audio_input = self.job.audio_input if include_paths else None
         meta = self.meta
+        sha256 = meta.get("audio_sha256")
+        remote_sha = meta.get("audio_sha256_remote")
+        size_remote = meta.get("audio_size_bytes_remote")
+        local_sha = None
+        local_size = None
+        local_path: Optional[Path] = None
+        if include_paths and audio_input and isinstance(audio_input, str) and audio_input.startswith("/"):
+            local_path = Path(audio_input)
+            if local_path.exists():
+                local_size = local_path.stat().st_size
+                if not sha256 and not remote_sha:
+                    local_sha = _sha256_file(local_path)
         return {
             "path": audio_input,
-            "original_name": _original_audio_name(self.job.audio_input),
-            "sha256": meta.get("audio_sha256"),
-            "remote_sha256": meta.get("audio_sha256_remote"),
+            "original_name": _original_audio_name(self.job.audio_input) or meta.get("audio_file"),
+            "sha256": sha256 or remote_sha or local_sha,
+            "remote_sha256": remote_sha or sha256,
             "content_md5_b64": meta.get("audio_content_md5_b64"),
-            "size_bytes_remote": meta.get("audio_size_bytes_remote"),
+            "size_bytes_remote": size_remote or local_size,
             "duration_s": meta.get("audio_duration_s") or self.job.duration_s,
-            "sample_rate_hz": meta.get("sample_rate_hz"),
-            "channels": meta.get("audio_channels"),
-            "bitrate_kbps": meta.get("audio_bitrate_kbps"),
+            "sample_rate_hz": meta.get("sample_rate_hz") or meta.get("audio_sample_rate_hz"),
+            "channels": meta.get("audio_channels") or meta.get("channels"),
+            "bitrate_kbps": meta.get("audio_bitrate_kbps") or meta.get("bitrate_kbps"),
             "mime": meta.get("audio_mime"),
         }
 
     def transcript_payload(self, *, include_paths: bool) -> Dict[str, Any]:
         meta = self.meta
         transcript_path = self.job.transcript_path if include_paths else None
+        transcript_sha = meta.get("transcript_sha256")
+        transcript_bytes = meta.get("transcript_bytes")
+        if include_paths and transcript_path:
+            path = Path(transcript_path)
+            if path.exists():
+                if transcript_bytes is None:
+                    transcript_bytes = path.stat().st_size
+                if not transcript_sha:
+                    transcript_sha = _sha256_file(path)
         return {
             "path": transcript_path,
-            "sha256": meta.get("transcript_sha256"),
+            "sha256": transcript_sha,
             "words": meta.get("word_count") or meta.get("transcript_words"),
-            "bytes": meta.get("transcript_bytes"),
+            "bytes": transcript_bytes,
             "segments": meta.get("segments"),
             "avg_confidence": meta.get("avg_confidence"),
             "language": meta.get("language") or self.job.language,
@@ -152,3 +174,11 @@ def summarize_jobs(jobs: Iterable[Job]) -> Dict[str, Any]:
             if existing is None or timestamp > existing:
                 summary["last_update"] = timestamp
     return summary
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()

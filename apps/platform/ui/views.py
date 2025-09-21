@@ -189,10 +189,17 @@ def case_detail(request: HttpRequest, case_id: str) -> HttpResponse:
         if data:
             job_insights.append(data)
         job_rows.append({"job": job, "telemetry": data})
-    latest_job = jobs_list[0] if jobs_list else None
-    latest_job_telemetry = telemetry_map.get(str(latest_job.id)) if latest_job else None
+    latest_job = None
+    latest_job_telemetry = None
     latest_activity_ts = None
-    if latest_job:
+    if jobs_list:
+        jobs_sorted = sorted(
+            jobs_list,
+            key=lambda j: (j.finished_at or j.started_at or j.created_at or datetime.min),
+            reverse=True,
+        )
+        latest_job = jobs_sorted[0]
+        latest_job_telemetry = telemetry_map.get(str(latest_job.id))
         latest_activity_ts = latest_job.finished_at or latest_job.started_at or latest_job.created_at
     context = {
         "case": case,
