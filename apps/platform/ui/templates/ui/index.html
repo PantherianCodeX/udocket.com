@@ -2,26 +2,38 @@
 {% block content %}
   <h2>Cases</h2>
   <table>
-    <thead><tr><th>ID</th><th>Title</th><th>Created</th></tr></thead>
+    <thead><tr><th>ID</th><th>Title</th><th>Organization</th><th>Created</th></tr></thead>
     <tbody>
       {% for c in cases %}
       <tr>
         <td><a href="/cases/{{ c.id }}/">{{ c.id }}</a></td>
         <td>{{ c.title }}</td>
+        <td>{% if c.organization %}{{ c.organization.name }}{% else %}—{% endif %}</td>
         <td>{{ c.created_at }}</td>
       </tr>
       {% empty %}
-      <tr><td colspan="3">No cases yet.</td></tr>
+      <tr><td colspan="4">No cases yet.</td></tr>
       {% endfor %}
     </tbody>
   </table>
 
   <h3>Create Case</h3>
-  <form method="post">
-    {% csrf_token %}
-    <label>Case ID: <input type="text" name="case_id" required></label>
-    <label>Title: <input type="text" name="title"></label>
-    <button type="submit">Create</button>
-  </form>
+  {% if organizations %}
+    <form method="post">
+      {% csrf_token %}
+      <label>Case ID: <input type="text" name="case_id" required></label>
+      <label>Title: <input type="text" name="title"></label>
+      <label>Organization:
+        <select name="organization_id" required>
+          <option value="">Select organization…</option>
+          {% for org in organizations %}
+            <option value="{{ org.id }}" {% if selected_org_id == org.id|stringformat:"s" %}selected{% endif %}>{{ org.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <button type="submit">Create</button>
+    </form>
+  {% else %}
+    <p>You do not have access to any organizations to create cases.</p>
+  {% endif %}
 {% endblock %}
-

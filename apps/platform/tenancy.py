@@ -14,6 +14,7 @@ __all__ = [
     "scope_cases",
     "scope_jobs",
     "scope_artifacts",
+    "accessible_organization_ids",
 ]
 
 
@@ -93,3 +94,35 @@ def scope_artifacts(qs: QuerySet, user) -> QuerySet:
         return qs.none()
     return qs.filter(filters).distinct()
 
+
+def accessible_organization_ids(user) -> set[str]:
+    """Return organization IDs the user may access.
+
+    Superusers gain access to all organizations, authenticated users receive
+    organizations via direct membership and any cases they are a member of.
+    When PLATFORM_DEV_OPEN is enabled, unauthenticated access falls back to
+    all organizations to preserve local developer workflows.
+    """
+
+    if _is_dev_open() and (not user or not getattr(user, "is_authenticated", False)):
+        Organization = apps.get_model("accounts", "Organization")
+        return set(str(org_id) for org_id in Organization.objects.values_list("id", flat=True))
+
+    if not user or not getattr(user, "is_authenticated", False):
+        return set()
+
+    if getattr(user, "is_superuser", False):
+        Organization = apps.get_model("accounts", "Organization")
+        return set(str(org_id) for org_id in Organization.objects.values_list("id", flat=True))
+
+    org_ids = set(str(org_id) for org_id in organization_ids_for_user(user))
+    case_ids = case_ids_for_user(user)
+    if case_ids:
+        Case = apps.get_model("cases", "Case")
+        case_orgs = (
+            Case.objects.filter(id__in=case_ids)
+            .exclude(organization_id__isnull=True)
+            .values_list("organization_id", flat=True)
+        )
+        org_ids.update(str(org_id) for org_id in case_orgs if org_id)
+    return org_ids

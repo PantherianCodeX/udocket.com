@@ -44,6 +44,9 @@
     {% if presets %}
       {% for preset in presets %}
         <h3>{{ preset.name }} <small style="color:#666;">{{ preset.uuid }}</small></h3>
+        {% if preset.organization_name %}
+          <p><strong>Organization:</strong> {{ preset.organization_name }} ({{ preset.organization }})</p>
+        {% endif %}
         <p>{{ preset.description }}</p>
         <strong>Capabilities:</strong> {{ preset.capabilities|join:", " }}
         {% if preset.field_policies %}
@@ -75,7 +78,7 @@
         <tbody>
           {% for role in roles %}
           <tr>
-            <td>{{ role.name }}<br><small style="color:#666;">{{ role.uuid }}</small></td>
+            <td>{{ role.name }}<br><small style="color:#666;">{{ role.uuid }}</small>{% if role.organization_name %}<br><small style="color:#888;">{{ role.organization_name }} ({{ role.organization }})</small>{% endif %}</td>
             <td>{{ role.presets|join:", " }}</td>
             <td>{{ role.capabilities|join:", " }}</td>
           </tr>
