@@ -11,10 +11,8 @@ from apps.platform.accounts.models import Organization
 from apps.platform.authorization.models import (
     PermissionPreset,
     PresetCapability,
-    PresetFieldPolicy,
     Role,
 )
-from apps.platform.artifacts.registry import artifact_field
 
 
 class Command(BaseCommand):
@@ -67,41 +65,12 @@ class Command(BaseCommand):
                 for c in want_caps - have_caps:
                     PresetCapability.objects.create(preset=preset, capability=c)
                 PresetCapability.objects.filter(preset=preset, capability__in=list(have_caps - want_caps)).delete()
-                # Field policies
-                want_fps = {}
-                for fp in (p.get("field_policies") or []):
-                    typ = (fp.get("type") or "").upper()
-                    field = (fp.get("field") or "").strip()
-                    if artifact_field(typ, field) is None:
-                        raise CommandError(
-                            f"Unknown artifact field in preset '{preset.name}': {typ}.{field}"
+                if p.get("field_policies"):
+                    self.stderr.write(
+                        self.style.WARNING(
+                            f"Preset '{preset.name}' includes field_policies but field-level rules are no longer supported; entries were ignored."
                         )
-                    inferred_resource = "CASE" if typ == "CASE" else "ARTIFACT"
-                    resource = (fp.get("resource") or inferred_resource).upper()
-                    want_fps[(resource, typ, field)] = fp.get("actions", []) or []
-                have = {
-                    (fp.resource, fp.type, fp.field_name): fp
-                    for fp in PresetFieldPolicy.objects.filter(preset=preset)
-                }
-                # Upsert
-                for (resource, typ, field), actions in want_fps.items():
-                    inst = have.get((resource, typ, field))
-                    if inst is None:
-                        PresetFieldPolicy.objects.create(
-                            preset=preset,
-                            resource=resource,
-                            type=typ,
-                            field_name=field,
-                            actions=actions,
-                        )
-                    else:
-                        if (inst.actions or []) != actions:
-                            inst.actions = actions
-                            inst.save(update_fields=["actions"])
-                # Remove extras
-                for (resource, typ, field), inst in have.items():
-                    if (resource, typ, field) not in want_fps:
-                        inst.delete()
+                    )
 
             # Bindings: role -> presets
             for role_name, preset_names in bindings.items():

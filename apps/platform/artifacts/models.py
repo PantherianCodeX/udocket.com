@@ -63,23 +63,3 @@ class CaseArtifact(models.Model):
                 self.organization_id = org_id
         super().save(*args, **kwargs)
 
-
-class FieldVisibilityRule(models.Model):
-    """Defines which roles can see fields across resources (artifacts, cases, etc.)."""
-
-    class Resource(models.TextChoices):
-        ARTIFACT = "ARTIFACT", "Artifact"
-        CASE = "CASE", "Case"
-
-    resource = models.CharField(max_length=32, choices=Resource.choices, default=Resource.ARTIFACT)
-    type = models.CharField(max_length=64)
-    field_name = models.CharField(max_length=64)
-    allowed_roles = models.JSONField(default=list, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        unique_together = ("resource", "type", "field_name")
-        indexes = [models.Index(fields=["resource", "type", "field_name"])]
-
-    def __str__(self) -> str:  # pragma: no cover - trivial
-        return f"{self.resource}:{self.type}:{self.field_name}"

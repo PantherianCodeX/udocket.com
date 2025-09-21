@@ -10,16 +10,13 @@ from apps.platform.accounts.utils import (
     get_active_admin_org_id,
     user_accessible_organizations,
 )
-from apps.platform.authorization.capabilities import CAPABILITY_CHOICES
+from apps.platform.authorization.capabilities import capability_choices
 from apps.platform.authorization.models import (
-    FIELD_RESOURCE_CHOICES,
     PermissionPreset,
     PresetCapability,
-    PresetFieldPolicy,
     Role,
     RoleCapability,
 )
-from apps.platform.artifacts.registry import artifact_field, artifact_types
 
 
 class RoleAdminForm(forms.ModelForm):
@@ -46,17 +43,76 @@ class RoleAdminForm(forms.ModelForm):
 
 
 class PermissionPresetAdminForm(forms.ModelForm):
+    capabilities = forms.MultipleChoiceField(
+        choices=(),
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        label="Capabilities",
+    )
+    extra_capabilities = forms.CharField(
+        required=False,
+        help_text="Add custom capability keys (comma separated).",
+        label="Additional capabilities",
+    )
+
     class Meta:
         model = PermissionPreset
-        fields = ["name", "description", "organization", "system"]
+        fields = [
+            "name",
+            "description",
+            "organization",
+            "system",
+            "capabilities",
+            "extra_capabilities",
+        ]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["capabilities"].choices = capability_choices()
+        if self.instance and self.instance.pk:
+            existing = self.instance.capabilities.values_list("capability", flat=True)
+            self.fields["capabilities"].initial = list(existing)
+
+    def save(self, commit=True):  # type: ignore[override]
+        preset = super().save(commit=commit)
+        extras_raw = self.cleaned_data.get("extra_capabilities", "") or ""
+        extra_caps = {
+            cap.strip() for cap in extras_raw.split(",") if cap.strip()
+        }
+        self._selected_capabilities = set(self.cleaned_data.get("capabilities", [])) | extra_caps
+        if commit:
+            self.sync_capabilities(preset)
+        return preset
+
+    def sync_capabilities(self, preset: PermissionPreset) -> None:
+        selected = getattr(self, "_selected_capabilities", set())
+        current = set(preset.capabilities.values_list("capability", flat=True))
+        for cap in current - selected:
+            preset.capabilities.filter(capability=cap).delete()
+        for cap in selected - current:
+            PresetCapability.objects.create(preset=preset, capability=cap)
+        # Refresh cached choices for dependent forms
+        try:
+            from apps.platform.authorization import capabilities as capabilities_module
+
+            capabilities_module.CAPABILITY_CHOICES = capabilities_module.capability_choices()
+        except Exception:
+            pass
+
+    def save_m2m(self) -> None:  # type: ignore[override]
+        self.sync_capabilities(self.instance)
 
 
 class RoleCapabilityForm(forms.ModelForm):
-    capability = forms.ChoiceField(choices=CAPABILITY_CHOICES)
+    capability = forms.ChoiceField(choices=(), label="Capability")
 
     class Meta:
         model = RoleCapability
         fields = ["capability"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["capability"].choices = capability_choices()
 
 
 class RoleCapabilityInline(admin.TabularInline):
@@ -145,38 +201,6 @@ class RoleAdmin(admin.ModelAdmin):
         return WrappedForm
 
 
-class PresetCapabilityInline(admin.TabularInline):
-    model = PresetCapability
-    extra = 1
-class PresetFieldPolicyForm(forms.ModelForm):
-    resource = forms.ChoiceField(choices=FIELD_RESOURCE_CHOICES, required=True)
-    type = forms.ChoiceField(choices=(), required=True)
-
-    class Meta:
-        model = PresetFieldPolicy
-        fields = ["resource", "type", "field_name", "actions"]
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields["type"].choices = [(t, t) for t in sorted(artifact_types())]
-        self.fields["field_name"].help_text = "Must match a registered artifact field name."
-        self.fields["actions"].help_text = "JSON list of allowed actions (view, download, update, create, delete)."
-
-    def clean(self):
-        cleaned = super().clean()
-        atype = cleaned.get("type")
-        fname = cleaned.get("field_name")
-        if atype and fname and artifact_field(atype, fname) is None:
-            raise forms.ValidationError(f"Unknown artifact field: {atype}.{fname}")
-        return cleaned
-
-
-class PresetFieldPolicyInline(admin.TabularInline):
-    model = PresetFieldPolicy
-    extra = 1
-    form = PresetFieldPolicyForm
-
-
 @admin.register(PermissionPreset)
 class PermissionPresetAdmin(admin.ModelAdmin):
     form = PermissionPresetAdminForm
@@ -184,7 +208,6 @@ class PermissionPresetAdmin(admin.ModelAdmin):
     search_fields = ("name", "organization__name")
     list_filter = ("system", "created_at", "organization")
     date_hierarchy = "created_at"
-    inlines = [PresetCapabilityInline, PresetFieldPolicyInline]
 
     def get_queryset(self, request):  # type: ignore[override]
         qs = super().get_queryset(request)
@@ -200,6 +223,11 @@ class PermissionPresetAdmin(admin.ModelAdmin):
         if db_field.name == "organization" and not request.user.is_superuser:
             kwargs["queryset"] = user_accessible_organizations(request.user)
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    def save_model(self, request, obj, form, change):  # type: ignore[override]
+        super().save_model(request, obj, form, change)
+        if isinstance(form, PermissionPresetAdminForm):
+            form.sync_capabilities(obj)
 
     def get_form(self, request, obj=None, **kwargs):  # type: ignore[override]
         form_class = super().get_form(request, obj, **kwargs)

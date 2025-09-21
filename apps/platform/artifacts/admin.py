@@ -2,7 +2,7 @@ from django.contrib import admin
 from simple_history.admin import SimpleHistoryAdmin
 
 from apps.platform.admin import TenantScopedAdminMixin
-from apps.platform.artifacts.models import CaseArtifact, FieldVisibilityRule
+from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.tenancy import scope_artifacts
 
 
@@ -22,16 +22,3 @@ class CaseArtifactAdmin(TenantScopedAdminMixin, SimpleHistoryAdmin):
 
     def scope_queryset(self, request, queryset):  # type: ignore[override]
         return scope_artifacts(queryset, request.user)
-
-
-@admin.register(FieldVisibilityRule)
-class FieldVisibilityRuleAdmin(TenantScopedAdminMixin, admin.ModelAdmin):
-    tenant_field = None
-    list_display = ("type", "field_name", "allowed_roles", "created_at")
-    list_filter = ("type", "created_at")
-    date_hierarchy = "created_at"
-    ordering = ("type", "field_name")
-    search_fields = ("type", "field_name")
-
-    def scope_queryset(self, request, queryset):  # type: ignore[override]
-        return queryset

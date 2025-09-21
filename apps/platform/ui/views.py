@@ -649,7 +649,7 @@ def permissions_overview(request: HttpRequest) -> HttpResponse:
 
     preset_qs = (
         PermissionPreset.objects.select_related("organization")
-        .prefetch_related("capabilities", "field_policies")
+        .prefetch_related("capabilities")
         .order_by("name")
     )
     role_qs = Role.objects.select_related("organization").prefetch_related("presets").order_by("name")
@@ -669,15 +669,6 @@ def permissions_overview(request: HttpRequest) -> HttpResponse:
     presets = []
     for preset in preset_qs:
         caps = sorted(pc.capability for pc in preset.capabilities.all())
-        policies = [
-            {
-                "resource": fp.resource,
-                "type": fp.type,
-                "field": fp.field_name,
-                "actions": list(fp.actions or []),
-            }
-            for fp in preset.field_policies.all()
-        ]
         presets.append(
             {
                 "uuid": str(preset.uuid) if preset.uuid else None,
@@ -687,7 +678,7 @@ def permissions_overview(request: HttpRequest) -> HttpResponse:
                 "organization": preset.organization_id,
                 "organization_name": preset.organization.name if preset.organization else None,
                 "capabilities": caps,
-                "field_policies": policies,
+                "field_policies": [],
             }
         )
 

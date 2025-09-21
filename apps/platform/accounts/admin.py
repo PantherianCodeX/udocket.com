@@ -1,10 +1,11 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
-from django.contrib.auth.forms import UserChangeForm
 from django.urls import path, reverse
 from django.shortcuts import redirect
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.http import require_POST
+
+from apps.platform.cases.models import CaseMembership
 
 from .forms import UserCreationWizardForm
 from .models import Organization, OrganizationMembership, User
@@ -13,13 +14,14 @@ from .utils import (
     get_active_admin_org,
     get_active_admin_org_id,
     set_active_admin_org_id,
+    sync_user_access_flags,
     user_accessible_organizations,
 )
 
 
 class OrganizationMembershipInline(admin.TabularInline):
     model = OrganizationMembership
-    extra = 0
+    extra = 1
     autocomplete_fields = ["organization"]
 
 
@@ -29,20 +31,45 @@ class OrganizationMembershipUserInline(admin.TabularInline):
     autocomplete_fields = ["user"]
 
 
+class CaseMembershipInline(admin.TabularInline):
+    model = CaseMembership
+    extra = 1
+    autocomplete_fields = ["case"]
+
+
 @admin.register(User)
 class UserAdmin(DjangoUserAdmin):
-    list_display = ("username", "email", "is_staff", "is_superuser", "last_login")
+    list_display = ("username", "email", "display_name", "primary_membership_roles", "last_login")
     search_fields = ("username", "email", "display_name", "kc_sub")
     ordering = ("username",)
+    list_filter = ("is_active",)
     add_form = UserCreationWizardForm
     add_fieldsets = (
         (None, {
             "classes": ("wide",),
-            "fields": ("username", "password1", "password2", "display_name", "email", "organization", "membership_role", "is_staff", "is_superuser"),
+            "fields": ("username", "password1", "password2", "display_name", "email", "organization", "membership_role"),
         }),
     )
-    fieldsets = DjangoUserAdmin.fieldsets + (("Tenant Profile", {"fields": ("display_name", "kc_sub")}),)
-    inlines = [OrganizationMembershipInline]
+    fieldsets = (
+        (None, {"fields": ("username", "password")}),
+        (_("Personal info"), {"fields": ("display_name", "first_name", "last_name", "email")}),
+        (_("Tenant Profile"), {"fields": ("kc_sub",)}),
+        (_("Status"), {"fields": ("is_active",)}),
+        (_("Important dates"), {"fields": ("last_login", "date_joined")}),
+    )
+    readonly_fields = ("last_login", "date_joined")
+    inlines = [OrganizationMembershipInline, CaseMembershipInline]
+
+    @admin.display(description="Roles")
+    def primary_membership_roles(self, obj: User) -> str:
+        memberships = list(obj.org_memberships.select_related("organization").all())
+        if not memberships:
+            return "—"
+        labels = [f"{m.organization_id}:{m.get_role_display()}" for m in memberships[:3]]
+        more = len(memberships) - len(labels)
+        if more > 0:
+            labels.append(f"(+{more})")
+        return ", ".join(labels)
 
     def get_form(self, request, obj=None, **kwargs):  # type: ignore[override]
         if obj is None:
@@ -60,8 +87,23 @@ class UserAdmin(DjangoUserAdmin):
 
             kwargs["form"] = RequestScopedUserCreationForm
         else:
-            kwargs["form"] = kwargs.get("form", UserChangeForm)
+            kwargs["form"] = kwargs.get("form", self.form)
         return super().get_form(request, obj, **kwargs)
+
+    def save_model(self, request, obj, form, change):  # type: ignore[override]
+        super().save_model(request, obj, form, change)
+        sync_user_access_flags(obj)
+
+    def save_formset(self, request, form, formset, change):  # type: ignore[override]
+        instances = formset.save()
+        for instance in instances:
+            if isinstance(instance, OrganizationMembership):
+                sync_user_access_flags(instance.user)
+        for obj in getattr(formset, "deleted_objects", []):
+            if isinstance(obj, OrganizationMembership):
+                user = getattr(obj, "user", None)
+                if user:
+                    sync_user_access_flags(user)
 
 
 @admin.register(Organization)

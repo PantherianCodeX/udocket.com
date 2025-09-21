@@ -10,6 +10,7 @@ from apps.platform.accounts.models import Organization, OrganizationMembership
 from apps.platform.accounts.utils import (
     resolve_request_organization,
     set_active_admin_org_id,
+    user_accessible_organizations,
 )
 
 
@@ -59,8 +60,32 @@ def test_resolve_organization_uses_admin_selection(settings):
 def test_resolve_organization_superuser_accepts_header(settings):
     settings.PLATFORM_DEV_OPEN = False
     org = Organization.objects.create(id="org-super", name="Super Org")
-    su = get_user_model().objects.create_superuser(username="root", password="x")
+    su = get_user_model().objects.create_user(username="root", password="x")
+    OrganizationMembership.objects.create(
+        user=su,
+        organization=org,
+        role=OrganizationMembership.Role.SUPERUSER,
+    )
 
     request = _req(user=su, headers={"HTTP_X_ORGANIZATION_ID": org.id})
     resolved = resolve_request_organization(request)
     assert resolved == org
+
+
+@pytest.mark.django_db
+def test_superuser_membership_sees_all_orgs(settings):
+    settings.PLATFORM_DEV_OPEN = False
+    org_a = Organization.objects.create(id="org-a", name="Org A")
+    org_b = Organization.objects.create(id="org-b", name="Org B")
+    user = get_user_model().objects.create_user(username="power", password="x")
+    OrganizationMembership.objects.create(
+        user=user,
+        organization=org_a,
+        role=OrganizationMembership.Role.SUPERUSER,
+    )
+
+    request = _req(user=user)
+    resolved = resolve_request_organization(request, required=False)
+    assert resolved is None
+    org_ids = {org.id for org in user_accessible_organizations(user)}
+    assert {org_a.id, org_b.id}.issubset(org_ids)

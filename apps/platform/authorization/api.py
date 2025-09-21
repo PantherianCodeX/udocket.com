@@ -58,7 +58,7 @@ def list_presets(request):
     user = getattr(request, "user", None)
     preset_qs = (
         PermissionPreset.objects.select_related("organization")
-        .prefetch_related("capabilities", "field_policies")
+        .prefetch_related("capabilities")
         .order_by("name")
     )
     preset_qs = _filter_by_org(preset_qs, user)
@@ -66,14 +66,6 @@ def list_presets(request):
     presets = []
     for preset in preset_qs:
         caps = sorted(pc.capability for pc in preset.capabilities.all())
-        fps = [
-            {
-                "type": fp.type,
-                "field": fp.field_name,
-                "actions": list(fp.actions or []),
-            }
-            for fp in preset.field_policies.all()
-        ]
         presets.append(
             {
                 "uuid": str(preset.uuid) if preset.uuid else None,
@@ -82,7 +74,7 @@ def list_presets(request):
                 "system": preset.system,
                 "organization": preset.organization_id,
                 "capabilities": caps,
-                "field_policies": fps,
+                "field_policies": [],
             }
         )
     return Response({"presets": presets})

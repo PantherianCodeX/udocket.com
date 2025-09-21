@@ -95,6 +95,8 @@ class CaseMembership(models.Model):
         OWNER = "OWNER", "Owner"
         CONTRIBUTOR = "CONTRIBUTOR", "Contributor"
         REVIEWER = "REVIEWER", "Reviewer"
+        ADMIN = "ADMIN", "Admin"
+        SUPERUSER = "SUPERUSER", "Superuser"
         AUDITOR = "AUDITOR", "Auditor"
         EXTERNAL = "EXTERNAL", "External"
         CLIENT = "CLIENT", "Client"

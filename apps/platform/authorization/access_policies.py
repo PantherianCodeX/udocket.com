@@ -159,7 +159,11 @@ class _MembershipMixin:
         if self._has_cap(request, view, "case.update"):
             return True
         role = self._membership_role(user, case_id)
-        return role == CaseMembership.Role.OWNER
+        return role in {
+            CaseMembership.Role.OWNER,
+            CaseMembership.Role.ADMIN,
+            CaseMembership.Role.SUPERUSER,
+        }
 
     def can_manage_jobs(self, request, view, action) -> bool:
         user = getattr(request, "user", None)
@@ -171,7 +175,12 @@ class _MembershipMixin:
         if self._has_cap(request, view, "job.create"):
             return True
         role = self._membership_role(user, case_id)
-        return role in {CaseMembership.Role.OWNER, CaseMembership.Role.CONTRIBUTOR}
+        return role in {
+            CaseMembership.Role.OWNER,
+            CaseMembership.Role.CONTRIBUTOR,
+            CaseMembership.Role.ADMIN,
+            CaseMembership.Role.SUPERUSER,
+        }
 
     def can_review_job(self, request, view, action) -> bool:
         user = getattr(request, "user", None)

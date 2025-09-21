@@ -6,12 +6,7 @@ from django.contrib.auth import get_user_model
 from django.urls import reverse
 
 from apps.platform.accounts.models import Organization, OrganizationMembership
-from apps.platform.authorization.models import (
-    PermissionPreset,
-    PresetCapability,
-    PresetFieldPolicy,
-    Role,
-)
+from apps.platform.authorization.models import PermissionPreset, PresetCapability, Role
 
 
 @pytest.mark.django_db
@@ -23,13 +18,6 @@ def test_permissions_overview_scopes_by_organization(client, settings):
 
     preset_a = PermissionPreset.objects.create(name="Demo Preset", organization=org_a)
     PresetCapability.objects.create(preset=preset_a, capability="case.view")
-    PresetFieldPolicy.objects.create(
-        preset=preset_a,
-        resource="ARTIFACT",
-        type="TRANSCRIPT",
-        field_name="path",
-        actions=["view"],
-    )
     role_a = Role.objects.create(name="Demo Role", organization=org_a)
     role_a.presets.add(preset_a)
 

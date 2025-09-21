@@ -6,6 +6,7 @@ from django import forms
 from django.contrib.auth.forms import UserCreationForm
 
 from apps.platform.accounts.models import Organization, OrganizationMembership, User
+from apps.platform.accounts.utils import sync_user_access_flags
 
 
 class UserCreationWizardForm(UserCreationForm):
@@ -13,9 +14,6 @@ class UserCreationWizardForm(UserCreationForm):
     membership_role = forms.ChoiceField(choices=OrganizationMembership.Role.choices, required=True)
     display_name = forms.CharField(max_length=200, required=False)
     email = forms.EmailField(required=False)
-    is_staff = forms.BooleanField(required=False, initial=False)
-    is_superuser = forms.BooleanField(required=False, initial=False)
-
     class Meta(UserCreationForm.Meta):
         model = User
         fields = ("username",)
@@ -30,19 +28,24 @@ class UserCreationWizardForm(UserCreationForm):
             self.fields["password2"].widget.attrs.setdefault("autocomplete", "new-password")
 
     def save(self, commit: bool = True):  # type: ignore[override]
-        user = super().save(commit=commit)
+        user = super().save(commit=False)
         organization = self.cleaned_data.get("organization")
         membership_role = self.cleaned_data.get("membership_role")
-        user.display_name = self.cleaned_data.get("display_name") or user.display_name
-        user.email = self.cleaned_data.get("email") or user.email
-        user.is_staff = self.cleaned_data.get("is_staff", False)
-        user.is_superuser = self.cleaned_data.get("is_superuser", False)
+        display_name = self.cleaned_data.get("display_name") or None
+        email = self.cleaned_data.get("email") or None
+        user.display_name = display_name
+        if email:
+            user.email = email
+        user.is_staff = False
+        user.is_superuser = False
         if commit:
-            user.save(update_fields=["display_name", "email", "is_staff", "is_superuser"])
+            user.save()
+            self.save_m2m()
         if commit and organization and membership_role:
             OrganizationMembership.objects.get_or_create(
                 organization=organization,
                 user=user,
                 defaults={"role": membership_role},
             )
+            sync_user_access_flags(user)
         return user

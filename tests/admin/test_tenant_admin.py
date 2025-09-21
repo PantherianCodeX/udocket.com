@@ -37,9 +37,11 @@ def test_case_admin_queryset_matches_scope(settings):
     org_blocked = Organization.objects.create(id="beta", name="Beta Org")
 
     user = get_user_model().objects.create_user(
-        username="tenant", password="x", is_staff=True, is_superuser=False
+        username="tenant", password="x"
     )
-    OrganizationMembership.objects.create(user=user, organization=org_allowed)
+    OrganizationMembership.objects.create(
+        user=user, organization=org_allowed, role=OrganizationMembership.Role.ADMIN
+    )
 
     case_allowed = Case.objects.create(id="case-1", title="One", organization=org_allowed)
     CaseMembership.objects.create(case=case_allowed, user=user)
@@ -71,9 +73,11 @@ def test_job_admin_queryset_matches_scope(settings):
     Case.objects.create(id="case-j2", title="Case Two", organization=org_blocked)
 
     user = get_user_model().objects.create_user(
-        username="tenant-jobs", password="x", is_staff=True, is_superuser=False
+        username="tenant-jobs", password="x"
     )
-    OrganizationMembership.objects.create(user=user, organization=org_allowed)
+    OrganizationMembership.objects.create(
+        user=user, organization=org_allowed, role=OrganizationMembership.Role.ADMIN
+    )
     CaseMembership.objects.create(case=case_allowed, user=user)
 
     job_allowed = Job.objects.create(
@@ -160,9 +164,11 @@ def test_artifact_admin_queryset_matches_scope(settings):
     case_blocked = Case.objects.create(id="artifact-case-2", title="Artifact Two", organization=org_blocked)
 
     user = get_user_model().objects.create_user(
-        username="artifact-staff", password="x", is_staff=True, is_superuser=False
+        username="artifact-staff", password="x"
     )
-    OrganizationMembership.objects.create(user=user, organization=org_allowed)
+    OrganizationMembership.objects.create(
+        user=user, organization=org_allowed, role=OrganizationMembership.Role.ADMIN
+    )
     CaseMembership.objects.create(case=case_allowed, user=user)
 
     artifact_allowed = CaseArtifact.objects.create(
@@ -209,9 +215,11 @@ def test_audit_event_admin_queryset_matches_scope(settings):
     Case.objects.create(id="audit-case-2", title="Audit Two", organization=org_blocked)
 
     user = get_user_model().objects.create_user(
-        username="audit-staff", password="x", is_staff=True, is_superuser=False
+        username="audit-staff", password="x"
     )
-    OrganizationMembership.objects.create(user=user, organization=org_allowed)
+    OrganizationMembership.objects.create(
+        user=user, organization=org_allowed, role=OrganizationMembership.Role.ADMIN
+    )
     CaseMembership.objects.create(case=case_allowed, user=user)
 
     allowed_event = AuditEvent.objects.create(case_id=case_allowed.id, event="ALLOWED", actor="user")
@@ -241,9 +249,11 @@ def test_task_run_admin_queryset_matches_scope(settings):
     case_blocked = Case.objects.create(id="task-case-2", title="Task Two", organization=org_blocked)
 
     user = get_user_model().objects.create_user(
-        username="task-staff", password="x", is_staff=True, is_superuser=False
+        username="task-staff", password="x"
     )
-    OrganizationMembership.objects.create(user=user, organization=org_allowed)
+    OrganizationMembership.objects.create(
+        user=user, organization=org_allowed, role=OrganizationMembership.Role.ADMIN
+    )
     CaseMembership.objects.create(case=case_allowed, user=user)
 
     job_allowed = Job.objects.create(
@@ -328,6 +338,9 @@ def test_operations_admin_respects_superuser_active_org(settings):
     )
 
     superuser = get_user_model().objects.create_superuser(username="root", password="x")
+    OrganizationMembership.objects.create(
+        user=superuser, organization=org_allowed, role=OrganizationMembership.Role.SUPERUSER
+    )
     audit_admin = AuditEventAdmin(AuditEvent, admin.site)
     task_admin = TaskRunAdmin(TaskRun, admin.site)
 

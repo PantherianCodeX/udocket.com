@@ -54,6 +54,7 @@ class OrganizationMembership(models.Model):
         ADMIN = "ADMIN", "Admin"
         MANAGER = "MANAGER", "Manager"
         MEMBER = "MEMBER", "Member"
+        SUPERUSER = "SUPERUSER", "Superuser"
 
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="memberships")
     user = models.ForeignKey("accounts.User", on_delete=models.CASCADE, related_name="org_memberships")

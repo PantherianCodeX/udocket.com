@@ -5,11 +5,9 @@ from typing import Iterable, Optional
 from django.conf import settings
 from django.db.models import Q
 
-from apps.platform.artifacts.registry import artifact_field
 from apps.platform.authorization.models import (
     PermissionPreset,
     PresetCapability,
-    PresetFieldPolicy,
     Role,
     RoleCapability,
 )
@@ -18,6 +16,24 @@ from apps.platform.cases.models import CaseMembership
 # Hard-coded defaults as a safe baseline; DB can override/extend
 DEFAULT_CAPS: dict[str, set[str]] = {
     "OWNER": {
+        "case.view",
+        "case.update",
+        "job.create",
+        "artifact.view",
+        "artifact.download",
+        "artifact.field.path.view",
+        "artifact.field.checksum.view",
+    },
+    "ADMIN": {
+        "case.view",
+        "case.update",
+        "job.create",
+        "artifact.view",
+        "artifact.download",
+        "artifact.field.path.view",
+        "artifact.field.checksum.view",
+    },
+    "SUPERUSER": {
         "case.view",
         "case.update",
         "job.create",
@@ -55,6 +71,23 @@ DEFAULT_CAPS: dict[str, set[str]] = {
     },
 }
 
+
+BASE_CAPABILITIES: set[str] = set().union(*DEFAULT_CAPS.values())
+
+
+def capability_choices() -> list[tuple[str, str]]:
+    """Return available capability choices for admin/forms widgets."""
+
+    dynamic: set[str] = set()
+    try:
+        dynamic = set(PresetCapability.objects.values_list("capability", flat=True))
+    except Exception:
+        dynamic = set()
+    values = sorted(BASE_CAPABILITIES | dynamic)
+    return [(c, c) for c in values]
+
+
+CAPABILITY_CHOICES: list[tuple[str, str]] = capability_choices()
 
 def _roles_for_name(role_name: str, organization_id: Optional[str]) -> Iterable[Role]:
     qs = Role.objects.filter(name__iexact=role_name)
@@ -94,42 +127,6 @@ def role_capabilities(role_name: str, organization_id: Optional[str] = None) -> 
     return caps
 
 
-def allowed_field_actions(
-    role_name: str | None,
-    target_type: str,
-    field_name: str,
-    *,
-    organization_id: Optional[str] = None,
-    resource: str = "ARTIFACT",
-) -> set[str]:
-    """Return allowed actions for a type.field based on attached presets."""
-
-    if not role_name:
-        return set()
-    acts: set[str] = set()
-    try:
-        preset_ids: set[int] = set()
-        for role in _roles_for_name(role_name, organization_id):
-            preset_ids.update(role.presets.values_list("id", flat=True))
-        if preset_ids:
-            for fp in PresetFieldPolicy.objects.filter(
-                preset_id__in=preset_ids,
-                resource=resource,
-                type=target_type,
-                field_name=field_name,
-            ):
-                acts.update(a.lower() for a in (fp.actions or []))
-    except Exception:
-        return acts
-    if acts:
-        return acts
-    meta = artifact_field(target_type, field_name)
-    return set(a.lower() for a in (meta.default_actions if meta else []))
-
-
-# Present allow-listed capability choices in admin/forms
-CAPABILITIES: set[str] = set().union(*DEFAULT_CAPS.values())
-CAPABILITY_CHOICES: list[tuple[str, str]] = sorted(((c, c) for c in CAPABILITIES), key=lambda x: x[0])
 
 
 def has_capability(user, case_id: str | None, capability: str) -> bool:

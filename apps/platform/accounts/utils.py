@@ -21,7 +21,10 @@ def user_accessible_organizations(user) -> models.QuerySet[Organization]:
         return Organization.objects.none()
     if getattr(user, "is_superuser", False):
         return Organization.objects.all().order_by("name")
-    direct_ids = OrganizationMembership.objects.filter(user=user).values_list("organization_id", flat=True)
+    memberships = OrganizationMembership.objects.filter(user=user)
+    if memberships.filter(role=OrganizationMembership.Role.SUPERUSER).exists():
+        return Organization.objects.all().order_by("name")
+    direct_ids = memberships.values_list("organization_id", flat=True)
     case_ids = (
         CaseMembership.objects.filter(user=user)
         .values_list("case__organization_id", flat=True)
@@ -110,7 +113,7 @@ def resolve_request_organization(request, *, required: bool = True) -> Optional[
     if header_org_id:
         org = _get_org(header_org_id)
         if org and user and getattr(user, "is_authenticated", False):
-            if getattr(user, "is_superuser", False):
+            if OrganizationMembership.objects.filter(user=user, role=OrganizationMembership.Role.SUPERUSER).exists():
                 return org
             if OrganizationMembership.objects.filter(organization=org, user=user).exists():
                 return org
@@ -129,3 +132,27 @@ def resolve_request_organization(request, *, required: bool = True) -> Optional[
     if required:
         raise PermissionDenied("Organization context is required for this action.")
     return None
+
+
+def sync_user_access_flags(user) -> None:
+    """Synchronize Django staff/superuser flags from organization roles."""
+
+    if not user or not getattr(user, "pk", None):
+        return
+
+    roles = set(
+        OrganizationMembership.objects.filter(user=user).values_list("role", flat=True)
+    )
+
+    is_super = OrganizationMembership.Role.SUPERUSER in roles
+    is_staff = is_super or OrganizationMembership.Role.ADMIN in roles
+
+    updates: list[str] = []
+    if user.is_superuser != is_super:
+        user.is_superuser = is_super
+        updates.append("is_superuser")
+    if user.is_staff != is_staff:
+        user.is_staff = is_staff
+        updates.append("is_staff")
+    if updates:
+        user.save(update_fields=updates)

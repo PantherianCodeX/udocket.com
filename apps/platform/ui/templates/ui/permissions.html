@@ -47,7 +47,7 @@
       <div class="space-y-6">
         <div class="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-black/25">
           <h2 class="text-lg font-semibold text-white">Permission presets</h2>
-          <p class="mt-2 text-sm text-slate-300">Presets bundle capabilities and field policies. Hover to reveal details.</p>
+          <p class="mt-2 text-sm text-slate-300">Presets bundle commonly granted capabilities for quick reuse.</p>
           <div class="mt-4 space-y-3">
             {% for preset in presets %}
               <div class="rounded-xl border border-white/10 bg-slate-900/60 p-4 text-sm text-slate-200">
@@ -63,31 +63,6 @@
                 </div>
                 {% if preset.capabilities %}
                   <p class="mt-3 text-xs text-slate-300">Capabilities: {{ preset.capabilities|join:", " }}</p>
-                {% endif %}
-                {% if preset.field_policies %}
-                  <details class="mt-3 rounded-lg border border-white/10 bg-slate-900/50">
-                    <summary class="cursor-pointer px-3 py-2 text-xs font-semibold">Field policies</summary>
-                    <table class="min-w-full divide-y divide-white/5 text-xs">
-                      <thead class="bg-white/5 text-left uppercase tracking-wide text-slate-400">
-                        <tr>
-                          <th class="px-3 py-2">Resource</th>
-                          <th class="px-3 py-2">Type</th>
-                          <th class="px-3 py-2">Field</th>
-                          <th class="px-3 py-2">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody class="divide-y divide-white/5 bg-slate-900/40 text-slate-200">
-                        {% for policy in preset.field_policies %}
-                          <tr>
-                            <td class="px-3 py-2">{{ policy.resource }}</td>
-                            <td class="px-3 py-2">{{ policy.type }}</td>
-                            <td class="px-3 py-2">{{ policy.field }}</td>
-                            <td class="px-3 py-2">{{ policy.actions|join:", " }}</td>
-                          </tr>
-                        {% endfor %}
-                      </tbody>
-                    </table>
-                  </details>
                 {% endif %}
               </div>
             {% empty %}
