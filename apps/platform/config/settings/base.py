@@ -223,6 +223,14 @@ CELERY_TASK_ALWAYS_EAGER = env.bool("CELERY_TASK_ALWAYS_EAGER", default=False)
 CELERY_TASK_TIME_LIMIT = env.int("CELERY_TASK_TIME_LIMIT", default=7200)
 CELERY_TASK_SOFT_TIME_LIMIT = env.int("CELERY_TASK_SOFT_TIME_LIMIT", default=7100)
 
+# Persist Celery beat schedule under storage/runtime/celery/
+celery_runtime_dir = storage_root / "runtime" / "celery"
+try:
+    celery_runtime_dir.mkdir(parents=True, exist_ok=True)
+except Exception:
+    pass
+CELERY_BEAT_SCHEDULE_FILENAME = str(celery_runtime_dir / "celerybeat-schedule")
+
 # Logging to stdout
 LOGGING = {
     "version": 1,
