@@ -11,7 +11,7 @@ import os, sys, json, hashlib, subprocess, shlex, threading, shutil, platform, p
 from urllib.parse import urlparse, unquote
 from pathlib import Path
 from datetime import datetime
-from typing import Optional, Dict, Any, Tuple
+from typing import Callable, Optional, Dict, Any, Tuple
 
 try:
     from dotenv import load_dotenv
@@ -33,6 +33,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.append(str(REPO_ROOT))
 
 from packages.udocket_core.audio import probe_audio_metadata
+from packages.udocket_core.agents.transcribe_lib import _record_batch_location
 
 # Accept both AZURE_* and legacy SPEECH_* env names
 SPEECH_KEY              = (os.getenv("AZURE_SPEECH_KEY") or os.getenv("SPEECH_KEY") or "").strip()
@@ -205,7 +206,12 @@ def _to_seconds(val) -> float:
         return 0.0
     return 0.0
 
-def _rest_batch_transcribe(audio_url: str, lang: str, diarization: bool) -> Tuple[str, Optional[float], Dict[str, Any]]:
+def _rest_batch_transcribe(
+    audio_url: str,
+    lang: str,
+    diarization: bool,
+    on_location: Optional[Callable[[str], None]] = None,
+) -> Tuple[str, Optional[float], Dict[str, Any]]:
     base = f"https://{SPEECH_REGION}.api.cognitive.microsoft.com/speechtotext/v3.2"
     create_url = base + "/transcriptions"
     headers = {"Ocp-Apim-Subscription-Key": SPEECH_KEY, "Content-Type": "application/json"}
@@ -233,6 +239,12 @@ def _rest_batch_transcribe(audio_url: str, lang: str, diarization: bool) -> Tupl
             loc = None
     if not loc:
         raise RuntimeError("REST create did not return a polling location")
+
+    if on_location is not None:
+        try:
+            on_location(loc)
+        except Exception:
+            pass
 
     # Poll status
     status = None
@@ -366,7 +378,12 @@ def _rest_batch_transcribe(audio_url: str, lang: str, diarization: bool) -> Tupl
     except Exception:
         return (tresp.text, None, {"diarization": diarization, "azure_transcription_url": loc})
 
-def batch_transcribe(audio: str | Path, lang: str, diarization: bool) -> Tuple[str, Optional[float], Dict[str, Any]]:
+def batch_transcribe(
+    audio: str | Path,
+    lang: str,
+    diarization: bool,
+    on_location: Optional[Callable[[str], None]] = None,
+) -> Tuple[str, Optional[float], Dict[str, Any]]:
     """Use REST API for batch transcription for consistent diarization support.
 
     Returns (text, duration_seconds|None)
@@ -375,7 +392,7 @@ def batch_transcribe(audio: str | Path, lang: str, diarization: bool) -> Tuple[s
         source_uri = audio.as_uri()
     else:
         source_uri = audio
-    return _rest_batch_transcribe(source_uri, lang, diarization)
+    return _rest_batch_transcribe(source_uri, lang, diarization, on_location=on_location)
 
 class Transcriber:
     def __init__(self, audio: Path, lang: str, case_dir: Path, case_id: str, diarization: bool = False):
@@ -639,7 +656,19 @@ def main():
                                         pass
                             except Exception:
                                 remote_sha256 = None
-                        text_raw, remote_dur, rest_meta = batch_transcribe(audio_url, lang, args.diarization)
+                        text_raw, remote_dur, rest_meta = batch_transcribe(
+                            audio_url,
+                            lang,
+                            args.diarization,
+                            on_location=lambda loc: _record_batch_location(
+                                case_dir,
+                                case_id,
+                                job_id,
+                                loc,
+                                SPEECH_REGION,
+                                lang,
+                            ),
+                        )
                         if remote_dur and not dur:
                             dur = remote_dur
                     else:

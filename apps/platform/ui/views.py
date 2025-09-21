@@ -611,16 +611,9 @@ def job_detail_panel(request: HttpRequest, job_id: str) -> HttpResponse:
     if auth_response:
         return auth_response
 
-    try:
-        organization = resolve_request_organization(request, required=True)
-    except PermissionDenied:
-        raise Http404
-    jobs_qs = (
-        Job.objects.select_related("case", "case__organization", "reviewed_by")
-        .filter(pk=job_id)
-    )
+    jobs_qs = Job.objects.select_related("case", "case__organization", "reviewed_by").filter(pk=job_id)
     job = scope_jobs(jobs_qs, getattr(request, "user", None)).first()
-    if not job or job.organization_id != getattr(organization, "id", None):
+    if not job:
         raise Http404
     telemetry = JobTelemetrySerializer(job, context={"request": request, "ui_mode": True}).data
     user_obj = getattr(request, "user", None)

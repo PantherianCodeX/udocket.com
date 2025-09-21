@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import platform
 import re
@@ -10,7 +11,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Iterable, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, Optional, Tuple
 
 import requests
 
@@ -86,9 +87,51 @@ def _insert_timestamps(text: str, interval: int) -> str:
 def _append_jsonl(p: Path, obj: dict) -> None:
     p.parent.mkdir(parents=True, exist_ok=True)
     with p.open("a", encoding="utf-8") as f:
-        import json
-
         f.write(json.dumps(obj, ensure_ascii=False) + "\n")
+
+
+def _record_batch_location(
+    case_dir: Path,
+    case_id: str,
+    job_id: str,
+    location: str,
+    region: str,
+    language: str,
+) -> None:
+    partial = {
+        "case_id": case_id,
+        "azure_transcription_url": location,
+        "azure_region": region,
+        "language": language,
+        "status": "starting",
+        "timestamp_utc": _now_utc(),
+    }
+    ops_dir = case_dir / "ops"
+    for name in (f"{case_id}_transcription_log.json", f"{job_id}_transcription_log.json"):
+        path = ops_dir / name
+        try:
+            if path.exists():
+                current = json.loads(path.read_text(encoding="utf-8"))
+            else:
+                current = {}
+            if current.get("azure_transcription_url") and current["azure_transcription_url"] != location:
+                current["previous_azure_transcription_url"] = current["azure_transcription_url"]
+            current.update(partial)
+            path.write_text(json.dumps(current, ensure_ascii=False, indent=2), encoding="utf-8")
+        except Exception:
+            pass
+    try:
+        _append_jsonl(
+            ops_dir / "ops_transcription.jsonl",
+            {
+                "ts": _now_utc(),
+                "case_id": case_id,
+                "event": "batch_location",
+                "azure_transcription_url": location,
+            },
+        )
+    except Exception:
+        pass
 
 
 def _next_versioned(path: Path) -> Path:
@@ -182,7 +225,14 @@ def _to_seconds(val: Any) -> float:
     return 0.0
 
 
-def _rest_batch_transcribe(audio_url: str, lang: str, key: str, region: str, diarization: bool) -> Tuple[str, Optional[float], Dict[str, Any]]:
+def _rest_batch_transcribe(
+    audio_url: str,
+    lang: str,
+    key: str,
+    region: str,
+    diarization: bool,
+    on_location: Optional[Callable[[str], None]] = None,
+) -> Tuple[str, Optional[float], Dict[str, Any]]:
     base = f"https://{region}.api.cognitive.microsoft.com/speechtotext/v3.2"
     create_url = base + "/transcriptions"
     headers = {"Ocp-Apim-Subscription-Key": key, "Content-Type": "application/json"}
@@ -204,6 +254,12 @@ def _rest_batch_transcribe(audio_url: str, lang: str, key: str, region: str, dia
     loc = r.headers.get("Location") or r.json().get("self")
     if not loc:
         raise RuntimeError("REST create did not return a polling location")
+
+    if on_location is not None:
+        try:
+            on_location(loc)
+        except Exception:
+            pass
 
     t0 = time.time()
     while True:
@@ -568,7 +624,19 @@ class TranscriptionAgent:
                     if not is_url:
                         raise RuntimeError("Batch mode requires HTTPS URL input (use worker upload)")
                     text_raw, remote_dur, rest_meta = _rest_batch_transcribe(
-                        str(input), lang, cfg.azure_speech_key, cfg.azure_speech_region, diarization
+                        str(input),
+                        lang,
+                        cfg.azure_speech_key,
+                        cfg.azure_speech_region,
+                        diarization,
+                        on_location=lambda loc: _record_batch_location(
+                            case_dir,
+                            case_id,
+                            str(job_id) if job_id else case_id,
+                            loc,
+                            cfg.azure_speech_region,
+                            lang,
+                        ),
                     )
                     if remote_dur and not dur:
                         dur = remote_dur

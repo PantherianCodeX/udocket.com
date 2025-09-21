@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import uuid
 
@@ -11,6 +12,7 @@ from apps.platform.authorization.access_policies import JobAccessPolicy
 from django.conf import settings
 from rest_framework.response import Response
 from django.http import FileResponse, Http404
+import requests
 from pathlib import Path
 
 from apps.platform.authorization.capabilities import has_capability
@@ -285,6 +287,10 @@ class JobViewSet(viewsets.ModelViewSet):
         job.finished_at = timezone.now()
         job.error_message = "Cancelled by user"
         job.save(update_fields=["status", "finished_at", "error_message"])
+        try:
+            self._cancel_azure_transcription(job)
+        except Exception:
+            pass
         audit_emit(request, case_id=str(job.case_id), event="job.cancelled", data={"job_id": str(job.id)})
         send_job_update(str(job.id), event="job.cancelled", status=Job.Status.CANCELLED, case_id=str(job.case_id))
         return Response({"status": Job.Status.CANCELLED})
@@ -338,6 +344,31 @@ class JobViewSet(viewsets.ModelViewSet):
             raise Http404
         audit_emit(request, case_id=case_id, event="job.download_logs", data={"job_id": str(job.id)})
         return FileResponse(open(ops, "rb"), filename=f"{job.id}_transcription.log", content_type="text/plain", as_attachment=True)
+
+    def _cancel_azure_transcription(self, job: Job) -> None:
+        if job.mode != Job.Mode.BATCH:
+            return
+        key = getattr(settings, "AZURE_SPEECH_KEY", None)
+        if not key:
+            return
+        ops_path = storage_ops_dir(str(job.case_id), job.case.organization_id) / f"{job.id}_transcription_log.json"
+        if not ops_path.exists():
+            return
+        try:
+            meta = json.loads(ops_path.read_text(encoding="utf-8"))
+        except Exception:
+            return
+        loc = meta.get("azure_transcription_url")
+        if not loc:
+            return
+        headers = {
+            "Ocp-Apim-Subscription-Key": key,
+            "Accept": "application/json",
+        }
+        try:
+            requests.delete(loc, headers=headers, timeout=10)
+        except Exception:
+            pass
 
     @action(detail=True, methods=["post"], url_path="analyze/summary")
     def analyze_summary(self, request, pk=None):
