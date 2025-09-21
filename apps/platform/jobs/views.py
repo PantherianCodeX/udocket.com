@@ -11,6 +11,7 @@ from apps.platform.authorization.access_policies import JobAccessPolicy
 from django.conf import settings
 from rest_framework.response import Response
 from django.http import FileResponse, Http404
+from pathlib import Path
 
 from apps.platform.authorization.capabilities import has_capability
 from apps.platform.artifacts.models import CaseArtifact
@@ -260,7 +261,20 @@ class JobViewSet(viewsets.ModelViewSet):
         if not job.transcript_path:
             raise Http404
         audit_emit(request, case_id=str(job.case_id), event="job.download_transcript", data={"job_id": str(job.id)})
-        return FileResponse(open(job.transcript_path, "rb"), filename=f"{job.id}__transcript.txt", content_type="text/plain")
+        return FileResponse(open(job.transcript_path, "rb"), filename=f"{job.id}__transcript.txt", content_type="text/plain", as_attachment=True)
+
+    @action(detail=True, methods=["get"], url_path="download-audio")
+    def download_audio(self, request, pk=None):
+        job = self.get_object()
+        audio_path = getattr(job, "audio_input", None)
+        if not audio_path or not str(audio_path).startswith("/"):
+            raise Http404
+        path_obj = Path(audio_path)
+        if not path_obj.exists():
+            raise Http404
+        audit_emit(request, case_id=str(job.case_id), event="job.download_audio", data={"job_id": str(job.id)})
+        filename = path_obj.name or f"{job.id}_audio"
+        return FileResponse(path_obj.open("rb"), filename=filename, as_attachment=True)
 
     @action(detail=True, methods=["post"], url_path="cancel")
     def cancel(self, request, pk=None):
@@ -282,33 +296,38 @@ class JobViewSet(viewsets.ModelViewSet):
             return Response({"detail": "Job is currently running."}, status=status.HTTP_400_BAD_REQUEST)
         if not job.audio_input:
             return Response({"detail": "Original audio input is missing."}, status=status.HTTP_400_BAD_REQUEST)
-
-        job.status = Job.Status.PENDING
-        job.error_message = ""
-        job.started_at = None
-        job.finished_at = None
-        job.duration_s = None
-        job.transcript_path = None
-        job.save(update_fields=[
-            "status",
-            "error_message",
-            "started_at",
-            "finished_at",
-            "duration_s",
-            "transcript_path",
-        ])
+        with transaction.atomic():
+            Job.objects.filter(pk=job.pk).update(
+                status=Job.Status.CANCELLED,
+                finished_at=timezone.now(),
+                error_message="Superseded by restart",
+            )
+            new_job = Job.objects.create(
+                case=job.case,
+                organization=job.organization,
+                audio_input=job.audio_input,
+                mode=job.mode,
+                diarization=job.diarization,
+                language=job.language,
+            )
 
         transcribe_job.delay(
-            case_id=str(job.case_id),
-            job_id=str(job.id),
-            audio_input=job.audio_input,
-            mode=job.mode,
-            diarization=job.diarization,
-            language=job.language,
+            case_id=str(new_job.case_id),
+            job_id=str(new_job.id),
+            audio_input=new_job.audio_input,
+            mode=new_job.mode,
+            diarization=new_job.diarization,
+            language=new_job.language,
         )
-        audit_emit(request, case_id=str(job.case_id), event="job.restarted", data={"job_id": str(job.id)})
-        send_job_update(str(job.id), event="job.restarted", status=Job.Status.PENDING, case_id=str(job.case_id))
-        return Response({"status": Job.Status.PENDING})
+        audit_emit(
+            request,
+            case_id=str(job.case_id),
+            event="job.restarted",
+            data={"job_id": str(job.id), "replacement_job_id": str(new_job.id)},
+        )
+        send_job_update(str(job.id), event="job.cancelled", status=Job.Status.CANCELLED, case_id=str(job.case_id))
+        send_job_update(str(new_job.id), event="job.created", status=Job.Status.PENDING, case_id=str(new_job.case_id))
+        return Response({"status": Job.Status.PENDING, "job_id": str(new_job.id)})
 
     @action(detail=True, methods=["get"], url_path="logs")
     def logs(self, request, pk=None):
@@ -318,7 +337,7 @@ class JobViewSet(viewsets.ModelViewSet):
         if not ops.exists():
             raise Http404
         audit_emit(request, case_id=case_id, event="job.download_logs", data={"job_id": str(job.id)})
-        return FileResponse(open(ops, "rb"), filename=f"{job.id}_transcription.log", content_type="text/plain")
+        return FileResponse(open(ops, "rb"), filename=f"{job.id}_transcription.log", content_type="text/plain", as_attachment=True)
 
     @action(detail=True, methods=["post"], url_path="analyze/summary")
     def analyze_summary(self, request, pk=None):

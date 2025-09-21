@@ -119,6 +119,7 @@ class JobTelemetrySerializer(serializers.Serializer):
                 "type": transcript_payload.get("artifact_type", "TRANSCRIPT"),
                 "path": transcript_payload.get("path") if allow_transcript_path else None,
                 "download_url": None,
+                "title": None,
             }
             # Only expose a download link when a transcript exists and job succeeded
             has_transcript = bool(getattr(instance, "transcript_path", None)) or bool(transcript_payload.get("path"))
@@ -130,6 +131,7 @@ class JobTelemetrySerializer(serializers.Serializer):
                     transcript_entry["download_url"] = download_href
                 except Exception:
                     transcript_entry["download_url"] = None
+            transcript_entry["title"] = transcript_payload.get("title")
             data["artifacts"].append(transcript_entry)
 
         log_excerpt = telem.log_excerpt()

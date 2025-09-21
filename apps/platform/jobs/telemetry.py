@@ -127,6 +127,7 @@ class JobTelemetry:
             "avg_confidence_pct": avg_conf_pct,
             "language": meta.get("language") or self.job.language,
             "artifact_type": "TRANSCRIPT",
+            "title": meta.get("transcript_title"),
         }
 
     def agent_payload(self) -> Dict[str, Any]:

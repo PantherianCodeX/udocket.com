@@ -26,6 +26,7 @@ from apps.platform.cases.models import Case
 from apps.platform.operations.audit import emit as audit_emit
 from apps.platform.operations.storage import ensure_case_dirs, tenant_case_root, ops_dir as storage_ops_dir
 import re
+from apps.platform.jobs.utils import unique_title
 
 log = logging.getLogger("apps.platform.operations.tasks")
 
@@ -115,8 +116,40 @@ def transcribe_job(
                     "audio_mime": mimetypes.guess_type(audio_path.name)[0],
                 }
                 audio_meta_updates.update(probe_audio_metadata(audio_path))
+                if job_obj is not None:
+                    dirty_fields: list[str] = []
+                    duration_val = audio_meta_updates.get("audio_duration_s")
+                    if duration_val and not job_obj.duration_s:
+                        try:
+                            job_obj.duration_s = float(duration_val)
+                            dirty_fields.append("duration_s")
+                        except Exception:
+                            pass
+                    bitrate_val = audio_meta_updates.get("audio_bitrate_kbps")
+                    if bitrate_val and job_obj.audio_bitrate_kbps != int(bitrate_val):
+                        job_obj.audio_bitrate_kbps = int(bitrate_val)
+                        dirty_fields.append("audio_bitrate_kbps")
+                    channels_val = audio_meta_updates.get("audio_channels")
+                    if channels_val and job_obj.audio_channels != int(channels_val):
+                        job_obj.audio_channels = int(channels_val)
+                        dirty_fields.append("audio_channels")
+                    sr_val = audio_meta_updates.get("audio_sample_rate_hz")
+                    if sr_val and job_obj.sample_rate_hz != int(sr_val):
+                        job_obj.sample_rate_hz = int(sr_val)
+                        dirty_fields.append("sample_rate_hz")
+                    if dirty_fields:
+                        try:
+                            job_obj.save(update_fields=dirty_fields)
+                        except Exception:
+                            pass
     except Exception:
         audio_meta_updates = {}
+
+    if audio_meta_updates:
+        try:
+            _update_job_meta(case_id, org_id, job_id, audio_meta_updates)
+        except Exception:
+            pass
 
     # Update DB status and notify; record TaskRun
     log.info("job claimed", extra={"job_id": job_id, "case_id": case_id, "mode": mode, "diarization": diarization})
@@ -231,13 +264,19 @@ def transcribe_job(
                 transcript_bytes = None
             transcript_checksum = _sha256_file(transcript_path_obj)
         # Register artifact with checksum
+        artifact_title = None
         try:
+            existing_titles = CaseArtifact.objects.filter(
+                case_id=str(case_id),
+                type="TRANSCRIPT",
+            ).values_list("title", flat=True)
+            artifact_title = unique_title("Transcript", existing_titles)
             CaseArtifact.objects.create(
                 case_id=str(case_id),
                 case_fk=Job.objects.filter(pk=job_id).values_list('case', flat=True).first(),
                 job_id=str(job_id),
                 type="TRANSCRIPT",
-                title=f"Transcript {job_id}",
+                title=artifact_title,
                 path=str(result.transcript_file),
                 checksum=transcript_checksum or "",
                 schema_version="v1",
@@ -254,6 +293,7 @@ def transcribe_job(
             {
                 "transcript_sha256": transcript_checksum,
                 "transcript_bytes": transcript_bytes,
+                "transcript_title": artifact_title,
             }
         )
         try:
