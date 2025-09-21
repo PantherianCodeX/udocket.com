@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import json
 import uuid
+from datetime import datetime
+
+from django.core.exceptions import PermissionDenied
 
 from django.conf import settings
 from django.db import models
@@ -8,6 +12,7 @@ from django.http import Http404, HttpRequest, HttpResponse, HttpResponseRedirect
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_http_methods
+from django.utils import timezone
 
 from apps.platform.cases.models import Case, CaseMembership
 from apps.platform.accounts.models import OrganizationMembership
@@ -56,6 +61,8 @@ def index(request: HttpRequest) -> HttpResponse:
     cases = cases_qs.for_user(getattr(request, "user", None)).order_by("-created_at")
     if organization is not None:
         cases = cases.filter(organization=organization)
+    else:
+        cases = cases.none()
 
     if request.method == "POST":
         if organization is None:
@@ -144,9 +151,14 @@ def case_detail(request: HttpRequest, case_id: str) -> HttpResponse:
     if auth_response:
         return auth_response
 
+    try:
+        active_org = resolve_request_organization(request, required=True)
+    except PermissionDenied:
+        return redirect("ui-index")
+
     cases_qs = Case.objects.select_related("organization")
     case = cases_qs.for_user(getattr(request, "user", None)).filter(pk=case_id).first()
-    if not case:
+    if not case or case.organization_id != getattr(active_org, "id", None):
         raise Http404
 
     if request.method == "POST":
@@ -163,7 +175,11 @@ def case_detail(request: HttpRequest, case_id: str) -> HttpResponse:
     job_summary = summarize_jobs(jobs_list)
     last_update = job_summary.get("last_update")
     job_summary["last_update"] = last_update.isoformat() if last_update else None
-    telemetry = JobTelemetrySerializer(jobs_list, many=True, context={"request": request}).data
+    telemetry = JobTelemetrySerializer(
+        jobs_list,
+        many=True,
+        context={"request": request, "ui_mode": True},
+    ).data
     telemetry_map = {item.get("id"): item for item in telemetry}
     job_insights = []
     for job in jobs_list:
@@ -171,12 +187,20 @@ def case_detail(request: HttpRequest, case_id: str) -> HttpResponse:
         data = telemetry_map.get(key)
         if data:
             job_insights.append(data)
+    latest_job = jobs_list[0] if jobs_list else None
+    latest_job_telemetry = telemetry_map.get(str(latest_job.id)) if latest_job else None
+    latest_activity_ts = None
+    if latest_job:
+        latest_activity_ts = latest_job.finished_at or latest_job.started_at or latest_job.created_at
     context = {
         "case": case,
         "jobs": jobs_list,
         "job_summary": job_summary,
         "job_telemetry": telemetry_map,
         "job_insights": job_insights,
+        "latest_job": latest_job,
+        "latest_job_telemetry": latest_job_telemetry,
+        "latest_activity_ts": latest_activity_ts,
     }
     return render(request, "ui/case_detail.html", context)
 
@@ -186,13 +210,15 @@ def jobs(request: HttpRequest) -> HttpResponse:
     if auth_response:
         return auth_response
 
-    organization = resolve_request_organization(request, required=False)
+    try:
+        organization = resolve_request_organization(request, required=True)
+    except PermissionDenied:
+        raise Http404
     jobs_qs = Job.objects.select_related("case", "case__organization")
     scoped = scope_jobs(jobs_qs, getattr(request, "user", None))
-    if organization is not None:
-        scoped = scoped.filter(organization=organization)
+    scoped = scoped.filter(organization=organization)
     all_jobs = list(scoped[:200])
-    return render(request, "ui/jobs.html", {"jobs": all_jobs})
+    return render(request, "ui/jobs.html", {"jobs": all_jobs, "active_org": organization})
 
 
 @require_http_methods(["GET"])
@@ -201,11 +227,15 @@ def job_detail_panel(request: HttpRequest, job_id: str) -> HttpResponse:
     if auth_response:
         return auth_response
 
+    try:
+        organization = resolve_request_organization(request, required=True)
+    except PermissionDenied:
+        raise Http404
     jobs_qs = Job.objects.select_related("case", "case__organization").filter(pk=job_id)
     job = scope_jobs(jobs_qs, getattr(request, "user", None)).first()
-    if not job:
+    if not job or job.organization_id != getattr(organization, "id", None):
         raise Http404
-    telemetry = JobTelemetrySerializer(job, context={"request": request}).data
+    telemetry = JobTelemetrySerializer(job, context={"request": request, "ui_mode": True}).data
     context = {
         "case": job.case,
         "job": job,
@@ -330,9 +360,14 @@ def create_job(request: HttpRequest, case_id: str) -> HttpResponse:
     if auth_response:
         return auth_response
 
+    try:
+        active_org = resolve_request_organization(request, required=True)
+    except PermissionDenied:
+        return redirect("ui-index")
+
     cases_qs = Case.objects.select_related("organization")
     case = cases_qs.for_user(getattr(request, "user", None)).filter(pk=case_id).first()
-    if not case:
+    if not case or case.organization_id != getattr(active_org, "id", None):
         raise Http404
 
     mode = request.POST.get("mode") or Job.Mode.ON_DEMAND
@@ -383,4 +418,8 @@ def create_job(request: HttpRequest, case_id: str) -> HttpResponse:
     )
 
     # HTMX partial for immediate row insert
-    return render(request, "ui/_job_row.html", {"j": job})
+    response = render(request, "ui/_job_row.html", {"j": job})
+    if request.headers.get("HX-Request"):
+        trigger = {"job-enqueued": {"job_id": str(job.id), "status": job.status}}
+        response["HX-Trigger"] = json.dumps(trigger)
+    return response

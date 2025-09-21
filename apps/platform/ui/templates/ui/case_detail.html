@@ -3,6 +3,130 @@
 <script src="https://unpkg.com/htmx.org@1.9.12"></script>
 <script>
   window.jobPollers = window.jobPollers || {};
+  let activeTranscriptionJobId = null;
+
+  function getTranscriptionElements() {
+    const statusBox = document.getElementById('module-transcription-status');
+    return {
+      statusBox,
+      statusTitle: statusBox ? statusBox.querySelector('[data-status-text]') : null,
+      statusDetail: statusBox ? statusBox.querySelector('[data-status-detail]') : null,
+      progressWrap: document.getElementById('module-transcription-progress'),
+      progressBar: document.querySelector('#module-transcription-progress .progress'),
+      progressText: document.getElementById('module-transcription-progress-text'),
+      startButton: document.getElementById('module-transcription-start'),
+      fileTrigger: document.querySelector('[data-file-trigger]'),
+      fileName: document.getElementById('module-transcription-file-name'),
+      fileInput: document.getElementById('module-transcription-file'),
+      urlInput: document.getElementById('module-transcription-url'),
+      summaryText: document.getElementById('module-transcription-summary-text'),
+    };
+  }
+
+  function updateStartAvailability() {
+    const { startButton, fileInput, urlInput } = getTranscriptionElements();
+    if (!startButton) return;
+    const hasFile = fileInput && fileInput.files && fileInput.files.length > 0;
+    const hasUrl = urlInput && urlInput.value.trim().length > 0;
+    startButton.disabled = !(hasFile || hasUrl);
+  }
+
+  function updateFileLabel() {
+    const { fileName, fileInput } = getTranscriptionElements();
+    if (!fileName || !fileInput) return;
+    if (fileInput.files && fileInput.files.length > 0) {
+      fileName.textContent = fileInput.files[0].name;
+    } else {
+      fileName.textContent = 'No file selected.';
+    }
+  }
+
+  function setTranscriptionSummary(text) {
+    const { summaryText } = getTranscriptionElements();
+    if (!summaryText || !text) return;
+    summaryText.textContent = text;
+  }
+
+  function setTranscriptionStatus({ title, detail, progress, state }) {
+    const { statusBox, statusTitle, statusDetail, progressWrap, progressBar, progressText, startButton } = getTranscriptionElements();
+    if (!statusBox) return;
+    if (title && statusTitle) statusTitle.textContent = title;
+    if (detail && statusDetail) statusDetail.textContent = detail;
+    if (progressWrap && progressBar) {
+      if (progress === null || progress === undefined) {
+        progressWrap.classList.add('hidden');
+      } else {
+        progressWrap.classList.remove('hidden');
+        const pct = Math.max(0, Math.min(100, Math.round(progress)));
+        progressBar.style.width = `${pct}%`;
+        if (progressText) progressText.textContent = `${pct}% complete`;
+      }
+    }
+    if (startButton) {
+      if (state === 'idle') {
+        startButton.classList.remove('hidden');
+        startButton.disabled = true;
+        updateStartAvailability();
+      } else {
+        startButton.classList.add('hidden');
+      }
+    }
+  }
+
+  window.udocketUpdateTranscriptionStatus = function(jobId, payload) {
+    const status = (payload.status || '').toUpperCase() || 'PENDING';
+    const progressValue =
+      payload.progress_percent ??
+      payload.percent_complete ??
+      (typeof payload.progress === 'number' ? payload.progress * (payload.progress <= 1 ? 100 : 1) : null);
+
+    if (!activeTranscriptionJobId) {
+      activeTranscriptionJobId = jobId;
+    }
+
+    const terminal = ['SUCCEEDED', 'FAILED', 'CANCELED', 'CANCELLED', 'ERROR'];
+    if (jobId !== activeTranscriptionJobId) {
+      if (terminal.includes(status)) {
+        const label = status === 'SUCCEEDED' ? 'Transcript ready' : `Job ${status.toLowerCase()}`;
+        setTranscriptionSummary(`${label} · ${new Date().toLocaleTimeString()}`);
+      }
+      return;
+    }
+
+    let title = '';
+    let detail = '';
+    let state = 'running';
+
+    if (status === 'RUNNING') {
+      title = 'Processing with Azure Speech…';
+      detail = 'Awaiting transcription results from Azure.';
+    } else if (status === 'QUEUED' || status === 'PENDING') {
+      title = 'Job queued';
+      detail = 'Azure Speech accepted the job and will start shortly.';
+    } else if (terminal.includes(status)) {
+      title = status === 'SUCCEEDED' ? 'Transcript ready' : `Job ${status.toLowerCase()}`;
+      detail = status === 'SUCCEEDED'
+        ? 'Refresh the jobs table below or open details to download the transcript.'
+        : 'Check the job logs for diagnostics.';
+      state = 'idle';
+      activeTranscriptionJobId = null;
+      updateStartAvailability();
+    } else {
+      title = `Job ${status.toLowerCase()}`;
+      detail = 'Monitoring job status.';
+    }
+
+    setTranscriptionStatus({
+      title,
+      detail,
+      progress: progressValue,
+      state,
+    });
+
+    if (terminal.includes(status)) {
+      setTranscriptionSummary(`${title} · ${new Date().toLocaleTimeString()}`);
+    }
+  };
 
   function connectWS(jobId) {
     const statusEl = document.getElementById(`job-status-${jobId}`);
@@ -17,6 +141,7 @@
         if (transcriptEl && (transcriptPath || (statusEl && statusEl.textContent === 'SUCCEEDED'))) {
           transcriptEl.innerHTML = `<a class="font-medium text-primary-300 underline" href="/api/v1/jobs/${data.job_id || jobId}/download/">Download</a>`;
         }
+        window.udocketUpdateTranscriptionStatus(jobId, data);
         if (statusEl && ['SUCCEEDED', 'FAILED'].includes(statusEl.textContent)) {
           clearInterval(window.jobPollers[jobId]);
           delete window.jobPollers[jobId];
@@ -36,6 +161,7 @@
       if (transcriptEl && (data.transcript_path || (statusEl && statusEl.textContent === 'SUCCEEDED'))) {
         transcriptEl.innerHTML = `<a class="font-medium text-primary-300 underline" href="/api/v1/jobs/${jobId}/download/">Download</a>`;
       }
+      window.udocketUpdateTranscriptionStatus(jobId, data);
       if (statusEl && ['SUCCEEDED', 'FAILED'].includes(statusEl.textContent)) {
         clearInterval(window.jobPollers[jobId]);
         delete window.jobPollers[jobId];
@@ -60,6 +186,8 @@
       }
       ensurePolling(jobId);
     });
+    updateStartAvailability();
+    updateFileLabel();
   }
 
   window.addEventListener('DOMContentLoaded', bootstrapJobs);
@@ -72,32 +200,128 @@
     if (window.renderLocalTimes) window.renderLocalTimes();
   });
 
-  document.addEventListener('htmx:xhr:progress', (evt) => {
-    const target = evt.target;
-    if (!target || target.id !== 'job-form') return;
-    const loaded = evt.detail?.loaded ?? 0;
-    const total = evt.detail?.total ?? 1;
-    const pct = Math.max(0, Math.min(100, Math.round((loaded / total) * 100)));
-    const bar = document.querySelector('#upload-progress .progress-bar');
-    const info = document.getElementById('upload-info');
-    if (bar) bar.style.width = `${pct}%`;
-    if (info) info.textContent = `${pct}%`;
-    document.getElementById('upload-progress')?.classList.remove('hidden');
+  document.addEventListener('keydown', (evt) => {
+    if (evt.key === 'Escape') {
+      window.udocketCloseJobDetail();
+    }
   });
 
   window.udocketShowJobDetail = function () {
     document.getElementById('job-detail-modal')?.classList.remove('hidden');
-  }
+  };
 
   window.udocketCloseJobDetail = function () {
     document.getElementById('job-detail-modal')?.classList.add('hidden');
     const body = document.getElementById('job-detail-modal-body');
     if (body) body.innerHTML = '';
-  }
+  };
 
-  document.addEventListener('keydown', (evt) => {
-    if (evt.key === 'Escape') {
-      window.udocketCloseJobDetail();
+  document.addEventListener('click', (evt) => {
+    const toggle = evt.target.closest('[data-module-target]');
+    if (!toggle) return;
+    const targetId = toggle.getAttribute('data-module-target');
+    const panel = document.getElementById(targetId);
+    if (!panel) return;
+    const isHidden = panel.classList.contains('hidden');
+    document.querySelectorAll('[data-module-panel]').forEach(p => {
+      if (p !== panel) {
+        p.classList.add('hidden');
+        const btn = document.querySelector(`[data-module-target="${p.id}"]`);
+        if (btn) {
+          btn.setAttribute('aria-expanded', 'false');
+          btn.querySelector('[data-module-arrow]')?.classList.remove('rotate-180');
+        }
+      }
+    });
+    if (isHidden) {
+      panel.classList.remove('hidden');
+      toggle.setAttribute('aria-expanded', 'true');
+      toggle.querySelector('[data-module-arrow]')?.classList.add('rotate-180');
+    } else {
+      panel.classList.add('hidden');
+      toggle.setAttribute('aria-expanded', 'false');
+      toggle.querySelector('[data-module-arrow]')?.classList.remove('rotate-180');
+    }
+  });
+
+  document.addEventListener('click', (evt) => {
+    const trigger = evt.target.closest('[data-file-trigger]');
+    if (!trigger) return;
+    const inputId = trigger.getAttribute('data-file-input');
+    const input = document.getElementById(inputId);
+    if (input) input.click();
+  });
+
+  document.addEventListener('change', (evt) => {
+    if (evt.target.id === 'module-transcription-file') {
+      updateFileLabel();
+      updateStartAvailability();
+    }
+  });
+
+  document.addEventListener('input', (evt) => {
+    if (evt.target.id === 'module-transcription-url') {
+      updateStartAvailability();
+    }
+  });
+
+  document.body.addEventListener('htmx:beforeRequest', (evt) => {
+    if (evt.target && evt.target.id === 'job-form') {
+      setTranscriptionStatus({
+        title: 'Uploading audio…',
+        detail: 'Sending media to the platform.',
+        progress: 5,
+        state: 'running',
+      });
+    }
+  });
+
+  document.body.addEventListener('htmx:xhr:progress', (evt) => {
+    const target = evt.target;
+    if (!target || target.id !== 'job-form') return;
+    const loaded = evt.detail?.loaded ?? 0;
+    const total = evt.detail?.total ?? 1;
+    const pct = Math.max(0, Math.min(100, Math.round((loaded / total) * 100)));
+    setTranscriptionStatus({
+      title: 'Uploading audio…',
+      detail: 'Sending media to the platform.',
+      progress: pct,
+      state: 'running',
+    });
+  });
+
+  document.body.addEventListener('htmx:afterRequest', (evt) => {
+    if (!evt.target || evt.target.id !== 'job-form') return;
+    const { fileInput, urlInput, fileName } = getTranscriptionElements();
+    if (fileInput) fileInput.value = '';
+    if (urlInput) urlInput.value = '';
+    if (fileName) fileName.textContent = 'No file selected.';
+    updateStartAvailability();
+
+    let payload;
+    try {
+      const header = evt.detail?.xhr?.getResponseHeader('HX-Trigger');
+      if (header) payload = JSON.parse(header);
+    } catch (_) {
+      payload = null;
+    }
+    const jobInfo = payload && payload['job-enqueued'];
+    if (jobInfo && jobInfo.job_id) {
+      activeTranscriptionJobId = jobInfo.job_id;
+      setTranscriptionStatus({
+        title: 'Job queued',
+        detail: 'Azure Speech accepted the transcription job.',
+        progress: null,
+        state: 'running',
+      });
+      setTranscriptionSummary('Job queued · awaiting Azure updates');
+    } else {
+      setTranscriptionStatus({
+        title: 'Ready to launch',
+        detail: 'Select audio or paste a SAS URL to start Azure Speech.',
+        progress: null,
+        state: 'idle',
+      });
     }
   });
 </script>
@@ -163,98 +387,148 @@
       </div>
     {% endif %}
 
-    <div class="grid gap-6 lg:grid-cols-[3fr,2fr]">
-      <div class="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-black/25">
-        <h2 class="text-lg font-semibold text-white">Launch transcription</h2>
-        <p class="mt-2 text-sm text-slate-300">Upload an audio file or provide a SAS URL. Selecting diarization automatically switches to batch mode.</p>
-        <form id="job-form" method="post" enctype="multipart/form-data" class="mt-6 space-y-5"
-              hx-post="/cases/{{ case.id }}/jobs/new"
-              hx-encoding="multipart/form-data"
-              hx-target="#jobs-body" hx-swap="afterbegin">
-          {% csrf_token %}
-          <div class="grid gap-4 md:grid-cols-2">
-            <label class="flex flex-col text-sm text-slate-200">Mode
-              <select name="mode" class="mt-1 rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-sm focus:border-primary-400 focus:outline-none">
-                <option value="on-demand">On-demand</option>
-                <option value="batch">Batch (supports diarization)</option>
-              </select>
-            </label>
-            <label class="flex flex-col text-sm text-slate-200">Language
-              <input type="text" name="language" value="en-CA" class="mt-1 rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-sm focus:border-primary-400 focus:outline-none">
-            </label>
-          </div>
-          <label class="inline-flex items-center gap-2 text-sm text-slate-200">
-            <input type="checkbox" name="diarization" class="h-4 w-4 rounded border-white/20 bg-slate-900/70 text-primary-500 focus:ring-primary-400">
-            Enable diarization (auto-switches to batch)
-          </label>
-          <div class="grid gap-4 md:grid-cols-2">
-            <label class="flex flex-col text-sm text-slate-200">Audio file
-              <input type="file" name="audio" accept="audio/*" class="mt-1 w-full cursor-pointer rounded-lg border border-dashed border-white/20 bg-slate-900/50 px-3 py-3 text-sm text-slate-200 file:mr-4 file:rounded-md file:border-0 file:bg-primary-500 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-primary-400">
-            </label>
-            <label class="flex flex-col text-sm text-slate-200">Or SAS URL
-              <input type="url" name="audio_url" placeholder="https://storage.azure.com/..." class="mt-1 rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-sm focus:border-primary-400 focus:outline-none">
-            </label>
-          </div>
-          <div class="flex items-center justify-between rounded-xl border border-white/10 bg-slate-900/60 px-4 py-3 text-xs text-slate-300">
-            <div>
-              <span class="font-semibold text-primary-200">Tip:</span> Azure batch mode supports long hearings and diarization.
+    <div class="grid gap-6 lg:grid-cols-[2fr,3fr]">
+      <div class="space-y-4">
+        <div class="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-black/25">
+          <h2 class="text-lg font-semibold text-white">Workflow modules</h2>
+          <p class="mt-2 text-sm text-slate-300">Launch automation tools and monitor their progress. Modules expand to reveal fine-grained controls.</p>
+          <div class="mt-4 space-y-3">
+            <div class="rounded-xl border border-white/10 bg-slate-900/60">
+              <button type="button" class="flex w-full items-center justify-between gap-4 px-4 py-3 text-left text-sm font-semibold text-slate-100 transition hover:bg-white/5 focus:outline-none" data-module-target="module-transcription" aria-expanded="false">
+                <div>
+                  <p class="text-xs uppercase tracking-wide text-slate-400">Transcription</p>
+                  <p class="mt-1 text-slate-200">Azure Speech · Batch with diarization</p>
+                  <span class="sr-only">Launch transcription</span>
+                </div>
+                <div class="text-right text-xs text-slate-300" id="module-transcription-summary">
+                  <div class="flex justify-end gap-2">
+                    <span class="rounded-full border border-emerald-400/40 bg-emerald-500/10 px-2 py-0.5 text-emerald-200">✓ {{ job_summary.succeeded|default:0 }}</span>
+                    <span class="rounded-full border border-blue-400/40 bg-blue-500/10 px-2 py-0.5 text-blue-200">▶ {{ job_summary.running|default:0 }}</span>
+                    <span class="rounded-full border border-slate-400/40 bg-slate-500/10 px-2 py-0.5 text-slate-200">… {{ job_summary.pending|default:0 }}</span>
+                  </div>
+                  <p class="mt-1" id="module-transcription-summary-text">
+                    {% if latest_job %}
+                      Last status: <span class="font-semibold text-primary-200">{{ latest_job_telemetry.status }}</span>{% if latest_activity_ts %} · <time data-ts="{{ latest_activity_ts|date:'c' }}">{{ latest_activity_ts }}</time>{% endif %}
+                    {% else %}
+                      Ready for the first transcription.
+                    {% endif %}
+                  </p>
+                </div>
+                <svg xmlns="http://www.w3.org/2000/svg" class="module-arrow h-4 w-4 text-slate-300 transition-transform duration-150" viewBox="0 0 20 20" fill="currentColor" data-module-arrow>
+                  <path fill-rule="evenodd" d="M10 3a1 1 0 01.832.445l4.5 6.5a1 1 0 01-.832 1.555H5.5a1 1 0 01-.832-1.555l4.5-6.5A1 1 0 0110 3z" clip-rule="evenodd" />
+                </svg>
+              </button>
+              <div id="module-transcription" data-module-panel class="hidden border-t border-white/10 bg-slate-900/80 px-4 py-4">
+                <form id="job-form" method="post" enctype="multipart/form-data" class="space-y-5"
+                      hx-post="/cases/{{ case.id }}/jobs/new"
+                      hx-encoding="multipart/form-data"
+                      hx-target="#jobs-body" hx-swap="afterbegin">
+                  {% csrf_token %}
+                  <input type="hidden" name="mode" value="batch">
+                  <div class="flex flex-wrap items-center gap-3">
+                    <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:border-primary-400 hover:text-white" data-file-trigger data-file-input="module-transcription-file">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M8.257 3.099c.366-.446.957-.678 1.57-.678s1.203.232 1.57.678l6.4 7.8c.585.713.68 1.698.241 2.39-.438.691-1.249 1.084-2.08 1.084H2.706c-.831 0-1.642-.393-2.08-1.084-.439-.692-.344-1.677.241-2.39l6.39-7.8z"/></svg>
+                      Select audio
+                    </button>
+                    <input type="file" name="audio" id="module-transcription-file" accept="audio/*" class="hidden">
+                    <span id="module-transcription-file-name" class="text-sm text-slate-300">No file selected.</span>
+                  </div>
+                  <label class="flex flex-col text-sm text-slate-200">
+                    Or provide SAS URL
+                    <input type="url" name="audio_url" id="module-transcription-url" placeholder="https://storage.azure.com/..." class="mt-1 rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-sm focus:border-primary-400 focus:outline-none">
+                  </label>
+                  <div class="grid gap-4 md:grid-cols-2">
+                    <label class="inline-flex items-center gap-2 text-sm text-slate-200">
+                      <input type="checkbox" name="diarization" value="on" checked class="h-4 w-4 rounded border-white/20 bg-slate-900/70 text-primary-500 focus:ring-primary-400">
+                      Enable diarization (recommended)
+                    </label>
+                    <label class="flex flex-col text-sm text-slate-200">
+                      Language
+                      <input type="text" name="language" value="en-CA" class="mt-1 rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-sm focus:border-primary-400 focus:outline-none">
+                    </label>
+                  </div>
+                  <details class="rounded-lg border border-white/10 bg-slate-900/60 text-sm text-slate-200">
+                    <summary class="cursor-pointer px-3 py-2 font-semibold">Advanced options</summary>
+                    <div class="border-t border-white/10 px-3 py-3 space-y-3 text-xs text-slate-300">
+                      <p>Batch mode with diarization is the default. Additional controls such as speaker labels and redaction will appear here as the platform evolves.</p>
+                    </div>
+                  </details>
+                  <div class="flex items-center gap-3">
+                    <button type="submit" id="module-transcription-start" class="inline-flex items-center gap-2 rounded-lg bg-primary-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-primary-500/30 transition hover:bg-primary-400 disabled:cursor-not-allowed disabled:opacity-60" disabled>
+                      Start transcription
+                    </button>
+                    <span class="text-xs text-slate-400">Jobs run asynchronously and can be monitored below.</span>
+                  </div>
+                </form>
+                <div id="module-transcription-status" class="mt-4 rounded-xl border border-white/10 bg-slate-900/60 p-4 text-sm text-slate-200">
+                  <p class="font-semibold text-white" data-status-text>Ready to launch</p>
+                  <p class="mt-1 text-xs text-slate-300" data-status-detail>Select audio or paste a SAS URL to start Azure Speech.</p>
+                  <div id="module-transcription-progress" class="mt-3 hidden">
+                    <div class="h-2 w-full rounded-full bg-white/10">
+                      <div class="progress h-full w-0 rounded-full bg-primary-400 transition-all"></div>
+                    </div>
+                    <p class="mt-2 text-xs text-slate-300" id="module-transcription-progress-text"></p>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div id="upload-progress" class="hidden h-2 w-28 rounded-full bg-white/10">
-              <div class="progress-bar h-full w-0 rounded-full bg-primary-400 transition-all"></div>
-            </div>
           </div>
-          <div class="flex justify-end gap-3">
-            <button type="submit" class="hide-during-request inline-flex items-center gap-2 rounded-lg bg-primary-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-primary-500/30 transition hover:bg-primary-400">
-              Launch transcription
-            </button>
-            <span class="show-during-request hidden items-center gap-2 text-sm text-slate-200">
-              <svg class="h-4 w-4 animate-spin text-primary-300" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke-width="4"></circle>
-                <path class="opacity-75" d="M4 12a8 8 0 018-8" stroke-width="4"></path>
-              </svg>
-              Uploading… <span id="upload-info"></span>
-            </span>
-          </div>
-        </form>
+        </div>
+
+        <div class="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-black/25">
+          <h2 class="text-lg font-semibold text-white">Last activity</h2>
+          {% if latest_job and latest_job_telemetry %}
+            <p class="mt-1 text-sm text-slate-300">Most recent transcription <strong class="text-primary-200">{{ latest_job.mode|title }}</strong> is <span class="font-semibold text-white">{{ latest_job_telemetry.status }}</span>{% if latest_activity_ts %} · <time data-ts="{{ latest_activity_ts|date:'c' }}">{{ latest_activity_ts }}</time>{% endif %}.</p>
+            <dl class="mt-4 grid gap-3 text-xs text-slate-300 sm:grid-cols-2">
+              <div>
+                <dt class="uppercase tracking-wide text-slate-500">Duration</dt>
+                <dd class="mt-1 text-slate-100">{% if latest_job_telemetry.duration_s %}{{ latest_job_telemetry.duration_s|floatformat:1 }} s{% else %}—{% endif %}</dd>
+              </div>
+              <div>
+                <dt class="uppercase tracking-wide text-slate-500">Words</dt>
+                <dd class="mt-1 text-slate-100">{{ latest_job_telemetry.transcript.words|default:"—" }}</dd>
+              </div>
+              <div>
+                <dt class="uppercase tracking-wide text-slate-500">Azure region</dt>
+                <dd class="mt-1 text-slate-100">{{ latest_job_telemetry.agent.region|default:"—" }}</dd>
+              </div>
+              <div>
+                <dt class="uppercase tracking-wide text-slate-500">Diarization</dt>
+                <dd class="mt-1 text-slate-100">{% if latest_job.diarization %}Enabled{% else %}Disabled{% endif %}</dd>
+              </div>
+            </dl>
+          {% else %}
+            <p class="mt-1 text-sm text-slate-300">No transcription jobs have been run for this case yet.</p>
+          {% endif %}
+        </div>
       </div>
 
       <div class="space-y-4">
-        <div class="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-black/25">
-          <h2 class="text-lg font-semibold text-white">Last activity</h2>
-          <p class="mt-1 text-sm text-slate-300">{% if job_summary.last_update %}Updated <time data-ts="{{ job_summary.last_update }}">{{ job_summary.last_update }}</time>{% else %}No jobs yet.{% endif %}</p>
-          <div class="mt-4 space-y-3 text-sm text-slate-200">
-            <div class="rounded-xl border border-white/10 bg-slate-900/50 p-4">
-              <p class="text-xs uppercase tracking-wide text-slate-400">Case ID</p>
-              <p class="mt-1 font-mono text-primary-200">{{ case.id }}</p>
-            </div>
-            <div class="rounded-xl border border-white/10 bg-slate-900/50 p-4">
-              <p class="text-xs uppercase tracking-wide text-slate-400">Organization</p>
-              <p class="mt-1 text-slate-100">{{ case.organization.name }}</p>
-            </div>
+        <div class="rounded-2xl border border-white/10 bg-white/5 p-6 text-sm text-slate-200">
+          <h2 class="text-lg font-semibold text-white">Client context</h2>
+          <p class="mt-2 text-xs uppercase tracking-wide text-slate-400">Client position</p>
+          <p class="mt-1 text-slate-100">{{ case.get_client_position_display|default:"—" }}</p>
+          <p class="mt-3 text-xs uppercase tracking-wide text-slate-400">Representation</p>
+          <p class="mt-1 text-slate-100">{{ case.get_representation_display|default:"—" }}</p>
+          <div class="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-200">
+            {% if case.legal_aid %}<span class="rounded-full border border-emerald-400/40 bg-emerald-500/10 px-3 py-1 font-semibold text-emerald-200">Legal aid</span>{% endif %}
+            {% if case.pro_bono %}<span class="rounded-full border border-primary-400/40 bg-primary-500/10 px-3 py-1 font-semibold text-primary-100">Pro bono</span>{% endif %}
           </div>
         </div>
 
-        {% if job_insights %}
-        <div class="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-black/25">
-          <h2 class="text-lg font-semibold text-white">Recent diagnostics</h2>
-          <div class="mt-4 space-y-3">
-            {% for info in job_insights|slice:":5" %}
-            <div class="rounded-xl border border-white/10 bg-slate-900/50 p-4">
-              <div class="flex items-center justify-between">
-                <code class="text-xs text-primary-200">{{ info.id }}</code>
-                <span class="rounded-full border border-white/10 bg-white/10 px-2 py-0.5 text-xs text-slate-200">{{ info.status }}</span>
-              </div>
-              <dl class="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs text-slate-300">
-                <div><dt class="uppercase tracking-wide text-slate-500">Region</dt><dd class="text-slate-200">{{ info.agent.region|default:"—" }}</dd></div>
-                <div><dt class="uppercase tracking-wide text-slate-500">Words</dt><dd class="text-slate-200">{{ info.transcript.words|default:"—" }}</dd></div>
-                <div><dt class="uppercase tracking-wide text-slate-500">Audio</dt><dd class="text-slate-200">{{ info.audio.original_name|default:"—" }}</dd></div>
-                <div><dt class="uppercase tracking-wide text-slate-500">Diarization</dt><dd class="text-slate-200">{% if info.diarization %}Yes{% else %}No{% endif %}</dd></div>
-              </dl>
-            </div>
-            {% endfor %}
-          </div>
+        <div class="rounded-2xl border border-white/10 bg-white/5 p-6 text-sm text-slate-200">
+          <h2 class="text-lg font-semibold text-white">Court details</h2>
+          <p class="mt-2 text-xs uppercase tracking-wide text-slate-400">Location</p>
+          <p class="mt-1 text-slate-100">{{ case.court_location|default:"—" }}</p>
+          <p class="mt-3 text-xs uppercase tracking-wide text-slate-400">Level &amp; division</p>
+          <p class="mt-1 text-slate-100">{{ case.get_court_level_display|default:"—" }}</p>
+          <p class="mt-1 text-slate-100">{{ case.get_court_division_display|default:"" }}</p>
+          <p class="mt-3 text-xs uppercase tracking-wide text-slate-400">Case number</p>
+          <p class="mt-1 text-slate-100">{{ case.court_case_number|default:"—" }}</p>
+          <p class="mt-3 text-xs uppercase tracking-wide text-slate-400">Key dates</p>
+          <p class="mt-1 text-slate-100">Court date: {% if case.court_date %}<time data-ts="{{ case.court_date|date:'c' }}">{{ case.court_date }}</time>{% else %}—{% endif %}</p>
+          <p class="mt-1 text-slate-100">Filing deadline: {% if case.filing_deadline %}{{ case.filing_deadline }}{% else %}—{% endif %}</p>
         </div>
-        {% endif %}
       </div>
     </div>
 

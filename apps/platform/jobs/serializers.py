@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from django.conf import settings
 from rest_framework import serializers
 
@@ -13,16 +15,18 @@ class JobTelemetrySerializer(serializers.Serializer):
 
     def to_representation(self, instance: Job) -> dict:  # type: ignore[override]
         request = self.context.get("request") if hasattr(self, "context") else None
+        ui_mode = bool(self.context.get("ui_mode"))
         user = getattr(request, "user", None)
         dev_open = bool(getattr(settings, "PLATFORM_DEV_OPEN", True))
 
-        allow_audio = dev_open
-        allow_transcript = dev_open
+        allow_audio = dev_open or ui_mode
+        allow_transcript = dev_open or ui_mode
         case_id = str(getattr(instance, "case_id", "")) if instance else ""
 
         if user and getattr(user, "is_authenticated", False) and case_id:
-            allow_audio = has_capability(user, case_id, "artifact.download")
-            allow_transcript = has_capability(user, case_id, "artifact.view")
+            if not ui_mode:
+                allow_audio = has_capability(user, case_id, "artifact.download")
+                allow_transcript = has_capability(user, case_id, "artifact.view")
             if allow_transcript and not has_capability(user, case_id, "artifact.field.path.view"):
                 # permit metadata but not raw path
                 allow_transcript_path = False
@@ -39,6 +43,19 @@ class JobTelemetrySerializer(serializers.Serializer):
         audio_payload = telem.audio_payload(include_paths=allow_audio)
         transcript_payload = telem.transcript_payload(include_paths=allow_transcript_path)
         agent_payload = telem.agent_payload()
+        meta_payload = dict(telem.meta) if isinstance(telem.meta, dict) else {}
+
+        if meta_payload:
+            if not allow_audio:
+                for key in list(meta_payload.keys()):
+                    lower = key.lower()
+                    if "audio" in lower and "path" in lower:
+                        meta_payload.pop(key)
+            if not allow_transcript_path:
+                for key in list(meta_payload.keys()):
+                    lower = key.lower()
+                    if "transcript" in lower and "path" in lower:
+                        meta_payload.pop(key)
 
         error_message = instance.error_message
         if error_message and not allow_transcript and not allow_audio:
@@ -82,6 +99,12 @@ class JobTelemetrySerializer(serializers.Serializer):
         log_excerpt = telem.log_excerpt()
         if log_excerpt:
             data["log_excerpt"] = log_excerpt
+
+        data["metadata"] = meta_payload or None
+        if meta_payload:
+            data["metadata_pretty"] = json.dumps(meta_payload, indent=2, sort_keys=True, default=str)
+        else:
+            data["metadata_pretty"] = None
 
         return data
 

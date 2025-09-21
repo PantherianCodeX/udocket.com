@@ -265,7 +265,7 @@ LOGIN_URL = "/oidc/authenticate/" if _oidc_enabled else "/admin/login/"
 LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/"
 # Development/open access toggle (bypasses auth policies when true)
-PLATFORM_DEV_OPEN = env.bool("PLATFORM_DEV_OPEN", default=True)
+PLATFORM_DEV_OPEN = env.bool("PLATFORM_DEV_OPEN", default=False)
 
 # If discovery is not set, derive OP endpoints from OIDC_ISSUER when provided
 OIDC_ISSUER = env("OIDC_ISSUER", default=None)
