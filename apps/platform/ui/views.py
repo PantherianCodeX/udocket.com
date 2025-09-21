@@ -275,6 +275,9 @@ def create_job(request: HttpRequest, case_id: str) -> HttpResponse:
     up = request.FILES.get("audio")
     sas_url = (request.POST.get("audio_url") or "").strip()
 
+    if diarization and mode != Job.Mode.BATCH:
+        mode = Job.Mode.BATCH
+
     job_id = uuid.uuid4()
     case_dir = ensure_case_dirs(case_id, case.organization_id)
     audio_dir = case_dir / "audio"
