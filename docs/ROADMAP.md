@@ -130,6 +130,7 @@ Progress To Date
 - Provenance (history): enabled `django-simple-history` and integrated with admin for Cases and Artifacts.
 - Configurable RBAC scaffolding: Role and RoleCapability models, capability resolver, and seeded default roles; admin page for Effective Capabilities.
 - Stability and resilience improvements: AccessPolicy fallback, resilient migrations in `artifacts`.
+- Case insights: Django UI now consumes DRF telemetry endpoints (`/api/v1/jobs/<id>/detail/`, `/api/v1/cases/<id>/jobs/summary|detail/`) to surface per-job diagnostics, transcript artifacts, and modal drill-downs sourced from ops metadata.
 - Next slices under consideration:
   - Create and apply migrations for `simple_history` changes; admin filters for user/date/action.
   - Expand tests for capability resolution, policies, field‑level redaction, and TaskRun lifecycle.
@@ -138,4 +139,3 @@ Progress To Date
 
 Cross‑References
 - Agents contract and analysis roadmap: see `AGENTS.md`.
-

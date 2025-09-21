@@ -206,7 +206,7 @@ class CaseAccessPolicy(_MembershipMixin, AccessPolicy):
 
 class JobAccessPolicy(_MembershipMixin, AccessPolicy):
     statements = [
-        {"action": ["list", "retrieve", "detail"], "principal": "*", "effect": "allow", "condition": "is_case_member"},
+        {"action": ["list", "retrieve", "telemetry"], "principal": "*", "effect": "allow", "condition": "is_case_member"},
         {"action": ["create", "upload", "analyze_summary", "analyze_timeline", "analyze_graph"], "principal": "*", "effect": "allow", "condition": "can_manage_jobs"},
         {"action": ["status"], "principal": "*", "effect": "allow", "condition": "is_case_member"},
         {"action": ["download", "logs"], "principal": "*", "effect": "allow", "condition": "can_download_artifacts"},

@@ -78,8 +78,8 @@ class JobViewSet(viewsets.ModelViewSet):
         }
         return Response(payload)
 
-    @action(detail=True, methods=["get"], url_path="detail")
-    def detail(self, request, pk=None):
+    @action(detail=True, methods=["get"], url_path="detail", url_name="detail")
+    def telemetry(self, request, pk=None):
         """Return enriched job telemetry mixing model fields and ops metadata."""
 
         job = self.get_object()
