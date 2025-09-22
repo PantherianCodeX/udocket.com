@@ -464,14 +464,15 @@ class JobViewSet(viewsets.ModelViewSet):
                 for tasks in data.values():
                     for entry in tasks:
                         entry_id = entry.get("id") or entry.get("request", {}).get("id")
-                        if entry_id in ids:
+                        entry_state = entry.get("state") or entry.get("request", {}).get("state")
+                        if entry_id in ids and entry_state in {None, "STARTED", "RETRY"}:
                             active.add(entry_id)
         if active:
             return active
         for tid in ids:
             try:
                 result = celery_app.AsyncResult(tid)
-                if result.state in {"PENDING", "STARTED", "RETRY"}:
+                if result.state in {"STARTED", "RETRY"}:
                     active.add(tid)
             except Exception as exc:
                 log.debug("celery async result check failed for %s: %s", tid, exc)
