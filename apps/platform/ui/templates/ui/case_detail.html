@@ -1208,6 +1208,14 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
         titleSpan.setAttribute('title', title);
       }
     }
+    // Also update the open detail panel header text and any visible input
+    const wrapper = document.getElementById(`job-title-wrapper-${jobId}`);
+    if (wrapper) {
+      const headerText = wrapper.querySelector('[data-job-title-display-text]');
+      if (headerText) headerText.textContent = title;
+      const input = wrapper.querySelector('[data-job-title-form] input[name="title"]');
+      if (input) input.value = title;
+    }
   });
 
   document.addEventListener('click', (evt) => {
