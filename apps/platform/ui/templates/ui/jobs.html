@@ -104,8 +104,8 @@
           <tbody id="jobs-body" class="divide-y divide-white/5 bg-slate-900/40 text-slate-100">
             {% for j in jobs %}
             <tr data-job="{{ j.id }}" class="transition hover:bg-white/10">
-              <td class="px-4 py-3 font-mono text-xs text-primary-200">{{ j.id }}</td>
-              <td class="px-4 py-3 text-primary-200"><a class="underline" href="/cases/{{ j.case_id }}/">{{ j.case_id }}</a></td>
+              <td class="px-4 py-3 font-mono text-xs text-primary-200"><span data-copy-text="{{ j.id }}" title="{{ j.id }}">{{ j.id }}</span></td>
+              <td class="px-4 py-3 text-primary-200"><a class="underline" href="/cases/{{ j.case_id }}/" data-copy-text="{{ j.case_id }}" title="{{ j.case_id }}">{{ j.case_id }}</a></td>
               <td class="px-4 py-3 text-slate-200 capitalize">{{ j.mode }}</td>
               <td class="px-4 py-3" id="job-status-{{ j.id }}">{{ j.status }}</td>
               <td class="px-4 py-3" id="job-transcript-{{ j.id }}">{% if j.transcript_path %}<a class="font-medium text-primary-300 underline" href="/api/v1/jobs/{{ j.id }}/download/">Download</a>{% else %}—{% endif %}</td>

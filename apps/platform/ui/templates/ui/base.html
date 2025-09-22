@@ -41,6 +41,21 @@
     window.addEventListener('DOMContentLoaded', renderLocalTimes);
 
     // Global click-to-copy handler and toast utility
+    function udocketToast(text) {
+      try {
+        const cont = document.getElementById('udocket-toaster');
+        const toast = document.createElement('div');
+        toast.textContent = text || 'Copied';
+        toast.setAttribute('role', 'status');
+        toast.className = 'pointer-events-none rounded-md border border-white/20 bg-slate-800/90 px-2 py-1 text-[11px] font-semibold text-slate-100 shadow-lg shadow-black/40';
+        (cont || document.body).appendChild(toast);
+        setTimeout(() => {
+          toast.style.opacity = '0';
+          toast.style.transition = 'opacity 150ms ease-in-out';
+          setTimeout(() => toast.remove(), 200);
+        }, 800);
+      } catch (_) {}
+    }
     function udocketShowToastAt(x, y, text) {
       try {
         const toast = document.createElement('div');
@@ -69,7 +84,7 @@
       const y = (evt.clientY != null ? evt.clientY : (evt.pageY != null ? (evt.pageY - window.scrollY) : 0));
       navigator.clipboard.writeText(value).then(() => {
         udocketShowToastAt(x, y, 'Copied');
-      }).catch(() => {});
+      }).catch(() => { try { udocketToast('Copied'); } catch (_) {} });
     });
   </script>
   <style>
@@ -99,6 +114,7 @@
 </head>
 <body class="min-h-full bg-slate-900 text-slate-100">
   <div class="relative min-h-screen pb-24">
+    <div id="udocket-toaster" class="pointer-events-none fixed right-4 bottom-4 z-50 flex flex-col items-end gap-2"></div>
     <div class="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-900 to-slate-950"></div>
     <header class="sticky top-0 z-50 border-b border-white/10 bg-white/5 backdrop-blur">
       <div class="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
