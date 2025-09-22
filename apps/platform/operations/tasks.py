@@ -253,6 +253,18 @@ def transcribe_job(
                 job_obj = Job.objects.get(pk=job_id)
         if job_obj.status == Job.Status.CANCELLED:
             log.info("job cancelled during execution; ignoring transcription output", extra={"job_id": job_id})
+            try:
+                if transcript_path_obj.exists():
+                    transcript_path_obj.unlink()
+            except Exception:
+                pass
+            try:
+                if isinstance(ai, str) and ai.startswith("/"):
+                    local_audio = Path(ai)
+                    if local_audio.exists():
+                        local_audio.unlink()
+            except Exception:
+                pass
             return {"status": Job.Status.CANCELLED, "job_id": job_id, "case_id": case_id}
         job_obj.status = Job.Status.SUCCEEDED
         job_obj.finished_at = timezone.now()

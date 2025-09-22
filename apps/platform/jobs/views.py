@@ -379,12 +379,25 @@ class JobViewSet(viewsets.ModelViewSet):
                     str(job.case_id),
                     job.organization_id,
                     str(job.id),
-                    {"azure_cancel_status": resp.status_code, "azure_transcription_url": loc},
+                    {
+                        "azure_cancel_status": resp.status_code,
+                        "azure_cancel_body": (resp.text or "")[:500],
+                        "azure_transcription_url": loc,
+                    },
                 )
             except Exception:
                 pass
         except Exception as exc:  # noqa: BLE001
             log.warning("azure batch cancel failed", extra={"job_id": str(job.id), "error": str(exc)})
+            try:
+                _update_job_meta(
+                    str(job.case_id),
+                    job.organization_id,
+                    str(job.id),
+                    {"azure_cancel_error": str(exc)},
+                )
+            except Exception:
+                pass
 
     @action(detail=True, methods=["post"], url_path="analyze/summary")
     def analyze_summary(self, request, pk=None):

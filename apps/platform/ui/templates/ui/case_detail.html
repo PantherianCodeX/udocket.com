@@ -451,7 +451,8 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
       if (window.renderLocalTimes) window.renderLocalTimes();
     } catch (error) {
       console.error('Failed to load job detail', error);
-      container.innerHTML = '<p class="text-xs text-rose-200">Unable to load job detail. Try again later.</p>';
+      const message = typeof error === 'object' && error !== null && error.message ? error.message : 'Unknown error';
+      container.innerHTML = `<div class="space-y-2 text-xs text-rose-200"><p>Unable to load job detail. Try again later.</p><p class="font-mono text-[10px] text-rose-300">${message}</p></div>`;
       delete container.dataset.loading;
     }
   }
