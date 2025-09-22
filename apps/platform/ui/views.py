@@ -264,7 +264,8 @@ def _job_detail_context(
     artifacts = telemetry.get("artifacts") or []
     artifact = artifacts[0] if artifacts else None
     artifact_title = artifact.get("title") if isinstance(artifact, dict) else None
-    job_title = artifact_title or getattr(job, "description", None) or str(job.id)
+    # Prefer artifact title, then job description; fall back to a friendly default
+    job_title = artifact_title or getattr(job, "description", None) or "Transcript"
     metadata_items = _format_metadata(telemetry.get("metadata"))
     azure_cancel_status = telemetry.get("metadata", {}).get("azure_cancel_status") if isinstance(telemetry.get("metadata"), dict) else None
     azure_cancel_body = telemetry.get("metadata", {}).get("azure_cancel_body") if isinstance(telemetry.get("metadata"), dict) else None

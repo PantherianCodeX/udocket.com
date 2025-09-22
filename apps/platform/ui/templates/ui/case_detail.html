@@ -1030,7 +1030,20 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
     if (!trigger) return;
     const inputId = trigger.getAttribute('data-file-input');
     const input = document.getElementById(inputId);
-    if (input) input.click();
+    // Ensure the transcription panel is open so browsers allow file dialog
+    const panel = document.getElementById('module-transcription');
+    const header = document.querySelector('[data-module-target="module-transcription"]');
+    if (panel && header && panel.classList.contains('hidden')) {
+      panel.classList.remove('hidden');
+      header.setAttribute('aria-expanded', 'true');
+      header.querySelector('[data-module-arrow]')?.classList.add('rotate-180');
+      const { quickSection } = getTranscriptionElements();
+      if (quickSection) quickSection.classList.add('hidden');
+      // Slight delay to allow layout to update before clicking input
+      setTimeout(() => input && input.click(), 0);
+    } else if (input) {
+      input.click();
+    }
   });
 
   document.addEventListener('click', (evt) => {
@@ -1217,8 +1230,8 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
     <div class="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-black/25">
       <h2 class="text-lg font-semibold text-white">Tools</h2>
       <p class="mt-2 text-sm text-slate-300">Launch automated agents or review upcoming features for this case.</p>
-      <div class="mt-4 grid gap-6 lg:grid-cols-3">
-        <div class="lg:col-span-2">
+      <div class="mt-4 space-y-4">
+        <div>
           <form id="job-form" method="post" enctype="multipart/form-data" class="space-y-5"
                 hx-post="/cases/{{ case.id }}/jobs/new"
                 hx-encoding="multipart/form-data"
@@ -1314,20 +1327,43 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
             </div>
           </form>
         </div>
-        <div class="flex flex-col gap-4 text-sm text-slate-200">
-          <div class="rounded-2xl border border-dashed border-white/15 bg-slate-900/40 p-4">
-            <p class="text-xs uppercase tracking-wide text-slate-400">Summarization</p>
-            <p class="mt-2 text-xs text-slate-300">Generate layered summaries of transcripts with AI assistance. This module will activate once summaries are available.</p>
-            <button type="button" class="mt-4 inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold text-slate-200 opacity-70" disabled>
-              Coming soon
-            </button>
+        <!-- Summarization row -->
+        <div class="rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-3" data-module-target="module-summary" aria-expanded="false">
+          <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div class="flex flex-1 flex-col gap-1">
+              <p class="text-xs uppercase tracking-wide text-slate-400">Summarization</p>
+              <p class="text-xs text-slate-300">Generate layered summaries of transcripts with AI assistance.</p>
+            </div>
+            <div class="hidden lg:flex items-center text-slate-300 pointer-events-none">
+              <svg xmlns="http://www.w3.org/2000/svg" class="module-arrow h-4 w-4 transition-transform duration-150" viewBox="0 0 20 20" fill="currentColor" data-module-arrow>
+                <path fill-rule="evenodd" d="M10 3a1 1 0 01.832.445l4.5 6.5a1 1 0 01-.832 1.555H5.5a1 1 0 01-.832-1.555l4.5-6.5A1 1 0 0110 3z" clip-rule="evenodd" />
+              </svg>
+            </div>
           </div>
-          <div class="rounded-2xl border border-dashed border-white/15 bg-slate-900/40 p-4">
-            <p class="text-xs uppercase tracking-wide text-slate-400">Timeline</p>
-            <p class="mt-2 text-xs text-slate-300">An AI-powered event timeline, anchored to transcript timestamps, will be available here in an upcoming release.</p>
-            <button type="button" class="mt-4 inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold text-slate-200 opacity-70" disabled>
-              Coming soon
-            </button>
+        </div>
+        <div id="module-summary" data-module-panel class="hidden rounded-xl border border-white/10 bg-slate-900/80 p-4 text-sm text-slate-200">
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-slate-300">Coming soon</span>
+          </div>
+        </div>
+
+        <!-- Timeline row -->
+        <div class="rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-3" data-module-target="module-timeline" aria-expanded="false">
+          <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div class="flex flex-1 flex-col gap-1">
+              <p class="text-xs uppercase tracking-wide text-slate-400">Timeline</p>
+              <p class="text-xs text-slate-300">An AI-powered event timeline anchored to transcript timestamps.</p>
+            </div>
+            <div class="hidden lg:flex items-center text-slate-300 pointer-events-none">
+              <svg xmlns="http://www.w3.org/2000/svg" class="module-arrow h-4 w-4 transition-transform duration-150" viewBox="0 0 20 20" fill="currentColor" data-module-arrow>
+                <path fill-rule="evenodd" d="M10 3a1 1 0 01.832.445l4.5 6.5a1 1 0 01-.832 1.555H5.5a1 1 0 01-.832-1.555l4.5-6.5A1 1 0 0110 3z" clip-rule="evenodd" />
+              </svg>
+            </div>
+          </div>
+        </div>
+        <div id="module-timeline" data-module-panel class="hidden rounded-xl border border-white/10 bg-slate-900/80 p-4 text-sm text-slate-200">
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-slate-300">Coming soon</span>
           </div>
         </div>
       </div>
@@ -1335,7 +1371,7 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
 
     <div class="rounded-2xl border border-white/10 bg-white/5 shadow-xl shadow-black/30">
       <div class="flex items-center justify-between border-b border-white/10 px-6 py-4">
-        <h2 class="text-lg font-semibold text-white">Case activity</h2>
+        <h2 class="text-lg font-semibold text-white">Automations Log</h2>
         <span class="text-xs uppercase tracking-wide text-slate-400">Live updates</span>
       </div>
       <div class="overflow-hidden">
