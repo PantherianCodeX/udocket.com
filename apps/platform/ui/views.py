@@ -45,6 +45,28 @@ STATUS_CLASS_MAP = {
 }
 
 
+def _format_metadata(metadata: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if not metadata:
+        return []
+    items: list[dict[str, Any]] = []
+    for key in sorted(metadata.keys()):
+        value = metadata[key]
+        is_structured = isinstance(value, (dict, list))
+        if is_structured:
+            display = json.dumps(value, ensure_ascii=False, indent=2)
+        else:
+            display = "" if value is None else str(value)
+        items.append(
+            {
+                "key": key,
+                "label": key.replace("_", " ").title(),
+                "value": display,
+                "is_multiline": "\n" in display,
+            }
+        )
+    return items
+
+
 def _status_class(status: str) -> str:
     return STATUS_CLASS_MAP.get(status, "border-white/20 bg-white/5 text-slate-200")
 
@@ -620,10 +642,11 @@ def job_detail_panel(request: HttpRequest, job_id: str) -> HttpResponse:
         telemetry = JobTelemetrySerializer(job, context={"request": request, "ui_mode": True}).data
         artifacts = telemetry.get("artifacts") or []
         artifact = artifacts[0] if artifacts else None
-        artifact_title = None
-        if isinstance(artifact, dict):
-            artifact_title = artifact.get("title")
+        artifact_title = artifact.get("title") if isinstance(artifact, dict) else None
         job_title = artifact_title or getattr(job, "description", None) or str(job.id)
+        metadata_items = _format_metadata(telemetry.get("metadata"))
+        azure_cancel_status = telemetry.get("metadata", {}).get("azure_cancel_status") if isinstance(telemetry.get("metadata"), dict) else None
+        azure_cancel_body = telemetry.get("metadata", {}).get("azure_cancel_body") if isinstance(telemetry.get("metadata"), dict) else None
 
         user_obj = getattr(request, "user", None)
         dev_open = getattr(settings, "PLATFORM_DEV_OPEN", False)
@@ -641,6 +664,9 @@ def job_detail_panel(request: HttpRequest, job_id: str) -> HttpResponse:
             "telemetry": telemetry,
             "artifact": artifact,
             "job_title": job_title,
+            "metadata_items": metadata_items,
+            "azure_cancel_status": azure_cancel_status,
+            "azure_cancel_body": azure_cancel_body,
             "user_can_review": can_review,
         }
         return render(request, "ui/_job_detail.html", context)
@@ -676,10 +702,11 @@ def case_job_detail_panel(request: HttpRequest, case_id: str, job_id: str) -> Ht
         telemetry = JobTelemetrySerializer(job, context={"request": request, "ui_mode": True}).data
         artifacts = telemetry.get("artifacts") or []
         artifact = artifacts[0] if artifacts else None
-        artifact_title = None
-        if isinstance(artifact, dict):
-            artifact_title = artifact.get("title")
+        artifact_title = artifact.get("title") if isinstance(artifact, dict) else None
         job_title = artifact_title or getattr(job, "description", None) or str(job.id)
+        metadata_items = _format_metadata(telemetry.get("metadata"))
+        azure_cancel_status = telemetry.get("metadata", {}).get("azure_cancel_status") if isinstance(telemetry.get("metadata"), dict) else None
+        azure_cancel_body = telemetry.get("metadata", {}).get("azure_cancel_body") if isinstance(telemetry.get("metadata"), dict) else None
 
         user_obj = getattr(request, "user", None)
         dev_open = getattr(settings, "PLATFORM_DEV_OPEN", False)
@@ -698,6 +725,9 @@ def case_job_detail_panel(request: HttpRequest, case_id: str, job_id: str) -> Ht
             "telemetry": telemetry,
             "artifact": artifact,
             "job_title": job_title,
+            "metadata_items": metadata_items,
+            "azure_cancel_status": azure_cancel_status,
+            "azure_cancel_body": azure_cancel_body,
             "user_can_review": can_review,
         }
         return render(request, "ui/_job_detail.html", context)
