@@ -477,6 +477,87 @@
     }
   }
 
+  function jobTitleWrapper(jobId) {
+    return document.querySelector(`#job-title-wrapper-${jobId}`);
+  }
+
+  function jobTitleEndpoint(jobId, caseId, action, params = '') {
+    if (!jobId || !caseId) return null;
+    const base = `/cases/${caseId}/jobs/${jobId}/title`;
+    if (action === 'form') {
+      return params ? `${base}/form/${params}` : `${base}/form/`;
+    }
+    return base + '/';
+  }
+
+  function renderJobTitleError(wrapper, message) {
+    if (!wrapper) return;
+    wrapper.innerHTML = `<div class="rounded-md border border-rose-400/40 bg-rose-500/10 p-3 text-xs text-rose-200">${message}</div>`;
+  }
+
+  function dispatchHxTriggerHeader(resp) {
+    const header = resp.headers.get('HX-Trigger');
+    if (!header) return;
+    try {
+      const payload = JSON.parse(header);
+      Object.entries(payload).forEach(([eventName, detail]) => {
+        document.dispatchEvent(new CustomEvent(eventName, { detail }));
+      });
+    } catch (error) {
+      console.warn('Failed to parse HX-Trigger header', error);
+    }
+  }
+
+  async function loadJobTitleForm(jobId, { edit = false } = {}) {
+    const wrapper = jobTitleWrapper(jobId);
+    if (!wrapper) return;
+    const caseId = wrapper.dataset.caseId;
+    if (!jobId || !caseId) return;
+    const url = jobTitleEndpoint(jobId, caseId, 'form', edit ? '?edit=1' : '');
+    if (!url) return;
+    try {
+      const resp = await fetch(url, {
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        credentials: 'same-origin',
+      });
+      const html = await resp.text();
+      wrapper.outerHTML = html;
+    } catch (error) {
+      logJobUiError(jobId, 'job-title-form', error);
+      renderJobTitleError(wrapper, 'Unable to load title editor.');
+    }
+  }
+
+  async function submitJobTitleForm(form) {
+    const wrapper = form.closest('[data-job-title-wrapper]');
+    if (!wrapper) return;
+    const jobId = wrapper.dataset.jobId;
+    const caseId = wrapper.dataset.caseId;
+    if (!jobId || !caseId) return;
+    const url = jobTitleEndpoint(jobId, caseId, 'update');
+    if (!url) return;
+    const formData = new FormData(form);
+    try {
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'X-CSRFToken': getCSRFToken(),
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        credentials: 'same-origin',
+        body: formData,
+      });
+      const html = await resp.text();
+      wrapper.outerHTML = html;
+      dispatchHxTriggerHeader(resp);
+    } catch (error) {
+      logJobUiError(jobId, 'job-title-save', error);
+      renderJobTitleError(wrapper, 'Unable to save title.');
+    }
+  }
+
   const REVIEW_CLASS_MAP = {
     APPROVED: ['border-emerald-400/40', 'bg-emerald-500/10', 'text-emerald-200'],
     REJECTED: ['border-rose-400/40', 'bg-rose-500/10', 'text-rose-200'],
@@ -1051,6 +1132,28 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
   });
 
   document.addEventListener('click', async (evt) => {
+    const editBtn = evt.target.closest('[data-edit-job-title]');
+    if (editBtn) {
+      evt.preventDefault();
+      evt.stopPropagation();
+      const wrapper = editBtn.closest('[data-job-title-wrapper]');
+      const jobId = wrapper ? wrapper.dataset.jobId : null;
+      if (jobId) await loadJobTitleForm(jobId, { edit: true });
+      return;
+    }
+
+    const cancelBtn = evt.target.closest('[data-cancel-job-title]');
+    if (cancelBtn) {
+      evt.preventDefault();
+      evt.stopPropagation();
+      const wrapper = cancelBtn.closest('[data-job-title-wrapper]');
+      const jobId = wrapper ? wrapper.dataset.jobId : null;
+      if (jobId) await loadJobTitleForm(jobId, { edit: false });
+      return;
+    }
+  });
+
+  document.addEventListener('click', async (evt) => {
     const jobLink = evt.target.closest('[data-job-link]');
     if (!jobLink) return;
     evt.preventDefault();
@@ -1082,6 +1185,14 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
     if (evt.target.closest('a, button, [data-job-link], [data-job-action], input, select, textarea')) return;
     evt.preventDefault();
     await toggleJobRow(row);
+  });
+
+  document.addEventListener('submit', async (evt) => {
+    const form = evt.target.closest('[data-job-title-form]');
+    if (!form) return;
+    evt.preventDefault();
+    evt.stopPropagation();
+    await submitJobTitleForm(form);
   });
 
   document.addEventListener('job-title-updated', (evt) => {
