@@ -1159,10 +1159,10 @@ def case_job_update_title(request: HttpRequest, case_id: str, job_id: str) -> Ht
 
     context = _job_detail_context(request, job)
     context["case"] = case
-    headers = {
-        "HX-Trigger": json.dumps({"job-title-updated": {"job_id": str(job.id), "title": new_title}})
-    }
-    return render(request, "ui/_job_detail_title_form.html", context, headers=headers)
+    trigger = json.dumps({"job-title-updated": {"job_id": str(job.id), "title": new_title}})
+    response = render(request, "ui/_job_detail_title_form.html", context)
+    response["HX-Trigger"] = trigger
+    return response
 
 
 @require_http_methods(["GET"])
