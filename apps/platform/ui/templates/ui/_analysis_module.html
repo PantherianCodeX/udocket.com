@@ -1,6 +1,6 @@
-<div class="rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-3">
-  <button type="button" class="flex w-full items-start justify-between gap-3 text-left" data-module-toggle data-module-target="{{ module.panel_id }}" aria-expanded="false">
-    <div class="flex-1">
+<div class="rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-3" data-module-wrapper="{{ module.panel_id }}">
+  <div class="flex items-center gap-3">
+    <div class="flex flex-col gap-1 text-left grow cursor-pointer" data-module-header="{{ module.panel_id }}">
       <p class="text-xs uppercase tracking-wide text-slate-400">{{ module.label }}</p>
       <p class="mt-0.5 text-xs text-slate-300">{{ module.description }}</p>
       {% if module.latest and module.header_hint == "Latest run" %}
@@ -9,13 +9,15 @@
         <p class="mt-1 text-xs text-slate-400">{{ module.header_hint }}</p>
       {% endif %}
     </div>
-    <div class="flex flex-col items-end gap-2 text-slate-300">
+    <div class="flex items-center gap-2 text-slate-300">
       <span class="status-pill inline-flex items-center rounded-full border {{ module.status_class }} px-2 py-0.5 text-[10px] font-semibold uppercase">{{ module.status }}</span>
-      <svg xmlns="http://www.w3.org/2000/svg" class="module-arrow h-4 w-4 transition-transform duration-150" viewBox="0 0 20 20" fill="currentColor" data-module-arrow>
-        <path fill-rule="evenodd" d="M10 3a1 1 0 01.832.445l4.5 6.5a1 1 0 01-.832 1.555H5.5a1 1 0 01-.832-1.555l4.5-6.5A1 1 0 0110 3z" clip-rule="evenodd" />
-      </svg>
+      <span class="ml-1" aria-hidden="true">
+        <svg xmlns="http://www.w3.org/2000/svg" class="module-arrow h-4 w-4 transition-transform duration-150" viewBox="0 0 20 20" fill="currentColor" data-module-chevron="{{ module.panel_id }}">
+          <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.094l3.71-3.86a.75.75 0 011.08 1.04l-4.247 4.41a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
+        </svg>
+      </span>
     </div>
-  </button>
+  </div>
 </div>
 <div id="{{ module.panel_id }}" data-module-panel class="hidden rounded-xl border border-white/10 bg-slate-900/80 p-4 text-sm text-slate-200 space-y-4">
   <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">

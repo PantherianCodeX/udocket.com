@@ -499,12 +499,12 @@ class _OnDemandTranscriber:
         )
         self.chunks: list[str] = []
         self.done = threading.Event()
-        self.canceled_reason: Optional[str] = None
-        self.canceled_details: Optional[str] = None
+        self.cancelled_reason: Optional[str] = None
+        self.cancelled_details: Optional[str] = None
 
         self.recognizer.recognizing.connect(self._on_recognizing)
         self.recognizer.recognized.connect(self._on_recognized)
-        self.recognizer.canceled.connect(self._on_canceled)
+        self.recognizer.cancelled.connect(self._on_cancelled)
         self.recognizer.session_stopped.connect(self._on_stopped)
 
     def _on_recognizing(self, evt) -> None:  # noqa: D401 - quiet
@@ -514,12 +514,12 @@ class _OnDemandTranscriber:
         if evt.result.reason == self._speechsdk.ResultReason.RecognizedSpeech and evt.result.text.strip():
             self.chunks.append(evt.result.text)
 
-    def _on_canceled(self, evt) -> None:
-        self.canceled_reason = str(evt.reason)
+    def _on_cancelled(self, evt) -> None:
+        self.cancelled_reason = str(evt.reason)
         try:
-            self.canceled_details = getattr(evt, "error_details", None)
+            self.cancelled_details = getattr(evt, "error_details", None)
         except Exception:
-            self.canceled_details = None
+            self.cancelled_details = None
         self.done.set()
 
     def _on_stopped(self, evt) -> None:

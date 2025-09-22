@@ -143,6 +143,15 @@ def transcribe_job(
 
     # Update DB status and notify; record TaskRun
     log.info("job claimed", extra={"job_id": job_id, "case_id": case_id, "mode": mode, "diarization": diarization})
+    try:
+        append_job_log(
+            case_id,
+            org_id,
+            job_id,
+            f"Worker started transcription (mode={mode}, diarization={'on' if diarization else 'off'}, language={language or cfg.default_language if hasattr(cfg, 'default_language') else (language or 'auto')})",
+        )
+    except Exception:
+        pass
     if upload_required:
         if bool(force_wav_conversion):
             send_job_update(
@@ -230,6 +239,12 @@ def transcribe_job(
                 # Azure Batch accepts compressed formats directly; use as-is
                 batch_upload_meta["batch_upload_converted"] = False
                 batch_upload_meta["converted_temp_wav"] = False
+                append_job_log(
+                    case_id,
+                    org_id,
+                    job_id,
+                    "Skipping WAV conversion; source format accepted by Azure Batch",
+                )
 
             log.info("uploading source to blob", extra={"job_id": job_id})
             append_job_log(case_id, org_id, job_id, f"Uploading audio to Azure Blob ({original_name})")
@@ -280,12 +295,19 @@ def transcribe_job(
                     cancel_check=_cancel_check,
                     progress_cb=_progress_cb,
                 )
+                try:
+                    # Record the URL prefix (no SAS) for diagnostics
+                    url_prefix = ai.split('?', 1)[0] if isinstance(ai, str) else ''
+                    update_job_meta(case_id, org_id, job_id, {"batch_upload_url_prefix": url_prefix})
+                    append_job_log(case_id, org_id, job_id, f"Blob uploaded: {url_prefix}")
+                except Exception:
+                    pass
             except UploadCancelled:
                 log.info("upload cancelled mid-transfer", extra={"job_id": job_id})
                 append_job_log(case_id, org_id, job_id, "Upload cancelled mid-transfer", level="warning")
                 raise
             except Exception as exc:
-                log.error("blob upload failed", extra={"job_id": job_id, "error": str(exc)})
+                log.exception("blob upload failed", extra={"job_id": job_id, "error": str(exc)})
                 append_job_log(case_id, org_id, job_id, f"Blob upload failed: {exc}", level="error")
                 raise
             # Cleanup if we converted to a temporary WAV
@@ -315,6 +337,23 @@ def transcribe_job(
             log.info("uploaded source to blob", extra={"job_id": job_id})
             append_job_log(case_id, org_id, job_id, f"Upload complete: {original_name}")
 
+        append_job_log(
+            case_id,
+            org_id,
+            job_id,
+            "Submitting transcription request to Azure Speech",
+        )
+        log.info(
+            "invoking transcription agent",
+            extra={
+                "job_id": job_id,
+                "mode": mode,
+                "diarization": diarization,
+                "language": language,
+                "upload_required": upload_required,
+            },
+        )
+
         result = agent.transcribe(
             input=ai,
             case_id=case_id,
@@ -323,6 +362,12 @@ def transcribe_job(
             language=language,
             mode=mode,
             diarization=diarization,
+        )
+        append_job_log(
+            case_id,
+            org_id,
+            job_id,
+            "Transcription agent completed; persisting results",
         )
         try:
             if result.meta_json.exists():
@@ -371,7 +416,7 @@ def transcribe_job(
                 pass
             return {"status": Job.Status.CANCELLED, "job_id": job_id, "case_id": case_id}
 
-        log.error("job failed", extra={"job_id": job_id, "error": str(e)})
+        log.exception("job failed", extra={"job_id": job_id, "error": str(e)})
         append_job_log(case_id, org_id, job_id, f"Job failed: {e}", level="error")
         payload = {
             "status": "FAILED",
@@ -403,8 +448,11 @@ def transcribe_job(
             send_job_update(job_id, event="job.failed", **payload)
         except Exception:
             pass
+        meta_updates = dict(audio_meta_updates)
+        if batch_upload_meta:
+            meta_updates.update(batch_upload_meta)
         try:
-            update_job_meta(case_id, org_id, job_id, audio_meta_updates)
+            update_job_meta(case_id, org_id, job_id, meta_updates)
         except Exception:
             pass
         raise
@@ -492,6 +540,8 @@ def transcribe_job(
                 "transcript_title": artifact_title,
             }
         )
+        if batch_upload_meta:
+            meta_updates.update(batch_upload_meta)
         try:
             update_job_meta(case_id, org_id, job_id, meta_updates)
         except Exception:

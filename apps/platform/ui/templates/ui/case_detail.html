@@ -2,13 +2,20 @@
 {% block head %}
 <script src="https://unpkg.com/htmx.org@1.9.12"></script>
 <script>
+  try {
   window.jobPollers = window.jobPollers || {};
   window.jobSockets = window.jobSockets || {};
   window.jobDetailRefreshAt = window.jobDetailRefreshAt || {};
   window.caseSocket = window.caseSocket || null;
   window.casePoller = window.casePoller || null;
+  window.jobLastStatus = window.jobLastStatus || {};
   const CASE_POLL_INTERVAL = 8000;
   let activeTranscriptionJobId = null;
+
+  function currentCaseId() {
+    const jobsBody = document.getElementById('jobs-body');
+    return jobsBody && jobsBody.dataset ? jobsBody.dataset.caseId || '' : '';
+  }
 
   function getTranscriptionElements() {
     const statusBox = document.getElementById('module-transcription-status');
@@ -39,7 +46,6 @@
     SUCCEEDED: 'Succeeded',
     FAILED: 'Failed',
     CANCELLED: 'Cancelled',
-    CANCELED: 'Cancelled',
     CANCELLING: 'Cancelling',
     ERROR: 'Error',
   };
@@ -53,30 +59,119 @@
     return STATUS_LABELS[normalized] || (normalized ? normalized.charAt(0) + normalized.slice(1).toLowerCase() : 'Status');
   }
 
+  const STATUS_CLASS_MAP = {
+    SUCCEEDED: ['border-emerald-400/40', 'bg-emerald-500/10', 'text-emerald-200'],
+    APPROVED: ['border-emerald-400/40', 'bg-emerald-500/10', 'text-emerald-200'],
+    FAILED: ['border-rose-400/40', 'bg-rose-500/10', 'text-rose-200'],
+    REJECTED: ['border-rose-400/40', 'bg-rose-500/10', 'text-rose-200'],
+    ERROR: ['border-rose-400/40', 'bg-rose-500/10', 'text-rose-200'],
+    CONVERTING: ['border-primary-400/40', 'bg-primary-500/10', 'text-primary-100'],
+    RUNNING: ['border-primary-400/40', 'bg-primary-500/10', 'text-primary-100'],
+    UPLOADING: ['border-primary-400/40', 'bg-primary-500/10', 'text-primary-100'],
+    PENDING: ['border-amber-400/40', 'bg-amber-500/10', 'text-amber-100'],
+    QUEUED: ['border-amber-400/40', 'bg-amber-500/10', 'text-amber-100'],
+    CANCELLED: ['border-slate-400/40', 'bg-slate-500/20', 'text-slate-100'],
+    CANCELLING: ['border-slate-400/40', 'bg-slate-500/20', 'text-slate-100'],
+    DEFAULT: ['border-white/20', 'bg-white/5', 'text-slate-300'],
+  };
+  const STATUS_CLASS_VALUES = Array.from(new Set(Object.values(STATUS_CLASS_MAP).flat()));
+  const TERMINAL_STATUSES = ['SUCCEEDED', 'FAILED', 'CANCELLED', 'ERROR'];
+
+  function isTerminalStatusValue(value) {
+    return TERMINAL_STATUSES.includes(normalizeStatusName(value));
+  }
+
+  const JOB_LOG_PREFIX = '[jobs]';
+
+  function logJobUiError(jobId, stage, error) {
+    if (!error) return;
+    const err = error instanceof Error ? error : new Error(String(error));
+    console.error(`${JOB_LOG_PREFIX} ${stage} failed for job ${jobId}: ${err.message}`, err);
+    if (typeof udocketLogClientError === 'function') {
+      try {
+        udocketLogClientError({
+          type: 'job_ui_error',
+          jobId,
+          stage,
+          message: err.message,
+          stack: err.stack,
+        });
+      } catch (_) {
+        // Swallow secondary logging errors to avoid loops
+      }
+    }
+  }
+
+  function stopJobPolling(jobId) {
+    const handle = window.jobPollers && window.jobPollers[jobId];
+    if (handle) {
+      clearInterval(handle);
+      delete window.jobPollers[jobId];
+      try {
+        if (typeof udocketLogDebug === 'function') {
+          udocketLogDebug({ type: 'job_poll_stop', jobId });
+        }
+      } catch (_) {
+        // ignore analytics errors
+      }
+      console.log(`${JOB_LOG_PREFIX} poll stop`, jobId);
+    }
+  }
+
+  function startJobPolling(jobId, runner) {
+    if (!window.jobPollers) window.jobPollers = {};
+    if (window.jobPollers[jobId]) return;
+    window.jobPollers[jobId] = setInterval(runner, 2000);
+    try {
+      if (typeof udocketLogDebug === 'function') {
+        udocketLogDebug({ type: 'job_poll_start', jobId });
+      }
+    } catch (_) {
+      // ignore analytics errors
+    }
+    console.log(`${JOB_LOG_PREFIX} poll start`, jobId);
+  }
+
+  function applyStatusPillClasses(target, normalized) {
+    if (!target || !target.classList || !target.classList.contains('status-pill')) return;
+    target.classList.remove(...STATUS_CLASS_VALUES);
+    const next = STATUS_CLASS_MAP[normalized] || STATUS_CLASS_MAP.DEFAULT;
+    target.classList.add(...next);
+  }
+
   function renderStatusLabel(el, status, progress) {
     if (!el) return;
     const target = el.matches('[data-status]') ? el : el.querySelector('[data-status]') || el;
     const normalized = normalizeStatusName(status);
+    const labelEl = target.querySelector('[data-job-status-label]');
+    const setText = (value) => {
+      if (labelEl) {
+        labelEl.textContent = value;
+      } else {
+        target.textContent = value;
+      }
+    };
     if (normalized === 'UPLOADING' && Number.isFinite(progress)) {
       const pct = Math.max(0, Math.min(100, Math.round(progress)));
-      target.textContent = `Uploading ${pct}%`;
+      setText(`Uploading ${pct}%`);
       target.dataset.progress = String(pct);
       if (target.classList.contains('status-pill')) {
         target.style.setProperty('--status-progress', (pct / 100).toString());
       }
     } else if (normalized === 'CANCELLING') {
-      target.textContent = 'Cancelling';
+      setText('Cancelling');
       target.dataset.progress = '';
       if (target.classList.contains('status-pill')) {
         target.style.removeProperty('--status-progress');
       }
     } else {
-      target.textContent = friendlyStatus(status);
+      setText(friendlyStatus(status));
       target.dataset.progress = '';
       if (target.classList.contains('status-pill')) {
         target.style.removeProperty('--status-progress');
       }
     }
+    applyStatusPillClasses(target, normalized);
     target.dataset.status = normalized;
     if (el !== target) {
       el.dataset.status = normalized;
@@ -88,9 +183,28 @@
     }
   }
 
+  function updateStatusDisplays(jobId, status, progress) {
+    const statusCell = document.getElementById(`job-status-${jobId}`);
+    if (statusCell) {
+      renderStatusLabel(statusCell, status, progress);
+    }
+    const detailContainer = document.querySelector(`[data-job-detail="${jobId}"]`);
+    if (!detailContainer) return;
+    const detailPill = detailContainer.querySelector('.status-pill[data-status]');
+    if (detailPill) {
+      renderStatusLabel(detailPill, status, progress);
+    }
+    const detailLabel = detailContainer.querySelector('[data-job-status-label]');
+    if (detailLabel) {
+      detailLabel.textContent = friendlyStatus(status);
+    }
+  }
+
   function getCSRFToken() {
     const match = document.cookie.match(/csrftoken=([^;]+)/);
-    return match ? decodeURIComponent(match[1]) : '';
+    if (match) return decodeURIComponent(match[1]);
+    const meta = document.querySelector('meta[name="csrf-token"]');
+    return meta ? meta.getAttribute('content') || '' : '';
   }
 
   function currentJobId() {
@@ -106,7 +220,7 @@
     if (!container) return;
     container.setAttribute('data-current-job-id', jobId || '');
     if (typeof status === 'string' && status.length) {
-      container.setAttribute('data-current-job-status', status);
+      container.setAttribute('data-current-job-status', status.toUpperCase());
     }
   }
 
@@ -134,6 +248,35 @@
     const { summaryText } = getTranscriptionElements();
     if (!summaryText || !text) return;
     summaryText.textContent = text;
+  }
+
+  function updateTranscriptionHeader(status, payload) {
+    const statusEl = document.querySelector('[data-transcription-last-status]');
+    if (statusEl) {
+      statusEl.textContent = friendlyStatus(status);
+    }
+    const emptyEl = document.querySelector('[data-transcription-last-empty]');
+    const summaryEl = document.querySelector('[data-transcription-last-summary]');
+    if (summaryEl) summaryEl.classList.remove('hidden');
+    if (emptyEl) emptyEl.classList.add('hidden');
+    const tsEl = document.querySelector('[data-transcription-last-ts]');
+    const timeWrapper = document.querySelector('[data-transcription-last-time-wrapper]');
+    if (tsEl) {
+      const ts =
+        payload.finished_at ||
+        payload.completed_at ||
+        payload.timestamp_utc ||
+        payload.started_at ||
+        payload.created_at ||
+        new Date().toISOString();
+      tsEl.dataset.ts = ts;
+      tsEl.textContent = new Date(ts).toISOString();
+      tsEl.classList.remove('hidden');
+      if (timeWrapper) timeWrapper.classList.remove('hidden');
+      if (window.renderLocalTimes) window.renderLocalTimes();
+    } else if (timeWrapper) {
+      timeWrapper.classList.add('hidden');
+    }
   }
 
   function setTranscriptionStatus({ title, detail, progress, state, statusName }) {
@@ -174,29 +317,7 @@
 
     if (statusPill) {
       const normalized = (statusName || title || '').toUpperCase();
-      const CLASS_MAP = {
-        SUCCEEDED: ['border-emerald-400/40', 'bg-emerald-500/10', 'text-emerald-200'],
-        APPROVED: ['border-emerald-400/40', 'bg-emerald-500/10', 'text-emerald-200'],
-        FAILED: ['border-rose-400/40', 'bg-rose-500/10', 'text-rose-200'],
-        REJECTED: ['border-rose-400/40', 'bg-rose-500/10', 'text-rose-200'],
-        RUNNING: ['border-primary-400/40', 'bg-primary-500/10', 'text-primary-100'],
-        UPLOADING: ['border-primary-400/40', 'bg-primary-500/10', 'text-primary-100'],
-        PENDING: ['border-amber-400/40', 'bg-amber-500/10', 'text-amber-100'],
-        QUEUED: ['border-amber-400/40', 'bg-amber-500/10', 'text-amber-100'],
-        CANCELLED: ['border-slate-400/40', 'bg-slate-500/20', 'text-slate-100'],
-        CANCELED: ['border-slate-400/40', 'bg-slate-500/20', 'text-slate-100'],
-        CANCELLING: ['border-slate-400/40', 'bg-slate-500/20', 'text-slate-100'],
-      };
-      statusPill.classList.remove(
-        'border-emerald-400/40', 'bg-emerald-500/10', 'text-emerald-200',
-        'border-rose-400/40', 'bg-rose-500/10', 'text-rose-200',
-        'border-primary-400/40', 'bg-primary-500/10', 'text-primary-100',
-        'border-amber-400/40', 'bg-amber-500/10', 'text-amber-100',
-        'border-slate-400/40', 'bg-slate-500/20', 'text-slate-100',
-        'border-white/20', 'bg-white/5', 'text-slate-300'
-      );
-      const next = CLASS_MAP[normalized] || ['border-white/20', 'bg-white/5', 'text-slate-300'];
-      statusPill.classList.add(...next);
+      applyStatusPillClasses(statusPill, normalized);
       const progressPct = typeof progress === 'number' ? Math.max(0, Math.min(100, progress)) : null;
       statusPill.textContent = statusName ? friendlyStatus(statusName) : (title || 'Status');
       statusPill.dataset.status = normalized;
@@ -213,7 +334,7 @@
   function updateTranscriptionControls(status) {
     const { startButtons } = getTranscriptionElements();
     const normalized = (status || '').toUpperCase();
-    const runningStates = ['RUNNING', 'UPLOADING', 'PENDING', 'CANCELLING'];
+    const runningStates = ['RUNNING', 'UPLOADING', 'CONVERTING', 'PENDING', 'CANCELLING'];
     if (startButtons && startButtons.length) {
       startButtons.forEach((btn) => {
         btn.disabled = runningStates.includes(normalized);
@@ -239,14 +360,14 @@
       }
       const html = await resp.text();
       container.innerHTML = html;
+      const newPanel = container.querySelector('[data-module-panel]');
+      const panelId = newPanel ? newPanel.id : `module-${key}`;
+      if (wasOpen && newPanel) {
+        newPanel.classList.remove('hidden');
+      }
       if (wasOpen) {
-        const header = container.querySelector('[data-module-toggle]');
-        const newPanel = container.querySelector('[data-module-panel]');
-        if (newPanel && header) {
-          newPanel.classList.remove('hidden');
-          header.setAttribute('aria-expanded', 'true');
-          header.querySelector('[data-module-arrow]')?.classList.add('rotate-180');
-        }
+        container.querySelectorAll(`[data-module-toggle][data-module-target="${panelId}"]`).forEach((btn) => btn.setAttribute('aria-expanded', 'true'));
+        container.querySelectorAll(`[data-module-chevron="${panelId}"]`).forEach((icon) => icon.classList.add('rotate-180'));
       }
       if (window.renderLocalTimes) window.renderLocalTimes();
     } catch (error) {
@@ -374,7 +495,7 @@
     const cancelBtn = document.querySelector(`[data-job-cancel="${jobId}"]`);
     const restartBtn = document.querySelector(`[data-job-restart="${jobId}"]`);
     const runningStates = ['RUNNING', 'UPLOADING', 'PENDING', 'QUEUED', 'CANCELLING'];
-    const restartStates = ['SUCCEEDED', 'FAILED', 'CANCELLED', 'CANCELED'];
+    const restartStates = ['SUCCEEDED', 'FAILED', 'CANCELLED'];
     if (cancelBtn) {
       const shouldShowCancel = runningStates.includes(normalized);
       cancelBtn.classList.toggle('hidden', !shouldShowCancel);
@@ -482,6 +603,7 @@
   }
 window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
     const status = (payload.status || '').toUpperCase() || 'PENDING';
+    const isTerminalStatus = isTerminalStatusValue(status);
     const progressValue =
       payload.upload_progress ??
       payload.progress_percent ??
@@ -489,6 +611,18 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
       (typeof payload.progress === 'number'
         ? payload.progress * (payload.progress <= 1 ? 100 : 1)
         : null);
+
+    const trackedJobIdCurrent = currentJobId();
+    const isTrackedJob = !trackedJobIdCurrent || trackedJobIdCurrent === jobId;
+
+    updateStatusDisplays(jobId, status, progressValue);
+    if (isTrackedJob) {
+      updateTranscriptionHeader(status, payload);
+    }
+
+    const previousStatus = window.jobLastStatus[jobId];
+    const statusChanged = previousStatus !== status;
+    window.jobLastStatus[jobId] = status;
 
     const row = document.querySelector(`[data-job="${jobId}"]`);
     if (row) {
@@ -508,18 +642,17 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
       if (detailRow && !detailRow.classList.contains('hidden') && container.dataset.loaded === '1') {
         const now = Date.now();
         const last = window.jobDetailRefreshAt[jobId] || 0;
-        // Throttle forced refreshes to avoid layout jumps during live updates
-        if (now - last > 4000) {
+        const shouldForceRefresh = isTerminalStatus ? statusChanged : (now - last > 4000);
+        if (shouldForceRefresh) {
           window.jobDetailRefreshAt[jobId] = now;
           loadJobDetail(jobId, { force: true });
         }
-      } else {
+      } else if (statusChanged) {
         delete container.dataset.loaded;
       }
     }
 
-    const trackedJobId = currentJobId();
-    if (!trackedJobId || trackedJobId === jobId) {
+    if (!trackedJobIdCurrent || trackedJobIdCurrent === jobId) {
       setCurrentJob(jobId, status);
     }
 
@@ -527,19 +660,13 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
       activeTranscriptionJobId = jobId;
     }
 
-    const detailStatusLabel = document.querySelector(`[data-job-detail="${jobId}"] [data-job-status-label]`);
-    if (detailStatusLabel) {
-      detailStatusLabel.textContent = friendlyStatus(status);
-    }
-
     if (payload.title) {
       const headerTitle = document.querySelector(`#job-title-wrapper-${jobId} [data-job-title-display] h2`);
       if (headerTitle) headerTitle.textContent = payload.title;
     }
 
-    const terminal = ['SUCCEEDED', 'FAILED', 'CANCELED', 'CANCELLED', 'ERROR'];
     if (jobId !== activeTranscriptionJobId) {
-      if (terminal.includes(status)) {
+      if (isTerminalStatus) {
         const label = status === 'SUCCEEDED' ? 'Transcript ready' : `Job ${status.toLowerCase()}`;
         const finishedAt = payload.finished_at || payload.completed_at || payload.timestamp_utc;
         if (finishedAt) {
@@ -548,6 +675,7 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
           setTranscriptionSummary(label);
         }
       }
+      stopJobPolling(jobId);
       return;
     }
 
@@ -558,16 +686,19 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
     if (status === 'UPLOADING') {
       title = 'Uploading audio…';
       detail = 'Preparing media for Azure Speech.';
+    } else if (status === 'CONVERTING') {
+      title = 'Converting audio…';
+      detail = 'Preparing a WAV conversion before upload.';
     } else if (status === 'RUNNING') {
       title = 'Processing with Azure Speech…';
       detail = 'Awaiting transcription results from Azure.';
     } else if (status === 'QUEUED' || status === 'PENDING') {
       title = 'Job queued';
       detail = 'Azure Speech accepted the job and will start shortly.';
-    } else if (terminal.includes(status)) {
+    } else if (isTerminalStatus) {
       title = status === 'SUCCEEDED' ? 'Transcript ready' : `Job ${status.toLowerCase()}`;
       detail = status === 'SUCCEEDED'
-        ? 'Refresh the jobs table below or open details to download the transcript.'
+        ? 'Open the job details below to download the transcript.'
         : 'Check the job logs for diagnostics.';
       state = 'idle';
       activeTranscriptionJobId = null;
@@ -586,32 +717,32 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
     });
     updateTranscriptionControls(status);
 
-    const detailStatusLabelActive = document.querySelector(`[data-job-detail="${jobId}"] [data-job-status-label]`);
-    if (detailStatusLabelActive) {
-      detailStatusLabelActive.textContent = friendlyStatus(status);
-    }
-
-    if (status === 'UPLOADING') {
+    if (status === 'CONVERTING') {
+      setTranscriptionSummary('Converting audio to 16 kHz mono WAV…');
+    } else if (status === 'UPLOADING') {
       setTranscriptionSummary('Uploading audio…');
     } else if (status === 'RUNNING') {
       setTranscriptionSummary('Processing with Azure Speech…');
     }
 
-    const detailStatus = document.querySelector(`[data-job-detail="${jobId}"] .status-pill[data-status]`);
-    if (detailStatus) renderStatusLabel(detailStatus, status, progressValue);
-
-    if (terminal.includes(status)) {
+    if (isTerminalStatus) {
       const finishedAt = payload.finished_at || payload.completed_at || payload.timestamp_utc;
       if (finishedAt) {
         setTranscriptionSummary(`${title} · ${new Date(finishedAt).toLocaleTimeString()}`);
       } else {
         setTranscriptionSummary(title);
       }
+      stopJobPolling(jobId);
     }
   };
 
   function connectWS(jobId) {
-    const statusEl = document.getElementById(`job-status-${jobId}`);
+    const row = document.querySelector(`[data-job="${jobId}"]`);
+    const caseId = currentCaseId();
+    if (!row || (caseId && row.dataset.jobCaseId && row.dataset.jobCaseId !== caseId)) {
+      stopJobPolling(jobId);
+      return;
+    }
     const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + `/ws/jobs/${jobId}/`;
     const ws = new WebSocket(url);
     window.jobSockets[jobId] = ws;
@@ -624,16 +755,17 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
     ws.onmessage = (ev) => {
       try {
         const data = JSON.parse(ev.data);
-        const progress = data.progress_percent ?? data.upload_progress;
-        if (statusEl) renderStatusLabel(statusEl, data.status, progress);
+        console.log(`${JOB_LOG_PREFIX} ws message`, jobId, data.status || data.event || data.type || '');
         window.udocketUpdateTranscriptionStatus(jobId, data);
         updateJobReview(jobId, data);
-        const normalized = statusEl && statusEl.dataset ? statusEl.dataset.status : '';
-        if (normalized && ['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(normalized)) {
-          clearInterval(window.jobPollers[jobId]);
-          delete window.jobPollers[jobId];
-        }
-      } catch (_) {}
+        const statusNode = document.getElementById(`job-status-${jobId}`);
+        const normalized = statusNode && statusNode.dataset ? statusNode.dataset.status : '';
+        if (isTerminalStatusValue(normalized)) {
+        stopJobPolling(jobId);
+      }
+    } catch (error) {
+      logJobUiError(jobId, 'ws-message', error);
+      }
     };
     ws.onerror = (err) => {
       console.warn('Job websocket error', jobId, err);
@@ -646,34 +778,53 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
 
   async function pollJob(jobId) {
     try {
+      const row = document.querySelector(`[data-job="${jobId}"]`);
+      const caseId = currentCaseId();
+      if (!row || (caseId && row.dataset.jobCaseId && row.dataset.jobCaseId !== caseId)) {
+        stopJobPolling(jobId);
+        return;
+      }
       const resp = await fetch(`/api/v1/jobs/${jobId}/status/`);
       if (!resp.ok) return;
       const data = await resp.json();
-      const statusEl = document.getElementById(`job-status-${jobId}`);
-      const progress = data.progress_percent ?? data.upload_progress;
-      if (statusEl) renderStatusLabel(statusEl, data.status, progress);
+      console.log(`${JOB_LOG_PREFIX} poll response`, jobId, data.status);
       window.udocketUpdateTranscriptionStatus(jobId, data);
       updateJobReview(jobId, data);
-      const normalized = statusEl && statusEl.dataset ? statusEl.dataset.status : '';
-      if (normalized && ['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(normalized)) {
-        clearInterval(window.jobPollers[jobId]);
-        delete window.jobPollers[jobId];
+      const statusNode = document.getElementById(`job-status-${jobId}`);
+      const normalized = statusNode && statusNode.dataset
+        ? statusNode.dataset.status
+        : (row ? row.dataset.jobStatus : (data.status || ''));
+      if (isTerminalStatusValue(normalized || data.status)) {
+        stopJobPolling(jobId);
       }
-    } catch (_) {}
+    } catch (error) {
+      logJobUiError(jobId, 'poll', error);
+    }
   }
 
   function ensurePolling(jobId, force = false) {
     if (window.jobPollers[jobId]) return;
     const statusEl = document.getElementById(`job-status-${jobId}`);
-    if (!statusEl) return;
-    const normalized = statusEl.dataset ? statusEl.dataset.status : '';
-    if (normalized && ['SUCCEEDED', 'FAILED', 'CANCELLED', 'CANCELED'].includes(normalized)) return;
+    const row = document.querySelector(`[data-job="${jobId}"]`);
+    const caseId = currentCaseId();
+    if (!row || (caseId && row.dataset.jobCaseId && row.dataset.jobCaseId !== caseId)) {
+      stopJobPolling(jobId);
+      return;
+    }
+    const normalized = statusEl && statusEl.dataset ? statusEl.dataset.status : (row ? row.dataset.jobStatus : '');
+    if (isTerminalStatusValue(normalized)) {
+      stopJobPolling(jobId);
+      return;
+    }
     const socket = window.jobSockets[jobId];
     if (!force && socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
       // Prefer websocket updates while connection is healthy.
+      console.log(`${JOB_LOG_PREFIX} poll skip (socket)`, jobId);
       return;
     }
-    window.jobPollers[jobId] = setInterval(() => pollJob(jobId), 2000);
+    startJobPolling(jobId, () => {
+      pollJob(jobId).catch((error) => logJobUiError(jobId, 'poll-interval', error));
+    });
   }
 
   async function loadJobDetail(jobId, { force = false } = {}) {
@@ -736,6 +887,16 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
           });
         }
       });
+      const row = document.querySelector(`[data-job="${jobId}"]`);
+      const currentStatus = row ? row.dataset.jobStatus : null;
+      if (currentStatus) {
+        updateStatusDisplays(jobId, currentStatus, null);
+      } else {
+        const pill = container.querySelector('[data-job-status-pill]');
+        if (pill && pill.dataset.status) {
+          updateStatusDisplays(jobId, pill.dataset.status, null);
+        }
+      }
       container.dataset.loaded = '1';
       delete container.dataset.loading;
       if (window.renderLocalTimes) window.renderLocalTimes();
@@ -781,21 +942,52 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
   }
 
   function bootstrapJobs() {
+    const seenJobIds = new Set();
     document.querySelectorAll('[data-job]').forEach((row) => {
       const jobId = row.dataset.job;
+      if (!jobId) return;
+      seenJobIds.add(jobId);
+      const statusEl = document.getElementById(`job-status-${jobId}`);
+      let statusValue = row.getAttribute('data-job-status') || '';
+      let progressValue;
+      if (statusEl) {
+        const currentStatus = statusEl.dataset && statusEl.dataset.status ? statusEl.dataset.status : statusEl.textContent;
+        statusValue = currentStatus || statusValue;
+        if (statusEl.dataset && statusEl.dataset.progress) {
+          const parsedProgress = parseFloat(statusEl.dataset.progress);
+          progressValue = Number.isFinite(parsedProgress) ? parsedProgress : undefined;
+        }
+        renderStatusLabel(statusEl, statusValue, progressValue);
+        statusValue = statusEl.dataset && statusEl.dataset.status ? statusEl.dataset.status : statusValue;
+      }
+      const normalized = normalizeStatusName(statusValue);
+      if (normalized) {
+        row.dataset.jobStatus = normalized;
+      }
+      updateJobActionButtons(jobId, normalized || row.getAttribute('data-job-status'));
       if (!row.dataset.ws) {
-        connectWS(jobId);
-        row.dataset.ws = '1';
+        try {
+          connectWS(jobId);
+          row.dataset.ws = '1';
+        } catch (error) {
+          logJobUiError(jobId, 'ws-init', error);
+        }
       }
       ensurePolling(jobId);
-      updateJobActionButtons(jobId, row.getAttribute('data-job-status'));
-      const statusEl = document.getElementById(`job-status-${jobId}`);
-      if (statusEl) {
-        const statusValue = statusEl.dataset && statusEl.dataset.status ? statusEl.dataset.status : statusEl.textContent;
-        const progressValue = statusEl.dataset && statusEl.dataset.progress ? parseFloat(statusEl.dataset.progress) : undefined;
-        renderStatusLabel(statusEl, statusValue, progressValue);
-      }
     });
+    if (window.jobPollers) {
+      Object.keys(window.jobPollers).forEach((jobId) => {
+        if (!seenJobIds.has(jobId)) {
+          stopJobPolling(jobId);
+          if (window.jobSockets && window.jobSockets[jobId]) {
+            try {
+              window.jobSockets[jobId].close();
+            } catch (_) {}
+            delete window.jobSockets[jobId];
+          }
+        }
+      });
+    }
     updateFileLabel();
     updateStartAvailability();
     updateTranscriptionConfig();
@@ -803,7 +995,7 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
     if (container) {
       const jobId = container.dataset.currentJobId || '';
       const status = (container.dataset.currentJobStatus || 'IDLE').toUpperCase();
-      if (jobId && ['RUNNING', 'PENDING', 'QUEUED'].includes(status)) {
+      if (jobId && ['RUNNING', 'UPLOADING', 'CONVERTING', 'PENDING', 'QUEUED'].includes(status)) {
         activeTranscriptionJobId = jobId;
       }
       if (!jobId) {
@@ -813,7 +1005,19 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
     }
     const caseId = document.getElementById('jobs-body')?.dataset.caseId;
     if (caseId) {
-      connectCaseWS(caseId);
+      try {
+        connectCaseWS(caseId);
+      } catch (err) {
+        console.error('Case websocket init failed', err);
+        if (typeof udocketLogClientError === 'function') {
+          udocketLogClientError({
+            type: 'case_ws_init',
+            message: err && err.message ? err.message : String(err),
+            stack: err && err.stack,
+            href: window.location.href,
+          });
+        }
+      }
       const socketReady = window.caseSocket && (window.caseSocket.readyState === WebSocket.OPEN || window.caseSocket.readyState === WebSocket.CONNECTING);
       if (!socketReady && !window.casePoller) {
         window.casePoller = setInterval(() => pollCaseModules(caseId), CASE_POLL_INTERVAL);
@@ -845,7 +1049,7 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
     await toggleJobRow(row);
   });
 
-  document.body.addEventListener('job-title-updated', (evt) => {
+  document.addEventListener('job-title-updated', (evt) => {
     const detail = evt.detail || {};
     const jobId = detail.job_id || detail.jobId;
     const title = detail.title;
@@ -861,35 +1065,42 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
   });
 
   document.addEventListener('click', (evt) => {
-    if (evt.target.closest('[data-module-quick]')) return;
+    if (evt.target.closest('[data-module-quick]')) {
+      evt.stopPropagation();
+      return;
+    }
     const toggle = evt.target.closest('[data-module-toggle]');
-    if (!toggle) return;
+    const header = evt.target.closest('[data-module-header]');
+    if (!toggle && !header) return;
+    const targetId = toggle ? toggle.getAttribute('data-module-target') : header?.getAttribute('data-module-header');
+    if (!targetId) return;
     evt.preventDefault();
-    const targetId = toggle.getAttribute('data-module-target');
     const panel = document.getElementById(targetId);
     if (!panel) return;
     const isHidden = panel.classList.contains('hidden');
     document.querySelectorAll('[data-module-panel]').forEach((p) => {
+      const panelId = p.id;
+      const wrapper = document.querySelector(`[data-module-wrapper="${panelId}"]`);
+      const quick = wrapper ? wrapper.querySelector('[data-module-quick]') : null;
       if (p !== panel) {
         p.classList.add('hidden');
-        const btn = document.querySelector(`[data-module-toggle][data-module-target="${p.id}"]`);
-        if (btn) {
-          btn.setAttribute('aria-expanded', 'false');
-          btn.querySelector('[data-module-arrow]')?.classList.remove('rotate-180');
-        }
+        document.querySelectorAll(`[data-module-toggle][data-module-target="${panelId}"]`).forEach((btn) => btn.setAttribute('aria-expanded', 'false'));
+        document.querySelectorAll(`[data-module-chevron="${panelId}"]`).forEach((icon) => icon.classList.remove('rotate-180'));
+        if (quick && panelId === 'module-transcription') quick.classList.remove('hidden');
       }
     });
-    const { quickSection } = getTranscriptionElements();
     if (isHidden) {
       panel.classList.remove('hidden');
-      toggle.setAttribute('aria-expanded', 'true');
-      toggle.querySelector('[data-module-arrow]')?.classList.add('rotate-180');
-      if (quickSection && targetId === 'module-transcription') quickSection.classList.add('hidden');
     } else {
       panel.classList.add('hidden');
-      toggle.setAttribute('aria-expanded', 'false');
-      toggle.querySelector('[data-module-arrow]')?.classList.remove('rotate-180');
-      if (quickSection && targetId === 'module-transcription') quickSection.classList.remove('hidden');
+    }
+    document.querySelectorAll(`[data-module-toggle][data-module-target="${targetId}"]`).forEach((btn) => btn.setAttribute('aria-expanded', isHidden ? 'true' : 'false'));
+    document.querySelectorAll(`[data-module-chevron="${targetId}"]`).forEach((icon) => icon.classList.toggle('rotate-180', isHidden));
+    const wrapper = document.querySelector(`[data-module-wrapper="${targetId}"]`);
+    const quick = wrapper ? wrapper.querySelector('[data-module-quick]') : null;
+    if (quick && targetId === 'module-transcription') {
+      if (isHidden) quick.classList.add('hidden');
+      else quick.classList.remove('hidden');
     }
   });
 
@@ -933,6 +1144,7 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
             'X-CSRFToken': getCSRFToken(),
             'Accept': 'application/json',
           },
+          credentials: 'same-origin',
         });
         if (resp.ok) {
           const data = await resp.json();
@@ -976,6 +1188,7 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
             'X-CSRFToken': getCSRFToken(),
             'Accept': 'application/json',
           },
+          credentials: 'same-origin',
         });
         if (resp.ok) {
           const data = await resp.json();
@@ -1024,6 +1237,7 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
             'X-CSRFToken': getCSRFToken(),
             'Accept': 'application/json',
           },
+          credentials: 'same-origin',
         });
         if (resp.ok) {
           const data = await resp.json();
@@ -1071,6 +1285,7 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
             'X-CSRFToken': getCSRFToken(),
             'Accept': 'application/json',
           },
+          credentials: 'same-origin',
         });
         if (resp.ok) {
           const data = await resp.json();
@@ -1106,6 +1321,7 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
             'Accept': 'application/json',
             'Content-Type': 'application/json',
           },
+          credentials: 'same-origin',
           body: JSON.stringify({ comment: reason }),
         });
         if (resp.ok) {
@@ -1175,22 +1391,11 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
   document.addEventListener('click', (evt) => {
     const trigger = evt.target.closest('[data-file-trigger]');
     if (!trigger) return;
+    evt.preventDefault();
+    evt.stopPropagation();
     const inputId = trigger.getAttribute('data-file-input');
     const input = document.getElementById(inputId);
-    // Ensure the transcription panel is open so browsers allow file dialog
-    const panel = document.getElementById('module-transcription');
-    const header = document.querySelector('[data-module-toggle][data-module-target="module-transcription"]');
-    if (panel && header && panel.classList.contains('hidden')) {
-      panel.classList.remove('hidden');
-      header.setAttribute('aria-expanded', 'true');
-      header.querySelector('[data-module-arrow]')?.classList.add('rotate-180');
-      const { quickSection } = getTranscriptionElements();
-      if (quickSection) quickSection.classList.add('hidden');
-      // Slight delay to allow layout to update before clicking input
-      setTimeout(() => input && input.click(), 0);
-    } else if (input) {
-      input.click();
-    }
+    if (input) input.click();
   });
 
   document.addEventListener('click', (evt) => {
@@ -1228,7 +1433,7 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
 
   // copy-to-clipboard moved to global base template
 
-  document.body.addEventListener('htmx:beforeRequest', (evt) => {
+  document.addEventListener('htmx:beforeRequest', (evt) => {
     if (evt.target && evt.target.id === 'job-form') {
       setTranscriptionStatus({
         title: 'Uploading audio…',
@@ -1241,7 +1446,7 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
     }
   });
 
-  document.body.addEventListener('htmx:xhr:progress', (evt) => {
+  document.addEventListener('htmx:xhr:progress', (evt) => {
     const target = evt.target;
     if (!target || target.id !== 'job-form') return;
     const loaded = evt.detail?.loaded ?? 0;
@@ -1257,7 +1462,7 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
     updateTranscriptionControls('UPLOADING');
   });
 
-  document.body.addEventListener('htmx:afterRequest', (evt) => {
+  document.addEventListener('htmx:afterRequest', (evt) => {
     if (!evt.target || evt.target.id !== 'job-form') return;
     const { fileInput, urlInput, fileName, quickSection } = getTranscriptionElements();
     if (fileInput) fileInput.value = '';
@@ -1275,17 +1480,27 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
     }
     const jobInfo = payload && payload['job-enqueued'];
     if (jobInfo && jobInfo.job_id) {
+      const initialStatus = jobInfo.force_wav ? 'CONVERTING' : 'PENDING';
+      const initialTitle = initialStatus === 'CONVERTING' ? 'Converting audio…' : 'Job queued';
+      const initialDetail = initialStatus === 'CONVERTING'
+        ? 'Preparing a WAV conversion before upload.'
+        : 'Azure Speech accepted the transcription job.';
       activeTranscriptionJobId = jobInfo.job_id;
       setTranscriptionStatus({
-        title: 'Job queued',
-        detail: 'Azure Speech accepted the transcription job.',
+        title: initialTitle,
+        detail: initialDetail,
         progress: null,
         state: 'running',
-        statusName: 'PENDING',
+        statusName: initialStatus,
       });
-      setCurrentJob(jobInfo.job_id, 'PENDING');
-      updateTranscriptionControls('PENDING');
-      setTranscriptionSummary('Job queued · awaiting Azure updates');
+      setCurrentJob(jobInfo.job_id, initialStatus);
+      updateTranscriptionControls(initialStatus);
+      if (jobInfo.force_wav) {
+        setTranscriptionSummary('Converting audio to 16 kHz mono WAV…');
+      } else {
+        setTranscriptionSummary('Job queued · awaiting Azure updates');
+      }
+      updateTranscriptionHeader(initialStatus, { created_at: new Date().toISOString() });
       const panel = document.getElementById('module-transcription');
       if (quickSection && panel && panel.classList.contains('hidden')) {
         quickSection.classList.remove('hidden');
@@ -1304,13 +1519,24 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
     }
   });
 
-  document.body.addEventListener('htmx:afterSwap', (evt) => {
+  document.addEventListener('htmx:afterSwap', (evt) => {
     if (evt.target && evt.target.id === 'case-title-wrapper') {
       toggleCaseTitleEditor(false);
     }
   });
 
   // toast is implemented globally as udocketShowToastAt
+  } catch (error) {
+    console.error('Case detail bootstrap failed', error);
+    if (typeof udocketLogClientError === 'function') {
+      udocketLogClientError({
+        type: 'case_detail_init',
+        message: error && error.message ? error.message : String(error),
+        stack: error && error.stack,
+        href: window.location.href,
+      });
+    }
+  }
 </script>
 {% endblock %}
 {% block content %}
@@ -1386,31 +1612,29 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
             {% csrf_token %}
             <input type="hidden" name="mode" value="batch">
             <div class="flex flex-col gap-4">
-              <div class="rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-3">
-                <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between" data-current-job-id="{{ latest_job.id|default:'' }}" data-current-job-status="{{ latest_job_telemetry.status|default:'IDLE' }}">
-                  <button type="button" class="group flex flex-1 items-start justify-between gap-3 text-left" data-module-toggle data-module-target="module-transcription" aria-expanded="false">
-                    <div class="flex flex-col gap-1">
-                      <p class="text-xs uppercase tracking-wide text-slate-400">Transcription</p>
-                      <p class="text-xs text-slate-300" data-transcription-config>Batch mode with diarization</p>
-                      <p class="text-xs text-slate-300">
-                        {% if latest_job %}
-                          Last status: <span class="font-semibold text-primary-200">{{ latest_job_telemetry.status }}</span>{% if latest_activity_ts %} · <time data-ts="{{ latest_activity_ts|date:'c' }}">{{ latest_activity_ts }}</time>{% endif %}
-                        {% else %}
-                          Ready for the first transcription.
-                        {% endif %}
-                      </p>
-                    </div>
-                    <svg xmlns="http://www.w3.org/2000/svg" class="module-arrow h-4 w-4 shrink-0 transition-transform duration-150 text-slate-300" viewBox="0 0 20 20" fill="currentColor" data-module-arrow>
-                      <path fill-rule="evenodd" d="M10 3a1 1 0 01.832.445l4.5 6.5a1 1 0 01-.832 1.555H5.5a1 1 0 01-.832-1.555l4.5-6.5A1 1 0 0110 3z" clip-rule="evenodd" />
-                    </svg>
-                  </button>
-                  <div class="flex flex-wrap items-center gap-3 lg:justify-end" data-module-quick>
+              <div class="rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-3" data-module-wrapper="module-transcription">
+                <div class="flex flex-wrap items-center gap-3" data-current-job-id="{{ latest_job.id|default:'' }}" data-current-job-status="{{ latest_job_telemetry.status|default:'IDLE' }}">
+                  <div class="flex flex-col gap-1 text-left grow cursor-pointer" data-module-header="module-transcription">
+                    <p class="text-xs uppercase tracking-wide text-slate-400">Transcription</p>
+                    <p class="text-xs text-slate-300" data-transcription-config>Batch mode with diarization</p>
+                    <p class="text-xs text-slate-300" data-transcription-last-wrapper>
+                      <span data-transcription-last-empty {% if latest_job %}class="hidden"{% endif %}>Ready for the first transcription.</span>
+                      <span data-transcription-last-summary {% if not latest_job %}class="hidden"{% endif %}>
+                        Last status:
+                        <span class="font-semibold text-primary-200" data-transcription-last-status>{{ latest_job_telemetry.status|default:'—'|lower|capfirst }}</span>
+                        <span data-transcription-last-time-wrapper {% if not latest_activity_ts %}class="hidden"{% endif %}>
+                          · <time data-transcription-last-ts data-ts="{{ latest_activity_ts|date:'c' }}">{{ latest_activity_ts }}</time>
+                        </span>
+                      </span>
+                    </p>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-3" data-module-quick>
                     <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-xs font-semibold text-slate-100 transition hover:border-primary-400 hover:text-white" data-file-trigger data-file-input="module-transcription-file">
                       <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 3h7l5 5v11a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2z" />
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12.5c1.5-1 3.5-1 5 0M9 16c1.5-1 3.5-1 5 0M12 9h.01" />
                       </svg>
-                      Upload
+                      Browse…
                     </button>
                     <span id="module-transcription-file-name" class="text-xs text-slate-300">No file selected.</span>
                     <button type="submit" class="inline-flex items-center gap-2 rounded-lg bg-primary-500 px-3 py-2 text-xs font-semibold text-white shadow-lg shadow-primary-500/30 transition hover:bg-primary-400 disabled:cursor-not-allowed disabled:opacity-60" data-transcription-start disabled>
@@ -1418,6 +1642,11 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
                       Upload &amp; Start
                     </button>
                   </div>
+                  <span class="ml-auto text-slate-300" aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="module-arrow h-4 w-4 transition-transform duration-150" viewBox="0 0 20 20" fill="currentColor" data-module-chevron="module-transcription">
+                      <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.094l3.71-3.86a.75.75 0 011.08 1.04l-4.247 4.41a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
+                    </svg>
+                  </span>
                 </div>
               </div>
               <div id="module-transcription" data-module-panel class="hidden rounded-xl border border-white/10 bg-slate-900/80 p-4">
@@ -1447,18 +1676,22 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
                           <input type="checkbox" name="diarization" value="on" checked class="h-4 w-4 rounded border-white/20 bg-slate-900/70 text-primary-500 focus:ring-primary-400">
                           Enable diarization (batch only)
                         </label>
-                        <div class="flex flex-col text-sm text-slate-200">
-                          <span>Mode</span>
-                          <div class="mt-2 flex items-center gap-4">
-                            <label class="inline-flex items-center gap-2">
-                              <input type="radio" name="mode" value="batch" checked class="h-4 w-4 border-white/20 bg-slate-900/70 text-primary-500 focus:ring-primary-400">
-                              <span>Batch (recommended)</span>
-                            </label>
-                            <label class="inline-flex items-center gap-2">
-                              <input type="radio" name="mode" value="on-demand" class="h-4 w-4 border-white/20 bg-slate-900/70 text-primary-500 focus:ring-primary-400">
-                              <span>On‑demand</span>
-                            </label>
-                          </div>
+                        <label class="inline-flex items-center gap-2 text-sm text-slate-200">
+                          <input type="checkbox" name="force_wav" value="on" class="h-4 w-4 rounded border-white/20 bg-slate-900/70 text-primary-500 focus:ring-primary-400">
+                          Convert to WAV before sending to Azure
+                        </label>
+                      </div>
+                      <div class="flex flex-col text-sm text-slate-200">
+                        <span>Mode</span>
+                        <div class="mt-2 flex items-center gap-4">
+                          <label class="inline-flex items-center gap-2">
+                            <input type="radio" name="mode" value="batch" checked class="h-4 w-4 border-white/20 bg-slate-900/70 text-primary-500 focus:ring-primary-400">
+                            <span>Batch (recommended)</span>
+                          </label>
+                          <label class="inline-flex items-center gap-2">
+                            <input type="radio" name="mode" value="on-demand" class="h-4 w-4 border-white/20 bg-slate-900/70 text-primary-500 focus:ring-primary-400">
+                            <span>On‑demand</span>
+                          </label>
                         </div>
                       </div>
                     </div>

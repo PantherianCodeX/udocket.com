@@ -48,6 +48,16 @@ class JobTelemetrySerializer(serializers.Serializer):
         transcript_payload = telem.transcript_payload(include_paths=allow_transcript_path)
         agent_payload = telem.agent_payload()
         meta_payload = dict(telem.meta) if isinstance(telem.meta, dict) else {}
+        # Enrich with availability flags for UI gating (e.g., converted WAV download)
+        try:
+            conv_path = meta_payload.get("converted_wav_path")
+            if isinstance(conv_path, str) and conv_path:
+                p = Path(conv_path)
+                meta_payload["converted_wav_available"] = p.exists()
+            else:
+                meta_payload["converted_wav_available"] = False
+        except Exception:
+            meta_payload["converted_wav_available"] = False
 
         agent_type = (
             meta_payload.get("agent_type")

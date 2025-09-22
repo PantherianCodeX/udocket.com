@@ -4,6 +4,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, Callable
 import base64
+from urllib.parse import quote
+import re
 
 from django.conf import settings
 import logging
@@ -50,8 +52,13 @@ def upload_with_sas(
         raise RuntimeError("AZURE_BLOB_CONTAINER is not configured")
 
     original = original_name or local_file.name
+    # Strip our local naming prefix "<jobUUID>__" if present so we don't duplicate the job id in blob name
+    original = re.sub(r"^[0-9a-fA-F-]{36}__", "", original)
+    safe_original = re.sub(r"[^A-Za-z0-9_.-]", "_", original)
+    if not safe_original:
+        safe_original = "audio"
     org_segment = organization_id or "unassigned"
-    blob_name = f"tenants/{org_segment}/cases/{case_id}/audio/{job_id}__{original}"
+    blob_name = f"tenants/{org_segment}/cases/{case_id}/audio/{job_id}__{safe_original}"
 
     conn_str = getattr(settings, "AZURE_BLOB_CONNECTION_STRING", None)
     account = getattr(settings, "AZURE_BLOB_ACCOUNT", None)
@@ -161,6 +168,7 @@ def upload_with_sas(
         expiry=datetime.utcnow() + timedelta(minutes=int(getattr(settings, "AZURE_BLOB_SAS_TTL_MIN", 120))),
     )
     base = blob_endpoint or f"https://{account_name}.{endpoint_suffix}"
-    url = f"{base}/{container}/{blob_name}?{sas}"
+    safe_blob = quote(blob_name, safe="/:")
+    url = f"{base}/{container}/{safe_blob}?{sas}"
     log.info("blob: sas generated", extra={"url_prefix": url.split("?",1)[0]})
     return url

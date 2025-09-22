@@ -5,6 +5,7 @@ from apps.platform.ui import views
 urlpatterns = [
     path("", views.index, name="ui-index"),
     path("cases/<str:case_id>/", views.case_detail, name="ui-case-detail"),
+    path("ui/log", views.ui_log, name="ui-log"),
     path(
         "cases/<str:case_id>/analysis/<str:agent>/module/",
         views.case_analysis_module,

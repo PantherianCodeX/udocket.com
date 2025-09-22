@@ -15,6 +15,7 @@ from django.http import Http404, HttpRequest, HttpResponse, HttpResponseRedirect
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_http_methods
+from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
 
 from apps.platform.cases.models import Case, CaseMembership
@@ -445,6 +446,26 @@ def _job_detail_context(
     azure_cancel_status = telemetry.get("metadata", {}).get("azure_cancel_status") if isinstance(telemetry.get("metadata"), dict) else None
     azure_cancel_body = telemetry.get("metadata", {}).get("azure_cancel_body") if isinstance(telemetry.get("metadata"), dict) else None
 
+    audio_meta = telemetry.get("audio") or {}
+    audio_mime = str(audio_meta.get("mime") or "").lower()
+    audio_names = [
+        str(audio_meta.get("path") or ""),
+        str(audio_meta.get("original_name") or ""),
+    ]
+    is_wav_input = audio_mime in {"audio/wav", "audio/x-wav"}
+    if not is_wav_input:
+        for name in audio_names:
+            if name.lower().endswith(".wav"):
+                is_wav_input = True
+                break
+    telemetry_meta = telemetry.get("metadata") or {}
+    converted_flag = bool(telemetry_meta.get("converted_wav_path") or telemetry_meta.get("batch_upload_converted"))
+    show_convert_button = (
+        job.status not in {Job.Status.SUCCEEDED, Job.Status.RUNNING, Job.Status.PENDING}
+        and not converted_flag
+        and not is_wav_input
+    )
+
     user_obj = getattr(request, "user", None)
     dev_open = getattr(settings, "PLATFORM_DEV_OPEN", False)
     can_review = False
@@ -468,6 +489,7 @@ def _job_detail_context(
         "user_can_review": can_review,
         "title_error": title_error,
         "title_edit": title_edit,
+        "show_convert_button": show_convert_button,
     }
 
 
@@ -1092,6 +1114,8 @@ def create_job(request: HttpRequest, case_id: str) -> HttpResponse:
     audio_dir = case_dir / "audio"
     audio_input: str
 
+    force_wav_conversion = str(request.POST.get("force_wav") or "").lower() in {"1", "true", "yes", "on"}
+
     if up:
         dest = audio_dir / f"{job_id}__{up.name}"
         with dest.open("wb") as f:
@@ -1115,7 +1139,15 @@ def create_job(request: HttpRequest, case_id: str) -> HttpResponse:
         language=language,
     )
 
-    log.info("ui enqueue job", extra={"job_id": str(job.id), "case_id": case_id, "mode": mode})
+    log.info(
+        "ui enqueue job",
+        extra={
+            "job_id": str(job.id),
+            "case_id": case_id,
+            "mode": mode,
+            "force_wav_conversion": force_wav_conversion,
+        },
+    )
     transcribe_job.delay(
         case_id=str(case.id),
         job_id=str(job.id),
@@ -1123,11 +1155,40 @@ def create_job(request: HttpRequest, case_id: str) -> HttpResponse:
         mode=mode,
         diarization=diarization,
         language=language,
+        force_wav_conversion=force_wav_conversion,
     )
 
     telemetry = JobTelemetrySerializer(job, context={"request": request, "ui_mode": True}).data
     response = render(request, "ui/_job_row.html", {"j": job, "telem": telemetry})
     if request.headers.get("HX-Request"):
-        trigger = {"job-enqueued": {"job_id": str(job.id), "status": job.status}}
+        trigger = {
+            "job-enqueued": {
+                "job_id": str(job.id),
+                "status": job.status,
+                "force_wav": force_wav_conversion,
+            }
+        }
         response["HX-Trigger"] = json.dumps(trigger)
     return response
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def ui_log(request: HttpRequest) -> HttpResponse:
+    try:
+        body = request.body.decode("utf-8") if request.body else "{}"
+        payload = json.loads(body)
+    except Exception:
+        payload = {"raw": request.body.decode("utf-8", errors="ignore") if request.body else ""}
+
+    log.error(
+        "client_ui_error",
+        extra={
+            "user_id": str(getattr(getattr(request, "user", None), "id", "")) or None,
+            "path": request.path,
+            "payload": payload,
+            "user_agent": request.META.get("HTTP_USER_AGENT"),
+            "referer": request.META.get("HTTP_REFERER"),
+        },
+    )
+    return HttpResponse(status=204)

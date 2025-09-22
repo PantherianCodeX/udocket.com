@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import uuid
+from typing import Iterable, Set
 
 from django.utils import timezone
 from rest_framework import status, viewsets
@@ -27,6 +28,7 @@ from apps.platform.jobs.serializers import (
     JobSerializer,
     JobTelemetrySerializer,
 )
+from apps.platform.config.celery import app as celery_app
 from apps.platform.operations.tasks import transcribe_job
 from apps.platform.operations.channels import send_job_update
 from apps.platform.operations.audit import emit as audit_emit
@@ -35,6 +37,7 @@ from apps.platform.operations.tasks import summarize_job, timeline_job, graph_jo
 from apps.platform.tenancy import scope_jobs
 from apps.platform.operations.storage import ensure_case_dirs, ops_dir as storage_ops_dir
 from apps.platform.operations.utils import update_job_meta, append_job_log
+from apps.platform.operations.models import TaskRun
 
 
 class JobViewSet(viewsets.ModelViewSet):
@@ -60,6 +63,8 @@ class JobViewSet(viewsets.ModelViewSet):
         if v.get("diarization") and v.get("mode") != Job.Mode.BATCH:
             return Response({"detail": "Diarization is only supported in batch mode."}, status=status.HTTP_400_BAD_REQUEST)
         job = Job.objects.create(**v)
+        audio_input_value = job.audio_input or ""
+        force_wav_conversion = str(request.data.get("force_wav") or "").lower() in {"1", "true", "yes", "on"}
         # Enqueue task
         transcribe_job.delay(
             case_id=str(job.case_id),
@@ -68,11 +73,16 @@ class JobViewSet(viewsets.ModelViewSet):
             mode=job.mode,
             diarization=job.diarization,
             language=job.language,
-            force_wav_conversion=False,
+            force_wav_conversion=force_wav_conversion,
         )
         out = JobSerializer(instance=job)
         headers = {"Location": f"/api/v1/jobs/{job.id}/"}
-        audit_emit(request, case_id=str(job.case_id), event="job.created", data={"job_id": str(job.id), "mode": job.mode})
+        audit_emit(
+            request,
+            case_id=str(job.case_id),
+            event="job.created",
+            data={"job_id": str(job.id), "mode": job.mode, "force_wav_conversion": force_wav_conversion},
+        )
         return Response(out.data, status=status.HTTP_201_CREATED, headers=headers)
 
     @action(detail=True, methods=["get"], url_path="status")
@@ -317,7 +327,61 @@ class JobViewSet(viewsets.ModelViewSet):
         job = self.get_object()
         if job.status not in {Job.Status.PENDING, Job.Status.RUNNING, Job.Status.CANCELLING}:
             return Response({"detail": "Job is not cancellable."}, status=status.HTTP_400_BAD_REQUEST)
-        # Move to CANCELLING to reflect in-progress cancellation; worker will finalize to CANCELLED
+        case_id = str(job.case_id)
+        org_id = str(job.organization_id) if getattr(job, "organization_id", None) else None
+        job_id_str = str(job.id)
+
+        task_runs = list(
+            TaskRun.objects.filter(job_id=job_id_str, task_name="transcribe_job").order_by("-started_at")
+        )
+        task_ids = [tr.task_id for tr in task_runs if tr.task_id]
+        active_task_ids = self._active_celery_task_ids(task_ids)
+
+        # If no workers are handling the job, finalize immediately regardless of current status.
+        if not active_task_ids and job.status != Job.Status.RUNNING:
+            now = timezone.now()
+            job.status = Job.Status.CANCELLED
+            job.finished_at = now
+            job.error_message = "Cancelled by user"
+            job.upload_progress = None
+            job.save(update_fields=["status", "finished_at", "error_message", "upload_progress"])
+            for tr in task_runs:
+                if tr.status != "CANCELLED":
+                    tr.status = "CANCELLED"
+                    tr.finished_at = now
+                    tr.save(update_fields=["status", "finished_at"])
+            try:
+                self._cancel_azure_transcription(job)
+            except Exception:
+                pass
+            append_job_log(case_id, org_id, job_id_str, "Cancellation completed (no active worker)")
+            update_job_meta(case_id, org_id, job_id_str, {"cancelled_at": now.isoformat()})
+            audit_emit(
+                request,
+                case_id=case_id,
+                event="job.cancelled",
+                data={"job_id": job_id_str, "immediate": True},
+            )
+            send_job_update(
+                job_id_str,
+                event="job.cancelled",
+                status=Job.Status.CANCELLED,
+                case_id=case_id,
+                progress_percent=None,
+                upload_progress=None,
+            )
+            return Response({"status": Job.Status.CANCELLED, "upload_progress": None})
+
+        # Attempt to revoke active Celery tasks and mark the job as cancelling.
+        for task_id in active_task_ids:
+            try:
+                celery_app.control.revoke(task_id, terminate=True)
+            except Exception as exc:
+                log.warning(
+                    "unable to revoke celery task",
+                    extra={"task_id": task_id, "job_id": job_id_str, "error": str(exc)},
+                )
+
         job.status = Job.Status.CANCELLING
         job.error_message = "Cancellation requested"
         job.save(update_fields=["status", "error_message"])
@@ -325,12 +389,18 @@ class JobViewSet(viewsets.ModelViewSet):
             self._cancel_azure_transcription(job)
         except Exception:
             pass
-        audit_emit(request, case_id=str(job.case_id), event="job.cancelling", data={"job_id": str(job.id)})
+        append_job_log(case_id, org_id, job_id_str, "Cancellation requested; awaiting worker shutdown")
+        audit_emit(
+            request,
+            case_id=case_id,
+            event="job.cancelling",
+            data={"job_id": job_id_str, "tasks": list(active_task_ids)},
+        )
         send_job_update(
-            str(job.id),
+            job_id_str,
             event="job.cancelling",
             status=Job.Status.CANCELLING,
-            case_id=str(job.case_id),
+            case_id=case_id,
             progress_percent=job.upload_progress,
             upload_progress=job.upload_progress,
         )
@@ -344,12 +414,6 @@ class JobViewSet(viewsets.ModelViewSet):
         if not job.audio_input:
             return Response({"detail": "Original audio input is missing."}, status=status.HTTP_400_BAD_REQUEST)
         with transaction.atomic():
-            Job.objects.filter(pk=job.pk).update(
-                status=Job.Status.CANCELLED,
-                finished_at=timezone.now(),
-                error_message="Superseded by restart",
-                upload_progress=None,
-            )
             new_job = Job.objects.create(
                 case=job.case,
                 organization=job.organization,
@@ -374,9 +438,44 @@ class JobViewSet(viewsets.ModelViewSet):
             event="job.restarted",
             data={"job_id": str(job.id), "replacement_job_id": str(new_job.id)},
         )
-        send_job_update(str(job.id), event="job.cancelled", status=Job.Status.CANCELLED, case_id=str(job.case_id))
         send_job_update(str(new_job.id), event="job.created", status=Job.Status.PENDING, case_id=str(new_job.case_id))
         return Response({"status": Job.Status.PENDING, "job_id": str(new_job.id)})
+
+    @staticmethod
+    def _active_celery_task_ids(task_ids: Iterable[str]) -> Set[str]:
+        ids = [tid for tid in task_ids if tid]
+        active: Set[str] = set()
+        if not ids:
+            return active
+        inspect_obj = None
+        try:
+            inspect_obj = celery_app.control.inspect()
+        except Exception as exc:
+            log.debug("celery inspect init failed: %s", exc)
+        if inspect_obj is not None:
+            for attr in ("active", "reserved", "scheduled"):
+                try:
+                    data = getattr(inspect_obj, attr)()
+                except Exception as exc:
+                    log.debug("celery inspect %s failed: %s", attr, exc)
+                    data = None
+                if not data:
+                    continue
+                for tasks in data.values():
+                    for entry in tasks:
+                        entry_id = entry.get("id") or entry.get("request", {}).get("id")
+                        if entry_id in ids:
+                            active.add(entry_id)
+        if active:
+            return active
+        for tid in ids:
+            try:
+                result = celery_app.AsyncResult(tid)
+                if result.state in {"PENDING", "STARTED", "RETRY"}:
+                    active.add(tid)
+            except Exception as exc:
+                log.debug("celery async result check failed for %s: %s", tid, exc)
+        return active
 
     @action(detail=True, methods=["get"], url_path="logs")
     def logs(self, request, pk=None):
@@ -559,6 +658,8 @@ class JobViewSet(viewsets.ModelViewSet):
                 job.audio_input = audio_url
             job.save(update_fields=["audio_input"])
 
+        force_wav_requested = str(request.data.get("force_wav") or "").lower() in {"1", "true", "yes", "on"}
+
         # Enqueue task
         transcribe_job.delay(
             case_id=str(job.case_id),
@@ -567,9 +668,14 @@ class JobViewSet(viewsets.ModelViewSet):
             mode=job.mode,
             diarization=job.diarization,
             language=job.language,
-            force_wav_conversion=False,
+            force_wav_conversion=force_wav_requested,
         )
         out = JobSerializer(instance=job)
         headers = {"Location": f"/api/v1/jobs/{job.id}/"}
-        audit_emit(request, case_id=str(case_id), event="job.uploaded", data={"job_id": str(job.id), "mode": mode, "file": bool(file_obj)})
+        audit_emit(
+            request,
+            case_id=str(case_id),
+            event="job.uploaded",
+            data={"job_id": str(job.id), "mode": mode, "file": bool(file_obj), "force_wav_conversion": force_wav_requested},
+        )
         return Response(out.data, status=status.HTTP_201_CREATED, headers=headers)

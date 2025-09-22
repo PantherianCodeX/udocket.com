@@ -3,7 +3,7 @@
 {% with status=telem.status|default:j.status %}
 {% with artifact=telem.artifacts.0|default_if_none:None %}
 {% with job_title=title|default:"Transcript" %}
-<tr data-job="{{ j.id }}" data-job-row data-job-status="{{ status }}" class="cursor-pointer transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400" tabindex="0" aria-expanded="false" data-review-status="{{ j.review_status|default:'PENDING' }}">
+<tr data-job="{{ j.id }}" data-job-row data-job-status="{{ status }}" data-job-case-id="{{ j.case_id }}" class="cursor-pointer transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400" tabindex="0" aria-expanded="false" data-review-status="{{ j.review_status|default:'PENDING' }}">
   <td class="px-4 py-3">
     <div class="flex items-center justify-between gap-2">
       <span class="max-w-[18rem] truncate font-medium text-slate-100" data-job-title title="{{ job_title }}">{{ job_title }}</span>
@@ -19,7 +19,7 @@
         <span class="status-pill inline-flex items-center rounded-full border border-emerald-400/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-emerald-200" data-status="SUCCEEDED">Succeeded</span>
       {% elif normalized == 'FAILED' %}
         <span class="status-pill inline-flex items-center rounded-full border border-rose-400/40 bg-rose-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-rose-200" data-status="FAILED">Failed</span>
-      {% elif normalized == 'CANCELLED' or normalized == 'CANCELED' %}
+      {% elif normalized == 'CANCELLED' %}
         <span class="status-pill inline-flex items-center rounded-full border border-slate-400/40 bg-slate-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-100" data-status="CANCELLED">Cancelled</span>
       {% elif normalized == 'CANCELLING' %}
         <span class="status-pill inline-flex items-center rounded-full border border-slate-400/40 bg-slate-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-100" data-status="CANCELLING">Cancelling</span>

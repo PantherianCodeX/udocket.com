@@ -15,7 +15,6 @@
     SUCCEEDED: 'Succeeded',
     FAILED: 'Failed',
     CANCELLED: 'Cancelled',
-    CANCELED: 'Cancelled',
     CANCELLING: 'Cancelling',
   };
 
@@ -85,7 +84,7 @@
           transcriptEl.innerHTML = `<a class="font-medium text-primary-300 underline" href="/api/v1/jobs/${data.job_id || jobId}/download/">Download</a>`;
         }
         const normalized = statusEl && statusEl.dataset ? statusEl.dataset.status : '';
-        if (normalized && ['SUCCEEDED', 'FAILED', 'CANCELLED', 'CANCELED'].includes(normalized)) {
+        if (normalized && ['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(normalized)) {
           clearInterval(window.jobPollers[jobId]);
           delete window.jobPollers[jobId];
         }
@@ -113,7 +112,7 @@
         transcriptEl.innerHTML = `<a class="font-medium text-primary-300 underline" href="/api/v1/jobs/${jobId}/download/">Download</a>`;
       }
       const normalized = statusEl && statusEl.dataset ? statusEl.dataset.status : '';
-      if (normalized && ['SUCCEEDED', 'FAILED', 'CANCELLED', 'CANCELED'].includes(normalized)) {
+      if (normalized && ['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(normalized)) {
         clearInterval(window.jobPollers[jobId]);
         delete window.jobPollers[jobId];
       }
@@ -125,7 +124,7 @@
     const statusEl = document.getElementById(`job-status-${jobId}`);
     if (!statusEl) return;
     const normalized = statusEl.dataset ? statusEl.dataset.status : '';
-    if (normalized && ['SUCCEEDED', 'FAILED', 'CANCELLED', 'CANCELED'].includes(normalized)) return;
+    if (normalized && ['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(normalized)) return;
     const socket = window.jobSockets[jobId];
     if (!force && socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
       return;
