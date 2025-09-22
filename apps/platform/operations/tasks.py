@@ -403,18 +403,21 @@ def transcribe_job(
                     tr.save(update_fields=["status", "finished_at"])
             except Exception:
                 pass
-            try:
-                send_job_update(
-                    job_id,
-                    event="job.cancelled",
-                    status=Job.Status.CANCELLED,
-                    case_id=case_id,
-                    progress_percent=None,
-                    upload_progress=None,
-                )
-            except Exception:
-                pass
-            return {"status": Job.Status.CANCELLED, "job_id": job_id, "case_id": case_id}
+        try:
+            send_job_update(
+                job_id,
+                event="job.cancelled",
+                status=Job.Status.CANCELLED,
+                case_id=case_id,
+                progress_percent=None,
+                upload_progress=None,
+            )
+        except Exception:
+            log.exception(
+                "job cancel update emit failed",
+                extra={"job_id": job_id, "event": "job.cancelled"},
+            )
+        return {"status": Job.Status.CANCELLED, "job_id": job_id, "case_id": case_id}
 
         log.exception("job failed", extra={"job_id": job_id, "error": str(e)})
         append_job_log(case_id, org_id, job_id, f"Job failed: {e}", level="error")
@@ -444,10 +447,14 @@ def transcribe_job(
                 tr.save(update_fields=["status", "finished_at"])
         except Exception:
             pass
+        emit_payload = {k: v for k, v in payload.items() if k != "job_id"}
         try:
-            send_job_update(job_id, event="job.failed", **payload)
+            send_job_update(job_id, event="job.failed", **emit_payload)
         except Exception:
-            pass
+            log.exception(
+                "job failure update emit failed",
+                extra={"job_id": job_id, "event": "job.failed"},
+            )
         meta_updates = dict(audio_meta_updates)
         if batch_upload_meta:
             meta_updates.update(batch_upload_meta)
@@ -562,16 +569,24 @@ def transcribe_job(
             tr.save(update_fields=["status", "finished_at"])
     except Exception:
         pass
+    emit_payload = {k: v for k, v in payload.items() if k != "job_id"}
     try:
         if artifact_title:
             payload["title"] = artifact_title
-        send_job_update(job_id, event="job.succeeded", **payload)
+            emit_payload["title"] = artifact_title
+        send_job_update(job_id, event="job.succeeded", **emit_payload)
     except Exception:
-        pass
+        log.exception(
+            "job success update emit failed",
+            extra={"job_id": job_id, "event": "job.succeeded"},
+        )
     try:
         send_case_update(case_id, event="artifact.created", kind="transcript", job_id=job_id)
     except Exception:
-        pass
+        log.exception(
+            "case artifact update emit failed",
+            extra={"case_id": case_id, "job_id": job_id, "event": "artifact.created"},
+        )
     return payload
 
 

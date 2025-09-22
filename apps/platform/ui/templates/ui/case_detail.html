@@ -602,6 +602,7 @@
     if (window.renderLocalTimes) window.renderLocalTimes();
   }
 window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
+    const updateSource = payload.__source || (payload.event ? 'ws' : 'unknown');
     const status = (payload.status || '').toUpperCase() || 'PENDING';
     const isTerminalStatus = isTerminalStatusValue(status);
     const progressValue =
@@ -642,7 +643,9 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
       if (detailRow && !detailRow.classList.contains('hidden') && container.dataset.loaded === '1') {
         const now = Date.now();
         const last = window.jobDetailRefreshAt[jobId] || 0;
-        const shouldForceRefresh = isTerminalStatus ? statusChanged : (now - last > 4000);
+        const shouldForceRefresh = isTerminalStatus
+          ? statusChanged
+          : (updateSource !== 'poll' && now - last > 4000);
         if (shouldForceRefresh) {
           window.jobDetailRefreshAt[jobId] = now;
           loadJobDetail(jobId, { force: true });
@@ -663,6 +666,14 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
     if (payload.title) {
       const headerTitle = document.querySelector(`#job-title-wrapper-${jobId} [data-job-title-display] h2`);
       if (headerTitle) headerTitle.textContent = payload.title;
+    }
+
+    const needsPolling =
+      !isTerminalStatus &&
+      (!window.jobPollers || !window.jobPollers[jobId]) &&
+      ['RUNNING', 'CONVERTING', 'UPLOADING'].includes(status);
+    if (needsPolling) {
+      ensurePolling(jobId, true);
     }
 
     if (jobId !== activeTranscriptionJobId) {
@@ -755,6 +766,7 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
     ws.onmessage = (ev) => {
       try {
         const data = JSON.parse(ev.data);
+        data.__source = 'ws';
         console.log(`${JOB_LOG_PREFIX} ws message`, jobId, data.status || data.event || data.type || '');
         window.udocketUpdateTranscriptionStatus(jobId, data);
         updateJobReview(jobId, data);
@@ -787,6 +799,7 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
       const resp = await fetch(`/api/v1/jobs/${jobId}/status/`);
       if (!resp.ok) return;
       const data = await resp.json();
+      data.__source = 'poll';
       console.log(`${JOB_LOG_PREFIX} poll response`, jobId, data.status);
       window.udocketUpdateTranscriptionStatus(jobId, data);
       updateJobReview(jobId, data);
