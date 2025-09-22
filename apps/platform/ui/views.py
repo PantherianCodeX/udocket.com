@@ -607,18 +607,47 @@ def jobs(request: HttpRequest) -> HttpResponse:
 
 @require_http_methods(["GET"])
 def job_detail_panel(request: HttpRequest, job_id: str) -> HttpResponse:
-    auth_response = _ensure_authenticated(request)
-    if auth_response:
-        return auth_response
-
-    jobs_qs = Job.objects.select_related("case", "case__organization", "reviewed_by").filter(pk=job_id)
-    job = scope_jobs(jobs_qs, getattr(request, "user", None)).first()
-    if not job:
-        raise Http404
     try:
+        auth_response = _ensure_authenticated(request)
+        if auth_response:
+            return auth_response
+
+        jobs_qs = Job.objects.select_related("case", "case__organization", "reviewed_by").filter(pk=job_id)
+        job = scope_jobs(jobs_qs, getattr(request, "user", None)).first()
+        if not job:
+            raise Http404
+
         telemetry = JobTelemetrySerializer(job, context={"request": request, "ui_mode": True}).data
+        artifacts = telemetry.get("artifacts") or []
+        artifact = artifacts[0] if artifacts else None
+        artifact_title = None
+        if isinstance(artifact, dict):
+            artifact_title = artifact.get("title")
+        job_title = artifact_title or getattr(job, "description", None) or str(job.id)
+
+        user_obj = getattr(request, "user", None)
+        dev_open = getattr(settings, "PLATFORM_DEV_OPEN", False)
+        can_review = False
+        if dev_open:
+            can_review = True
+        elif user_obj and getattr(user_obj, "is_authenticated", False):
+            if job.case.reviewer_id and str(user_obj.id) == str(job.case.reviewer_id):
+                can_review = True
+            elif has_capability(user_obj, str(job.case_id), "case.update"):
+                can_review = True
+        context = {
+            "case": job.case,
+            "job": job,
+            "telemetry": telemetry,
+            "artifact": artifact,
+            "job_title": job_title,
+            "user_can_review": can_review,
+        }
+        return render(request, "ui/_job_detail.html", context)
+    except Http404:
+        raise
     except Exception as exc:  # noqa: BLE001
-        log.exception("failed to render job detail", extra={"job_id": job_id})
+        log.exception("job_detail_panel error", extra={"job_id": job_id})
         return HttpResponse(
             '<div class="space-y-2 text-xs text-rose-200">'
             "<p>Unable to load job detail.</p>"
@@ -626,44 +655,58 @@ def job_detail_panel(request: HttpRequest, job_id: str) -> HttpResponse:
             "</div>",
             status=500,
         )
-    user_obj = getattr(request, "user", None)
-    dev_open = getattr(settings, "PLATFORM_DEV_OPEN", False)
-    can_review = False
-    if dev_open:
-        can_review = True
-    elif user_obj and getattr(user_obj, "is_authenticated", False):
-        if job.case.reviewer_id and str(user_obj.id) == str(job.case.reviewer_id):
-            can_review = True
-        elif has_capability(user_obj, str(job.case_id), "case.update"):
-            can_review = True
-    context = {
-        "case": job.case,
-        "job": job,
-        "telemetry": telemetry,
-        "user_can_review": can_review,
-    }
-    return render(request, "ui/_job_detail.html", context)
 
 
 @require_http_methods(["GET"])
 def case_job_detail_panel(request: HttpRequest, case_id: str, job_id: str) -> HttpResponse:
-    auth_response = _ensure_authenticated(request)
-    if auth_response:
-        return auth_response
-
-    case, _ = _get_case_and_org(request, case_id)
-    job = (
-        Job.objects.select_related("case", "case__organization", "reviewed_by")
-        .filter(case=case, pk=job_id)
-        .first()
-    )
-    if not job:
-        raise Http404
-
     try:
+        auth_response = _ensure_authenticated(request)
+        if auth_response:
+            return auth_response
+
+        case, _ = _get_case_and_org(request, case_id)
+        job = (
+            Job.objects.select_related("case", "case__organization", "reviewed_by")
+            .filter(case=case, pk=job_id)
+            .first()
+        )
+        if not job:
+            raise Http404
+
         telemetry = JobTelemetrySerializer(job, context={"request": request, "ui_mode": True}).data
+        artifacts = telemetry.get("artifacts") or []
+        artifact = artifacts[0] if artifacts else None
+        artifact_title = None
+        if isinstance(artifact, dict):
+            artifact_title = artifact.get("title")
+        job_title = artifact_title or getattr(job, "description", None) or str(job.id)
+
+        user_obj = getattr(request, "user", None)
+        dev_open = getattr(settings, "PLATFORM_DEV_OPEN", False)
+        can_review = False
+        if dev_open:
+            can_review = True
+        elif user_obj and getattr(user_obj, "is_authenticated", False):
+            if job.case.reviewer_id and str(user_obj.id) == str(job.case.reviewer_id):
+                can_review = True
+            elif has_capability(user_obj, str(job.case_id), "case.update"):
+                can_review = True
+
+        context = {
+            "case": case,
+            "job": job,
+            "telemetry": telemetry,
+            "artifact": artifact,
+            "job_title": job_title,
+            "user_can_review": can_review,
+        }
+        return render(request, "ui/_job_detail.html", context)
+    except Http404:
+        raise
     except Exception as exc:  # noqa: BLE001
-        log.exception("failed to render case job detail", extra={"job_id": job_id, "case_id": case_id})
+        log.exception(
+            "case_job_detail_panel error", extra={"job_id": job_id, "case_id": case_id}
+        )
         return HttpResponse(
             '<div class="space-y-2 text-xs text-rose-200">'
             "<p>Unable to load job detail.</p>"
@@ -671,24 +714,6 @@ def case_job_detail_panel(request: HttpRequest, case_id: str, job_id: str) -> Ht
             "</div>",
             status=500,
         )
-    user_obj = getattr(request, "user", None)
-    dev_open = getattr(settings, "PLATFORM_DEV_OPEN", False)
-    can_review = False
-    if dev_open:
-        can_review = True
-    elif user_obj and getattr(user_obj, "is_authenticated", False):
-        if job.case.reviewer_id and str(user_obj.id) == str(job.case.reviewer_id):
-            can_review = True
-        elif has_capability(user_obj, str(job.case_id), "case.update"):
-            can_review = True
-
-    context = {
-        "case": case,
-        "job": job,
-        "telemetry": telemetry,
-        "user_can_review": can_review,
-    }
-    return render(request, "ui/_job_detail.html", context)
 
 
 @require_http_methods(["GET"])
