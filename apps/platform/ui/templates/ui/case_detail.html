@@ -5,6 +5,9 @@
   window.jobPollers = window.jobPollers || {};
   window.jobSockets = window.jobSockets || {};
   window.jobDetailRefreshAt = window.jobDetailRefreshAt || {};
+  window.caseSocket = window.caseSocket || null;
+  window.casePoller = window.casePoller || null;
+  const CASE_POLL_INTERVAL = 8000;
   let activeTranscriptionJobId = null;
 
   function getTranscriptionElements() {
@@ -237,7 +240,7 @@
       const html = await resp.text();
       container.innerHTML = html;
       if (wasOpen) {
-        const header = container.querySelector('[data-module-target]');
+        const header = container.querySelector('[data-module-toggle]');
         const newPanel = container.querySelector('[data-module-panel]');
         if (newPanel && header) {
           newPanel.classList.remove('hidden');
@@ -249,6 +252,60 @@
     } catch (error) {
       console.error('Failed to refresh analysis module', key, error);
     }
+  }
+
+  async function pollCaseModules(caseId) {
+    try {
+      await Promise.all([
+        refreshAnalysisModule('summary', false),
+        refreshAnalysisModule('timeline', false),
+      ]);
+    } catch (error) {
+      console.error('Failed to poll case modules', error);
+    }
+    connectCaseWS(caseId);
+  }
+
+  function connectCaseWS(caseId) {
+    if (!caseId) return;
+    const existing = window.caseSocket;
+    if (existing && (existing.readyState === WebSocket.OPEN || existing.readyState === WebSocket.CONNECTING)) {
+      return;
+    }
+    const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
+    const ws = new WebSocket(`${scheme}://${location.host}/ws/cases/${caseId}/`);
+    window.caseSocket = ws;
+    ws.onopen = () => {
+      if (window.casePoller) {
+        clearInterval(window.casePoller);
+        window.casePoller = null;
+      }
+    };
+    ws.onmessage = async (evt) => {
+      try {
+        const data = JSON.parse(evt.data);
+        if (data.event === 'artifact.created') {
+          const kind = (data.kind || '').toLowerCase();
+          if (kind === 'summary' || kind === 'timeline') {
+            await refreshAnalysisModule(kind);
+          } else if (kind === 'transcription') {
+            await refreshAnalysisModule('summary', false);
+            await refreshAnalysisModule('timeline', false);
+          }
+        }
+      } catch (error) {
+        console.error('Case websocket message error', error);
+      }
+    };
+    ws.onerror = (err) => {
+      console.warn('Case websocket error', caseId, err);
+    };
+    ws.onclose = () => {
+      window.caseSocket = null;
+      if (!window.casePoller) {
+        window.casePoller = setInterval(() => pollCaseModules(caseId), CASE_POLL_INTERVAL);
+      }
+    };
   }
 
   function updateTranscriptionConfig() {
@@ -754,6 +811,14 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
       }
       updateTranscriptionControls(status || 'IDLE');
     }
+    const caseId = document.getElementById('jobs-body')?.dataset.caseId;
+    if (caseId) {
+      connectCaseWS(caseId);
+      const socketReady = window.caseSocket && (window.caseSocket.readyState === WebSocket.OPEN || window.caseSocket.readyState === WebSocket.CONNECTING);
+      if (!socketReady && !window.casePoller) {
+        window.casePoller = setInterval(() => pollCaseModules(caseId), CASE_POLL_INTERVAL);
+      }
+    }
   }
 
   window.addEventListener('DOMContentLoaded', bootstrapJobs);
@@ -797,8 +862,9 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
 
   document.addEventListener('click', (evt) => {
     if (evt.target.closest('[data-module-quick]')) return;
-    const toggle = evt.target.closest('[data-module-target]');
+    const toggle = evt.target.closest('[data-module-toggle]');
     if (!toggle) return;
+    evt.preventDefault();
     const targetId = toggle.getAttribute('data-module-target');
     const panel = document.getElementById(targetId);
     if (!panel) return;
@@ -806,7 +872,7 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
     document.querySelectorAll('[data-module-panel]').forEach((p) => {
       if (p !== panel) {
         p.classList.add('hidden');
-        const btn = document.querySelector(`[data-module-target="${p.id}"]`);
+        const btn = document.querySelector(`[data-module-toggle][data-module-target="${p.id}"]`);
         if (btn) {
           btn.setAttribute('aria-expanded', 'false');
           btn.querySelector('[data-module-arrow]')?.classList.remove('rotate-180');
@@ -818,12 +884,12 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
       panel.classList.remove('hidden');
       toggle.setAttribute('aria-expanded', 'true');
       toggle.querySelector('[data-module-arrow]')?.classList.add('rotate-180');
-      if (quickSection) quickSection.classList.add('hidden');
+      if (quickSection && targetId === 'module-transcription') quickSection.classList.add('hidden');
     } else {
       panel.classList.add('hidden');
       toggle.setAttribute('aria-expanded', 'false');
       toggle.querySelector('[data-module-arrow]')?.classList.remove('rotate-180');
-      if (quickSection) quickSection.classList.remove('hidden');
+      if (quickSection && targetId === 'module-transcription') quickSection.classList.remove('hidden');
     }
   });
 
@@ -1062,6 +1128,7 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
     const analysisBtn = evt.target.closest('[data-analysis-action="analysis-start"]');
     if (!analysisBtn) return;
     evt.preventDefault();
+    evt.stopPropagation();
     const key = analysisBtn.getAttribute('data-analysis-key');
     const jobId = analysisBtn.getAttribute('data-job-id');
     if (!key || !jobId) return;
@@ -1112,7 +1179,7 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
     const input = document.getElementById(inputId);
     // Ensure the transcription panel is open so browsers allow file dialog
     const panel = document.getElementById('module-transcription');
-    const header = document.querySelector('[data-module-target="module-transcription"]');
+    const header = document.querySelector('[data-module-toggle][data-module-target="module-transcription"]');
     if (panel && header && panel.classList.contains('hidden')) {
       panel.classList.remove('hidden');
       header.setAttribute('aria-expanded', 'true');
@@ -1319,19 +1386,24 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
             {% csrf_token %}
             <input type="hidden" name="mode" value="batch">
             <div class="flex flex-col gap-4">
-              <div class="rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-3" data-module-target="module-transcription" aria-expanded="false" data-current-job-id="{{ latest_job.id|default:'' }}" data-current-job-status="{{ latest_job_telemetry.status|default:'IDLE' }}">
-                <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                  <div class="flex flex-1 flex-col gap-1">
-                    <p class="text-xs uppercase tracking-wide text-slate-400">Transcription</p>
-                    <p class="text-xs text-slate-300" data-transcription-config>Batch mode with diarization</p>
-                    <p class="text-xs text-slate-300">
-                      {% if latest_job %}
-                        Last status: <span class="font-semibold text-primary-200">{{ latest_job_telemetry.status }}</span>{% if latest_activity_ts %} · <time data-ts="{{ latest_activity_ts|date:'c' }}">{{ latest_activity_ts }}</time>{% endif %}
-                      {% else %}
-                        Ready for the first transcription.
-                      {% endif %}
-                    </p>
-                  </div>
+              <div class="rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-3">
+                <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between" data-current-job-id="{{ latest_job.id|default:'' }}" data-current-job-status="{{ latest_job_telemetry.status|default:'IDLE' }}">
+                  <button type="button" class="group flex flex-1 items-start justify-between gap-3 text-left" data-module-toggle data-module-target="module-transcription" aria-expanded="false">
+                    <div class="flex flex-col gap-1">
+                      <p class="text-xs uppercase tracking-wide text-slate-400">Transcription</p>
+                      <p class="text-xs text-slate-300" data-transcription-config>Batch mode with diarization</p>
+                      <p class="text-xs text-slate-300">
+                        {% if latest_job %}
+                          Last status: <span class="font-semibold text-primary-200">{{ latest_job_telemetry.status }}</span>{% if latest_activity_ts %} · <time data-ts="{{ latest_activity_ts|date:'c' }}">{{ latest_activity_ts }}</time>{% endif %}
+                        {% else %}
+                          Ready for the first transcription.
+                        {% endif %}
+                      </p>
+                    </div>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="module-arrow h-4 w-4 shrink-0 transition-transform duration-150 text-slate-300" viewBox="0 0 20 20" fill="currentColor" data-module-arrow>
+                      <path fill-rule="evenodd" d="M10 3a1 1 0 01.832.445l4.5 6.5a1 1 0 01-.832 1.555H5.5a1 1 0 01-.832-1.555l4.5-6.5A1 1 0 0110 3z" clip-rule="evenodd" />
+                    </svg>
+                  </button>
                   <div class="flex flex-wrap items-center gap-3 lg:justify-end" data-module-quick>
                     <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-xs font-semibold text-slate-100 transition hover:border-primary-400 hover:text-white" data-file-trigger data-file-input="module-transcription-file">
                       <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -1345,11 +1417,6 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
                       <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path d="M6.5 4.5l9 5.5-9 5.5v-11z" /></svg>
                       Upload &amp; Start
                     </button>
-                  </div>
-                  <div class="hidden lg:flex items-center text-slate-300 pointer-events-none">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="module-arrow h-4 w-4 transition-transform duration-150" viewBox="0 0 20 20" fill="currentColor" data-module-arrow>
-                      <path fill-rule="evenodd" d="M10 3a1 1 0 01.832.445l4.5 6.5a1 1 0 01-.832 1.555H5.5a1 1 0 01-.832-1.555l4.5-6.5A1 1 0 0110 3z" clip-rule="evenodd" />
-                    </svg>
                   </div>
                 </div>
               </div>
@@ -1435,7 +1502,7 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
           </thead>
           <tbody id="jobs-body" data-case-id="{{ case.id }}" class="divide-y divide-white/5 bg-slate-900/40 text-slate-100">
             {% for row in job_rows %}
-              {% include "ui/_job_row.html" with j=row.job telem=row.telemetry %}
+              {% include "ui/_job_row.html" with j=row.job telem=row.telemetry title=row.title %}
             {% empty %}
             <tr>
               <td colspan="7" class="px-4 py-6 text-center text-slate-400">No activity yet.</td>

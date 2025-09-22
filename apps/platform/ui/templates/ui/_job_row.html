@@ -2,7 +2,7 @@
 {% with telem=telem|default_if_none:None %}
 {% with status=telem.status|default:j.status %}
 {% with artifact=telem.artifacts.0|default_if_none:None %}
-{% with job_title=artifact.title|default:"Transcript" %}
+{% with job_title=title|default:"Transcript" %}
 <tr data-job="{{ j.id }}" data-job-row data-job-status="{{ status }}" class="cursor-pointer transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400" tabindex="0" aria-expanded="false" data-review-status="{{ j.review_status|default:'PENDING' }}">
   <td class="px-4 py-3">
     <div class="flex items-center justify-between gap-2">

@@ -149,8 +149,12 @@ def _map_job_status(job: Job) -> str:
     return "Created"
 
 
-def _friendly_job_title(job: Job, telemetry_map: Dict[str, Dict[str, Any]]) -> str:
-    telem = telemetry_map.get(str(job.id)) or {}
+def _friendly_job_title(
+    job: Job,
+    telemetry: Optional[Dict[str, Any]] = None,
+    artifact: Optional[CaseArtifact] = None,
+) -> str:
+    telem = telemetry or {}
     artifacts = telem.get("artifacts") or []
     if artifacts:
         candidate = artifacts[0]
@@ -158,6 +162,8 @@ def _friendly_job_title(job: Job, telemetry_map: Dict[str, Dict[str, Any]]) -> s
             title = candidate.get("title")
             if title:
                 return title
+    if artifact and getattr(artifact, "title", None):
+        return artifact.title
     description = getattr(job, "description", None)
     return description or str(job.id)
 
@@ -205,6 +211,7 @@ def _analysis_modules_context(
     case: Case,
     jobs: List[Job],
     telemetry_map: Dict[str, Dict[str, Any]],
+    transcript_artifacts: Optional[Dict[str, CaseArtifact]] = None,
 ) -> List[Dict[str, Any]]:
     user = getattr(request, "user", None)
     artifacts_qs = (
@@ -227,7 +234,11 @@ def _analysis_modules_context(
     if latest_transcription:
         target_job = {
             "id": str(latest_transcription.id),
-            "title": _friendly_job_title(latest_transcription, telemetry_map),
+            "title": _friendly_job_title(
+                latest_transcription,
+                telemetry_map.get(str(latest_transcription.id)),
+                (transcript_artifacts or {}).get(str(latest_transcription.id)),
+            ),
             "status": latest_transcription.status,
             "finished_at": latest_transcription.finished_at,
         }
@@ -424,9 +435,12 @@ def _job_detail_context(
     telemetry = telemetry or JobTelemetrySerializer(job, context={"request": request, "ui_mode": True}).data
     artifacts = telemetry.get("artifacts") or []
     artifact = artifacts[0] if artifacts else None
-    artifact_title = artifact.get("title") if isinstance(artifact, dict) else None
-    # Prefer artifact title, then job description; fall back to a friendly default
-    job_title = artifact_title or getattr(job, "description", None) or "Transcript"
+    db_artifact = (
+        CaseArtifact.objects.filter(case_id=str(job.case_id), job_id=str(job.id), type="TRANSCRIPT")
+        .order_by("-created_at")
+        .first()
+    )
+    job_title = _friendly_job_title(job, telemetry, db_artifact)
     metadata_items = _format_metadata(telemetry.get("metadata"))
     azure_cancel_status = telemetry.get("metadata", {}).get("azure_cancel_status") if isinstance(telemetry.get("metadata"), dict) else None
     azure_cancel_body = telemetry.get("metadata", {}).get("azure_cancel_body") if isinstance(telemetry.get("metadata"), dict) else None
@@ -609,6 +623,16 @@ def case_detail(request: HttpRequest, case_id: str) -> HttpResponse:
     )
     jobs_scoped = scope_jobs(jobs_qs, getattr(request, "user", None))
     jobs_list = list(jobs_scoped)
+    job_ids = [str(job.id) for job in jobs_list]
+    transcript_artifacts: Dict[str, CaseArtifact] = {}
+    if job_ids:
+        for art in (
+            CaseArtifact.objects.filter(case_id=str(case.id), job_id__in=job_ids, type="TRANSCRIPT")
+            .order_by("-created_at")
+        ):
+            key = art.job_id or ""
+            if key and key not in transcript_artifacts:
+                transcript_artifacts[key] = art
     job_summary = summarize_jobs(jobs_list)
     last_update = job_summary.get("last_update")
     job_summary["last_update"] = last_update.isoformat() if last_update else None
@@ -625,7 +649,8 @@ def case_detail(request: HttpRequest, case_id: str) -> HttpResponse:
         data = telemetry_map.get(key)
         if data:
             job_insights.append(data)
-        job_rows.append({"job": job, "telemetry": data})
+        display_title = _friendly_job_title(job, data, transcript_artifacts.get(key))
+        job_rows.append({"job": job, "telemetry": data, "title": display_title})
     latest_job = None
     latest_job_telemetry = None
     latest_activity_ts = None
@@ -639,7 +664,9 @@ def case_detail(request: HttpRequest, case_id: str) -> HttpResponse:
         latest_job_telemetry = telemetry_map.get(str(latest_job.id))
         latest_activity_ts = latest_job.finished_at or latest_job.started_at or latest_job.created_at
     progress_ctx = _case_progress_context(case, jobs_list, telemetry_map)
-    analysis_modules = _analysis_modules_context(request, case, jobs_list, telemetry_map)
+    analysis_modules = _analysis_modules_context(
+        request, case, jobs_list, telemetry_map, transcript_artifacts
+    )
 
     user_can_review = False
     dev_open = getattr(settings, "PLATFORM_DEV_OPEN", False)
