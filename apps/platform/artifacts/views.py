@@ -1,15 +1,18 @@
 from __future__ import annotations
 
-from rest_framework import viewsets
-from rest_framework.permissions import AllowAny
-from apps.platform.authorization.access_policies import ArtifactAccessPolicy
-from django.conf import settings
+from pathlib import Path
 
-from apps.platform.artifacts.models import CaseArtifact
-from apps.platform.tenancy import scope_artifacts
+from django.conf import settings
 from django.db.models import Q
+from django.http import FileResponse, Http404
+from rest_framework import viewsets
+from rest_framework.decorators import action
+
+from apps.platform.authorization.access_policies import ArtifactAccessPolicy
+from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.artifacts.serializers import CaseArtifactSerializer
 from apps.platform.operations.audit import emit as audit_emit
+from apps.platform.tenancy import scope_artifacts
 
 
 class ArtifactViewSet(viewsets.ReadOnlyModelViewSet):
@@ -42,3 +45,28 @@ class ArtifactViewSet(viewsets.ReadOnlyModelViewSet):
         except Exception:
             pass
         return resp
+
+    @action(detail=True, methods=["get"], url_path="download")
+    def download(self, request, *args, **kwargs):
+        artifact = self.get_object()
+        path_value = artifact.path or ""
+        path_obj = Path(path_value)
+        if not path_obj.exists():
+            raise Http404
+        storage_root = Path(settings.STORAGE_ROOT).resolve()
+        try:
+            is_relative = path_obj.resolve().is_relative_to(storage_root)
+        except AttributeError:
+            is_relative = str(path_obj.resolve()).startswith(str(storage_root))
+        if not is_relative:
+            raise Http404
+        try:
+            audit_emit(
+                request,
+                case_id=artifact.case_id,
+                event="artifact.download",
+                data={"artifact_id": artifact.id, "type": artifact.type},
+            )
+        except Exception:
+            pass
+        return FileResponse(path_obj.open("rb"), filename=path_obj.name, as_attachment=True)

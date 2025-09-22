@@ -218,6 +218,39 @@
     }
   }
 
+  async function refreshAnalysisModule(key, preserveState = true) {
+    const container = document.querySelector(`[data-analysis-module="${key}"]`);
+    if (!container) return;
+    const panel = container.querySelector('[data-module-panel]');
+    const wasOpen = preserveState && panel && !panel.classList.contains('hidden');
+    const caseId = container.dataset.caseId || document.getElementById('jobs-body')?.dataset.caseId;
+    if (!caseId) return;
+    try {
+      const resp = await fetch(`/cases/${caseId}/analysis/${key}/module/`, {
+        headers: { 'HX-Request': 'true' },
+        credentials: 'same-origin',
+      });
+      if (!resp.ok) {
+        console.error('Failed to refresh analysis module', key, resp.status);
+        return;
+      }
+      const html = await resp.text();
+      container.innerHTML = html;
+      if (wasOpen) {
+        const header = container.querySelector('[data-module-target]');
+        const newPanel = container.querySelector('[data-module-panel]');
+        if (newPanel && header) {
+          newPanel.classList.remove('hidden');
+          header.setAttribute('aria-expanded', 'true');
+          header.querySelector('[data-module-arrow]')?.classList.add('rotate-180');
+        }
+      }
+      if (window.renderLocalTimes) window.renderLocalTimes();
+    } catch (error) {
+      console.error('Failed to refresh analysis module', key, error);
+    }
+  }
+
   function updateTranscriptionConfig() {
     const configEl = document.querySelector('[data-transcription-config]');
     if (!configEl) return;
@@ -1025,6 +1058,53 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
     }
   });
 
+  document.addEventListener('click', async (evt) => {
+    const analysisBtn = evt.target.closest('[data-analysis-action="analysis-start"]');
+    if (!analysisBtn) return;
+    evt.preventDefault();
+    const key = analysisBtn.getAttribute('data-analysis-key');
+    const jobId = analysisBtn.getAttribute('data-job-id');
+    if (!key || !jobId) return;
+    const label = analysisBtn.getAttribute('data-analysis-label') || key;
+    const originalText = analysisBtn.textContent;
+    const loadingText = analysisBtn.getAttribute('data-loading-text') || 'Queuing…';
+    const successText = analysisBtn.getAttribute('data-success-label') || 'Automation queued';
+    analysisBtn.disabled = true;
+    analysisBtn.textContent = loadingText;
+    const toastX = evt.clientX || window.innerWidth / 2;
+    const toastY = evt.clientY || window.innerHeight / 2;
+    let success = false;
+    try {
+      const resp = await fetch(`/api/v1/jobs/${jobId}/analyze/${key}/`, {
+        method: 'POST',
+        headers: {
+          'X-CSRFToken': getCSRFToken(),
+          'Accept': 'application/json',
+        },
+        credentials: 'same-origin',
+      });
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(text || `HTTP ${resp.status}`);
+      }
+      success = true;
+    } catch (error) {
+      console.error(`Failed to queue ${key}`, error);
+      if (window.udocketShowToastAt) {
+        window.udocketShowToastAt(toastX, toastY, `Unable to queue ${label}.`);
+      }
+    } finally {
+      analysisBtn.disabled = false;
+      analysisBtn.textContent = originalText;
+    }
+    if (success) {
+      if (window.udocketShowToastAt) {
+        window.udocketShowToastAt(toastX, toastY, successText);
+      }
+      await refreshAnalysisModule(key);
+    }
+  });
+
   document.addEventListener('click', (evt) => {
     const trigger = evt.target.closest('[data-file-trigger]');
     if (!trigger) return;
@@ -1230,7 +1310,7 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
     <div class="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-black/25">
       <h2 class="text-lg font-semibold text-white">Tools</h2>
       <p class="mt-2 text-sm text-slate-300">Launch automated agents or review upcoming features for this case.</p>
-      <div class="mt-4 space-y-4">
+      <div class="mt-4 grid gap-4">
         <div>
           <form id="job-form" method="post" enctype="multipart/form-data" class="space-y-5"
                 hx-post="/cases/{{ case.id }}/jobs/new"
@@ -1327,45 +1407,11 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
             </div>
           </form>
         </div>
-        <!-- Summarization row -->
-        <div class="rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-3" data-module-target="module-summary" aria-expanded="false">
-          <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div class="flex flex-1 flex-col gap-1">
-              <p class="text-xs uppercase tracking-wide text-slate-400">Summarization</p>
-              <p class="text-xs text-slate-300">Generate layered summaries of transcripts with AI assistance.</p>
-            </div>
-            <div class="hidden lg:flex items-center text-slate-300 pointer-events-none">
-              <svg xmlns="http://www.w3.org/2000/svg" class="module-arrow h-4 w-4 transition-transform duration-150" viewBox="0 0 20 20" fill="currentColor" data-module-arrow>
-                <path fill-rule="evenodd" d="M10 3a1 1 0 01.832.445l4.5 6.5a1 1 0 01-.832 1.555H5.5a1 1 0 01-.832-1.555l4.5-6.5A1 1 0 0110 3z" clip-rule="evenodd" />
-              </svg>
-            </div>
+        {% for module in analysis_modules %}
+          <div id="analysis-module-{{ module.key }}" data-analysis-module="{{ module.key }}" data-case-id="{{ case.id }}">
+            {% include "ui/_analysis_module.html" with module=module %}
           </div>
-        </div>
-        <div id="module-summary" data-module-panel class="hidden rounded-xl border border-white/10 bg-slate-900/80 p-4 text-sm text-slate-200">
-          <div class="flex items-center gap-2">
-            <span class="text-xs text-slate-300">Coming soon</span>
-          </div>
-        </div>
-
-        <!-- Timeline row -->
-        <div class="rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-3" data-module-target="module-timeline" aria-expanded="false">
-          <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div class="flex flex-1 flex-col gap-1">
-              <p class="text-xs uppercase tracking-wide text-slate-400">Timeline</p>
-              <p class="text-xs text-slate-300">An AI-powered event timeline anchored to transcript timestamps.</p>
-            </div>
-            <div class="hidden lg:flex items-center text-slate-300 pointer-events-none">
-              <svg xmlns="http://www.w3.org/2000/svg" class="module-arrow h-4 w-4 transition-transform duration-150" viewBox="0 0 20 20" fill="currentColor" data-module-arrow>
-                <path fill-rule="evenodd" d="M10 3a1 1 0 01.832.445l4.5 6.5a1 1 0 01-.832 1.555H5.5a1 1 0 01-.832-1.555l4.5-6.5A1 1 0 0110 3z" clip-rule="evenodd" />
-              </svg>
-            </div>
-          </div>
-        </div>
-        <div id="module-timeline" data-module-panel class="hidden rounded-xl border border-white/10 bg-slate-900/80 p-4 text-sm text-slate-200">
-          <div class="flex items-center gap-2">
-            <span class="text-xs text-slate-300">Coming soon</span>
-          </div>
-        </div>
+        {% endfor %}
       </div>
     </div>
 

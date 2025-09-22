@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from django.core.exceptions import PermissionDenied
@@ -29,6 +30,7 @@ from apps.platform.operations.storage import ensure_case_dirs
 from apps.platform.authorization.models import PermissionPreset, Role
 from apps.platform.authorization.capabilities import role_capabilities, has_capability
 from apps.platform.artifacts.registry import ARTIFACT_FIELD_REGISTRY
+from apps.platform.artifacts.models import CaseArtifact
 from django.contrib.auth import logout
 from apps.platform.tenancy import accessible_organization_ids, scope_jobs
 from apps.platform.jobs.serializers import JobTelemetrySerializer
@@ -45,6 +47,9 @@ STATUS_CLASS_MAP = {
     "Uploading": "border-primary-400/40 bg-primary-500/10 text-primary-200",
     "Rejected": "border-rose-400/40 bg-rose-500/10 text-rose-200",
     "Cancelling": "border-slate-400/40 bg-slate-500/20 text-slate-200",
+    "Ready": "border-emerald-400/40 bg-emerald-500/10 text-emerald-200",
+    "Not Started": "border-white/20 bg-white/5 text-slate-200",
+    "No Transcript": "border-amber-400/40 bg-amber-500/10 text-amber-100",
 }
 
 
@@ -142,6 +147,162 @@ def _map_job_status(job: Job) -> str:
     if status in {Job.Status.FAILED, getattr(Job.Status, "CANCELLED", "CANCELLED")}:
         return "Rejected"
     return "Created"
+
+
+def _friendly_job_title(job: Job, telemetry_map: Dict[str, Dict[str, Any]]) -> str:
+    telem = telemetry_map.get(str(job.id)) or {}
+    artifacts = telem.get("artifacts") or []
+    if artifacts:
+        candidate = artifacts[0]
+        if isinstance(candidate, dict):
+            title = candidate.get("title")
+            if title:
+                return title
+    description = getattr(job, "description", None)
+    return description or str(job.id)
+
+
+def _latest_successful_transcription_job(jobs: List[Job]) -> Optional[Job]:
+    ordered = sorted(
+        jobs,
+        key=lambda j: (j.finished_at or j.started_at or j.created_at or datetime.min),
+        reverse=True,
+    )
+    for job in ordered:
+        if job.status == Job.Status.SUCCEEDED and job.transcript_path:
+            return job
+    return None
+
+
+def _artifact_payload(artifact: CaseArtifact) -> Dict[str, Any]:
+    metadata = artifact.metadata or {}
+    path_obj = Path(artifact.path) if artifact.path else None
+    filename = path_obj.name if path_obj else (artifact.path or "")
+    source = metadata.get("source_transcript") or metadata.get("source")
+    if source:
+        try:
+            source = Path(source).name
+        except Exception:
+            source = str(source)
+    try:
+        download_url = reverse("artifact-download", kwargs={"pk": artifact.pk})
+    except Exception:
+        download_url = ""
+    return {
+        "id": artifact.pk,
+        "title": artifact.title or filename,
+        "created_at": artifact.created_at,
+        "download_url": download_url,
+        "job_id": artifact.job_id,
+        "filename": filename,
+        "metadata": metadata,
+        "source": source,
+    }
+
+
+def _analysis_modules_context(
+    request: HttpRequest,
+    case: Case,
+    jobs: List[Job],
+    telemetry_map: Dict[str, Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    user = getattr(request, "user", None)
+    artifacts_qs = (
+        CaseArtifact.objects.for_user(user)
+        .filter(case_id=str(case.id), type__in=["SUMMARY", "TIMELINE"])
+        .order_by("-created_at")
+    )
+
+    summary_artifacts: List[Dict[str, Any]] = []
+    timeline_artifacts: List[Dict[str, Any]] = []
+    for artifact in artifacts_qs:
+        payload = _artifact_payload(artifact)
+        if artifact.type == "SUMMARY":
+            summary_artifacts.append(payload)
+        elif artifact.type == "TIMELINE":
+            timeline_artifacts.append(payload)
+
+    latest_transcription = _latest_successful_transcription_job(jobs)
+    target_job: Optional[Dict[str, Any]] = None
+    if latest_transcription:
+        target_job = {
+            "id": str(latest_transcription.id),
+            "title": _friendly_job_title(latest_transcription, telemetry_map),
+            "status": latest_transcription.status,
+            "finished_at": latest_transcription.finished_at,
+        }
+
+    def build_module(
+        *,
+        key: str,
+        label: str,
+        description: str,
+        artifacts: List[Dict[str, Any]],
+        empty_message: str,
+        action_label: str,
+        success_label: str,
+    ) -> Dict[str, Any]:
+        latest = artifacts[0] if artifacts else None
+        history = artifacts[1:5]
+        if not target_job:
+            status = "No Transcript"
+            header_hint = "Upload and run a transcription to enable this automation."
+            action_disabled = True
+            disabled_reason = "Requires a completed transcript."
+        elif latest:
+            status = "Ready"
+            header_hint = "Latest run"
+            action_disabled = False
+            disabled_reason = None
+        else:
+            status = "Not Started"
+            header_hint = "No runs yet"
+            action_disabled = False
+            disabled_reason = None
+
+        return {
+            "key": key,
+            "label": label,
+            "description": description,
+            "panel_id": f"module-{key}",
+            "status": status,
+            "status_class": _status_class(status),
+            "header_hint": header_hint,
+            "header_hint_time": latest["created_at"] if latest else None,
+            "latest": latest,
+            "history": history,
+            "empty_message": empty_message,
+            "target_job": target_job,
+            "action": {
+                "job_id": target_job["id"] if target_job else None,
+                "label": action_label,
+                "loading_label": "Queuing…",
+                "success_label": success_label,
+                "disabled": action_disabled,
+                "disabled_reason": disabled_reason,
+            },
+        }
+
+    return [
+        build_module(
+            key="summary",
+            label="Summarization",
+            description="Generate layered summaries of transcripts with AI assistance.",
+            artifacts=summary_artifacts,
+            empty_message="No summaries yet. Generate one from the latest transcript.",
+            action_label="Generate summary",
+            success_label="Summary queued",
+        ),
+        build_module(
+            key="timeline",
+            label="Timeline",
+            description="Build an event timeline anchored to transcript timestamps.",
+            artifacts=timeline_artifacts,
+            empty_message="No timeline has been generated yet.",
+            action_label="Generate timeline",
+            success_label="Timeline queued",
+        ),
+    ]
 
 
 def _build_case_progress(case: Case, jobs: List[Job], telemetry_map: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -478,6 +639,7 @@ def case_detail(request: HttpRequest, case_id: str) -> HttpResponse:
         latest_job_telemetry = telemetry_map.get(str(latest_job.id))
         latest_activity_ts = latest_job.finished_at or latest_job.started_at or latest_job.created_at
     progress_ctx = _case_progress_context(case, jobs_list, telemetry_map)
+    analysis_modules = _analysis_modules_context(request, case, jobs_list, telemetry_map)
 
     user_can_review = False
     dev_open = getattr(settings, "PLATFORM_DEV_OPEN", False)
@@ -502,8 +664,39 @@ def case_detail(request: HttpRequest, case_id: str) -> HttpResponse:
         "latest_activity_ts": latest_activity_ts,
         **progress_ctx,
         "user_can_review": user_can_review,
+        "analysis_modules": analysis_modules,
     }
     return render(request, "ui/case_detail.html", context)
+
+
+@require_http_methods(["GET"])
+def case_analysis_module(request: HttpRequest, case_id: str, agent: str) -> HttpResponse:
+    auth_response = _ensure_authenticated(request)
+    if auth_response:
+        return auth_response
+
+    case, _ = _get_case_and_org(request, case_id)
+
+    jobs_qs = (
+        Job.objects.select_related("case", "case__organization", "reviewed_by")
+        .filter(case=case)
+        .order_by("-created_at")
+    )
+    jobs_scoped = scope_jobs(jobs_qs, getattr(request, "user", None))
+    jobs_list = list(jobs_scoped)
+    telemetry = JobTelemetrySerializer(
+        jobs_list,
+        many=True,
+        context={"request": request, "ui_mode": True},
+    ).data
+    telemetry_map = {item.get("id"): item for item in telemetry}
+
+    modules = _analysis_modules_context(request, case, jobs_list, telemetry_map)
+    module = next((item for item in modules if item.get("key") == agent), None)
+    if not module:
+        raise Http404
+
+    return render(request, "ui/_analysis_module.html", {"module": module, "case": case})
 
 
 @require_http_methods(["POST"])

@@ -5,6 +5,11 @@ from apps.platform.ui import views
 urlpatterns = [
     path("", views.index, name="ui-index"),
     path("cases/<str:case_id>/", views.case_detail, name="ui-case-detail"),
+    path(
+        "cases/<str:case_id>/analysis/<str:agent>/module/",
+        views.case_analysis_module,
+        name="ui-case-analysis-module",
+    ),
     path("cases/<str:case_id>/title", views.case_update_title, name="ui-case-update-title"),
     path("cases/<str:case_id>/jobs/<uuid:job_id>/detail/", views.case_job_detail_panel, name="ui-case-job-detail"),
     path("cases/<str:case_id>/jobs/new", views.create_job, name="ui-job-create"),
