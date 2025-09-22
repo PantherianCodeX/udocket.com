@@ -3,6 +3,8 @@
 <script src="https://unpkg.com/htmx.org@1.9.12"></script>
 <script>
   window.jobPollers = window.jobPollers || {};
+  window.jobSockets = window.jobSockets || {};
+  window.jobDetailRefreshAt = window.jobDetailRefreshAt || {};
   let activeTranscriptionJobId = null;
 
   function getTranscriptionElements() {
@@ -23,6 +25,64 @@
       container: document.querySelector('[data-current-job-id]'),
       statusPill: document.querySelector('[data-transcription-status-pill]'),
     };
+  }
+
+  const STATUS_LABELS = {
+    CONVERTING: 'Converting',
+    UPLOADING: 'Uploading',
+    RUNNING: 'Transcribing',
+    PENDING: 'Pending',
+    QUEUED: 'Queued',
+    SUCCEEDED: 'Succeeded',
+    FAILED: 'Failed',
+    CANCELLED: 'Cancelled',
+    CANCELED: 'Cancelled',
+    CANCELLING: 'Cancelling',
+    ERROR: 'Error',
+  };
+
+  function normalizeStatusName(status) {
+    return (status || '').toString().toUpperCase();
+  }
+
+  function friendlyStatus(status) {
+    const normalized = normalizeStatusName(status);
+    return STATUS_LABELS[normalized] || (normalized ? normalized.charAt(0) + normalized.slice(1).toLowerCase() : 'Status');
+  }
+
+  function renderStatusLabel(el, status, progress) {
+    if (!el) return;
+    const target = el.matches('[data-status]') ? el : el.querySelector('[data-status]') || el;
+    const normalized = normalizeStatusName(status);
+    if (normalized === 'UPLOADING' && Number.isFinite(progress)) {
+      const pct = Math.max(0, Math.min(100, Math.round(progress)));
+      target.textContent = `Uploading ${pct}%`;
+      target.dataset.progress = String(pct);
+      if (target.classList.contains('status-pill')) {
+        target.style.setProperty('--status-progress', (pct / 100).toString());
+      }
+    } else if (normalized === 'CANCELLING') {
+      target.textContent = 'Cancelling';
+      target.dataset.progress = '';
+      if (target.classList.contains('status-pill')) {
+        target.style.removeProperty('--status-progress');
+      }
+    } else {
+      target.textContent = friendlyStatus(status);
+      target.dataset.progress = '';
+      if (target.classList.contains('status-pill')) {
+        target.style.removeProperty('--status-progress');
+      }
+    }
+    target.dataset.status = normalized;
+    if (el !== target) {
+      el.dataset.status = normalized;
+      if (normalized === 'UPLOADING' && Number.isFinite(progress)) {
+        el.dataset.progress = target.dataset.progress;
+      } else {
+        delete el.dataset.progress;
+      }
+    }
   }
 
   function getCSRFToken() {
@@ -96,7 +156,10 @@
         progressWrap.classList.remove('hidden');
         const pct = Math.max(0, Math.min(100, Math.round(progress)));
         progressBar.style.width = `${pct}%`;
-        if (progressText) progressText.textContent = `${pct}% complete`;
+        if (progressText) {
+          const label = statusName === 'UPLOADING' ? 'uploaded' : 'complete';
+          progressText.textContent = `${pct}% ${label}`;
+        }
       }
     }
 
@@ -114,10 +177,12 @@
         FAILED: ['border-rose-400/40', 'bg-rose-500/10', 'text-rose-200'],
         REJECTED: ['border-rose-400/40', 'bg-rose-500/10', 'text-rose-200'],
         RUNNING: ['border-primary-400/40', 'bg-primary-500/10', 'text-primary-100'],
+        UPLOADING: ['border-primary-400/40', 'bg-primary-500/10', 'text-primary-100'],
         PENDING: ['border-amber-400/40', 'bg-amber-500/10', 'text-amber-100'],
         QUEUED: ['border-amber-400/40', 'bg-amber-500/10', 'text-amber-100'],
         CANCELLED: ['border-slate-400/40', 'bg-slate-500/20', 'text-slate-100'],
         CANCELED: ['border-slate-400/40', 'bg-slate-500/20', 'text-slate-100'],
+        CANCELLING: ['border-slate-400/40', 'bg-slate-500/20', 'text-slate-100'],
       };
       statusPill.classList.remove(
         'border-emerald-400/40', 'bg-emerald-500/10', 'text-emerald-200',
@@ -129,19 +194,23 @@
       );
       const next = CLASS_MAP[normalized] || ['border-white/20', 'bg-white/5', 'text-slate-300'];
       statusPill.classList.add(...next);
-      let displayStatus = title || (statusName || 'Status');
-      if (statusName) {
-        const lower = statusName.toLowerCase();
-        displayStatus = lower.charAt(0).toUpperCase() + lower.slice(1);
+      const progressPct = typeof progress === 'number' ? Math.max(0, Math.min(100, progress)) : null;
+      statusPill.textContent = statusName ? friendlyStatus(statusName) : (title || 'Status');
+      statusPill.dataset.status = normalized;
+      if (normalized === 'UPLOADING' && progressPct !== null) {
+        statusPill.style.setProperty('--status-progress', (progressPct / 100).toString());
+        statusPill.dataset.progress = progressPct.toFixed(1);
+      } else {
+        statusPill.style.removeProperty('--status-progress');
+        statusPill.dataset.progress = '';
       }
-      statusPill.textContent = displayStatus;
     }
   }
 
   function updateTranscriptionControls(status) {
     const { startButtons } = getTranscriptionElements();
     const normalized = (status || '').toUpperCase();
-    const runningStates = ['RUNNING', 'PENDING'];
+    const runningStates = ['RUNNING', 'UPLOADING', 'PENDING', 'CANCELLING'];
     if (startButtons && startButtons.length) {
       startButtons.forEach((btn) => {
         btn.disabled = runningStates.includes(normalized);
@@ -185,12 +254,36 @@
     }
   }
 
+  function toggleJobTitleEditor(jobId, show) {
+    const wrapper = document.querySelector(`#job-title-wrapper-${jobId}`);
+    if (!wrapper) return;
+    const display = wrapper.querySelector('[data-job-title-display]');
+    const form = wrapper.querySelector('[data-job-title-form]');
+    const error = wrapper.querySelector('[data-job-title-error]');
+    if (!display || !form) return;
+    if (show) {
+      display.classList.add('hidden');
+      form.classList.remove('hidden');
+      const input = form.querySelector('input[name="title"]');
+      if (input) {
+        requestAnimationFrame(() => {
+          input.focus();
+          input.select();
+        });
+      }
+    } else {
+      display.classList.remove('hidden');
+      form.classList.add('hidden');
+    }
+    if (error) error.classList.add('hidden');
+  }
+
   function updateJobActionButtons(jobId, status) {
     if (!jobId) return;
     const normalized = (status || '').toUpperCase();
     const cancelBtn = document.querySelector(`[data-job-cancel="${jobId}"]`);
     const restartBtn = document.querySelector(`[data-job-restart="${jobId}"]`);
-    const runningStates = ['RUNNING', 'PENDING', 'QUEUED'];
+    const runningStates = ['RUNNING', 'UPLOADING', 'PENDING', 'QUEUED', 'CANCELLING'];
     const restartStates = ['SUCCEEDED', 'FAILED', 'CANCELLED', 'CANCELED'];
     if (cancelBtn) {
       const shouldShowCancel = runningStates.includes(normalized);
@@ -300,6 +393,7 @@
 window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
     const status = (payload.status || '').toUpperCase() || 'PENDING';
     const progressValue =
+      payload.upload_progress ??
       payload.progress_percent ??
       payload.percent_complete ??
       (typeof payload.progress === 'number'
@@ -309,13 +403,26 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
     const row = document.querySelector(`[data-job="${jobId}"]`);
     if (row) {
       row.dataset.jobStatus = status;
+      if (payload.title) {
+        const titleSpan = row.querySelector('[data-job-title]');
+        if (titleSpan) {
+          titleSpan.textContent = payload.title;
+          titleSpan.setAttribute('title', payload.title);
+        }
+      }
     }
     updateJobActionButtons(jobId, status);
     const detailRow = document.querySelector(`[data-job-detail="${jobId}"]`);
     const container = detailRow ? detailRow.querySelector(`[data-job-detail-container="${jobId}"]`) : null;
     if (container) {
       if (detailRow && !detailRow.classList.contains('hidden') && container.dataset.loaded === '1') {
-        loadJobDetail(jobId, { force: true });
+        const now = Date.now();
+        const last = window.jobDetailRefreshAt[jobId] || 0;
+        // Throttle forced refreshes to avoid layout jumps during live updates
+        if (now - last > 4000) {
+          window.jobDetailRefreshAt[jobId] = now;
+          loadJobDetail(jobId, { force: true });
+        }
       } else {
         delete container.dataset.loaded;
       }
@@ -328,6 +435,16 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
 
     if (!activeTranscriptionJobId) {
       activeTranscriptionJobId = jobId;
+    }
+
+    const detailStatusLabel = document.querySelector(`[data-job-detail="${jobId}"] [data-job-status-label]`);
+    if (detailStatusLabel) {
+      detailStatusLabel.textContent = friendlyStatus(status);
+    }
+
+    if (payload.title) {
+      const headerTitle = document.querySelector(`#job-title-wrapper-${jobId} [data-job-title-display] h2`);
+      if (headerTitle) headerTitle.textContent = payload.title;
     }
 
     const terminal = ['SUCCEEDED', 'FAILED', 'CANCELED', 'CANCELLED', 'ERROR'];
@@ -348,7 +465,10 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
     let detail = '';
     let state = 'running';
 
-    if (status === 'RUNNING') {
+    if (status === 'UPLOADING') {
+      title = 'Uploading audio…';
+      detail = 'Preparing media for Azure Speech.';
+    } else if (status === 'RUNNING') {
       title = 'Processing with Azure Speech…';
       detail = 'Awaiting transcription results from Azure.';
     } else if (status === 'QUEUED' || status === 'PENDING') {
@@ -376,6 +496,20 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
     });
     updateTranscriptionControls(status);
 
+    const detailStatusLabelActive = document.querySelector(`[data-job-detail="${jobId}"] [data-job-status-label]`);
+    if (detailStatusLabelActive) {
+      detailStatusLabelActive.textContent = friendlyStatus(status);
+    }
+
+    if (status === 'UPLOADING') {
+      setTranscriptionSummary('Uploading audio…');
+    } else if (status === 'RUNNING') {
+      setTranscriptionSummary('Processing with Azure Speech…');
+    }
+
+    const detailStatus = document.querySelector(`[data-job-detail="${jobId}"] .status-pill[data-status]`);
+    if (detailStatus) renderStatusLabel(detailStatus, status, progressValue);
+
     if (terminal.includes(status)) {
       const finishedAt = payload.finished_at || payload.completed_at || payload.timestamp_utc;
       if (finishedAt) {
@@ -390,17 +524,33 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
     const statusEl = document.getElementById(`job-status-${jobId}`);
     const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + `/ws/jobs/${jobId}/`;
     const ws = new WebSocket(url);
+    window.jobSockets[jobId] = ws;
+    ws.onopen = () => {
+      if (window.jobPollers[jobId]) {
+        clearInterval(window.jobPollers[jobId]);
+        delete window.jobPollers[jobId];
+      }
+    };
     ws.onmessage = (ev) => {
       try {
         const data = JSON.parse(ev.data);
-        if (data.status && statusEl) statusEl.textContent = data.status;
+        const progress = data.progress_percent ?? data.upload_progress;
+        if (statusEl) renderStatusLabel(statusEl, data.status, progress);
         window.udocketUpdateTranscriptionStatus(jobId, data);
         updateJobReview(jobId, data);
-        if (statusEl && ['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(statusEl.textContent)) {
+        const normalized = statusEl && statusEl.dataset ? statusEl.dataset.status : '';
+        if (normalized && ['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(normalized)) {
           clearInterval(window.jobPollers[jobId]);
           delete window.jobPollers[jobId];
         }
       } catch (_) {}
+    };
+    ws.onerror = (err) => {
+      console.warn('Job websocket error', jobId, err);
+    };
+    ws.onclose = () => {
+      delete window.jobSockets[jobId];
+      ensurePolling(jobId, true);
     };
   }
 
@@ -410,21 +560,29 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
       if (!resp.ok) return;
       const data = await resp.json();
       const statusEl = document.getElementById(`job-status-${jobId}`);
-      if (statusEl && data.status) statusEl.textContent = data.status;
+      const progress = data.progress_percent ?? data.upload_progress;
+      if (statusEl) renderStatusLabel(statusEl, data.status, progress);
       window.udocketUpdateTranscriptionStatus(jobId, data);
       updateJobReview(jobId, data);
-      if (statusEl && ['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(statusEl.textContent)) {
+      const normalized = statusEl && statusEl.dataset ? statusEl.dataset.status : '';
+      if (normalized && ['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(normalized)) {
         clearInterval(window.jobPollers[jobId]);
         delete window.jobPollers[jobId];
       }
     } catch (_) {}
   }
 
-  function ensurePolling(jobId) {
+  function ensurePolling(jobId, force = false) {
     if (window.jobPollers[jobId]) return;
     const statusEl = document.getElementById(`job-status-${jobId}`);
     if (!statusEl) return;
-    if (['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(statusEl.textContent)) return;
+    const normalized = statusEl.dataset ? statusEl.dataset.status : '';
+    if (normalized && ['SUCCEEDED', 'FAILED', 'CANCELLED', 'CANCELED'].includes(normalized)) return;
+    const socket = window.jobSockets[jobId];
+    if (!force && socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+      // Prefer websocket updates while connection is healthy.
+      return;
+    }
     window.jobPollers[jobId] = setInterval(() => pollJob(jobId), 2000);
   }
 
@@ -432,6 +590,18 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
     const container = document.querySelector(`[data-job-detail-container="${jobId}"]`);
     if (!container) return;
     if (!force && (container.dataset.loaded === '1' || container.dataset.loading === '1')) return;
+    // Preserve <details> open state and scroll positions
+    const preserve = {};
+    container.querySelectorAll('details[data-preserve-state]').forEach(d => {
+      const key = d.getAttribute('data-preserve-state');
+      if (!key) return;
+      preserve[key] = { open: d.open, scroll: {} };
+      d.querySelectorAll('[data-preserve-scroll]').forEach(el => {
+        const sk = el.getAttribute('data-preserve-scroll');
+        if (!sk) return;
+        preserve[key].scroll[sk] = el.scrollTop;
+      });
+    });
     container.dataset.loading = '1';
     container.innerHTML = '<div class="flex items-center gap-2 text-xs text-slate-300"><svg class="h-3 w-3 animate-spin text-primary-300" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle class="opacity-30" cx="12" cy="12" r="10" stroke-width="2"></circle><path d="M22 12a10 10 0 00-10-10" stroke-width="2" stroke-linecap="round"></path></svg><span>Loading details…</span></div>';
     try {
@@ -462,6 +632,20 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
       }
       const html = await resp.text();
       container.innerHTML = html;
+      // Restore preserved state
+      Object.entries(preserve).forEach(([key, info]) => {
+        const d = container.querySelector(`details[data-preserve-state="${key}"]`);
+        if (!d) return;
+        if (info && info.open) d.setAttribute('open', '');
+        if (info && info.scroll) {
+          d.querySelectorAll('[data-preserve-scroll]').forEach(el => {
+            const sk = el.getAttribute('data-preserve-scroll');
+            if (sk && info.scroll[sk] != null) {
+              try { el.scrollTop = info.scroll[sk]; } catch (_) {}
+            }
+          });
+        }
+      });
       container.dataset.loaded = '1';
       delete container.dataset.loading;
       if (window.renderLocalTimes) window.renderLocalTimes();
@@ -515,6 +699,12 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
       }
       ensurePolling(jobId);
       updateJobActionButtons(jobId, row.getAttribute('data-job-status'));
+      const statusEl = document.getElementById(`job-status-${jobId}`);
+      if (statusEl) {
+        const statusValue = statusEl.dataset && statusEl.dataset.status ? statusEl.dataset.status : statusEl.textContent;
+        const progressValue = statusEl.dataset && statusEl.dataset.progress ? parseFloat(statusEl.dataset.progress) : undefined;
+        renderStatusLabel(statusEl, statusValue, progressValue);
+      }
     });
     updateFileLabel();
     updateStartAvailability();
@@ -557,6 +747,21 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
     await toggleJobRow(row);
   });
 
+  document.body.addEventListener('job-title-updated', (evt) => {
+    const detail = evt.detail || {};
+    const jobId = detail.job_id || detail.jobId;
+    const title = detail.title;
+    if (!jobId || !title) return;
+    const row = document.querySelector(`[data-job="${jobId}"]`);
+    if (row) {
+      const titleSpan = row.querySelector('[data-job-title]');
+      if (titleSpan) {
+        titleSpan.textContent = title;
+        titleSpan.setAttribute('title', title);
+      }
+    }
+  });
+
   document.addEventListener('click', (evt) => {
     if (evt.target.closest('[data-module-quick]')) return;
     const toggle = evt.target.closest('[data-module-target]');
@@ -590,6 +795,30 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
   });
 
   document.addEventListener('click', async (evt) => {
+    const titleEditBtn = evt.target.closest('[data-edit-job-title]');
+    if (titleEditBtn) {
+      evt.preventDefault();
+      evt.stopPropagation();
+      const wrapper = titleEditBtn.closest('[data-job-title-wrapper]');
+      if (wrapper) {
+        const jobId = wrapper.id.replace('job-title-wrapper-', '');
+        toggleJobTitleEditor(jobId, true);
+      }
+      return;
+    }
+
+    const titleCancelBtn = evt.target.closest('[data-cancel-job-title]');
+    if (titleCancelBtn) {
+      evt.preventDefault();
+      evt.stopPropagation();
+      const wrapper = titleCancelBtn.closest('[data-job-title-wrapper]');
+      if (wrapper) {
+        const jobId = wrapper.id.replace('job-title-wrapper-', '');
+        toggleJobTitleEditor(jobId, false);
+      }
+      return;
+    }
+
     const cancelBtn = evt.target.closest('[data-job-cancel]');
     if (cancelBtn) {
       evt.preventDefault();
@@ -639,7 +868,7 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
       evt.stopPropagation();
       const jobId = restartBtn.getAttribute('data-job-restart');
       if (!jobId) return;
-      if (!window.confirm('Restart transcription? Previous output will be replaced.')) return;
+      if (!window.confirm('Restart transcription? This will create a new job with the same audio and settings.')) return;
       restartBtn.disabled = true;
       try {
         const resp = await fetch(`/api/v1/jobs/${jobId}/restart/`, {
@@ -677,6 +906,54 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
         console.error('Restart transcription failed', error);
       } finally {
         restartBtn.disabled = false;
+      }
+      return;
+    }
+
+    const restartConvertBtn = evt.target.closest('[data-job-restart-convert]');
+    if (restartConvertBtn) {
+      evt.preventDefault();
+      evt.stopPropagation();
+      const jobId = restartConvertBtn.getAttribute('data-job-restart-convert');
+      if (!jobId) return;
+      if (!window.confirm('Restart with WAV conversion? This creates a new job with the same audio and settings (converted to WAV).')) return;
+      restartConvertBtn.disabled = true;
+      try {
+        const resp = await fetch(`/api/v1/jobs/${jobId}/restart/?convert=1`, {
+          method: 'POST',
+          headers: {
+            'X-CSRFToken': getCSRFToken(),
+            'Accept': 'application/json',
+          },
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          const status = (data.status || 'PENDING').toUpperCase();
+          const replacementId = data.job_id || jobId;
+          if (replacementId && replacementId !== jobId) {
+            window.location.reload();
+            return;
+          }
+          activeTranscriptionJobId = replacementId;
+          setCurrentJob(replacementId, status);
+          setTranscriptionStatus({
+            title: 'Restarting transcription…',
+            detail: 'Audio will be converted to WAV, then sent to Azure.',
+            progress: null,
+            state: 'running',
+            statusName: status,
+          });
+          setTranscriptionSummary('Job restarting with conversion…');
+          updateTranscriptionControls(status);
+          updateJobActionButtons(replacementId, status);
+          const row = document.querySelector(`[data-job="${replacementId}"]`);
+          if (row) row.dataset.jobStatus = status;
+          ensurePolling(replacementId);
+        }
+      } catch (error) {
+        console.error('Restart w/ conversion failed', error);
+      } finally {
+        restartConvertBtn.disabled = false;
       }
       return;
     }
@@ -798,9 +1075,9 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
         detail: 'Sending media to the platform.',
         progress: 5,
         state: 'running',
-        statusName: 'RUNNING',
+        statusName: 'UPLOADING',
       });
-      updateTranscriptionControls('RUNNING');
+      updateTranscriptionControls('UPLOADING');
     }
   });
 
@@ -815,9 +1092,9 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
       detail: 'Sending media to the platform.',
       progress: pct,
       state: 'running',
-      statusName: 'RUNNING',
+      statusName: 'UPLOADING',
     });
-    updateTranscriptionControls('RUNNING');
+    updateTranscriptionControls('UPLOADING');
   });
 
   document.body.addEventListener('htmx:afterRequest', (evt) => {
@@ -989,24 +1266,41 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
                     <label class="flex flex-col text-sm text-slate-200">Audio file
                       <input type="file" name="audio" id="module-transcription-file" accept="audio/*" class="mt-2 rounded-lg border border-dashed border-white/20 bg-slate-900/60 px-3 py-3 text-sm focus:border-primary-400 focus:outline-none text-slate-200">
                     </label>
-                    <label class="flex flex-col text-sm text-slate-200">Or SAS URL
-                      <input type="url" name="audio_url" id="module-transcription-url" placeholder="https://storage.azure.com/..." class="mt-2 rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm focus:border-primary-400 focus:outline-none">
-                    </label>
-                  </div>
-                  <div class="grid gap-4 md:grid-cols-2">
                     <label class="inline-flex items-center gap-2 text-sm text-slate-200">
                       <input type="checkbox" name="diarization" value="on" checked class="h-4 w-4 rounded border-white/20 bg-slate-900/70 text-primary-500 focus:ring-primary-400">
-                      Enable diarization (recommended)
-                    </label>
-                    <label class="flex flex-col text-sm text-slate-200">
-                      Language
-                      <input type="text" name="language" value="en-CA" class="mt-2 rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm focus:border-primary-400 focus:outline-none">
+                      Enable diarization (batch only)
                     </label>
                   </div>
                   <details class="rounded-lg border border-white/10 bg-slate-900/60 text-sm text-slate-200">
                     <summary class="cursor-pointer px-3 py-2 font-semibold">Advanced options</summary>
                     <div class="border-t border-white/10 px-3 py-3 space-y-3 text-xs text-slate-300">
-                      <p>Batch mode with diarization is the default. Additional controls such as speaker labels and redaction will appear here as the platform evolves.</p>
+                      <div class="grid gap-4 md:grid-cols-2">
+                        <label class="flex flex-col text-sm text-slate-200">SAS URL (optional)
+                          <input type="url" name="audio_url" id="module-transcription-url" placeholder="https://storage.azure.com/..." class="mt-2 rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm focus:border-primary-400 focus:outline-none">
+                        </label>
+                        <label class="flex flex-col text-sm text-slate-200">Language
+                          <input type="text" name="language" value="en-CA" class="mt-2 rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm focus:border-primary-400 focus:outline-none">
+                        </label>
+                      </div>
+                      <div class="grid gap-4 md:grid-cols-2">
+                        <label class="inline-flex items-center gap-2 text-sm text-slate-200">
+                          <input type="checkbox" name="diarization" value="on" checked class="h-4 w-4 rounded border-white/20 bg-slate-900/70 text-primary-500 focus:ring-primary-400">
+                          Enable diarization (batch only)
+                        </label>
+                        <div class="flex flex-col text-sm text-slate-200">
+                          <span>Mode</span>
+                          <div class="mt-2 flex items-center gap-4">
+                            <label class="inline-flex items-center gap-2">
+                              <input type="radio" name="mode" value="batch" checked class="h-4 w-4 border-white/20 bg-slate-900/70 text-primary-500 focus:ring-primary-400">
+                              <span>Batch (recommended)</span>
+                            </label>
+                            <label class="inline-flex items-center gap-2">
+                              <input type="radio" name="mode" value="on-demand" class="h-4 w-4 border-white/20 bg-slate-900/70 text-primary-500 focus:ring-primary-400">
+                              <span>On‑demand</span>
+                            </label>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </details>
                   <div class="flex items-center gap-3">

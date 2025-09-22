@@ -84,6 +84,8 @@ class JobTelemetrySerializer(serializers.Serializer):
             "id": str(instance.id),
             "case_id": str(instance.case_id),
             "status": instance.status,
+            "upload_progress": instance.upload_progress,
+            "progress_percent": instance.upload_progress,
             "mode": instance.mode,
             "language": instance.language,
             "diarization": instance.diarization,
@@ -177,6 +179,7 @@ class JobSerializer(serializers.ModelSerializer):
             "diarization",
             "language",
             "status",
+            "upload_progress",
             "error_message",
             "transcript_path",
             "duration_s",
@@ -186,6 +189,7 @@ class JobSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             "status",
+            "upload_progress",
             "error_message",
             "transcript_path",
             "duration_s",

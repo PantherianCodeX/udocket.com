@@ -6,6 +6,7 @@ import hashlib
 import json
 import logging
 import mimetypes
+import shutil
 import subprocess
 
 from celery import shared_task
@@ -15,16 +16,22 @@ from django.utils import timezone
 from packages.udocket_core.agents import (
     TranscriptionAgent,
     TranscriptionConfig,
+    ensure_wav,
 )
 from packages.udocket_core.audio import probe_audio_metadata
 from apps.platform.operations.channels import send_job_update, send_case_update
 from apps.platform.jobs.models import Job
 from apps.platform.artifacts.models import CaseArtifact
-from apps.platform.operations.blob_upload import upload_with_sas
+from apps.platform.operations.blob_upload import upload_with_sas, UploadCancelled
 from apps.platform.operations.models import TaskRun
 from apps.platform.cases.models import Case
 from apps.platform.operations.audit import emit as audit_emit
 from apps.platform.operations.storage import ensure_case_dirs, tenant_case_root, ops_dir as storage_ops_dir
+from apps.platform.operations.utils import update_job_meta, append_job_log
+
+# Backwards compatibility for tests importing _update_job_meta
+def _update_job_meta(case_id: str, organization_id: Optional[str], job_id: str, updates: Dict[str, Any]) -> None:  # pragma: no cover - shim
+    return update_job_meta(case_id, organization_id, job_id, updates)
 import re
 from apps.platform.jobs.utils import unique_title
 
@@ -43,31 +50,6 @@ def _sha256_file(path: Path) -> Optional[str]:
 
 
 
-def _update_job_meta(case_id: str, organization_id: Optional[str], job_id: str, updates: Dict[str, Any]) -> None:
-    if not updates:
-        return
-    ops_path = storage_ops_dir(case_id, organization_id) / f"{job_id}_transcription_log.json"
-    try:
-        if ops_path.exists():
-            current = json.loads(ops_path.read_text(encoding="utf-8"))
-        else:
-            current = {}
-    except Exception:
-        current = {}
-    changed = False
-    for key, value in updates.items():
-        if value is None:
-            continue
-        if current.get(key) != value:
-            current[key] = value
-            changed = True
-    if changed:
-        try:
-            ops_path.write_text(json.dumps(current, indent=2, ensure_ascii=False), encoding="utf-8")
-        except Exception:
-            pass
-
-
 @shared_task(bind=True)
 def transcribe_job(
     self,
@@ -78,20 +60,28 @@ def transcribe_job(
     mode: str = "on-demand",
     diarization: bool = False,
     language: Optional[str] = None,
+    force_wav_conversion: bool = False,
 ) -> Dict[str, Any]:
     """Run transcription using the importable agent.
 
     Arguments are explicit to decouple from legacy DB schema.
     """
+    upload_required = (
+        mode == "batch"
+        and isinstance(audio_input, str)
+        and not audio_input.lower().startswith(("http://", "https://"))
+    )
+
     org_id: Optional[str] = None
     try:
         job_obj = Job.objects.select_related("case").get(pk=job_id)
         if job_obj.status == Job.Status.CANCELLED:
             log.info("job already cancelled before execution", extra={"job_id": job_id})
             return {"status": Job.Status.CANCELLED, "job_id": job_id, "case_id": case_id}
-        job_obj.status = Job.Status.RUNNING
+        job_obj.status = Job.Status.UPLOADING if upload_required else Job.Status.RUNNING
         job_obj.started_at = timezone.now()
-        job_obj.save(update_fields=["status", "started_at"])
+        job_obj.upload_progress = 0.0 if upload_required else None
+        job_obj.save(update_fields=["status", "started_at", "upload_progress"])
         org_id = job_obj.organization_id or getattr(job_obj.case, "organization_id", None)
     except Exception:
         job_obj = None
@@ -147,13 +137,22 @@ def transcribe_job(
 
     if audio_meta_updates:
         try:
-            _update_job_meta(case_id, org_id, job_id, audio_meta_updates)
+            update_job_meta(case_id, org_id, job_id, audio_meta_updates)
         except Exception:
             pass
 
     # Update DB status and notify; record TaskRun
     log.info("job claimed", extra={"job_id": job_id, "case_id": case_id, "mode": mode, "diarization": diarization})
-    send_job_update(job_id, event="job.started", status="RUNNING", case_id=case_id)
+    if upload_required:
+        if bool(force_wav_conversion):
+            send_job_update(
+                job_id,
+                event="job.converting",
+                status=Job.Status.CONVERTING,
+                case_id=case_id,
+            )
+    else:
+        send_job_update(job_id, event="job.started", status=Job.Status.RUNNING, case_id=case_id)
 
     # Create a TaskRun row for reproducibility
     tr = TaskRun(
@@ -170,24 +169,151 @@ def transcribe_job(
         tr = None
 
     # Run the agent; only this block determines success vs. failure
+    batch_upload_meta: Dict[str, Any] = {}
     try:
         # If batch mode and the input is a local file, upload to Azure Blob to obtain SAS URL
         ai = audio_input
-        if mode == "batch" and not (str(audio_input).startswith("http://") or str(audio_input).startswith("https://")):
-            try:
-                log.info("uploading source to blob", extra={"job_id": job_id})
-                ai = upload_with_sas(Path(audio_input), case_id, job_id, organization_id=org_id)
-                log.info("uploaded source to blob", extra={"job_id": job_id})
-            except Exception:
+        if upload_required:
+            source_path = Path(audio_input)
+            upload_path = source_path
+            original_name = source_path.name
+            cleanup_path: Optional[Path] = None
+            # Optional conversion pathway (opt-in only)
+            if force_wav_conversion and source_path.suffix.lower() != ".wav":
                 try:
-                    # Legacy fallback (used in FastAPI worker)
-                    from apps.worker.app.blob_upload import upload_with_sas as legacy_upload
+                    # Announce converting state
+                    try:
+                        Job.objects.filter(pk=job_id).update(status=Job.Status.CONVERTING)
+                    except Exception:
+                        pass
+                    try:
+                        send_job_update(
+                            job_id,
+                            event="job.converting",
+                            status=Job.Status.CONVERTING,
+                            case_id=case_id,
+                        )
+                    except Exception:
+                        pass
+                    append_job_log(case_id, org_id, job_id, "Converting source audio to 16 kHz mono WAV")
+                except Exception:
+                    pass
+                try:
+                    converted = ensure_wav(source_path, case_dir, case_id)
+                    upload_path = converted
+                    if converted != source_path:
+                        cleanup_path = converted
+                    original_name = f"{source_path.stem}.wav"
+                    batch_upload_meta.update(
+                        {
+                            "batch_upload_original_extension": source_path.suffix.lower(),
+                            "batch_upload_converted": True,
+                        }
+                    )
+                    converted_copy = storage_ops_dir(case_id, org_id) / f"{job_id}__converted.wav"
+                    try:
+                        shutil.copy2(upload_path, converted_copy)
+                        batch_upload_meta["converted_wav_path"] = str(converted_copy)
+                    except Exception as exc:
+                        log.warning("unable to persist converted wav", extra={"job_id": job_id, "error": str(exc)})
+                    batch_upload_meta["converted_temp_wav"] = True
+                    update_job_meta(case_id, org_id, job_id, batch_upload_meta)
+                    append_job_log(
+                        case_id,
+                        org_id,
+                        job_id,
+                        f"Conversion complete: {converted_copy.name if batch_upload_meta.get('converted_wav_path') else original_name}",
+                    )
+                except Exception as exc:
+                    raise RuntimeError(f"Batch upload conversion failed: {exc}") from exc
+            else:
+                # Azure Batch accepts compressed formats directly; use as-is
+                batch_upload_meta["batch_upload_converted"] = False
+                batch_upload_meta["converted_temp_wav"] = False
 
-                    log.warning("blob upload failed; trying legacy uploader", extra={"job_id": job_id})
-                    ai = legacy_upload(Path(audio_input), case_id, job_id)
-                except Exception as e:
-                    log.error("blob upload failed (both paths)", extra={"job_id": job_id, "error": str(e)})
-                    raise
+            log.info("uploading source to blob", extra={"job_id": job_id})
+            append_job_log(case_id, org_id, job_id, f"Uploading audio to Azure Blob ({original_name})")
+            last_progress = {"value": -1.0}
+
+            def _progress_cb(ratio: float) -> None:
+                pct = round(ratio * 100, 1)
+                if pct == last_progress["value"]:
+                    return
+                last_progress["value"] = pct
+                try:
+                    Job.objects.filter(
+                        pk=job_id,
+                        status__in=[
+                            Job.Status.PENDING,
+                            getattr(Job.Status, "CONVERTING", "CONVERTING"),
+                            Job.Status.UPLOADING,
+                        ],
+                    ).update(status=Job.Status.UPLOADING, upload_progress=pct)
+                except Exception:
+                    pass
+                try:
+                    send_job_update(
+                        job_id,
+                        event="job.uploading",
+                        status=Job.Status.UPLOADING,
+                        case_id=case_id,
+                        progress_percent=pct,
+                        upload_progress=pct,
+                    )
+                except Exception:
+                    pass
+
+            def _cancel_check() -> bool:
+                return Job.objects.filter(
+                    pk=job_id,
+                    status__in=(Job.Status.CANCELLING, Job.Status.CANCELLED),
+                ).exists()
+
+            try:
+                _progress_cb(0.0)
+                ai = upload_with_sas(
+                    upload_path,
+                    case_id,
+                    job_id,
+                    organization_id=org_id,
+                    original_name=original_name,
+                    cancel_check=_cancel_check,
+                    progress_cb=_progress_cb,
+                )
+            except UploadCancelled:
+                log.info("upload cancelled mid-transfer", extra={"job_id": job_id})
+                append_job_log(case_id, org_id, job_id, "Upload cancelled mid-transfer", level="warning")
+                raise
+            except Exception as exc:
+                log.error("blob upload failed", extra={"job_id": job_id, "error": str(exc)})
+                append_job_log(case_id, org_id, job_id, f"Blob upload failed: {exc}", level="error")
+                raise
+            # Cleanup if we converted to a temporary WAV
+            if cleanup_path and cleanup_path.exists():
+                try:
+                    cleanup_path.unlink(missing_ok=True)
+                except Exception:
+                    pass
+
+            current_status = Job.objects.filter(pk=job_id).values_list("status", flat=True).first()
+            if current_status in (Job.Status.CANCELLING, Job.Status.CANCELLED):
+                raise UploadCancelled("Cancelled before transcription start")
+            Job.objects.filter(pk=job_id).update(status=Job.Status.RUNNING, upload_progress=None)
+            if batch_upload_meta:
+                batch_upload_meta.setdefault("batch_upload_blob_name", original_name)
+                update_job_meta(case_id, org_id, job_id, batch_upload_meta)
+            if job_obj is not None:
+                job_obj.status = Job.Status.RUNNING
+                job_obj.upload_progress = None
+            send_job_update(
+                job_id,
+                event="job.started",
+                status=Job.Status.RUNNING,
+                case_id=case_id,
+                upload_progress=None,
+            )
+            log.info("uploaded source to blob", extra={"job_id": job_id})
+            append_job_log(case_id, org_id, job_id, f"Upload complete: {original_name}")
 
         result = agent.transcribe(
             input=ai,
@@ -198,13 +324,62 @@ def transcribe_job(
             mode=mode,
             diarization=diarization,
         )
+        try:
+            if result.meta_json.exists():
+                meta_payload = json.loads(result.meta_json.read_text(encoding="utf-8"))
+                azure_url = meta_payload.get("azure_transcription_url")
+                if azure_url:
+                    append_job_log(case_id, org_id, job_id, f"Azure transcription created: {azure_url}")
+                    update_job_meta(case_id, org_id, job_id, {"azure_transcription_url": azure_url})
+        except Exception as exc:
+            log.debug("unable to parse transcription meta", extra={"job_id": job_id, "error": str(exc)})
     except Exception as e:
+        if isinstance(e, UploadCancelled):
+            log.info("job cancelled during preparation", extra={"job_id": job_id})
+            append_job_log(case_id, org_id, job_id, "Job cancelled during preparation", level="warning")
+            try:
+                now = timezone.now()
+                Job.objects.filter(pk=job_id).update(
+                    status=Job.Status.CANCELLED,
+                    finished_at=now,
+                    error_message="Cancelled by user",
+                    upload_progress=None,
+                )
+                if job_obj is not None:
+                    job_obj.status = Job.Status.CANCELLED
+                    job_obj.finished_at = now
+                    job_obj.error_message = "Cancelled by user"
+            except Exception:
+                pass
+            try:
+                if tr is not None:
+                    tr.status = "CANCELLED"
+                    tr.finished_at = timezone.now()
+                    tr.save(update_fields=["status", "finished_at"])
+            except Exception:
+                pass
+            try:
+                send_job_update(
+                    job_id,
+                    event="job.cancelled",
+                    status=Job.Status.CANCELLED,
+                    case_id=case_id,
+                    progress_percent=None,
+                    upload_progress=None,
+                )
+            except Exception:
+                pass
+            return {"status": Job.Status.CANCELLED, "job_id": job_id, "case_id": case_id}
+
         log.error("job failed", extra={"job_id": job_id, "error": str(e)})
+        append_job_log(case_id, org_id, job_id, f"Job failed: {e}", level="error")
         payload = {
             "status": "FAILED",
             "job_id": job_id,
             "case_id": case_id,
             "error": str(e)[:1000],
+            "progress_percent": None,
+            "upload_progress": None,
         }
         try:
             if job_obj is None:
@@ -213,7 +388,8 @@ def transcribe_job(
                 job_obj.status = Job.Status.FAILED
                 job_obj.finished_at = timezone.now()
                 job_obj.error_message = payload["error"]
-                job_obj.save(update_fields=["status", "finished_at", "error_message"])
+                job_obj.upload_progress = None
+                job_obj.save(update_fields=["status", "finished_at", "error_message", "upload_progress"])
         except Exception:
             pass
         try:
@@ -228,7 +404,7 @@ def transcribe_job(
         except Exception:
             pass
         try:
-            _update_job_meta(case_id, org_id, job_id, audio_meta_updates)
+            update_job_meta(case_id, org_id, job_id, audio_meta_updates)
         except Exception:
             pass
         raise
@@ -242,6 +418,8 @@ def transcribe_job(
             "duration_s": result.duration_s,
             "language": result.language,
             "region": result.region,
+            "progress_percent": None,
+            "upload_progress": None,
         }
     try:
         if job_obj is None:
@@ -270,7 +448,8 @@ def transcribe_job(
         job_obj.finished_at = timezone.now()
         job_obj.transcript_path = str(result.transcript_file)
         job_obj.duration_s = result.duration_s
-        job_obj.save(update_fields=["status", "finished_at", "transcript_path", "duration_s"])
+        job_obj.upload_progress = None
+        job_obj.save(update_fields=["status", "finished_at", "transcript_path", "duration_s", "upload_progress"])
         transcript_checksum: Optional[str] = None
         transcript_bytes: Optional[int] = None
         transcript_path_obj = Path(result.transcript_file)
@@ -314,12 +493,18 @@ def transcribe_job(
             }
         )
         try:
-            _update_job_meta(case_id, org_id, job_id, meta_updates)
+            update_job_meta(case_id, org_id, job_id, meta_updates)
         except Exception:
             pass
     except Exception:
         pass
     log.info("job succeeded", extra={"job_id": job_id, "transcript": str(result.transcript_file)})
+    append_job_log(
+        case_id,
+        org_id,
+        job_id,
+        f"Job succeeded: transcript={Path(result.transcript_file).name} duration={payload.get('duration_s')}s",
+    )
     try:
         if tr is not None:
             tr.status = "SUCCEEDED"
@@ -328,6 +513,8 @@ def transcribe_job(
     except Exception:
         pass
     try:
+        if artifact_title:
+            payload["title"] = artifact_title
         send_job_update(job_id, event="job.succeeded", **payload)
     except Exception:
         pass

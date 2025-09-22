@@ -2,12 +2,18 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Callable
+import base64
 
 from django.conf import settings
 import logging
 
 log = logging.getLogger("apps.platform.operations.blob")
+
+
+class UploadCancelled(RuntimeError):
+    """Raised when an upload is cancelled mid-transfer."""
+    pass
 
 
 def _parse_conn_string(cs: str) -> dict[str, str]:
@@ -27,12 +33,15 @@ def upload_with_sas(
     *,
     organization_id: Optional[str] = None,
     original_name: Optional[str] = None,
+    cancel_check: Optional[Callable[[], bool]] = None,
+    progress_cb: Optional[Callable[[float], None]] = None,
 ) -> str:
     from azure.storage.blob import (
         BlobServiceClient,
         ContentSettings,
         generate_blob_sas,
         BlobSasPermissions,
+        BlobBlock,
     )
     from azure.core.exceptions import HttpResponseError
 
@@ -82,8 +91,39 @@ def upload_with_sas(
     blob_client = container_client.get_blob_client(blob_name)
     content_settings = ContentSettings(content_type=_guess_content_type(original))
     try:
-        with open(local_file, "rb") as f:
-            blob_client.upload_blob(f, overwrite=True, content_settings=content_settings)
+        try:
+            blob_client.delete_blob()
+        except Exception:
+            pass
+        chunk_size = 8 * 1024 * 1024  # 8 MiB
+        block_ids: list[str] = []
+        total = max(1, local_file.stat().st_size)
+        uploaded = 0
+        if progress_cb:
+            progress_cb(0.0)
+        with open(local_file, "rb") as handle:
+            idx = 0
+            while True:
+                if cancel_check and cancel_check():
+                    raise UploadCancelled("Upload cancelled")
+                chunk = handle.read(chunk_size)
+                if not chunk:
+                    break
+                block_id_raw = f"{idx:08d}".encode("ascii")
+                block_id = base64.b64encode(block_id_raw).decode("ascii")
+                blob_client.stage_block(block_id=block_id, data=chunk)
+                block_ids.append(block_id)
+                uploaded += len(chunk)
+                idx += 1
+                if progress_cb:
+                    progress_cb(min(uploaded / total, 1.0))
+        blob_client.commit_block_list([BlobBlock(block_id=b) for b in block_ids])
+        try:
+            blob_client.set_http_headers(content_settings=content_settings)
+        except Exception:
+            pass
+        if progress_cb:
+            progress_cb(1.0)
     except HttpResponseError as e:  # pragma: no cover - passthrough
         raise RuntimeError(
             "Azure Blob upload failed: AuthorizationFailure or insufficient permissions. "

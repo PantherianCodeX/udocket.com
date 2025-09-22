@@ -17,6 +17,9 @@ class Job(models.Model):
     class Status(models.TextChoices):
         PENDING = "PENDING"
         RUNNING = "RUNNING"
+        CONVERTING = "CONVERTING"
+        UPLOADING = "UPLOADING"
+        CANCELLING = "CANCELLING"
         SUCCEEDED = "SUCCEEDED"
         FAILED = "FAILED"
         CANCELLED = "CANCELLED"
@@ -49,6 +52,7 @@ class Job(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     started_at = models.DateTimeField(null=True, blank=True, db_index=True)
     finished_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    upload_progress = models.FloatField(null=True, blank=True)
     review_status = models.CharField(
         max_length=16,
         choices=ReviewStatus.choices,

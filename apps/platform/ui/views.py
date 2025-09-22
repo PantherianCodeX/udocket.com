@@ -40,8 +40,11 @@ log = logging.getLogger("apps.platform.ui")
 STATUS_CLASS_MAP = {
     "Approved": "border-emerald-400/40 bg-emerald-500/10 text-emerald-200",
     "Created": "border-white/20 bg-white/5 text-slate-200",
+    "Converting": "border-primary-400/40 bg-primary-500/10 text-primary-200",
     "Running": "border-primary-400/40 bg-primary-500/10 text-primary-200",
+    "Uploading": "border-primary-400/40 bg-primary-500/10 text-primary-200",
     "Rejected": "border-rose-400/40 bg-rose-500/10 text-rose-200",
+    "Cancelling": "border-slate-400/40 bg-slate-500/20 text-slate-200",
 }
 
 
@@ -126,10 +129,16 @@ def _select_agent(latest: Dict[str, Dict[str, Any]], keywords: tuple[str, ...]) 
 
 def _map_job_status(job: Job) -> str:
     status = str(job.status or "").upper()
+    if status == getattr(Job.Status, "CONVERTING", "CONVERTING"):
+        return "Converting"
+    if status == Job.Status.UPLOADING:
+        return "Uploading"
     if status in {Job.Status.RUNNING, Job.Status.PENDING}:
         return "Running"
     if status == Job.Status.SUCCEEDED:
         return "Created"
+    if status == getattr(Job.Status, "CANCELLING", "CANCELLING"):
+        return "Cancelling"
     if status in {Job.Status.FAILED, getattr(Job.Status, "CANCELLED", "CANCELLED")}:
         return "Rejected"
     return "Created"
@@ -240,6 +249,49 @@ def _case_progress_context(case: Case, jobs: List[Job], telemetry_map: Dict[str,
         "current_reviewer_label": _user_label(case.reviewer) if case.reviewer else None,
         "current_client_label": _user_label(case.client_user) if case.client_user else None,
         "transcription_review_status": transcription_item.get("status") if transcription_item else None,
+    }
+
+
+def _job_detail_context(
+    request: HttpRequest,
+    job: Job,
+    *,
+    telemetry: Optional[Dict[str, Any]] = None,
+    title_error: Optional[str] = None,
+    title_edit: bool = False,
+) -> Dict[str, Any]:
+    telemetry = telemetry or JobTelemetrySerializer(job, context={"request": request, "ui_mode": True}).data
+    artifacts = telemetry.get("artifacts") or []
+    artifact = artifacts[0] if artifacts else None
+    artifact_title = artifact.get("title") if isinstance(artifact, dict) else None
+    job_title = artifact_title or getattr(job, "description", None) or str(job.id)
+    metadata_items = _format_metadata(telemetry.get("metadata"))
+    azure_cancel_status = telemetry.get("metadata", {}).get("azure_cancel_status") if isinstance(telemetry.get("metadata"), dict) else None
+    azure_cancel_body = telemetry.get("metadata", {}).get("azure_cancel_body") if isinstance(telemetry.get("metadata"), dict) else None
+
+    user_obj = getattr(request, "user", None)
+    dev_open = getattr(settings, "PLATFORM_DEV_OPEN", False)
+    can_review = False
+    if dev_open:
+        can_review = True
+    elif user_obj and getattr(user_obj, "is_authenticated", False):
+        if job.case.reviewer_id and str(user_obj.id) == str(job.case.reviewer_id):
+            can_review = True
+        elif has_capability(user_obj, str(job.case_id), "case.update"):
+            can_review = True
+
+    return {
+        "case": job.case,
+        "job": job,
+        "telemetry": telemetry,
+        "artifact": artifact,
+        "job_title": job_title,
+        "metadata_items": metadata_items,
+        "azure_cancel_status": azure_cancel_status,
+        "azure_cancel_body": azure_cancel_body,
+        "user_can_review": can_review,
+        "title_error": title_error,
+        "title_edit": title_edit,
     }
 
 
@@ -639,36 +691,7 @@ def job_detail_panel(request: HttpRequest, job_id: str) -> HttpResponse:
         if not job:
             raise Http404
 
-        telemetry = JobTelemetrySerializer(job, context={"request": request, "ui_mode": True}).data
-        artifacts = telemetry.get("artifacts") or []
-        artifact = artifacts[0] if artifacts else None
-        artifact_title = artifact.get("title") if isinstance(artifact, dict) else None
-        job_title = artifact_title or getattr(job, "description", None) or str(job.id)
-        metadata_items = _format_metadata(telemetry.get("metadata"))
-        azure_cancel_status = telemetry.get("metadata", {}).get("azure_cancel_status") if isinstance(telemetry.get("metadata"), dict) else None
-        azure_cancel_body = telemetry.get("metadata", {}).get("azure_cancel_body") if isinstance(telemetry.get("metadata"), dict) else None
-
-        user_obj = getattr(request, "user", None)
-        dev_open = getattr(settings, "PLATFORM_DEV_OPEN", False)
-        can_review = False
-        if dev_open:
-            can_review = True
-        elif user_obj and getattr(user_obj, "is_authenticated", False):
-            if job.case.reviewer_id and str(user_obj.id) == str(job.case.reviewer_id):
-                can_review = True
-            elif has_capability(user_obj, str(job.case_id), "case.update"):
-                can_review = True
-        context = {
-            "case": job.case,
-            "job": job,
-            "telemetry": telemetry,
-            "artifact": artifact,
-            "job_title": job_title,
-            "metadata_items": metadata_items,
-            "azure_cancel_status": azure_cancel_status,
-            "azure_cancel_body": azure_cancel_body,
-            "user_can_review": can_review,
-        }
+        context = _job_detail_context(request, job)
         return render(request, "ui/_job_detail.html", context)
     except Http404:
         raise
@@ -699,37 +722,8 @@ def case_job_detail_panel(request: HttpRequest, case_id: str, job_id: str) -> Ht
         if not job:
             raise Http404
 
-        telemetry = JobTelemetrySerializer(job, context={"request": request, "ui_mode": True}).data
-        artifacts = telemetry.get("artifacts") or []
-        artifact = artifacts[0] if artifacts else None
-        artifact_title = artifact.get("title") if isinstance(artifact, dict) else None
-        job_title = artifact_title or getattr(job, "description", None) or str(job.id)
-        metadata_items = _format_metadata(telemetry.get("metadata"))
-        azure_cancel_status = telemetry.get("metadata", {}).get("azure_cancel_status") if isinstance(telemetry.get("metadata"), dict) else None
-        azure_cancel_body = telemetry.get("metadata", {}).get("azure_cancel_body") if isinstance(telemetry.get("metadata"), dict) else None
-
-        user_obj = getattr(request, "user", None)
-        dev_open = getattr(settings, "PLATFORM_DEV_OPEN", False)
-        can_review = False
-        if dev_open:
-            can_review = True
-        elif user_obj and getattr(user_obj, "is_authenticated", False):
-            if job.case.reviewer_id and str(user_obj.id) == str(job.case.reviewer_id):
-                can_review = True
-            elif has_capability(user_obj, str(job.case_id), "case.update"):
-                can_review = True
-
-        context = {
-            "case": case,
-            "job": job,
-            "telemetry": telemetry,
-            "artifact": artifact,
-            "job_title": job_title,
-            "metadata_items": metadata_items,
-            "azure_cancel_status": azure_cancel_status,
-            "azure_cancel_body": azure_cancel_body,
-            "user_can_review": can_review,
-        }
+        context = _job_detail_context(request, job)
+        context["case"] = case
         return render(request, "ui/_job_detail.html", context)
     except Http404:
         raise

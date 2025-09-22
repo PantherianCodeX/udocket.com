@@ -27,13 +27,14 @@ from apps.platform.jobs.serializers import (
     JobSerializer,
     JobTelemetrySerializer,
 )
-from apps.platform.operations.tasks import transcribe_job, _update_job_meta
+from apps.platform.operations.tasks import transcribe_job
 from apps.platform.operations.channels import send_job_update
 from apps.platform.operations.audit import emit as audit_emit
 from django.db import transaction
 from apps.platform.operations.tasks import summarize_job, timeline_job, graph_job
 from apps.platform.tenancy import scope_jobs
 from apps.platform.operations.storage import ensure_case_dirs, ops_dir as storage_ops_dir
+from apps.platform.operations.utils import update_job_meta, append_job_log
 
 
 class JobViewSet(viewsets.ModelViewSet):
@@ -67,6 +68,7 @@ class JobViewSet(viewsets.ModelViewSet):
             mode=job.mode,
             diarization=job.diarization,
             language=job.language,
+            force_wav_conversion=False,
         )
         out = JobSerializer(instance=job)
         headers = {"Location": f"/api/v1/jobs/{job.id}/"}
@@ -84,6 +86,8 @@ class JobViewSet(viewsets.ModelViewSet):
         payload = {
             "id": str(job.id),
             "status": job.status,
+            "upload_progress": job.upload_progress,
+            "progress_percent": job.upload_progress,
             "transcript_path": job.transcript_path,
             "finished_at": job.finished_at,
             "review_status": job.review_status,
@@ -271,32 +275,66 @@ class JobViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["get"], url_path="download-audio")
     def download_audio(self, request, pk=None):
         job = self.get_object()
-        audio_path = getattr(job, "audio_input", None)
-        if not audio_path or not str(audio_path).startswith("/"):
-            raise Http404
-        path_obj = Path(audio_path)
+        converted = str(request.query_params.get("converted", "")).lower() in {"1", "true", "yes"}
+        path_obj: Optional[Path]
+        if converted:
+            meta_path = storage_ops_dir(str(job.case_id), job.case.organization_id) / f"{job.id}_transcription_log.json"
+            try:
+                meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
+            except Exception:
+                meta = {}
+            converted_path = meta.get("converted_wav_path")
+            if not converted_path:
+                raise Http404
+            path_obj = Path(converted_path)
+        else:
+            audio_path = getattr(job, "audio_input", None)
+            if not audio_path or not str(audio_path).startswith("/"):
+                raise Http404
+            path_obj = Path(audio_path)
         if not path_obj.exists():
             raise Http404
-        audit_emit(request, case_id=str(job.case_id), event="job.download_audio", data={"job_id": str(job.id)})
+        storage_root = Path(settings.STORAGE_ROOT).resolve()
+        try:
+            if not path_obj.resolve().is_relative_to(storage_root):
+                raise Http404
+        except AttributeError:
+            # Python < 3.9 compatibility: fallback check
+            resolved = path_obj.resolve()
+            if not str(resolved).startswith(str(storage_root)):
+                raise Http404
+        audit_emit(
+            request,
+            case_id=str(job.case_id),
+            event="job.download_audio",
+            data={"job_id": str(job.id), "converted": converted},
+        )
         filename = path_obj.name or f"{job.id}_audio"
         return FileResponse(path_obj.open("rb"), filename=filename, as_attachment=True)
 
     @action(detail=True, methods=["post"], url_path="cancel")
     def cancel(self, request, pk=None):
         job = self.get_object()
-        if job.status not in {Job.Status.PENDING, Job.Status.RUNNING}:
+        if job.status not in {Job.Status.PENDING, Job.Status.RUNNING, Job.Status.CANCELLING}:
             return Response({"detail": "Job is not cancellable."}, status=status.HTTP_400_BAD_REQUEST)
-        job.status = Job.Status.CANCELLED
-        job.finished_at = timezone.now()
-        job.error_message = "Cancelled by user"
-        job.save(update_fields=["status", "finished_at", "error_message"])
+        # Move to CANCELLING to reflect in-progress cancellation; worker will finalize to CANCELLED
+        job.status = Job.Status.CANCELLING
+        job.error_message = "Cancellation requested"
+        job.save(update_fields=["status", "error_message"])
         try:
             self._cancel_azure_transcription(job)
         except Exception:
             pass
-        audit_emit(request, case_id=str(job.case_id), event="job.cancelled", data={"job_id": str(job.id)})
-        send_job_update(str(job.id), event="job.cancelled", status=Job.Status.CANCELLED, case_id=str(job.case_id))
-        return Response({"status": Job.Status.CANCELLED})
+        audit_emit(request, case_id=str(job.case_id), event="job.cancelling", data={"job_id": str(job.id)})
+        send_job_update(
+            str(job.id),
+            event="job.cancelling",
+            status=Job.Status.CANCELLING,
+            case_id=str(job.case_id),
+            progress_percent=job.upload_progress,
+            upload_progress=job.upload_progress,
+        )
+        return Response({"status": Job.Status.CANCELLING, "upload_progress": job.upload_progress})
 
     @action(detail=True, methods=["post"], url_path="restart")
     def restart(self, request, pk=None):
@@ -310,6 +348,7 @@ class JobViewSet(viewsets.ModelViewSet):
                 status=Job.Status.CANCELLED,
                 finished_at=timezone.now(),
                 error_message="Superseded by restart",
+                upload_progress=None,
             )
             new_job = Job.objects.create(
                 case=job.case,
@@ -327,6 +366,7 @@ class JobViewSet(viewsets.ModelViewSet):
             mode=new_job.mode,
             diarization=new_job.diarization,
             language=new_job.language,
+            force_wav_conversion=(request.query_params.get("convert") in ("1", "true", "True")),
         )
         audit_emit(
             request,
@@ -375,7 +415,7 @@ class JobViewSet(viewsets.ModelViewSet):
                 status_text += f" {resp.text[:120]}"
             log.info("azure batch cancel", extra={"job_id": str(job.id), "status": status_text})
             try:
-                _update_job_meta(
+                update_job_meta(
                     str(job.case_id),
                     job.organization_id,
                     str(job.id),
@@ -390,7 +430,7 @@ class JobViewSet(viewsets.ModelViewSet):
         except Exception as exc:  # noqa: BLE001
             log.warning("azure batch cancel failed", extra={"job_id": str(job.id), "error": str(exc)})
             try:
-                _update_job_meta(
+                update_job_meta(
                     str(job.case_id),
                     job.organization_id,
                     str(job.id),
@@ -419,6 +459,57 @@ class JobViewSet(viewsets.ModelViewSet):
         graph_job.delay(case_id=str(job.case_id), job_id=str(job.id))
         audit_emit(request, case_id=str(job.case_id), event="analysis.graph.requested", data={"job_id": str(job.id)})
         return Response({"status": "queued"}, status=status.HTTP_202_ACCEPTED)
+
+    @action(detail=True, methods=["post"], url_path="title")
+    def update_title(self, request, pk=None):
+        job = self.get_object()
+        artifact = (
+            CaseArtifact.objects.filter(case_id=str(job.case_id), job_id=str(job.id), type="TRANSCRIPT")
+            .order_by("-created_at")
+            .first()
+        )
+        if not artifact:
+            return Response({"detail": "Transcript not found for this job."}, status=status.HTTP_404_NOT_FOUND)
+        new_title = (request.data.get("title") or "").strip()
+        title_error = None
+        if not new_title:
+            title_error = "Title cannot be empty."
+        else:
+            clash = CaseArtifact.objects.filter(
+                case_id=str(job.case_id), type="TRANSCRIPT", title=new_title
+            ).exclude(pk=artifact.pk)
+            if clash.exists():
+                title_error = "A transcript with that title already exists in this case."
+        if title_error:
+            telemetry = JobTelemetrySerializer(job, context={"request": request, "ui_mode": True}).data
+            context = {
+                "case": job.case,
+                "job": job,
+                "telemetry": telemetry,
+                "artifact": {"title": artifact.title, "path": artifact.path},
+                "job_title": artifact.title or str(job.id),
+                "metadata_items": [],
+                "title_error": title_error,
+                "title_edit": True,
+                "user_can_review": True,
+            }
+            return render(request, "ui/_job_detail.html", context)
+
+        artifact.title = new_title
+        artifact.save(update_fields=["title"])
+        append_job_log(str(job.case_id), job.organization_id, str(job.id), f"Transcript title set to '{new_title}'")
+        headers = {"HX-Trigger": json.dumps({"job-title-updated": {"job_id": str(job.id), "title": new_title}})}
+        telemetry = JobTelemetrySerializer(job, context={"request": request, "ui_mode": True}).data
+        context = {
+            "case": job.case,
+            "job": job,
+            "telemetry": telemetry,
+            "artifact": {"title": new_title, "path": artifact.path},
+            "job_title": new_title,
+            "metadata_items": [],
+            "user_can_review": True,
+        }
+        return render(request, "ui/_job_detail.html", context, headers=headers)
 
     @action(detail=False, methods=["post"], url_path="upload")
     def upload(self, request):
@@ -476,6 +567,7 @@ class JobViewSet(viewsets.ModelViewSet):
             mode=job.mode,
             diarization=job.diarization,
             language=job.language,
+            force_wav_conversion=False,
         )
         out = JobSerializer(instance=job)
         headers = {"Location": f"/api/v1/jobs/{job.id}/"}

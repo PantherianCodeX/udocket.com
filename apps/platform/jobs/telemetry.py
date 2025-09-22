@@ -193,7 +193,7 @@ def summarize_jobs(jobs: Iterable[Job]) -> Dict[str, Any]:
             summary["failed"] += 1
         elif status == Job.Status.CANCELLED:
             summary["failed"] += 1
-        elif status == Job.Status.RUNNING:
+        elif status in (Job.Status.RUNNING, Job.Status.UPLOADING, Job.Status.CANCELLING):
             summary["running"] += 1
         else:
             summary["pending"] += 1

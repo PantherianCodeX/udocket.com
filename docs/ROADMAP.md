@@ -1,20 +1,19 @@
 uDocket Platform Roadmap — Option 3 (Django Consolidation)
 
 Context
-- The repository currently ships three FastAPI services (`apps/api`, `apps/admin`, `apps/worker`) wired together through Docker, pointing at a SQLite/Postgres database that only holds `cases` and `jobs` tables while agents write artifacts into `storage/media/cases/<CASE_ID>/...` on disk.
+- The repository now ships the Django platform (`apps/platform`) Artifacts continue to live under `storage/media/cases/<CASE_ID>/...` on disk while Postgres stores metadata (`cases`, `jobs`, etc.).
 
 Target End State (Option 3)
 - A single Django 4.2 LTS project providing both admin UI and public APIs (via Django REST Framework) with asynchronous updates delivered through Django Channels.
 - Authentication and session management delegated to an external IAM (Keycloak on Azure) using OpenID Connect for the browser/admin UI and bearer‑token validation for the APIs.
 - A centralized authorization layer powered by Oso (Polar policies) backed by our capability catalog, replacing ad-hoc checks while preserving defense-in-depth with Postgres row-level security.
 - A normalized relational schema that captures core case workflow plus extensible artifacts (summaries, timelines, relationship graphs, exhibits, etc.) while retaining the existing on‑disk storage contract for binary artifacts.
-- Background processing (transcription/analysis) executed as Django‑managed Celery workers that still invoke the agent CLI so all existing agent conventions remain intact.
+- Background processing (transcription/analysis) executed as Django‑managed Celery workers that call the importable `TranscriptionAgent` interface.
 
 Implementation Roadmap
 1) Repository Preparation
-   - Create a new Django project under `apps/platform/` (or similar) instead of replacing the FastAPI code in‑place until parity is proven; keep the existing FastAPI apps running during the migration window.
-   - Add a root `manage.py`, `apps/platform/config/` settings package, and new Django apps (`accounts`, `cases`, `artifacts`, `operations`, etc.).
-   - Keep the current `config/settings.py` for legacy services until the cut‑over; the new Django settings will live inside the Django project.
+   - Create a new Django project under `apps/platform/` (done)
+   - Maintain the root `manage.py`, `apps/platform/config/` settings package, and Django apps (`accounts`, `cases`, `artifacts`, `operations`, etc.).
 
 2) Dependencies & Tooling
    - Update requirements to include: Django 4.2, django‑environ, djangorestframework, drf‑spectacular, django‑filter.
@@ -37,12 +36,11 @@ Implementation Roadmap
 4) Database Design
    - Replace the legacy schema with these core models (build with migrations):
      - `accounts.User`: Keycloak subject ID, email, display name, staff flags, status, MFA requirements, timestamps.
-     - `accounts.Organization`: optional grouping for tenants; ManyToMany between users and organizations with role metadata.
+     - `accounts.Organization`: ManyToMany between users and organizations with role metadata.
      - `cases.Case`: owner organization, status, retention dates, classification level.
      - `cases.CaseMembership`: associates users with cases and roles (e.g., owner, contributor, reviewer, auditor); integrate with `django-guardian` for object‑level permissions.
      - `jobs.Job`: agent type, status, payload metadata, `storage_key`.
      - `artifacts.CaseArtifact`: generic artifact table with fields (id, case, job, type, title, description, path, checksum, schema_version, created_by, created_at, metadata JSONField). Provide typed proxy models per artifact flavor.
-     - `artifacts.FieldVisibilityRule`: mapping of artifact fields to roles/scopes for field‑level redaction.
      - `operations.AuditEvent`: captures read/write events, policy evaluations, and agent runs.
      - `operations.TaskRun`: tracks Celery executions (tie back to jobs).
    - Ensure referential integrity via `on_delete=PROTECT` where necessary; add DB‑level unique constraints and indexes (e.g., `(case, type, title)`).
@@ -72,19 +70,14 @@ Implementation Roadmap
    - Refresh the `/permissions/` catalog page to read effective permissions through Oso, highlighting field visibility rules and preset provenance for auditability.
    - Add change-history logging for Role/PermissionPreset edits using `django-simple-history` or `django-auditlog` to prove who modified policies.
 
-8) Legacy Surface Retirement
-   - Freeze the legacy FastAPI services (`apps/api`, `apps/admin`, `apps/worker`) to read-only once Django parity is achieved; plan removal from docker-compose manifests after tenant migration.
-   - Remove duplicate IAM configuration from FastAPI apps in favor of the centralized Django/Oso stack; ensure ingress routes bypass deprecated services.
-   - Provide tenant-level communications and runbook for the cut-over window, including rollback steps if Django deployment must be paused.
-
-9) API & Admin Surface
+8) API & Admin Surface
    - Implement DRF viewsets for Case, Job, CaseArtifact, CaseMembership under `/api/v1/`.
    - Provide serializers that surface only allowed fields; add nested serializers for artifacts.
    - Expose endpoints for uploading audio, triggering agents, downloading transcripts; keep storage paths compatible (`storage/media/cases/<CASE_ID>/...`).
    - Use Django admin (hardened with `django-admin-honeypot`, `django-admin-ip-restrictor`) for ops tasks; customize dashboards to show case status, audit events, and artifact history.
    - Optional: server-rendered templates for custom admin UI pages (Django templates + HTMX).
 
-10) Real-Time Updates with Channels
+9) Real-Time Updates with Channels
    - Configure Redis (Azure Cache for Redis) as the Channels layer.
    - Routing:
      - Case room updates (`cases/<case_id>`),
@@ -94,28 +87,28 @@ Implementation Roadmap
    - Frontend (admin UI): consume Channels via JS and refresh views in real time.
    - Authenticate Channels using the same OIDC session; validate permissions before group subscription.
 
-11) Background Processing & Agent Integration
-   - Replace `apps/worker` with a Django app `operations` containing Celery tasks mirroring the current worker logic.
+10) Background Processing & Agent Integration
+   - Replace the legacy `apps/worker` process with the Django `operations` app containing Celery tasks (complete).
    - Task to launch transcription agent via existing CLI (subprocess), capturing stdout JSON and logs.
    - Tasks for future analysis agents (summary, timeline, relationships) using the documented agent contract.
    - Configure Celery with Redis or Azure Service Bus as broker; store results in Postgres with `django-celery-results`.
    - Ensure tasks write outputs to the same file layout; register new `CaseArtifact` entries when new files appear.
    - Provide admin commands (`manage.py sync_legacy_cases`) to migrate existing jobs/cases.
 
-12) Storage & Media Handling
+11) Storage & Media Handling
    - Keep `storage/media/cases/<CASE_ID>/...` directory conventions unchanged for compatibility.
    - Wrap file interactions with Django’s `FileSystemStorage` pointing to `MEDIA_ROOT` (`/app/storage/media` by default).
    - Compute SHA‑256 for each artifact file and store it on `CaseArtifact.checksum`.
    - Optional: publish artifacts to Azure Blob Storage using SAS tokens aligned with current conventions.
 
-13) Testing & Quality Gates
+12) Testing & Quality Gates
    - Port FastAPI tests to DRF (APITestCase / pytest) covering auth flows, permissions, and field redaction.
    - Add contract tests verifying agent CLI output parsing, artifact creation, and field‑level policies.
    - Add async tests for Channels consumers (pytest‑asyncio).
    - Integrate static analysis (mypy, black, flake8, bandit) and run in CI.
    - Create load/perf tests to validate Channels and API scaling on Azure.
 
-14) Deployment Updates
+13) Deployment Updates
    - Update Dockerfiles in `infra/docker/` to build the Django image (gunicorn + uvicorn workers for ASGI) with multi‑stage builds.
    - Modify `docker-compose.yml` to include Django ASGI service, Celery worker, Celery beat, Redis.
    - Azure production:
@@ -125,13 +118,7 @@ Implementation Roadmap
      - Set up CI to run tests, build images, push to ACR, and deploy via Helm/Bicep.
      - Configure Keycloak as managed AKS deployment and integrate with Azure AD for SSO if required.
 
-15) Cut-Over & Decommissioning
-   - Implement data migration scripts to move existing FastAPI SQLite/Postgres data into the new Django schema; test on a clone.
-   - Stand up the Django stack alongside FastAPI, run integration tests, and confirm parity.
-   - Update ingress (Azure Application Gateway/Front Door) to route traffic to the Django ASGI service once validated.
-   - Retire the FastAPI services after confirming no regressions; remove obsolete Dockerfiles and settings.
-
-16) Documentation & Handover
+14) Documentation & Handover
    - Update `README.md` and create developer docs describing the new architecture, IAM integration, and deployment.
    - Document the data model (ER diagrams), permission matrices, Channels event contracts, Celery task flow, and Keycloak realm configuration.
    - Provide runbooks for onboarding, rotating secrets, audit requests, and disaster recovery.

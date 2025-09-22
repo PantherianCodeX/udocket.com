@@ -108,6 +108,30 @@
       /* Tailwind primary-400 (#5b8bff) approximation */
       text-decoration-color: rgba(91, 139, 255, 0.9);
     }
+    /* Utility for inline clipping (head-tail handled by template filter) */
+    .clip-inline {
+      max-width: 28rem;
+      display: inline-block;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      vertical-align: bottom;
+    }
+    .status-pill {
+      position: relative;
+      overflow: hidden;
+      z-index: 0;
+    }
+    .status-pill::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, rgba(91, 139, 255, 0.45), rgba(91, 139, 255, 0.18));
+      transform: scaleX(var(--status-progress, 0));
+      transform-origin: left center;
+      transition: transform 150ms ease-in-out;
+      z-index: -1;
+    }
   </style>
   {% block head %}{% endblock %}
   {% csrf_token %}

@@ -26,7 +26,7 @@
         <div id="module-transcription-status" class="rounded-xl border border-white/10 bg-slate-900/70 p-4 text-sm text-slate-200">
           <div class="flex items-center justify-between">
             <p class="text-xs uppercase tracking-wide text-slate-400">Transcribe</p>
-            <span data-transcription-status-pill class="inline-flex items-center rounded-full border {{ item.status_class }} px-2 py-1 text-[10px] font-semibold uppercase">{{ item.status }}</span>
+            <span data-transcription-status-pill data-status="{{ item.status|upper }}" class="status-pill inline-flex items-center rounded-full border {{ item.status_class }} px-2 py-1 text-[10px] font-semibold uppercase">{{ item.status }}</span>
           </div>
           <span class="sr-only">Transcription workflow</span>
           <p class="mt-2 text-sm font-semibold text-white" data-status-text>

@@ -4,27 +4,29 @@
 {% with artifact=telem.artifacts.0|default_if_none:None %}
 {% with job_title=artifact.title|default:"Transcript" %}
 <tr data-job="{{ j.id }}" data-job-row data-job-status="{{ status }}" class="cursor-pointer transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400" tabindex="0" aria-expanded="false" data-review-status="{{ j.review_status|default:'PENDING' }}">
-  <td class="px-4 py-3" id="job-status-{{ j.id }}">
+  <td class="px-4 py-3">
     <div class="flex items-center justify-between gap-2">
-      <span class="max-w-[18rem] truncate font-medium text-slate-100" title="{{ job_title }}">{{ job_title }}</span>
-      <button type="button" class="inline-flex items-center gap-1 rounded border border-white/15 bg-white/5 px-2 py-0.5 text-[11px] font-mono text-primary-200 transition hover:border-primary-300 cursor-copy underline decoration-dotted decoration-white/20 hover:decoration-primary-300" data-copy-text="{{ j.id }}" title="{{ j.id }}">
-        {{ j.id|short_uuid }}
-      </button>
+      <span class="max-w-[18rem] truncate font-medium text-slate-100" data-job-title title="{{ job_title }}">{{ job_title }}</span>
+      <span class="font-mono text-[11px] text-primary-200" data-copy-text="{{ j.id }}" title="{{ j.id }}">{{ j.id|short_uuid }}</span>
     </div>
     {% if telem.audio.original_name %}
       <p class="mt-1 truncate text-xs text-slate-400">{{ telem.audio.original_name }}</p>
     {% endif %}
   </td>
-  <td class="px-4 py-3">
-    {% with normalized=status|upper %}
+  <td class="px-4 py-3" id="job-status-{{ j.id }}">
+    {% with normalized=status|upper progress=telem.upload_progress %}
       {% if normalized == 'SUCCEEDED' %}
-        <span class="inline-flex items-center rounded-full border border-emerald-400/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-emerald-200">Succeeded</span>
+        <span class="status-pill inline-flex items-center rounded-full border border-emerald-400/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-emerald-200" data-status="SUCCEEDED">Succeeded</span>
       {% elif normalized == 'FAILED' %}
-        <span class="inline-flex items-center rounded-full border border-rose-400/40 bg-rose-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-rose-200">Failed</span>
+        <span class="status-pill inline-flex items-center rounded-full border border-rose-400/40 bg-rose-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-rose-200" data-status="FAILED">Failed</span>
       {% elif normalized == 'CANCELLED' or normalized == 'CANCELED' %}
-        <span class="inline-flex items-center rounded-full border border-slate-400/40 bg-slate-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-100">Cancelled</span>
+        <span class="status-pill inline-flex items-center rounded-full border border-slate-400/40 bg-slate-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-100" data-status="CANCELLED">Cancelled</span>
+      {% elif normalized == 'CANCELLING' %}
+        <span class="status-pill inline-flex items-center rounded-full border border-slate-400/40 bg-slate-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-100" data-status="CANCELLING">Cancelling</span>
+      {% elif normalized == 'UPLOADING' %}
+        <span class="status-pill inline-flex items-center rounded-full border border-primary-400/40 bg-primary-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-primary-100" data-status-progress="{{ progress|default_if_none:0 }}" data-status="UPLOADING">Uploading{% if progress is not None %} {{ progress|floatformat:0 }}%{% endif %}</span>
       {% else %}
-        <span class="inline-flex items-center rounded-full border border-primary-400/40 bg-primary-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-primary-100">{{ normalized }}</span>
+        <span class="status-pill inline-flex items-center rounded-full border border-primary-400/40 bg-primary-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-primary-100" data-status="{{ normalized }}">{{ normalized|lower|capfirst }}</span>
       {% endif %}
     {% endwith %}
   </td>
@@ -42,7 +44,7 @@
   <td class="px-4 py-3 text-slate-200">
     {{ telem.agent.type|default:j.mode|title }}
   </td>
-  <td class="px-4 py-3 text-slate-300"><time data-ts="{{ j.created_at|date:'c' }}">{{ j.created_at }}</time></td>
+  <td class="px-4 py-3 text-slate-300"><time data-ts="{{ j.created_at|date:'c' }}">{{ j.created_at|date:'M j, Y g:i A' }}</time></td>
   <td class="px-4 py-3">
     <div class="flex items-center justify-end gap-2">
       <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-rose-400/40 bg-rose-500/10 px-3 py-1.5 text-xs font-semibold text-rose-100 transition hover:bg-rose-500/30 disabled:opacity-60 {% if status != 'RUNNING' and status != 'PENDING' and status != 'QUEUED' %}hidden{% endif %}" data-job-cancel="{{ j.id }}">

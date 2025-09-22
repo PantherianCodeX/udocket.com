@@ -16,21 +16,11 @@ class Settings(BaseSettings):
     # API/Admin
     API_BIND: str = "0.0.0.0"
     API_PORT: int = 8080
-    ADMIN_BIND: str = "0.0.0.0"
-    ADMIN_PORT: int = 8081
+    ADMIN_BIND: str | None = None
+    ADMIN_PORT: int | None = None
 
     # DB
     DATABASE_URL: str = "sqlite:///__AUTO__"
-
-    # Worker
-    POLL_INTERVAL_SEC: int = 2
-    JOB_TIMEOUT_SEC: int = 7200
-    MAX_CONCURRENT: int = 1
-
-    # Agent
-    AGENT_CMD_TEMPLATE: str = (
-        'python packages/udocket_core/agents/transcribe.py --input "{audio}" --case "{case_id}" --outdir "{case_dir}/transcript" --language "{lang}"'
-    )
 
     # Security
     ALLOWED_AUDIO_MIME: str = (

@@ -177,6 +177,11 @@ def _ensure_wav(input_path: Path, out_dir: Path, case_id: str) -> Path:
     return out
 
 
+def ensure_wav(input_path: Path, out_dir: Path, case_id: str) -> Path:
+    """Public helper to produce a 16 kHz mono WAV for batch uploads."""
+    return _ensure_wav(input_path, out_dir, case_id)
+
+
 def _sdk_version() -> str:
     try:
         import pkgutil
@@ -223,6 +228,50 @@ def _to_seconds(val: Any) -> float:
     except Exception:
         return 0.0
     return 0.0
+
+
+def _summarize_batch_error(payload: Any) -> str:
+    try:
+        if isinstance(payload, dict):
+            errors = payload.get("errors")
+            if isinstance(errors, list) and errors:
+                parts = []
+                for err in errors:
+                    if not isinstance(err, dict):
+                        parts.append(str(err))
+                        continue
+                    code = err.get("code")
+                    message = err.get("message") or err.get("description") or err.get("errorMessage")
+                    target = err.get("target")
+                    segment = " | ".join(
+                        p
+                        for p in (
+                            f"code={code}" if code else None,
+                            message,
+                            f"target={target}" if target else None,
+                        )
+                        if p
+                    )
+                    parts.append(segment or str(err))
+                return "; ".join(parts)
+            if isinstance(errors, dict) and errors:
+                code = errors.get("code")
+                message = errors.get("message") or errors.get("description")
+                return " | ".join(p for p in (f"code={code}" if code else None, message) if p)
+            error_obj = payload.get("error")
+            if isinstance(error_obj, dict):
+                code = error_obj.get("code")
+                message = error_obj.get("message") or error_obj.get("description")
+                return " | ".join(p for p in (f"code={code}" if code else None, message) if p) or str(error_obj)
+            details = payload.get("details")
+            if isinstance(details, list) and details:
+                return "; ".join(_summarize_batch_error(item) for item in details)
+            props = payload.get("properties")
+            if isinstance(props, dict) and props.get("error"):
+                return _summarize_batch_error(props.get("error"))
+        return str(payload)
+    except Exception:
+        return repr(payload)
 
 
 def _rest_batch_transcribe(
@@ -273,12 +322,17 @@ def _rest_batch_transcribe(
             raise RuntimeError("REST batch timeout waiting for completion")
         time.sleep(5)
     if status != "Succeeded":
-        err = pdata.get("errors") or pdata.get("error") or pdata.get("details")
-        raise RuntimeError(f"REST batch status={status}: {err}")
+        err = _summarize_batch_error(pdata)
+        try:
+            detail = json.dumps(pdata, ensure_ascii=False)[:800]
+        except Exception:
+            detail = repr(pdata)
+        raise RuntimeError(f"REST batch status={status}: {err} (details={detail})")
 
     fr = requests.get(loc + "/files", headers=headers, timeout=30)
     fr.raise_for_status()
-    files = fr.json().get("values", [])
+    files_payload = fr.json()
+    files = files_payload.get("values", [])
     text_url = None
     for f in files:
         if f.get("kind") == "Transcription":

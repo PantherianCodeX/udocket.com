@@ -17,38 +17,6 @@ services:
         - path: apps/api/requirements.txt
           action: rebuild
 
-  admin:
-    volumes:
-      - .:/app
-    command: >-
-      uvicorn apps.admin.app.main:app
-      --host 0.0.0.0 --port 8081 --workers 1
-      --reload --reload-dir /app
-      --log-config infra/logging/uvicorn.yml
-    develop:
-      watch:
-        - path: infra/docker/Dockerfile.admin
-          action: rebuild
-        - path: apps/admin/requirements.txt
-          action: rebuild
-
-  worker:
-    volumes:
-      - .:/app
-    # Auto-restart worker on code changes using watchfiles.
-    # Installs watchfiles at runtime to avoid changing base image.
-    command: >-
-      sh -lc "python -m pip install -q --no-input watchfiles &&
-      watchfiles --target-type command --filter python
-      --ignore-paths .venv --grace-period 0.2
-      'python apps/worker/app/main.py' /app"
-    develop:
-      watch:
-        - path: infra/docker/Dockerfile.worker
-          action: rebuild
-        - path: apps/worker/requirements.txt
-          action: rebuild
-
   platform:
     volumes:
       - .:/app

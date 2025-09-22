@@ -1,27 +1,102 @@
 {% extends "ui/base.html" %}
+{% load ui_display %}
 {% block head %}
 <script src="https://unpkg.com/htmx.org@1.9.12"></script>
 <script>
   window.jobPollers = window.jobPollers || {};
+  window.jobSockets = window.jobSockets || {};
+
+  const STATUS_LABELS = {
+    CONVERTING: 'Converting',
+    UPLOADING: 'Uploading',
+    RUNNING: 'Transcribing',
+    PENDING: 'Pending',
+    QUEUED: 'Queued',
+    SUCCEEDED: 'Succeeded',
+    FAILED: 'Failed',
+    CANCELLED: 'Cancelled',
+    CANCELED: 'Cancelled',
+    CANCELLING: 'Cancelling',
+  };
+
+  function normalizeStatusName(status) {
+    return (status || '').toString().toUpperCase();
+  }
+
+  function friendlyStatus(status) {
+    const normalized = normalizeStatusName(status);
+    return STATUS_LABELS[normalized] || (normalized ? normalized.charAt(0) + normalized.slice(1).toLowerCase() : 'Status');
+  }
+
+  function renderStatusLabel(el, status, progress) {
+    if (!el) return;
+    const target = el.matches('[data-status]') ? el : el.querySelector('[data-status]') || el;
+    const normalized = normalizeStatusName(status);
+    if (normalized === 'UPLOADING' && Number.isFinite(progress)) {
+      const pct = Math.max(0, Math.min(100, Math.round(progress)));
+      target.textContent = `Uploading ${pct}%`;
+      target.dataset.progress = String(pct);
+      if (target.classList.contains('status-pill')) {
+        target.style.setProperty('--status-progress', (pct / 100).toString());
+      }
+    } else if (normalized === 'CANCELLING') {
+      target.textContent = 'Cancelling';
+      target.dataset.progress = '';
+      if (target.classList.contains('status-pill')) {
+        target.style.removeProperty('--status-progress');
+      }
+    } else {
+      target.textContent = friendlyStatus(status);
+      target.dataset.progress = '';
+      if (target.classList.contains('status-pill')) {
+        target.style.removeProperty('--status-progress');
+      }
+    }
+    target.dataset.status = normalized;
+    if (el !== target) {
+      el.dataset.status = normalized;
+      if (normalized === 'UPLOADING' && Number.isFinite(progress)) {
+        el.dataset.progress = target.dataset.progress;
+      } else {
+        delete el.dataset.progress;
+      }
+    }
+  }
 
   function connectWS(jobId) {
     const statusEl = document.getElementById(`job-status-${jobId}`);
     const transcriptEl = document.getElementById(`job-transcript-${jobId}`);
     const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + `/ws/jobs/${jobId}/`;
     const ws = new WebSocket(url);
+    window.jobSockets[jobId] = ws;
+    ws.onopen = () => {
+      if (window.jobPollers[jobId]) {
+        clearInterval(window.jobPollers[jobId]);
+        delete window.jobPollers[jobId];
+      }
+    };
     ws.onmessage = (ev) => {
       try {
         const data = JSON.parse(ev.data);
-        if (data.status && statusEl) statusEl.textContent = data.status;
+        const progress = data.progress_percent ?? data.upload_progress;
+        if (statusEl) renderStatusLabel(statusEl, data.status, progress);
         const transcriptPath = data.transcript_file || data.transcript_path;
-        if (transcriptEl && (transcriptPath || (statusEl && statusEl.textContent === 'SUCCEEDED'))) {
+        if (transcriptEl && (transcriptPath || (statusEl && statusEl.dataset && statusEl.dataset.status === 'SUCCEEDED'))) {
           transcriptEl.innerHTML = `<a class="font-medium text-primary-300 underline" href="/api/v1/jobs/${data.job_id || jobId}/download/">Download</a>`;
         }
-        if (statusEl && ['SUCCEEDED', 'FAILED'].includes(statusEl.textContent)) {
+        const normalized = statusEl && statusEl.dataset ? statusEl.dataset.status : '';
+        if (normalized && ['SUCCEEDED', 'FAILED', 'CANCELLED', 'CANCELED'].includes(normalized)) {
           clearInterval(window.jobPollers[jobId]);
           delete window.jobPollers[jobId];
         }
       } catch (_) {}
+    };
+    ws.onerror = (err) => {
+      console.warn('Job websocket error', jobId, err);
+    };
+    ws.onclose = () => {
+      delete window.jobSockets[jobId];
+      ensurePolling(jobId, true);
     };
   }
 
@@ -32,22 +107,29 @@
       const data = await resp.json();
       const statusEl = document.getElementById(`job-status-${jobId}`);
       const transcriptEl = document.getElementById(`job-transcript-${jobId}`);
-      if (statusEl && data.status) statusEl.textContent = data.status;
-      if (transcriptEl && (data.transcript_path || (statusEl && statusEl.textContent === 'SUCCEEDED'))) {
+      const progress = data.progress_percent ?? data.upload_progress;
+      if (statusEl) renderStatusLabel(statusEl, data.status, progress);
+      if (transcriptEl && (data.transcript_path || (statusEl && statusEl.dataset && statusEl.dataset.status === 'SUCCEEDED'))) {
         transcriptEl.innerHTML = `<a class="font-medium text-primary-300 underline" href="/api/v1/jobs/${jobId}/download/">Download</a>`;
       }
-      if (statusEl && ['SUCCEEDED', 'FAILED'].includes(statusEl.textContent)) {
+      const normalized = statusEl && statusEl.dataset ? statusEl.dataset.status : '';
+      if (normalized && ['SUCCEEDED', 'FAILED', 'CANCELLED', 'CANCELED'].includes(normalized)) {
         clearInterval(window.jobPollers[jobId]);
         delete window.jobPollers[jobId];
       }
     } catch (_) {}
   }
 
-  function ensurePolling(jobId) {
+  function ensurePolling(jobId, force = false) {
     if (window.jobPollers[jobId]) return;
     const statusEl = document.getElementById(`job-status-${jobId}`);
     if (!statusEl) return;
-    if (['SUCCEEDED', 'FAILED'].includes(statusEl.textContent)) return;
+    const normalized = statusEl.dataset ? statusEl.dataset.status : '';
+    if (normalized && ['SUCCEEDED', 'FAILED', 'CANCELLED', 'CANCELED'].includes(normalized)) return;
+    const socket = window.jobSockets[jobId];
+    if (!force && socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+      return;
+    }
     window.jobPollers[jobId] = setInterval(() => pollJob(jobId), 2000);
   }
 
@@ -59,6 +141,12 @@
         row.dataset.ws = '1';
       }
       ensurePolling(jobId);
+      const statusEl = document.getElementById(`job-status-${jobId}`);
+      if (statusEl) {
+        const statusValue = statusEl.dataset && statusEl.dataset.status ? statusEl.dataset.status : statusEl.textContent;
+        const progressValue = statusEl.dataset && statusEl.dataset.progress ? parseFloat(statusEl.dataset.progress) : undefined;
+        renderStatusLabel(statusEl, statusValue, progressValue);
+      }
     });
   }
 
@@ -104,10 +192,20 @@
           <tbody id="jobs-body" class="divide-y divide-white/5 bg-slate-900/40 text-slate-100">
             {% for j in jobs %}
             <tr data-job="{{ j.id }}" class="transition hover:bg-white/10">
-              <td class="px-4 py-3 font-mono text-xs text-primary-200"><span data-copy-text="{{ j.id }}" title="{{ j.id }}">{{ j.id }}</span></td>
-              <td class="px-4 py-3 text-primary-200"><a class="underline" href="/cases/{{ j.case_id }}/" data-copy-text="{{ j.case_id }}" title="{{ j.case_id }}">{{ j.case_id }}</a></td>
+              <td class="px-4 py-3">
+                <button type="button" class="inline-flex items-center gap-1 rounded border border-white/15 bg-white/5 px-2 py-0.5 text-[11px] font-mono text-primary-200 transition hover:border-primary-300 cursor-copy underline decoration-dotted decoration-white/20 hover:decoration-primary-300" data-copy-text="{{ j.id }}" title="{{ j.id }}">
+                  {{ j.id|short_uuid }}
+                </button>
+              </td>
+              <td class="px-4 py-3 text-primary-200">
+                <a class="inline-flex items-center gap-1 rounded border border-white/15 bg-white/5 px-2 py-0.5 text-[11px] font-mono text-primary-200 transition hover:border-primary-300 underline decoration-dotted decoration-white/20 hover:decoration-primary-300" href="/cases/{{ j.case_id }}/" data-copy-text="{{ j.case_id }}" title="{{ j.case_id }}">
+                  {{ j.case_id|short_uuid }}
+                </a>
+              </td>
               <td class="px-4 py-3 text-slate-200 capitalize">{{ j.mode }}</td>
-              <td class="px-4 py-3" id="job-status-{{ j.id }}">{{ j.status }}</td>
+              <td class="px-4 py-3" id="job-status-{{ j.id }}">
+                <span class="status-pill inline-flex items-center rounded-full border border-white/20 bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-200" data-status="{{ j.status|upper }}">{{ j.status|lower|capfirst }}</span>
+              </td>
               <td class="px-4 py-3" id="job-transcript-{{ j.id }}">{% if j.transcript_path %}<a class="font-medium text-primary-300 underline" href="/api/v1/jobs/{{ j.id }}/download/">Download</a>{% else %}—{% endif %}</td>
               <td class="px-4 py-3 text-primary-200"><a class="underline" href="/api/v1/jobs/{{ j.id }}/logs/">Logs</a></td>
               <td class="px-4 py-3 text-slate-300"><time data-ts="{{ j.created_at|date:'c' }}">{{ j.created_at }}</time></td>

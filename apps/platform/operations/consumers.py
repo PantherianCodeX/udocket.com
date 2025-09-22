@@ -39,6 +39,8 @@ class JobConsumer(AsyncJsonWebsocketConsumer):
                 "status": j.status,
                 "transcript_path": j.transcript_path,
                 "transcript_file": j.transcript_path,
+                "upload_progress": j.upload_progress,
+                "progress_percent": j.upload_progress,
             }
         except Job.DoesNotExist:
             return {"type": "job.update", "event": "snapshot", "job_id": job_id, "status": "UNKNOWN"}
