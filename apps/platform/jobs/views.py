@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import uuid
 
@@ -13,6 +14,8 @@ from django.conf import settings
 from rest_framework.response import Response
 from django.http import FileResponse, Http404
 import requests
+
+log = logging.getLogger("apps.platform.jobs.views")
 from pathlib import Path
 
 from apps.platform.authorization.capabilities import has_capability
@@ -24,7 +27,7 @@ from apps.platform.jobs.serializers import (
     JobSerializer,
     JobTelemetrySerializer,
 )
-from apps.platform.operations.tasks import transcribe_job
+from apps.platform.operations.tasks import transcribe_job, _update_job_meta
 from apps.platform.operations.channels import send_job_update
 from apps.platform.operations.audit import emit as audit_emit
 from django.db import transaction
@@ -366,9 +369,22 @@ class JobViewSet(viewsets.ModelViewSet):
             "Accept": "application/json",
         }
         try:
-            requests.delete(loc, headers=headers, timeout=10)
-        except Exception:
-            pass
+            resp = requests.delete(loc, headers=headers, timeout=10)
+            status_text = f"{resp.status_code}"
+            if resp.text:
+                status_text += f" {resp.text[:120]}"
+            log.info("azure batch cancel", extra={"job_id": str(job.id), "status": status_text})
+            try:
+                _update_job_meta(
+                    str(job.case_id),
+                    job.organization_id,
+                    str(job.id),
+                    {"azure_cancel_status": resp.status_code, "azure_transcription_url": loc},
+                )
+            except Exception:
+                pass
+        except Exception as exc:  # noqa: BLE001
+            log.warning("azure batch cancel failed", extra={"job_id": str(job.id), "error": str(exc)})
 
     @action(detail=True, methods=["post"], url_path="analyze/summary")
     def analyze_summary(self, request, pk=None):

@@ -435,7 +435,9 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
     container.dataset.loading = '1';
     container.innerHTML = '<div class="flex items-center gap-2 text-xs text-slate-300"><svg class="h-3 w-3 animate-spin text-primary-300" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle class="opacity-30" cx="12" cy="12" r="10" stroke-width="2"></circle><path d="M22 12a10 10 0 00-10-10" stroke-width="2" stroke-linecap="round"></path></svg><span>Loading details…</span></div>';
     try {
-      const resp = await fetch(`/jobs/${jobId}/detail-panel/`, {
+      const caseId = document.getElementById('jobs-body')?.dataset.caseId;
+      const detailUrl = caseId ? `/cases/${caseId}/jobs/${jobId}/detail/` : `/jobs/${jobId}/detail-panel/`;
+      const resp = await fetch(detailUrl, {
         headers: {
           'HX-Request': 'true',
         },
@@ -1045,7 +1047,7 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
               <th class="px-4 py-3 text-right">&nbsp;</th>
             </tr>
           </thead>
-          <tbody id="jobs-body" class="divide-y divide-white/5 bg-slate-900/40 text-slate-100">
+          <tbody id="jobs-body" data-case-id="{{ case.id }}" class="divide-y divide-white/5 bg-slate-900/40 text-slate-100">
             {% for row in job_rows %}
               {% include "ui/_job_row.html" with j=row.job telem=row.telemetry %}
             {% empty %}
