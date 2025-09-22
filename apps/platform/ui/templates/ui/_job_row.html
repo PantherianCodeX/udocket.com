@@ -7,7 +7,7 @@
   <td class="px-4 py-3" id="job-status-{{ j.id }}">
     <div class="flex items-center justify-between gap-2">
       <span class="max-w-[18rem] truncate font-medium text-slate-100" title="{{ job_title }}">{{ job_title }}</span>
-      <button type="button" class="inline-flex items-center gap-1 rounded border border-white/15 bg-white/5 px-2 py-0.5 text-[11px] font-mono text-primary-200 transition hover:border-primary-300" data-copy-text="{{ j.id }}" title="{{ j.id }}">
+      <button type="button" class="inline-flex items-center gap-1 rounded border border-white/15 bg-white/5 px-2 py-0.5 text-[11px] font-mono text-primary-200 transition hover:border-primary-300 cursor-copy underline decoration-dotted decoration-white/20 hover:decoration-primary-300" data-copy-text="{{ j.id }}" title="{{ j.id }}">
         {{ j.id|short_uuid }}
       </button>
     </div>

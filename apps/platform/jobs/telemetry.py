@@ -81,6 +81,21 @@ class JobTelemetry:
                 local_size = local_path.stat().st_size
                 if not sha256 and not remote_sha:
                     local_sha = _sha256_file(local_path)
+                # Opportunistically probe audio characteristics if not present in metadata
+                try:
+                    from packages.udocket_core.audio import probe_audio_metadata as _probe
+
+                    probe = _probe(local_path)
+                except Exception:
+                    probe = {}
+                if isinstance(probe, dict):
+                    # Only fill missing fields to avoid overriding agent-provided values
+                    meta.setdefault("audio_duration_s", probe.get("audio_duration_s"))
+                    meta.setdefault("audio_sample_rate_hz", probe.get("audio_sample_rate_hz"))
+                    meta.setdefault("audio_channels", probe.get("audio_channels"))
+                    meta.setdefault("audio_bitrate_kbps", probe.get("audio_bitrate_kbps"))
+                    meta.setdefault("audio_codec", probe.get("audio_codec"))
+                    meta.setdefault("audio_channel_layout", probe.get("audio_channel_layout"))
         return {
             "path": audio_input,
             "original_name": _original_audio_name(self.job.audio_input) or meta.get("audio_file"),
@@ -90,7 +105,7 @@ class JobTelemetry:
             "size_bytes_remote": size_remote or local_size,
             "size_bytes_local": local_size,
             "duration_s": meta.get("audio_duration_s") or self.job.duration_s,
-            "sample_rate_hz": meta.get("sample_rate_hz") or meta.get("audio_sample_rate_hz"),
+            "sample_rate_hz": meta.get("audio_sample_rate_hz") or meta.get("sample_rate_hz"),
             "channels": meta.get("audio_channels") or meta.get("channels"),
             "bitrate_kbps": meta.get("audio_bitrate_kbps") or meta.get("bitrate_kbps"),
             "codec": meta.get("audio_codec"),

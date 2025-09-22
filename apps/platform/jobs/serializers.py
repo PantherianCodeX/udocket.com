@@ -27,10 +27,14 @@ class JobTelemetrySerializer(serializers.Serializer):
             if not ui_mode:
                 allow_audio = has_capability(user, case_id, "artifact.download")
                 allow_transcript = has_capability(user, case_id, "artifact.view")
-            if allow_transcript and not has_capability(user, case_id, "artifact.field.path.view"):
-                # permit metadata but not raw path
-                allow_transcript_path = False
+                # Only enforce transcript path capability outside of UI mode
+                if allow_transcript and not has_capability(user, case_id, "artifact.field.path.view"):
+                    # permit metadata but not raw path
+                    allow_transcript_path = False
+                else:
+                    allow_transcript_path = allow_transcript
             else:
+                # In UI mode, mirror allow_transcript and show paths to streamline diagnostics
                 allow_transcript_path = allow_transcript
         else:
             allow_transcript_path = allow_transcript

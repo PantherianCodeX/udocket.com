@@ -28,6 +28,7 @@
             <p class="text-xs uppercase tracking-wide text-slate-400">Transcribe</p>
             <span data-transcription-status-pill class="inline-flex items-center rounded-full border {{ item.status_class }} px-2 py-1 text-[10px] font-semibold uppercase">{{ item.status }}</span>
           </div>
+          <span class="sr-only">Transcription workflow</span>
           <p class="mt-2 text-sm font-semibold text-white" data-status-text>
             {% if item.status %}{{ item.status|title }}{% else %}Status pending{% endif %}
           </p>

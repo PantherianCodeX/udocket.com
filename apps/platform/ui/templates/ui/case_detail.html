@@ -789,16 +789,7 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
     }
   });
 
-  document.addEventListener('click', (evt) => {
-    const copyTarget = evt.target.closest('[data-copy-text]');
-    if (!copyTarget) return;
-    const value = copyTarget.getAttribute('data-copy-text');
-    if (!value || !navigator.clipboard) return;
-    navigator.clipboard.writeText(value).then(() => {
-      copyTarget.classList.add('ring-1', 'ring-primary-300');
-      setTimeout(() => copyTarget.classList.remove('ring-1', 'ring-primary-300'), 750);
-    }).catch(() => {});
-  });
+  // copy-to-clipboard moved to global base template
 
   document.body.addEventListener('htmx:beforeRequest', (evt) => {
     if (evt.target && evt.target.id === 'job-form') {
@@ -881,6 +872,8 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
       toggleCaseTitleEditor(false);
     }
   });
+
+  // toast is implemented globally as udocketShowToastAt
 </script>
 {% endblock %}
 {% block content %}
@@ -891,7 +884,7 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
         <div id="case-title-wrapper" class="mt-1">
           {% include "ui/_case_title.html" %}
         </div>
-        <p class="mt-2 text-sm text-slate-300">Managed by {{ case.organization.name }} · ID <span class="font-mono text-primary-200">{{ case.id }}</span></p>
+        <p class="mt-2 text-sm text-slate-300">Managed by {{ case.organization.name }} · ID <span class="font-mono text-primary-200" data-copy-text="{{ case.id }}" title="{{ case.id }}">{{ case.id }}</span></p>
         <dl class="mt-4 grid gap-3 text-xs text-slate-300 sm:grid-cols-3">
           <div>
             <dt class="uppercase tracking-wide text-slate-500">Created</dt>

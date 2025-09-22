@@ -39,6 +39,38 @@
       });
     }
     window.addEventListener('DOMContentLoaded', renderLocalTimes);
+
+    // Global click-to-copy handler and toast utility
+    function udocketShowToastAt(x, y, text) {
+      try {
+        const toast = document.createElement('div');
+        toast.textContent = text || 'Copied';
+        toast.setAttribute('role', 'status');
+        toast.className = 'pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full rounded-md border border-white/20 bg-slate-800/90 px-2 py-1 text-[11px] font-semibold text-slate-100 shadow-lg shadow-black/40';
+        const vx = Math.max(8, Math.min(window.innerWidth - 8, x || 0));
+        const vy = Math.max(8, Math.min(window.innerHeight - 8, y || 0));
+        toast.style.left = vx + 'px';
+        toast.style.top = vy + 'px';
+        document.body.appendChild(toast);
+        setTimeout(() => {
+          toast.style.opacity = '0';
+          toast.style.transition = 'opacity 150ms ease-in-out';
+          setTimeout(() => toast.remove(), 200);
+        }, 600);
+      } catch (_) {}
+    }
+
+    document.addEventListener('click', (evt) => {
+      const target = evt.target && evt.target.closest ? evt.target.closest('[data-copy-text]') : null;
+      if (!target) return;
+      const value = target.getAttribute('data-copy-text');
+      if (!value || !navigator.clipboard) return;
+      const x = (evt.clientX != null ? evt.clientX : (evt.pageX != null ? (evt.pageX - window.scrollX) : 0));
+      const y = (evt.clientY != null ? evt.clientY : (evt.pageY != null ? (evt.pageY - window.scrollY) : 0));
+      navigator.clipboard.writeText(value).then(() => {
+        udocketShowToastAt(x, y, 'Copied');
+      }).catch(() => {});
+    });
   </script>
   <style>
     .htmx-request .hide-during-request { display: none !important; }
@@ -49,6 +81,18 @@
     details.group > summary { display: inline-flex; align-items: center; gap: 0.5rem; }
     details.group > div { display: none; }
     details.group[open] > div { display: block; }
+    /* Site-wide copy-to-clipboard affordance */
+    [data-copy-text] {
+      cursor: copy;
+      text-decoration-line: underline;
+      text-decoration-style: dotted;
+      text-underline-offset: 2px;
+      text-decoration-color: rgba(255, 255, 255, 0.2);
+    }
+    [data-copy-text]:hover {
+      /* Tailwind primary-400 (#5b8bff) approximation */
+      text-decoration-color: rgba(91, 139, 255, 0.9);
+    }
   </style>
   {% block head %}{% endblock %}
   {% csrf_token %}
