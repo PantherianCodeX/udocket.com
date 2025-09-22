@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from django.core.exceptions import PermissionDenied
+import logging
 
 from django.conf import settings
 from django.db import models
@@ -32,7 +33,6 @@ from django.contrib.auth import logout
 from apps.platform.tenancy import accessible_organization_ids, scope_jobs
 from apps.platform.jobs.serializers import JobTelemetrySerializer
 from apps.platform.jobs.telemetry import summarize_jobs
-import logging
 
 log = logging.getLogger("apps.platform.ui")
 
@@ -615,7 +615,17 @@ def job_detail_panel(request: HttpRequest, job_id: str) -> HttpResponse:
     job = scope_jobs(jobs_qs, getattr(request, "user", None)).first()
     if not job:
         raise Http404
-    telemetry = JobTelemetrySerializer(job, context={"request": request, "ui_mode": True}).data
+    try:
+        telemetry = JobTelemetrySerializer(job, context={"request": request, "ui_mode": True}).data
+    except Exception as exc:  # noqa: BLE001
+        log.exception("failed to render job detail", extra={"job_id": job_id})
+        return HttpResponse(
+            '<div class="space-y-2 text-xs text-rose-200">'
+            "<p>Unable to load job detail.</p>"
+            f"<p class=\"font-mono text-[10px] text-rose-300\">{exc}</p>"
+            "</div>",
+            status=500,
+        )
     user_obj = getattr(request, "user", None)
     dev_open = getattr(settings, "PLATFORM_DEV_OPEN", False)
     can_review = False
@@ -650,7 +660,17 @@ def case_job_detail_panel(request: HttpRequest, case_id: str, job_id: str) -> Ht
     if not job:
         raise Http404
 
-    telemetry = JobTelemetrySerializer(job, context={"request": request, "ui_mode": True}).data
+    try:
+        telemetry = JobTelemetrySerializer(job, context={"request": request, "ui_mode": True}).data
+    except Exception as exc:  # noqa: BLE001
+        log.exception("failed to render case job detail", extra={"job_id": job_id, "case_id": case_id})
+        return HttpResponse(
+            '<div class="space-y-2 text-xs text-rose-200">'
+            "<p>Unable to load job detail.</p>"
+            f"<p class=\"font-mono text-[10px] text-rose-300\">{exc}</p>"
+            "</div>",
+            status=500,
+        )
     user_obj = getattr(request, "user", None)
     dev_open = getattr(settings, "PLATFORM_DEV_OPEN", False)
     can_review = False
