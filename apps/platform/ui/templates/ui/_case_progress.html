@@ -12,7 +12,7 @@
   <div class="grid gap-4 px-6 pb-5 pt-5 md:grid-cols-3">
     {% for item in progress_items %}
       {% if item.key == 'case_setup' %}
-        <a href="/admin/cases/{{ case.id }}/edit" class="group flex flex-col justify-between rounded-xl border border-white/10 bg-slate-900/60 p-4 transition hover:border-primary-400 hover:bg-slate-900/70" target="_blank" rel="noopener">
+        <a href="/admin/cases/case/{{ case.id }}/change/" class="group flex flex-col justify-between rounded-xl border border-white/10 bg-slate-900/60 p-4 transition hover:border-primary-400 hover:bg-slate-900/70" target="_blank" rel="noopener">
           <div>
             <div class="flex items-center justify-between">
               <p class="text-xs uppercase tracking-wide text-slate-400">Case Setup</p>

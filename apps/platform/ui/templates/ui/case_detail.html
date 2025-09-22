@@ -445,52 +445,6 @@
     configEl.textContent = `${modeLabel} · ${diarLabel} · ${language}`;
   }
 
-  function toggleCaseTitleEditor(show) {
-    const wrapper = document.getElementById('case-title-wrapper');
-    if (!wrapper) return;
-    const display = wrapper.querySelector('[data-case-title-display]');
-    const form = wrapper.querySelector('[data-case-title-form]');
-    if (!display || !form) return;
-    if (show) {
-      display.classList.add('hidden');
-      form.classList.remove('hidden');
-      const input = form.querySelector('input[name="title"]');
-      if (input) {
-        requestAnimationFrame(() => {
-          input.focus();
-          input.select();
-        });
-      }
-    } else {
-      display.classList.remove('hidden');
-      form.classList.add('hidden');
-    }
-  }
-
-  function toggleJobTitleEditor(jobId, show) {
-    const wrapper = document.querySelector(`#job-title-wrapper-${jobId}`);
-    if (!wrapper) return;
-    const display = wrapper.querySelector('[data-job-title-display]');
-    const form = wrapper.querySelector('[data-job-title-form]');
-    const error = wrapper.querySelector('[data-job-title-error]');
-    if (!display || !form) return;
-    if (show) {
-      display.classList.add('hidden');
-      form.classList.remove('hidden');
-      const input = form.querySelector('input[name="title"]');
-      if (input) {
-        requestAnimationFrame(() => {
-          input.focus();
-          input.select();
-        });
-      }
-    } else {
-      display.classList.remove('hidden');
-      form.classList.add('hidden');
-    }
-    if (error) error.classList.add('hidden');
-  }
-
   function updateJobActionButtons(jobId, status) {
     if (!jobId) return;
     const normalized = (status || '').toUpperCase();
@@ -1186,30 +1140,6 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
   });
 
   document.addEventListener('click', async (evt) => {
-    const titleEditBtn = evt.target.closest('[data-edit-job-title]');
-    if (titleEditBtn) {
-      evt.preventDefault();
-      evt.stopPropagation();
-      const wrapper = titleEditBtn.closest('[data-job-title-wrapper]');
-      if (wrapper) {
-        const jobId = wrapper.id.replace('job-title-wrapper-', '');
-        toggleJobTitleEditor(jobId, true);
-      }
-      return;
-    }
-
-    const titleCancelBtn = evt.target.closest('[data-cancel-job-title]');
-    if (titleCancelBtn) {
-      evt.preventDefault();
-      evt.stopPropagation();
-      const wrapper = titleCancelBtn.closest('[data-job-title-wrapper]');
-      if (wrapper) {
-        const jobId = wrapper.id.replace('job-title-wrapper-', '');
-        toggleJobTitleEditor(jobId, false);
-      }
-      return;
-    }
-
     const cancelBtn = evt.target.closest('[data-job-cancel]');
     if (cancelBtn) {
       evt.preventDefault();
@@ -1479,20 +1409,6 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
     if (input) input.click();
   });
 
-  document.addEventListener('click', (evt) => {
-    const editBtn = evt.target.closest('[data-edit-case-title]');
-    if (editBtn) {
-      evt.preventDefault();
-      toggleCaseTitleEditor(true);
-      return;
-    }
-    const cancelBtn = evt.target.closest('[data-cancel-case-title]');
-    if (cancelBtn) {
-      evt.preventDefault();
-      toggleCaseTitleEditor(false);
-    }
-  });
-
   document.addEventListener('change', (evt) => {
     if (evt.target && evt.target.name === 'diarization') {
       updateTranscriptionConfig();
@@ -1597,12 +1513,6 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
       activeTranscriptionJobId = null;
       setCurrentJob('', 'IDLE');
       updateTranscriptionControls('IDLE');
-    }
-  });
-
-  document.addEventListener('htmx:afterSwap', (evt) => {
-    if (evt.target && evt.target.id === 'case-title-wrapper') {
-      toggleCaseTitleEditor(false);
     }
   });
 

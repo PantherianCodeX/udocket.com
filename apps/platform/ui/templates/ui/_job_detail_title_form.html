@@ -2,14 +2,34 @@
 <div id="job-title-wrapper-{{ job.id }}" data-job-title-wrapper class="flex flex-col gap-2">
   <div class="flex flex-wrap items-center gap-3 {% if title_edit %}hidden{% endif %}" data-job-title-display>
     <h2 class="text-lg font-semibold text-white" data-job-title-display-text>{{ job_title }}</h2>
-    <button type="button" class="inline-flex items-center gap-1 rounded border border-white/20 bg-white/10 px-2 py-1 text-xs font-semibold text-slate-200 transition hover:border-primary-400 hover:text-white" data-edit-job-title>Edit</button>
+    <button
+      type="button"
+      class="inline-flex items-center gap-1 rounded border border-white/20 bg-white/10 px-2 py-1 text-xs font-semibold text-slate-200 transition hover:border-primary-400 hover:text-white"
+      data-edit-job-title
+      hx-get="/cases/{{ case.id }}/jobs/{{ job.id }}/detail/?title_edit=1"
+      hx-target="closest [data-job-detail-container]"
+      hx-swap="innerHTML"
+    >Edit</button>
   </div>
-  <form class="items-center gap-2 {% if not title_edit %}hidden{% endif %}" data-job-title-form hx-post="/api/v1/jobs/{{ job.id }}/title/" hx-target="closest [data-job-detail-container]" hx-swap="innerHTML">
+  <form
+    class="items-center gap-2 {% if not title_edit %}hidden{% endif %}"
+    data-job-title-form
+    hx-post="/cases/{{ case.id }}/jobs/{{ job.id }}/title/"
+    hx-target="closest [data-job-detail-container]"
+    hx-swap="innerHTML"
+  >
     {% csrf_token %}
     <input type="text" name="title" value="{{ job_title }}" class="w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-1.5 text-sm text-white focus:border-primary-400 focus:outline-none" placeholder="Enter transcript title">
     <div class="flex items-center gap-2">
       <button type="submit" class="inline-flex items-center rounded-lg border border-primary-400/40 bg-primary-500/10 px-3 py-1.5 text-xs font-semibold text-primary-100 transition hover:bg-primary-500/25">Save</button>
-      <button type="button" class="inline-flex items-center rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-primary-400 hover:text-white" data-cancel-job-title>Cancel</button>
+      <button
+        type="button"
+        class="inline-flex items-center rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-primary-400 hover:text-white"
+        data-cancel-job-title
+        hx-get="/cases/{{ case.id }}/jobs/{{ job.id }}/detail/"
+        hx-target="closest [data-job-detail-container]"
+        hx-swap="innerHTML"
+      >Cancel</button>
     </div>
   </form>
   {% if title_error %}

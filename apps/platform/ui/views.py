@@ -28,6 +28,7 @@ from apps.platform.accounts.utils import (
 from apps.platform.jobs.models import Job
 from apps.platform.operations.tasks import transcribe_job
 from apps.platform.operations.storage import ensure_case_dirs
+from apps.platform.operations.utils import append_job_log
 from apps.platform.authorization.models import PermissionPreset, Role
 from apps.platform.authorization.capabilities import role_capabilities, has_capability
 from apps.platform.artifacts.registry import ARTIFACT_FIELD_REGISTRY
@@ -946,7 +947,9 @@ def job_detail_panel(request: HttpRequest, job_id: str) -> HttpResponse:
         if not job:
             raise Http404
 
-        context = _job_detail_context(request, job)
+        # Support forcing the title editor open via query param for HTMX swaps
+        title_edit = str(request.GET.get("title_edit") or "").lower() in {"1", "true", "yes", "on"}
+        context = _job_detail_context(request, job, title_edit=title_edit)
         return render(request, "ui/_job_detail.html", context)
     except Http404:
         raise
@@ -977,7 +980,9 @@ def case_job_detail_panel(request: HttpRequest, case_id: str, job_id: str) -> Ht
         if not job:
             raise Http404
 
-        context = _job_detail_context(request, job)
+        # Support forcing the title editor open via query param for HTMX swaps
+        title_edit = str(request.GET.get("title_edit") or "").lower() in {"1", "true", "yes", "on"}
+        context = _job_detail_context(request, job, title_edit=title_edit)
         context["case"] = case
         return render(request, "ui/_job_detail.html", context)
     except Http404:
@@ -993,6 +998,83 @@ def case_job_detail_panel(request: HttpRequest, case_id: str, job_id: str) -> Ht
             "</div>",
             status=500,
         )
+
+
+@require_http_methods(["POST"])
+def case_job_update_title(request: HttpRequest, case_id: str, job_id: str) -> HttpResponse:
+    auth_response = _ensure_authenticated(request)
+    if auth_response:
+        return auth_response
+
+    case, _ = _get_case_and_org(request, case_id)
+    job = (
+        Job.objects.select_related("case", "case__organization", "reviewed_by")
+        .filter(case=case, pk=job_id)
+        .first()
+    )
+    if not job:
+        raise Http404
+
+    user = getattr(request, "user", None)
+    dev_open = getattr(settings, "PLATFORM_DEV_OPEN", False)
+    can_edit = False
+    if dev_open:
+        can_edit = True
+    elif user and getattr(user, "is_authenticated", False):
+        if case.reviewer_id and str(user.id) == str(case.reviewer_id):
+            can_edit = True
+        elif has_capability(user, str(case.id), "case.update"):
+            can_edit = True
+    if not can_edit:
+        return HttpResponse("Forbidden", status=403)
+
+    new_title = (request.POST.get("title") or "").strip()
+    artifact = (
+        CaseArtifact.objects.filter(case_id=str(case.id), job_id=str(job.id), type="TRANSCRIPT")
+        .order_by("-created_at")
+        .first()
+    )
+
+    title_error: Optional[str] = None
+    if not artifact:
+        title_error = "Transcript not found for this job."
+    elif not new_title:
+        title_error = "Title cannot be empty."
+    else:
+        clash = (
+            CaseArtifact.objects.filter(case_id=str(case.id), type="TRANSCRIPT", title=new_title)
+            .exclude(pk=artifact.pk)
+        )
+        if clash.exists():
+            title_error = "A transcript with that title already exists in this case."
+
+    if title_error:
+        context = _job_detail_context(
+            request,
+            job,
+            title_error=title_error,
+            title_edit=True,
+        )
+        context["case"] = case
+        context["job_title"] = new_title
+        status_code = 404 if artifact is None else 400
+        return render(request, "ui/_job_detail.html", context, status=status_code)
+
+    artifact.title = new_title
+    artifact.save(update_fields=["title"])
+    append_job_log(
+        str(job.case_id),
+        job.organization_id,
+        str(job.id),
+        f"Transcript title set to '{new_title}'",
+    )
+
+    context = _job_detail_context(request, job)
+    context["case"] = case
+    headers = {
+        "HX-Trigger": json.dumps({"job-title-updated": {"job_id": str(job.id), "title": new_title}})
+    }
+    return render(request, "ui/_job_detail.html", context, headers=headers)
 
 
 @require_http_methods(["GET"])
