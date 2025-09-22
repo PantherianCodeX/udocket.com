@@ -1000,6 +1000,32 @@ def case_job_detail_panel(request: HttpRequest, case_id: str, job_id: str) -> Ht
         )
 
 
+@require_http_methods(["GET"])
+def case_job_title_form(request: HttpRequest, case_id: str, job_id: str) -> HttpResponse:
+    auth_response = _ensure_authenticated(request)
+    if auth_response:
+        return auth_response
+
+    case, _ = _get_case_and_org(request, case_id)
+    job = (
+        Job.objects.select_related("case", "case__organization", "reviewed_by")
+        .filter(case=case, pk=job_id)
+        .first()
+    )
+    if not job:
+        raise Http404
+
+    edit_flag = str(request.GET.get("edit") or request.GET.get("title_edit") or "").lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    context = _job_detail_context(request, job, title_edit=edit_flag)
+    context["case"] = case
+    return render(request, "ui/_job_detail_title_form.html", context)
+
+
 @require_http_methods(["POST"])
 def case_job_update_title(request: HttpRequest, case_id: str, job_id: str) -> HttpResponse:
     auth_response = _ensure_authenticated(request)
@@ -1058,7 +1084,7 @@ def case_job_update_title(request: HttpRequest, case_id: str, job_id: str) -> Ht
         context["case"] = case
         context["job_title"] = new_title
         status_code = 404 if artifact is None else 400
-        return render(request, "ui/_job_detail.html", context, status=status_code)
+        return render(request, "ui/_job_detail_title_form.html", context, status=status_code)
 
     artifact.title = new_title
     artifact.save(update_fields=["title"])
@@ -1074,7 +1100,7 @@ def case_job_update_title(request: HttpRequest, case_id: str, job_id: str) -> Ht
     headers = {
         "HX-Trigger": json.dumps({"job-title-updated": {"job_id": str(job.id), "title": new_title}})
     }
-    return render(request, "ui/_job_detail.html", context, headers=headers)
+    return render(request, "ui/_job_detail_title_form.html", context, headers=headers)
 
 
 @require_http_methods(["GET"])

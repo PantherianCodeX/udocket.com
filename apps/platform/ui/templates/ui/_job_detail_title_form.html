@@ -1,22 +1,20 @@
 {% load ui_display %}
 <div id="job-title-wrapper-{{ job.id }}" data-job-title-wrapper class="flex flex-col gap-2">
-  <div class="flex flex-wrap items-center gap-3 {% if title_edit %}hidden{% endif %}" data-job-title-display>
+  <div class="flex flex-wrap items-center gap-3 {% if title_edit %}hidden{% endif %}">
     <h2 class="text-lg font-semibold text-white" data-job-title-display-text>{{ job_title }}</h2>
     <button
       type="button"
       class="inline-flex items-center gap-1 rounded border border-white/20 bg-white/10 px-2 py-1 text-xs font-semibold text-slate-200 transition hover:border-primary-400 hover:text-white"
-      data-edit-job-title
-      hx-get="/cases/{{ case.id }}/jobs/{{ job.id }}/detail/?title_edit=1"
-      hx-target="closest [data-job-detail-container]"
-      hx-swap="innerHTML"
+      hx-get="/cases/{{ case.id }}/jobs/{{ job.id }}/title/form/?edit=1"
+      hx-target="closest [data-job-title-wrapper]"
+      hx-swap="outerHTML"
     >Edit</button>
   </div>
   <form
     class="items-center gap-2 {% if not title_edit %}hidden{% endif %}"
-    data-job-title-form
     hx-post="/cases/{{ case.id }}/jobs/{{ job.id }}/title/"
-    hx-target="closest [data-job-detail-container]"
-    hx-swap="innerHTML"
+    hx-target="closest [data-job-title-wrapper]"
+    hx-swap="outerHTML"
   >
     {% csrf_token %}
     <input type="text" name="title" value="{{ job_title }}" class="w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-1.5 text-sm text-white focus:border-primary-400 focus:outline-none" placeholder="Enter transcript title">
@@ -25,10 +23,9 @@
       <button
         type="button"
         class="inline-flex items-center rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-primary-400 hover:text-white"
-        data-cancel-job-title
-        hx-get="/cases/{{ case.id }}/jobs/{{ job.id }}/detail/"
-        hx-target="closest [data-job-detail-container]"
-        hx-swap="innerHTML"
+        hx-get="/cases/{{ case.id }}/jobs/{{ job.id }}/title/form/"
+        hx-target="closest [data-job-title-wrapper]"
+        hx-swap="outerHTML"
       >Cancel</button>
     </div>
   </form>

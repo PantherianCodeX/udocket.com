@@ -633,7 +633,7 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
     }
 
     if (payload.title) {
-      const headerTitle = document.querySelector(`#job-title-wrapper-${jobId} [data-job-title-display] h2`);
+      const headerTitle = document.querySelector(`#job-title-wrapper-${jobId} [data-job-title-display-text]`);
       if (headerTitle) headerTitle.textContent = payload.title;
     }
 

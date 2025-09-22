@@ -14,6 +14,11 @@ urlpatterns = [
     path("cases/<str:case_id>/title", views.case_update_title, name="ui-case-update-title"),
     path("cases/<str:case_id>/jobs/<uuid:job_id>/detail/", views.case_job_detail_panel, name="ui-case-job-detail"),
     path(
+        "cases/<str:case_id>/jobs/<uuid:job_id>/title/form/",
+        views.case_job_title_form,
+        name="ui-case-job-title-form",
+    ),
+    path(
         "cases/<str:case_id>/jobs/<uuid:job_id>/title/",
         views.case_job_update_title,
         name="ui-case-job-update-title",
