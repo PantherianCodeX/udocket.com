@@ -28,7 +28,7 @@ from apps.platform.accounts.utils import (
 from apps.platform.jobs.models import Job
 from apps.platform.operations.tasks import transcribe_job
 from apps.platform.operations.storage import ensure_case_dirs
-from apps.platform.operations.utils import append_job_log
+from apps.platform.operations.utils import append_job_log, update_job_meta
 from apps.platform.authorization.models import PermissionPreset, Role
 from apps.platform.authorization.capabilities import role_capabilities, has_capability
 from apps.platform.artifacts.registry import ARTIFACT_FIELD_REGISTRY
