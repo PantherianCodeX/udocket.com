@@ -293,10 +293,22 @@ class JobViewSet(viewsets.ModelViewSet):
                 meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
             except Exception:
                 meta = {}
-            converted_path = meta.get("converted_wav_path")
-            if not converted_path:
-                raise Http404
-            path_obj = Path(converted_path)
+            converted_job_id = meta.get("converted_audio_job_id") or meta.get("converted_wav_job_id")
+            path_obj = None
+            if converted_job_id:
+                try:
+                    converted_job = Job.objects.get(pk=converted_job_id)
+                    if str(converted_job.case_id) == str(job.case_id) and converted_job.audio_input:
+                        candidate = Path(converted_job.audio_input)
+                        if candidate.exists():
+                            path_obj = candidate
+                except Job.DoesNotExist:
+                    path_obj = None
+            if path_obj is None:
+                converted_path = meta.get("converted_wav_path")
+                if not converted_path:
+                    raise Http404
+                path_obj = Path(converted_path)
         else:
             audio_path = getattr(job, "audio_input", None)
             if not audio_path or not str(audio_path).startswith("/"):

@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, Optional
 import hashlib
+import uuid
 import json
 import logging
 import mimetypes
@@ -73,6 +74,7 @@ def transcribe_job(
     )
 
     org_id: Optional[str] = None
+    case_obj: Optional[Case] = None
     try:
         job_obj = Job.objects.select_related("case").get(pk=job_id)
         if job_obj.status == Job.Status.CANCELLED:
@@ -83,6 +85,7 @@ def transcribe_job(
         job_obj.upload_progress = 0.0 if upload_required else None
         job_obj.save(update_fields=["status", "started_at", "upload_progress"])
         org_id = job_obj.organization_id or getattr(job_obj.case, "organization_id", None)
+        case_obj = getattr(job_obj, "case", None)
     except Exception:
         job_obj = None
     if org_id is None:
@@ -91,6 +94,8 @@ def transcribe_job(
             .values_list("organization_id", flat=True)
             .first()
         )
+    if case_obj is None:
+        case_obj = Case.objects.select_related("organization").filter(pk=case_id).first()
     case_dir = ensure_case_dirs(case_id, org_id)
     cfg = TranscriptionConfig.from_env()
     agent = TranscriptionAgent(cfg)
@@ -219,20 +224,212 @@ def transcribe_job(
                             "batch_upload_converted": True,
                         }
                     )
-                    converted_copy = storage_ops_dir(case_id, org_id) / f"{job_id}__converted.wav"
+
+                    # Persist converted WAV as a dedicated audio job for download and tracing
+                    audio_dir = case_dir / "audio"
+                    audio_dir.mkdir(parents=True, exist_ok=True)
+                    original_display = source_path.name.split("__", 1)[-1] if "__" in source_path.name else source_path.name
+                    requested_basename = Path(original_display).with_suffix(".wav").name
+
+                    existing_meta = {}
+                    src_meta_path = storage_ops_dir(case_id, org_id) / f"{job_id}_transcription_log.json"
+                    if src_meta_path.exists():
+                        try:
+                            existing_meta = json.loads(src_meta_path.read_text(encoding="utf-8"))
+                        except Exception:
+                            existing_meta = {}
+
+                    converted_job_obj: Optional[Job] = None
+                    converted_job_id = existing_meta.get("converted_audio_job_id") or existing_meta.get("converted_wav_job_id")
+                    if converted_job_id:
+                        try:
+                            converted_job_obj = Job.objects.select_related("case").get(pk=converted_job_id)
+                            if str(converted_job_obj.case_id) != str(case_id):
+                                converted_job_obj = None
+                        except Job.DoesNotExist:
+                            converted_job_obj = None
+
+                    now_ts = timezone.now()
+                    if converted_job_obj is None:
+                        wav_job_uuid = uuid.uuid4()
+                        try:
+                            converted_job_obj = Job.objects.create(
+                                id=wav_job_uuid,
+                                case=case_obj,
+                                organization=getattr(case_obj, "organization", None),
+                                audio_input="",
+                                mode=getattr(job_obj, "mode", Job.Mode.BATCH),
+                                diarization=False,
+                                language=getattr(job_obj, "language", language) or (language or cfg.default_language or "en-CA"),
+                                status=Job.Status.SUCCEEDED,
+                                started_at=now_ts,
+                                finished_at=now_ts,
+                            )
+                        except Exception as exc:
+                            log.warning("failed to create wav job", extra={"job_id": job_id, "error": str(exc)})
+                            converted_job_obj = None
+                    else:
+                        wav_job_uuid = converted_job_obj.id
+
+                    wav_job_id = str(wav_job_uuid) if converted_job_obj else None
+                    if converted_job_obj and getattr(converted_job_obj, "audio_input", None):
+                        converted_path = Path(str(converted_job_obj.audio_input))
+                    else:
+                        converted_path = audio_dir / requested_basename
+                        if converted_path.exists():
+                            base_path = Path(requested_basename)
+                            stem = base_path.stem
+                            suffix = base_path.suffix or ".wav"
+                            counter = 2
+                            while (audio_dir / f"{stem}_v{counter}{suffix}").exists():
+                                counter += 1
+                            converted_path = audio_dir / f"{stem}_v{counter}{suffix}"
+                    converted_basename = converted_path.name
                     try:
-                        shutil.copy2(upload_path, converted_copy)
-                        batch_upload_meta["converted_wav_path"] = str(converted_copy)
+                        if converted_path.exists():
+                            converted_path.unlink()
+                        shutil.copy2(upload_path, converted_path)
                     except Exception as exc:
-                        log.warning("unable to persist converted wav", extra={"job_id": job_id, "error": str(exc)})
+                        log.warning(
+                            "unable to persist converted wav",
+                            extra={"job_id": job_id, "converted_job_id": wav_job_id, "error": str(exc)},
+                        )
+                        converted_path = Path(str(upload_path))
+
+                    converted_stats = {}
+                    try:
+                        converted_stats = probe_audio_metadata(converted_path)
+                    except Exception:
+                        converted_stats = {}
+
+                    converted_sha = _sha256_file(converted_path)
+                    converted_size = None
+                    try:
+                        converted_size = converted_path.stat().st_size
+                    except Exception:
+                        converted_size = None
+
+                    if converted_job_obj is not None:
+                        converted_job_obj.audio_input = str(converted_path)
+                        converted_job_obj.status = Job.Status.SUCCEEDED
+                        converted_job_obj.finished_at = now_ts
+                        converted_job_obj.started_at = converted_job_obj.started_at or now_ts
+                        converted_job_obj.upload_progress = None
+                        try:
+                            converted_job_obj.duration_s = (
+                                converted_stats.get("audio_duration_s")
+                                or converted_job_obj.duration_s
+                            )
+                        except Exception:
+                            pass
+                        try:
+                            converted_job_obj.save(
+                                update_fields=[
+                                    "audio_input",
+                                    "status",
+                                    "finished_at",
+                                    "started_at",
+                                    "upload_progress",
+                                    "duration_s",
+                                ]
+                            )
+                        except Exception:
+                            converted_job_obj.save()
+                        converted_job_id = str(converted_job_obj.id)
+
+                        converted_meta_updates: Dict[str, Any] = {
+                            "job_kind": "audio_conversion",
+                            "job_title": converted_basename,
+                            "agent_type": "Audio Conversion",
+                            "audio_file": converted_basename,
+                            "audio_path": str(converted_path),
+                            "audio_sha256": converted_sha,
+                            "audio_size_bytes": converted_size,
+                            "audio_mime": "audio/wav",
+                            "source_job_id": job_id,
+                            "source_audio_path": str(source_path),
+                            "source_audio_file": original_display,
+                            "conversion_source_extension": source_path.suffix.lower(),
+                            "conversion_completed_at": now_ts.isoformat(),
+                        }
+                        if converted_stats:
+                            converted_meta_updates.update(converted_stats)
+                        update_job_meta(case_id, org_id, converted_job_id, converted_meta_updates)
+                        append_job_log(
+                            case_id,
+                            org_id,
+                            converted_job_id,
+                            f"Converted WAV created from job {job_id}",
+                        )
+                        try:
+                            send_job_update(
+                                converted_job_id,
+                                event="job.created",
+                                status=Job.Status.SUCCEEDED,
+                                case_id=case_id,
+                                job_title=converted_basename,
+                                job_kind="audio_conversion",
+                            )
+                        except Exception:
+                            log.exception(
+                                "wav job emit failed",
+                                extra={"job_id": job_id, "converted_job_id": converted_job_id},
+                            )
+                        try:
+                            send_case_update(
+                                case_id,
+                                event="job.created",
+                                job_id=converted_job_id,
+                                job_kind="audio_conversion",
+                            )
+                        except Exception:
+                            log.exception(
+                                "case update emit failed",
+                                extra={"case_id": case_id, "converted_job_id": converted_job_id},
+                            )
+
                     batch_upload_meta["converted_temp_wav"] = True
+                    if converted_job_id:
+                        batch_upload_meta["converted_audio_job_id"] = converted_job_id
+                    batch_upload_meta["converted_wav_path"] = str(converted_path)
+                    batch_upload_meta["converted_audio_file"] = converted_basename
                     update_job_meta(case_id, org_id, job_id, batch_upload_meta)
                     append_job_log(
                         case_id,
                         org_id,
                         job_id,
-                        f"Conversion complete: {converted_copy.name if batch_upload_meta.get('converted_wav_path') else original_name}",
+                        f"Conversion complete: {converted_basename}",
                     )
+                    if converted_job_id:
+                        try:
+                            current_status = (
+                                Job.objects.filter(pk=job_id).values_list("status", flat=True).first()
+                                or (job_obj.status if job_obj else Job.Status.RUNNING)
+                            )
+                            send_job_update(
+                                job_id,
+                                event="job.updated",
+                                status=current_status,
+                                case_id=case_id,
+                                converted_audio_job_id=converted_job_id,
+                            )
+                        except Exception:
+                            log.exception(
+                                "source job update emit failed",
+                                extra={"job_id": job_id, "converted_job_id": converted_job_id},
+                            )
+                        try:
+                            send_case_update(
+                                case_id,
+                                event="job.updated",
+                                job_id=job_id,
+                                converted_audio_job_id=converted_job_id,
+                            )
+                        except Exception:
+                            log.exception(
+                                "case job update emit failed",
+                                extra={"case_id": case_id, "job_id": job_id},
+                            )
                 except Exception as exc:
                     raise RuntimeError(f"Batch upload conversion failed: {exc}") from exc
             else:

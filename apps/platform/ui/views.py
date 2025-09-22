@@ -156,6 +156,11 @@ def _friendly_job_title(
     artifact: Optional[CaseArtifact] = None,
 ) -> str:
     telem = telemetry or {}
+    meta = telem.get("metadata") or {}
+    if isinstance(meta, dict):
+        title = meta.get("job_title")
+        if title:
+            return str(title)
     artifacts = telem.get("artifacts") or []
     if artifacts:
         candidate = artifacts[0]
@@ -459,11 +464,17 @@ def _job_detail_context(
                 is_wav_input = True
                 break
     telemetry_meta = telemetry.get("metadata") or {}
-    converted_flag = bool(telemetry_meta.get("converted_wav_path") or telemetry_meta.get("batch_upload_converted"))
+    converted_flag = bool(
+        telemetry_meta.get("converted_wav_path")
+        or telemetry_meta.get("batch_upload_converted")
+        or telemetry_meta.get("converted_audio_job_id")
+    )
+    job_kind = str(telemetry_meta.get("job_kind", ""))
     show_convert_button = (
         job.status not in {Job.Status.SUCCEEDED, Job.Status.RUNNING, Job.Status.PENDING}
         and not converted_flag
         and not is_wav_input
+        and job_kind != "audio_conversion"
     )
 
     user_obj = getattr(request, "user", None)
@@ -490,6 +501,7 @@ def _job_detail_context(
         "title_error": title_error,
         "title_edit": title_edit,
         "show_convert_button": show_convert_button,
+        "job_kind": job_kind,
     }
 
 
@@ -981,6 +993,26 @@ def case_job_detail_panel(request: HttpRequest, case_id: str, job_id: str) -> Ht
             "</div>",
             status=500,
         )
+
+
+@require_http_methods(["GET"])
+def case_job_row(request: HttpRequest, case_id: str, job_id: str) -> HttpResponse:
+    auth_response = _ensure_authenticated(request)
+    if auth_response:
+        return auth_response
+
+    case, _ = _get_case_and_org(request, case_id)
+    job = (
+        Job.objects.select_related("case", "case__organization")
+        .filter(case=case, pk=job_id)
+        .first()
+    )
+    if not job:
+        raise Http404
+
+    telemetry = JobTelemetrySerializer(job, context={"request": request, "ui_mode": True}).data
+    title = _friendly_job_title(job, telemetry)
+    return render(request, "ui/_job_row.html", {"j": job, "telem": telemetry, "title": title})
 
 
 @require_http_methods(["GET"])

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from django.conf import settings
 from rest_framework import serializers
@@ -49,15 +50,32 @@ class JobTelemetrySerializer(serializers.Serializer):
         agent_payload = telem.agent_payload()
         meta_payload = dict(telem.meta) if isinstance(telem.meta, dict) else {}
         # Enrich with availability flags for UI gating (e.g., converted WAV download)
-        try:
-            conv_path = meta_payload.get("converted_wav_path")
-            if isinstance(conv_path, str) and conv_path:
-                p = Path(conv_path)
-                meta_payload["converted_wav_available"] = p.exists()
-            else:
-                meta_payload["converted_wav_available"] = False
-        except Exception:
-            meta_payload["converted_wav_available"] = False
+        converted_available = False
+        converted_job_id = meta_payload.get("converted_audio_job_id") or meta_payload.get("converted_wav_job_id")
+        if converted_job_id:
+            try:
+                converted_job = Job.objects.only("audio_input", "case_id").get(pk=converted_job_id)
+                if (
+                    str(converted_job.case_id) == str(instance.case_id)
+                    and converted_job.audio_input
+                ):
+                    try:
+                        path_candidate = Path(converted_job.audio_input)
+                        converted_available = path_candidate.exists()
+                        if converted_available:
+                            meta_payload.setdefault("converted_wav_path", str(path_candidate))
+                    except Exception:
+                        converted_available = False
+            except Job.DoesNotExist:
+                converted_available = False
+        if not converted_available:
+            try:
+                conv_path = meta_payload.get("converted_wav_path")
+                if isinstance(conv_path, str) and conv_path:
+                    converted_available = Path(conv_path).exists()
+            except Exception:
+                converted_available = False
+        meta_payload["converted_wav_available"] = converted_available
 
         agent_type = (
             meta_payload.get("agent_type")

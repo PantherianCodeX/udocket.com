@@ -413,6 +413,8 @@
             await refreshAnalysisModule('summary', false);
             await refreshAnalysisModule('timeline', false);
           }
+        } else if ((data.event === 'job.created' || data.event === 'job.updated') && data.job_id) {
+          await insertOrReplaceJobRow(data.job_id);
         }
       } catch (error) {
         console.error('Case websocket message error', error);
@@ -494,6 +496,19 @@
     const normalized = (status || '').toUpperCase();
     const cancelBtn = document.querySelector(`[data-job-cancel="${jobId}"]`);
     const restartBtn = document.querySelector(`[data-job-restart="${jobId}"]`);
+    const row = document.querySelector(`[data-job="${jobId}"]`);
+    const jobKind = row && row.dataset ? (row.dataset.jobKind || '').toUpperCase() : '';
+    if (jobKind === 'AUDIO_CONVERSION') {
+      if (cancelBtn) {
+        cancelBtn.classList.add('hidden');
+        cancelBtn.disabled = true;
+      }
+      if (restartBtn) {
+        restartBtn.classList.add('hidden');
+        restartBtn.disabled = true;
+      }
+      return;
+    }
     const runningStates = ['RUNNING', 'UPLOADING', 'PENDING', 'QUEUED'];
     const restartStates = ['SUCCEEDED', 'FAILED', 'CANCELLED'];
     if (cancelBtn) {
@@ -840,6 +855,42 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
     });
   }
 
+  async function insertOrReplaceJobRow(jobId) {
+    if (!jobId) return null;
+    const jobsBody = document.getElementById('jobs-body');
+    const caseId = currentCaseId();
+    if (!jobsBody || !caseId) return null;
+    const wasOpen = (() => {
+      const detailRow = jobsBody.querySelector(`[data-job-detail="${jobId}"]`);
+      return detailRow ? !detailRow.classList.contains('hidden') : false;
+    })();
+    try {
+      const resp = await fetch(`/cases/${caseId}/jobs/${jobId}/row/`, {
+        headers: {
+          'HX-Request': 'true',
+        },
+        credentials: 'same-origin',
+      });
+      if (!resp.ok) return null;
+      const html = (await resp.text()).trim();
+      if (!html) return null;
+      jobsBody
+        .querySelectorAll(`[data-job="${jobId}"], [data-job-detail="${jobId}"]`)
+        .forEach((node) => node.remove());
+      jobsBody.insertAdjacentHTML('afterbegin', html);
+      bootstrapJobs();
+      const newRow = document.querySelector(`[data-job="${jobId}"]`);
+      if (wasOpen && newRow) {
+        await loadJobDetail(jobId, { force: true });
+        setJobRowExpanded(newRow, true);
+      }
+      return newRow;
+    } catch (error) {
+      console.error('Failed to refresh job row', jobId, error);
+      return null;
+    }
+  }
+
   async function loadJobDetail(jobId, { force = false } = {}) {
     const container = document.querySelector(`[data-job-detail-container="${jobId}"]`);
     if (!container) return;
@@ -1043,6 +1094,23 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
   document.addEventListener('htmx:afterSwap', (evt) => {
     bootstrapJobs();
     if (window.renderLocalTimes) window.renderLocalTimes();
+  });
+
+  document.addEventListener('click', async (evt) => {
+    const jobLink = evt.target.closest('[data-job-link]');
+    if (!jobLink) return;
+    evt.preventDefault();
+    const targetJob = jobLink.getAttribute('data-job-link');
+    if (!targetJob) return;
+    const row = await insertOrReplaceJobRow(targetJob);
+    if (row) {
+      collapseOtherJobRows(row);
+      await loadJobDetail(targetJob, { force: true });
+      setJobRowExpanded(row, true);
+      try {
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } catch (_) {}
+    }
   });
 
   document.addEventListener('click', async (evt) => {
