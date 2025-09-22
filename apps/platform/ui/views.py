@@ -1055,39 +1055,101 @@ def case_job_update_title(request: HttpRequest, case_id: str, job_id: str) -> Ht
         return HttpResponse("Forbidden", status=403)
 
     new_title = (request.POST.get("title") or "").strip()
+    title_error: Optional[str] = None
+    if not new_title:
+        title_error = "Title cannot be empty."
+
+    telemetry_payload = JobTelemetrySerializer(job, context={"request": request, "ui_mode": True}).data
+
     artifact = (
         CaseArtifact.objects.filter(case_id=str(case.id), job_id=str(job.id), type="TRANSCRIPT")
         .order_by("-created_at")
         .first()
     )
 
-    title_error: Optional[str] = None
-    if not artifact:
-        title_error = "Transcript not found for this job."
-    elif not new_title:
-        title_error = "Title cannot be empty."
-    else:
-        clash = (
-            CaseArtifact.objects.filter(case_id=str(case.id), type="TRANSCRIPT", title=new_title)
-            .exclude(pk=artifact.pk)
-        )
-        if clash.exists():
+    def ensure_transcript_artifact() -> Optional[CaseArtifact]:
+        nonlocal artifact
+        if artifact:
+            return artifact
+        candidate_paths: list[str] = []
+        transcript_payload = telemetry_payload.get("transcript") or {}
+        path_from_telem = transcript_payload.get("path") if isinstance(transcript_payload, dict) else None
+        if isinstance(job.transcript_path, str) and job.transcript_path:
+            candidate_paths.append(job.transcript_path)
+        if isinstance(path_from_telem, str) and path_from_telem:
+            candidate_paths.append(path_from_telem)
+        for path in candidate_paths:
+            existing = (
+                CaseArtifact.objects.filter(case_id=str(case.id), type="TRANSCRIPT", path=path)
+                .order_by("-created_at")
+                .first()
+            )
+            if existing:
+                return existing
+        for path in candidate_paths:
+            if not path:
+                continue
+            try:
+                created = CaseArtifact.objects.create(
+                    case_id=str(case.id),
+                    case_fk=case,
+                    job_id=str(job.id),
+                    type="TRANSCRIPT",
+                    title=new_title,
+                    path=path,
+                    metadata={"created_via": "ui.job_title"},
+                )
+                return created
+            except Exception:
+                continue
+        return None
+
+    if not title_error:
+        conflict_qs = CaseArtifact.objects.filter(case_id=str(case.id), type="TRANSCRIPT", title=new_title)
+        if artifact:
+            conflict_qs = conflict_qs.exclude(pk=artifact.pk)
+        if conflict_qs.exists():
             title_error = "A transcript with that title already exists in this case."
+
+    if not title_error:
+        artifact = ensure_transcript_artifact()
+        if not artifact:
+            title_error = "Transcript not found for this job."
 
     if title_error:
         context = _job_detail_context(
             request,
             job,
+            telemetry=telemetry_payload,
             title_error=title_error,
             title_edit=True,
         )
         context["case"] = case
-        context["job_title"] = new_title
-        status_code = 404 if artifact is None else 400
-        return render(request, "ui/_job_detail_title_form.html", context, status=status_code)
+        context["job_title"] = new_title or context.get("job_title")
+        return render(request, "ui/_job_detail_title_form.html", context, status=400)
 
     artifact.title = new_title
-    artifact.save(update_fields=["title"])
+    if isinstance(artifact.metadata, dict):
+        metadata = dict(artifact.metadata)
+    else:
+        metadata = {}
+    metadata.update({
+        "transcript_title": new_title,
+        "job_title": new_title,
+        "title_updated_at": timezone.now().isoformat(),
+    })
+    if user and getattr(user, "is_authenticated", False):
+        metadata["title_updated_by"] = str(getattr(user, "id", ""))
+    artifact.metadata = metadata
+    artifact.save(update_fields=["title", "metadata"])
+
+    update_job_meta(
+        str(case.id),
+        case.organization_id,
+        str(job.id),
+        {"job_title": new_title, "transcript_title": new_title},
+    )
+
     append_job_log(
         str(job.case_id),
         job.organization_id,
