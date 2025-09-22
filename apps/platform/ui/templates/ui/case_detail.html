@@ -436,14 +436,30 @@ window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
     container.innerHTML = '<div class="flex items-center gap-2 text-xs text-slate-300"><svg class="h-3 w-3 animate-spin text-primary-300" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle class="opacity-30" cx="12" cy="12" r="10" stroke-width="2"></circle><path d="M22 12a10 10 0 00-10-10" stroke-width="2" stroke-linecap="round"></path></svg><span>Loading details…</span></div>';
     try {
       const caseId = document.getElementById('jobs-body')?.dataset.caseId;
-      const detailUrl = caseId ? `/cases/${caseId}/jobs/${jobId}/detail/` : `/jobs/${jobId}/detail-panel/`;
-      const resp = await fetch(detailUrl, {
-        headers: {
-          'HX-Request': 'true',
-        },
-        credentials: 'same-origin',
-      });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const urls = [];
+      if (caseId) urls.push(`/cases/${caseId}/jobs/${jobId}/detail/`);
+      urls.push(`/jobs/${jobId}/detail-panel/`);
+      let resp;
+      let lastError;
+      for (const detailUrl of urls) {
+        try {
+          resp = await fetch(detailUrl, {
+            headers: {
+              'HX-Request': 'true',
+            },
+            credentials: 'same-origin',
+          });
+          if (resp.ok) {
+            break;
+          }
+          lastError = new Error(`HTTP ${resp.status}`);
+        } catch (fetchErr) {
+          lastError = fetchErr;
+        }
+      }
+      if (!resp || !resp.ok) {
+        throw lastError || new Error('Unable to fetch job detail');
+      }
       const html = await resp.text();
       container.innerHTML = html;
       container.dataset.loaded = '1';
