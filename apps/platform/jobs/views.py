@@ -338,7 +338,7 @@ class JobViewSet(viewsets.ModelViewSet):
         active_task_ids = self._active_celery_task_ids(task_ids)
 
         # If no workers are handling the job, finalize immediately regardless of current status.
-        if not active_task_ids and job.status != Job.Status.RUNNING:
+        if not active_task_ids:
             now = timezone.now()
             job.status = Job.Status.CANCELLED
             job.finished_at = now

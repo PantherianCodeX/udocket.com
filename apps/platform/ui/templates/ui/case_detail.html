@@ -494,7 +494,7 @@
     const normalized = (status || '').toUpperCase();
     const cancelBtn = document.querySelector(`[data-job-cancel="${jobId}"]`);
     const restartBtn = document.querySelector(`[data-job-restart="${jobId}"]`);
-    const runningStates = ['RUNNING', 'UPLOADING', 'PENDING', 'QUEUED', 'CANCELLING'];
+    const runningStates = ['RUNNING', 'UPLOADING', 'PENDING', 'QUEUED'];
     const restartStates = ['SUCCEEDED', 'FAILED', 'CANCELLED'];
     if (cancelBtn) {
       const shouldShowCancel = runningStates.includes(normalized);
