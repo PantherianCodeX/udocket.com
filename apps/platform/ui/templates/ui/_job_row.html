@@ -1,6 +1,6 @@
 {% load ui_display %}
 {% with telem=telem|default_if_none:None %}
-{% with meta=telem.metadata|default_if_none:{} %}
+{% with meta=telem.metadata %}
 {% with status=telem.status|default:j.status %}
 {% with artifact=telem.artifacts.0|default_if_none:None %}
 {% with job_title=title|default:"Transcript" %}
