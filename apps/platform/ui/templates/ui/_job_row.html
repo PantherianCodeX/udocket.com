@@ -4,8 +4,19 @@
 {% with status=telem.status|default:j.status %}
 {% with artifact=telem.artifacts.0|default_if_none:None %}
 {% with job_title=title|default:"Transcript" %}
-<tr data-job="{{ j.id }}" data-job-row data-job-status="{{ status }}" data-job-case-id="{{ j.case_id }}" data-job-kind="{{ meta.job_kind|default:'' }}" class="cursor-pointer transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400" tabindex="0" aria-expanded="false" data-review-status="{{ j.review_status|default:'PENDING' }}">
-  <td class="px-4 py-3">
+{% with child=is_child|default:False %}
+{% with normalized=status|upper %}
+<tr data-job="{{ j.id }}"
+    data-job-row
+    data-job-status="{{ status }}"
+    data-job-case-id="{{ j.case_id }}"
+    data-job-kind="{{ meta.job_kind|default:'' }}"
+    {% if child %}data-job-child="1"{% endif %}
+    class="cursor-pointer transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 {% if child %}bg-slate-900/70{% endif %}"
+    tabindex="0"
+    aria-expanded="false"
+    data-review-status="{{ j.review_status|default:'PENDING' }}">
+  <td class="px-4 py-3 {% if child %}pl-10{% endif %}">
     <div class="flex items-center justify-between gap-2">
       <span class="max-w-[18rem] truncate font-medium text-slate-100" data-job-title title="{{ job_title }}">{{ job_title }}</span>
       <span class="font-mono text-[11px] text-primary-200" data-copy-text="{{ j.id }}" title="{{ j.id }}">{{ j.id|short_uuid }}</span>
@@ -13,24 +24,26 @@
     {% if telem.audio.original_name %}
       <p class="mt-1 truncate text-xs text-slate-400">{{ telem.audio.original_name }}</p>
     {% endif %}
-    {% if meta.source_job_id %}
-      <p class="mt-1 inline-flex items-center gap-1 rounded-full border border-sky-400/40 bg-sky-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-sky-200">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
-          <path d="M10 2a.75.75 0 01.715.512l1.01 3.111a.75.75 0 00.452.452l3.111 1.01a.75.75 0 010 1.426l-3.11 1.01a.75.75 0 00-.453.452l-1.01 3.111a.75.75 0 01-1.426 0l-1.01-3.11a.75.75 0 00-.452-.453l-3.111-1.01a.75.75 0 010-1.426l3.11-1.01a.75.75 0 00.453-.452l1.01-3.111A.75.75 0 0110 2z" />
-        </svg>
-        Converted WAV
-      </p>
-    {% elif meta.converted_audio_job_id %}
-      <p class="mt-1 inline-flex items-center gap-1 rounded-full border border-emerald-400/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-emerald-200">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
-          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.53-9.28a.75.75 0 00-1.06-1.06L9 11.19 7.53 9.72a.75.75 0 10-1.06 1.06l2 2a.75.75 0 001.06 0l4-4z" clip-rule="evenodd" />
-        </svg>
-        WAV Ready
-      </p>
+    {% if not child %}
+      {% if meta.source_job_id %}
+        <p class="mt-1 inline-flex items-center gap-1 rounded-full border border-sky-400/40 bg-sky-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-sky-200">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+            <path d="M10 2a.75.75 0 01.715.512l1.01 3.111a.75.75 0 00.452.452l3.111 1.01a.75.75 0 010 1.426l-3.11 1.01a.75.75 0 00-.453.452l-1.01 3.111a.75.75 0 01-1.426 0l-1.01-3.11a.75.75 0 00-.452-.453l-3.111-1.01a.75.75 0 010-1.426l3.11-1.01a.75.75 0 00.453-.452l1.01-3.111A.75.75 0 0110 2z" />
+          </svg>
+          Converted WAV
+        </p>
+      {% elif meta.converted_audio_job_id %}
+        <p class="mt-1 inline-flex items-center gap-1 rounded-full border border-emerald-400/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-emerald-200">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.53-9.28a.75.75 0 00-1.06-1.06L9 11.19 7.53 9.72a.75.75 0 10-1.06 1.06l2 2a.75.75 0 001.06 0l4-4z" clip-rule="evenodd" />
+          </svg>
+          WAV Ready
+        </p>
+      {% endif %}
     {% endif %}
   </td>
   <td class="px-4 py-3" id="job-status-{{ j.id }}">
-    {% with normalized=status|upper progress=telem.upload_progress %}
+    {% with progress=telem.upload_progress %}
       {% if normalized == 'SUCCEEDED' %}
         <span class="status-pill inline-flex items-center rounded-full border border-emerald-400/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-emerald-200" data-status="SUCCEEDED">Succeeded</span>
       {% elif normalized == 'FAILED' %}
@@ -62,16 +75,16 @@
   </td>
   <td class="px-4 py-3 text-slate-300"><time data-ts="{{ j.created_at|date:'c' }}">{{ j.created_at|date:'M j, Y g:i A' }}</time></td>
   <td class="px-4 py-3">
-    {% if meta.job_kind == 'audio_conversion' %}
+    {% if meta.job_kind == 'audio_conversion' or child %}
       <div class="flex items-center justify-end gap-2 text-xs text-slate-400">
         <span class="rounded-md border border-sky-400/30 bg-sky-500/10 px-2 py-0.5 font-semibold text-sky-200">Conversion</span>
       </div>
     {% else %}
       <div class="flex items-center justify-end gap-2">
-        <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-rose-400/40 bg-rose-500/10 px-3 py-1.5 text-xs font-semibold text-rose-100 transition hover:bg-rose-500/30 disabled:opacity-60 {% if status != 'RUNNING' and status != 'PENDING' and status != 'QUEUED' %}hidden{% endif %}" data-job-cancel="{{ j.id }}">
+        <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-rose-400/40 bg-rose-500/10 px-3 py-1.5 text-xs font-semibold text-rose-100 transition hover:bg-rose-500/30 disabled:opacity-60 {% if normalized not in 'RUNNING,PENDING,QUEUED,UPLOADING,CANCELLING' %}hidden{% endif %}" data-job-cancel="{{ j.id }}">
           <span>Cancel</span>
         </button>
-        <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-slate-300/40 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-100 transition hover:border-primary-400 hover:text-white disabled:opacity-60 {% if status == 'RUNNING' or status == 'PENDING' or status == 'QUEUED' %}hidden{% endif %}" data-job-restart="{{ j.id }}">
+        <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-slate-300/40 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-100 transition hover:border-primary-400 hover:text-white disabled:opacity-60 {% if normalized not in 'SUCCEEDED,FAILED,CANCELLED' %}hidden{% endif %}" data-job-restart="{{ j.id }}">
           <span>Restart</span>
         </button>
       </div>
@@ -93,3 +106,6 @@
 {% endwith %}
 {% endwith %}
 {% endwith %}
+{% endwith %}
+{% endwith %}
+*** End Patch

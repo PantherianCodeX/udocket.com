@@ -475,16 +475,12 @@ def _case_field_specs() -> List[Dict[str, Any]]:
         },
         {"name": "court_case_number", "label": "Court Case Number", "type": "text"},
         {
-            "name": "representation",
-            "label": "Representation",
-            "type": "choice",
-            "choices": Case.Representation.choices,
+            "name": "court_date",
+            "label": "Next Hearing",
+            "type": "datetime",
         },
-        {"name": "legal_aid", "label": "Legal Aid", "type": "boolean"},
-        {"name": "pro_bono", "label": "Pro Bono", "type": "boolean"},
-        {"name": "court_date", "label": "Next Hearing", "type": "datetime"},
         {"name": "filing_deadline", "label": "Filing Deadline", "type": "date"},
-        {"name": "notes", "label": "Notes", "type": "textarea"},
+        {"name": "notes", "label": "Client Notes", "type": "textarea"},
     ]
 
 
@@ -603,7 +599,15 @@ def _jobs_by_agent(
             return True
         return False
 
-    return [row for row in job_rows if _matches(row)]
+    filtered: List[Dict[str, Any]] = []
+    for row in job_rows:
+        children = row.get("children") or []
+        filtered_children = _jobs_by_agent(children, keywords=keywords, include_conversion=include_conversion) if children else []
+        if _matches(row) or filtered_children:
+            new_row = dict(row)
+            new_row["children"] = filtered_children
+            filtered.append(new_row)
+    return filtered
 
 
 def _build_tool_panels(
@@ -620,6 +624,9 @@ def _build_tool_panels(
     latest_job: Optional[Job],
     latest_job_telemetry: Optional[Dict[str, Any]],
     job_summary: Dict[str, Any],
+    all_job_rows: Optional[List[Dict[str, Any]]] = None,
+    job_summary_last_dt: Optional[datetime] = None,
+    user_can_review: bool = False,
 ) -> Dict[str, Dict[str, Any]]:
     progress_lookup = {item["key"]: item for item in progress_items}
     analysis_lookup = {module["key"]: module for module in analysis_modules}
@@ -630,8 +637,10 @@ def _build_tool_panels(
     case_fields = _prepare_case_fields(case)
     org_options = _organization_member_options(case)
 
+    all_rows_iterable = all_job_rows or job_rows
+
     transcript_sources: List[Dict[str, Any]] = []
-    for row in job_rows:
+    for row in all_rows_iterable:
         job = row.get("job")
         telem = row.get("telemetry") or {}
         if not job:
@@ -689,6 +698,34 @@ def _build_tool_panels(
     panels: Dict[str, Dict[str, Any]] = {}
 
     case_status = _status_payload("case_setup")
+    field_map = {field["name"]: field for field in case_fields}
+    field_groups: List[Dict[str, Any]] = []
+
+    def _group(label: str, keys: List[str]) -> None:
+        items = [field_map[key] for key in keys if key in field_map]
+        if items:
+            field_groups.append({"title": label, "fields": items})
+
+    _group("Case Overview", ["title", "client_name", "client_position", "opposing_party"])
+    _group("Scheduling & Court", ["court_location", "court_level", "court_division", "court_case_number", "court_date", "filing_deadline"])
+    _group("Client Notes", ["notes"])
+
+    representation_choices = list(Case.Representation.choices)
+    current_representation = case.representation or ""
+    engagement_options = [
+        {"value": "standard", "label": "Standard"},
+        {"value": "legal_aid", "label": "Legal aid"},
+        {"value": "pro_bono", "label": "Pro bono"},
+    ]
+    if case.legal_aid:
+        current_engagement = "legal_aid"
+    elif case.pro_bono:
+        current_engagement = "pro_bono"
+    else:
+        current_engagement = "standard"
+
+    owner_id = owner_ids[0] if owner_ids else ""
+
     panels["case-details"] = {
         "key": "case-details",
         "label": "Intake Form",
@@ -707,15 +744,21 @@ def _build_tool_panels(
         "body_context": {
             "case": case,
             "fields": case_fields,
+            "field_groups": field_groups,
             "owner_labels": owner_labels,
             "owner_options": org_options,
-            "current_owner_ids": owner_ids,
+            "current_owner_id": owner_id,
             "reviewer_id": str(case.reviewer_id) if case.reviewer_id else "",
             "client_user_id": str(case.client_user_id) if case.client_user_id else "",
             "reviewer_options": org_options,
             "client_options": org_options,
             "update_url": reverse("ui-case-details-update", kwargs={"case_id": case.id}),
             "job_summary": job_summary,
+            "job_summary_last_dt": job_summary_last_dt,
+            "representation_choices": representation_choices,
+            "current_representation": current_representation,
+            "engagement_options": engagement_options,
+            "current_engagement": current_engagement,
             "TODO_acl": "TODO: enforce per-field ACL when authorization library lands.",
         },
         "jobs": job_rows,
@@ -728,6 +771,40 @@ def _build_tool_panels(
     transcription_status = _status_payload("transcription", "Not Started")
     transcription_jobs = _jobs_by_agent(job_rows, keywords=("transcription", "speech", "audio"), include_conversion=True)
     latest_transcription = transcription_jobs[0] if transcription_jobs else None
+    latest_status = (getattr(latest_job, "status", "") or "").upper() if latest_job else ""
+    latest_meta = (latest_job_telemetry or {}).get("metadata") if latest_job_telemetry else {}
+    converted_available = False
+    if isinstance(latest_meta, dict):
+        converted_available = bool(latest_meta.get("converted_wav_available"))
+
+    job_actions: List[Dict[str, Any]] = []
+    if latest_job:
+        job_id = str(latest_job.id)
+        cancelable_statuses = {"RUNNING", "PENDING", "QUEUED", "UPLOADING", "CANCELLING"}
+        restartable_statuses = {"SUCCEEDED", "FAILED", "CANCELLED"}
+        if latest_status in cancelable_statuses:
+            job_actions.append({
+                "label": "Cancel job",
+                "attrs": {"data-job-cancel": job_id},
+            })
+        if latest_status in restartable_statuses:
+            job_actions.append({
+                "label": "Restart transcription",
+                "attrs": {"data-job-restart": job_id},
+            })
+            force_convert_available = not converted_available and str((latest_meta or {}).get("job_kind", "")).lower() != "audio_conversion"
+            if force_convert_available:
+                job_actions.append({
+                    "label": "Restart with WAV conversion",
+                    "attrs": {"data-job-restart-convert": job_id},
+                })
+
+    review_actions: List[Dict[str, Any]] = []
+    if latest_job and user_can_review and latest_status == Job.Status.SUCCEEDED:
+        job_id = str(latest_job.id)
+        review_actions.append({"label": "Approve transcript", "attrs": {"data-job-approve": job_id}})
+        review_actions.append({"label": "Reject transcript", "attrs": {"data-job-reject": job_id}})
+
     panels["transcribe"] = {
         "key": "transcribe",
         "label": "Transcribe",
@@ -756,6 +833,9 @@ def _build_tool_panels(
             "latest_job": latest_job,
             "latest_job_telemetry": latest_job_telemetry,
             "transcript_sources": transcript_sources,
+            "job_actions": job_actions,
+            "review_actions": review_actions,
+            "can_review": user_can_review,
         },
         "jobs": transcription_jobs,
         "jobs_title": "Transcription Jobs",
@@ -768,7 +848,7 @@ def _build_tool_panels(
     summary_module = analysis_lookup.get("summary") or {}
     summary_latest = summary_module.get("latest") or {}
     summary_history = summary_module.get("history") or []
-    summary_jobs = _jobs_by_agent(job_rows, keywords=("summary", "summarization"))
+    summary_jobs = _jobs_by_agent(all_rows_iterable, keywords=("summary", "summarization"))
     panels["summary"] = {
         "key": "summary",
         "label": "Summary",
@@ -799,7 +879,7 @@ def _build_tool_panels(
     timeline_module = analysis_lookup.get("timeline") or {}
     timeline_latest = timeline_module.get("latest") or {}
     timeline_history = timeline_module.get("history") or []
-    timeline_jobs = _jobs_by_agent(job_rows, keywords=("timeline", "event"))
+    timeline_jobs = _jobs_by_agent(all_rows_iterable, keywords=("timeline", "event"))
     panels["timeline"] = {
         "key": "timeline",
         "label": "Timeline",
@@ -923,12 +1003,12 @@ def _compute_case_tool_state(request: HttpRequest, case: Case) -> Dict[str, Any]
     ).data
     telemetry_map = {item.get("id"): item for item in telemetry}
 
-    job_rows: List[Dict[str, Any]] = []
+    flat_rows: List[Dict[str, Any]] = []
     for job in jobs_list:
         key = str(job.id)
         data = telemetry_map.get(key)
         title = _friendly_job_title(job, data, transcript_artifacts.get(key))
-        job_rows.append({"job": job, "telemetry": data, "title": title})
+        flat_rows.append({"job": job, "telemetry": data, "title": title})
 
     latest_job = None
     latest_job_telemetry = None
@@ -944,17 +1024,54 @@ def _compute_case_tool_state(request: HttpRequest, case: Case) -> Dict[str, Any]
         latest_activity_ts = latest_job.finished_at or latest_job.started_at or latest_job.created_at
 
     memberships = list(case.memberships.select_related("user"))
+
+    row_lookup: Dict[str, Dict[str, Any]] = {}
+    for row in flat_rows:
+        row["children"] = []
+        row["is_child"] = False
+        job_obj = row.get("job")
+        if job_obj:
+            row_lookup[str(job_obj.id)] = row
+
+    display_rows: List[Dict[str, Any]] = []
+    for row in flat_rows:
+        telem = row.get("telemetry") or {}
+        meta = telem.get("metadata") or {}
+        kind = str(meta.get("job_kind", "")).lower()
+        source_id = meta.get("source_job_id")
+        if kind.startswith("audio_conversion") and source_id:
+            parent = row_lookup.get(str(source_id))
+            if parent:
+                row["is_child"] = True
+                parent.setdefault("children", []).append(row)
+                parent["children"].sort(
+                    key=lambda child: getattr(child.get("job"), "created_at", datetime.min)
+                )
+                continue
+        display_rows.append(row)
+
     progress_ctx = _case_progress_context(case, jobs_list, telemetry_map, memberships)
     analysis_modules = _analysis_modules_context(
         request, case, jobs_list, telemetry_map, transcript_artifacts
     )
     artifacts_all = _collect_case_artifacts(request, case)
 
+    user = getattr(request, "user", None)
+    dev_open = getattr(settings, "PLATFORM_DEV_OPEN", False)
+    user_can_review = False
+    if dev_open:
+        user_can_review = True
+    elif user and getattr(user, "is_authenticated", False):
+        if case.reviewer_id and str(user.id) == str(case.reviewer_id):
+            user_can_review = True
+        elif has_capability(user, str(case.id), "case.update"):
+            user_can_review = True
+
     tool_panels = _build_tool_panels(
         request,
         case,
         progress_items=progress_ctx["progress_items"],
-        job_rows=job_rows,
+        job_rows=display_rows,
         telemetry_map=telemetry_map,
         transcript_artifacts=transcript_artifacts,
         analysis_modules=analysis_modules,
@@ -963,6 +1080,9 @@ def _compute_case_tool_state(request: HttpRequest, case: Case) -> Dict[str, Any]
         latest_job=latest_job,
         latest_job_telemetry=latest_job_telemetry,
         job_summary=job_summary,
+        all_job_rows=flat_rows,
+        job_summary_last_dt=job_summary_last_dt,
+        user_can_review=user_can_review,
     )
 
     case_details_panel = tool_panels.get("case-details") or {}
@@ -978,13 +1098,16 @@ def _compute_case_tool_state(request: HttpRequest, case: Case) -> Dict[str, Any]
 
     return {
         "jobs_list": jobs_list,
-        "job_rows": job_rows,
+        "job_rows": display_rows,
+        "job_rows_flat": flat_rows,
         "transcript_artifacts": transcript_artifacts,
         "tool_panels": tool_panels,
         "case_header": case_header,
         "developer_cards": developer_cards,
         "job_summary": job_summary,
         "latest_activity_ts": latest_activity_ts,
+        "job_summary_last_dt": job_summary_last_dt,
+        "user_can_review": user_can_review,
     }
 def _job_detail_context(
     request: HttpRequest,
@@ -1314,10 +1437,6 @@ def case_details_update(request: HttpRequest, case_id: str) -> HttpResponse:
         field_type = spec.get("type", "text")
         raw_value = request.POST.get(name)
 
-        if field_type == "boolean":
-            case_updates[name] = bool(request.POST.get(name))
-            continue
-
         if field_type in {"text", "textarea", "choice"}:
             case_updates[name] = raw_value or ""
             continue
@@ -1346,7 +1465,9 @@ def case_details_update(request: HttpRequest, case_id: str) -> HttpResponse:
 
     reviewer_id = (request.POST.get("reviewer_id") or "").strip()
     client_user_id = (request.POST.get("client_user_id") or "").strip()
-    owner_ids = [value.strip() for value in request.POST.getlist("owner_ids") if value.strip()]
+    owner_id = (request.POST.get("owner_id") or "").strip()
+    representation_value = (request.POST.get("representation") or "").strip()
+    engagement_value = (request.POST.get("engagement_model") or "standard").strip().lower()
 
     if form_errors:
         state = _compute_case_tool_state(request, case)
@@ -1361,6 +1482,32 @@ def case_details_update(request: HttpRequest, case_id: str) -> HttpResponse:
         if hasattr(case, field_name) and getattr(case, field_name) != value:
             setattr(case, field_name, value)
             update_fields.append(field_name)
+
+    if representation_value and representation_value != case.representation:
+        case.representation = representation_value
+        update_fields.append("representation")
+
+    if engagement_value == "legal_aid":
+        if not case.legal_aid:
+            case.legal_aid = True
+            update_fields.append("legal_aid")
+        if case.pro_bono:
+            case.pro_bono = False
+            update_fields.append("pro_bono")
+    elif engagement_value == "pro_bono":
+        if not case.pro_bono:
+            case.pro_bono = True
+            update_fields.append("pro_bono")
+        if case.legal_aid:
+            case.legal_aid = False
+            update_fields.append("legal_aid")
+    else:
+        if case.legal_aid:
+            case.legal_aid = False
+            update_fields.append("legal_aid")
+        if case.pro_bono:
+            case.pro_bono = False
+            update_fields.append("pro_bono")
 
     if reviewer_id:
         reviewer = User.objects.filter(pk=reviewer_id).first()
@@ -1405,11 +1552,9 @@ def case_details_update(request: HttpRequest, case_id: str) -> HttpResponse:
     current_owner_memberships = case.memberships.filter(role=CaseMembership.Role.OWNER)
     current_owner_ids = {str(m.user_id) for m in current_owner_memberships if m.user_id}
 
-    if owner_ids:
-        for owner_id in owner_ids:
-            owner_user = User.objects.filter(pk=owner_id).first()
-            if not owner_user:
-                continue
+    if owner_id:
+        owner_user = User.objects.filter(pk=owner_id).first()
+        if owner_user and owner_id not in current_owner_ids:
             OrganizationMembership.objects.get_or_create(
                 organization=case.organization,
                 user=owner_user,
@@ -1423,7 +1568,7 @@ def case_details_update(request: HttpRequest, case_id: str) -> HttpResponse:
             if membership.role != CaseMembership.Role.OWNER:
                 membership.role = CaseMembership.Role.OWNER
                 membership.save(update_fields=["role"])
-        demote_ids = current_owner_ids - set(owner_ids)
+        demote_ids = {oid for oid in current_owner_ids if oid != owner_id}
     else:
         demote_ids = current_owner_ids
 
