@@ -1,0 +1,66 @@
+<details class="group rounded-2xl border border-white/10 bg-white/5 shadow-xl shadow-black/30" data-case-header>
+  <summary class="flex cursor-pointer flex-col gap-4 px-6 py-5 text-left transition group-open:bg-white/10">
+    <div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+      <div>
+        <h1 class="text-2xl font-semibold text-white">{{ case_header.title }}</h1>
+        <p class="mt-1 text-sm text-slate-300">Client · <span class="font-medium text-slate-100">{{ case_header.client_name }}</span></p>
+      </div>
+      <div class="grid gap-y-2 text-xs text-slate-300 sm:grid-cols-2 md:text-right">
+        <div>
+          <span class="uppercase tracking-wide text-slate-500">Owner(s)</span>
+          <p class="mt-1 text-slate-100">{{ case_header.owner_labels|join:", "|default:"Unassigned" }}</p>
+        </div>
+        <div>
+          <span class="uppercase tracking-wide text-slate-500">Reviewer</span>
+          <p class="mt-1 text-slate-100">{{ case_header.reviewer_label|default:"Unassigned" }}</p>
+        </div>
+        <div>
+          <span class="uppercase tracking-wide text-slate-500">Client User</span>
+          <p class="mt-1 text-slate-100">{{ case_header.client_label|default:"Unassigned" }}</p>
+        </div>
+        <div>
+          <span class="uppercase tracking-wide text-slate-500">Next Hearing</span>
+          <p class="mt-1 text-slate-100">
+            {% if case_header.next_hearing and case_header.next_hearing.value %}
+              <time data-ts="{{ case_header.next_hearing.value|date:'c' }}">{{ case_header.next_hearing.display }}</time>
+            {% else %}
+              Pending
+            {% endif %}
+          </p>
+        </div>
+        <div class="sm:col-span-2">
+          <span class="uppercase tracking-wide text-slate-500">Last Activity</span>
+          <p class="mt-1 text-slate-100">
+            {% if case_header.last_activity_ts %}
+              {% if case_header.last_activity_label %}{{ case_header.last_activity_label }} · {% endif %}
+              <time data-ts="{{ case_header.last_activity_ts|date:'c' }}">{{ case_header.last_activity_ts|date:'M j, Y g:i A' }}</time>
+            {% else %}
+              Not recorded
+            {% endif %}
+          </p>
+        </div>
+      </div>
+    </div>
+    <span class="text-[11px] uppercase tracking-wide text-slate-500">Click for details</span>
+  </summary>
+  <div class="border-t border-white/10 px-6 py-5 text-sm text-slate-200">
+    <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      {% for field in case_header.fields %}
+        <div class="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+          <p class="text-xs uppercase tracking-wide text-slate-400">{{ field.label }}</p>
+          {% if field.type == 'textarea' %}
+            <p class="mt-2 whitespace-pre-line text-sm text-slate-100">{{ field.display }}</p>
+          {% else %}
+            <p class="mt-2 text-sm text-slate-100">
+              {% if field.type == 'datetime' and field.value %}
+                <time data-ts="{{ field.value|date:'c' }}">{{ field.display }}</time>
+              {% else %}
+                {{ field.display }}
+              {% endif %}
+            </p>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+</details>

@@ -1,0 +1,110 @@
+{% with fields=body.fields %}
+<div class="space-y-6" data-case-details data-update-url="{{ body.update_url }}">
+  <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+    <div>
+      <p class="text-xs uppercase tracking-wide text-slate-400">Assignments</p>
+      <div class="mt-2 grid gap-2 text-sm text-slate-200 sm:grid-cols-2">
+        <p>Owner(s): <span class="font-semibold text-white">{{ body.owner_labels|join:", "|default:"Unassigned" }}</span></p>
+        <p>Reviewer: <span class="font-semibold text-white">{% if body.reviewer_id %}{% for option in body.reviewer_options %}{% if option.id == body.reviewer_id %}{{ option.label }}{% endif %}{% endfor %}{% else %}Unassigned{% endif %}</span></p>
+        <p>Client user: <span class="font-semibold text-white">{% if body.client_user_id %}{% for option in body.client_options %}{% if option.id == body.client_user_id %}{{ option.label }}{% endif %}{% endfor %}{% else %}Unassigned{% endif %}</span></p>
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <button type="button" class="rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold text-slate-100 transition hover:border-primary-400 hover:text-white" data-action="toggle-edit">
+        Edit details
+      </button>
+      <span class="text-[11px] text-slate-500">Changes apply to the case record.</span>
+    </div>
+  </div>
+
+  <div data-view-mode class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+    {% for field in fields %}
+      <div class="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+        <p class="text-xs uppercase tracking-wide text-slate-400">{{ field.label }}</p>
+        {% if field.type == 'textarea' %}
+          <p class="mt-2 whitespace-pre-line text-sm text-slate-100">{{ field.display }}</p>
+        {% else %}
+          <p class="mt-2 text-sm text-slate-100">{{ field.display }}</p>
+        {% endif %}
+      </div>
+    {% endfor %}
+  </div>
+
+  <form method="post"
+        action="{{ body.update_url }}"
+        data-edit-form
+        class="hidden space-y-6 rounded-2xl border border-white/10 bg-slate-900/70 p-6"
+        hx-post="{{ body.update_url }}"
+        hx-target="#tool-workspace"
+        hx-swap="innerHTML">
+    {% csrf_token %}
+    {% if body.form_errors %}
+      <div class="rounded-lg border border-rose-400/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+        <p class="font-semibold">Unable to save. Fix the highlighted fields.</p>
+      </div>
+    {% endif %}
+    <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      {% for field in fields %}
+        <div class="flex flex-col gap-2 text-sm text-slate-200">
+          <label class="text-xs uppercase tracking-wide text-slate-400" for="case-field-{{ field.name }}">{{ field.label }}</label>
+          {% if field.type == 'textarea' %}
+            <textarea id="case-field-{{ field.name }}" name="{{ field.name }}" rows="4" class="rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none focus:ring-0">{{ field.value|default:'' }}</textarea>
+          {% elif field.type == 'boolean' %}
+            <label class="inline-flex items-center gap-2 text-sm text-slate-200">
+              <input type="checkbox" name="{{ field.name }}" value="1" class="h-4 w-4 rounded border-white/20 bg-slate-900/70 text-primary-500 focus:ring-primary-400" {% if field.value %}checked{% endif %}>
+              <span>{{ field.label }}</span>
+            </label>
+          {% elif field.type == 'choice' %}
+            <select id="case-field-{{ field.name }}" name="{{ field.name }}" class="rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none focus:ring-0">
+              <option value="">—</option>
+              {% for value,label in field.choices %}
+                <option value="{{ value }}" {% if field.value == value %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          {% elif field.type == 'datetime' %}
+            <input type="datetime-local" id="case-field-{{ field.name }}" name="{{ field.name }}" value="{{ field.value|default:'' }}" class="rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none focus:ring-0">
+          {% elif field.type == 'date' %}
+            <input type="date" id="case-field-{{ field.name }}" name="{{ field.name }}" value="{{ field.value|default:'' }}" class="rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none focus:ring-0">
+          {% else %}
+            <input type="text" id="case-field-{{ field.name }}" name="{{ field.name }}" value="{{ field.value|default:'' }}" class="rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none focus:ring-0">
+          {% endif %}
+        </div>
+      {% endfor %}
+      <div class="flex flex-col gap-2 text-sm text-slate-200">
+        <label class="text-xs uppercase tracking-wide text-slate-400" for="case-field-reviewer">Reviewer</label>
+        <select id="case-field-reviewer" name="reviewer_id" class="rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none focus:ring-0">
+          <option value="">Unassigned</option>
+          {% for option in body.reviewer_options %}
+            <option value="{{ option.id }}" {% if option.id == body.reviewer_id %}selected{% endif %}>{{ option.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="flex flex-col gap-2 text-sm text-slate-200">
+        <label class="text-xs uppercase tracking-wide text-slate-400" for="case-field-client-user">Client User</label>
+        <select id="case-field-client-user" name="client_user_id" class="rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none focus:ring-0">
+          <option value="">Unassigned</option>
+          {% for option in body.client_options %}
+            <option value="{{ option.id }}" {% if option.id == body.client_user_id %}selected{% endif %}>{{ option.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="flex flex-col gap-2 text-sm text-slate-200">
+        <label class="text-xs uppercase tracking-wide text-slate-400" for="case-field-owners">Owners</label>
+        <select id="case-field-owners" name="owner_ids" multiple class="h-28 rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none focus:ring-0">
+          {% for option in body.owner_options %}
+            <option value="{{ option.id }}" {% if option.id in body.current_owner_ids %}selected{% endif %}>{{ option.label }}</option>
+          {% endfor %}
+        </select>
+        <p class="text-[11px] text-slate-500">Hold Ctrl/Cmd to select multiple owners.</p>
+      </div>
+    </div>
+
+    <div class="flex items-center justify-end gap-3">
+      <button type="button" class="rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:border-primary-400 hover:text-white" data-action="cancel-edit">Cancel</button>
+      <button type="submit" class="inline-flex items-center gap-2 rounded-lg bg-primary-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-primary-500/30 transition hover:bg-primary-400">
+        Save changes
+      </button>
+    </div>
+  </form>
+</div>
+{% endwith %}

@@ -7,9 +7,19 @@ urlpatterns = [
     path("cases/<str:case_id>/", views.case_detail, name="ui-case-detail"),
     path("ui/log", views.ui_log, name="ui-log"),
     path(
+        "cases/<str:case_id>/tools/<str:tool_key>/",
+        views.case_tool_panel,
+        name="ui-case-tool-panel",
+    ),
+    path(
         "cases/<str:case_id>/analysis/<str:agent>/module/",
         views.case_analysis_module,
         name="ui-case-analysis-module",
+    ),
+    path(
+        "cases/<str:case_id>/tools/case-details/update/",
+        views.case_details_update,
+        name="ui-case-details-update",
     ),
     path("cases/<str:case_id>/title", views.case_update_title, name="ui-case-update-title"),
     path("cases/<str:case_id>/jobs/<uuid:job_id>/detail/", views.case_job_detail_panel, name="ui-case-job-detail"),

@@ -4,7 +4,7 @@ import json
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from django.core.exceptions import PermissionDenied
 import logging
@@ -13,6 +13,7 @@ from django.conf import settings
 from django.db import models
 from django.http import Http404, HttpRequest, HttpResponse, HttpResponseRedirect
 from django.shortcuts import redirect, render
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
@@ -393,8 +394,12 @@ def _build_case_progress(case: Case, jobs: List[Job], telemetry_map: Dict[str, D
     return items
 
 
-def _case_assignment_lists(case: Case) -> Dict[str, List[Dict[str, Any]]]:
-    memberships = case.memberships.select_related("user").all()
+def _case_assignment_lists(
+    case: Case,
+    memberships: Optional[List[CaseMembership]] = None,
+) -> Dict[str, List[Dict[str, Any]]]:
+    if memberships is None:
+        memberships = list(case.memberships.select_related("user"))
     reviewers = [m.user for m in memberships if m.role == CaseMembership.Role.REVIEWER]
     clients = [m.user for m in memberships if m.role == CaseMembership.Role.CLIENT]
 
@@ -417,8 +422,13 @@ def _case_assignment_lists(case: Case) -> Dict[str, List[Dict[str, Any]]]:
     }
 
 
-def _case_progress_context(case: Case, jobs: List[Job], telemetry_map: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
-    assignments = _case_assignment_lists(case)
+def _case_progress_context(
+    case: Case,
+    jobs: List[Job],
+    telemetry_map: Dict[str, Dict[str, Any]],
+    memberships: Optional[List[CaseMembership]] = None,
+) -> Dict[str, Any]:
+    assignments = _case_assignment_lists(case, memberships)
     progress_items = _build_case_progress(case, jobs, telemetry_map)
     transcription_item = next((item for item in progress_items if item.get("key") == "transcription"), None)
     return {
@@ -431,6 +441,548 @@ def _case_progress_context(case: Case, jobs: List[Job], telemetry_map: Dict[str,
     }
 
 
+def _case_owner_memberships(memberships: List[CaseMembership]) -> List[CaseMembership]:
+    return [m for m in memberships if m.role == CaseMembership.Role.OWNER and m.user]
+
+
+def _case_owner_labels(memberships: List[CaseMembership]) -> List[str]:
+    return [_user_label(m.user) for m in _case_owner_memberships(memberships) if m.user]
+
+
+def _case_field_specs() -> List[Dict[str, Any]]:
+    return [
+        {"name": "title", "label": "Title", "type": "text"},
+        {"name": "client_name", "label": "Client", "type": "text"},
+        {"name": "opposing_party", "label": "Opposing Party", "type": "text"},
+        {
+            "name": "client_position",
+            "label": "Client Position",
+            "type": "choice",
+            "choices": Case.ClientPosition.choices,
+        },
+        {"name": "court_location", "label": "Court Location", "type": "text"},
+        {
+            "name": "court_level",
+            "label": "Court Level",
+            "type": "choice",
+            "choices": Case.CourtLevel.choices,
+        },
+        {
+            "name": "court_division",
+            "label": "Court Division",
+            "type": "choice",
+            "choices": Case.CourtDivision.choices,
+        },
+        {"name": "court_case_number", "label": "Court Case Number", "type": "text"},
+        {
+            "name": "representation",
+            "label": "Representation",
+            "type": "choice",
+            "choices": Case.Representation.choices,
+        },
+        {"name": "legal_aid", "label": "Legal Aid", "type": "boolean"},
+        {"name": "pro_bono", "label": "Pro Bono", "type": "boolean"},
+        {"name": "court_date", "label": "Next Hearing", "type": "datetime"},
+        {"name": "filing_deadline", "label": "Filing Deadline", "type": "date"},
+        {"name": "notes", "label": "Notes", "type": "textarea"},
+    ]
+
+
+def _format_case_field_value(case: Case, spec: Dict[str, Any]) -> Dict[str, Any]:
+    name = spec["name"]
+    raw_value = getattr(case, name, None)
+    field_type = spec.get("type", "text")
+    display: Optional[str]
+    form_value: Any = raw_value
+
+    if field_type == "boolean":
+        display = "Yes" if raw_value else "No"
+        form_value = bool(raw_value)
+    elif field_type == "datetime":
+        if raw_value:
+            local_dt = timezone.localtime(raw_value)
+            display = local_dt.strftime("%b %d, %Y %I:%M %p")
+            form_value = local_dt.strftime("%Y-%m-%dT%H:%M")
+        else:
+            display = "—"
+            form_value = ""
+    elif field_type == "date":
+        if raw_value:
+            display = raw_value.strftime("%b %d, %Y")
+            form_value = raw_value.strftime("%Y-%m-%d")
+        else:
+            display = "—"
+            form_value = ""
+    elif field_type == "choice":
+        getter = getattr(case, f"get_{name}_display", None)
+        display = getter() if callable(getter) else (raw_value or "—")
+        form_value = raw_value or ""
+    elif field_type == "textarea":
+        display = raw_value or "—"
+        form_value = raw_value or ""
+    else:
+        display = raw_value or "—"
+        form_value = raw_value or ""
+
+    return {
+        "name": name,
+        "label": spec.get("label", name.replace("_", " ").title()),
+        "type": field_type,
+        "choices": spec.get("choices"),
+        "display": display,
+        "value": form_value,
+    }
+
+
+def _prepare_case_fields(case: Case) -> List[Dict[str, Any]]:
+    return [_format_case_field_value(case, spec) for spec in _case_field_specs()]
+
+
+def _organization_member_options(case: Case) -> List[Dict[str, Any]]:
+    memberships = (
+        OrganizationMembership.objects.select_related("user")
+        .filter(organization=case.organization)
+        .order_by("user__display_name", "user__first_name", "user__email")
+    )
+    options: List[Dict[str, Any]] = []
+    seen: set[str] = set()
+    for membership in memberships:
+        user = membership.user
+        if not user:
+            continue
+        key = str(user.pk)
+        if key in seen:
+            continue
+        seen.add(key)
+        options.append({"id": key, "label": _user_label(user)})
+    return options
+
+
+def _collect_case_artifacts(
+    request: HttpRequest,
+    case: Case,
+    *,
+    exclude_audio: bool = True,
+) -> List[Dict[str, Any]]:
+    user = getattr(request, "user", None)
+    qs = CaseArtifact.objects.for_user(user).filter(case_id=str(case.id))
+    if exclude_audio:
+        qs = qs.exclude(type__iexact="AUDIO")
+    artifacts: List[Dict[str, Any]] = []
+    for artifact in qs.order_by("-created_at"):
+        payload = _artifact_payload(artifact)
+        payload["type"] = artifact.type
+        artifacts.append(payload)
+    return artifacts
+
+
+def _jobs_by_agent(
+    job_rows: List[Dict[str, Any]],
+    *,
+    keywords: Tuple[str, ...],
+    include_conversion: bool = False,
+) -> List[Dict[str, Any]]:
+    keywords_lower = tuple(word.lower() for word in keywords)
+
+    def _matches(row: Dict[str, Any]) -> bool:
+        job = row.get("job")
+        telem = row.get("telemetry") or {}
+        meta = telem.get("metadata") or {}
+        agent = telem.get("agent") or {}
+        agent_type = str(agent.get("type") or "").lower()
+        job_kind = str(meta.get("job_kind") or "").lower()
+        job_mode = str(getattr(job, "mode", "") or "").lower()
+
+        if any(word in agent_type for word in keywords_lower):
+            return True
+        if any(word in job_kind for word in keywords_lower):
+            return True
+        if any(word in job_mode for word in keywords_lower):
+            return True
+        if include_conversion and job_kind.startswith("audio_conversion"):
+            return True
+        return False
+
+    return [row for row in job_rows if _matches(row)]
+
+
+def _build_tool_panels(
+    request: HttpRequest,
+    case: Case,
+    *,
+    progress_items: List[Dict[str, Any]],
+    job_rows: List[Dict[str, Any]],
+    telemetry_map: Dict[str, Dict[str, Any]],
+    transcript_artifacts: Dict[str, CaseArtifact],
+    analysis_modules: List[Dict[str, Any]],
+    artifacts: List[Dict[str, Any]],
+    memberships: List[CaseMembership],
+    latest_job: Optional[Job],
+    latest_job_telemetry: Optional[Dict[str, Any]],
+    job_summary: Dict[str, Any],
+) -> Dict[str, Dict[str, Any]]:
+    progress_lookup = {item["key"]: item for item in progress_items}
+    analysis_lookup = {module["key"]: module for module in analysis_modules}
+    owner_labels = _case_owner_labels(memberships)
+    owner_ids = [str(m.user_id) for m in _case_owner_memberships(memberships)]
+    reviewer_label = _user_label(case.reviewer) if case.reviewer else None
+    client_label = _user_label(case.client_user) if case.client_user else None
+    case_fields = _prepare_case_fields(case)
+    org_options = _organization_member_options(case)
+
+    transcript_sources: List[Dict[str, Any]] = []
+    for row in job_rows:
+        job = row.get("job")
+        telem = row.get("telemetry") or {}
+        if not job:
+            continue
+        job_id = str(getattr(job, "id", ""))
+        if not job_id:
+            continue
+        agent = (telem.get("agent") or {})
+        agent_type = str(agent.get("type") or "").lower()
+        meta = telem.get("metadata") or {}
+        job_kind = str(meta.get("job_kind") or "").lower()
+        if not any(word in agent_type for word in ("transcription", "speech", "audio")) and not job_kind.startswith("audio"):
+            continue
+        transcript_payload = telem.get("transcript") or {}
+        path = transcript_payload.get("path")
+        artifact = transcript_artifacts.get(job_id)
+        if artifact and artifact.path:
+            path = artifact.path
+        transcript_sources.append(
+            {
+                "job_id": job_id,
+                "label": row.get("title") or job_id,
+                "status": getattr(job, "status", ""),
+                "review_status": getattr(job, "review_status", ""),
+                "approved": getattr(job, "review_status", "") == Job.ReviewStatus.APPROVED,
+                "path": path,
+                "language": getattr(job, "language", None),
+                "created_at": getattr(job, "finished_at", None) or getattr(job, "created_at", None),
+            }
+        )
+
+    artifacts_by_type: Dict[str, List[Dict[str, Any]]] = {}
+    for artifact in artifacts:
+        artifacts_by_type.setdefault(str(artifact.get("type", "")).upper(), []).append(artifact)
+
+    def _status_payload(key: str, default_status: str = "Created") -> Dict[str, Any]:
+        item = progress_lookup.get(key)
+        if not item:
+            return {
+                "label": default_status,
+                "class": _status_class(default_status),
+                "updated": None,
+                "detail": None,
+            }
+        return {
+            "label": item.get("status") or default_status,
+            "class": item.get("status_class") or _status_class(default_status),
+            "updated": item.get("updated"),
+            "detail": item.get("detail"),
+        }
+
+    panels: Dict[str, Dict[str, Any]] = {}
+
+    case_status = _status_payload("case_setup")
+    panels["case-details"] = {
+        "key": "case-details",
+        "label": "Case Details",
+        "description": "Review assignments and update metadata for this matter.",
+        "status_label": case_status["label"],
+        "status_class": case_status["class"],
+        "updated_at": case_status.get("updated") or case.updated_at,
+        "progress_detail": case_status.get("detail"),
+        "meta": [
+            {"label": "Owners", "value": ", ".join(owner_labels) or "Unassigned"},
+            {"label": "Reviewer", "value": reviewer_label or "Unassigned"},
+            {"label": "Client", "value": client_label or "Unassigned"},
+            {"label": "Case ID", "value": case.id},
+        ],
+        "body_template": "ui/tools/case_details.html",
+        "body_context": {
+            "case": case,
+            "fields": case_fields,
+            "owner_labels": owner_labels,
+            "owner_options": org_options,
+            "current_owner_ids": owner_ids,
+            "reviewer_id": str(case.reviewer_id) if case.reviewer_id else "",
+            "client_user_id": str(case.client_user_id) if case.client_user_id else "",
+            "reviewer_options": org_options,
+            "client_options": org_options,
+            "update_url": reverse("ui-case-details-update", kwargs={"case_id": case.id}),
+            "job_summary": job_summary,
+            "TODO_acl": "TODO: enforce per-field ACL when authorization library lands.",
+        },
+        "jobs": job_rows,
+        "jobs_title": "All Jobs",
+        "jobs_pill": "Live updates",
+        "jobs_empty_message": "No jobs recorded yet.",
+        "case_id": str(case.id),
+    }
+
+    transcription_status = _status_payload("transcription", "Not Started")
+    transcription_jobs = _jobs_by_agent(job_rows, keywords=("transcription", "speech", "audio"), include_conversion=True)
+    latest_transcription = transcription_jobs[0] if transcription_jobs else None
+    panels["transcribe"] = {
+        "key": "transcribe",
+        "label": "Transcribe",
+        "description": "Upload audio or provide a SAS URL to run Azure Speech in Canada-only regions.",
+        "status_label": transcription_status["label"],
+        "status_class": transcription_status["class"],
+        "updated_at": transcription_status["updated"],
+        "progress_detail": transcription_status.get("detail"),
+        "meta": [
+            {
+                "label": "Approved",
+                "value": sum(1 for item in transcription_jobs if getattr(item.get("job"), "review_status", "") == Job.ReviewStatus.APPROVED),
+            },
+            {
+                "label": "Total Jobs",
+                "value": len(transcription_jobs),
+            },
+        ],
+        "body_template": "ui/tools/transcribe.html",
+        "body_context": {
+            "case": case,
+            "form_action": reverse("ui-job-create", kwargs={"case_id": case.id}),
+            "diarization_default": True,
+            "force_wav_default": False,
+            "language_default": getattr(latest_job, "language", "en-CA") if latest_job else "en-CA",
+            "latest_job": latest_job,
+            "latest_job_telemetry": latest_job_telemetry,
+            "transcript_sources": transcript_sources,
+        },
+        "jobs": transcription_jobs,
+        "jobs_title": "Transcription Jobs",
+        "jobs_pill": "Live updates",
+        "jobs_empty_message": "No transcription jobs yet.",
+        "case_id": str(case.id),
+    }
+
+    summary_status = _status_payload("summary", "Not Started")
+    summary_module = analysis_lookup.get("summary") or {}
+    summary_latest = summary_module.get("latest") or {}
+    summary_history = summary_module.get("history") or []
+    summary_jobs = _jobs_by_agent(job_rows, keywords=("summary", "summarization"))
+    panels["summary"] = {
+        "key": "summary",
+        "label": "Summary",
+        "description": "Generate layered summaries from approved transcripts.",
+        "status_label": summary_status["label"],
+        "status_class": summary_status["class"],
+        "updated_at": summary_status["updated"] or summary_latest.get("created_at"),
+        "progress_detail": summary_status.get("detail"),
+        "meta": [
+            {"label": "Summaries", "value": len(summary_history) + (1 if summary_latest else 0)},
+            {"label": "Approved transcripts", "value": sum(1 for src in transcript_sources if src["approved"])},
+        ],
+        "body_template": "ui/tools/summary.html",
+        "body_context": {
+            "case": case,
+            "module": summary_module,
+            "transcripts": transcript_sources,
+            "job_endpoint_template": "/api/v1/jobs/{job_id}/analyze/summary/",
+        },
+        "jobs": summary_jobs,
+        "jobs_title": "Summary Jobs",
+        "jobs_pill": "Automations",
+        "jobs_empty_message": "No summary jobs yet. Generate a summary above.",
+        "case_id": str(case.id),
+    }
+
+    timeline_status = _status_payload("timeline", "Not Started")
+    timeline_module = analysis_lookup.get("timeline") or {}
+    timeline_latest = timeline_module.get("latest") or {}
+    timeline_history = timeline_module.get("history") or []
+    timeline_jobs = _jobs_by_agent(job_rows, keywords=("timeline", "event"))
+    panels["timeline"] = {
+        "key": "timeline",
+        "label": "Timeline",
+        "description": "Produce an event timeline anchored to transcript timestamps and summaries.",
+        "status_label": timeline_status["label"],
+        "status_class": timeline_status["class"],
+        "updated_at": timeline_status["updated"] or timeline_latest.get("created_at"),
+        "progress_detail": timeline_status.get("detail"),
+        "meta": [
+            {"label": "Timelines", "value": len(timeline_history) + (1 if timeline_latest else 0)},
+            {"label": "Artifacts", "value": len(artifacts)},
+        ],
+        "body_template": "ui/tools/timeline.html",
+        "body_context": {
+            "case": case,
+            "module": timeline_module,
+            "transcripts": transcript_sources,
+            "artifact_options": artifacts_by_type,
+            "job_endpoint_template": "/api/v1/jobs/{job_id}/analyze/timeline/",
+        },
+        "jobs": timeline_jobs,
+        "jobs_title": "Timeline Jobs",
+        "jobs_pill": "Automations",
+        "jobs_empty_message": "No timeline jobs yet. Generate a timeline above.",
+        "case_id": str(case.id),
+    }
+
+    return panels
+
+
+def _build_case_developer_cards(panels: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
+    order = ["case-details", "transcribe", "summary", "timeline"]
+    cards: List[Dict[str, Any]] = []
+    for key in order:
+        panel = panels.get(key)
+        if not panel:
+            continue
+        cards.append(
+            {
+                "key": key,
+                "label": panel.get("label"),
+                "status_label": panel.get("status_label"),
+                "status_class": panel.get("status_class"),
+                "description": panel.get("progress_detail") or panel.get("description"),
+                "updated_at": panel.get("updated_at"),
+            }
+        )
+    return cards
+
+
+def _build_case_header_context(
+    case: Case,
+    *,
+    panels: Dict[str, Dict[str, Any]],
+    case_fields: List[Dict[str, Any]],
+    memberships: List[CaseMembership],
+    job_summary_last_update: Optional[datetime],
+) -> Dict[str, Any]:
+    owners = _case_owner_labels(memberships)
+    reviewer_label = _user_label(case.reviewer) if case.reviewer else None
+    client_label = _user_label(case.client_user) if case.client_user else None
+
+    activity_candidates: List[Tuple[Optional[datetime], Optional[str]]] = []
+    for panel in panels.values():
+        updated = panel.get("updated_at")
+        label = panel.get("label")
+        if isinstance(updated, datetime):
+            activity_candidates.append((updated, label))
+    if job_summary_last_update:
+        activity_candidates.append((job_summary_last_update, None))
+    if case.updated_at:
+        activity_candidates.append((case.updated_at, None))
+
+    activity_candidates = [item for item in activity_candidates if item[0]]
+    activity_candidates.sort(key=lambda item: item[0], reverse=True)
+    last_activity_ts = activity_candidates[0][0] if activity_candidates else None
+    last_activity_label = activity_candidates[0][1] if activity_candidates else None
+
+    next_hearing_field = next((field for field in case_fields if field["name"] == "court_date"), None)
+
+    return {
+        "title": case.title,
+        "client_name": case.client_name or "—",
+        "owner_labels": owners,
+        "reviewer_label": reviewer_label,
+        "client_label": client_label,
+        "next_hearing": next_hearing_field,
+        "last_activity_ts": last_activity_ts,
+        "last_activity_label": last_activity_label,
+        "fields": case_fields,
+    }
+
+
+def _compute_case_tool_state(request: HttpRequest, case: Case) -> Dict[str, Any]:
+    jobs_qs = (
+        Job.objects.select_related("case", "case__organization", "reviewed_by")
+        .filter(case=case)
+        .order_by("-created_at")
+    )
+    jobs_list = list(scope_jobs(jobs_qs, getattr(request, "user", None)))
+
+    job_ids = [str(job.id) for job in jobs_list]
+    transcript_artifacts: Dict[str, CaseArtifact] = {}
+    if job_ids:
+        for art in (
+            CaseArtifact.objects.filter(case_id=str(case.id), job_id__in=job_ids, type="TRANSCRIPT")
+            .order_by("-created_at")
+        ):
+            key = art.job_id or ""
+            if key and key not in transcript_artifacts:
+                transcript_artifacts[key] = art
+
+    job_summary = summarize_jobs(jobs_list)
+    job_summary_last_dt = job_summary.get("last_update")
+    job_summary["last_update"] = job_summary_last_dt.isoformat() if job_summary_last_dt else None
+
+    telemetry = JobTelemetrySerializer(
+        jobs_list,
+        many=True,
+        context={"request": request, "ui_mode": True},
+    ).data
+    telemetry_map = {item.get("id"): item for item in telemetry}
+
+    job_rows: List[Dict[str, Any]] = []
+    for job in jobs_list:
+        key = str(job.id)
+        data = telemetry_map.get(key)
+        title = _friendly_job_title(job, data, transcript_artifacts.get(key))
+        job_rows.append({"job": job, "telemetry": data, "title": title})
+
+    latest_job = None
+    latest_job_telemetry = None
+    latest_activity_ts = None
+    if jobs_list:
+        jobs_sorted = sorted(
+            jobs_list,
+            key=lambda j: (j.finished_at or j.started_at or j.created_at or datetime.min),
+            reverse=True,
+        )
+        latest_job = jobs_sorted[0]
+        latest_job_telemetry = telemetry_map.get(str(latest_job.id))
+        latest_activity_ts = latest_job.finished_at or latest_job.started_at or latest_job.created_at
+
+    memberships = list(case.memberships.select_related("user"))
+    progress_ctx = _case_progress_context(case, jobs_list, telemetry_map, memberships)
+    analysis_modules = _analysis_modules_context(
+        request, case, jobs_list, telemetry_map, transcript_artifacts
+    )
+    artifacts_all = _collect_case_artifacts(request, case)
+
+    tool_panels = _build_tool_panels(
+        request,
+        case,
+        progress_items=progress_ctx["progress_items"],
+        job_rows=job_rows,
+        telemetry_map=telemetry_map,
+        transcript_artifacts=transcript_artifacts,
+        analysis_modules=analysis_modules,
+        artifacts=artifacts_all,
+        memberships=memberships,
+        latest_job=latest_job,
+        latest_job_telemetry=latest_job_telemetry,
+        job_summary=job_summary,
+    )
+
+    case_details_panel = tool_panels.get("case-details") or {}
+    case_fields = case_details_panel.get("body_context", {}).get("fields", _prepare_case_fields(case))
+    case_header = _build_case_header_context(
+        case,
+        panels=tool_panels,
+        case_fields=case_fields,
+        memberships=memberships,
+        job_summary_last_update=job_summary_last_dt,
+    )
+    developer_cards = _build_case_developer_cards(tool_panels)
+
+    return {
+        "jobs_list": jobs_list,
+        "job_rows": job_rows,
+        "transcript_artifacts": transcript_artifacts,
+        "tool_panels": tool_panels,
+        "case_header": case_header,
+        "developer_cards": developer_cards,
+        "job_summary": job_summary,
+        "latest_activity_ts": latest_activity_ts,
+    }
 def _job_detail_context(
     request: HttpRequest,
     job: Job,
@@ -651,82 +1203,39 @@ def case_detail(request: HttpRequest, case_id: str) -> HttpResponse:
             return response
         return redirect("ui-case-detail", case_id=case_id)
 
-    jobs_qs = (
-        Job.objects.select_related("case", "case__organization", "reviewed_by")
-        .filter(case=case)
-        .order_by("-created_at")
-    )
-    jobs_scoped = scope_jobs(jobs_qs, getattr(request, "user", None))
-    jobs_list = list(jobs_scoped)
-    job_ids = [str(job.id) for job in jobs_list]
-    transcript_artifacts: Dict[str, CaseArtifact] = {}
-    if job_ids:
-        for art in (
-            CaseArtifact.objects.filter(case_id=str(case.id), job_id__in=job_ids, type="TRANSCRIPT")
-            .order_by("-created_at")
-        ):
-            key = art.job_id or ""
-            if key and key not in transcript_artifacts:
-                transcript_artifacts[key] = art
-    job_summary = summarize_jobs(jobs_list)
-    last_update = job_summary.get("last_update")
-    job_summary["last_update"] = last_update.isoformat() if last_update else None
-    telemetry = JobTelemetrySerializer(
-        jobs_list,
-        many=True,
-        context={"request": request, "ui_mode": True},
-    ).data
-    telemetry_map = {item.get("id"): item for item in telemetry}
-    job_insights = []
-    job_rows = []
-    for job in jobs_list:
-        key = str(job.id)
-        data = telemetry_map.get(key)
-        if data:
-            job_insights.append(data)
-        display_title = _friendly_job_title(job, data, transcript_artifacts.get(key))
-        job_rows.append({"job": job, "telemetry": data, "title": display_title})
-    latest_job = None
-    latest_job_telemetry = None
-    latest_activity_ts = None
-    if jobs_list:
-        jobs_sorted = sorted(
-            jobs_list,
-            key=lambda j: (j.finished_at or j.started_at or j.created_at or datetime.min),
-            reverse=True,
-        )
-        latest_job = jobs_sorted[0]
-        latest_job_telemetry = telemetry_map.get(str(latest_job.id))
-        latest_activity_ts = latest_job.finished_at or latest_job.started_at or latest_job.created_at
-    progress_ctx = _case_progress_context(case, jobs_list, telemetry_map)
-    analysis_modules = _analysis_modules_context(
-        request, case, jobs_list, telemetry_map, transcript_artifacts
-    )
+    state = _compute_case_tool_state(request, case)
+    tool_panels = state["tool_panels"]
+    developer_cards = state["developer_cards"]
+    case_header = state["case_header"]
+    job_summary = state["job_summary"]
+    latest_activity_ts = state["latest_activity_ts"]
 
-    user_can_review = False
-    dev_open = getattr(settings, "PLATFORM_DEV_OPEN", False)
-    if dev_open:
-        user_can_review = True
-    else:
-        user_obj = getattr(request, "user", None)
-        if user_obj and getattr(user_obj, "is_authenticated", False):
-            if case.reviewer_id and str(user_obj.id) == str(case.reviewer_id):
-                user_can_review = True
-            elif has_capability(user_obj, str(case.id), "case.update"):
-                user_can_review = True
+    raw_tool = (request.GET.get("tool") or request.GET.get("module") or "").strip().lower()
+    tool_aliases = {
+        "": "case-details",
+        "case": "case-details",
+        "details": "case-details",
+        "case-details": "case-details",
+        "setup": "case-details",
+        "transcribe": "transcribe",
+        "transcription": "transcribe",
+        "summary": "summary",
+        "summaries": "summary",
+        "timeline": "timeline",
+    }
+    initial_tool_key = tool_aliases.get(raw_tool, raw_tool if raw_tool in tool_panels else None)
+    if not initial_tool_key or initial_tool_key not in tool_panels:
+        initial_tool_key = "case-details"
+    initial_panel = tool_panels.get(initial_tool_key)
+
     context = {
         "case": case,
-        "jobs": jobs_list,
         "job_summary": job_summary,
-        "job_telemetry": telemetry_map,
-        "job_insights": job_insights,
-        "job_rows": job_rows,
-        "latest_job": latest_job,
-        "latest_job_telemetry": latest_job_telemetry,
         "latest_activity_ts": latest_activity_ts,
-        **progress_ctx,
-        "user_can_review": user_can_review,
-        "analysis_modules": analysis_modules,
+        "case_header": case_header,
+        "case_developer_cards": developer_cards,
+        "initial_tool_key": initial_tool_key,
+        "initial_tool_panel": initial_panel,
     }
     return render(request, "ui/case_detail.html", context)
 
@@ -775,6 +1284,202 @@ def case_update_title(request: HttpRequest, case_id: str) -> HttpResponse:
         case.title = new_title
         case.save(update_fields=["title"])
     return render(request, "ui/_case_title.html", {"case": case})
+
+
+@require_http_methods(["POST"])
+def case_details_update(request: HttpRequest, case_id: str) -> HttpResponse:
+    auth_response = _ensure_authenticated(request)
+    if auth_response:
+        return auth_response
+
+    case, _ = _get_case_and_org(request, case_id)
+
+    dev_open = getattr(settings, "PLATFORM_DEV_OPEN", False)
+    user = getattr(request, "user", None)
+    if not dev_open:
+        if not user or not getattr(user, "is_authenticated", False) or not has_capability(user, str(case.id), "case.update"):
+            return HttpResponse("Forbidden", status=403)
+
+    form_errors: Dict[str, str] = {}
+    case_updates: Dict[str, Any] = {}
+    specs = _case_field_specs()
+
+    for spec in specs:
+        name = spec["name"]
+        field_type = spec.get("type", "text")
+        raw_value = request.POST.get(name)
+
+        if field_type == "boolean":
+            case_updates[name] = bool(request.POST.get(name))
+            continue
+
+        if field_type in {"text", "textarea", "choice"}:
+            case_updates[name] = raw_value or ""
+            continue
+
+        if field_type == "datetime":
+            if raw_value:
+                try:
+                    dt = datetime.strptime(raw_value, "%Y-%m-%dT%H:%M")
+                    aware = timezone.make_aware(dt, timezone.get_current_timezone())
+                    case_updates[name] = aware
+                except Exception:
+                    form_errors[name] = "Enter a valid date and time."
+            else:
+                case_updates[name] = None
+            continue
+
+        if field_type == "date":
+            if raw_value:
+                try:
+                    case_updates[name] = datetime.strptime(raw_value, "%Y-%m-%d").date()
+                except Exception:
+                    form_errors[name] = "Enter a valid date."
+            else:
+                case_updates[name] = None
+            continue
+
+    reviewer_id = (request.POST.get("reviewer_id") or "").strip()
+    client_user_id = (request.POST.get("client_user_id") or "").strip()
+    owner_ids = [value.strip() for value in request.POST.getlist("owner_ids") if value.strip()]
+
+    if form_errors:
+        state = _compute_case_tool_state(request, case)
+        panel = state["tool_panels"].get("case-details")
+        if panel:
+            panel_body = panel.get("body_context", {})
+            panel_body["form_errors"] = form_errors
+        return render(request, "ui/tools/_panel.html", {"panel": panel}, status=400)
+
+    update_fields: List[str] = []
+    for field_name, value in case_updates.items():
+        if hasattr(case, field_name) and getattr(case, field_name) != value:
+            setattr(case, field_name, value)
+            update_fields.append(field_name)
+
+    if reviewer_id:
+        reviewer = User.objects.filter(pk=reviewer_id).first()
+        if reviewer and str(case.reviewer_id) != str(reviewer.pk):
+            OrganizationMembership.objects.get_or_create(
+                organization=case.organization,
+                user=reviewer,
+                defaults={"role": OrganizationMembership.Role.MEMBER},
+            )
+            CaseMembership.objects.get_or_create(
+                case=case,
+                user=reviewer,
+                defaults={"role": CaseMembership.Role.REVIEWER},
+            )
+            case.reviewer = reviewer
+            update_fields.append("reviewer")
+    else:
+        if case.reviewer_id is not None:
+            case.reviewer = None
+            update_fields.append("reviewer")
+
+    if client_user_id:
+        client_user = User.objects.filter(pk=client_user_id).first()
+        if client_user and str(case.client_user_id) != str(client_user.pk):
+            OrganizationMembership.objects.get_or_create(
+                organization=case.organization,
+                user=client_user,
+                defaults={"role": OrganizationMembership.Role.MEMBER},
+            )
+            CaseMembership.objects.get_or_create(
+                case=case,
+                user=client_user,
+                defaults={"role": CaseMembership.Role.CLIENT},
+            )
+            case.client_user = client_user
+            update_fields.append("client_user")
+    else:
+        if case.client_user_id is not None:
+            case.client_user = None
+            update_fields.append("client_user")
+
+    current_owner_memberships = case.memberships.filter(role=CaseMembership.Role.OWNER)
+    current_owner_ids = {str(m.user_id) for m in current_owner_memberships if m.user_id}
+
+    if owner_ids:
+        for owner_id in owner_ids:
+            owner_user = User.objects.filter(pk=owner_id).first()
+            if not owner_user:
+                continue
+            OrganizationMembership.objects.get_or_create(
+                organization=case.organization,
+                user=owner_user,
+                defaults={"role": OrganizationMembership.Role.MEMBER},
+            )
+            membership, _ = CaseMembership.objects.get_or_create(
+                case=case,
+                user=owner_user,
+                defaults={"role": CaseMembership.Role.OWNER},
+            )
+            if membership.role != CaseMembership.Role.OWNER:
+                membership.role = CaseMembership.Role.OWNER
+                membership.save(update_fields=["role"])
+        demote_ids = current_owner_ids - set(owner_ids)
+    else:
+        demote_ids = current_owner_ids
+
+    if demote_ids:
+        CaseMembership.objects.filter(
+            case=case,
+            user_id__in=demote_ids,
+            role=CaseMembership.Role.OWNER,
+        ).update(role=CaseMembership.Role.CONTRIBUTOR)
+
+    if update_fields:
+        case.save(update_fields=list(set(update_fields)))
+
+    state = _compute_case_tool_state(request, case)
+    panel = state["tool_panels"].get("case-details")
+    response = render(request, "ui/tools/_panel.html", {"panel": panel})
+    trigger_payload = {
+        "case-view-refreshed": {
+            "tools": ["case-details"],
+            "header_html": render_to_string(
+                "ui/tools/_case_header.html",
+                {"case": case, "case_header": state["case_header"]},
+            ),
+            "cards_html": render_to_string(
+                "ui/tools/_developer_cards.html",
+                {"case": case, "cards": state["developer_cards"], "active_tool": "case-details"},
+            ),
+            "active_tool": "case-details",
+        }
+    }
+    response["HX-Trigger"] = json.dumps(trigger_payload)
+    return response
+
+
+@require_http_methods(["GET"])
+def case_tool_panel(request: HttpRequest, case_id: str, tool_key: str) -> HttpResponse:
+    auth_response = _ensure_authenticated(request)
+    if auth_response:
+        return auth_response
+
+    case, _ = _get_case_and_org(request, case_id)
+    state = _compute_case_tool_state(request, case)
+    panels = state["tool_panels"]
+
+    aliases = {
+        "case": "case-details",
+        "details": "case-details",
+        "case-details": "case-details",
+        "transcription": "transcribe",
+        "transcribe": "transcribe",
+        "summary": "summary",
+        "timeline": "timeline",
+    }
+    resolved_key = aliases.get(tool_key.strip().lower(), tool_key.strip().lower())
+    panel = panels.get(resolved_key)
+    if not panel:
+        raise Http404
+
+    response = render(request, "ui/tools/_panel.html", {"panel": panel})
+    response["HX-Trigger"] = json.dumps({"case-view-refreshed": {"tools": [resolved_key], "active_tool": resolved_key}})
+    return response
 
 
 @require_http_methods(["POST"])

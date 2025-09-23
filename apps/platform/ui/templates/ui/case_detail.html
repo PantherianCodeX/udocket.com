@@ -1,1860 +1,648 @@
 {% extends "ui/base.html" %}
 {% block head %}
-<script src="https://unpkg.com/htmx.org@1.9.12"></script>
-<script>
-  try {
-  window.jobPollers = window.jobPollers || {};
-  window.jobSockets = window.jobSockets || {};
-  window.jobDetailRefreshAt = window.jobDetailRefreshAt || {};
-  window.caseSocket = window.caseSocket || null;
-  window.casePoller = window.casePoller || null;
-  window.jobLastStatus = window.jobLastStatus || {};
-  const CASE_POLL_INTERVAL = 8000;
-  let activeTranscriptionJobId = null;
-
-  function currentCaseId() {
-    const jobsBody = document.getElementById('jobs-body');
-    return jobsBody && jobsBody.dataset ? jobsBody.dataset.caseId || '' : '';
-  }
-
-  function getTranscriptionElements() {
-    const statusBox = document.getElementById('module-transcription-status');
-    return {
-      statusBox,
-      statusTitle: statusBox ? statusBox.querySelector('[data-status-text]') : null,
-      statusDetail: statusBox ? statusBox.querySelector('[data-status-detail]') : null,
-      progressWrap: document.getElementById('module-transcription-progress'),
-      progressBar: document.querySelector('#module-transcription-progress .progress'),
-      progressText: document.getElementById('module-transcription-progress-text'),
-      startButtons: Array.from(document.querySelectorAll('[data-transcription-start]')),
-      fileInput: document.getElementById('module-transcription-file'),
-      urlInput: document.getElementById('module-transcription-url'),
-      fileName: document.getElementById('module-transcription-file-name'),
-      quickSection: document.querySelector('[data-module-quick]'),
-      summaryText: document.getElementById('module-transcription-summary-text'),
-      container: document.querySelector('[data-current-job-id]'),
-      statusPill: document.querySelector('[data-transcription-status-pill]'),
-    };
-  }
-
-  const STATUS_LABELS = {
-    CONVERTING: 'Converting',
-    UPLOADING: 'Uploading',
-    RUNNING: 'Transcribing',
-    PENDING: 'Pending',
-    QUEUED: 'Queued',
-    SUCCEEDED: 'Succeeded',
-    FAILED: 'Failed',
-    CANCELLED: 'Cancelled',
-    CANCELLING: 'Cancelling',
-    ERROR: 'Error',
-  };
-
-  function normalizeStatusName(status) {
-    return (status || '').toString().toUpperCase();
-  }
-
-  function friendlyStatus(status) {
-    const normalized = normalizeStatusName(status);
-    return STATUS_LABELS[normalized] || (normalized ? normalized.charAt(0) + normalized.slice(1).toLowerCase() : 'Status');
-  }
-
-  const STATUS_CLASS_MAP = {
-    SUCCEEDED: ['border-emerald-400/40', 'bg-emerald-500/10', 'text-emerald-200'],
-    APPROVED: ['border-emerald-400/40', 'bg-emerald-500/10', 'text-emerald-200'],
-    FAILED: ['border-rose-400/40', 'bg-rose-500/10', 'text-rose-200'],
-    REJECTED: ['border-rose-400/40', 'bg-rose-500/10', 'text-rose-200'],
-    ERROR: ['border-rose-400/40', 'bg-rose-500/10', 'text-rose-200'],
-    CONVERTING: ['border-primary-400/40', 'bg-primary-500/10', 'text-primary-100'],
-    RUNNING: ['border-primary-400/40', 'bg-primary-500/10', 'text-primary-100'],
-    UPLOADING: ['border-primary-400/40', 'bg-primary-500/10', 'text-primary-100'],
-    PENDING: ['border-amber-400/40', 'bg-amber-500/10', 'text-amber-100'],
-    QUEUED: ['border-amber-400/40', 'bg-amber-500/10', 'text-amber-100'],
-    CANCELLED: ['border-slate-400/40', 'bg-slate-500/20', 'text-slate-100'],
-    CANCELLING: ['border-slate-400/40', 'bg-slate-500/20', 'text-slate-100'],
-    DEFAULT: ['border-white/20', 'bg-white/5', 'text-slate-300'],
-  };
-  const STATUS_CLASS_VALUES = Array.from(new Set(Object.values(STATUS_CLASS_MAP).flat()));
-  const TERMINAL_STATUSES = ['SUCCEEDED', 'FAILED', 'CANCELLED', 'ERROR'];
-
-  function isTerminalStatusValue(value) {
-    return TERMINAL_STATUSES.includes(normalizeStatusName(value));
-  }
-
-  const JOB_LOG_PREFIX = '[jobs]';
-
-  function logJobUiError(jobId, stage, error) {
-    if (!error) return;
-    const err = error instanceof Error ? error : new Error(String(error));
-    console.error(`${JOB_LOG_PREFIX} ${stage} failed for job ${jobId}: ${err.message}`, err);
-    if (typeof udocketLogClientError === 'function') {
-      try {
-        udocketLogClientError({
-          type: 'job_ui_error',
-          jobId,
-          stage,
-          message: err.message,
-          stack: err.stack,
-        });
-      } catch (_) {
-        // Swallow secondary logging errors to avoid loops
-      }
-    }
-  }
-
-  function stopJobPolling(jobId) {
-    const handle = window.jobPollers && window.jobPollers[jobId];
-    if (handle) {
-      clearInterval(handle);
-      delete window.jobPollers[jobId];
-      try {
-        if (typeof udocketLogDebug === 'function') {
-          udocketLogDebug({ type: 'job_poll_stop', jobId });
-        }
-      } catch (_) {
-        // ignore analytics errors
-      }
-      console.log(`${JOB_LOG_PREFIX} poll stop`, jobId);
-    }
-  }
-
-  function startJobPolling(jobId, runner) {
-    if (!window.jobPollers) window.jobPollers = {};
-    if (window.jobPollers[jobId]) return;
-    window.jobPollers[jobId] = setInterval(runner, 2000);
-    try {
-      if (typeof udocketLogDebug === 'function') {
-        udocketLogDebug({ type: 'job_poll_start', jobId });
-      }
-    } catch (_) {
-      // ignore analytics errors
-    }
-    console.log(`${JOB_LOG_PREFIX} poll start`, jobId);
-  }
-
-  function applyStatusPillClasses(target, normalized) {
-    if (!target || !target.classList || !target.classList.contains('status-pill')) return;
-    target.classList.remove(...STATUS_CLASS_VALUES);
-    const next = STATUS_CLASS_MAP[normalized] || STATUS_CLASS_MAP.DEFAULT;
-    target.classList.add(...next);
-  }
-
-  function renderStatusLabel(el, status, progress) {
-    if (!el) return;
-    const target = el.matches('[data-status]') ? el : el.querySelector('[data-status]') || el;
-    const normalized = normalizeStatusName(status);
-    const labelEl = target.querySelector('[data-job-status-label]');
-    const setText = (value) => {
-      if (labelEl) {
-        labelEl.textContent = value;
-      } else {
-        target.textContent = value;
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <script>
+    window.UDOCKET_CASE_ROUTE = {
+      toolEndpoint: function(caseId, key) {
+        return `/cases/${caseId}/tools/${key}/`;
+      },
+      caseDetailsUpdate: function(caseId) {
+        return `/cases/${caseId}/tools/case-details/update/`;
       }
     };
-    if (normalized === 'UPLOADING' && Number.isFinite(progress)) {
-      const pct = Math.max(0, Math.min(100, Math.round(progress)));
-      setText(`Uploading ${pct}%`);
-      target.dataset.progress = String(pct);
-      if (target.classList.contains('status-pill')) {
-        target.style.setProperty('--status-progress', (pct / 100).toString());
-      }
-    } else if (normalized === 'CANCELLING') {
-      setText('Cancelling');
-      target.dataset.progress = '';
-      if (target.classList.contains('status-pill')) {
-        target.style.removeProperty('--status-progress');
-      }
-    } else {
-      setText(friendlyStatus(status));
-      target.dataset.progress = '';
-      if (target.classList.contains('status-pill')) {
-        target.style.removeProperty('--status-progress');
-      }
-    }
-    applyStatusPillClasses(target, normalized);
-    target.dataset.status = normalized;
-    if (el !== target) {
-      el.dataset.status = normalized;
-      if (normalized === 'UPLOADING' && Number.isFinite(progress)) {
-        el.dataset.progress = target.dataset.progress;
-      } else {
-        delete el.dataset.progress;
-      }
-    }
-  }
-
-  function updateStatusDisplays(jobId, status, progress) {
-    const statusCell = document.getElementById(`job-status-${jobId}`);
-    if (statusCell) {
-      renderStatusLabel(statusCell, status, progress);
-    }
-    const detailContainer = document.querySelector(`[data-job-detail="${jobId}"]`);
-    if (!detailContainer) return;
-    const detailPill = detailContainer.querySelector('.status-pill[data-status]');
-    if (detailPill) {
-      renderStatusLabel(detailPill, status, progress);
-    }
-    const detailLabel = detailContainer.querySelector('[data-job-status-label]');
-    if (detailLabel) {
-      detailLabel.textContent = friendlyStatus(status);
-    }
-  }
-
-  function getCSRFToken() {
-    const match = document.cookie.match(/csrftoken=([^;]+)/);
-    if (match) return decodeURIComponent(match[1]);
-    const meta = document.querySelector('meta[name="csrf-token"]');
-    return meta ? meta.getAttribute('content') || '' : '';
-  }
-
-  function currentJobId() {
-    if (activeTranscriptionJobId) return activeTranscriptionJobId;
-    const { container } = getTranscriptionElements();
-    if (!container) return null;
-    const value = container.getAttribute('data-current-job-id');
-    return value && value.length ? value : null;
-  }
-
-  function setCurrentJob(jobId, status) {
-    const { container } = getTranscriptionElements();
-    if (!container) return;
-    container.setAttribute('data-current-job-id', jobId || '');
-    if (typeof status === 'string' && status.length) {
-      container.setAttribute('data-current-job-status', status.toUpperCase());
-    }
-  }
-
-  function updateStartAvailability() {
-    const { startButtons, fileInput, urlInput } = getTranscriptionElements();
-    const hasFile = fileInput && fileInput.files && fileInput.files.length > 0;
-    const hasUrl = urlInput && urlInput.value.trim().length > 0;
-    startButtons.forEach((btn) => {
-      if (!btn) return;
-      btn.disabled = !(hasFile || hasUrl);
-    });
-  }
-
-  function updateFileLabel() {
-    const { fileName, fileInput } = getTranscriptionElements();
-    if (!fileName || !fileInput) return;
-    if (fileInput.files && fileInput.files.length > 0) {
-      fileName.textContent = fileInput.files[0].name;
-    } else {
-      fileName.textContent = 'No file selected.';
-    }
-  }
-
-  function setTranscriptionSummary(text) {
-    const { summaryText } = getTranscriptionElements();
-    if (!summaryText || !text) return;
-    summaryText.textContent = text;
-  }
-
-  function updateTranscriptionHeader(status, payload) {
-    const statusEl = document.querySelector('[data-transcription-last-status]');
-    if (statusEl) {
-      statusEl.textContent = friendlyStatus(status);
-    }
-    const emptyEl = document.querySelector('[data-transcription-last-empty]');
-    const summaryEl = document.querySelector('[data-transcription-last-summary]');
-    if (summaryEl) summaryEl.classList.remove('hidden');
-    if (emptyEl) emptyEl.classList.add('hidden');
-    const tsEl = document.querySelector('[data-transcription-last-ts]');
-    const timeWrapper = document.querySelector('[data-transcription-last-time-wrapper]');
-    if (tsEl) {
-      const ts =
-        payload.finished_at ||
-        payload.completed_at ||
-        payload.timestamp_utc ||
-        payload.started_at ||
-        payload.created_at ||
-        new Date().toISOString();
-      tsEl.dataset.ts = ts;
-      tsEl.textContent = new Date(ts).toISOString();
-      tsEl.classList.remove('hidden');
-      if (timeWrapper) timeWrapper.classList.remove('hidden');
-      if (window.renderLocalTimes) window.renderLocalTimes();
-    } else if (timeWrapper) {
-      timeWrapper.classList.add('hidden');
-    }
-  }
-
-  function setTranscriptionStatus({ title, detail, progress, state, statusName }) {
-    const {
-      statusBox,
-      statusTitle,
-      statusDetail,
-      progressWrap,
-      progressBar,
-      progressText,
-      startButtons,
-      statusPill,
-    } = getTranscriptionElements();
-
-    if (!statusBox) return;
-    if (title && statusTitle) statusTitle.textContent = title;
-    if (detail && statusDetail) statusDetail.textContent = detail;
-
-    if (progressWrap && progressBar) {
-      if (progress === null || progress === undefined) {
-        progressWrap.classList.add('hidden');
-      } else {
-        progressWrap.classList.remove('hidden');
-        const pct = Math.max(0, Math.min(100, Math.round(progress)));
-        progressBar.style.width = `${pct}%`;
-        if (progressText) {
-          const label = statusName === 'UPLOADING' ? 'uploaded' : 'complete';
-          progressText.textContent = `${pct}% ${label}`;
-        }
-      }
-    }
-
-    if (startButtons && startButtons.length) {
-      startButtons.forEach((btn) => {
-        btn.disabled = state === 'running';
-      });
-    }
-
-    if (statusPill) {
-      const normalized = (statusName || title || '').toUpperCase();
-      applyStatusPillClasses(statusPill, normalized);
-      const progressPct = typeof progress === 'number' ? Math.max(0, Math.min(100, progress)) : null;
-      statusPill.textContent = statusName ? friendlyStatus(statusName) : (title || 'Status');
-      statusPill.dataset.status = normalized;
-      if (normalized === 'UPLOADING' && progressPct !== null) {
-        statusPill.style.setProperty('--status-progress', (progressPct / 100).toString());
-        statusPill.dataset.progress = progressPct.toFixed(1);
-      } else {
-        statusPill.style.removeProperty('--status-progress');
-        statusPill.dataset.progress = '';
-      }
-    }
-  }
-
-  function updateTranscriptionControls(status) {
-    const { startButtons } = getTranscriptionElements();
-    const normalized = (status || '').toUpperCase();
-    const runningStates = ['RUNNING', 'UPLOADING', 'CONVERTING', 'PENDING', 'CANCELLING'];
-    if (startButtons && startButtons.length) {
-      startButtons.forEach((btn) => {
-        btn.disabled = runningStates.includes(normalized);
-      });
-    }
-  }
-
-  async function refreshAnalysisModule(key, preserveState = true) {
-    const container = document.querySelector(`[data-analysis-module="${key}"]`);
-    if (!container) return;
-    const panel = container.querySelector('[data-module-panel]');
-    const wasOpen = preserveState && panel && !panel.classList.contains('hidden');
-    const caseId = container.dataset.caseId || document.getElementById('jobs-body')?.dataset.caseId;
-    if (!caseId) return;
-    try {
-      const resp = await fetch(`/cases/${caseId}/analysis/${key}/module/`, {
-        headers: { 'HX-Request': 'true' },
-        credentials: 'same-origin',
-      });
-      if (!resp.ok) {
-        console.error('Failed to refresh analysis module', key, resp.status);
-        return;
-      }
-      const html = await resp.text();
-      container.innerHTML = html;
-      const newPanel = container.querySelector('[data-module-panel]');
-      const panelId = newPanel ? newPanel.id : `module-${key}`;
-      if (wasOpen && newPanel) {
-        newPanel.classList.remove('hidden');
-      }
-      if (wasOpen) {
-        container.querySelectorAll(`[data-module-toggle][data-module-target="${panelId}"]`).forEach((btn) => btn.setAttribute('aria-expanded', 'true'));
-        container.querySelectorAll(`[data-module-chevron="${panelId}"]`).forEach((icon) => icon.classList.add('rotate-180'));
-      }
-      if (window.renderLocalTimes) window.renderLocalTimes();
-    } catch (error) {
-      console.error('Failed to refresh analysis module', key, error);
-    }
-  }
-
-  async function pollCaseModules(caseId) {
-    try {
-      await Promise.all([
-        refreshAnalysisModule('summary', false),
-        refreshAnalysisModule('timeline', false),
-      ]);
-    } catch (error) {
-      console.error('Failed to poll case modules', error);
-    }
-    connectCaseWS(caseId);
-  }
-
-  function connectCaseWS(caseId) {
-    if (!caseId) return;
-    const existing = window.caseSocket;
-    if (existing && (existing.readyState === WebSocket.OPEN || existing.readyState === WebSocket.CONNECTING)) {
-      return;
-    }
-    const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
-    const ws = new WebSocket(`${scheme}://${location.host}/ws/cases/${caseId}/`);
-    window.caseSocket = ws;
-    ws.onopen = () => {
-      if (window.casePoller) {
-        clearInterval(window.casePoller);
-        window.casePoller = null;
-      }
-    };
-    ws.onmessage = async (evt) => {
-      try {
-        const data = JSON.parse(evt.data);
-        if (data.event === 'artifact.created') {
-          const kind = (data.kind || '').toLowerCase();
-          if (kind === 'summary' || kind === 'timeline') {
-            await refreshAnalysisModule(kind);
-          } else if (kind === 'transcription') {
-            await refreshAnalysisModule('summary', false);
-            await refreshAnalysisModule('timeline', false);
-          }
-        } else if ((data.event === 'job.created' || data.event === 'job.updated') && data.job_id) {
-          await insertOrReplaceJobRow(data.job_id);
-        }
-      } catch (error) {
-        console.error('Case websocket message error', error);
-      }
-    };
-    ws.onerror = (err) => {
-      console.warn('Case websocket error', caseId, err);
-    };
-    ws.onclose = () => {
-      window.caseSocket = null;
-      if (!window.casePoller) {
-        window.casePoller = setInterval(() => pollCaseModules(caseId), CASE_POLL_INTERVAL);
-      }
-    };
-  }
-
-  function updateTranscriptionConfig() {
-    const configEl = document.querySelector('[data-transcription-config]');
-    if (!configEl) return;
-    const modeInput = document.querySelector('input[name="mode"]');
-    const diarCheckbox = document.querySelector('input[name="diarization"]');
-    const languageInput = document.querySelector('input[name="language"]');
-    const mode = (modeInput ? modeInput.value : 'batch') || 'batch';
-    const modeLabel = mode === 'on-demand' ? 'On-demand mode' : 'Batch mode';
-    const diarEnabled = diarCheckbox ? diarCheckbox.checked : false;
-    const diarLabel = diarEnabled ? 'diarization enabled' : 'diarization off';
-    const language = (languageInput ? languageInput.value : 'en-CA') || 'en-CA';
-    configEl.textContent = `${modeLabel} · ${diarLabel} · ${language}`;
-  }
-
-  function updateJobActionButtons(jobId, status) {
-    if (!jobId) return;
-    const normalized = (status || '').toUpperCase();
-    const cancelBtn = document.querySelector(`[data-job-cancel="${jobId}"]`);
-    const restartBtn = document.querySelector(`[data-job-restart="${jobId}"]`);
-    const row = document.querySelector(`[data-job="${jobId}"]`);
-    const jobKind = row && row.dataset ? (row.dataset.jobKind || '').toUpperCase() : '';
-    if (jobKind === 'AUDIO_CONVERSION') {
-      if (cancelBtn) {
-        cancelBtn.classList.add('hidden');
-        cancelBtn.disabled = true;
-      }
-      if (restartBtn) {
-        restartBtn.classList.add('hidden');
-        restartBtn.disabled = true;
-      }
-      return;
-    }
-    const runningStates = ['RUNNING', 'UPLOADING', 'PENDING', 'QUEUED'];
-    const restartStates = ['SUCCEEDED', 'FAILED', 'CANCELLED'];
-    if (cancelBtn) {
-      const shouldShowCancel = runningStates.includes(normalized);
-      cancelBtn.classList.toggle('hidden', !shouldShowCancel);
-      cancelBtn.disabled = !shouldShowCancel;
-    }
-    if (restartBtn) {
-      const shouldShowRestart = restartStates.includes(normalized);
-      restartBtn.classList.toggle('hidden', !shouldShowRestart);
-      restartBtn.disabled = !shouldShowRestart;
-    }
-  }
-
-  function jobTitleWrapper(jobId) {
-    return document.querySelector(`#job-title-wrapper-${jobId}`);
-  }
-
-  function jobTitleEndpoint(jobId, caseId, action, params = '') {
-    if (!jobId || !caseId) return null;
-    const base = `/cases/${caseId}/jobs/${jobId}/title`;
-    if (action === 'form') {
-      return params ? `${base}/form/${params}` : `${base}/form/`;
-    }
-    return base + '/';
-  }
-
-  function renderJobTitleError(wrapper, message) {
-    if (!wrapper) return;
-    wrapper.innerHTML = `<div class="rounded-md border border-rose-400/40 bg-rose-500/10 p-3 text-xs text-rose-200">${message}</div>`;
-  }
-
-  function dispatchHxTriggerHeader(resp) {
-    const header = resp.headers.get('HX-Trigger');
-    if (!header) return;
-    try {
-      const payload = JSON.parse(header);
-      Object.entries(payload).forEach(([eventName, detail]) => {
-        document.dispatchEvent(new CustomEvent(eventName, { detail }));
-      });
-    } catch (error) {
-      console.warn('Failed to parse HX-Trigger header', error);
-    }
-  }
-
-  async function loadJobTitleForm(jobId, { edit = false } = {}) {
-    const wrapper = jobTitleWrapper(jobId);
-    if (!wrapper) return;
-    const caseId = wrapper.dataset.caseId;
-    if (!jobId || !caseId) return;
-    const url = jobTitleEndpoint(jobId, caseId, 'form', edit ? '?edit=1' : '');
-    if (!url) return;
-    try {
-      const resp = await fetch(url, {
-        headers: {
-          'X-Requested-With': 'XMLHttpRequest',
-        },
-        credentials: 'same-origin',
-      });
-      const html = await resp.text();
-      wrapper.outerHTML = html;
-    } catch (error) {
-      logJobUiError(jobId, 'job-title-form', error);
-      renderJobTitleError(wrapper, 'Unable to load title editor.');
-    }
-  }
-
-  async function submitJobTitleForm(form) {
-    const wrapper = form.closest('[data-job-title-wrapper]');
-    if (!wrapper) return;
-    const jobId = wrapper.dataset.jobId;
-    const caseId = wrapper.dataset.caseId;
-    if (!jobId || !caseId) return;
-    const url = jobTitleEndpoint(jobId, caseId, 'update');
-    if (!url) return;
-    const formData = new FormData(form);
-    try {
-      const resp = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'X-CSRFToken': getCSRFToken(),
-          'X-Requested-With': 'XMLHttpRequest',
-        },
-        credentials: 'same-origin',
-        body: formData,
-      });
-      const html = await resp.text();
-      wrapper.outerHTML = html;
-      dispatchHxTriggerHeader(resp);
-    } catch (error) {
-      logJobUiError(jobId, 'job-title-save', error);
-      renderJobTitleError(wrapper, 'Unable to save title.');
-    }
-  }
-
-  const REVIEW_CLASS_MAP = {
-    APPROVED: ['border-emerald-400/40', 'bg-emerald-500/10', 'text-emerald-200'],
-    REJECTED: ['border-rose-400/40', 'bg-rose-500/10', 'text-rose-200'],
-  };
-
-  function updateJobReview(jobId, payload) {
-    if (!jobId) return;
-    const normalized = ((payload.review_status || payload.reviewStatus || '') || '').toUpperCase();
-    const comment = payload.review_comment ?? payload.reviewComment ?? '';
-    const reviewerLabel = (payload.reviewed_by && (payload.reviewed_by.label || payload.reviewed_by)) || payload.reviewedBy || '';
-    const reviewedAt = payload.reviewed_at || payload.reviewedAt || '';
-
-    const row = document.querySelector(`[data-job="${jobId}"]`);
-    if (row) {
-      row.setAttribute('data-review-status', normalized || 'PENDING');
-    }
-
-    const badge = document.getElementById(`job-review-badge-${jobId}`);
-    if (badge) {
-      badge.classList.remove('hidden', ...REVIEW_CLASS_MAP.APPROVED, ...REVIEW_CLASS_MAP.REJECTED);
-      if (normalized === 'APPROVED') {
-        badge.classList.add(...REVIEW_CLASS_MAP.APPROVED);
-        badge.textContent = 'Approved';
-      } else if (normalized === 'REJECTED') {
-        badge.classList.add(...REVIEW_CLASS_MAP.REJECTED);
-        badge.textContent = 'Rejected';
-      } else {
-        badge.classList.add('hidden');
-        badge.textContent = '';
-      }
-    }
-
-    const statusPill = document.querySelector('[data-review-status-pill]');
-    if (statusPill) {
-      statusPill.classList.remove('border-white/20', 'bg-white/5', 'text-slate-300', ...REVIEW_CLASS_MAP.APPROVED, ...REVIEW_CLASS_MAP.REJECTED);
-      if (normalized === 'APPROVED') {
-        statusPill.classList.add(...REVIEW_CLASS_MAP.APPROVED);
-        statusPill.textContent = 'Approved';
-      } else if (normalized === 'REJECTED') {
-        statusPill.classList.add(...REVIEW_CLASS_MAP.REJECTED);
-        statusPill.textContent = 'Rejected';
-      } else {
-        statusPill.classList.add('border-white/20', 'bg-white/5', 'text-slate-300');
-        statusPill.textContent = 'Pending';
-      }
-    }
-
-    const detailRow = document.querySelector(`[data-job-detail="${jobId}"]`);
-    if (detailRow) {
-      const statusEl = detailRow.querySelector('[data-review-status-text]');
-      const commentEl = detailRow.querySelector('[data-review-comment]');
-      const metaEl = detailRow.querySelector('[data-review-meta]');
-      if (statusEl) {
-        statusEl.textContent = normalized === 'APPROVED' ? 'Approved' : normalized === 'REJECTED' ? 'Rejected' : 'Pending';
-      }
-      if (commentEl) {
-        commentEl.textContent = comment;
-      }
-      if (metaEl) {
-        if (reviewerLabel || reviewedAt) {
-          let html = '';
-          if (reviewerLabel) {
-            html += `Reviewed by <span class="font-semibold text-slate-100">${reviewerLabel}</span>`;
-          }
-          if (reviewedAt) {
-            const ts = new Date(reviewedAt).toISOString();
-            html += ` · <time data-ts="${ts}">${ts}</time>`;
-          }
-          metaEl.innerHTML = html;
-          metaEl.classList.remove('text-slate-500');
-          metaEl.classList.add('text-slate-400');
-        } else {
-          metaEl.textContent = 'Awaiting reviewer decision.';
-          metaEl.classList.remove('text-slate-400');
-          metaEl.classList.add('text-slate-500');
-        }
-      }
-      const approveBtn = detailRow.querySelector('[data-job-approve]');
-      const rejectBtn = detailRow.querySelector('[data-job-reject]');
-      if (approveBtn) approveBtn.disabled = false;
-      if (rejectBtn) rejectBtn.disabled = false;
-    }
-
-    if (normalized === 'APPROVED') {
-      const label = reviewerLabel ? ` by ${reviewerLabel}` : '';
-      setTranscriptionSummary(`Transcript approved${label}`);
-    } else if (normalized === 'REJECTED') {
-      const label = reviewerLabel ? ` by ${reviewerLabel}` : '';
-      setTranscriptionSummary(`Transcript rejected${label}`);
-    }
-
-    if (window.renderLocalTimes) window.renderLocalTimes();
-  }
-window.udocketUpdateTranscriptionStatus = function (jobId, payload) {
-    const updateSource = payload.__source || (payload.event ? 'ws' : 'unknown');
-    const status = (payload.status || '').toUpperCase() || 'PENDING';
-    const isTerminalStatus = isTerminalStatusValue(status);
-    const progressValue =
-      payload.upload_progress ??
-      payload.progress_percent ??
-      payload.percent_complete ??
-      (typeof payload.progress === 'number'
-        ? payload.progress * (payload.progress <= 1 ? 100 : 1)
-        : null);
-
-    const trackedJobIdCurrent = currentJobId();
-    const isTrackedJob = !trackedJobIdCurrent || trackedJobIdCurrent === jobId;
-
-    updateStatusDisplays(jobId, status, progressValue);
-    if (isTrackedJob) {
-      updateTranscriptionHeader(status, payload);
-    }
-
-    const previousStatus = window.jobLastStatus[jobId];
-    const statusChanged = previousStatus !== status;
-    window.jobLastStatus[jobId] = status;
-
-    const row = document.querySelector(`[data-job="${jobId}"]`);
-    if (row) {
-      row.dataset.jobStatus = status;
-      if (payload.title) {
-        const titleSpan = row.querySelector('[data-job-title]');
-        if (titleSpan) {
-          titleSpan.textContent = payload.title;
-          titleSpan.setAttribute('title', payload.title);
-        }
-      }
-    }
-    updateJobActionButtons(jobId, status);
-    const detailRow = document.querySelector(`[data-job-detail="${jobId}"]`);
-    const container = detailRow ? detailRow.querySelector(`[data-job-detail-container="${jobId}"]`) : null;
-    if (container) {
-      if (detailRow && !detailRow.classList.contains('hidden') && container.dataset.loaded === '1') {
-        const now = Date.now();
-        const last = window.jobDetailRefreshAt[jobId] || 0;
-        const shouldForceRefresh = isTerminalStatus
-          ? statusChanged
-          : (updateSource !== 'poll' && now - last > 4000);
-        if (shouldForceRefresh) {
-          window.jobDetailRefreshAt[jobId] = now;
-          loadJobDetail(jobId, { force: true });
-        }
-      } else if (statusChanged) {
-        delete container.dataset.loaded;
-      }
-    }
-
-    if (!trackedJobIdCurrent || trackedJobIdCurrent === jobId) {
-      setCurrentJob(jobId, status);
-    }
-
-    if (!activeTranscriptionJobId) {
-      activeTranscriptionJobId = jobId;
-    }
-
-    if (payload.title) {
-      const headerTitle = document.querySelector(`#job-title-wrapper-${jobId} [data-job-title-display-text]`);
-      if (headerTitle) headerTitle.textContent = payload.title;
-    }
-
-    const needsPolling =
-      !isTerminalStatus &&
-      (!window.jobPollers || !window.jobPollers[jobId]) &&
-      ['RUNNING', 'CONVERTING', 'UPLOADING'].includes(status);
-    if (needsPolling) {
-      ensurePolling(jobId, true);
-    }
-
-    if (jobId !== activeTranscriptionJobId) {
-      if (isTerminalStatus) {
-        const label = status === 'SUCCEEDED' ? 'Transcript ready' : `Job ${status.toLowerCase()}`;
-        const finishedAt = payload.finished_at || payload.completed_at || payload.timestamp_utc;
-        if (finishedAt) {
-          setTranscriptionSummary(`${label} · ${new Date(finishedAt).toLocaleTimeString()}`);
-        } else {
-          setTranscriptionSummary(label);
-        }
-      }
-      stopJobPolling(jobId);
-      return;
-    }
-
-    let title = '';
-    let detail = '';
-    let state = 'running';
-
-    if (status === 'UPLOADING') {
-      title = 'Uploading audio…';
-      detail = 'Preparing media for Azure Speech.';
-    } else if (status === 'CONVERTING') {
-      title = 'Converting audio…';
-      detail = 'Preparing a WAV conversion before upload.';
-    } else if (status === 'RUNNING') {
-      title = 'Processing with Azure Speech…';
-      detail = 'Awaiting transcription results from Azure.';
-    } else if (status === 'QUEUED' || status === 'PENDING') {
-      title = 'Job queued';
-      detail = 'Azure Speech accepted the job and will start shortly.';
-    } else if (isTerminalStatus) {
-      title = status === 'SUCCEEDED' ? 'Transcript ready' : `Job ${status.toLowerCase()}`;
-      detail = status === 'SUCCEEDED'
-        ? 'Open the job details below to download the transcript.'
-        : 'Check the job logs for diagnostics.';
-      state = 'idle';
-      activeTranscriptionJobId = null;
-      updateStartAvailability();
-    } else {
-      title = `Job ${status.toLowerCase()}`;
-      detail = 'Monitoring job status.';
-    }
-
-    setTranscriptionStatus({
-      title,
-      detail,
-      progress: progressValue,
-      state,
-      statusName: status,
-    });
-    updateTranscriptionControls(status);
-
-    if (status === 'CONVERTING') {
-      setTranscriptionSummary('Converting audio to 16 kHz mono WAV…');
-    } else if (status === 'UPLOADING') {
-      setTranscriptionSummary('Uploading audio…');
-    } else if (status === 'RUNNING') {
-      setTranscriptionSummary('Processing with Azure Speech…');
-    }
-
-    if (isTerminalStatus) {
-      const finishedAt = payload.finished_at || payload.completed_at || payload.timestamp_utc;
-      if (finishedAt) {
-        setTranscriptionSummary(`${title} · ${new Date(finishedAt).toLocaleTimeString()}`);
-      } else {
-        setTranscriptionSummary(title);
-      }
-      stopJobPolling(jobId);
-    }
-  };
-
-  function connectWS(jobId) {
-    const row = document.querySelector(`[data-job="${jobId}"]`);
-    const caseId = currentCaseId();
-    if (!row || (caseId && row.dataset.jobCaseId && row.dataset.jobCaseId !== caseId)) {
-      stopJobPolling(jobId);
-      return;
-    }
-    const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + `/ws/jobs/${jobId}/`;
-    const ws = new WebSocket(url);
-    window.jobSockets[jobId] = ws;
-    ws.onopen = () => {
-      if (window.jobPollers[jobId]) {
-        clearInterval(window.jobPollers[jobId]);
-        delete window.jobPollers[jobId];
-      }
-    };
-    ws.onmessage = (ev) => {
-      try {
-        const data = JSON.parse(ev.data);
-        data.__source = 'ws';
-        console.log(`${JOB_LOG_PREFIX} ws message`, jobId, data.status || data.event || data.type || '');
-        window.udocketUpdateTranscriptionStatus(jobId, data);
-        updateJobReview(jobId, data);
-        const statusNode = document.getElementById(`job-status-${jobId}`);
-        const normalized = statusNode && statusNode.dataset ? statusNode.dataset.status : '';
-        if (isTerminalStatusValue(normalized)) {
-        stopJobPolling(jobId);
-      }
-    } catch (error) {
-      logJobUiError(jobId, 'ws-message', error);
-      }
-    };
-    ws.onerror = (err) => {
-      console.warn('Job websocket error', jobId, err);
-    };
-    ws.onclose = () => {
-      delete window.jobSockets[jobId];
-      ensurePolling(jobId, true);
-    };
-  }
-
-  async function pollJob(jobId) {
-    try {
-      const row = document.querySelector(`[data-job="${jobId}"]`);
-      const caseId = currentCaseId();
-      if (!row || (caseId && row.dataset.jobCaseId && row.dataset.jobCaseId !== caseId)) {
-        stopJobPolling(jobId);
-        return;
-      }
-      const resp = await fetch(`/api/v1/jobs/${jobId}/status/`);
-      if (!resp.ok) return;
-      const data = await resp.json();
-      data.__source = 'poll';
-      console.log(`${JOB_LOG_PREFIX} poll response`, jobId, data.status);
-      window.udocketUpdateTranscriptionStatus(jobId, data);
-      updateJobReview(jobId, data);
-      const statusNode = document.getElementById(`job-status-${jobId}`);
-      const normalized = statusNode && statusNode.dataset
-        ? statusNode.dataset.status
-        : (row ? row.dataset.jobStatus : (data.status || ''));
-      if (isTerminalStatusValue(normalized || data.status)) {
-        stopJobPolling(jobId);
-      }
-    } catch (error) {
-      logJobUiError(jobId, 'poll', error);
-    }
-  }
-
-  function ensurePolling(jobId, force = false) {
-    if (window.jobPollers[jobId]) return;
-    const statusEl = document.getElementById(`job-status-${jobId}`);
-    const row = document.querySelector(`[data-job="${jobId}"]`);
-    const caseId = currentCaseId();
-    if (!row || (caseId && row.dataset.jobCaseId && row.dataset.jobCaseId !== caseId)) {
-      stopJobPolling(jobId);
-      return;
-    }
-    const normalized = statusEl && statusEl.dataset ? statusEl.dataset.status : (row ? row.dataset.jobStatus : '');
-    if (isTerminalStatusValue(normalized)) {
-      stopJobPolling(jobId);
-      return;
-    }
-    const socket = window.jobSockets[jobId];
-    if (!force && socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
-      // Prefer websocket updates while connection is healthy.
-      console.log(`${JOB_LOG_PREFIX} poll skip (socket)`, jobId);
-      return;
-    }
-    startJobPolling(jobId, () => {
-      pollJob(jobId).catch((error) => logJobUiError(jobId, 'poll-interval', error));
-    });
-  }
-
-  async function insertOrReplaceJobRow(jobId) {
-    if (!jobId) return null;
-    const jobsBody = document.getElementById('jobs-body');
-    const caseId = currentCaseId();
-    if (!jobsBody || !caseId) return null;
-    const wasOpen = (() => {
-      const detailRow = jobsBody.querySelector(`[data-job-detail="${jobId}"]`);
-      return detailRow ? !detailRow.classList.contains('hidden') : false;
-    })();
-    try {
-      const resp = await fetch(`/cases/${caseId}/jobs/${jobId}/row/`, {
-        headers: {
-          'HX-Request': 'true',
-        },
-        credentials: 'same-origin',
-      });
-      if (!resp.ok) return null;
-      const html = (await resp.text()).trim();
-      if (!html) return null;
-      jobsBody
-        .querySelectorAll(`[data-job="${jobId}"], [data-job-detail="${jobId}"]`)
-        .forEach((node) => node.remove());
-      jobsBody.insertAdjacentHTML('afterbegin', html);
-      bootstrapJobs();
-      const newRow = document.querySelector(`[data-job="${jobId}"]`);
-      if (wasOpen && newRow) {
-        await loadJobDetail(jobId, { force: true });
-        setJobRowExpanded(newRow, true);
-      }
-      return newRow;
-    } catch (error) {
-      console.error('Failed to refresh job row', jobId, error);
-      return null;
-    }
-  }
-
-  async function loadJobDetail(jobId, { force = false } = {}) {
-    const container = document.querySelector(`[data-job-detail-container="${jobId}"]`);
-    if (!container) return;
-    if (!force && (container.dataset.loaded === '1' || container.dataset.loading === '1')) return;
-    // Preserve <details> open state and scroll positions
-    const preserve = {};
-    container.querySelectorAll('details[data-preserve-state]').forEach(d => {
-      const key = d.getAttribute('data-preserve-state');
-      if (!key) return;
-      preserve[key] = { open: d.open, scroll: {} };
-      d.querySelectorAll('[data-preserve-scroll]').forEach(el => {
-        const sk = el.getAttribute('data-preserve-scroll');
-        if (!sk) return;
-        preserve[key].scroll[sk] = el.scrollTop;
-      });
-    });
-    container.dataset.loading = '1';
-    container.innerHTML = '<div class="flex items-center gap-2 text-xs text-slate-300"><svg class="h-3 w-3 animate-spin text-primary-300" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle class="opacity-30" cx="12" cy="12" r="10" stroke-width="2"></circle><path d="M22 12a10 10 0 00-10-10" stroke-width="2" stroke-linecap="round"></path></svg><span>Loading details…</span></div>';
-    try {
-      const caseId = document.getElementById('jobs-body')?.dataset.caseId;
-      const urls = [];
-      if (caseId) urls.push(`/cases/${caseId}/jobs/${jobId}/detail/`);
-      urls.push(`/jobs/${jobId}/detail-panel/`);
-      let resp;
-      let lastError;
-      for (const detailUrl of urls) {
-        try {
-          resp = await fetch(detailUrl, {
-            headers: {
-              'HX-Request': 'true',
-            },
-            credentials: 'same-origin',
-          });
-          if (resp.ok) {
-            break;
-          }
-          lastError = new Error(`HTTP ${resp.status}`);
-        } catch (fetchErr) {
-          lastError = fetchErr;
-        }
-      }
-      if (!resp || !resp.ok) {
-        throw lastError || new Error('Unable to fetch job detail');
-      }
-      const html = await resp.text();
-      container.innerHTML = html;
-      // Restore preserved state
-      Object.entries(preserve).forEach(([key, info]) => {
-        const d = container.querySelector(`details[data-preserve-state="${key}"]`);
-        if (!d) return;
-        if (info && info.open) d.setAttribute('open', '');
-        if (info && info.scroll) {
-          d.querySelectorAll('[data-preserve-scroll]').forEach(el => {
-            const sk = el.getAttribute('data-preserve-scroll');
-            if (sk && info.scroll[sk] != null) {
-              try { el.scrollTop = info.scroll[sk]; } catch (_) {}
-            }
-          });
-        }
-      });
-      const row = document.querySelector(`[data-job="${jobId}"]`);
-      const currentStatus = row ? row.dataset.jobStatus : null;
-      if (currentStatus) {
-        updateStatusDisplays(jobId, currentStatus, null);
-      } else {
-        const pill = container.querySelector('[data-job-status-pill]');
-        if (pill && pill.dataset.status) {
-          updateStatusDisplays(jobId, pill.dataset.status, null);
-        }
-      }
-      container.dataset.loaded = '1';
-      delete container.dataset.loading;
-      if (window.renderLocalTimes) window.renderLocalTimes();
-    } catch (error) {
-      console.error('Failed to load job detail', error);
-      const message = typeof error === 'object' && error !== null && error.message ? error.message : 'Unknown error';
-      container.innerHTML = `<div class="space-y-2 text-xs text-rose-200"><p>Unable to load job detail. Try again later.</p><p class="font-mono text-[10px] text-rose-300">${message}</p></div>`;
-      delete container.dataset.loading;
-    }
-  }
-
-  function setJobRowExpanded(row, expanded) {
-    if (!row) return;
-    const jobId = row.dataset.job;
-    const detailRow = document.querySelector(`[data-job-detail="${jobId}"]`);
-    if (detailRow) {
-      detailRow.classList.toggle('hidden', !expanded);
-    }
-    row.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-    row.classList.toggle('bg-white/10', expanded);
-    const chevron = row.querySelector('[data-job-chevron]');
-    if (chevron) chevron.classList.toggle('rotate-180', expanded);
-  }
-
-  function collapseOtherJobRows(activeRow) {
-    document.querySelectorAll('[data-job-row]').forEach((row) => {
-      if (row !== activeRow) {
-        setJobRowExpanded(row, false);
-      }
-    });
-  }
-
-  async function toggleJobRow(row) {
-    const detailRow = row ? document.querySelector(`[data-job-detail="${row.dataset.job}"]`) : null;
-    if (!detailRow) return;
-    const isExpanded = !detailRow.classList.contains('hidden');
-    const shouldExpand = !isExpanded;
-    if (shouldExpand) {
-      collapseOtherJobRows(row);
-      await loadJobDetail(row.dataset.job);
-    }
-    setJobRowExpanded(row, shouldExpand);
-  }
-
-  function bootstrapJobs() {
-    const seenJobIds = new Set();
-    document.querySelectorAll('[data-job]').forEach((row) => {
-      const jobId = row.dataset.job;
-      if (!jobId) return;
-      seenJobIds.add(jobId);
-      const statusEl = document.getElementById(`job-status-${jobId}`);
-      let statusValue = row.getAttribute('data-job-status') || '';
-      let progressValue;
-      if (statusEl) {
-        const currentStatus = statusEl.dataset && statusEl.dataset.status ? statusEl.dataset.status : statusEl.textContent;
-        statusValue = currentStatus || statusValue;
-        if (statusEl.dataset && statusEl.dataset.progress) {
-          const parsedProgress = parseFloat(statusEl.dataset.progress);
-          progressValue = Number.isFinite(parsedProgress) ? parsedProgress : undefined;
-        }
-        renderStatusLabel(statusEl, statusValue, progressValue);
-        statusValue = statusEl.dataset && statusEl.dataset.status ? statusEl.dataset.status : statusValue;
-      }
-      const normalized = normalizeStatusName(statusValue);
-      if (normalized) {
-        row.dataset.jobStatus = normalized;
-      }
-      updateJobActionButtons(jobId, normalized || row.getAttribute('data-job-status'));
-      if (!row.dataset.ws) {
-        try {
-          connectWS(jobId);
-          row.dataset.ws = '1';
-        } catch (error) {
-          logJobUiError(jobId, 'ws-init', error);
-        }
-      }
-      ensurePolling(jobId);
-    });
-    if (window.jobPollers) {
-      Object.keys(window.jobPollers).forEach((jobId) => {
-        if (!seenJobIds.has(jobId)) {
-          stopJobPolling(jobId);
-          if (window.jobSockets && window.jobSockets[jobId]) {
-            try {
-              window.jobSockets[jobId].close();
-            } catch (_) {}
-            delete window.jobSockets[jobId];
-          }
-        }
-      });
-    }
-    updateFileLabel();
-    updateStartAvailability();
-    updateTranscriptionConfig();
-    const { container } = getTranscriptionElements();
-    if (container) {
-      const jobId = container.dataset.currentJobId || '';
-      const status = (container.dataset.currentJobStatus || 'IDLE').toUpperCase();
-      if (jobId && ['RUNNING', 'UPLOADING', 'CONVERTING', 'PENDING', 'QUEUED'].includes(status)) {
-        activeTranscriptionJobId = jobId;
-      }
-      if (!jobId) {
-        activeTranscriptionJobId = null;
-      }
-      updateTranscriptionControls(status || 'IDLE');
-    }
-    const caseId = document.getElementById('jobs-body')?.dataset.caseId;
-    if (caseId) {
-      try {
-        connectCaseWS(caseId);
-      } catch (err) {
-        console.error('Case websocket init failed', err);
-        if (typeof udocketLogClientError === 'function') {
-          udocketLogClientError({
-            type: 'case_ws_init',
-            message: err && err.message ? err.message : String(err),
-            stack: err && err.stack,
-            href: window.location.href,
-          });
-        }
-      }
-      const socketReady = window.caseSocket && (window.caseSocket.readyState === WebSocket.OPEN || window.caseSocket.readyState === WebSocket.CONNECTING);
-      if (!socketReady && !window.casePoller) {
-        window.casePoller = setInterval(() => pollCaseModules(caseId), CASE_POLL_INTERVAL);
-      }
-    }
-  }
-
-  window.addEventListener('DOMContentLoaded', bootstrapJobs);
-
-  document.addEventListener('htmx:afterSwap', (evt) => {
-    bootstrapJobs();
-    if (window.renderLocalTimes) window.renderLocalTimes();
-  });
-
-  document.addEventListener('click', async (evt) => {
-    const editBtn = evt.target.closest('[data-edit-job-title]');
-    if (editBtn) {
-      evt.preventDefault();
-      evt.stopPropagation();
-      const wrapper = editBtn.closest('[data-job-title-wrapper]');
-      const jobId = wrapper ? wrapper.dataset.jobId : null;
-      if (jobId) await loadJobTitleForm(jobId, { edit: true });
-      return;
-    }
-
-    const cancelBtn = evt.target.closest('[data-cancel-job-title]');
-    if (cancelBtn) {
-      evt.preventDefault();
-      evt.stopPropagation();
-      const wrapper = cancelBtn.closest('[data-job-title-wrapper]');
-      const jobId = wrapper ? wrapper.dataset.jobId : null;
-      if (jobId) await loadJobTitleForm(jobId, { edit: false });
-      return;
-    }
-  });
-
-  document.addEventListener('click', async (evt) => {
-    const jobLink = evt.target.closest('[data-job-link]');
-    if (!jobLink) return;
-    evt.preventDefault();
-    const targetJob = jobLink.getAttribute('data-job-link');
-    if (!targetJob) return;
-    const row = await insertOrReplaceJobRow(targetJob);
-    if (row) {
-      collapseOtherJobRows(row);
-      await loadJobDetail(targetJob, { force: true });
-      setJobRowExpanded(row, true);
-      try {
-        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      } catch (_) {}
-    }
-  });
-
-  document.addEventListener('click', async (evt) => {
-    const row = evt.target.closest('[data-job-row]');
-    if (!row) return;
-    if (evt.target.closest('a, button, [data-job-link], [data-job-action], input, select, textarea')) return;
-    evt.preventDefault();
-    await toggleJobRow(row);
-  });
-
-  document.addEventListener('keydown', async (evt) => {
-    if (!(evt.key === 'Enter' || evt.key === ' ')) return;
-    const row = evt.target.closest('[data-job-row]');
-    if (!row) return;
-    if (evt.target.closest('a, button, [data-job-link], [data-job-action], input, select, textarea')) return;
-    evt.preventDefault();
-    await toggleJobRow(row);
-  });
-
-  document.addEventListener('submit', async (evt) => {
-    const form = evt.target.closest('[data-job-title-form]');
-    if (!form) return;
-    evt.preventDefault();
-    evt.stopPropagation();
-    await submitJobTitleForm(form);
-  });
-
-  document.addEventListener('job-title-updated', (evt) => {
-    const detail = evt.detail || {};
-    const jobId = detail.job_id || detail.jobId;
-    const title = detail.title;
-    if (!jobId || !title) return;
-    const row = document.querySelector(`[data-job="${jobId}"]`);
-    if (row) {
-      const titleSpan = row.querySelector('[data-job-title]');
-      if (titleSpan) {
-        titleSpan.textContent = title;
-        titleSpan.setAttribute('title', title);
-      }
-    }
-    // Also update the open detail panel header text and any visible input
-    const wrapper = document.getElementById(`job-title-wrapper-${jobId}`);
-    if (wrapper) {
-      const headerText = wrapper.querySelector('[data-job-title-display-text]');
-      if (headerText) headerText.textContent = title;
-      const input = wrapper.querySelector('[data-job-title-form] input[name="title"]');
-      if (input) input.value = title;
-    }
-  });
-
-  document.addEventListener('click', (evt) => {
-    if (evt.target.closest('[data-module-quick]')) {
-      evt.stopPropagation();
-      return;
-    }
-    const toggle = evt.target.closest('[data-module-toggle]');
-    const header = evt.target.closest('[data-module-header]');
-    if (!toggle && !header) return;
-    const targetId = toggle ? toggle.getAttribute('data-module-target') : header?.getAttribute('data-module-header');
-    if (!targetId) return;
-    evt.preventDefault();
-    const panel = document.getElementById(targetId);
-    if (!panel) return;
-    const isHidden = panel.classList.contains('hidden');
-    document.querySelectorAll('[data-module-panel]').forEach((p) => {
-      const panelId = p.id;
-      const wrapper = document.querySelector(`[data-module-wrapper="${panelId}"]`);
-      const quick = wrapper ? wrapper.querySelector('[data-module-quick]') : null;
-      if (p !== panel) {
-        p.classList.add('hidden');
-        document.querySelectorAll(`[data-module-toggle][data-module-target="${panelId}"]`).forEach((btn) => btn.setAttribute('aria-expanded', 'false'));
-        document.querySelectorAll(`[data-module-chevron="${panelId}"]`).forEach((icon) => icon.classList.remove('rotate-180'));
-        if (quick && panelId === 'module-transcription') quick.classList.remove('hidden');
-      }
-    });
-    if (isHidden) {
-      panel.classList.remove('hidden');
-    } else {
-      panel.classList.add('hidden');
-    }
-    document.querySelectorAll(`[data-module-toggle][data-module-target="${targetId}"]`).forEach((btn) => btn.setAttribute('aria-expanded', isHidden ? 'true' : 'false'));
-    document.querySelectorAll(`[data-module-chevron="${targetId}"]`).forEach((icon) => icon.classList.toggle('rotate-180', isHidden));
-    const wrapper = document.querySelector(`[data-module-wrapper="${targetId}"]`);
-    const quick = wrapper ? wrapper.querySelector('[data-module-quick]') : null;
-    if (quick && targetId === 'module-transcription') {
-      if (isHidden) quick.classList.add('hidden');
-      else quick.classList.remove('hidden');
-    }
-  });
-
-  document.addEventListener('click', async (evt) => {
-    const cancelBtn = evt.target.closest('[data-job-cancel]');
-    if (cancelBtn) {
-      evt.preventDefault();
-      evt.stopPropagation();
-      const jobId = cancelBtn.getAttribute('data-job-cancel');
-      if (!jobId) return;
-      if (!window.confirm('Cancel this transcription job?')) return;
-      cancelBtn.disabled = true;
-      try {
-        const resp = await fetch(`/api/v1/jobs/${jobId}/cancel/`, {
-          method: 'POST',
-          headers: {
-            'X-CSRFToken': getCSRFToken(),
-            'Accept': 'application/json',
-          },
-          credentials: 'same-origin',
-        });
-        if (resp.ok) {
-          const data = await resp.json();
-          const status = (data.status || 'CANCELLED').toUpperCase();
-          activeTranscriptionJobId = activeTranscriptionJobId === jobId ? null : activeTranscriptionJobId;
-          setCurrentJob(jobId, status);
-         setTranscriptionStatus({
-           title: 'Cancellation requested',
-           detail: 'Stopping transcription run.',
-           progress: null,
-            state: 'idle',
-            statusName: status,
-          });
-          setTranscriptionSummary('Cancellation requested');
-          updateTranscriptionControls(status);
-          updateJobActionButtons(jobId, status);
-          const row = document.querySelector(`[data-job="${jobId}"]`);
-          if (row) row.dataset.jobStatus = status;
-          pollJob(jobId);
-        }
-      } catch (error) {
-        console.error('Cancel transcription failed', error);
-      } finally {
-        cancelBtn.disabled = false;
-      }
-      return;
-    }
-
-    const restartBtn = evt.target.closest('[data-job-restart]');
-    if (restartBtn) {
-      evt.preventDefault();
-      evt.stopPropagation();
-      const jobId = restartBtn.getAttribute('data-job-restart');
-      if (!jobId) return;
-      if (!window.confirm('Restart transcription? This will create a new job with the same audio and settings.')) return;
-      restartBtn.disabled = true;
-      try {
-        const resp = await fetch(`/api/v1/jobs/${jobId}/restart/`, {
-          method: 'POST',
-          headers: {
-            'X-CSRFToken': getCSRFToken(),
-            'Accept': 'application/json',
-          },
-          credentials: 'same-origin',
-        });
-        if (resp.ok) {
-          const data = await resp.json();
-          const status = (data.status || 'PENDING').toUpperCase();
-          const replacementId = data.job_id || jobId;
-          if (replacementId && replacementId !== jobId) {
-            window.location.reload();
-            return;
-          }
-          activeTranscriptionJobId = replacementId;
-          setCurrentJob(replacementId, status);
-          setTranscriptionStatus({
-            title: 'Restarting transcription…',
-            detail: 'Azure Speech will process the audio again.',
-            progress: null,
-            state: 'running',
-            statusName: status,
-          });
-          setTranscriptionSummary('Job restarting…');
-          updateTranscriptionControls(status);
-          updateJobActionButtons(replacementId, status);
-          const row = document.querySelector(`[data-job="${replacementId}"]`);
-          if (row) row.dataset.jobStatus = status;
-          ensurePolling(replacementId);
-        }
-      } catch (error) {
-        console.error('Restart transcription failed', error);
-      } finally {
-        restartBtn.disabled = false;
-      }
-      return;
-    }
-
-    const restartConvertBtn = evt.target.closest('[data-job-restart-convert]');
-    if (restartConvertBtn) {
-      evt.preventDefault();
-      evt.stopPropagation();
-      const jobId = restartConvertBtn.getAttribute('data-job-restart-convert');
-      if (!jobId) return;
-      if (!window.confirm('Restart with WAV conversion? This creates a new job with the same audio and settings (converted to WAV).')) return;
-      restartConvertBtn.disabled = true;
-      try {
-        const resp = await fetch(`/api/v1/jobs/${jobId}/restart/?convert=1`, {
-          method: 'POST',
-          headers: {
-            'X-CSRFToken': getCSRFToken(),
-            'Accept': 'application/json',
-          },
-          credentials: 'same-origin',
-        });
-        if (resp.ok) {
-          const data = await resp.json();
-          const status = (data.status || 'PENDING').toUpperCase();
-          const replacementId = data.job_id || jobId;
-          if (replacementId && replacementId !== jobId) {
-            window.location.reload();
-            return;
-          }
-          activeTranscriptionJobId = replacementId;
-          setCurrentJob(replacementId, status);
-          setTranscriptionStatus({
-            title: 'Restarting transcription…',
-            detail: 'Audio will be converted to WAV, then sent to Azure.',
-            progress: null,
-            state: 'running',
-            statusName: status,
-          });
-          setTranscriptionSummary('Job restarting with conversion…');
-          updateTranscriptionControls(status);
-          updateJobActionButtons(replacementId, status);
-          const row = document.querySelector(`[data-job="${replacementId}"]`);
-          if (row) row.dataset.jobStatus = status;
-          ensurePolling(replacementId);
-        }
-      } catch (error) {
-        console.error('Restart w/ conversion failed', error);
-      } finally {
-        restartConvertBtn.disabled = false;
-      }
-      return;
-    }
-
-    const approveBtn = evt.target.closest('[data-job-approve]');
-    if (approveBtn) {
-      evt.preventDefault();
-      evt.stopPropagation();
-      const jobId = approveBtn.getAttribute('data-job-approve');
-      if (!jobId) return;
-      approveBtn.disabled = true;
-      try {
-        const resp = await fetch(`/api/v1/jobs/${jobId}/approve/`, {
-          method: 'POST',
-          headers: {
-            'X-CSRFToken': getCSRFToken(),
-            'Accept': 'application/json',
-          },
-          credentials: 'same-origin',
-        });
-        if (resp.ok) {
-          const data = await resp.json();
-          updateJobReview(jobId, data);
-          pollJob(jobId);
-        } else {
-          console.error('Approve transcription failed', await resp.text());
-        }
-      } catch (error) {
-        console.error('Approve transcription failed', error);
-      } finally {
-        approveBtn.disabled = false;
-      }
-      return;
-    }
-
-    const rejectBtn = evt.target.closest('[data-job-reject]');
-    if (rejectBtn) {
-      evt.preventDefault();
-      evt.stopPropagation();
-      const jobId = rejectBtn.getAttribute('data-job-reject');
-      if (!jobId) return;
-      const reason = window.prompt('Provide a reason for rejection (optional):', '');
-      if (reason === null) {
-        return;
-      }
-      rejectBtn.disabled = true;
-      try {
-        const resp = await fetch(`/api/v1/jobs/${jobId}/reject/`, {
-          method: 'POST',
-          headers: {
-            'X-CSRFToken': getCSRFToken(),
-            'Accept': 'application/json',
-            'Content-Type': 'application/json',
-          },
-          credentials: 'same-origin',
-          body: JSON.stringify({ comment: reason }),
-        });
-        if (resp.ok) {
-          const data = await resp.json();
-          updateJobReview(jobId, data);
-          pollJob(jobId);
-        } else {
-          console.error('Reject transcription failed', await resp.text());
-        }
-      } catch (error) {
-        console.error('Reject transcription failed', error);
-      } finally {
-        rejectBtn.disabled = false;
-      }
-      return;
-    }
-  });
-
-  document.addEventListener('click', async (evt) => {
-    const analysisBtn = evt.target.closest('[data-analysis-action="analysis-start"]');
-    if (!analysisBtn) return;
-    evt.preventDefault();
-    evt.stopPropagation();
-    const key = analysisBtn.getAttribute('data-analysis-key');
-    const jobId = analysisBtn.getAttribute('data-job-id');
-    if (!key || !jobId) return;
-    const label = analysisBtn.getAttribute('data-analysis-label') || key;
-    const originalText = analysisBtn.textContent;
-    const loadingText = analysisBtn.getAttribute('data-loading-text') || 'Queuing…';
-    const successText = analysisBtn.getAttribute('data-success-label') || 'Automation queued';
-    analysisBtn.disabled = true;
-    analysisBtn.textContent = loadingText;
-    const toastX = evt.clientX || window.innerWidth / 2;
-    const toastY = evt.clientY || window.innerHeight / 2;
-    let success = false;
-    try {
-      const resp = await fetch(`/api/v1/jobs/${jobId}/analyze/${key}/`, {
-        method: 'POST',
-        headers: {
-          'X-CSRFToken': getCSRFToken(),
-          'Accept': 'application/json',
-        },
-        credentials: 'same-origin',
-      });
-      if (!resp.ok) {
-        const text = await resp.text();
-        throw new Error(text || `HTTP ${resp.status}`);
-      }
-      success = true;
-    } catch (error) {
-      console.error(`Failed to queue ${key}`, error);
-      if (window.udocketShowToastAt) {
-        window.udocketShowToastAt(toastX, toastY, `Unable to queue ${label}.`);
-      }
-    } finally {
-      analysisBtn.disabled = false;
-      analysisBtn.textContent = originalText;
-    }
-    if (success) {
-      if (window.udocketShowToastAt) {
-        window.udocketShowToastAt(toastX, toastY, successText);
-      }
-      await refreshAnalysisModule(key);
-    }
-  });
-
-  document.addEventListener('click', (evt) => {
-    const trigger = evt.target.closest('[data-file-trigger]');
-    if (!trigger) return;
-    evt.preventDefault();
-    evt.stopPropagation();
-    const inputId = trigger.getAttribute('data-file-input');
-    const input = document.getElementById(inputId);
-    if (input) input.click();
-  });
-
-  document.addEventListener('change', (evt) => {
-    if (evt.target && evt.target.name === 'diarization') {
-      updateTranscriptionConfig();
-    }
-    if (evt.target.id === 'module-transcription-file') {
-      updateFileLabel();
-      updateStartAvailability();
-    }
-  });
-
-  document.addEventListener('input', (evt) => {
-    if (evt.target && evt.target.name === 'language') {
-      updateTranscriptionConfig();
-    }
-    if (evt.target.id === 'module-transcription-url') {
-      updateStartAvailability();
-    }
-  });
-
-  // copy-to-clipboard moved to global base template
-
-  document.addEventListener('htmx:beforeRequest', (evt) => {
-    if (evt.target && evt.target.id === 'job-form') {
-      setTranscriptionStatus({
-        title: 'Uploading audio…',
-        detail: 'Sending media to the platform.',
-        progress: 5,
-        state: 'running',
-        statusName: 'UPLOADING',
-      });
-      updateTranscriptionControls('UPLOADING');
-    }
-  });
-
-  document.addEventListener('htmx:xhr:progress', (evt) => {
-    const target = evt.target;
-    if (!target || target.id !== 'job-form') return;
-    const loaded = evt.detail?.loaded ?? 0;
-    const total = evt.detail?.total ?? 1;
-    const pct = Math.max(0, Math.min(100, Math.round((loaded / total) * 100)));
-    setTranscriptionStatus({
-      title: 'Uploading audio…',
-      detail: 'Sending media to the platform.',
-      progress: pct,
-      state: 'running',
-      statusName: 'UPLOADING',
-    });
-    updateTranscriptionControls('UPLOADING');
-  });
-
-  document.addEventListener('htmx:afterRequest', (evt) => {
-    if (!evt.target || evt.target.id !== 'job-form') return;
-    const { fileInput, urlInput, fileName, quickSection } = getTranscriptionElements();
-    if (fileInput) fileInput.value = '';
-    if (urlInput) urlInput.value = '';
-    if (fileName) fileName.textContent = 'No file selected.';
-    updateStartAvailability();
-    updateTranscriptionConfig();
-
-    let payload;
-    try {
-      const header = evt.detail?.xhr?.getResponseHeader('HX-Trigger');
-      if (header) payload = JSON.parse(header);
-    } catch (_) {
-      payload = null;
-    }
-    const jobInfo = payload && payload['job-enqueued'];
-    if (jobInfo && jobInfo.job_id) {
-      const initialStatus = jobInfo.force_wav ? 'CONVERTING' : 'PENDING';
-      const initialTitle = initialStatus === 'CONVERTING' ? 'Converting audio…' : 'Job queued';
-      const initialDetail = initialStatus === 'CONVERTING'
-        ? 'Preparing a WAV conversion before upload.'
-        : 'Azure Speech accepted the transcription job.';
-      activeTranscriptionJobId = jobInfo.job_id;
-      setTranscriptionStatus({
-        title: initialTitle,
-        detail: initialDetail,
-        progress: null,
-        state: 'running',
-        statusName: initialStatus,
-      });
-      setCurrentJob(jobInfo.job_id, initialStatus);
-      updateTranscriptionControls(initialStatus);
-      if (jobInfo.force_wav) {
-        setTranscriptionSummary('Converting audio to 16 kHz mono WAV…');
-      } else {
-        setTranscriptionSummary('Job queued · awaiting Azure updates');
-      }
-      updateTranscriptionHeader(initialStatus, { created_at: new Date().toISOString() });
-      const panel = document.getElementById('module-transcription');
-      if (quickSection && panel && panel.classList.contains('hidden')) {
-        quickSection.classList.remove('hidden');
-      }
-    } else {
-      setTranscriptionStatus({
-        title: 'Ready to launch',
-        detail: 'Select audio or paste a SAS URL to start Azure Speech.',
-        progress: null,
-        state: 'idle',
-        statusName: 'IDLE',
-      });
-      activeTranscriptionJobId = null;
-      setCurrentJob('', 'IDLE');
-      updateTranscriptionControls('IDLE');
-    }
-  });
-
-  // toast is implemented globally as udocketShowToastAt
-  } catch (error) {
-    console.error('Case detail bootstrap failed', error);
-    if (typeof udocketLogClientError === 'function') {
-      udocketLogClientError({
-        type: 'case_detail_init',
-        message: error && error.message ? error.message : String(error),
-        stack: error && error.stack,
-        href: window.location.href,
-      });
-    }
-  }
-</script>
+  </script>
 {% endblock %}
 {% block content %}
-  <section class="space-y-6">
-    <div class="flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/10 p-6 shadow-lg shadow-black/30 lg:flex-row lg:items-stretch">
-      <div class="flex-1">
-        <p class="text-xs uppercase tracking-wide text-slate-300">Case</p>
-        <div id="case-title-wrapper" class="mt-1">
-          {% include "ui/_case_title.html" %}
+  <section class="space-y-8" data-case-view data-case-id="{{ case.id }}">
+    <div id="case-header" data-case-header-container>
+      {% include "ui/tools/_case_header.html" %}
+    </div>
+
+    <section aria-label="Case Developer" class="space-y-4" data-case-developer>
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-lg font-semibold text-white">Case Developer</h2>
+          <p class="text-sm text-slate-300">Choose a workspace to launch tools or manage metadata.</p>
         </div>
-        <p class="mt-2 text-sm text-slate-300">Managed by {{ case.organization.name }} · ID <span class="font-mono text-primary-200" data-copy-text="{{ case.id }}" title="{{ case.id }}">{{ case.id }}</span></p>
-        <dl class="mt-4 grid gap-3 text-xs text-slate-300 sm:grid-cols-3">
-          <div>
-            <dt class="uppercase tracking-wide text-slate-500">Created</dt>
-            <dd class="mt-1 text-slate-100"><time data-ts="{{ case.created_at|date:'c' }}">{{ case.created_at }}</time></dd>
-          </div>
-          <div>
-            <dt class="uppercase tracking-wide text-slate-500">Total jobs</dt>
-            <dd class="mt-1 text-slate-100">{{ job_summary.total }}</dd>
-          </div>
-          <div>
-            <dt class="uppercase tracking-wide text-slate-500">Succeeded</dt>
-            <dd class="mt-1 text-emerald-200">{{ job_summary.succeeded }}</dd>
-          </div>
-        </dl>
       </div>
-      <div class="rounded-2xl border border-white/10 bg-slate-900/80 p-5 text-sm text-slate-200 lg:max-w-sm">
-        <h2 class="text-lg font-semibold text-white">Last activity</h2>
-        {% if latest_job and latest_job_telemetry %}
-          <p class="mt-2">Most recent transcription <strong class="text-primary-200">{{ latest_job.mode|title }}</strong> is <span class="font-semibold text-white">{{ latest_job_telemetry.status }}</span>{% if latest_activity_ts %} · <time data-ts="{{ latest_activity_ts|date:'c' }}">{{ latest_activity_ts }}</time>{% endif %}.</p>
-          <dl class="mt-4 grid gap-3 text-xs text-slate-300 sm:grid-cols-2">
-            <div>
-              <dt class="uppercase tracking-wide text-slate-500">Duration</dt>
-              <dd class="mt-1 text-slate-100">{% if latest_job_telemetry.duration_s %}{{ latest_job_telemetry.duration_s|floatformat:1 }} s{% else %}—{% endif %}</dd>
-            </div>
-            <div>
-              <dt class="uppercase tracking-wide text-slate-500">Words</dt>
-              <dd class="mt-1 text-slate-100">{{ latest_job_telemetry.transcript.words|default:"—" }}</dd>
-            </div>
-            <div>
-              <dt class="uppercase tracking-wide text-slate-500">Azure region</dt>
-              <dd class="mt-1 text-slate-100">{{ latest_job_telemetry.agent.region|default:"—" }}</dd>
-            </div>
-            <div>
-              <dt class="uppercase tracking-wide text-slate-500">Diarization</dt>
-              <dd class="mt-1 text-slate-100">{% if latest_job.diarization %}Enabled{% else %}Disabled{% endif %}</dd>
-            </div>
-          </dl>
+      <div id="case-developer-cards" data-case-developer-cards>
+        {% include "ui/tools/_developer_cards.html" with cards=case_developer_cards active_tool=initial_tool_key %}
+      </div>
+    </section>
+
+    <section aria-label="Tool Workspace" class="space-y-4">
+      <div id="tool-workspace" data-tool-workspace>
+        {% if initial_tool_panel %}
+          {% include "ui/tools/_panel.html" with panel=initial_tool_panel %}
         {% else %}
-          <p class="mt-2">No transcription jobs have been run yet. Use the quick launch controls below to start one.</p>
+          <div class="rounded-2xl border border-dashed border-white/15 bg-white/5 p-6 text-center text-sm text-slate-400">
+            Select a tool from Case Developer to get started.
+          </div>
         {% endif %}
       </div>
-    </div>
-
-    {% include "ui/_case_progress.html" %}
-
-    {% if case.notes %}
-      <div class="rounded-2xl border border-white/10 bg-white/5 p-6 text-sm text-slate-100">
-        <p class="text-xs uppercase tracking-wide text-slate-400">Notes</p>
-        <p class="mt-2 whitespace-pre-line">{{ case.notes }}</p>
-      </div>
-    {% endif %}
-
-    <div class="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-black/25">
-      <h2 class="text-lg font-semibold text-white">Tools</h2>
-      <p class="mt-2 text-sm text-slate-300">Launch automated agents or review upcoming features for this case.</p>
-      <div class="mt-4 grid gap-4">
-        <div>
-          <form id="job-form" method="post" enctype="multipart/form-data" class="space-y-5"
-                hx-post="/cases/{{ case.id }}/jobs/new"
-                hx-encoding="multipart/form-data"
-                hx-target="#jobs-body" hx-swap="afterbegin">
-            {% csrf_token %}
-            <input type="hidden" name="mode" value="batch">
-            <div class="flex flex-col gap-4">
-              <div class="rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-3" data-module-wrapper="module-transcription">
-                <div class="flex flex-wrap items-center gap-3" data-current-job-id="{{ latest_job.id|default:'' }}" data-current-job-status="{{ latest_job_telemetry.status|default:'IDLE' }}">
-                  <div class="flex flex-col gap-1 text-left grow cursor-pointer" data-module-header="module-transcription">
-                    <p class="text-xs uppercase tracking-wide text-slate-400">Transcription</p>
-                    <p class="text-xs text-slate-300" data-transcription-config>Batch mode with diarization</p>
-                    <p class="text-xs text-slate-300" data-transcription-last-wrapper>
-                      <span data-transcription-last-empty {% if latest_job %}class="hidden"{% endif %}>Ready for the first transcription.</span>
-                      <span data-transcription-last-summary {% if not latest_job %}class="hidden"{% endif %}>
-                        Last status:
-                        <span class="font-semibold text-primary-200" data-transcription-last-status>{{ latest_job_telemetry.status|default:'—'|lower|capfirst }}</span>
-                        <span data-transcription-last-time-wrapper {% if not latest_activity_ts %}class="hidden"{% endif %}>
-                          · <time data-transcription-last-ts data-ts="{{ latest_activity_ts|date:'c' }}">{{ latest_activity_ts }}</time>
-                        </span>
-                      </span>
-                    </p>
-                  </div>
-                  <div class="flex flex-wrap items-center gap-3" data-module-quick>
-                    <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-xs font-semibold text-slate-100 transition hover:border-primary-400 hover:text-white" data-file-trigger data-file-input="module-transcription-file">
-                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 3h7l5 5v11a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2z" />
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12.5c1.5-1 3.5-1 5 0M9 16c1.5-1 3.5-1 5 0M12 9h.01" />
-                      </svg>
-                      Browse…
-                    </button>
-                    <span id="module-transcription-file-name" class="text-xs text-slate-300">No file selected.</span>
-                    <button type="submit" class="inline-flex items-center gap-2 rounded-lg bg-primary-500 px-3 py-2 text-xs font-semibold text-white shadow-lg shadow-primary-500/30 transition hover:bg-primary-400 disabled:cursor-not-allowed disabled:opacity-60" data-transcription-start disabled>
-                      <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path d="M6.5 4.5l9 5.5-9 5.5v-11z" /></svg>
-                      Upload &amp; Start
-                    </button>
-                  </div>
-                  <span class="ml-auto text-slate-300" aria-hidden="true">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="module-arrow h-4 w-4 transition-transform duration-150" viewBox="0 0 20 20" fill="currentColor" data-module-chevron="module-transcription">
-                      <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.094l3.71-3.86a.75.75 0 011.08 1.04l-4.247 4.41a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
-                    </svg>
-                  </span>
-                </div>
-              </div>
-              <div id="module-transcription" data-module-panel class="hidden rounded-xl border border-white/10 bg-slate-900/80 p-4">
-                <div class="space-y-5">
-                  <div class="grid gap-4 md:grid-cols-2">
-                    <label class="flex flex-col text-sm text-slate-200">Audio file
-                      <input type="file" name="audio" id="module-transcription-file" accept="audio/*" class="mt-2 rounded-lg border border-dashed border-white/20 bg-slate-900/60 px-3 py-3 text-sm focus:border-primary-400 focus:outline-none text-slate-200">
-                    </label>
-                    <label class="inline-flex items-center gap-2 text-sm text-slate-200">
-                      <input type="checkbox" name="diarization" value="on" checked class="h-4 w-4 rounded border-white/20 bg-slate-900/70 text-primary-500 focus:ring-primary-400">
-                      Enable diarization (batch only)
-                    </label>
-                  </div>
-                  <details class="rounded-lg border border-white/10 bg-slate-900/60 text-sm text-slate-200">
-                    <summary class="cursor-pointer px-3 py-2 font-semibold">Advanced options</summary>
-                    <div class="border-t border-white/10 px-3 py-3 space-y-3 text-xs text-slate-300">
-                      <div class="grid gap-4 md:grid-cols-2">
-                        <label class="flex flex-col text-sm text-slate-200">SAS URL (optional)
-                          <input type="url" name="audio_url" id="module-transcription-url" placeholder="https://storage.azure.com/..." class="mt-2 rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm focus:border-primary-400 focus:outline-none">
-                        </label>
-                        <label class="flex flex-col text-sm text-slate-200">Language
-                          <input type="text" name="language" value="en-CA" class="mt-2 rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm focus:border-primary-400 focus:outline-none">
-                        </label>
-                      </div>
-                      <div class="grid gap-4 md:grid-cols-2">
-                        <label class="inline-flex items-center gap-2 text-sm text-slate-200">
-                          <input type="checkbox" name="diarization" value="on" checked class="h-4 w-4 rounded border-white/20 bg-slate-900/70 text-primary-500 focus:ring-primary-400">
-                          Enable diarization (batch only)
-                        </label>
-                        <label class="inline-flex items-center gap-2 text-sm text-slate-200">
-                          <input type="checkbox" name="force_wav" value="on" class="h-4 w-4 rounded border-white/20 bg-slate-900/70 text-primary-500 focus:ring-primary-400">
-                          Convert to WAV before sending to Azure
-                        </label>
-                      </div>
-                      <div class="flex flex-col text-sm text-slate-200">
-                        <span>Mode</span>
-                        <div class="mt-2 flex items-center gap-4">
-                          <label class="inline-flex items-center gap-2">
-                            <input type="radio" name="mode" value="batch" checked class="h-4 w-4 border-white/20 bg-slate-900/70 text-primary-500 focus:ring-primary-400">
-                            <span>Batch (recommended)</span>
-                          </label>
-                          <label class="inline-flex items-center gap-2">
-                            <input type="radio" name="mode" value="on-demand" class="h-4 w-4 border-white/20 bg-slate-900/70 text-primary-500 focus:ring-primary-400">
-                            <span>On‑demand</span>
-                          </label>
-                        </div>
-                      </div>
-                    </div>
-                  </details>
-                  <div class="flex items-center gap-3">
-                    <button type="submit" class="inline-flex items-center gap-2 rounded-lg bg-primary-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-primary-500/30 transition hover:bg-primary-400 disabled:cursor-not-allowed disabled:opacity-60" data-transcription-start disabled>
-                      Start transcription
-                    </button>
-                    <span class="text-xs text-slate-400">Jobs run asynchronously and can be monitored below.</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </form>
-        </div>
-        {% for module in analysis_modules %}
-          <div id="analysis-module-{{ module.key }}" data-analysis-module="{{ module.key }}" data-case-id="{{ case.id }}">
-            {% include "ui/_analysis_module.html" with module=module %}
-          </div>
-        {% endfor %}
-      </div>
-    </div>
-
-    <div class="rounded-2xl border border-white/10 bg-white/5 shadow-xl shadow-black/30">
-      <div class="flex items-center justify-between border-b border-white/10 px-6 py-4">
-        <h2 class="text-lg font-semibold text-white">Automations Log</h2>
-        <span class="text-xs uppercase tracking-wide text-slate-400">Live updates</span>
-      </div>
-      <div class="overflow-hidden">
-        <table class="min-w-full divide-y divide-white/10 text-sm">
-          <thead class="bg-white/5 text-left text-xs uppercase tracking-wide text-slate-400">
-            <tr>
-              <th class="px-4 py-3">Title</th>
-              <th class="px-4 py-3">Status</th>
-              <th class="px-4 py-3">Approval</th>
-              <th class="px-4 py-3">Agent</th>
-              <th class="px-4 py-3">Created</th>
-              <th class="px-4 py-3 text-right">Actions</th>
-              <th class="px-4 py-3 text-right">&nbsp;</th>
-            </tr>
-          </thead>
-          <tbody id="jobs-body" data-case-id="{{ case.id }}" class="divide-y divide-white/5 bg-slate-900/40 text-slate-100">
-            {% for row in job_rows %}
-              {% include "ui/_job_row.html" with j=row.job telem=row.telemetry title=row.title %}
-            {% empty %}
-            <tr>
-              <td colspan="7" class="px-4 py-6 text-center text-slate-400">No activity yet.</td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </div>
+    </section>
   </section>
 
+  <script>
+    (function() {
+      const caseView = document.querySelector('[data-case-view]');
+      if (!caseView) return;
+      const caseId = caseView.getAttribute('data-case-id');
+      const workspace = caseView.querySelector('#tool-workspace');
+
+      const STATUS_LABELS = {
+        CONVERTING: 'Converting',
+        UPLOADING: 'Uploading',
+        RUNNING: 'Running',
+        PENDING: 'Pending',
+        QUEUED: 'Queued',
+        SUCCEEDED: 'Succeeded',
+        FAILED: 'Failed',
+        CANCELLED: 'Cancelled',
+        CANCELLING: 'Cancelling',
+        ERROR: 'Error',
+      };
+
+      const STATUS_CLASS_MAP = {
+        SUCCEEDED: ['border-emerald-400/40', 'bg-emerald-500/10', 'text-emerald-200'],
+        APPROVED: ['border-emerald-400/40', 'bg-emerald-500/10', 'text-emerald-200'],
+        FAILED: ['border-rose-400/40', 'bg-rose-500/10', 'text-rose-200'],
+        REJECTED: ['border-rose-400/40', 'bg-rose-500/10', 'text-rose-200'],
+        ERROR: ['border-rose-400/40', 'bg-rose-500/10', 'text-rose-200'],
+        CONVERTING: ['border-primary-400/40', 'bg-primary-500/10', 'text-primary-100'],
+        RUNNING: ['border-primary-400/40', 'bg-primary-500/10', 'text-primary-100'],
+        UPLOADING: ['border-primary-400/40', 'bg-primary-500/10', 'text-primary-100'],
+        PENDING: ['border-amber-400/40', 'bg-amber-500/10', 'text-amber-100'],
+        QUEUED: ['border-amber-400/40', 'bg-amber-500/10', 'text-amber-100'],
+        CANCELLED: ['border-slate-400/40', 'bg-slate-500/20', 'text-slate-100'],
+        CANCELLING: ['border-slate-400/40', 'bg-slate-500/20', 'text-slate-100'],
+        DEFAULT: ['border-white/20', 'bg-white/5', 'text-slate-300'],
+      };
+      const STATUS_CLASS_VALUES = Array.from(new Set(Object.values(STATUS_CLASS_MAP).flat()));
+      const TERMINAL_STATUSES = ['SUCCEEDED', 'FAILED', 'CANCELLED', 'ERROR'];
+
+      const JobsState = {
+        sockets: {},
+        pollers: {},
+        lastStatus: {},
+        currentCaseId: caseId,
+      };
+
+      function normalizeStatus(status) {
+        return (status || '').toString().toUpperCase();
+      }
+
+      function friendlyStatus(status) {
+        const normalized = normalizeStatus(status);
+        return STATUS_LABELS[normalized] || (normalized ? normalized.charAt(0) + normalized.slice(1).toLowerCase() : 'Status');
+      }
+
+      function applyStatusPillClasses(target, normalized) {
+        if (!target || !target.classList) return;
+        target.classList.remove(...STATUS_CLASS_VALUES);
+        const next = STATUS_CLASS_MAP[normalized] || STATUS_CLASS_MAP.DEFAULT;
+        target.classList.add(...next);
+      }
+
+      function renderStatusLabel(el, status, progress) {
+        if (!el) return;
+        const target = el.matches('[data-status]') ? el : el.querySelector('[data-status]') || el;
+        const normalized = normalizeStatus(status);
+        const labelEl = target.querySelector('[data-job-status-label]');
+        const setText = (value) => {
+          if (labelEl) {
+            labelEl.textContent = value;
+          } else {
+            target.textContent = value;
+          }
+        };
+        if (normalized === 'UPLOADING' && Number.isFinite(progress)) {
+          const pct = Math.max(0, Math.min(100, Math.round(progress)));
+          setText(`Uploading ${pct}%`);
+          target.dataset.progress = String(pct);
+          if (target.classList.contains('status-pill')) {
+            target.style.setProperty('--status-progress', (pct / 100).toString());
+          }
+        } else {
+          setText(friendlyStatus(status));
+          target.dataset.progress = '';
+          if (target.classList.contains('status-pill')) {
+            target.style.removeProperty('--status-progress');
+          }
+        }
+        applyStatusPillClasses(target, normalized);
+        target.dataset.status = normalized;
+        if (el !== target) {
+          el.dataset.status = normalized;
+        }
+      }
+
+      function updateStatusDisplays(jobId, status, progress) {
+        const statusCell = document.getElementById(`job-status-${jobId}`);
+        if (statusCell) {
+          renderStatusLabel(statusCell, status, progress);
+        }
+        const detailContainer = document.querySelector(`[data-job-detail="${jobId}"]`);
+        if (!detailContainer) return;
+        const pill = detailContainer.querySelector('[data-job-status-pill]');
+        if (pill) {
+          renderStatusLabel(pill, status, progress);
+        }
+      }
+
+      function setActiveCard(key) {
+        document.querySelectorAll('[data-tool-card]').forEach((card) => {
+          const match = card.getAttribute('data-tool-card') === key;
+          card.classList.toggle('border-primary-400', match);
+          card.classList.toggle('bg-slate-900/70', match);
+          card.setAttribute('aria-pressed', match ? 'true' : 'false');
+        });
+        caseView.setAttribute('data-active-tool', key || '');
+        if (key) {
+          history.replaceState({}, '', `?tool=${encodeURIComponent(key)}`);
+        } else {
+          history.replaceState({}, '', location.pathname);
+        }
+      }
+
+      document.body.addEventListener('htmx:beforeRequest', (evt) => {
+        const button = evt.target.closest('[data-tool-card]');
+        if (!button) return;
+        const key = button.getAttribute('data-tool-card');
+        setActiveCard(key);
+        button.classList.add('ring-1', 'ring-primary-400/60');
+      });
+
+      document.body.addEventListener('htmx:afterSwap', (evt) => {
+        const button = evt.target.closest('[data-tool-card]');
+        if (button) {
+          button.classList.remove('ring-1', 'ring-primary-400/60');
+          boostJobs();
+          return;
+        }
+        if (evt.target === workspace) {
+          boostJobs();
+        }
+      });
+
+      document.body.addEventListener('htmx:error', (evt) => {
+        const button = evt.target.closest('[data-tool-card]');
+        if (button) {
+          button.classList.remove('ring-1', 'ring-primary-400/60');
+        }
+      });
+
+      document.body.addEventListener('htmx:afterOnLoad', (evt) => {
+        const headerValue = evt.detail?.xhr?.getResponseHeader('HX-Trigger');
+        if (!headerValue) return;
+        try {
+          const payload = JSON.parse(headerValue);
+          const refreshed = payload['case-view-refreshed'];
+          if (refreshed) {
+            if (refreshed.header_html) {
+              const headerContainer = document.querySelector('[data-case-header-container]');
+              if (headerContainer) headerContainer.innerHTML = refreshed.header_html;
+            }
+            if (refreshed.cards_html) {
+              const cardsContainer = document.querySelector('[data-case-developer-cards]');
+              if (cardsContainer) cardsContainer.innerHTML = refreshed.cards_html;
+            }
+            if (refreshed.active_tool) {
+              setActiveCard(refreshed.active_tool);
+            }
+            boostJobs();
+          }
+        } catch (_) {}
+      });
+
+      function ensurePolling(jobId) {
+        if (JobsState.pollers[jobId]) return;
+        const statusEl = document.getElementById(`job-status-${jobId}`);
+        const normalized = statusEl && statusEl.dataset ? statusEl.dataset.status : '';
+        if (TERMINAL_STATUSES.includes(normalizeStatus(normalized))) {
+          return;
+        }
+        JobsState.pollers[jobId] = setInterval(() => pollJob(jobId), 3000);
+      }
+
+      async function pollJob(jobId) {
+        try {
+          const resp = await fetch(`/api/v1/jobs/${jobId}/status/`);
+          if (!resp.ok) return;
+          const data = await resp.json();
+          handleJobUpdate(jobId, data, 'poll');
+          const normalized = normalizeStatus(data.status);
+          if (TERMINAL_STATUSES.includes(normalized) && JobsState.pollers[jobId]) {
+            clearInterval(JobsState.pollers[jobId]);
+            delete JobsState.pollers[jobId];
+          }
+        } catch (error) {
+          console.warn('Job poll failed', jobId, error);
+        }
+      }
+
+      function handleJobUpdate(jobId, payload, source) {
+        const status = normalizeStatus(payload.status || payload.event || '');
+        const progressValue = payload.upload_progress ?? payload.progress_percent ?? (typeof payload.progress === 'number' ? payload.progress * (payload.progress <= 1 ? 100 : 1) : null);
+        updateStatusDisplays(jobId, status, progressValue);
+        JobsState.lastStatus[jobId] = status;
+        if (status && TERMINAL_STATUSES.includes(status) && JobsState.pollers[jobId]) {
+          clearInterval(JobsState.pollers[jobId]);
+          delete JobsState.pollers[jobId];
+        }
+      }
+
+      function connectSocket(jobId) {
+        if (JobsState.sockets[jobId]) return;
+        const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + `/ws/jobs/${jobId}/`;
+        const ws = new WebSocket(url);
+        JobsState.sockets[jobId] = ws;
+        ws.onopen = () => {
+          if (JobsState.pollers[jobId]) {
+            clearInterval(JobsState.pollers[jobId]);
+            delete JobsState.pollers[jobId];
+          }
+        };
+        ws.onmessage = (ev) => {
+          try {
+            const data = JSON.parse(ev.data);
+            handleJobUpdate(jobId, data, 'ws');
+          } catch (error) {
+            console.warn('Job websocket parse error', jobId, error);
+          }
+        };
+        ws.onerror = (err) => {
+          console.warn('Job websocket error', jobId, err);
+        };
+        ws.onclose = () => {
+          delete JobsState.sockets[jobId];
+          ensurePolling(jobId);
+        };
+      }
+
+      function toggleJobRow(row) {
+        const detailRow = row ? document.querySelector(`[data-job-detail="${row.dataset.job}"]`) : null;
+        if (!detailRow) return;
+        const isExpanded = !detailRow.classList.contains('hidden');
+        if (isExpanded) {
+          detailRow.classList.add('hidden');
+          row.setAttribute('aria-expanded', 'false');
+          row.classList.remove('bg-white/10');
+          return;
+        }
+        document.querySelectorAll('[data-job-row]').forEach((other) => {
+          if (other !== row) {
+            const d = document.querySelector(`[data-job-detail="${other.dataset.job}"]`);
+            if (d) d.classList.add('hidden');
+            other.setAttribute('aria-expanded', 'false');
+            other.classList.remove('bg-white/10');
+          }
+        });
+        loadJobDetail(row.dataset.job).then(() => {
+          detailRow.classList.remove('hidden');
+          row.setAttribute('aria-expanded', 'true');
+          row.classList.add('bg-white/10');
+        });
+      }
+
+      async function loadJobDetail(jobId) {
+        const container = document.querySelector(`[data-job-detail-container="${jobId}"]`);
+        if (!container || container.dataset.loading === '1') return;
+        container.dataset.loading = '1';
+        container.innerHTML = '<div class="flex items-center gap-2 text-xs text-slate-300"><svg class="h-3 w-3 animate-spin text-primary-300" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle class="opacity-30" cx="12" cy="12" r="10" stroke-width="2"></circle><path d="M22 12a10 10 0 00-10-10" stroke-width="2" stroke-linecap="round"></path></svg><span>Loading…</span></div>';
+        try {
+          const url = `/cases/${caseId}/jobs/${jobId}/detail/`;
+          const resp = await fetch(url, { headers: { 'HX-Request': 'true' }, credentials: 'same-origin' });
+          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+          const html = await resp.text();
+          container.innerHTML = html;
+          container.dataset.loaded = '1';
+          delete container.dataset.loading;
+        } catch (error) {
+          container.innerHTML = '<div class="text-xs text-rose-300">Unable to load job detail.</div>';
+          delete container.dataset.loading;
+        }
+      }
+
+      function handleRowClick(evt) {
+        const row = evt.target.closest('[data-job-row]');
+        if (!row) return;
+        evt.preventDefault();
+        toggleJobRow(row);
+      }
+
+      function handleRowKey(evt) {
+        if (evt.target.closest('[data-job-row]') && (evt.key === 'Enter' || evt.key === ' ')) {
+          evt.preventDefault();
+          toggleJobRow(evt.target.closest('[data-job-row]'));
+        }
+      }
+
+      async function handleJobAction(evt) {
+        const btn = evt.target.closest('[data-job-cancel],[data-job-restart],[data-job-restart-convert],[data-job-approve],[data-job-reject]');
+        if (!btn) return;
+        evt.preventDefault();
+        const jobId = btn.getAttribute('data-job-cancel')
+          || btn.getAttribute('data-job-restart')
+          || btn.getAttribute('data-job-restart-convert')
+          || btn.getAttribute('data-job-approve')
+          || btn.getAttribute('data-job-reject');
+        if (!jobId) return;
+        const action = btn.hasAttribute('data-job-cancel')
+          ? 'cancel'
+          : btn.hasAttribute('data-job-restart') ? 'restart' : btn.hasAttribute('data-job-restart-convert') ? 'restart?convert=1' : btn.hasAttribute('data-job-approve') ? 'approve' : 'reject';
+
+        if (action === 'cancel' && !window.confirm('Cancel this job?')) return;
+        if (action.startsWith('restart') && !window.confirm('Restart this job?')) return;
+        let body;
+        if (action === 'reject') {
+          const reason = window.prompt('Reason for rejection (optional):', '');
+          if (reason === null) return;
+          body = JSON.stringify({ comment: reason });
+        }
+        btn.disabled = true;
+        try {
+          const url = `/api/v1/jobs/${jobId}/${action}/`;
+          const resp = await fetch(url, {
+            method: 'POST',
+            headers: {
+              'X-CSRFToken': getCSRFToken(),
+              'Accept': 'application/json',
+              'Content-Type': body ? 'application/json' : 'application/json',
+            },
+            credentials: 'same-origin',
+            body,
+          });
+          if (!resp.ok) {
+            console.warn('Job action failed', action, await resp.text());
+          } else {
+            const data = await resp.json();
+            handleJobUpdate(jobId, data, 'action');
+            ensurePolling(jobId);
+          }
+        } catch (error) {
+          console.warn('Job action error', action, error);
+        } finally {
+          btn.disabled = false;
+        }
+      }
+
+      function getCSRFToken() {
+        const match = document.cookie.match(/csrftoken=([^;]+)/);
+        if (match) return decodeURIComponent(match[1]);
+        const meta = document.querySelector('meta[name="csrf-token"]');
+        return meta ? meta.getAttribute('content') || '' : '';
+      }
+
+      function setupTranscribeSection(root) {
+        const form = root.querySelector('#transcribe-form');
+        if (!form) return;
+        const fileInput = form.querySelector('#transcribe-audio');
+        const submitBtn = form.querySelector('[data-transcribe-submit]');
+        const statusPill = root.querySelector('[data-transcribe-status-pill]');
+        const progressWrap = root.querySelector('[data-transcribe-progress]');
+        const progressBar = root.querySelector('[data-transcribe-progress-bar]');
+        const progressLabel = root.querySelector('[data-transcribe-progress-label]');
+        const summary = root.querySelector('[data-transcribe-summary]');
+
+        function updateSubmitState() {
+          if (!submitBtn) return;
+          const hasFile = fileInput && fileInput.files && fileInput.files.length > 0;
+          submitBtn.disabled = !hasFile;
+        }
+
+        form.addEventListener('change', updateSubmitState);
+        updateSubmitState();
+
+        document.body.addEventListener('htmx:beforeRequest', (evt) => {
+          if (evt.target !== form) return;
+          if (statusPill) {
+            renderStatusLabel(statusPill, 'Uploading', 5);
+          }
+          if (progressWrap && progressBar && progressLabel) {
+            progressWrap.classList.remove('hidden');
+            progressBar.style.width = '5%';
+            progressLabel.textContent = 'Starting upload…';
+          }
+        });
+
+        document.body.addEventListener('htmx:xhr:progress', (evt) => {
+          if (evt.target !== form) return;
+          const loaded = evt.detail?.loaded ?? 0;
+          const total = evt.detail?.total ?? 1;
+          const pct = Math.max(0, Math.min(100, Math.round((loaded / total) * 100)));
+          if (statusPill) {
+            renderStatusLabel(statusPill, 'Uploading', pct);
+          }
+          if (progressWrap && progressBar && progressLabel) {
+            progressWrap.classList.remove('hidden');
+            progressBar.style.width = `${pct}%`;
+            progressLabel.textContent = `${pct}% uploaded`;
+          }
+        });
+
+        document.body.addEventListener('htmx:afterRequest', (evt) => {
+          if (evt.target !== form) return;
+          form.reset();
+          updateSubmitState();
+          if (progressWrap && progressBar && progressLabel) {
+            progressWrap.classList.add('hidden');
+            progressBar.style.width = '0%';
+            progressLabel.textContent = '';
+          }
+          if (summary) {
+            summary.textContent = 'Job queued. Monitoring status…';
+          }
+        });
+      }
+
+      function setupAnalysisActions(root) {
+        const summaryContainer = root.querySelector('[data-summary]');
+        if (summaryContainer) {
+          const select = summaryContainer.querySelector('[data-summary-source]');
+          const button = summaryContainer.querySelector('[data-analysis-action="summary"]');
+          const updateDisabled = () => {
+            if (!button) return;
+            const option = select ? select.querySelector('option[value][disabled]:not([value=""])') : null;
+            if (select && select.selectedOptions.length) {
+              const selected = select.selectedOptions[0];
+              button.disabled = selected.hasAttribute('disabled');
+            } else {
+              button.disabled = true;
+            }
+          };
+          if (select) {
+            select.addEventListener('change', updateDisabled);
+            updateDisabled();
+          }
+        }
+
+        const timelineContainer = root.querySelector('[data-timeline]');
+        if (timelineContainer) {
+          const transcriptSelect = timelineContainer.querySelector('[data-timeline-transcript]');
+          const button = timelineContainer.querySelector('[data-analysis-action="timeline"]');
+          const updateDisabled = () => {
+            if (!button) return;
+            if (!transcriptSelect || !transcriptSelect.value || transcriptSelect.selectedOptions[0]?.disabled) {
+              button.disabled = true;
+            } else {
+              button.disabled = false;
+            }
+          };
+          if (transcriptSelect) {
+            transcriptSelect.addEventListener('change', updateDisabled);
+            updateDisabled();
+          }
+        }
+      }
+
+      document.body.addEventListener('click', (evt) => {
+        const card = evt.target.closest('[data-job-row]');
+        if (card && evt.target.closest('button, a, input, textarea, select') == null) {
+          evt.preventDefault();
+          toggleJobRow(card);
+        }
+      });
+
+      document.body.addEventListener('keydown', handleRowKey);
+      document.body.addEventListener('click', handleJobAction);
+
+      document.body.addEventListener('click', (evt) => {
+        const toggle = evt.target.closest('[data-action="toggle-edit"]');
+        if (toggle) {
+          evt.preventDefault();
+          const panel = toggle.closest('[data-case-details]');
+          if (!panel) return;
+          const form = panel.querySelector('[data-edit-form]');
+          const viewMode = panel.querySelector('[data-view-mode]');
+          if (!form || !viewMode) return;
+          form.classList.remove('hidden');
+          viewMode.classList.add('hidden');
+          return;
+        }
+        const cancel = evt.target.closest('[data-action="cancel-edit"]');
+        if (cancel) {
+          evt.preventDefault();
+          const panel = cancel.closest('[data-case-details]');
+          if (!panel) return;
+          const form = panel.querySelector('[data-edit-form]');
+          const viewMode = panel.querySelector('[data-view-mode]');
+          if (!form || !viewMode) return;
+          form.classList.add('hidden');
+          viewMode.classList.remove('hidden');
+        }
+      });
+
+      document.body.addEventListener('click', async (evt) => {
+        const button = evt.target.closest('[data-analysis-action]');
+        if (!button) return;
+        evt.preventDefault();
+        const action = button.getAttribute('data-analysis-action');
+        const endpointTemplate = button.getAttribute('data-analysis-endpoint');
+        if (!endpointTemplate) return;
+        let jobId;
+        let payload = {};
+        if (action === 'summary') {
+          const select = button.closest('[data-summary]')?.querySelector('[data-summary-source]');
+          if (!select || !select.value) {
+            button.disabled = true;
+            return;
+          }
+          const selectedOption = select.selectedOptions[0];
+          if (selectedOption && selectedOption.disabled) {
+            if (window.udocketShowToastAt) {
+              window.udocketShowToastAt(evt.clientX, evt.clientY, 'Transcript pending approval.');
+            }
+            return;
+          }
+          jobId = select.value;
+        } else if (action === 'timeline') {
+          const container = button.closest('[data-timeline]');
+          const transcriptSelect = container?.querySelector('[data-timeline-transcript]');
+          if (!transcriptSelect || !transcriptSelect.value || transcriptSelect.selectedOptions[0]?.disabled) {
+            return;
+          }
+          jobId = transcriptSelect.value;
+          const summarySelect = container.querySelector('[data-timeline-summary]');
+          const artifactSelect = container.querySelector('[data-timeline-artifacts]');
+          if (summarySelect && summarySelect.value) {
+            payload.summary_artifact_id = summarySelect.value;
+          }
+          if (artifactSelect && artifactSelect.selectedOptions.length) {
+            payload.artifact_ids = Array.from(artifactSelect.selectedOptions).map((opt) => opt.value).filter(Boolean);
+          }
+        }
+        if (!jobId) return;
+
+        button.disabled = true;
+        const toastX = evt.clientX || window.innerWidth / 2;
+        const toastY = evt.clientY || window.innerHeight / 2;
+        try {
+          const url = endpointTemplate.replace('{job_id}', jobId);
+          const resp = await fetch(url, {
+            method: 'POST',
+            headers: {
+              'X-CSRFToken': getCSRFToken(),
+              'Accept': 'application/json',
+              'Content-Type': 'application/json',
+            },
+            credentials: 'same-origin',
+            body: Object.keys(payload).length ? JSON.stringify(payload) : null,
+          });
+          if (!resp.ok) {
+            const text = await resp.text();
+            throw new Error(text || `HTTP ${resp.status}`);
+          }
+          if (window.udocketShowToastAt) {
+            window.udocketShowToastAt(toastX, toastY, 'Automation queued');
+          }
+          htmx.ajax('GET', `/cases/${caseId}/tools/${action}/`, '#tool-workspace');
+        } catch (error) {
+          console.error('Automation queue failed', action, error);
+          if (window.udocketShowToastAt) {
+            window.udocketShowToastAt(toastX, toastY, 'Unable to queue automation');
+          }
+        } finally {
+          button.disabled = false;
+        }
+      });
+
+      window.udocketCaseJobs = function(caseIdParam) {
+        if (caseIdParam) {
+          JobsState.currentCaseId = caseIdParam;
+        }
+        const root = document.querySelector('#tool-workspace');
+        if (!root) return;
+        setupTranscribeSection(root.querySelector('[data-transcribe]') || root);
+        setupAnalysisActions(root);
+        const jobsBody = root.querySelector('#jobs-body');
+        if (!jobsBody) return;
+        const caseAttr = jobsBody.dataset.caseId;
+        if (caseAttr && caseAttr !== JobsState.currentCaseId) {
+          JobsState.currentCaseId = caseAttr;
+        }
+        jobsBody.querySelectorAll('[data-job]').forEach((row) => {
+          const jobId = row.dataset.job;
+          if (!jobId) return;
+          connectSocket(jobId);
+          ensurePolling(jobId);
+          const statusEl = document.getElementById(`job-status-${jobId}`);
+          if (statusEl) {
+            const statusValue = statusEl.dataset && statusEl.dataset.status ? statusEl.dataset.status : statusEl.textContent;
+            const progressValue = statusEl.dataset && statusEl.dataset.progress ? parseFloat(statusEl.dataset.progress) : undefined;
+            renderStatusLabel(statusEl, statusValue, progressValue);
+          }
+        });
+      };
+
+      function boostJobs() {
+        if (typeof window.udocketCaseJobs === 'function') {
+          window.udocketCaseJobs(caseId);
+        }
+      }
+
+      setActiveCard('{{ initial_tool_key }}');
+      boostJobs();
+    })();
+  </script>
 {% endblock %}
