@@ -17,6 +17,22 @@ import requests
 
 from ..audio import probe_audio_metadata
 
+TARGET_SAMPLE_RATE_HZ = 16000
+TARGET_AUDIO_CODEC = "pcm_s16le"
+TARGET_AUDIO_CHANNELS = 1  # Future multi-channel diarization may raise this
+TARGET_SAMPLE_FMT = "s16"
+TARGET_BITS_PER_SAMPLE = 16
+TARGET_AUDIO_MIME = "audio/wav"
+TARGET_SAMPLE_FMTS = {"s16", "s16p", "s16le"}
+
+
+@dataclass
+class AudioNormalizationResult:
+    path: Path
+    converted: bool
+    metadata: Dict[str, Any]
+    reasons: list[str]
+
 
 def _now_utc() -> str:
     return datetime.utcnow().isoformat(timespec="seconds") + "Z"
@@ -32,6 +48,121 @@ def _sha256sum(fp: Path) -> str:
 
 def _have_ffmpeg() -> bool:
     return shutil.which("ffmpeg") is not None
+
+
+def _analyze_audio_conversion(
+    input_path: Path,
+    metadata: Optional[Dict[str, Any]] = None,
+    *,
+    diarization: bool = False,
+) -> tuple[list[str], Dict[str, Any]]:
+    meta: Dict[str, Any] = dict(metadata or {})
+    if not meta:
+        try:
+            meta = probe_audio_metadata(input_path)
+        except Exception:
+            meta = {}
+
+    reasons: list[str] = []
+
+    suffix = input_path.suffix.lower()
+    if suffix != ".wav":
+        reasons.append("format")
+
+    codec = (meta.get("audio_codec") or "").lower()
+    if codec and codec != TARGET_AUDIO_CODEC:
+        reasons.append("codec")
+
+    sample_fmt = (meta.get("audio_sample_fmt") or "").lower()
+    if sample_fmt and sample_fmt not in TARGET_SAMPLE_FMTS:
+        reasons.append("sample_format")
+
+    bits = meta.get("audio_bits_per_sample")
+    if isinstance(bits, (int, float)) and int(bits) != TARGET_BITS_PER_SAMPLE:
+        reasons.append("bit_depth")
+
+    sample_rate = meta.get("audio_sample_rate_hz")
+    if isinstance(sample_rate, (int, float)) and int(sample_rate) != TARGET_SAMPLE_RATE_HZ:
+        reasons.append("sample_rate")
+
+    channels = meta.get("audio_channels")
+    if isinstance(channels, (int, float)):
+        target_channels = TARGET_AUDIO_CHANNELS
+        # Multi-channel diarization is future work; stay mono for now.
+        if int(channels) != target_channels:
+            reasons.append("channels")
+
+    return reasons, meta
+
+
+def normalize_audio(
+    input_path: Path,
+    out_dir: Path,
+    case_id: str,
+    *,
+    metadata: Optional[Dict[str, Any]] = None,
+    diarization: bool = False,
+    force: bool = False,
+) -> AudioNormalizationResult:
+    reasons, meta = _analyze_audio_conversion(input_path, metadata=metadata, diarization=diarization)
+    if force and "forced" not in reasons:
+        reasons.append("forced")
+    should_convert = bool(reasons) or force
+    if not should_convert:
+        return AudioNormalizationResult(path=input_path, converted=False, metadata=meta, reasons=[])
+    if not _have_ffmpeg():
+        raise RuntimeError("ffmpeg missing. Install ffmpeg to normalize audio inputs.")
+
+    out = input_path.with_suffix(".tmp.wav")
+    import subprocess
+
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-loglevel",
+        "error",
+        "-i",
+        str(input_path),
+        "-ac",
+        str(TARGET_AUDIO_CHANNELS),
+        "-ar",
+        str(TARGET_SAMPLE_RATE_HZ),
+        "-c:a",
+        TARGET_AUDIO_CODEC,
+        "-sample_fmt",
+        TARGET_SAMPLE_FMT,
+        str(out),
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        errp = out_dir / "ops" / f"{case_id}_ffmpeg_error.log"
+        errp.parent.mkdir(parents=True, exist_ok=True)
+        errp.write_text(
+            "CMD: "
+            + " ".join(cmd)
+            + "\n\nSTDOUT:\n"
+            + proc.stdout
+            + "\n\nSTDERR:\n"
+            + proc.stderr
+            + "\n",
+            encoding="utf-8",
+        )
+        raise RuntimeError("ffmpeg conversion failed; see ops ffmpeg_error.log")
+
+    # Update metadata to reflect target format
+    meta.update(
+        {
+            "audio_codec": TARGET_AUDIO_CODEC,
+            "audio_sample_rate_hz": TARGET_SAMPLE_RATE_HZ,
+            "audio_channels": TARGET_AUDIO_CHANNELS,
+            "audio_sample_fmt": TARGET_SAMPLE_FMT,
+            "audio_bits_per_sample": TARGET_BITS_PER_SAMPLE,
+            "audio_mime": TARGET_AUDIO_MIME,
+            "audio_conversion_reasons": reasons,
+        }
+    )
+
+    return AudioNormalizationResult(path=out, converted=True, metadata=meta, reasons=reasons)
 
 
 def _get_duration_seconds(p: Path) -> Optional[float]:
@@ -150,31 +281,24 @@ def _next_versioned(path: Path) -> Path:
             return cand
 
 
-def _ensure_wav(input_path: Path, out_dir: Path, case_id: str) -> Path:
-    if input_path.suffix.lower() == ".wav":
-        return input_path
-    if not _have_ffmpeg():
-        raise RuntimeError("ffmpeg missing. Install ffmpeg or provide a .wav file.")
-    out = input_path.with_suffix(".tmp.wav")
-    import subprocess
-
-    cmd = ["ffmpeg", "-y", "-i", str(input_path), "-ac", "1", "-ar", "16000", str(out)]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
-    if proc.returncode != 0:
-        errp = out_dir / "ops" / f"{case_id}_ffmpeg_error.log"
-        errp.parent.mkdir(parents=True, exist_ok=True)
-        errp.write_text(
-            "CMD: "
-            + " ".join(cmd)
-            + "\n\nSTDOUT:\n"
-            + proc.stdout
-            + "\n\nSTDERR:\n"
-            + proc.stderr
-            + "\n",
-            encoding="utf-8",
-        )
-        raise RuntimeError("ffmpeg conversion failed; see ops ffmpeg_error.log")
-    return out
+def _ensure_wav(
+    input_path: Path,
+    out_dir: Path,
+    case_id: str,
+    *,
+    metadata: Optional[Dict[str, Any]] = None,
+    diarization: bool = False,
+    force: bool = False,
+) -> Path:
+    result = normalize_audio(
+        input_path,
+        out_dir,
+        case_id,
+        metadata=metadata,
+        diarization=diarization,
+        force=force,
+    )
+    return result.path
 
 
 def ensure_wav(input_path: Path, out_dir: Path, case_id: str) -> Path:
@@ -618,6 +742,7 @@ class TranscriptionAgent:
         wav: Optional[Path] = None
         converted = False
         audio_meta: Dict[str, Any] = {}
+        conversion_reasons: list[str] = []
         if not is_url:
             assert audio_in is not None
             if audio_in.suffix.lower() not in self.AUDIO_EXTS:
@@ -628,15 +753,31 @@ class TranscriptionAgent:
                     f.write(f"{_now_utc()} INFO | local_sha256 {audio_sha}\n")
             except Exception:
                 pass
-            try:
-                audio_meta = probe_audio_metadata(audio_in)
-            except Exception:
-                audio_meta = {}
-            if audio_in.suffix.lower() != ".wav":
-                wav = _ensure_wav(audio_in, case_dir, case_id)
-                converted = True
-            else:
-                wav = audio_in
+
+            normalization = normalize_audio(
+                audio_in,
+                case_dir,
+                case_id,
+                metadata=None,
+                diarization=bool(diarization),
+            )
+            wav = normalization.path if normalization.converted else audio_in
+            converted = normalization.converted
+            audio_meta = normalization.metadata
+            conversion_reasons = normalization.reasons
+
+            if converted:
+                _append_jsonl(
+                    audit_jsonl,
+                    {
+                        "ts": _now_utc(),
+                        "case_id": case_id,
+                        "event": "audio_normalized",
+                        "reasons": conversion_reasons,
+                        "source_file": audio_in.name,
+                    },
+                )
+
             if _is_audio_empty(wav):
                 _append_jsonl(
                     audit_jsonl,

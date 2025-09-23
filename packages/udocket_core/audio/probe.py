@@ -72,6 +72,9 @@ def probe_audio_metadata(source: str | Path) -> Dict[str, Optional[Any]]:
     channels = _parse_int(stream.get("channels"))
     sample_rate = _parse_int(stream.get("sample_rate"))
 
+    sample_fmt = stream.get("sample_fmt")
+    bits_per = _parse_int(stream.get("bits_per_raw_sample") or stream.get("bits_per_sample"))
+
     return {
         "audio_duration_s": duration,
         "audio_bitrate_kbps": int(round(bitrate / 1000)) if isinstance(bitrate, int) and bitrate > 0 else None,
@@ -79,4 +82,6 @@ def probe_audio_metadata(source: str | Path) -> Dict[str, Optional[Any]]:
         "audio_sample_rate_hz": sample_rate,
         "audio_codec": stream.get("codec_name"),
         "audio_channel_layout": stream.get("channel_layout"),
+        "audio_sample_fmt": sample_fmt,
+        "audio_bits_per_sample": bits_per,
     }

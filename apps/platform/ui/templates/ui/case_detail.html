@@ -49,10 +49,12 @@
 
   <script>
     (function() {
+      // TODO(layout-refresh): Investigate more reliable template update tooling to reduce manual patch churn during upcoming refactor.
       const caseView = document.querySelector('[data-case-view]');
       if (!caseView) return;
       const caseId = caseView.getAttribute('data-case-id');
       const workspace = caseView.querySelector('#tool-workspace');
+      const modalRoot = document.getElementById('modal-root');
 
       const STATUS_LABELS = {
         CONVERTING: 'Converting',
@@ -84,6 +86,8 @@
       };
       const STATUS_CLASS_VALUES = Array.from(new Set(Object.values(STATUS_CLASS_MAP).flat()));
       const TERMINAL_STATUSES = ['SUCCEEDED', 'FAILED', 'CANCELLED', 'ERROR'];
+      const CANCEL_ACTIVE = new Set(['RUNNING', 'PENDING', 'QUEUED', 'UPLOADING', 'CANCELLING', 'CONVERTING']);
+      const RESTART_ACTIVE = new Set(['SUCCEEDED', 'FAILED', 'CANCELLED']);
 
       const JobsState = {
         sockets: {},
@@ -141,11 +145,34 @@
         }
       }
 
+      function updateJobActions(jobId, status) {
+        const normalized = normalizeStatus(status);
+        const row = document.querySelector(`[data-job="${jobId}"]`);
+        if (!row) return;
+        const cancelBtn = row.querySelector('[data-job-cancel]');
+        if (cancelBtn) {
+          if (CANCEL_ACTIVE.has(normalized)) {
+            cancelBtn.classList.remove('hidden');
+          } else {
+            cancelBtn.classList.add('hidden');
+          }
+        }
+        const restartBtn = row.querySelector('[data-job-restart]');
+        if (restartBtn) {
+          if (RESTART_ACTIVE.has(normalized)) {
+            restartBtn.classList.remove('hidden');
+          } else {
+            restartBtn.classList.add('hidden');
+          }
+        }
+      }
+
       function updateStatusDisplays(jobId, status, progress) {
         const statusCell = document.getElementById(`job-status-${jobId}`);
-        if (statusCell) {
+      if (statusCell) {
           renderStatusLabel(statusCell, status, progress);
         }
+        updateJobActions(jobId, status);
         const detailContainer = document.querySelector(`[data-job-detail="${jobId}"]`);
         if (!detailContainer) return;
         const pill = detailContainer.querySelector('[data-job-status-pill]');
@@ -500,6 +527,107 @@
         }
       }
 
+      async function openTranscriptModal(jobId) {
+        if (!jobId) return;
+        try {
+          const resp = await fetch(`/cases/${caseId}/jobs/${jobId}/transcript/`, {
+            headers: { 'HX-Request': 'true' },
+            credentials: 'same-origin',
+          });
+          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+          const html = await resp.text();
+          if (modalRoot) {
+            modalRoot.innerHTML = html;
+          } else {
+            const temp = document.createElement('div');
+            temp.innerHTML = html;
+            document.body.appendChild(temp);
+          }
+          const modal = (modalRoot || document.body).querySelector('[data-modal]');
+          if (!modal) return;
+          const closeModal = () => {
+            if (modalRoot) {
+              modalRoot.innerHTML = '';
+            } else {
+              modal.remove();
+            }
+          };
+          modal.addEventListener('click', (evt) => {
+            if (evt.target === modal) closeModal();
+          });
+          modal.querySelectorAll('[data-modal-close]').forEach((btn) => btn.addEventListener('click', closeModal));
+        } catch (error) {
+          console.error('Transcript preview failed', jobId, error);
+          if (window.udocketShowToastAt) {
+            window.udocketShowToastAt(window.innerWidth / 2, window.innerHeight / 2, 'Unable to load transcript');
+          }
+        }
+      }
+
+      async function expandJobRow(jobId) {
+        if (!jobId) return false;
+        const row = document.querySelector(`[data-job="${jobId}"]`);
+        const detailRow = document.querySelector(`[data-job-detail="${jobId}"]`);
+        if (!row || !detailRow) {
+          return false;
+        }
+        if (!detailRow.classList.contains('hidden')) {
+          row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          row.focus({ preventScroll: true });
+          return true;
+        }
+        document.querySelectorAll('[data-job-row]').forEach((other) => {
+          if (other !== row) {
+            const otherDetail = document.querySelector(`[data-job-detail="${other.dataset.job}"]`);
+            if (otherDetail) otherDetail.classList.add('hidden');
+            other.setAttribute('aria-expanded', 'false');
+            other.classList.remove('bg-white/10');
+          }
+        });
+        await loadJobDetail(jobId);
+        detailRow.classList.remove('hidden');
+        row.setAttribute('aria-expanded', 'true');
+        row.classList.add('bg-white/10');
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        row.focus({ preventScroll: true });
+        return true;
+      }
+
+      document.addEventListener('click', (evt) => {
+        if (!evt.target.closest('[data-transcript-item]')) {
+          document.querySelectorAll('[data-transcript-item][open]').forEach((item) => item.removeAttribute('open'));
+        }
+      });
+
+      document.addEventListener('toggle', (evt) => {
+        const target = evt.target;
+        if (target instanceof HTMLElement && target.matches('[data-transcript-item]') && target.open) {
+          document.querySelectorAll('[data-transcript-item][open]').forEach((item) => {
+            if (item !== target) item.removeAttribute('open');
+          });
+        }
+      });
+
+      document.body.addEventListener('click', async (evt) => {
+        const transcriptAction = evt.target.closest('[data-transcript-action]');
+        if (!transcriptAction) return;
+        evt.preventDefault();
+        const action = transcriptAction.getAttribute('data-transcript-action');
+        const jobId = transcriptAction.getAttribute('data-job-id');
+        const parentDetails = transcriptAction.closest('details');
+        if (parentDetails) {
+          parentDetails.removeAttribute('open');
+        }
+        if (action === 'view') {
+          await openTranscriptModal(jobId);
+        } else if (action === 'job') {
+          const success = await expandJobRow(jobId);
+          if (!success && window.udocketShowToastAt) {
+            window.udocketShowToastAt(evt.clientX || window.innerWidth / 2, evt.clientY || window.innerHeight / 2, 'Job not available in this panel');
+          }
+        }
+      });
+
       document.body.addEventListener('click', (evt) => {
         const card = evt.target.closest('[data-job-row]');
         if (card && evt.target.closest('button, a, input, textarea, select') == null) {
@@ -609,6 +737,7 @@
             const statusValue = statusEl.dataset && statusEl.dataset.status ? statusEl.dataset.status : statusEl.textContent;
             const progressValue = statusEl.dataset && statusEl.dataset.progress ? parseFloat(statusEl.dataset.progress) : undefined;
             renderStatusLabel(statusEl, statusValue, progressValue);
+            updateJobActions(jobId, statusValue);
           }
         });
       };

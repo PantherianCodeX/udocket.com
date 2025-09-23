@@ -17,7 +17,7 @@ from django.utils import timezone
 from packages.udocket_core.agents import (
     TranscriptionAgent,
     TranscriptionConfig,
-    ensure_wav,
+    normalize_audio,
 )
 from packages.udocket_core.audio import probe_audio_metadata
 from apps.platform.operations.channels import send_job_update, send_case_update
@@ -192,10 +192,16 @@ def transcribe_job(
             upload_path = source_path
             original_name = source_path.name
             cleanup_path: Optional[Path] = None
-            # Optional conversion pathway (opt-in only)
-            if force_wav_conversion and source_path.suffix.lower() != ".wav":
+            normalization = normalize_audio(
+                source_path,
+                case_dir,
+                case_id,
+                diarization=bool(diarization),
+                force=bool(force_wav_conversion),
+            )
+
+            if normalization.converted:
                 try:
-                    # Announce converting state
                     try:
                         Job.objects.filter(pk=job_id).update(status=Job.Status.CONVERTING)
                     except Exception:
@@ -209,23 +215,32 @@ def transcribe_job(
                         )
                     except Exception:
                         pass
-                    append_job_log(case_id, org_id, job_id, "Converting source audio to 16 kHz mono WAV")
+                    reasons_txt = ", ".join(normalization.reasons) or "format normalization"
+                    append_job_log(
+                        case_id,
+                        org_id,
+                        job_id,
+                        f"Normalized source audio via ffmpeg ({reasons_txt})",
+                    )
                 except Exception:
                     pass
+
                 try:
-                    converted = ensure_wav(source_path, case_dir, case_id)
-                    upload_path = converted
-                    if converted != source_path:
-                        cleanup_path = converted
+                    upload_path = normalization.path
+                    if normalization.path != source_path:
+                        cleanup_path = normalization.path
                     original_name = f"{source_path.stem}.wav"
                     batch_upload_meta.update(
                         {
                             "batch_upload_original_extension": source_path.suffix.lower(),
                             "batch_upload_converted": True,
+                            "audio_conversion_reasons": normalization.reasons,
                         }
                     )
+                    for key, value in normalization.metadata.items():
+                        if key.startswith("audio_") and value is not None:
+                            batch_upload_meta.setdefault(key, value)
 
-                    # Persist converted WAV as a dedicated audio job for download and tracing
                     audio_dir = case_dir / "audio"
                     audio_dir.mkdir(parents=True, exist_ok=True)
                     original_display = source_path.name.split("__", 1)[-1] if "__" in source_path.name else source_path.name
@@ -433,16 +448,14 @@ def transcribe_job(
                 except Exception as exc:
                     raise RuntimeError(f"Batch upload conversion failed: {exc}") from exc
             else:
-                # Azure Batch accepts compressed formats directly; use as-is
                 batch_upload_meta["batch_upload_converted"] = False
                 batch_upload_meta["converted_temp_wav"] = False
                 append_job_log(
                     case_id,
                     org_id,
                     job_id,
-                    "Skipping WAV conversion; source format accepted by Azure Batch",
+                    "Using original audio format for batch upload",
                 )
-
             log.info("uploading source to blob", extra={"job_id": job_id})
             append_job_log(case_id, org_id, job_id, f"Uploading audio to Azure Blob ({original_name})")
             last_progress = {"value": -1.0}
