@@ -1,4 +1,4 @@
-{% with module=body.module|default:{} %}
+{% with module=body.module %}
 <div class="space-y-6" data-timeline>
   <div class="grid gap-4 md:grid-cols-3">
     <div class="md:col-span-2 space-y-4 rounded-2xl border border-white/10 bg-slate-900/70 p-5">
@@ -21,7 +21,7 @@
         <label for="timeline-summary" class="text-xs uppercase tracking-wide text-slate-400">Optional summary</label>
         <select id="timeline-summary" name="timeline_summary" class="rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" data-timeline-summary>
           <option value="">None</option>
-          {% for artifact in body.artifact_options.SUMMARY|default:[] %}
+          {% for artifact in body.artifact_options.SUMMARY %}
             <option value="{{ artifact.id }}">{{ artifact.title }}</option>
           {% empty %}
             <option value="" disabled>No summaries yet</option>

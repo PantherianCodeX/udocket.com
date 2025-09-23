@@ -667,6 +667,9 @@ def _build_tool_panels(
     for artifact in artifacts:
         artifacts_by_type.setdefault(str(artifact.get("type", "")).upper(), []).append(artifact)
 
+    for bucket in ("SUMMARY", "TIMELINE", "TRANSCRIPT"):
+        artifacts_by_type.setdefault(bucket, [])
+
     def _status_payload(key: str, default_status: str = "Created") -> Dict[str, Any]:
         item = progress_lookup.get(key)
         if not item:
@@ -688,8 +691,8 @@ def _build_tool_panels(
     case_status = _status_payload("case_setup")
     panels["case-details"] = {
         "key": "case-details",
-        "label": "Case Details",
-        "description": "Review assignments and update metadata for this matter.",
+        "label": "Intake Form",
+        "description": "Update assignments, key dates, and intake metadata for this case.",
         "status_label": case_status["label"],
         "status_class": case_status["class"],
         "updated_at": case_status.get("updated") or case.updated_at,
@@ -1217,6 +1220,8 @@ def case_detail(request: HttpRequest, case_id: str) -> HttpResponse:
         "details": "case-details",
         "case-details": "case-details",
         "setup": "case-details",
+        "intake": "case-details",
+        "intake-form": "case-details",
         "transcribe": "transcribe",
         "transcription": "transcribe",
         "summary": "summary",
@@ -1467,6 +1472,8 @@ def case_tool_panel(request: HttpRequest, case_id: str, tool_key: str) -> HttpRe
         "case": "case-details",
         "details": "case-details",
         "case-details": "case-details",
+        "intake": "case-details",
+        "intake-form": "case-details",
         "transcription": "transcribe",
         "transcribe": "transcribe",
         "summary": "summary",

@@ -19,15 +19,18 @@
     </div>
 
     <section aria-label="Case Developer" class="space-y-4" data-case-developer>
-      <div class="flex items-center justify-between">
-        <div>
-          <h2 class="text-lg font-semibold text-white">Case Developer</h2>
-          <p class="text-sm text-slate-300">Choose a workspace to launch tools or manage metadata.</p>
+        <div class="rounded-2xl border border-white/10 bg-white/5 p-5 shadow-xl shadow-black/30">
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 class="text-lg font-semibold text-white">Case Developer</h2>
+              <p class="text-sm text-slate-300">Launch tools and manage the Transcription workflow and intake for this case.</p>
+            </div>
+            <span class="text-[11px] uppercase tracking-wide text-slate-400">Live updates</span>
+          </div>
+          <div id="case-developer-cards" data-case-developer-cards class="mt-4">
+            {% include "ui/tools/_developer_cards.html" with cards=case_developer_cards active_tool=initial_tool_key %}
+          </div>
         </div>
-      </div>
-      <div id="case-developer-cards" data-case-developer-cards>
-        {% include "ui/tools/_developer_cards.html" with cards=case_developer_cards active_tool=initial_tool_key %}
-      </div>
     </section>
 
     <section aria-label="Tool Workspace" class="space-y-4">
@@ -506,32 +509,6 @@
 
       document.body.addEventListener('keydown', handleRowKey);
       document.body.addEventListener('click', handleJobAction);
-
-      document.body.addEventListener('click', (evt) => {
-        const toggle = evt.target.closest('[data-action="toggle-edit"]');
-        if (toggle) {
-          evt.preventDefault();
-          const panel = toggle.closest('[data-case-details]');
-          if (!panel) return;
-          const form = panel.querySelector('[data-edit-form]');
-          const viewMode = panel.querySelector('[data-view-mode]');
-          if (!form || !viewMode) return;
-          form.classList.remove('hidden');
-          viewMode.classList.add('hidden');
-          return;
-        }
-        const cancel = evt.target.closest('[data-action="cancel-edit"]');
-        if (cancel) {
-          evt.preventDefault();
-          const panel = cancel.closest('[data-case-details]');
-          if (!panel) return;
-          const form = panel.querySelector('[data-edit-form]');
-          const viewMode = panel.querySelector('[data-view-mode]');
-          if (!form || !viewMode) return;
-          form.classList.add('hidden');
-          viewMode.classList.remove('hidden');
-        }
-      });
 
       document.body.addEventListener('click', async (evt) => {
         const button = evt.target.closest('[data-analysis-action]');
