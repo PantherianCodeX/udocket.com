@@ -30,6 +30,8 @@ RUN if [ "$DEV_TOOLS" = "1" ]; then \
         make \
         nano \
         netcat-openbsd \
+        docker.io \
+        docker-compose-plugin \
         postgresql-client \
         pkg-config \
         procps \
