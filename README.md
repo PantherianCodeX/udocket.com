@@ -47,3 +47,8 @@ and module discovery (`db/__init__.py`, `config/__init__.py`).
 
 ## Roadmap
 - Platform migration and consolidation plan: see `docs/ROADMAP.md`.
+
+## Devcontainer notes (persisting chat sessions)
+- Rebuilding the VS Code devcontainer used to wipe CLI/chat history stored under the container HOME.
+- The devcontainer compose now mounts persistent volumes for `/root/.config`, `/root/.cache`, and `/root/.local/share` so tools like Codex CLI and editors retain session data across rebuilds.
+- To apply: Reopen in Container (Rebuild) from VS Code. Existing named volumes are reused automatically; nothing else is required.

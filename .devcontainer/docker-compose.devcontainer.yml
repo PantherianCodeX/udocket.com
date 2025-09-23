@@ -14,6 +14,10 @@ services:
     command: sleep infinity
     volumes:
       - vscode-server:/root/.vscode-server
+      # Persist HOME config/cache so CLI chat history survives rebuilds
+      - home-config:/root/.config
+      - home-cache:/root/.cache
+      - home-local-share:/root/.local/share
       - ${PWD}:/app
       - ${PWD}/storage:/app/storage
       - ${PWD}/.env:/app/.env:ro
@@ -23,6 +27,19 @@ services:
         condition: service_started
       redis:
         condition: service_started
- 
+  # Override service port publishing when running inside the devcontainer
+  # Keep internal networking the same; only change host bindings to avoid conflicts
+  redis:
+    # Do not publish Redis on the host; containers use service name `redis:6379`
+    ports: []
+
+  postgres:
+    # Remap host port to avoid conflicts with a host PostgreSQL
+    # Internal port remains 5432 so other services keep working
+    ports:
+      - "5434:5432"
 volumes:
   vscode-server: {}
+  home-config: {}
+  home-cache: {}
+  home-local-share: {}

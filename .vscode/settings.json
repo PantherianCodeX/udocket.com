@@ -6,4 +6,11 @@
     "tests"
   ],
   "python.testing.pytestEnv": {}
+  ,
+  "remote.extensionKind": {
+    // Run these extensions on the remote so their storage lives under ~/.vscode-server
+    "openai.chatgpt": ["workspace"],
+    "openai.codex": ["workspace"],
+    "openai.vscode-codex": ["workspace"]
+  }
 }
