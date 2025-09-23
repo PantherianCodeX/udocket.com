@@ -726,6 +726,8 @@ def _build_tool_panels(
 
     owner_id = owner_ids[0] if owner_ids else ""
 
+    approved_transcripts = [item for item in transcript_sources if item.get("approved")]
+
     panels["case-details"] = {
         "key": "case-details",
         "label": "Intake Form",
@@ -833,6 +835,7 @@ def _build_tool_panels(
             "latest_job": latest_job,
             "latest_job_telemetry": latest_job_telemetry,
             "transcript_sources": transcript_sources,
+            "approved_transcripts": approved_transcripts,
             "job_actions": job_actions,
             "review_actions": review_actions,
             "can_review": user_can_review,
@@ -1632,6 +1635,52 @@ def case_tool_panel(request: HttpRequest, case_id: str, tool_key: str) -> HttpRe
     response = render(request, "ui/tools/_panel.html", {"panel": panel})
     response["HX-Trigger"] = json.dumps({"case-view-refreshed": {"tools": [resolved_key], "active_tool": resolved_key}})
     return response
+
+
+@require_http_methods(["GET"])
+def case_job_transcript(request: HttpRequest, case_id: str, job_id: uuid.UUID) -> HttpResponse:
+    auth_response = _ensure_authenticated(request)
+    if auth_response:
+        return auth_response
+
+    case, _ = _get_case_and_org(request, case_id)
+    job = (
+        Job.objects.select_related("case", "case__organization", "reviewed_by")
+        .filter(case=case, pk=job_id)
+        .first()
+    )
+    if not job:
+        raise Http404
+
+    transcript_path = job.transcript_path
+    transcript_text = ""
+    if transcript_path and Path(transcript_path).exists():
+        try:
+            with Path(transcript_path).open("r", encoding="utf-8", errors="replace") as handle:
+                transcript_text = handle.read(20000)
+                if handle.read(1):
+                    transcript_text += "\n…"
+        except Exception:
+            transcript_text = ""
+
+    serializer = JobTelemetrySerializer(job, context={"request": request, "ui_mode": True})
+    telemetry = serializer.data
+    download_url = None
+    artifacts = telemetry.get("artifacts") or []
+    for art in artifacts:
+        if (art.get("type") or "").upper() == "TRANSCRIPT" and art.get("download_url"):
+            download_url = art.get("download_url")
+            break
+
+    friendly_title = _friendly_job_title(job, telemetry, None)
+    context = {
+        "title": friendly_title,
+        "job_id": job.id,
+        "transcript_text": transcript_text,
+        "download_url": download_url,
+        "created_at": job.finished_at or job.started_at or job.created_at,
+    }
+    return render(request, "ui/_transcript_modal.html", context)
 
 
 @require_http_methods(["POST"])

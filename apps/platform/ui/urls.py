@@ -12,6 +12,11 @@ urlpatterns = [
         name="ui-case-tool-panel",
     ),
     path(
+        "cases/<str:case_id>/jobs/<uuid:job_id>/transcript/",
+        views.case_job_transcript,
+        name="ui-case-job-transcript",
+    ),
+    path(
         "cases/<str:case_id>/analysis/<str:agent>/module/",
         views.case_analysis_module,
         name="ui-case-analysis-module",
