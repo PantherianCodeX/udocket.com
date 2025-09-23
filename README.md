@@ -17,7 +17,7 @@ and module discovery (`db/__init__.py`, `config/__init__.py`).
 ## Notes
 - Postgres is now the default application database. Per-organization row-level security is enforced via `python manage.py enable_rls`.
 - Media storage is tenant-aware: artifacts for organization `ORG123` live under `/media/tenants/ORG123/cases/<CASE_ID>/...`.
-- Run tests inside Docker (parity with deployed env) using `./scripts/pytest-in-container.sh`. VS Code's built-in discovery runs against a local sqlite DB (see `.vscode/settings.json` for the lightweight override).
+- Run tests inside the dev container directly: `pytest`. The devcontainer provides the runtime and services, so no local helper scripts are required.
 - Remote dev: open the repository in VS Code using **Dev Containers > Reopen in Container** to attach to the `platform-dev` service defined under `.devcontainer/` (starts alongside Postgres and Redis).
 - Permissions: Visit `/permissions/` for a read-only catalog of artifact fields, presets, and roles (edits still happen via Django admin for MVP).
 - Platform uploads let you choose `batch` (default) or `on-demand` transcription.
