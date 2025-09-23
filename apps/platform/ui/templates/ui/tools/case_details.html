@@ -122,6 +122,16 @@
   </div>
 
   <div class="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+    <p class="text-xs uppercase tracking-wide text-slate-400">Contributors</p>
+    <select id="case-field-contributors" name="contributor_ids" multiple class="mt-2 h-32 w-full rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none focus:ring-0">
+      {% for option in body.contributor_options %}
+        <option value="{{ option.id }}" {% if option.id in body.contributor_ids %}selected{% endif %}>{{ option.label }}</option>
+      {% endfor %}
+    </select>
+    <p class="mt-2 text-[11px] text-slate-500">Owners and reviewers are managed above. Contributors can upload and manage artifacts for this case.</p>
+  </div>
+
+  <div class="rounded-xl border border-white/10 bg-slate-900/60 p-4">
     <p class="text-xs uppercase tracking-wide text-slate-400">Case Owner</p>
     <select id="case-field-owner" name="owner_id" class="mt-2 rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none focus:ring-0">
       <option value="">Unassigned</option>

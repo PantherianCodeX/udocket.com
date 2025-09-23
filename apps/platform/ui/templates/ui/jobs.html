@@ -27,6 +27,31 @@
     return STATUS_LABELS[normalized] || (normalized ? normalized.charAt(0) + normalized.slice(1).toLowerCase() : 'Status');
   }
 
+  const STATUS_CLASS_MAP = {
+    SUCCEEDED: ['border-emerald-400/40', 'bg-emerald-500/10', 'text-emerald-200'],
+    APPROVED: ['border-emerald-400/40', 'bg-emerald-500/10', 'text-emerald-200'],
+    FAILED: ['border-rose-400/40', 'bg-rose-500/10', 'text-rose-200'],
+    REJECTED: ['border-rose-400/40', 'bg-rose-500/10', 'text-rose-200'],
+    ERROR: ['border-rose-400/40', 'bg-rose-500/10', 'text-rose-200'],
+    CONVERTING: ['border-primary-400/40', 'bg-primary-500/10', 'text-primary-100'],
+    RUNNING: ['border-primary-400/40', 'bg-primary-500/10', 'text-primary-100'],
+    UPLOADING: ['border-primary-400/40', 'bg-primary-500/10', 'text-primary-100'],
+    PENDING: ['border-amber-400/40', 'bg-amber-500/10', 'text-amber-100'],
+    QUEUED: ['border-amber-400/40', 'bg-amber-500/10', 'text-amber-100'],
+    CANCELLED: ['border-slate-400/40', 'bg-slate-500/20', 'text-slate-100'],
+    CANCELLING: ['border-slate-400/40', 'bg-slate-500/20', 'text-slate-100'],
+    DEFAULT: ['border-white/20', 'bg-white/5', 'text-slate-300'],
+  };
+
+  const STATUS_CLASS_VALUES = Array.from(new Set(Object.values(STATUS_CLASS_MAP).flat()));
+
+  function applyStatusPillClasses(target, normalized) {
+    if (!target || !target.classList) return;
+    target.classList.remove(...STATUS_CLASS_VALUES);
+    const next = STATUS_CLASS_MAP[normalized] || STATUS_CLASS_MAP.DEFAULT;
+    target.classList.add(...next);
+  }
+
   function renderStatusLabel(el, status, progress) {
     if (!el) return;
     const target = el.matches('[data-status]') ? el : el.querySelector('[data-status]') || el;
@@ -50,6 +75,9 @@
       if (target.classList.contains('status-pill')) {
         target.style.removeProperty('--status-progress');
       }
+    }
+    if (target.classList.contains('status-pill')) {
+      applyStatusPillClasses(target, normalized);
     }
     target.dataset.status = normalized;
     if (el !== target) {
@@ -203,7 +231,25 @@
               </td>
               <td class="px-4 py-3 text-slate-200 capitalize">{{ j.mode }}</td>
               <td class="px-4 py-3" id="job-status-{{ j.id }}">
-                <span class="status-pill inline-flex items-center rounded-full border border-white/20 bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-200" data-status="{{ j.status|upper }}">{{ j.status|lower|capfirst }}</span>
+                {% with status=j.status|upper %}
+                  {% if status == 'SUCCEEDED' %}
+                    <span class="status-pill inline-flex items-center rounded-full border border-emerald-400/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-emerald-200" data-status="{{ status }}">Succeeded</span>
+                  {% elif status == 'FAILED' %}
+                    <span class="status-pill inline-flex items-center rounded-full border border-rose-400/40 bg-rose-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-rose-200" data-status="{{ status }}">Failed</span>
+                  {% elif status == 'CANCELLED' %}
+                    <span class="status-pill inline-flex items-center rounded-full border border-slate-400/40 bg-slate-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-100" data-status="{{ status }}">Cancelled</span>
+                  {% elif status == 'CANCELLING' %}
+                    <span class="status-pill inline-flex items-center rounded-full border border-slate-400/40 bg-slate-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-100" data-status="{{ status }}">Cancelling</span>
+                  {% elif status == 'UPLOADING' %}
+                    <span class="status-pill inline-flex items-center rounded-full border border-primary-400/40 bg-primary-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-primary-100" data-status="{{ status }}">Uploading</span>
+                  {% elif status == 'RUNNING' or status == 'PENDING' or status == 'CONVERTING' %}
+                    <span class="status-pill inline-flex items-center rounded-full border border-primary-400/40 bg-primary-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-primary-100" data-status="{{ status }}">{{ status|lower|capfirst }}</span>
+                  {% elif status == 'QUEUED' %}
+                    <span class="status-pill inline-flex items-center rounded-full border border-amber-400/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-100" data-status="{{ status }}">Queued</span>
+                  {% else %}
+                    <span class="status-pill inline-flex items-center rounded-full border border-white/20 bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-300" data-status="{{ status }}">{{ status|lower|capfirst }}</span>
+                  {% endif %}
+                {% endwith %}
               </td>
               <td class="px-4 py-3" id="job-transcript-{{ j.id }}">{% if j.transcript_path %}<a class="font-medium text-primary-300 underline" href="/api/v1/jobs/{{ j.id }}/download/">Download</a>{% else %}—{% endif %}</td>
               <td class="px-4 py-3 text-primary-200"><a class="underline" href="/api/v1/jobs/{{ j.id }}/logs/">Logs</a></td>

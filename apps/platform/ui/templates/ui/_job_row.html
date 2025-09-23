@@ -6,6 +6,7 @@
 {% with job_title=title|default:"Transcript" %}
 {% with child=is_child|default:False %}
 {% with normalized=status|upper %}
+{% with job_actions=actions|default:None %}
 <tr data-job="{{ j.id }}"
     data-job-row
     data-job-status="{{ status }}"
@@ -63,13 +64,8 @@
   </td>
   <td class="px-4 py-3 text-slate-300"><time data-ts="{{ j.created_at|date:'c' }}">{{ j.created_at|date:'M j, Y g:i A' }}</time></td>
   <td class="px-4 py-3">
-    <div class="flex items-center justify-end gap-2">
-      <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-rose-400/40 bg-rose-500/10 px-3 py-1.5 text-xs font-semibold text-rose-100 transition hover:bg-rose-500/30 disabled:opacity-60 {% if normalized not in 'RUNNING,PENDING,QUEUED,UPLOADING,CANCELLING' %}hidden{% endif %}" data-job-cancel="{{ j.id }}">
-        <span>Cancel</span>
-      </button>
-      <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-slate-300/40 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-100 transition hover:border-primary-400 hover:text-white disabled:opacity-60 {% if normalized not in 'SUCCEEDED,FAILED,CANCELLED' %}hidden{% endif %}" data-job-restart="{{ j.id }}">
-        <span>Restart</span>
-      </button>
+    <div class="flex justify-end">
+      {% include "ui/tools/_job_action_menu.html" with actions=job_actions only %}
     </div>
   </td>
   <td class="px-4 py-3 text-right text-slate-300">
@@ -83,6 +79,7 @@
     <div class="rounded-xl border border-white/10 bg-slate-900/80 p-4" data-job-detail-container="{{ j.id }}"></div>
   </td>
 </tr>
+{% endwith %}
 {% endwith %}
 {% endwith %}
 {% endwith %}

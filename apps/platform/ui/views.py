@@ -11,7 +11,7 @@ import logging
 
 from django.conf import settings
 from django.db import models
-from django.http import Http404, HttpRequest, HttpResponse, HttpResponseRedirect
+from django.http import Http404, HttpRequest, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse
@@ -54,6 +54,10 @@ STATUS_CLASS_MAP = {
     "Not Started": "border-white/20 bg-white/5 text-slate-200",
     "No Transcript": "border-amber-400/40 bg-amber-500/10 text-amber-100",
 }
+
+CANCELABLE_STATUSES = {"RUNNING", "PENDING", "QUEUED", "UPLOADING", "CANCELLING", "CONVERTING"}
+
+RESTARTABLE_STATUSES = {"SUCCEEDED", "FAILED", "CANCELLED"}
 
 
 def _format_metadata(metadata: dict[str, Any] | None) -> list[dict[str, Any]]:
@@ -174,6 +178,177 @@ def _friendly_job_title(
         return artifact.title
     description = getattr(job, "description", None)
     return description or str(job.id)
+
+
+def _job_action_entries(
+    job: Optional[Job],
+    telemetry: Optional[Dict[str, Any]],
+    *,
+    can_review: bool,
+) -> List[Dict[str, Any]]:
+    if not job:
+        return []
+    actions: List[Dict[str, Any]] = []
+    job_id = str(job.id)
+    status = str(getattr(job, "status", "") or "").upper()
+    meta = (telemetry or {}).get("metadata") or {}
+    converted_available = bool(meta.get("converted_wav_available"))
+    job_kind = str(meta.get("job_kind") or "").lower()
+
+    if status in CANCELABLE_STATUSES:
+        actions.append(
+            {
+                "label": "Cancel job",
+                "action": "cancel",
+                "confirm": "Cancel this job?",
+                "visible_when": "cancel",
+                "job_id": job_id,
+            }
+        )
+
+    if status in RESTARTABLE_STATUSES:
+        actions.append(
+            {
+                "label": "Restart transcription",
+                "action": "restart",
+                "confirm": "Restart this job?",
+                "visible_when": "restart",
+                "job_id": job_id,
+            }
+        )
+        force_convert_available = (
+            not converted_available
+            and not job_kind.startswith("audio_conversion")
+            and bool(job.audio_input)
+        )
+        if force_convert_available:
+            actions.append(
+                {
+                    "label": "Restart with WAV conversion",
+                    "action": "restart",
+                    "query": "convert=1",
+                    "confirm": "Restart this job with WAV conversion?",
+                    "visible_when": "restart",
+                    "job_id": job_id,
+                }
+            )
+
+    if can_review and status == Job.Status.SUCCEEDED:
+        actions.append(
+            {
+                "label": "Approve transcript",
+                "action": "approve",
+                "confirm": "Approve this transcript?",
+                "visible_when": "review",
+                "job_id": job_id,
+            }
+        )
+        actions.append(
+            {
+                "label": "Reject transcript",
+                "action": "reject",
+                "prompt": "Reason for rejection (optional):",
+                "visible_when": "review",
+                "job_id": job_id,
+            }
+        )
+
+    return actions
+
+
+def _candidate_transcript_paths(job: Job, telemetry: Optional[Dict[str, Any]]) -> List[str]:
+    paths: List[str] = []
+    if isinstance(job.transcript_path, str) and job.transcript_path:
+        paths.append(job.transcript_path)
+    transcript_payload = (telemetry or {}).get("transcript") or {}
+    if isinstance(transcript_payload, dict):
+        path_from_telem = transcript_payload.get("path")
+        if isinstance(path_from_telem, str) and path_from_telem and path_from_telem not in paths:
+            paths.append(path_from_telem)
+    return paths
+
+
+def _default_transcript_title(job: Job, telemetry: Optional[Dict[str, Any]]) -> str:
+    telem = telemetry or {}
+    transcript_payload = telem.get("transcript") or {}
+    if isinstance(transcript_payload, dict):
+        title_value = transcript_payload.get("title")
+        if isinstance(title_value, str) and title_value.strip():
+            return title_value.strip()
+    meta = telem.get("metadata") or {}
+    if isinstance(meta, dict):
+        job_title = meta.get("job_title")
+        if isinstance(job_title, str) and job_title.strip():
+            return job_title.strip()
+    return _friendly_job_title(job, telemetry)
+
+
+def _unique_transcript_title(case_id: str, base_title: str) -> str:
+    base = (base_title or "").strip() or "Transcript"
+    base = base[:180]
+    candidate = base
+    suffix = 2
+    while CaseArtifact.objects.filter(case_id=case_id, type="TRANSCRIPT", title=candidate).exists():
+        candidate = f"{base}_v{suffix}"
+        suffix += 1
+        if len(candidate) > 200:
+            trimmed = base[: max(0, 200 - len(str(suffix)) - 3)]
+            candidate = f"{trimmed}_v{suffix}"
+    return candidate
+
+
+def _ensure_transcript_artifact(
+    *,
+    case: Case,
+    job: Job,
+    telemetry: Optional[Dict[str, Any]] = None,
+    title: Optional[str] = None,
+    metadata_source: str = "ui.transcript_promote",
+) -> Optional[CaseArtifact]:
+    artifact = (
+        CaseArtifact.objects.filter(case_id=str(case.id), job_id=str(job.id), type="TRANSCRIPT")
+        .order_by("-created_at")
+        .first()
+    )
+    if artifact:
+        return artifact
+
+    candidate_paths = _candidate_transcript_paths(job, telemetry)
+    if not candidate_paths:
+        return None
+
+    for path in candidate_paths:
+        existing = (
+            CaseArtifact.objects.filter(case_id=str(case.id), type="TRANSCRIPT", path=path)
+            .order_by("-created_at")
+            .first()
+        )
+        if existing:
+            return existing
+
+    base_title = title or _default_transcript_title(job, telemetry)
+    attempts = 0
+    while attempts < 3:
+        attempts += 1
+        candidate_title = _unique_transcript_title(str(case.id), base_title)
+        metadata = {"created_via": metadata_source}
+        for path in candidate_paths:
+            try:
+                artifact = CaseArtifact.objects.create(
+                    case_id=str(case.id),
+                    case_fk=case,
+                    job_id=str(job.id),
+                    type="TRANSCRIPT",
+                    title=candidate_title,
+                    path=path,
+                    metadata=metadata,
+                )
+                return artifact
+            except IntegrityError:
+                break
+            except Exception:
+                continue
+    return None
 
 
 def _latest_successful_transcription_job(jobs: List[Job]) -> Optional[Job]:
@@ -754,6 +929,8 @@ def _build_tool_panels(
             "client_user_id": str(case.client_user_id) if case.client_user_id else "",
             "reviewer_options": org_options,
             "client_options": org_options,
+            "contributor_options": org_options,
+            "contributor_ids": [str(m.user_id) for m in memberships if getattr(m, "role", "") == CaseMembership.Role.CONTRIBUTOR],
             "update_url": reverse("ui-case-details-update", kwargs={"case_id": case.id}),
             "job_summary": job_summary,
             "job_summary_last_dt": job_summary_last_dt,
@@ -779,33 +956,13 @@ def _build_tool_panels(
     if isinstance(latest_meta, dict):
         converted_available = bool(latest_meta.get("converted_wav_available"))
 
-    job_actions: List[Dict[str, Any]] = []
+    latest_job_title = None
     if latest_job:
-        job_id = str(latest_job.id)
-        cancelable_statuses = {"RUNNING", "PENDING", "QUEUED", "UPLOADING", "CANCELLING"}
-        restartable_statuses = {"SUCCEEDED", "FAILED", "CANCELLED"}
-        if latest_status in cancelable_statuses:
-            job_actions.append({
-                "label": "Cancel job",
-                "attrs": {"data-job-cancel": job_id},
-            })
-        if latest_status in restartable_statuses:
-            job_actions.append({
-                "label": "Restart transcription",
-                "attrs": {"data-job-restart": job_id},
-            })
-            force_convert_available = not converted_available and str((latest_meta or {}).get("job_kind", "")).lower() != "audio_conversion"
-            if force_convert_available:
-                job_actions.append({
-                    "label": "Restart with WAV conversion",
-                    "attrs": {"data-job-restart-convert": job_id},
-                })
-
-    review_actions: List[Dict[str, Any]] = []
-    if latest_job and user_can_review and latest_status == Job.Status.SUCCEEDED:
-        job_id = str(latest_job.id)
-        review_actions.append({"label": "Approve transcript", "attrs": {"data-job-approve": job_id}})
-        review_actions.append({"label": "Reject transcript", "attrs": {"data-job-reject": job_id}})
+        latest_job_title = _friendly_job_title(
+            latest_job,
+            latest_job_telemetry,
+            transcript_artifacts.get(str(latest_job.id)),
+        )
 
     panels["transcribe"] = {
         "key": "transcribe",
@@ -834,10 +991,9 @@ def _build_tool_panels(
             "language_default": getattr(latest_job, "language", "en-CA") if latest_job else "en-CA",
             "latest_job": latest_job,
             "latest_job_telemetry": latest_job_telemetry,
+            "latest_job_title": latest_job_title,
             "transcript_sources": transcript_sources,
             "approved_transcripts": approved_transcripts,
-            "job_actions": job_actions,
-            "review_actions": review_actions,
             "can_review": user_can_review,
         },
         "jobs": transcription_jobs,
@@ -926,7 +1082,7 @@ def _build_case_developer_cards(panels: Dict[str, Dict[str, Any]]) -> List[Dict[
                 "label": panel.get("label"),
                 "status_label": panel.get("status_label"),
                 "status_class": panel.get("status_class"),
-                "description": panel.get("progress_detail") or panel.get("description"),
+                "status_summary": panel.get("progress_detail") or panel.get("status_label"),
                 "updated_at": panel.get("updated_at"),
             }
         )
@@ -962,6 +1118,7 @@ def _build_case_header_context(
     last_activity_label = activity_candidates[0][1] if activity_candidates else None
 
     next_hearing_field = next((field for field in case_fields if field["name"] == "court_date"), None)
+    filing_deadline_field = next((field for field in case_fields if field["name"] == "filing_deadline"), None)
 
     return {
         "title": case.title,
@@ -970,6 +1127,7 @@ def _build_case_header_context(
         "reviewer_label": reviewer_label,
         "client_label": client_label,
         "next_hearing": next_hearing_field,
+        "filing_deadline": filing_deadline_field,
         "last_activity_ts": last_activity_ts,
         "last_activity_label": last_activity_label,
         "fields": case_fields,
@@ -1053,12 +1211,6 @@ def _compute_case_tool_state(request: HttpRequest, case: Case) -> Dict[str, Any]
                 continue
         display_rows.append(row)
 
-    progress_ctx = _case_progress_context(case, jobs_list, telemetry_map, memberships)
-    analysis_modules = _analysis_modules_context(
-        request, case, jobs_list, telemetry_map, transcript_artifacts
-    )
-    artifacts_all = _collect_case_artifacts(request, case)
-
     user = getattr(request, "user", None)
     dev_open = getattr(settings, "PLATFORM_DEV_OPEN", False)
     user_can_review = False
@@ -1069,6 +1221,19 @@ def _compute_case_tool_state(request: HttpRequest, case: Case) -> Dict[str, Any]
             user_can_review = True
         elif has_capability(user, str(case.id), "case.update"):
             user_can_review = True
+
+    for row in flat_rows:
+        row["actions"] = _job_action_entries(
+            row.get("job"),
+            row.get("telemetry"),
+            can_review=user_can_review,
+        )
+
+    progress_ctx = _case_progress_context(case, jobs_list, telemetry_map, memberships)
+    analysis_modules = _analysis_modules_context(
+        request, case, jobs_list, telemetry_map, transcript_artifacts
+    )
+    artifacts_all = _collect_case_artifacts(request, case)
 
     tool_panels = _build_tool_panels(
         request,
@@ -1469,6 +1634,7 @@ def case_details_update(request: HttpRequest, case_id: str) -> HttpResponse:
     reviewer_id = (request.POST.get("reviewer_id") or "").strip()
     client_user_id = (request.POST.get("client_user_id") or "").strip()
     owner_id = (request.POST.get("owner_id") or "").strip()
+    contributor_ids = set((request.POST.getlist("contributor_ids") or []) if hasattr(request, 'POST') else [])
     representation_value = (request.POST.get("representation") or "").strip()
     engagement_value = (request.POST.get("engagement_model") or "standard").strip().lower()
 
@@ -1581,6 +1747,36 @@ def case_details_update(request: HttpRequest, case_id: str) -> HttpResponse:
             user_id__in=demote_ids,
             role=CaseMembership.Role.OWNER,
         ).update(role=CaseMembership.Role.CONTRIBUTOR)
+
+    # Sync contributors (add/remove) — excludes owners/reviewer/client
+    existing_contributors = set(
+        str(m.user_id)
+        for m in case.memberships.filter(role=CaseMembership.Role.CONTRIBUTOR).all()
+        if m.user_id
+    )
+    to_add = contributor_ids - existing_contributors
+    to_remove = existing_contributors - contributor_ids
+    if to_add:
+        for uid in to_add:
+            user_obj = User.objects.filter(pk=uid).first()
+            if not user_obj:
+                continue
+            OrganizationMembership.objects.get_or_create(
+                organization=case.organization,
+                user=user_obj,
+                defaults={"role": OrganizationMembership.Role.MEMBER},
+            )
+            CaseMembership.objects.get_or_create(
+                case=case,
+                user=user_obj,
+                defaults={"role": CaseMembership.Role.CONTRIBUTOR},
+            )
+    if to_remove:
+        CaseMembership.objects.filter(
+            case=case,
+            role=CaseMembership.Role.CONTRIBUTOR,
+            user_id__in=list(to_remove),
+        ).delete()
 
     if update_fields:
         case.save(update_fields=list(set(update_fields)))
@@ -1973,43 +2169,6 @@ def case_job_update_title(request: HttpRequest, case_id: str, job_id: str) -> Ht
         .first()
     )
 
-    def ensure_transcript_artifact() -> Optional[CaseArtifact]:
-        nonlocal artifact
-        if artifact:
-            return artifact
-        candidate_paths: list[str] = []
-        transcript_payload = telemetry_payload.get("transcript") or {}
-        path_from_telem = transcript_payload.get("path") if isinstance(transcript_payload, dict) else None
-        if isinstance(job.transcript_path, str) and job.transcript_path:
-            candidate_paths.append(job.transcript_path)
-        if isinstance(path_from_telem, str) and path_from_telem:
-            candidate_paths.append(path_from_telem)
-        for path in candidate_paths:
-            existing = (
-                CaseArtifact.objects.filter(case_id=str(case.id), type="TRANSCRIPT", path=path)
-                .order_by("-created_at")
-                .first()
-            )
-            if existing:
-                return existing
-        for path in candidate_paths:
-            if not path:
-                continue
-            try:
-                created = CaseArtifact.objects.create(
-                    case_id=str(case.id),
-                    case_fk=case,
-                    job_id=str(job.id),
-                    type="TRANSCRIPT",
-                    title=new_title,
-                    path=path,
-                    metadata={"created_via": "ui.job_title"},
-                )
-                return created
-            except Exception:
-                continue
-        return None
-
     if not title_error:
         conflict_qs = CaseArtifact.objects.filter(case_id=str(case.id), type="TRANSCRIPT", title=new_title)
         if artifact:
@@ -2018,7 +2177,13 @@ def case_job_update_title(request: HttpRequest, case_id: str, job_id: str) -> Ht
             title_error = "A transcript with that title already exists in this case."
 
     if not title_error:
-        artifact = ensure_transcript_artifact()
+        artifact = artifact or _ensure_transcript_artifact(
+            case=case,
+            job=job,
+            telemetry=telemetry_payload,
+            title=new_title,
+            metadata_source="ui.job_title",
+        )
         if not artifact:
             title_error = "Transcript not found for this job."
 
@@ -2069,6 +2234,117 @@ def case_job_update_title(request: HttpRequest, case_id: str, job_id: str) -> Ht
     response = render(request, "ui/_job_detail_title_form.html", context)
     response["HX-Trigger"] = trigger
     return response
+
+
+@require_http_methods(["POST"])
+def case_job_create_artifact(request: HttpRequest, case_id: str, job_id: str) -> HttpResponse:
+    auth_response = _ensure_authenticated(request)
+    if auth_response:
+        return auth_response
+
+    case, _ = _get_case_and_org(request, case_id)
+    job = (
+        Job.objects.select_related("case", "case__organization", "reviewed_by")
+        .filter(case=case, pk=job_id)
+        .first()
+    )
+    if not job:
+        raise Http404
+
+    user = getattr(request, "user", None)
+    dev_open = getattr(settings, "PLATFORM_DEV_OPEN", False)
+    can_manage = False
+    if dev_open:
+        can_manage = True
+    elif user and getattr(user, "is_authenticated", False):
+        if case.reviewer_id and str(user.id) == str(case.reviewer_id):
+            can_manage = True
+        elif has_capability(user, str(case.id), "case.update"):
+            can_manage = True
+    if not can_manage:
+        return JsonResponse({"status": "error", "detail": "Forbidden"}, status=403)
+
+    telemetry_payload = JobTelemetrySerializer(job, context={"request": request, "ui_mode": True}).data
+
+    existing = (
+        CaseArtifact.objects.filter(case_id=str(case.id), job_id=str(job.id), type="TRANSCRIPT")
+        .order_by("-created_at")
+        .first()
+    )
+
+    artifact = existing or _ensure_transcript_artifact(
+        case=case,
+        job=job,
+        telemetry=telemetry_payload,
+        metadata_source="ui.transcript_promote",
+    )
+
+    if not artifact:
+        return JsonResponse(
+            {"status": "error", "detail": "Transcript not found for this job."},
+            status=404,
+        )
+
+    title_input = (request.POST.get("title") or "").strip()
+    metadata_changed = False
+    title_changed = False
+    if title_input:
+        desired_title = _unique_transcript_title(str(case.id), title_input)
+        if artifact.title != desired_title:
+            artifact.title = desired_title
+            title_changed = True
+    elif not artifact.title:
+        default_title = _default_transcript_title(job, telemetry_payload)
+        unique_title = _unique_transcript_title(str(case.id), default_title)
+        if artifact.title != unique_title:
+            artifact.title = unique_title
+            title_changed = True
+
+    metadata = artifact.metadata or {}
+    if not isinstance(metadata, dict):
+        metadata = {}
+    else:
+        metadata = dict(metadata)
+    if metadata.get("created_via") is None:
+        metadata["created_via"] = "ui.transcript_promote"
+        metadata_changed = True
+    metadata["last_promoted_at"] = timezone.now().isoformat()
+    metadata_changed = True
+    if user and getattr(user, "is_authenticated", False):
+        metadata["last_promoted_by"] = str(getattr(user, "id", ""))
+    if title_changed:
+        metadata["job_title"] = artifact.title
+        metadata["transcript_title"] = artifact.title
+    artifact.metadata = metadata
+
+    update_fields: List[str] = []
+    if title_changed:
+        update_fields.append("title")
+    if metadata_changed or title_changed:
+        update_fields.append("metadata")
+    if update_fields:
+        artifact.save(update_fields=update_fields)
+
+    was_created = existing is None
+    log_message = "Transcript promoted to case artifact"
+    if title_changed and not was_created:
+        log_message = f"Transcript artifact updated: {artifact.title}"
+    append_job_log(str(job.case_id), job.organization_id, str(job.id), log_message)
+    update_job_meta(
+        str(case.id),
+        case.organization_id,
+        str(job.id),
+        {"transcript_artifact_id": str(artifact.id)},
+    )
+
+    return JsonResponse(
+        {
+            "status": "ok",
+            "artifact_id": artifact.id,
+            "title": artifact.title,
+            "created": was_created,
+        }
+    )
 
 
 @require_http_methods(["GET"])

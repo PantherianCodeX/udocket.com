@@ -1,37 +1,42 @@
 <details class="group rounded-2xl border border-white/10 bg-white/5 shadow-xl shadow-black/30" data-case-header>
   <summary class="flex cursor-pointer flex-col gap-5 px-6 py-5 text-left transition group-open:bg-white/10">
-    <div class="flex flex-col gap-4 md:flex-row md:items-stretch md:justify-between">
-      <div class="flex-1 space-y-3">
-        <div>
-          <h1 class="text-2xl font-semibold text-white">{{ case_header.title }}</h1>
-          <p class="mt-1 text-sm text-slate-300">Client · <span class="font-medium text-slate-100">{{ case_header.client_name }}</span></p>
+    <div class="flex flex-col gap-4 md:flex-row md:items-start">
+      <div class="flex min-w-0 flex-1 flex-col gap-3">
+        <div class="flex min-w-0 flex-wrap items-center gap-4">
+          <h1 class="truncate text-2xl font-semibold text-white">{{ case_header.title }}</h1>
+          {% if case_header.owner_labels %}
+            <span class="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-[11px] uppercase tracking-wide text-slate-200 whitespace-nowrap">
+              Owner: <span class="font-semibold text-white/90">{{ case_header.owner_labels|join:", " }}</span>
+            </span>
+          {% endif %}
+          {% if case_header.reviewer_label %}
+            <span class="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-[11px] uppercase tracking-wide text-slate-200 whitespace-nowrap">
+              Reviewer: <span class="font-semibold text-white/90">{{ case_header.reviewer_label }}</span>
+            </span>
+          {% endif %}
         </div>
-        <div class="grid gap-3 text-xs text-slate-300 sm:grid-cols-2">
-          <div>
-            <span class="uppercase tracking-wide text-slate-500">Owner(s)</span>
-            <p class="mt-1 text-sm text-slate-100">{{ case_header.owner_labels|join:", "|default:"Unassigned" }}</p>
+        {% if (case_header.filing_deadline and case_header.filing_deadline.value) or (case_header.next_hearing and case_header.next_hearing.value) %}
+          <div class="flex flex-wrap items-center gap-2 text-xs uppercase tracking-wide text-slate-300">
+            {% if case_header.filing_deadline and case_header.filing_deadline.value %}
+              <span class="inline-flex items-center rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-slate-200">
+                Filing Deadline: <time class="ml-1 font-semibold text-white/90" data-ts="{{ case_header.filing_deadline.value|date:'c' }}">{{ case_header.filing_deadline.display }}</time>
+              </span>
+            {% endif %}
+            {% if case_header.next_hearing and case_header.next_hearing.value %}
+              <span class="inline-flex items-center rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-slate-200">
+                Next Hearing: <time class="ml-1 font-semibold text-white/90" data-ts="{{ case_header.next_hearing.value|date:'c' }}">{{ case_header.next_hearing.display }}</time>
+              </span>
+            {% endif %}
           </div>
-          <div>
-            <span class="uppercase tracking-wide text-slate-500">Reviewer</span>
-            <p class="mt-1 text-sm text-slate-100">{{ case_header.reviewer_label|default:"Unassigned" }}</p>
-          </div>
-          <div>
-            <span class="uppercase tracking-wide text-slate-500">Client User</span>
-            <p class="mt-1 text-sm text-slate-100">{{ case_header.client_label|default:"Unassigned" }}</p>
-          </div>
-          <div>
-            <span class="uppercase tracking-wide text-slate-500">Next Hearing</span>
-            <p class="mt-1 text-sm text-slate-100">
-              {% if case_header.next_hearing and case_header.next_hearing.value %}
-                <time data-ts="{{ case_header.next_hearing.value|date:'c' }}">{{ case_header.next_hearing.display }}</time>
-              {% else %}
-                Pending
-              {% endif %}
-            </p>
-          </div>
+        {% endif %}
+        <div class="text-sm text-slate-300">
+          <span class="block">Client · <span class="font-medium text-slate-100">{{ case_header.client_name }}</span></span>
+          {% if case_header.client_label %}
+            <span class="mt-1 inline-flex items-center rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-[11px] uppercase tracking-wide text-slate-200">Client User: <span class="ml-1 font-semibold text-white/90">{{ case_header.client_label }}</span></span>
+          {% endif %}
         </div>
       </div>
-      <div class="mt-2 flex md:mt-0 md:w-64">
+      <div class="ml-auto w-full md:w-72">
         <div class="w-full rounded-xl border border-white/10 bg-slate-900/60 p-4 text-sm text-slate-200">
           <p class="text-xs uppercase tracking-wide text-slate-500">Last Activity</p>
           <p class="mt-2 font-semibold text-white">
@@ -47,26 +52,28 @@
         </div>
       </div>
     </div>
-    <span class="text-[11px] uppercase tracking-wide text-slate-500 text-center">Click for details</span>
+    <span class="text-[11px] text-center uppercase tracking-wide text-slate-500">Click for details</span>
   </summary>
   <div class="border-t border-white/10 px-6 py-5 text-sm text-slate-200">
-    <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-      {% for field in case_header.fields %}
-        <div class="rounded-xl border border-white/10 bg-slate-900/60 p-4">
-          <p class="text-xs uppercase tracking-wide text-slate-400">{{ field.label }}</p>
-          {% if field.type == 'textarea' %}
-            <p class="mt-2 whitespace-pre-line text-sm text-slate-100">{{ field.display }}</p>
-          {% else %}
-            <p class="mt-2 text-sm text-slate-100">
-              {% if field.type == 'datetime' and field.value %}
-                <time data-ts="{{ field.value|date:'c' }}">{{ field.display }}</time>
-              {% else %}
-                {{ field.display }}
-              {% endif %}
-            </p>
-          {% endif %}
-        </div>
-      {% endfor %}
+    <div class="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+      <dl class="grid gap-x-6 gap-y-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {% for field in case_header.fields %}
+          <div>
+            <dt class="text-xs uppercase tracking-wide text-slate-400">{{ field.label }}</dt>
+            {% if field.type == 'textarea' %}
+              <dd class="mt-1 whitespace-pre-line text-sm text-slate-100">{{ field.display }}</dd>
+            {% else %}
+              <dd class="mt-1 text-sm text-slate-100">
+                {% if field.type == 'datetime' and field.value %}
+                  <time data-ts="{{ field.value|date:'c' }}">{{ field.display }}</time>
+                {% else %}
+                  {{ field.display|default:'—' }}
+                {% endif %}
+              </dd>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </dl>
     </div>
     <div class="mt-4 rounded-xl border border-white/10 bg-slate-900/60 p-4">
       <p class="text-xs uppercase tracking-wide text-slate-400">Last activity detail</p>

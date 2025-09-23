@@ -6,7 +6,7 @@
         <div class="flex items-center gap-3">
           <h2 class="text-xl font-semibold text-white">{{ panel.label }}</h2>
           {% if panel.status_label %}
-            <span class="status-pill inline-flex items-center rounded-full border {{ panel.status_class }} px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-white/90" data-tool-status="{{ panel.key }}">
+            <span class="status-pill inline-flex items-center rounded-full border {{ panel.status_class }} px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white/90 whitespace-nowrap flex-none" data-tool-status="{{ panel.key }}">
               {{ panel.status_label }}
             </span>
           {% endif %}

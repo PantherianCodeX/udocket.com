@@ -20,10 +20,10 @@
       </thead>
       <tbody id="jobs-body" data-case-id="{{ panel.case_id }}" data-tool-key="{{ panel.key }}" class="divide-y divide-white/5 bg-slate-900/40 text-slate-100">
         {% for row in panel.jobs %}
-          {% include "ui/_job_row.html" with j=row.job telem=row.telemetry title=row.title is_child=False children=row.children only %}
+          {% include "ui/_job_row.html" with j=row.job telem=row.telemetry title=row.title actions=row.actions is_child=False children=row.children only %}
           {% if row.children %}
             {% for child in row.children %}
-              {% include "ui/_job_row.html" with j=child.job telem=child.telemetry title=child.title is_child=True parent_id=row.job.id children=child.children only %}
+              {% include "ui/_job_row.html" with j=child.job telem=child.telemetry title=child.title actions=child.actions is_child=True parent_id=row.job.id children=child.children only %}
             {% endfor %}
           {% endif %}
         {% empty %}

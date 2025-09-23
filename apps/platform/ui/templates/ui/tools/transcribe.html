@@ -4,7 +4,7 @@
       <div class="space-y-1">
         <span class="text-xs uppercase tracking-wide text-slate-400">Transcription workflow</span>
         {% if body.latest_job %}
-          <p class="text-sm text-slate-200">Latest run · {{ body.latest_job.language|default:"en-CA" }} · {{ body.latest_job.mode|title }}</p>
+          <p class="text-sm text-slate-200">Latest run · {{ body.latest_job_title|default:body.latest_job.id }}</p>
         {% else %}
           <p class="text-sm text-slate-200">No transcription jobs yet. Upload audio to start.</p>
         {% endif %}
@@ -12,10 +12,6 @@
       </div>
       <div class="flex flex-wrap items-center gap-3 text-xs text-slate-300">
         <span class="status-pill inline-flex items-center rounded-full border border-white/20 bg-white/5 px-2 py-0.5 text-[11px] font-semibold uppercase text-slate-200" data-transcribe-status-pill>Idle</span>
-        {% include "ui/tools/_action_menu.html" with title="Job actions" actions=body.job_actions %}
-        {% if body.review_actions %}
-          {% include "ui/tools/_action_menu.html" with title="Review actions" actions=body.review_actions %}
-        {% endif %}
       </div>
     </div>
     <div class="mt-4 hidden" data-transcribe-progress>
@@ -80,8 +76,8 @@
       </div>
     </form>
 
-    <div class="flex h-full min-h-[20rem] flex-col gap-4 rounded-2xl border border-white/10 bg-slate-900/70 p-6 text-sm text-slate-200">
-      <p class="text-xs uppercase tracking-wide text-slate-400">Approved transcripts</p>
+    <div class="flex h-full min-h-[20rem] flex-col gap-4 rounded-2xl border border-white/10 bg-slate-900/70 p-6 text-sm text-slate-200" data-transcript-sidebar>
+      <p class="text-xs uppercase tracking-wide text-slate-400">Create Case Artifact</p>
       {% if body.approved_transcripts %}
         <ul class="flex-1 space-y-2 overflow-y-auto pr-1 text-xs" data-transcript-list>
           {% for transcript in body.approved_transcripts %}
@@ -93,13 +89,24 @@
                     <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.094l3.71-3.86a.75.75 0 111.08 1.04l-4.247 4.41a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
                   </svg>
                 </summary>
-                <div class="mt-2 space-y-1 border-t border-white/10 px-3 py-2 text-xs text-slate-200" data-transcript-menu>
-                  <button type="button"
-                          class="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-1.5 text-left font-semibold text-slate-200 transition hover:bg-white/10"
-                          data-transcript-action="view"
-                          data-job-id="{{ transcript.job_id }}">
-                    <span>View transcript</span>
-                  </button>
+                <div class="mt-2 space-y-3 border-t border-white/10 px-3 py-2 text-xs text-slate-200" data-transcript-menu>
+                  <div class="space-y-1" data-transcript-promote>
+                    <p class="text-[10px] uppercase tracking-wide text-slate-400">Case artifact</p>
+                    <button type="button"
+                            class="flex w-full items-center justify-between gap-2 rounded-lg bg-primary-500/10 px-3 py-1.5 text-left font-semibold text-primary-100 transition hover:bg-primary-500/20"
+                            data-transcript-action="create-artifact"
+                            data-job-id="{{ transcript.job_id }}"
+                            data-artifact-endpoint="/cases/{{ case.id }}/jobs/{{ transcript.job_id }}/artifact/create/">
+                      <span>Create artifact</span>
+                    </button>
+                  </div>
+                  <div class="border-t border-white/10 pt-2 space-y-1">
+                    <button type="button"
+                            class="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-1.5 text-left font-semibold text-slate-200 transition hover:bg-white/10"
+                            data-transcript-action="view"
+                            data-job-id="{{ transcript.job_id }}">
+                      <span>View transcript</span>
+                    </button>
                   {% if transcript.download_url %}
                     <a href="{{ transcript.download_url }}"
                        class="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-1.5 font-semibold text-slate-200 transition hover:bg-white/10"
@@ -113,13 +120,14 @@
                           data-job-id="{{ transcript.job_id }}">
                     <span>View job</span>
                   </button>
+                  </div>
                 </div>
               </details>
             </li>
           {% endfor %}
         </ul>
       {% else %}
-        <p class="text-xs text-slate-400">No approved transcripts yet.</p>
+        <p class="text-xs text-slate-400">No approved transcripts ready to promote.</p>
       {% endif %}
     </div>
   </div>

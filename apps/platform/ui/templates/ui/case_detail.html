@@ -149,21 +149,31 @@
         const normalized = normalizeStatus(status);
         const row = document.querySelector(`[data-job="${jobId}"]`);
         if (!row) return;
-        const cancelBtn = row.querySelector('[data-job-cancel]');
-        if (cancelBtn) {
-          if (CANCEL_ACTIVE.has(normalized)) {
-            cancelBtn.classList.remove('hidden');
-          } else {
-            cancelBtn.classList.add('hidden');
+        const menu = row.querySelector('[data-job-action-menu]');
+        if (!menu) return;
+        const items = menu.querySelectorAll('[data-job-action-item]');
+        let anyVisible = false;
+        items.forEach((item) => {
+          const condition = item.getAttribute('data-visible-when') || '';
+          let visible = true;
+          if (condition === 'cancel') {
+            visible = CANCEL_ACTIVE.has(normalized);
+          } else if (condition === 'restart') {
+            visible = RESTART_ACTIVE.has(normalized);
+          } else if (condition === 'review') {
+            visible = normalized === 'SUCCEEDED';
           }
+          item.classList.toggle('hidden', !visible);
+          if (visible) {
+            anyVisible = true;
+          }
+        });
+        const emptyState = menu.querySelector('[data-job-action-empty]');
+        if (emptyState) {
+          emptyState.classList.toggle('hidden', anyVisible);
         }
-        const restartBtn = row.querySelector('[data-job-restart]');
-        if (restartBtn) {
-          if (RESTART_ACTIVE.has(normalized)) {
-            restartBtn.classList.remove('hidden');
-          } else {
-            restartBtn.classList.add('hidden');
-          }
+        if (!anyVisible && menu.hasAttribute('open')) {
+          menu.removeAttribute('open');
         }
       }
 
@@ -370,51 +380,63 @@
       }
 
       async function handleJobAction(evt) {
-        const btn = evt.target.closest('[data-job-cancel],[data-job-restart],[data-job-restart-convert],[data-job-approve],[data-job-reject]');
+        const btn = evt.target.closest('[data-job-action]');
         if (!btn) return;
         evt.preventDefault();
-        const jobId = btn.getAttribute('data-job-cancel')
-          || btn.getAttribute('data-job-restart')
-          || btn.getAttribute('data-job-restart-convert')
-          || btn.getAttribute('data-job-approve')
-          || btn.getAttribute('data-job-reject');
-        if (!jobId) return;
-        const action = btn.hasAttribute('data-job-cancel')
-          ? 'cancel'
-          : btn.hasAttribute('data-job-restart') ? 'restart' : btn.hasAttribute('data-job-restart-convert') ? 'restart?convert=1' : btn.hasAttribute('data-job-approve') ? 'approve' : 'reject';
+        const jobId = btn.getAttribute('data-job-id');
+        const action = btn.getAttribute('data-job-action');
+        if (!jobId || !action) return;
 
-        if (action === 'cancel' && !window.confirm('Cancel this job?')) return;
-        if (action.startsWith('restart') && !window.confirm('Restart this job?')) return;
-        let body;
-        if (action === 'reject') {
-          const reason = window.prompt('Reason for rejection (optional):', '');
-          if (reason === null) return;
-          body = JSON.stringify({ comment: reason });
+        const confirmMessage = btn.getAttribute('data-job-action-confirm');
+        if (confirmMessage && !window.confirm(confirmMessage)) {
+          const menu = btn.closest('[data-job-action-menu]');
+          if (menu) menu.removeAttribute('open');
+          return;
         }
+
+        let requestBody;
+        let endpointAction = action;
+        const promptMessage = btn.getAttribute('data-job-action-prompt');
+        if (promptMessage) {
+          const response = window.prompt(promptMessage, '');
+          if (response === null) {
+            const menu = btn.closest('[data-job-action-menu]');
+            if (menu) menu.removeAttribute('open');
+            return;
+          }
+          requestBody = JSON.stringify({ comment: response });
+        }
+        const optionalQuery = btn.getAttribute('data-job-action-query');
+        if (optionalQuery) {
+          endpointAction = `${endpointAction}?${optionalQuery}`;
+        }
+
         btn.disabled = true;
         try {
-          const url = `/api/v1/jobs/${jobId}/${action}/`;
+          const url = `/api/v1/jobs/${jobId}/${endpointAction}/`;
           const resp = await fetch(url, {
             method: 'POST',
             headers: {
               'X-CSRFToken': getCSRFToken(),
               'Accept': 'application/json',
-              'Content-Type': body ? 'application/json' : 'application/json',
+              'Content-Type': 'application/json',
             },
             credentials: 'same-origin',
-            body,
+            body: requestBody || null,
           });
           if (!resp.ok) {
-            console.warn('Job action failed', action, await resp.text());
+            console.warn('Job action failed', endpointAction, await resp.text());
           } else {
             const data = await resp.json();
             handleJobUpdate(jobId, data, 'action');
             ensurePolling(jobId);
           }
         } catch (error) {
-          console.warn('Job action error', action, error);
+          console.warn('Job action error', endpointAction, error);
         } finally {
           btn.disabled = false;
+          const menu = btn.closest('[data-job-action-menu]');
+          if (menu) menu.removeAttribute('open');
         }
       }
 
@@ -608,6 +630,31 @@
         }
       });
 
+      document.addEventListener('toggle', (evt) => {
+        const target = evt.target;
+        if (target instanceof HTMLElement && target.matches('[data-job-action-menu], [data-action-menu]') && target.open) {
+          document.querySelectorAll('[data-job-action-menu][open], [data-action-menu][open]').forEach((menu) => {
+            if (menu !== target) menu.removeAttribute('open');
+          });
+        }
+      });
+
+      const closeActionMenus = () => {
+        document.querySelectorAll('[data-job-action-menu][open], [data-action-menu][open]').forEach((menu) => menu.removeAttribute('open'));
+      };
+
+      document.addEventListener('click', (evt) => {
+        if (!evt.target.closest('[data-job-action-menu]') && !evt.target.closest('[data-action-menu]')) {
+          closeActionMenus();
+        }
+      });
+
+      document.addEventListener('focusin', (evt) => {
+        if (!evt.target.closest('[data-job-action-menu]') && !evt.target.closest('[data-action-menu]')) {
+          closeActionMenus();
+        }
+      });
+
       document.body.addEventListener('click', async (evt) => {
         const transcriptAction = evt.target.closest('[data-transcript-action]');
         if (!transcriptAction) return;
@@ -625,12 +672,43 @@
           if (!success && window.udocketShowToastAt) {
             window.udocketShowToastAt(evt.clientX || window.innerWidth / 2, evt.clientY || window.innerHeight / 2, 'Job not available in this panel');
           }
+        } else if (action === 'create-artifact') {
+          const endpoint = transcriptAction.getAttribute('data-artifact-endpoint');
+          if (!endpoint) return;
+          if (!window.confirm('Add this transcript as a case artifact?')) return;
+          transcriptAction.disabled = true;
+          const toastX = evt.clientX || window.innerWidth / 2;
+          const toastY = evt.clientY || window.innerHeight / 2;
+          try {
+            const resp = await fetch(endpoint, {
+              method: 'POST',
+              headers: {
+                'X-CSRFToken': getCSRFToken(),
+                'Accept': 'application/json',
+              },
+              credentials: 'same-origin',
+            });
+            if (!resp.ok) {
+              const text = await resp.text();
+              throw new Error(text || `HTTP ${resp.status}`);
+            }
+            if (window.udocketShowToastAt) {
+              window.udocketShowToastAt(toastX, toastY, 'Case artifact created');
+            }
+          } catch (error) {
+            console.error('Create artifact failed', error);
+            if (window.udocketShowToastAt) {
+              window.udocketShowToastAt(toastX, toastY, 'Unable to create artifact');
+            }
+          } finally {
+            transcriptAction.disabled = false;
+          }
         }
       });
 
       document.body.addEventListener('click', (evt) => {
         const card = evt.target.closest('[data-job-row]');
-        if (card && evt.target.closest('button, a, input, textarea, select') == null) {
+        if (card && evt.target.closest('button, a, input, textarea, select, [data-job-action-menu], [data-action-menu]') == null) {
           evt.preventDefault();
           toggleJobRow(card);
         }

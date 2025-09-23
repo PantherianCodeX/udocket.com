@@ -38,6 +38,11 @@ urlpatterns = [
         views.case_job_update_title,
         name="ui-case-job-update-title",
     ),
+    path(
+        "cases/<str:case_id>/jobs/<uuid:job_id>/artifact/create/",
+        views.case_job_create_artifact,
+        name="ui-case-job-create-artifact",
+    ),
     path("cases/<str:case_id>/jobs/<uuid:job_id>/row/", views.case_job_row, name="ui-case-job-row"),
     path("cases/<str:case_id>/jobs/new", views.create_job, name="ui-job-create"),
     path("cases/<str:case_id>/assign-reviewer/", views.case_assign_reviewer, name="ui-case-assign-reviewer"),
