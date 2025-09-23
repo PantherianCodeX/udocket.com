@@ -3,8 +3,6 @@ services:
     build:
       context: ..
       dockerfile: infra/docker/Dockerfile.platform
-    env_file:
-      - ../.env
     environment:
       DJANGO_SETTINGS_MODULE: apps.platform.config.settings.dev
       STORAGE_ROOT: /app/storage
