@@ -3,7 +3,7 @@
   "dockerComposeFile": [
     "../docker-compose.yml",
     "../docker-compose.override.yml",
-    "docker-compose.devcontainer.yml"
+    "./docker-compose.devcontainer.yml"
   ],
   "service": "platform-dev",
   "runServices": [
@@ -23,20 +23,24 @@
   "customizations": {
     "vscode": {
       "extensions": [
+        "etmoffat.pip-packages",
+        "github.copilot",
+        "github.copilot-chat",
+        "github.vscode-pull-request-github",
+        "ms-azuretools.vscode-containers",
+        "ms-azuretools.vscode-docker",
+        "ms-python.black-formatter",
+        "ms-python.debugpy",
         "ms-python.python",
         "ms-python.vscode-pylance",
-        "ms-azuretools.vscode-docker",
-        "ms-python.black-formatter"
+        "ms-python.vscode-python-envs",
+        "ms-vscode-remote.remote-containers",
+        "openai.chatgpt",
+        "slightc.pip-manager"
       ],
       "settings": {
-        "python.defaultInterpreterPath": "/usr/local/bin/python",
-        "python.testing.pytestEnabled": true,
-        "python.testing.pytestArgs": [
-          "tests"
-        ],
-        "python.testing.pytestPath": "/usr/local/bin/pytest"
+        "python.defaultInterpreterPath": "/usr/local/bin/python"
       }
     }
   }
 }
-

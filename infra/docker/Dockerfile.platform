@@ -5,8 +5,45 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg \
+    && apt-get install -y --no-install-recommends \
+       ffmpeg \
     && rm -rf /var/lib/apt/lists/*
+
+# Optional dev tools (enabled via build-arg DEV_TOOLS=1)
+ARG DEV_TOOLS=0
+RUN if [ "$DEV_TOOLS" = "1" ]; then \
+      apt-get update && apt-get install -y --no-install-recommends \
+        bash \
+        ca-certificates \
+        build-essential \
+        curl \
+        gcc \
+        g++ \
+        git \
+        git-lfs \
+        htop \
+        iputils-ping \
+        jq \
+        less \
+        libpq-dev \
+        lsof \
+        make \
+        nano \
+        netcat-openbsd \
+        postgresql-client \
+        pkg-config \
+        procps \
+        ripgrep \
+        sqlite3 \
+        strace \
+        tcpdump \
+        tree \
+        unzip \
+        vim-tiny \
+        wget \
+      && git lfs install --system \
+      && rm -rf /var/lib/apt/lists/*; \
+    fi
 
 WORKDIR /app
 

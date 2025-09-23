@@ -1,23 +1,27 @@
 services:
   platform-dev:
     build:
-      context: ..
+      context: ${PWD}
       dockerfile: infra/docker/Dockerfile.platform
+      args:
+        DEV_TOOLS: "1"
+    env_file:
+      - ${PWD}/.env
     environment:
       DJANGO_SETTINGS_MODULE: apps.platform.config.settings.dev
-      STORAGE_ROOT: /app/storage
-      REDIS_URL: redis://redis:6379/1
-      CELERY_BROKER_URL: redis://redis:6379/1
-      CELERY_RESULT_BACKEND: django-db
       ENV_READ_DOTENV: "1"
       ALLOW_SQLITE_DEV_FALLBACK: "1"
     command: sleep infinity
     volumes:
-      - ..:/app
-      - ../storage:/app/storage
-      - ../.env:/app/.env:ro
+      - vscode-server:/root/.vscode-server
+      - ${PWD}:/app
+      - ${PWD}/storage:/app/storage
+      - ${PWD}/.env:/app/.env:ro
     depends_on:
       postgres:
         condition: service_started
       redis:
         condition: service_started
+ 
+volumes:
+  vscode-server: {}
