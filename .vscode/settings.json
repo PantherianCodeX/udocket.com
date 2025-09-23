@@ -1,8 +1,14 @@
 {
   "python.testing.pytestEnabled": true,
   "python.testing.unittestEnabled": false,
-  "python.testing.pytestPath": "${workspaceFolder}/scripts/pytest-in-compose.sh",
+  
   "python.testing.pytestArgs": [
     "tests"
-  ]
+  ],
+  "python.testing.pytestEnv": {
+    "DATABASE_URL": "sqlite:///./pytest-vscode.db",
+    "TEST_DATABASE_URL": "sqlite:///./pytest-vscode.db",
+    "ENV_READ_DOTENV": "0",
+    "ALLOW_SQLITE_DEV_FALLBACK": "1"
+  }
 }

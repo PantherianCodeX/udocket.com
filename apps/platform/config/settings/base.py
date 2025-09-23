@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import socket
 from pathlib import Path
 import environ
 
@@ -122,6 +123,7 @@ if os.environ.get("PYTEST_CURRENT_TEST"):
         DATABASES = {"default": environ.Env.db_url_config(test_url)}
 else:
     _db_url = env("DATABASE_URL", default=f"sqlite:///{default_sqlite_path}")
+    allow_sqlite_fallback = env.bool("ALLOW_SQLITE_DEV_FALLBACK", default=False)
     if isinstance(_db_url, str) and _db_url.startswith("sqlite:///"):
         _sqlite_path = Path(_db_url.replace("sqlite:///", "")).resolve()
         try:
@@ -130,7 +132,30 @@ else:
         except Exception:
             DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": str(default_sqlite_path)}}
     else:
-        DATABASES = {"default": env.db("DATABASE_URL", default=_db_url)}
+        _db_conf = env.db("DATABASE_URL", default=_db_url)
+        should_fallback = False
+        if allow_sqlite_fallback:
+            host = _db_conf.get("HOST")
+            port = _db_conf.get("PORT") or None
+            if host:
+                try:
+                    socket.getaddrinfo(host, int(port) if port else None)
+                except (socket.gaierror, ValueError):
+                    should_fallback = True
+        if allow_sqlite_fallback and should_fallback:
+            fallback_path = default_sqlite_path
+            try:
+                fallback_path.parent.mkdir(parents=True, exist_ok=True)
+            except Exception:
+                pass
+            DATABASES = {
+                "default": {
+                    "ENGINE": "django.db.backends.sqlite3",
+                    "NAME": str(fallback_path),
+                }
+            }
+        else:
+            DATABASES = {"default": _db_conf}
 
 
 # Password validation
