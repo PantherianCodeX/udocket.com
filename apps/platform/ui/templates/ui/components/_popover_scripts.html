@@ -29,8 +29,10 @@
     const state = popoverState.get(detailsEl);
     if (!state) return;
     window.removeEventListener('scroll', state.onScroll, true);
+    document.removeEventListener('scroll', state.onScroll, true);
     window.removeEventListener('resize', state.onResize, true);
-    const { panel, original, placeholder, parent, portal, onWheel, onResizeObs } = state;
+    window.removeEventListener('orientationchange', state.onResize, true);
+    const { panel, original, placeholder, parent, portal, onWheel, onResizeObs, scrollAncestors } = state;
     if (panel && panel.isConnected) {
       Object.entries(original).forEach(([key, value]) => {
         panel.style[key] = value;
@@ -55,6 +57,11 @@
     }
     if (onResizeObs && typeof onResizeObs.disconnect === 'function') {
       try { onResizeObs.disconnect(); } catch (err) {}
+    }
+    if (Array.isArray(scrollAncestors)) {
+      try {
+        scrollAncestors.forEach((el) => el.removeEventListener('scroll', state.onScroll, true));
+      } catch (err) {}
     }
     popoverState.delete(detailsEl);
   }
@@ -167,6 +174,7 @@
       onResize: positionPanel,
       onWheel: null,
       onResizeObs: null,
+      scrollAncestors: [],
     };
     popoverState.set(detailsEl, state);
     // Ensure the panel is at least as wide as the trigger to avoid misalignment
@@ -186,7 +194,9 @@
     };
     rafReposition();
     window.addEventListener('scroll', positionPanel, true);
+    document.addEventListener('scroll', positionPanel, true);
     window.addEventListener('resize', positionPanel, true);
+    window.addEventListener('orientationchange', positionPanel, true);
 
     const wheelHandler = (evt) => {
       if (!detailsEl.open || !panel) return;
@@ -209,6 +219,27 @@
         state.onResizeObs = ro;
       } catch (err) {}
     }
+
+    // Attach scroll listeners to nearest scrollable ancestors of the trigger
+    try {
+      const ancestors = [];
+      let node = summary.parentElement;
+      const root = document.documentElement;
+      while (node && node !== root && node !== document.body) {
+        try {
+          const cs = window.getComputedStyle(node);
+          const overflowY = cs.overflowY || cs.overflow;
+          const overflowX = cs.overflowX || cs.overflow;
+          const scrollable = /(auto|scroll|overlay)/.test(overflowY) || /(auto|scroll|overlay)/.test(overflowX);
+          if (scrollable && typeof node.addEventListener === 'function') {
+            node.addEventListener('scroll', positionPanel, true);
+            ancestors.push(node);
+          }
+        } catch (err) {}
+        node = node.parentElement;
+      }
+      state.scrollAncestors = ancestors;
+    } catch (err) {}
   }
 
   function close(detailsEl) {
