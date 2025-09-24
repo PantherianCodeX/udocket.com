@@ -88,8 +88,6 @@
       };
       const STATUS_CLASS_VALUES = Array.from(new Set(Object.values(STATUS_CLASS_MAP).flat()));
       const TERMINAL_STATUSES = ['SUCCEEDED', 'FAILED', 'CANCELLED', 'ERROR', 'CORRUPTED'];
-      const CANCEL_ACTIVE = new Set(['RUNNING', 'PENDING', 'QUEUED', 'UPLOADING', 'CANCELLING', 'CONVERTING']);
-      const RESTART_ACTIVE = new Set(['SUCCEEDED', 'FAILED', 'CANCELLED', 'CORRUPTED']);
       const JOB_ROW_STATUS_CLASSES = ['bg-emerald-500/10', 'bg-rose-500/10', 'bg-amber-500/10', 'bg-primary-500/10', 'bg-white/5'];
 
       const JobsState = {
@@ -100,7 +98,9 @@
         refreshTranscribeScheduled: false,
       };
       let transcribeSidebarBinding = null;
-      const popoverMenuState = new WeakMap();
+      const popoverHelpers = window.udocketPopovers || {};
+      const resetPopoverMenu = popoverHelpers.reset || (() => {});
+      const jobActions = window.udocketJobActions || { updateForRow: () => {} };
 
       function normalizeStatus(status) {
         return (status || '').toString().toUpperCase();
@@ -293,60 +293,6 @@
         }
       }
 
-      function updateJobActions(jobId, status) {
-        const normalized = normalizeStatus(status);
-        const row = document.querySelector(`[data-job="${jobId}"]`);
-        if (!row) return;
-        const menu = row.querySelector('[data-job-action-menu]');
-        if (!menu) return;
-        const items = menu.querySelectorAll('[data-job-action-item]');
-        let anyVisible = false;
-        items.forEach((item) => {
-          const condition = item.getAttribute('data-visible-when') || '';
-          let visible = true;
-          if (condition === 'cancel') {
-            visible = CANCEL_ACTIVE.has(normalized);
-          } else if (condition === 'restart') {
-            visible = RESTART_ACTIVE.has(normalized);
-          } else if (condition === 'review') {
-            visible = normalized === 'SUCCEEDED';
-          }
-          item.classList.toggle('hidden', !visible);
-          if (visible) {
-            anyVisible = true;
-          }
-        });
-        const sections = Array.from(menu.querySelectorAll('[data-job-action-section]'));
-        const visibleSections = [];
-        sections.forEach((section) => {
-          const sectionItems = section.querySelectorAll('[data-job-action-item]:not(.hidden)');
-          const sectionVisible = sectionItems.length > 0;
-          section.classList.toggle('hidden', !sectionVisible);
-          if (sectionVisible) {
-            visibleSections.push(section);
-          }
-        });
-        const dividers = menu.querySelectorAll('[data-job-action-divider]');
-        dividers.forEach((divider) => divider.classList.add('hidden'));
-        visibleSections.forEach((section, index) => {
-          const divider = section.nextElementSibling;
-          if (divider && divider.hasAttribute('data-job-action-divider')) {
-            divider.classList.toggle('hidden', index >= visibleSections.length - 1);
-          }
-        });
-        const emptyState = menu.querySelector('[data-job-action-empty]');
-        if (emptyState) {
-          emptyState.classList.toggle('hidden', anyVisible);
-        }
-        if ((!anyVisible || normalized === 'CANCELLED') && menu.hasAttribute('open')) {
-          menu.removeAttribute('open');
-          resetPopoverMenu(menu);
-        } else if (menu.hasAttribute('open')) {
-          requestAnimationFrame(() => floatPopoverMenu(menu));
-        }
-      }
-
-
       function updateStatusDisplays(jobId, status, progress) {
         const statusCell = document.getElementById(`job-status-${jobId}`);
         if (statusCell) {
@@ -356,7 +302,7 @@
         if (jobRow) {
           jobRow.classList.remove(...JOB_ROW_STATUS_CLASSES);
         }
-        updateJobActions(jobId, status);
+        jobActions.updateForRow(jobId, status);
         const detailContainer = document.querySelector(`[data-job-detail="${jobId}"]`);
         if (!detailContainer) return;
         const pill = detailContainer.querySelector('[data-job-status-pill]');
@@ -1197,293 +1143,6 @@
         return true;
       }
 
-      function getPopoverPortal(kind) {
-        const id = kind ? `popover-portal-${kind}` : 'popover-portal-default';
-        let portal = document.getElementById(id);
-        if (!portal) {
-          portal = document.createElement('div');
-          portal.id = id;
-          portal.style.position = 'fixed';
-          portal.style.top = '0';
-          portal.style.left = '0';
-          portal.style.width = '100%';
-          portal.style.height = '100%';
-          portal.style.pointerEvents = 'none';
-          portal.style.zIndex = '2147483636';
-          document.body.appendChild(portal);
-        }
-        return portal;
-      }
-
-      function resetPopoverMenu(detailsEl) {
-        const state = popoverMenuState.get(detailsEl);
-        if (!state) return;
-        window.removeEventListener('scroll', state.onScroll, true);
-        window.removeEventListener('resize', state.onResize);
-        const { panel, original, placeholder, parent, portal, onScroll, onResize, onWheel } = state;
-        if (panel && panel.isConnected) {
-          Object.entries(original).forEach(([key, value]) => {
-            panel.style[key] = value;
-          });
-          panel.dataset.floating = '';
-          if (placeholder && parent && parent.isConnected) {
-            try { parent.insertBefore(panel, placeholder); } catch (_) {}
-            try { placeholder.remove(); } catch (_) {}
-          }
-        }
-        if (portal) {
-          portal.style.zIndex = '2147483636';
-          portal.style.pointerEvents = 'none';
-        }
-        if (onScroll) window.removeEventListener('scroll', onScroll, true);
-        if (onResize) window.removeEventListener('resize', onResize);
-        if (onWheel) {
-          try {
-            panel.removeEventListener('wheel', onWheel, { passive: false });
-          } catch (_) {
-            panel.removeEventListener('wheel', onWheel);
-          }
-        }
-        popoverMenuState.delete(detailsEl);
-      }
-
-      function floatPopoverMenu(detailsEl) {
-        const panel = detailsEl.querySelector('[data-popover-panel]');
-        const summary = detailsEl.querySelector('summary');
-        if (!panel || !summary) return;
-        resetPopoverMenu(detailsEl);
-        const original = {
-          position: panel.style.position,
-          top: panel.style.top,
-          left: panel.style.left,
-          right: panel.style.right,
-          bottom: panel.style.bottom,
-          zIndex: panel.style.zIndex,
-          maxHeight: panel.style.maxHeight,
-          pointerEvents: panel.style.pointerEvents,
-          visibility: panel.style.visibility,
-        };
-        const parent = panel.parentElement;
-        const usePortal = (detailsEl.getAttribute('data-popover-portal') || '').toLowerCase() === 'body';
-        let placeholder = null;
-        let portal = null;
-        if (usePortal && parent) {
-          placeholder = document.createComment('popover-placeholder');
-          try { parent.insertBefore(placeholder, panel); } catch (_) {}
-          const key = detailsEl.getAttribute('data-popover') || 'menu';
-          portal = getPopoverPortal(key);
-          portal.style.zIndex = '2147483638';
-          portal.style.pointerEvents = 'auto';
-          portal.appendChild(panel);
-          panel.style.pointerEvents = 'auto';
-        }
-
-        panel.dataset.floating = '1';
-        panel.style.visibility = 'hidden';
-        panel.style.position = 'absolute';
-        panel.style.zIndex = usePortal ? '2147483640' : '9999';
-        panel.style.contain = 'layout paint';
-        panel.style.isolation = 'isolate';
-        panel.style.transform = 'translateZ(0)';
-        const gap = 8;
-        const margin = 16;
-        const viewportCap = Math.max(240, Math.floor(window.innerHeight * 0.9));
-
-        const positionPanel = () => {
-          if (!detailsEl.isConnected || !detailsEl.open) {
-            resetPopoverMenu(detailsEl);
-            return;
-          }
-          const rect = summary.getBoundingClientRect();
-          const width = panel.offsetWidth || panel.scrollWidth || 240;
-          let measuredHeight = panel.offsetHeight || panel.scrollHeight || 200;
-          const availableDown = window.innerHeight - rect.bottom - gap - margin;
-          const availableUp = rect.top - gap - margin;
-          const openDown = availableDown >= availableUp;
-          let maxHeight = viewportCap;
-          if (openDown && availableDown > 0) {
-            maxHeight = Math.min(viewportCap, availableDown + margin);
-          } else if (!openDown && availableUp > 0) {
-            maxHeight = Math.min(viewportCap, availableUp + margin);
-          }
-          if (measuredHeight > maxHeight) {
-            panel.style.maxHeight = `${maxHeight}px`;
-            panel.style.overflowY = 'auto';
-            panel.style.overscrollBehavior = 'contain';
-            measuredHeight = maxHeight;
-          } else {
-            panel.style.maxHeight = '';
-            panel.style.overflowY = '';
-            panel.style.overscrollBehavior = '';
-          }
-
-          const docLeft = rect.left + window.scrollX;
-          const docTop = rect.top + window.scrollY;
-          const viewportWidth = document.documentElement.clientWidth;
-          let left = docLeft + rect.width - width;
-          left = Math.min(left, window.scrollX + viewportWidth - width - margin);
-          left = Math.max(window.scrollX + margin, left);
-          let top = openDown ? docTop + rect.height + gap : docTop - measuredHeight - gap;
-
-          if (usePortal) {
-            panel.style.left = `${Math.round(left)}px`;
-            panel.style.top = `${Math.round(top)}px`;
-          } else if (parent) {
-            const parentRect = parent.getBoundingClientRect();
-            const parentDocLeft = parentRect.left + window.scrollX;
-            const parentDocTop = parentRect.top + window.scrollY;
-            panel.style.left = `${Math.round(left - parentDocLeft)}px`;
-            panel.style.top = `${Math.round(top - parentDocTop)}px`;
-          } else {
-            panel.style.left = `${Math.round(left)}px`;
-            panel.style.top = `${Math.round(top)}px`;
-          }
-          panel.style.visibility = 'visible';
-        };
-
-        const state = {
-          panel,
-          original,
-          placeholder,
-          parent,
-          portal,
-          onScroll: positionPanel,
-          onResize: positionPanel,
-          onWheel: null,
-        };
-        popoverMenuState.set(detailsEl, state);
-        positionPanel();
-        window.addEventListener('scroll', positionPanel, true);
-        window.addEventListener('resize', positionPanel, true);
-
-        const wheelHandler = (wheelEvt) => {
-          if (!detailsEl.open) return;
-        const delta = wheelEvt.deltaY;
-        wheelEvt.preventDefault();
-        panel.scrollTop += delta;
-      };
-        try {
-          panel.addEventListener('wheel', wheelHandler, { passive: false });
-        } catch (_) {
-          panel.addEventListener('wheel', wheelHandler);
-        }
-        state.onWheel = wheelHandler;
-      }
-
-
-      function closeTranscriptDetails(target) {
-        if (target instanceof HTMLElement && target.matches('[data-transcript-item]')) {
-          resetPopoverMenu(target);
-          target.removeAttribute('open');
-        }
-      }
-
-      document.addEventListener('click', (evt) => {
-        const summaryTrigger = evt.target.closest('[data-popover] > summary');
-        if (summaryTrigger) {
-          evt.preventDefault();
-          evt.stopPropagation();
-          const owner = summaryTrigger.closest('[data-popover]');
-          if (!(owner instanceof HTMLElement)) return;
-          const willOpen = !owner.open;
-          const isTranscript = owner.matches('[data-transcript-item]');
-          if (isTranscript) {
-            document.querySelectorAll('[data-transcript-item][open]').forEach((item) => {
-              if (item !== owner) {
-                resetPopoverMenu(item);
-                item.removeAttribute('open');
-              }
-            });
-          } else {
-            document.querySelectorAll('[data-popover][open]').forEach((item) => {
-              if (item !== owner) {
-                resetPopoverMenu(item);
-                item.removeAttribute('open');
-              }
-            });
-          }
-          if (willOpen) {
-            owner.open = true;
-            requestAnimationFrame(() => floatPopoverMenu(owner));
-          } else {
-            resetPopoverMenu(owner);
-            owner.removeAttribute('open');
-          }
-          return;
-        }
-
-        if (!evt.target.closest('[data-transcript-item]') && !evt.target.closest('[data-transcript-menu]')) {
-          document.querySelectorAll('[data-transcript-item][open]').forEach((item) => closeTranscriptDetails(item));
-        }
-        if (!evt.target.closest('[data-job-action-menu]') && !evt.target.closest('[data-action-menu]')) {
-          closeActionMenus();
-        }
-      }, true);
-
-      document.addEventListener('toggle', (evt) => {
-        const target = evt.target;
-        if (target instanceof HTMLElement && target.matches('[data-transcript-item]')) {
-          if (target.open) {
-            document.querySelectorAll('[data-transcript-item][open]').forEach((item) => {
-              if (item !== target) closeTranscriptDetails(item);
-            });
-            requestAnimationFrame(() => floatPopoverMenu(target));
-          } else {
-            resetPopoverMenu(target);
-          }
-        }
-      });
-
-      document.addEventListener('toggle', (evt) => {
-        const target = evt.target;
-        if (!(target instanceof HTMLElement)) return;
-        if (target.matches('[data-job-action-menu], [data-action-menu]')) {
-          if (target.open) {
-            document.querySelectorAll('[data-job-action-menu][open], [data-action-menu][open]').forEach((menu) => {
-              if (menu !== target) {
-                menu.removeAttribute('open');
-                if (menu.matches('[data-job-action-menu]')) {
-                  resetPopoverMenu(menu);
-                }
-              }
-            });
-            if (target.matches('[data-job-action-menu]')) {
-              requestAnimationFrame(() => floatPopoverMenu(target));
-            }
-          } else if (target.matches('[data-job-action-menu]')) {
-            resetPopoverMenu(target);
-          }
-        }
-      });
-
-      const closeActionMenus = () => {
-        document.querySelectorAll('[data-job-action-menu][open], [data-action-menu][open]').forEach((menu) => {
-          menu.removeAttribute('open');
-          if (menu.matches('[data-job-action-menu]') || menu.matches('[data-action-menu]')) {
-            resetPopoverMenu(menu);
-          }
-        });
-      };
-
-      document.addEventListener('click', (evt) => {
-        if (!evt.target.closest('[data-job-action-menu]') && !evt.target.closest('[data-action-menu]')) {
-          closeActionMenus();
-        }
-      });
-
-      document.addEventListener('focusin', (evt) => {
-        if (!evt.target.closest('[data-job-action-menu]') && !evt.target.closest('[data-action-menu]')) {
-          closeActionMenus();
-        }
-      });
-
-      document.addEventListener('keydown', (evt) => {
-        if (evt.key === 'Escape') {
-          document.querySelectorAll('[data-transcript-item][open]').forEach((item) => closeTranscriptDetails(item));
-          closeActionMenus();
-        }
-      });
-
       document.body.addEventListener('click', async (evt) => {
         const transcriptAction = evt.target.closest('[data-transcript-action]');
         if (!transcriptAction) return;
@@ -1675,7 +1334,7 @@
             const statusValue = statusEl.dataset && statusEl.dataset.status ? statusEl.dataset.status : statusEl.textContent;
             const progressValue = statusEl.dataset && statusEl.dataset.progress ? parseFloat(statusEl.dataset.progress) : undefined;
             renderStatusLabel(statusEl, statusValue, progressValue);
-            updateJobActions(jobId, statusValue);
+            jobActions.updateForRow(jobId, statusValue);
           }
         });
       };

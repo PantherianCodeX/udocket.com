@@ -1,0 +1,120 @@
+<script>
+(function() {
+  if (window.udocketJobActions) return;
+
+  const CANCEL_ACTIVE = new Set(['RUNNING', 'PENDING', 'QUEUED', 'UPLOADING', 'CANCELLING', 'CONVERTING']);
+  const RESTART_ACTIVE = new Set(['SUCCEEDED', 'FAILED', 'CANCELLED', 'CORRUPTED']);
+
+  function normalizeStatus(value) {
+    return (value || '').toString().toUpperCase();
+  }
+
+  function applyMenuState(menu, normalized) {
+    if (!(menu instanceof HTMLElement)) return false;
+    const helpers = window.udocketPopovers || {};
+    const visibilityRules = {
+      cancel: () => CANCEL_ACTIVE.has(normalized),
+      restart: () => RESTART_ACTIVE.has(normalized),
+      review: () => normalized === 'SUCCEEDED',
+    };
+    const items = menu.querySelectorAll('[data-job-action-item]');
+    let anyVisible = false;
+    items.forEach((item) => {
+      const condition = (item.getAttribute('data-visible-when') || '').trim();
+      let visible = true;
+      if (condition && visibilityRules[condition]) {
+        visible = visibilityRules[condition]();
+      }
+      item.classList.toggle('hidden', !visible);
+      if (visible) anyVisible = true;
+    });
+
+    const sections = Array.from(menu.querySelectorAll('[data-job-action-section]'));
+    const visibleSections = [];
+    sections.forEach((section) => {
+      const sectionItems = section.querySelectorAll('[data-job-action-item]:not(.hidden)');
+      const active = sectionItems.length > 0;
+      section.classList.toggle('hidden', !active);
+      if (active) visibleSections.push(section);
+    });
+
+    const dividers = menu.querySelectorAll('[data-job-action-divider]');
+    dividers.forEach((divider) => divider.classList.add('hidden'));
+    visibleSections.forEach((section, index) => {
+      const divider = section.nextElementSibling;
+      if (divider && divider.hasAttribute('data-job-action-divider')) {
+        divider.classList.toggle('hidden', index >= visibleSections.length - 1);
+      }
+    });
+
+    const emptyState = menu.querySelector('[data-job-action-empty]');
+    if (emptyState) {
+      emptyState.classList.toggle('hidden', anyVisible);
+    }
+
+    if ((!anyVisible || normalized === 'CANCELLED') && menu.hasAttribute('open')) {
+      menu.removeAttribute('open');
+      if (typeof helpers.reset === 'function') {
+        helpers.reset(menu);
+      }
+    } else if (menu.hasAttribute('open') && typeof helpers.float === 'function') {
+      requestAnimationFrame(() => helpers.float(menu));
+    }
+
+    return anyVisible;
+  }
+
+  function updateMenu(menu, status) {
+    const normalized = normalizeStatus(status);
+    applyMenuState(menu, normalized);
+  }
+
+  function updateForRow(jobId, status) {
+    const normalized = normalizeStatus(status);
+    document.querySelectorAll(`[data-job="${jobId}"] [data-job-action-menu]`).forEach((menu) => {
+      applyMenuState(menu, normalized);
+    });
+  }
+
+  function statusFromMenu(menu) {
+    const row = menu.closest('[data-job]');
+    if (!row) return null;
+    const jobId = row.getAttribute('data-job');
+    let value = row.getAttribute('data-job-status');
+    if (jobId) {
+      const statusCell = document.getElementById(`job-status-${jobId}`);
+      if (statusCell) {
+        const pill = statusCell.querySelector('[data-status]');
+        if (pill && pill.dataset && pill.dataset.status) {
+          value = pill.dataset.status;
+        } else if (pill) {
+          value = pill.textContent;
+        }
+      }
+    }
+    return value;
+  }
+
+  function bootstrapMenus() {
+    document.querySelectorAll('[data-job-action-menu]').forEach((menu) => {
+      const statusValue = statusFromMenu(menu);
+      if (statusValue != null) {
+        applyMenuState(menu, normalizeStatus(statusValue));
+      }
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', bootstrapMenus);
+  document.addEventListener('htmx:afterSwap', bootstrapMenus);
+
+  window.udocketJobActions = {
+    normalizeStatus,
+    updateMenu,
+    updateForRow,
+    applyMenuState,
+    bootstrapMenus,
+    CANCEL_ACTIVE,
+    RESTART_ACTIVE,
+  };
+})();
+</script>
