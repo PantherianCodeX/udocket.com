@@ -75,6 +75,7 @@ class JobTelemetry:
         local_sha = None
         local_size = None
         local_path: Optional[Path] = None
+        local_probe: Dict[str, Any] = {}
         if include_paths and audio_input and isinstance(audio_input, str) and audio_input.startswith("/"):
             local_path = Path(audio_input)
             if local_path.exists():
@@ -89,13 +90,7 @@ class JobTelemetry:
                 except Exception:
                     probe = {}
                 if isinstance(probe, dict):
-                    # Only fill missing fields to avoid overriding agent-provided values
-                    meta.setdefault("audio_duration_s", probe.get("audio_duration_s"))
-                    meta.setdefault("audio_sample_rate_hz", probe.get("audio_sample_rate_hz"))
-                    meta.setdefault("audio_channels", probe.get("audio_channels"))
-                    meta.setdefault("audio_bitrate_kbps", probe.get("audio_bitrate_kbps"))
-                    meta.setdefault("audio_codec", probe.get("audio_codec"))
-                    meta.setdefault("audio_channel_layout", probe.get("audio_channel_layout"))
+                    local_probe = probe
         return {
             "path": audio_input,
             "original_name": _original_audio_name(self.job.audio_input) or meta.get("audio_file"),
@@ -104,12 +99,12 @@ class JobTelemetry:
             "content_md5_b64": meta.get("audio_content_md5_b64"),
             "size_bytes_remote": size_remote or local_size,
             "size_bytes_local": local_size,
-            "duration_s": meta.get("audio_duration_s") or self.job.duration_s,
-            "sample_rate_hz": meta.get("audio_sample_rate_hz") or meta.get("sample_rate_hz"),
-            "channels": meta.get("audio_channels") or meta.get("channels"),
-            "bitrate_kbps": meta.get("audio_bitrate_kbps") or meta.get("bitrate_kbps"),
-            "codec": meta.get("audio_codec"),
-            "channel_layout": meta.get("audio_channel_layout"),
+            "duration_s": local_probe.get("audio_duration_s") or meta.get("audio_duration_s") or self.job.duration_s,
+            "sample_rate_hz": local_probe.get("audio_sample_rate_hz") or meta.get("audio_sample_rate_hz") or meta.get("sample_rate_hz"),
+            "channels": local_probe.get("audio_channels") or meta.get("audio_channels") or meta.get("channels"),
+            "bitrate_kbps": local_probe.get("audio_bitrate_kbps") or meta.get("audio_bitrate_kbps") or meta.get("bitrate_kbps"),
+            "codec": local_probe.get("audio_codec") or meta.get("audio_codec"),
+            "channel_layout": local_probe.get("audio_channel_layout") or meta.get("audio_channel_layout"),
             "mime": meta.get("audio_mime"),
         }
 

@@ -12,5 +12,6 @@
     "openai.chatgpt": ["workspace"],
     "openai.codex": ["workspace"],
     "openai.vscode-codex": ["workspace"]
-  }
+  },
+  "chatgpt.openOnStartup": false
 }

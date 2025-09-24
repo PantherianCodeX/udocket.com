@@ -4,7 +4,7 @@ import json
 import logging
 import os
 import uuid
-from typing import Iterable, Set
+from typing import Any, Dict, Iterable, Optional, Set
 
 from django.utils import timezone
 from rest_framework import status, viewsets
@@ -38,6 +38,51 @@ from apps.platform.tenancy import scope_jobs
 from apps.platform.operations.storage import ensure_case_dirs, ops_dir as storage_ops_dir
 from apps.platform.operations.utils import update_job_meta, append_job_log
 from apps.platform.operations.models import TaskRun
+
+
+def _derive_audio_filename(path_obj: Path | None, meta: Dict[str, Any], fallback: str) -> str:
+    def _clean(value: Any) -> str:
+        if not isinstance(value, str):
+            return ""
+        candidate = value.strip()
+        if not candidate:
+            return ""
+        candidate = candidate.split("?")[0].split("#")[0].rstrip("/\\")
+        candidate = candidate.split("/")[-1].split("\\")[-1]
+        return candidate
+
+    candidates: list[str] = []
+    meta_keys = (
+        "source_audio_file",
+        "audio_file",
+        "original_audio_file",
+        "original_file",
+        "original_name",
+        "converted_audio_file",
+    )
+    for key in meta_keys:
+        cleaned = _clean(meta.get(key))
+        if cleaned:
+            candidates.append(cleaned)
+
+    if path_obj is not None:
+        name = path_obj.name
+        if "__" in name:
+            cleaned = _clean(name.split("__", 1)[-1])
+            if cleaned:
+                candidates.append(cleaned)
+        cleaned_base = _clean(name)
+        if cleaned_base:
+            candidates.append(cleaned_base)
+
+    cleaned_fallback = _clean(fallback)
+    if cleaned_fallback:
+        candidates.append(cleaned_fallback)
+
+    for candidate in candidates:
+        if candidate:
+            return candidate
+    return fallback or "audio"
 
 
 class JobViewSet(viewsets.ModelViewSet):
@@ -286,15 +331,21 @@ class JobViewSet(viewsets.ModelViewSet):
     def download_audio(self, request, pk=None):
         job = self.get_object()
         converted = str(request.query_params.get("converted", "")).lower() in {"1", "true", "yes"}
-        path_obj: Optional[Path]
+        org_id = getattr(getattr(job, "case", None), "organization_id", None) or getattr(job, "organization_id", None)
+        job_meta: Dict[str, Any] = {}
+        if org_id is not None:
+            job_meta_path = storage_ops_dir(str(job.case_id), org_id) / f"{job.id}_transcription_log.json"
+            if job_meta_path.exists():
+                try:
+                    job_meta = json.loads(job_meta_path.read_text(encoding="utf-8"))
+                except Exception:
+                    job_meta = {}
+        path_obj: Optional[Path] = None
+        active_meta: Dict[str, Any] = job_meta
         if converted:
-            meta_path = storage_ops_dir(str(job.case_id), job.case.organization_id) / f"{job.id}_transcription_log.json"
-            try:
-                meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
-            except Exception:
-                meta = {}
+            meta = job_meta
             converted_job_id = meta.get("converted_audio_job_id") or meta.get("converted_wav_job_id")
-            path_obj = None
+            converted_meta: Dict[str, Any] = {}
             if converted_job_id:
                 try:
                     converted_job = Job.objects.get(pk=converted_job_id)
@@ -302,6 +353,13 @@ class JobViewSet(viewsets.ModelViewSet):
                         candidate = Path(converted_job.audio_input)
                         if candidate.exists():
                             path_obj = candidate
+                    if org_id is not None:
+                        converted_meta_path = storage_ops_dir(str(job.case_id), org_id) / f"{converted_job_id}_transcription_log.json"
+                        if converted_meta_path.exists():
+                            try:
+                                converted_meta = json.loads(converted_meta_path.read_text(encoding="utf-8"))
+                            except Exception:
+                                converted_meta = {}
                 except Job.DoesNotExist:
                     path_obj = None
             if path_obj is None:
@@ -309,11 +367,13 @@ class JobViewSet(viewsets.ModelViewSet):
                 if not converted_path:
                     raise Http404
                 path_obj = Path(converted_path)
+            active_meta = converted_meta or meta or {}
         else:
             audio_path = getattr(job, "audio_input", None)
             if not audio_path or not str(audio_path).startswith("/"):
                 raise Http404
             path_obj = Path(audio_path)
+            active_meta = job_meta
         if not path_obj.exists():
             raise Http404
         storage_root = Path(settings.STORAGE_ROOT).resolve()
@@ -331,7 +391,7 @@ class JobViewSet(viewsets.ModelViewSet):
             event="job.download_audio",
             data={"job_id": str(job.id), "converted": converted},
         )
-        filename = path_obj.name or f"{job.id}_audio"
+        filename = _derive_audio_filename(path_obj, active_meta, path_obj.name or f"{job.id}_audio")
         return FileResponse(path_obj.open("rb"), filename=filename, as_attachment=True)
 
     @action(detail=True, methods=["post"], url_path="cancel")

@@ -237,9 +237,21 @@ def transcribe_job(
                             "audio_conversion_reasons": normalization.reasons,
                         }
                     )
-                    for key, value in normalization.metadata.items():
+                    source_audio_meta = normalization.original_metadata or {}
+                    target_audio_meta = normalization.metadata or {}
+                    source_audio_applied = False
+                    for key, value in source_audio_meta.items():
                         if key.startswith("audio_") and value is not None:
                             batch_upload_meta.setdefault(key, value)
+                            source_audio_applied = True
+                            batch_upload_meta.setdefault(f"source_{key}", value)
+                    if not source_audio_applied:
+                        for key, value in target_audio_meta.items():
+                            if key.startswith("audio_") and value is not None:
+                                batch_upload_meta.setdefault(key, value)
+                    for key, value in target_audio_meta.items():
+                        if key.startswith("audio_") and value is not None:
+                            batch_upload_meta.setdefault(f"converted_{key}", value)
 
                     audio_dir = case_dir / "audio"
                     audio_dir.mkdir(parents=True, exist_ok=True)
@@ -676,16 +688,16 @@ def transcribe_job(
 
     # If agent succeeded, persist results; notification errors won't flip status
     payload: Dict[str, Any] = {
-            "status": "SUCCEEDED",
-            "job_id": job_id,
-            "case_id": case_id,
-            "transcript_file": str(result.transcript_file),
-            "duration_s": result.duration_s,
-            "language": result.language,
-            "region": result.region,
-            "progress_percent": None,
-            "upload_progress": None,
-        }
+        "status": "SUCCEEDED",
+        "job_id": job_id,
+        "case_id": case_id,
+        "transcript_file": str(result.transcript_file),
+        "duration_s": result.duration_s,
+        "language": result.language,
+        "region": result.region,
+        "progress_percent": None,
+        "upload_progress": None,
+    }
     try:
         if job_obj is None:
             job_obj = Job.objects.get(pk=job_id)
@@ -731,7 +743,17 @@ def transcribe_job(
                 case_id=str(case_id),
                 type="TRANSCRIPT",
             ).values_list("title", flat=True)
-            artifact_title = unique_title("Transcript", existing_titles)
+            job_meta_title = None
+            try:
+                job_meta_path = storage_ops_dir(case_id, org_id) / f"{job_id}_transcription_log.json"
+                if job_meta_path.exists():
+                    job_meta_payload = json.loads(job_meta_path.read_text(encoding="utf-8"))
+                    title_candidate = job_meta_payload.get("job_title")
+                    if isinstance(title_candidate, str) and title_candidate.strip():
+                        job_meta_title = title_candidate.strip()
+            except Exception:
+                job_meta_title = None
+            artifact_title = job_meta_title or unique_title("Transcript", existing_titles)
             CaseArtifact.objects.create(
                 case_id=str(case_id),
                 case_fk=Job.objects.filter(pk=job_id).values_list('case', flat=True).first(),
@@ -757,6 +779,8 @@ def transcribe_job(
                 "transcript_title": artifact_title,
             }
         )
+        if job_meta_title:
+            meta_updates.setdefault("job_title", job_meta_title)
         if batch_upload_meta:
             meta_updates.update(batch_upload_meta)
         try:

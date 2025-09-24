@@ -95,6 +95,7 @@
         pollers: {},
         lastStatus: {},
         currentCaseId: caseId,
+        refreshTranscribeScheduled: false,
       };
       let transcribeSidebarBinding = null;
       const transcriptMenuState = new WeakMap();
@@ -145,6 +146,59 @@
         target.dataset.status = normalized;
         if (el !== target) {
           delete el.dataset.status;
+        }
+      }
+
+      function scheduleTranscribeRefresh() {
+        if (!JobsState.currentCaseId) return;
+        if (JobsState.refreshTranscribeScheduled) return;
+        JobsState.refreshTranscribeScheduled = true;
+        setTimeout(() => {
+          JobsState.refreshTranscribeScheduled = false;
+          const url = `/cases/${JobsState.currentCaseId}/tools/transcribe/`;
+          if (typeof window.htmx !== 'undefined' && window.htmx.ajax) {
+            window.htmx.ajax('GET', url, '#tool-workspace');
+            return;
+          }
+          fetch(url, { headers: { 'HX-Request': 'true' }, credentials: 'same-origin' })
+            .then((resp) => (resp.ok ? resp.text() : null))
+            .then((html) => {
+              if (!html) return;
+              const workspaceEl = document.getElementById('tool-workspace');
+              if (workspaceEl) {
+                workspaceEl.innerHTML = html;
+                if (typeof boostJobs === 'function') {
+                  boostJobs();
+                }
+              }
+            })
+            .catch(() => {});
+        }, 150);
+      }
+
+      function ensureElementVisible(el, align = 'nearest') {
+        if (!el || !el.getBoundingClientRect) return;
+        const rect = el.getBoundingClientRect();
+        const viewHeight = window.innerHeight || document.documentElement.clientHeight;
+        const padding = Math.min(120, Math.max(48, viewHeight * 0.15));
+        const topLimit = padding;
+        const bottomLimit = viewHeight - padding;
+        const fullyVisible = rect.top >= topLimit && rect.bottom <= bottomLimit;
+        if (fullyVisible) {
+          return;
+        }
+        const overTop = rect.top - topLimit;
+        const overBottom = rect.bottom - bottomLimit;
+        let delta = 0;
+        if (overTop < 0) {
+          delta = overTop;
+        } else if (overBottom > 0) {
+          delta = overBottom;
+        }
+        if (delta && typeof window.scrollBy === 'function') {
+          window.scrollBy({ top: delta, behavior: 'smooth' });
+        } else {
+          el.scrollIntoView({ behavior: 'smooth', block: align, inline: 'nearest' });
         }
       }
 
@@ -294,6 +348,9 @@
         const progressValue = payload.upload_progress ?? payload.progress_percent ?? (typeof payload.progress === 'number' ? payload.progress * (payload.progress <= 1 ? 100 : 1) : null);
         updateStatusDisplays(jobId, status, progressValue);
         JobsState.lastStatus[jobId] = status;
+        if (payload && (payload.converted_audio_job_id || (payload.event && String(payload.event).toLowerCase() === 'job.created' && (payload.job_kind === 'audio_conversion' || payload.agent_type === 'Audio Conversion')))) {
+          scheduleTranscribeRefresh();
+        }
         if (status && TERMINAL_STATUSES.includes(status) && JobsState.pollers[jobId]) {
           clearInterval(JobsState.pollers[jobId]);
           delete JobsState.pollers[jobId];
@@ -682,8 +739,8 @@
           return false;
         }
         if (!detailRow.classList.contains('hidden')) {
-          row.scrollIntoView({ behavior: 'smooth', block: 'center' });
           row.focus({ preventScroll: true });
+          ensureElementVisible(detailRow, 'nearest');
           return true;
         }
         document.querySelectorAll('[data-job-row]').forEach((other) => {
@@ -698,8 +755,8 @@
         detailRow.classList.remove('hidden');
         row.setAttribute('aria-expanded', 'true');
         row.classList.add('bg-white/10');
-        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
         row.focus({ preventScroll: true });
+        requestAnimationFrame(() => ensureElementVisible(detailRow, 'nearest'));
         return true;
       }
 
@@ -913,6 +970,25 @@
             transcriptAction.disabled = false;
           }
         }
+      });
+
+      document.body.addEventListener('click', async (evt) => {
+        const jobLink = evt.target.closest('[data-job-link]');
+        if (!jobLink) return;
+        evt.preventDefault();
+        const targetJobId = jobLink.getAttribute('data-job-link');
+        if (!targetJobId) return;
+        const linkCaseId = jobLink.getAttribute('data-job-link-case');
+        if (!linkCaseId || linkCaseId === caseId) {
+          const success = await expandJobRow(targetJobId);
+          if (!success && window.udocketShowToastAt) {
+            const toastX = evt.clientX || window.innerWidth / 2;
+            const toastY = evt.clientY || window.innerHeight / 2;
+            window.udocketShowToastAt(toastX, toastY, 'Job not available in this panel');
+          }
+          return;
+        }
+        window.location.href = `/cases/${linkCaseId}/`;
       });
 
       document.body.addEventListener('click', (evt) => {

@@ -16,12 +16,13 @@ def unique_title(base: str, existing: Iterable[str]) -> str:
     """
 
     base_clean = base.strip() or "Untitled"
-    candidates = list(existing)
-    if base_clean not in candidates:
-        return base_clean
+    candidates = [title for title in existing if isinstance(title, str)]
 
     max_idx = 0
     for title in candidates:
+        if title == base_clean:
+            max_idx = max(max_idx, 0)
+            continue
         if not title.startswith(base_clean):
             continue
         match = _UNIQUE_SUFFIX_RE.search(title)

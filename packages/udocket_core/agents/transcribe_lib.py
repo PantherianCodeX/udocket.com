@@ -32,6 +32,7 @@ class AudioNormalizationResult:
     converted: bool
     metadata: Dict[str, Any]
     reasons: list[str]
+    original_metadata: Optional[Dict[str, Any]] = None
 
 
 def _now_utc() -> str:
@@ -109,7 +110,14 @@ def normalize_audio(
         reasons.append("forced")
     should_convert = bool(reasons) or force
     if not should_convert:
-        return AudioNormalizationResult(path=input_path, converted=False, metadata=meta, reasons=[])
+        original_meta = dict(meta)
+        return AudioNormalizationResult(
+            path=input_path,
+            converted=False,
+            metadata=meta,
+            reasons=[],
+            original_metadata=original_meta,
+        )
     if not _have_ffmpeg():
         raise RuntimeError("ffmpeg missing. Install ffmpeg to normalize audio inputs.")
 
@@ -150,6 +158,8 @@ def normalize_audio(
         raise RuntimeError("ffmpeg conversion failed; see ops ffmpeg_error.log")
 
     # Update metadata to reflect target format
+    original_meta = dict(meta)
+
     meta.update(
         {
             "audio_codec": TARGET_AUDIO_CODEC,
@@ -162,7 +172,13 @@ def normalize_audio(
         }
     )
 
-    return AudioNormalizationResult(path=out, converted=True, metadata=meta, reasons=reasons)
+    return AudioNormalizationResult(
+        path=out,
+        converted=True,
+        metadata=meta,
+        reasons=reasons,
+        original_metadata=original_meta,
+    )
 
 
 def _get_duration_seconds(p: Path) -> Optional[float]:

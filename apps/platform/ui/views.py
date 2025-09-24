@@ -28,12 +28,13 @@ from apps.platform.accounts.utils import (
 )
 from apps.platform.jobs.models import Job
 from apps.platform.operations.tasks import transcribe_job
-from apps.platform.operations.storage import ensure_case_dirs
+from apps.platform.operations.storage import ensure_case_dirs, ops_dir as storage_ops_dir
 from apps.platform.operations.utils import append_job_log, update_job_meta
 from apps.platform.authorization.models import PermissionPreset, Role
 from apps.platform.authorization.capabilities import role_capabilities, has_capability
 from apps.platform.artifacts.registry import ARTIFACT_FIELD_REGISTRY
 from apps.platform.artifacts.models import CaseArtifact
+from apps.platform.jobs.utils import unique_title
 from django.contrib.auth import logout
 from apps.platform.tenancy import accessible_organization_ids, scope_jobs
 from apps.platform.jobs.serializers import JobTelemetrySerializer
@@ -283,18 +284,36 @@ def _default_transcript_title(job: Job, telemetry: Optional[Dict[str, Any]]) -> 
     return _friendly_job_title(job, telemetry)
 
 
-def _unique_transcript_title(case_id: str, base_title: str) -> str:
+def _unique_transcript_title(case_id: str, base_title: str, organization_id: Optional[str] = None) -> str:
     base = (base_title or "").strip() or "Transcript"
     base = base[:180]
-    candidate = base
-    suffix = 2
-    while CaseArtifact.objects.filter(case_id=case_id, type="TRANSCRIPT", title=candidate).exists():
-        candidate = f"{base}_v{suffix}"
-        suffix += 1
-        if len(candidate) > 200:
-            trimmed = base[: max(0, 200 - len(str(suffix)) - 3)]
-            candidate = f"{trimmed}_v{suffix}"
-    return candidate
+    titles: set[str] = set(
+        CaseArtifact.objects.filter(case_id=case_id, type="TRANSCRIPT").values_list("title", flat=True)
+    )
+    try:
+        ops_dir = storage_ops_dir(case_id, organization_id)
+        if ops_dir.exists():
+            for meta_path in ops_dir.glob("*_transcription_log.json"):
+                try:
+                    payload = json.loads(meta_path.read_text(encoding="utf-8"))
+                except Exception:
+                    continue
+                title_value = payload.get("job_title") or payload.get("transcript_title")
+                if isinstance(title_value, str) and title_value.strip():
+                    titles.add(title_value.strip())
+    except Exception:
+        pass
+
+    candidate = unique_title(base, titles)
+    if len(candidate) <= 200:
+        return candidate
+
+    if "-" in candidate:
+        stem, suffix = candidate.rsplit("-", 1)
+        trimmed = base[: max(0, 200 - len(suffix) - 1)] or base[:200]
+        return f"{trimmed}-{suffix}"[:200]
+
+    return candidate[:200]
 
 
 def _ensure_transcript_artifact(
@@ -330,7 +349,7 @@ def _ensure_transcript_artifact(
     attempts = 0
     while attempts < 3:
         attempts += 1
-        candidate_title = _unique_transcript_title(str(case.id), base_title)
+        candidate_title = _unique_transcript_title(str(case.id), base_title, getattr(case, "organization_id", None))
         metadata = {"created_via": metadata_source}
         for path in candidate_paths:
             try:
@@ -2314,13 +2333,13 @@ def case_job_create_artifact(request: HttpRequest, case_id: str, job_id: str) ->
     metadata_changed = False
     title_changed = False
     if title_input:
-        desired_title = _unique_transcript_title(str(case.id), title_input)
+        desired_title = _unique_transcript_title(str(case.id), title_input, getattr(case, "organization_id", None))
         if artifact.title != desired_title:
             artifact.title = desired_title
             title_changed = True
     elif not artifact.title:
         default_title = _default_transcript_title(job, telemetry_payload)
-        unique_title = _unique_transcript_title(str(case.id), default_title)
+        unique_title = _unique_transcript_title(str(case.id), default_title, getattr(case, "organization_id", None))
         if artifact.title != unique_title:
             artifact.title = unique_title
             title_changed = True
@@ -2548,6 +2567,29 @@ def create_job(request: HttpRequest, case_id: str) -> HttpResponse:
         language=language,
     )
 
+    existing_titles: set[str] = set(
+        CaseArtifact.objects.filter(case_id=str(case.id), type="TRANSCRIPT").values_list("title", flat=True)
+    )
+    ops_dir = storage_ops_dir(str(case.id), case.organization_id)
+    try:
+        if ops_dir.exists():
+            for meta_path in ops_dir.glob("*_transcription_log.json"):
+                try:
+                    payload = json.loads(meta_path.read_text(encoding="utf-8"))
+                except Exception:
+                    continue
+                title_value = payload.get("job_title") or payload.get("transcript_title")
+                if isinstance(title_value, str) and title_value.strip():
+                    existing_titles.add(title_value.strip())
+    except Exception:
+        pass
+
+    job_title = unique_title("Transcript", existing_titles)
+    try:
+        update_job_meta(str(case.id), case.organization_id, str(job.id), {"job_title": job_title})
+    except Exception:
+        pass
+
     log.info(
         "ui enqueue job",
         extra={
@@ -2568,16 +2610,39 @@ def create_job(request: HttpRequest, case_id: str) -> HttpResponse:
     )
 
     telemetry = JobTelemetrySerializer(job, context={"request": request, "ui_mode": True}).data
-    response = render(request, "ui/_job_row.html", {"j": job, "telem": telemetry})
+
     if request.headers.get("HX-Request"):
-        trigger = {
-            "job-enqueued": {
-                "job_id": str(job.id),
-                "status": job.status,
-                "force_wav": force_wav_conversion,
+        state = _compute_case_tool_state(request, case)
+        panel = state["tool_panels"].get("transcribe")
+        if panel:
+            response = render(request, "ui/tools/_panel.html", {"panel": panel})
+            trigger_payload = {
+                "job-enqueued": {
+                    "job_id": str(job.id),
+                    "status": job.status,
+                    "force_wav": force_wav_conversion,
+                },
+                "case-view-refreshed": {
+                    "tools": ["transcribe"],
+                    "active_tool": "transcribe",
+                    "header_html": render_to_string(
+                        "ui/tools/_case_header.html",
+                        {"case": case, "case_header": state["case_header"]},
+                    ),
+                    "cards_html": render_to_string(
+                        "ui/tools/_developer_cards.html",
+                        {
+                            "case": case,
+                            "cards": state["developer_cards"],
+                            "active_tool": "transcribe",
+                        },
+                    ),
+                },
             }
-        }
-        response["HX-Trigger"] = json.dumps(trigger)
+            response["HX-Trigger"] = json.dumps(trigger_payload)
+            return response
+
+    response = render(request, "ui/_job_row.html", {"j": job, "telem": telemetry})
     return response
 
 
