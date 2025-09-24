@@ -1302,9 +1302,9 @@
           const openDown = availableDown >= availableUp;
           let maxHeight = viewportCap;
           if (openDown && availableDown > 0) {
-            maxHeight = Math.min(viewportCap, availableDown);
+            maxHeight = Math.min(viewportCap, availableDown + margin);
           } else if (!openDown && availableUp > 0) {
-            maxHeight = Math.min(viewportCap, availableUp);
+            maxHeight = Math.min(viewportCap, availableUp + margin);
           }
           if (measuredHeight > maxHeight) {
             panel.style.maxHeight = `${maxHeight}px`;
@@ -1317,12 +1317,27 @@
             panel.style.overscrollBehavior = '';
           }
 
-          let left = rect.right - width;
-          left = Math.min(left, window.innerWidth - width - margin);
-          left = Math.max(margin, left);
-          let top = openDown ? rect.bottom + gap : rect.top - measuredHeight - gap;
-          panel.style.left = `${Math.round(left)}px`;
-          panel.style.top = `${Math.round(top)}px`;
+          const docLeft = rect.left + window.scrollX;
+          const docTop = rect.top + window.scrollY;
+          const viewportWidth = document.documentElement.clientWidth;
+          let left = docLeft + rect.width - width;
+          left = Math.min(left, window.scrollX + viewportWidth - width - margin);
+          left = Math.max(window.scrollX + margin, left);
+          let top = openDown ? docTop + rect.height + gap : docTop - measuredHeight - gap;
+
+          if (usePortal) {
+            panel.style.left = `${Math.round(left)}px`;
+            panel.style.top = `${Math.round(top)}px`;
+          } else if (parent) {
+            const parentRect = parent.getBoundingClientRect();
+            const parentDocLeft = parentRect.left + window.scrollX;
+            const parentDocTop = parentRect.top + window.scrollY;
+            panel.style.left = `${Math.round(left - parentDocLeft)}px`;
+            panel.style.top = `${Math.round(top - parentDocTop)}px`;
+          } else {
+            panel.style.left = `${Math.round(left)}px`;
+            panel.style.top = `${Math.round(top)}px`;
+          }
           panel.style.visibility = 'visible';
         };
 
