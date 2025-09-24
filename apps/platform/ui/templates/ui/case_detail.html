@@ -1220,7 +1220,7 @@
         if (!state) return;
         window.removeEventListener('scroll', state.onScroll, true);
         window.removeEventListener('resize', state.onResize);
-        const { panel, original, placeholder, parent, portal } = state;
+        const { panel, original, placeholder, parent, portal, onScroll, onResize } = state;
         if (panel && panel.isConnected) {
           Object.entries(original).forEach(([key, value]) => {
             panel.style[key] = value;
@@ -1235,6 +1235,8 @@
           portal.style.zIndex = '2147483636';
           portal.style.pointerEvents = 'none';
         }
+        if (onScroll) window.removeEventListener('scroll', onScroll, true);
+        if (onResize) window.removeEventListener('resize', onResize);
         popoverMenuState.delete(detailsEl);
       }
 
@@ -1276,37 +1278,46 @@
         panel.style.contain = 'layout paint';
         panel.style.isolation = 'isolate';
         panel.style.transform = 'translateZ(0)';
-        const summaryRect = summary.getBoundingClientRect();
-        const width = panel.offsetWidth || panel.scrollWidth || 240;
-        let height = panel.offsetHeight || panel.scrollHeight || 200;
         const gap = 8;
-        const availableDown = window.innerHeight - summaryRect.bottom - gap;
-        const availableUp = summaryRect.top - gap;
+        const margin = 16;
         const viewportCap = Math.max(240, Math.floor(window.innerHeight * 0.9));
-        const openDown = availableDown >= availableUp;
-        let maxHeight = viewportCap;
-        if (openDown && availableDown > 0) {
-          maxHeight = Math.min(viewportCap, availableDown);
-        } else if (!openDown && availableUp > 0) {
-          maxHeight = Math.min(viewportCap, availableUp);
-        }
-        if (height > maxHeight) {
-          panel.style.maxHeight = `${maxHeight}px`;
-          panel.style.overflowY = 'auto';
-          panel.style.overscrollBehavior = 'contain';
-          height = maxHeight;
-        } else {
-          panel.style.maxHeight = '';
-          panel.style.overflowY = '';
-          panel.style.overscrollBehavior = '';
-        }
-        let left = summaryRect.right - width;
-        left = Math.min(left, window.innerWidth - width - 16);
-        left = Math.max(16, left);
-        let top = openDown ? summaryRect.bottom + gap : summaryRect.top - height - gap;
-        panel.style.left = `${Math.round(left)}px`;
-        panel.style.top = `${Math.round(top)}px`;
-        panel.style.visibility = 'visible';
+
+        const positionPanel = () => {
+          if (!detailsEl.isConnected || !detailsEl.open) {
+            resetPopoverMenu(detailsEl);
+            return;
+          }
+          const rect = summary.getBoundingClientRect();
+          const width = panel.offsetWidth || panel.scrollWidth || 240;
+          let measuredHeight = panel.offsetHeight || panel.scrollHeight || 200;
+          const availableDown = window.innerHeight - rect.bottom - gap - margin;
+          const availableUp = rect.top - gap - margin;
+          const openDown = availableDown >= availableUp;
+          let maxHeight = viewportCap;
+          if (openDown && availableDown > 0) {
+            maxHeight = Math.min(viewportCap, availableDown);
+          } else if (!openDown && availableUp > 0) {
+            maxHeight = Math.min(viewportCap, availableUp);
+          }
+          if (measuredHeight > maxHeight) {
+            panel.style.maxHeight = `${maxHeight}px`;
+            panel.style.overflowY = 'auto';
+            panel.style.overscrollBehavior = 'contain';
+            measuredHeight = maxHeight;
+          } else {
+            panel.style.maxHeight = '';
+            panel.style.overflowY = '';
+            panel.style.overscrollBehavior = '';
+          }
+
+          let left = rect.right - width;
+          left = Math.min(left, window.innerWidth - width - margin);
+          left = Math.max(margin, left);
+          let top = openDown ? rect.bottom + gap : rect.top - measuredHeight - gap;
+          panel.style.left = `${Math.round(left)}px`;
+          panel.style.top = `${Math.round(top)}px`;
+          panel.style.visibility = 'visible';
+        };
 
         const state = {
           panel,
@@ -1314,8 +1325,13 @@
           placeholder,
           parent,
           portal,
+          onScroll: positionPanel,
+          onResize: positionPanel,
         };
         popoverMenuState.set(detailsEl, state);
+        positionPanel();
+        window.addEventListener('scroll', positionPanel, true);
+        window.addEventListener('resize', positionPanel, true);
       }
 
 
