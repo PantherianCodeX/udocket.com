@@ -30,12 +30,13 @@
     if (!state) return;
     window.removeEventListener('scroll', state.onScroll, true);
     window.removeEventListener('resize', state.onResize, true);
-    const { panel, original, placeholder, parent, portal, onWheel } = state;
+    const { panel, original, placeholder, parent, portal, onWheel, onResizeObs } = state;
     if (panel && panel.isConnected) {
       Object.entries(original).forEach(([key, value]) => {
         panel.style[key] = value;
       });
       panel.dataset.floating = '';
+      panel.style.minWidth = '';
       if (placeholder && parent && parent.isConnected) {
         try { parent.insertBefore(panel, placeholder); } catch (err) {}
         try { placeholder.remove(); } catch (err) {}
@@ -51,6 +52,9 @@
       } catch (err) {
         panel.removeEventListener('wheel', onWheel);
       }
+    }
+    if (onResizeObs && typeof onResizeObs.disconnect === 'function') {
+      try { onResizeObs.disconnect(); } catch (err) {}
     }
     popoverState.delete(detailsEl);
   }
@@ -162,9 +166,25 @@
       onScroll: positionPanel,
       onResize: positionPanel,
       onWheel: null,
+      onResizeObs: null,
     };
     popoverState.set(detailsEl, state);
-    positionPanel();
+    // Ensure the panel is at least as wide as the trigger to avoid misalignment
+    try {
+      const summaryRect = summary.getBoundingClientRect();
+      const triggerWidth = summaryRect.width || 0;
+      const currentWidth = panel.offsetWidth || panel.scrollWidth || 0;
+      const targetMin = Math.max(160, Math.min(Math.max(triggerWidth, currentWidth), window.innerWidth - 32));
+      if (Number.isFinite(targetMin) && targetMin > 0) {
+        panel.style.minWidth = `${Math.round(targetMin)}px`;
+      }
+    } catch (err) {}
+
+    const rafReposition = () => {
+      positionPanel();
+      requestAnimationFrame(() => positionPanel());
+    };
+    rafReposition();
     window.addEventListener('scroll', positionPanel, true);
     window.addEventListener('resize', positionPanel, true);
 
@@ -180,6 +200,15 @@
       panel.addEventListener('wheel', wheelHandler);
     }
     state.onWheel = wheelHandler;
+
+    // Observe content size changes to keep positioning accurate
+    if (window.ResizeObserver) {
+      try {
+        const ro = new ResizeObserver(() => positionPanel());
+        ro.observe(panel);
+        state.onResizeObs = ro;
+      } catch (err) {}
+    }
   }
 
   function close(detailsEl) {
