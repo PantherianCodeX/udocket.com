@@ -1,17 +1,11 @@
 {
-  "python.testing.pytestEnabled": true,
-  "python.testing.unittestEnabled": false,
-  
-  "python.testing.pytestArgs": [
-    "tests"
-  ],
-  "python.testing.pytestEnv": {}
-  ,
-  "remote.extensionKind": {
-    // Run these extensions on the remote so their storage lives under ~/.vscode-server
-    "openai.chatgpt": ["workspace"],
-    "openai.codex": ["workspace"],
-    "openai.vscode-codex": ["workspace"]
-  },
-  "chatgpt.openOnStartup": false
+  "python.analysis.typeCheckingMode": "basic",
+  "python.analysis.djangoEnabled": true,
+  "python.analysis.djangoSettingsModule": "apps.platform.config.settings.dev",
+  "python.analysis.exclude": [
+    "**/migrations",
+    "**/.venv",
+    "**/__pycache__"
+  ]
 }
+

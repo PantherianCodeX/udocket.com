@@ -1,0 +1,23 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/pyright/main/packages/vscode-pyright/schemas/pyrightconfig.schema.json",
+  "typeCheckingMode": "basic",
+  "reportMissingTypeStubs": "warning",
+  "reportUnknownMemberType": "warning",
+  "pythonVersion": "3.11",
+  "venvPath": ".",
+  "exclude": [
+    "**/migrations",
+    "**/.venv",
+    "**/.tox",
+    "**/.pytest_cache",
+    "**/__pycache__"
+  ],
+  "djangoSettingsModule": "apps.platform.config.settings.dev",
+  "executionEnvironments": [
+    {
+      "root": ".",
+      "extraPaths": ["apps"]
+    }
+  ]
+}
+
