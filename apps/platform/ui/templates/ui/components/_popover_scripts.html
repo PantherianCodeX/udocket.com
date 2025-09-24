@@ -139,27 +139,36 @@
         panel.style.overflowY = '';
         panel.style.overscrollBehavior = '';
       }
-
-      const docLeft = rect.left + window.scrollX;
-      const docTop = rect.top + window.scrollY;
       const viewportWidth = document.documentElement.clientWidth;
-      let left = docLeft + rect.width - width;
-      left = Math.min(left, window.scrollX + viewportWidth - width - margin);
-      left = Math.max(window.scrollX + margin, left);
-      let top = openDown ? docTop + rect.height + gap : docTop - measuredHeight - gap;
-
       if (usePortal) {
-        panel.style.left = `${Math.round(left)}px`;
-        panel.style.top = `${Math.round(top)}px`;
+        // Position using viewport coordinates (portal is fixed to viewport)
+        let leftVp = rect.left + rect.width - width;
+        leftVp = Math.min(leftVp, viewportWidth - width - margin);
+        leftVp = Math.max(margin, leftVp);
+        const topVp = openDown ? (rect.bottom + gap) : (rect.top - measuredHeight - gap);
+        panel.style.left = `${Math.round(leftVp)}px`;
+        panel.style.top = `${Math.round(topVp)}px`;
       } else if (parent) {
+        // Position relative to document, then convert to parent coords
+        const docLeft = rect.left + window.scrollX;
+        const docTop = rect.top + window.scrollY;
+        let leftDoc = docLeft + rect.width - width;
+        leftDoc = Math.min(leftDoc, window.scrollX + viewportWidth - width - margin);
+        leftDoc = Math.max(window.scrollX + margin, leftDoc);
+        const topDoc = openDown ? (docTop + rect.height + gap) : (docTop - measuredHeight - gap);
         const parentRect = parent.getBoundingClientRect();
         const parentDocLeft = parentRect.left + window.scrollX;
         const parentDocTop = parentRect.top + window.scrollY;
-        panel.style.left = `${Math.round(left - parentDocLeft)}px`;
-        panel.style.top = `${Math.round(top - parentDocTop)}px`;
+        panel.style.left = `${Math.round(leftDoc - parentDocLeft)}px`;
+        panel.style.top = `${Math.round(topDoc - parentDocTop)}px`;
       } else {
-        panel.style.left = `${Math.round(left)}px`;
-        panel.style.top = `${Math.round(top)}px`;
+        // Fallback to viewport-based positioning if no parent
+        let leftVp = rect.left + rect.width - width;
+        leftVp = Math.min(leftVp, viewportWidth - width - margin);
+        leftVp = Math.max(margin, leftVp);
+        const topVp = openDown ? (rect.bottom + gap) : (rect.top - measuredHeight - gap);
+        panel.style.left = `${Math.round(leftVp)}px`;
+        panel.style.top = `${Math.round(topVp)}px`;
       }
       panel.style.visibility = 'visible';
     };
