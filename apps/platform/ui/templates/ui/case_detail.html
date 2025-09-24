@@ -911,13 +911,10 @@
 
       async function openJobLogModal(caseValue, jobId) {
         if (!caseValue || !jobId) return;
-        try {
-          const resp = await fetch(`/cases/${caseValue}/jobs/${jobId}/logs/modal/`, {
-            headers: { 'HX-Request': 'true' },
-            credentials: 'same-origin',
-          });
-          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-          const html = await resp.text();
+        const showErrorModal = (title, detail) => {
+          const content = typeof detail === 'string' ? detail : (detail && detail.message) || '';
+          const safe = (content || '').toString().slice(0, 2000);
+          const html = `\n<div class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm" data-modal>\n  <div class="w-full max-w-3xl rounded-2xl border border-white/10 bg-slate-900/95 p-6 shadow-2xl shadow-black/60">\n    <div class="flex items-start justify-between gap-4">\n      <div>\n        <p class="text-xs uppercase tracking-wide text-slate-400">Job Logs</p>\n        <h3 class="mt-1 text-lg font-semibold text-white">${title || 'Unable to load job log'}</h3>\n      </div>\n      <button type="button" class="rounded-lg border border-white/20 bg-white/10 p-2 text-slate-300 transition hover:border-primary-400 hover:text-white" data-modal-close>\n        <span class="sr-only">Close modal</span>\n        <svg xmlns=\"http://www.w3.org/2000/svg\" class=\"h-4 w-4\" viewBox=\"0 0 20 20\" fill=\"currentColor\"><path fill-rule=\"evenodd\" d=\"M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z\" clip-rule=\"evenodd\" /></svg>\n      </button>\n    </div>\n    <div class="mt-4 max-h-[28rem] overflow-y-auto rounded-lg border border-white/10 bg-slate-950/30 p-4 text-[13px] leading-relaxed text-slate-100">\n      <pre class="whitespace-pre-wrap break-words">${safe || 'No details available.'}</pre>\n    </div>\n  </div>\n</div>`;
           if (modalRoot) {
             modalRoot.innerHTML = html;
           } else {
@@ -926,11 +923,33 @@
             document.body.appendChild(temp);
           }
           mountModal();
-        } catch (error) {
-          console.warn('Job log modal failed', jobId, error);
-          if (window.udocketShowToastAt) {
-            window.udocketShowToastAt(window.innerWidth / 2, window.innerHeight / 2, 'Unable to load job log');
+        };
+        try {
+          const resp = await fetch(`/cases/${caseValue}/jobs/${jobId}/logs/modal/`, {
+            headers: { 'HX-Request': 'true' },
+            credentials: 'same-origin',
+          });
+          const text = await resp.text();
+          if (!resp.ok) {
+            console.error('Job log modal HTTP error', resp.status, text.slice(0, 500));
+            showErrorModal(`HTTP ${resp.status}`, text);
+            return;
           }
+          if (modalRoot) {
+            modalRoot.innerHTML = text;
+          } else {
+            const temp = document.createElement('div');
+            temp.innerHTML = text;
+            document.body.appendChild(temp);
+          }
+          const mounted = mountModal();
+          if (!mounted || !mounted.modal) {
+            console.error('Job log modal missing [data-modal] wrapper');
+            showErrorModal('Log content unavailable', text);
+          }
+        } catch (error) {
+          console.error('Job log modal failed', jobId, error);
+          showErrorModal('Unable to load job log', error && error.message ? error.message : String(error));
         }
       }
 
