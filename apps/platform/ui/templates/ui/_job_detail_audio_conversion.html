@@ -10,11 +10,6 @@
         <span>Sample rate: {% if audio.sample_rate_hz %}{{ audio.sample_rate_hz }} Hz{% else %}—{% endif %}</span>
         <span>Channels: {% if audio.channels is not None %}{{ audio.channels }}{% else %}—{% endif %}</span>
       </div>
-      <div class="flex flex-wrap items-center gap-3 text-xs text-slate-400">
-        <span>Normalization: {% with reasons=metadata.audio_conversion_reasons %}{% if reasons %}{% for reason in reasons %}{{ reason|upper }}{% if not forloop.last %}, {% endif %}{% endfor %}{% else %}Already compliant{% endif %}{% endwith %}</span>
-        <span>Sample format: {% if metadata.audio_sample_fmt %}{{ metadata.audio_sample_fmt|upper }}{% else %}—{% endif %}</span>
-        <span>Bits per sample: {% if metadata.audio_bits_per_sample %}{{ metadata.audio_bits_per_sample }}{% else %}—{% endif %}</span>
-      </div>
       <div class="grid gap-3 text-xs text-slate-400 sm:grid-cols-3">
         <div>
           <span class="uppercase tracking-wide text-slate-500">Created</span>

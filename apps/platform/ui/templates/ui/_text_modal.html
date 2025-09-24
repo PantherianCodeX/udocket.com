@@ -74,11 +74,11 @@
             {{ modal_download_label|default:'Download' }}
           </a>
         {% endif %}
-        {% if modal_text|default:transcript_text %}
-          <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 font-semibold text-slate-200 transition hover:border-primary-400 hover:text-white" data-copy-target="#{{ text_id }}">
+        {% with copy_source=modal_text|default:transcript_text %}
+          <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 font-semibold text-slate-200 transition hover:border-primary-400 hover:text-white" data-copy-target="#{{ text_id }}" {% if not copy_source %}disabled aria-disabled="true"{% endif %}>
             {{ modal_copy_label|default:'Copy to clipboard' }}
           </button>
-        {% endif %}
+        {% endwith %}
         {# No default Close button: use the header X or add your own via block override #}
       {% endblock %}
     </div>

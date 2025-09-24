@@ -1275,7 +1275,13 @@
         if (!portal) {
           portal = document.createElement('div');
           portal.id = 'job-menu-portal';
-          portal.className = 'fixed inset-0 z-[120] pointer-events-none';
+          portal.style.position = 'fixed';
+          portal.style.top = '0';
+          portal.style.left = '0';
+          portal.style.width = '100%';
+          portal.style.height = '100%';
+          portal.style.pointerEvents = 'none';
+          portal.style.zIndex = '100000';
           document.body.appendChild(portal);
         }
         return portal;
@@ -1309,18 +1315,22 @@
           }
           menu.dataset.floating = '1';
           menu.style.position = 'fixed';
-          menu.style.zIndex = '99999';
+          menu.style.zIndex = '100001';
           menu.style.maxHeight = 'min(60vh, 360px)';
           const summaryRect = summary.getBoundingClientRect();
-          const width = menu.offsetWidth || 240;
+          const width = menu.offsetWidth || menu.scrollWidth || 240;
+          const height = menu.offsetHeight || menu.scrollHeight || 240;
           let left = summaryRect.right - width;
           left = Math.min(left, window.innerWidth - width - 16);
           left = Math.max(16, left);
-          // Estimate height after making visible
-          const height = menu.offsetHeight || 240;
           let top = summaryRect.bottom + 8;
-          top = Math.min(top, window.innerHeight - height - 16);
-          top = Math.max(16, top);
+          if (top + height + 16 > window.innerHeight) {
+            top = summaryRect.top - height - 8;
+          }
+          if (top < 16) {
+            top = Math.min(summaryRect.bottom + 8, window.innerHeight - height - 16);
+            top = Math.max(16, top);
+          }
           menu.style.left = `${Math.round(left)}px`;
           menu.style.top = `${Math.round(top)}px`;
           menu.style.visibility = 'visible';
