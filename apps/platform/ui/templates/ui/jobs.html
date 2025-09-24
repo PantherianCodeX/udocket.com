@@ -54,7 +54,7 @@
 
   function renderStatusLabel(el, status, progress) {
     if (!el) return;
-    const target = el.matches('[data-status]') ? el : el.querySelector('[data-status]') || el;
+    const target = el.querySelector('[data-status]') || (el.matches('[data-status]') ? el : el);
     const normalized = normalizeStatusName(status);
     if (normalized === 'UPLOADING' && Number.isFinite(progress)) {
       const pct = Math.max(0, Math.min(100, Math.round(progress)));
@@ -89,12 +89,8 @@
     }
     target.dataset.status = normalized;
     if (el !== target) {
-      el.dataset.status = normalized;
-      if (normalized === 'UPLOADING' && Number.isFinite(progress)) {
-        el.dataset.progress = target.dataset.progress;
-      } else {
-        delete el.dataset.progress;
-      }
+      delete el.dataset.status;
+      delete el.dataset.progress;
     }
   }
 

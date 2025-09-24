@@ -117,7 +117,7 @@
 
       function renderStatusLabel(el, status, progress) {
         if (!el) return;
-        const target = el.matches('[data-status]') ? el : el.querySelector('[data-status]') || el;
+        const target = el.querySelector('[data-status]') || (el.matches('[data-status]') ? el : el);
         const normalized = normalizeStatus(status);
         const labelEl = target.querySelector('[data-job-status-label]');
         const setText = (value) => {
@@ -144,7 +144,7 @@
         applyStatusPillClasses(target, normalized);
         target.dataset.status = normalized;
         if (el !== target) {
-          el.dataset.status = normalized;
+          delete el.dataset.status;
         }
       }
 
