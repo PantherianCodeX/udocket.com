@@ -807,6 +807,12 @@
       });
 
       document.addEventListener('click', (evt) => {
+        const summaryWithin = evt.target.closest('[data-transcript-item] > summary');
+        if (summaryWithin) {
+          evt.preventDefault();
+          evt.stopPropagation();
+          return;
+        }
         if (!evt.target.closest('[data-transcript-item], [data-transcript-menu]')) {
           document.querySelectorAll('[data-transcript-item][open]').forEach((item) => closeTranscriptDetails(item));
         }
