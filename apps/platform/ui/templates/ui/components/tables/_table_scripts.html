@@ -1,0 +1,148 @@
+<script>
+  (function () {
+    const STATE_KEY = 'udocketTables';
+
+    function toSortField(field) {
+      return field ? field.toString() : '';
+    }
+
+    function getGroups(table) {
+      const body = table.querySelector('[data-table-body]');
+      if (!body) return [];
+      const parents = Array.from(body.querySelectorAll('[data-table-row][data-table-depth="0"]'));
+      return parents.map((parent) => {
+        const id = parent.getAttribute('data-table-row-id') || parent.dataset.job || parent.dataset.tableGroup || '';
+        const rows = [parent];
+        if (id) {
+          const detail = body.querySelector(`[data-table-detail-for="${CSS.escape(id)}"]`);
+          if (detail) rows.push(detail);
+          const children = Array.from(body.querySelectorAll(`[data-table-row][data-table-parent-id="${CSS.escape(id)}"]`));
+          children.forEach((child) => {
+            rows.push(child);
+            const childId = child.getAttribute('data-table-row-id') || child.dataset.job || '';
+            if (childId) {
+              const childDetail = body.querySelector(`[data-table-detail-for="${CSS.escape(childId)}"]`);
+              if (childDetail) rows.push(childDetail);
+            }
+          });
+        }
+        return { id, rows, parent };
+      });
+    }
+
+    function normalizeValue(value, direction) {
+      if (value == null) return direction === 'desc' ? Number.NEGATIVE_INFINITY : Number.NEGATIVE_INFINITY;
+      const num = Number(value);
+      if (!Number.isNaN(num)) return num;
+      return value.toString().toLowerCase();
+    }
+
+    function sortTable(table, field, direction) {
+      const body = table.querySelector('[data-table-body]');
+      if (!body) return;
+      const groups = getGroups(table);
+      const appliedDirection = direction === 'desc' ? 'desc' : 'asc';
+      groups.sort((a, b) => {
+        const aVal = normalizeValue(a.parent.getAttribute(`data-table-value-${field}`), appliedDirection);
+        const bVal = normalizeValue(b.parent.getAttribute(`data-table-value-${field}`), appliedDirection);
+        if (aVal < bVal) return appliedDirection === 'asc' ? -1 : 1;
+        if (aVal > bVal) return appliedDirection === 'asc' ? 1 : -1;
+        return 0;
+      });
+      groups.forEach((group) => {
+        group.rows.forEach((row) => {
+          if (row && row.parentNode === body) {
+            body.appendChild(row);
+          }
+        });
+      });
+      table.setAttribute('data-table-sorted-field', field);
+      table.setAttribute('data-table-sorted-direction', appliedDirection);
+    }
+
+    function applySearch(table, query) {
+      const body = table.querySelector('[data-table-body]');
+      if (!body) return;
+      const normalized = (query || '').toString().trim().toLowerCase();
+      const groups = getGroups(table);
+      groups.forEach((group) => {
+        let visible = true;
+        if (normalized) {
+          visible = group.rows.some((row) => {
+            const haystack = row.getAttribute('data-table-filter') || '';
+            return haystack.includes(normalized);
+          });
+        }
+        group.rows.forEach((row) => {
+          if (!row) return;
+          if (visible) {
+            row.classList.remove('hidden');
+          } else {
+            row.classList.add('hidden');
+          }
+        });
+      });
+    }
+
+    function resetSortIndicators(table, activeButton, direction) {
+      table.querySelectorAll('[data-table-sort]').forEach((btn) => {
+        const icon = btn.querySelector('[data-table-sort-icon]');
+        if (btn === activeButton) {
+          btn.setAttribute('data-table-direction', direction);
+          btn.classList.add('text-white');
+          if (icon) {
+            icon.classList.remove('rotate-180');
+            if (direction === 'desc') icon.classList.add('rotate-180');
+            else icon.classList.remove('rotate-180');
+          }
+        } else {
+          btn.removeAttribute('data-table-direction');
+          btn.classList.remove('text-white');
+          if (icon) icon.classList.remove('rotate-180');
+        }
+      });
+    }
+
+    function bindTable(table) {
+      if (table.dataset.tableReady === '1') return;
+      const container = table.closest('[data-table-container]');
+      const searchInput = container ? container.querySelector('[data-table-search-input]') : null;
+
+      table.querySelectorAll('[data-table-sort]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const field = toSortField(button.getAttribute('data-table-sort-field') || button.dataset.tableSort);
+          if (!field) return;
+          const current = button.getAttribute('data-table-direction');
+          const nextDirection = current === 'asc' ? 'desc' : 'asc';
+          sortTable(table, field, nextDirection);
+          resetSortIndicators(table, button, nextDirection);
+        });
+        const defaultDirection = button.getAttribute('data-table-sort-default');
+        if (defaultDirection) {
+          const field = toSortField(button.getAttribute('data-table-sort-field') || button.dataset.tableSort);
+          sortTable(table, field, defaultDirection);
+          resetSortIndicators(table, button, defaultDirection);
+        }
+      });
+
+      if (searchInput) {
+        searchInput.addEventListener('input', () => applySearch(table, searchInput.value));
+      }
+
+      applySearch(table, searchInput ? searchInput.value : '');
+      table.dataset.tableReady = '1';
+    }
+
+    function initAll() {
+      document.querySelectorAll('[data-table]:not([data-table-ready="1"])').forEach(bindTable);
+    }
+
+    if (!window[STATE_KEY]) {
+      window[STATE_KEY] = { initAll };
+      window.addEventListener('DOMContentLoaded', initAll);
+      document.addEventListener('htmx:afterSwap', initAll);
+    } else {
+      window[STATE_KEY].initAll();
+    }
+  })();
+</script>

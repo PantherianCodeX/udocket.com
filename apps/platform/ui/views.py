@@ -6,6 +6,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+import re
+
 from django.core.exceptions import PermissionDenied
 import logging
 
@@ -61,6 +63,49 @@ STATUS_CLASS_MAP = {
 CANCELABLE_STATUSES = {"RUNNING", "PENDING", "QUEUED", "UPLOADING", "CANCELLING", "CONVERTING"}
 
 RESTARTABLE_STATUSES = {"SUCCEEDED", "FAILED", "CANCELLED", "CORRUPTED"}
+
+STATUS_SORT_ORDER: Dict[str, int] = {
+    "UPLOADING": 10,
+    "QUEUED": 20,
+    "PENDING": 30,
+    "CONVERTING": 40,
+    "RUNNING": 50,
+    "CANCELLING": 60,
+    "SUCCEEDED": 80,
+    "READY": 85,
+    "FAILED": 90,
+    "CANCELLED": 95,
+    "CORRUPTED": 100,
+    "ERROR": 110,
+}
+
+DEFAULT_TABLE_FILTERS = (
+    {
+        "type": "search",
+        "id": "query",
+        "placeholder": "Filter jobs",
+    },
+)
+
+CASE_JOB_TABLE_COLUMNS: Tuple[Dict[str, Any], ...] = (
+    {"id": "title", "label": "Title", "sortable": True, "sort_key": "title"},
+    {"id": "status", "label": "Status", "sortable": True, "sort_key": "status"},
+    {"id": "review", "label": "Approval", "sortable": True, "sort_key": "review"},
+    {"id": "agent", "label": "Agent", "sortable": True, "sort_key": "agent"},
+    {"id": "created", "label": "Created", "sortable": True, "sort_key": "created", "align": "right"},
+    {"id": "actions", "label": "Actions", "sortable": False, "align": "right"},
+    {"id": "expander", "label": "", "sortable": False, "align": "right"},
+)
+
+GLOBAL_JOB_TABLE_COLUMNS: Tuple[Dict[str, Any], ...] = (
+    {"id": "title", "label": "Job", "sortable": True, "sort_key": "title"},
+    {"id": "status", "label": "Status", "sortable": True, "sort_key": "status"},
+    {"id": "type", "label": "Type", "sortable": True, "sort_key": "type"},
+    {"id": "agent", "label": "Agent", "sortable": True, "sort_key": "agent"},
+    {"id": "created", "label": "Created", "sortable": True, "sort_key": "created", "align": "right", "default_direction": "desc"},
+    {"id": "actions", "label": "Actions", "sortable": False, "align": "right"},
+    {"id": "expander", "label": "", "sortable": False, "align": "right"},
+)
 
 
 def _format_metadata(metadata: dict[str, Any] | None) -> list[dict[str, Any]]:
@@ -181,6 +226,130 @@ def _friendly_job_title(
         return artifact.title
     description = getattr(job, "description", None)
     return description or str(job.id)
+
+
+def _safe_lower(value: Any) -> str:
+    return str(value or "").strip().lower()
+
+
+def _humanize_label(value: Any) -> str:
+    raw = str(value or "")
+    if not raw:
+        return ""
+    text = raw.replace(".", " ").replace("-", " ")
+    text = re.sub(r"[_\s]+", " ", text).strip()
+    return text.title() if text else ""
+
+
+def _job_agent_label(job: Optional[Job], telemetry: Optional[Dict[str, Any]]) -> str:
+    telem_agent = (telemetry or {}).get("agent") or {}
+    for key in ("label", "name", "type"):
+        value = telem_agent.get(key)
+        if value:
+            return str(value)
+    if job and getattr(job, "mode", None):
+        return _humanize_label(job.mode)
+    return ""
+
+
+def _job_type_label(job: Optional[Job], telemetry: Optional[Dict[str, Any]]) -> str:
+    meta = (telemetry or {}).get("metadata") or {}
+    kind = meta.get("job_kind")
+    if kind:
+        label = _humanize_label(kind)
+        if label:
+            return label
+    agent_label = _job_agent_label(job, telemetry)
+    if agent_label:
+        return agent_label
+    mode = getattr(job, "mode", "")
+    if mode:
+        return _humanize_label(mode)
+    return "Job"
+
+
+def _status_sort_value(status: str) -> str:
+    normalized = (status or "").strip().upper()
+    rank = STATUS_SORT_ORDER.get(normalized, 900)
+    return f"{rank:03d}-{normalized}"
+
+
+def _build_row_table_meta(row: Dict[str, Any]) -> None:
+    """Populate a job row dict with deterministic sort/filter metadata for UI tables."""
+    job = row.get("job")
+    telemetry = row.get("telemetry") or {}
+    title = str(row.get("title") or "")
+    audio_meta = telemetry.get("audio") if isinstance(telemetry, dict) else {}
+    meta = telemetry.get("metadata") if isinstance(telemetry, dict) else {}
+
+    status_raw = str(telemetry.get("status") or getattr(job, "status", "") or "").strip().upper()
+    review_status = str(getattr(job, "review_status", "") or "").strip().upper()
+    agent_label = _job_agent_label(job, telemetry) or "Unknown"
+    job_type_label = _job_type_label(job, telemetry)
+    case_label = _humanize_label(getattr(getattr(job, "case", None), "title", ""))
+    created_at = getattr(job, "created_at", None)
+    created_sort = (
+        f"{int(created_at.timestamp() * 1000):020d}"
+        if isinstance(created_at, datetime)
+        else "00000000000000000000"
+    )
+
+    audio_name = ""
+    if isinstance(audio_meta, dict):
+        audio_name = str(
+            audio_meta.get("original_name")
+            or audio_meta.get("path")
+            or audio_meta.get("audio_file")
+            or ""
+        )
+
+    metadata_source = ""
+    if isinstance(meta, dict):
+        metadata_source = str(meta.get("source_name") or meta.get("source_label") or "")
+
+    filter_parts = [
+        title,
+        status_raw,
+        review_status,
+        agent_label,
+        job_type_label,
+        case_label,
+        audio_name,
+        metadata_source,
+    ]
+
+    row.setdefault("table", {})
+    row_table = row["table"]
+    row_table["sort"] = {
+        "title": _safe_lower(title),
+        "status": _status_sort_value(status_raw),
+        "review": review_status or "PENDING",
+        "agent": _safe_lower(agent_label),
+        "type": _safe_lower(job_type_label),
+        "case": _safe_lower(case_label),
+        "created": created_sort,
+    }
+    row_table["filter"] = " ".join(_safe_lower(value) for value in filter_parts if value)
+    row_table["status"] = status_raw
+    row_table["status_rank"] = STATUS_SORT_ORDER.get(status_raw, 900)
+    row_table["agent_label"] = agent_label
+    row_table["type_label"] = job_type_label
+    row_table["case_label"] = getattr(getattr(job, "case", None), "title", "") or ""
+    row_table["case_id"] = str(getattr(job, "case_id", "") or "")
+    row_table["job_id"] = str(getattr(job, "id", "") or "")
+    row_table["audio_name"] = audio_name
+    row_table["metadata_source"] = metadata_source
+    row_table["review_status"] = review_status or "PENDING"
+    row_table["created_iso"] = created_at.isoformat() if isinstance(created_at, datetime) else ""
+
+def _user_can_review_case(user: Optional[User], case: Case) -> bool:
+    if getattr(settings, "PLATFORM_DEV_OPEN", False):
+        return True
+    if not user or not getattr(user, "is_authenticated", False):
+        return False
+    if case.reviewer_id and str(user.id) == str(case.reviewer_id):
+        return True
+    return has_capability(user, str(case.id), "case.update")
 
 
 def _job_action_entries(
@@ -869,6 +1038,55 @@ def _collect_case_artifacts(
     return artifacts
 
 
+def _build_job_rows(
+    jobs_list: List[Job],
+    telemetry_map: Dict[str, Dict[str, Any]],
+    transcript_artifacts: Optional[Dict[str, CaseArtifact]] = None,
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Return hierarchical job rows ready for rendering with shared table components."""
+    transcript_artifacts = transcript_artifacts or {}
+    flat_rows: List[Dict[str, Any]] = []
+    for job in jobs_list:
+        key = str(job.id)
+        data = telemetry_map.get(key)
+        title = _friendly_job_title(job, data, transcript_artifacts.get(key))
+        row: Dict[str, Any] = {
+            "job": job,
+            "telemetry": data,
+            "title": title,
+            "children": [],
+            "is_child": False,
+        }
+        _build_row_table_meta(row)
+        flat_rows.append(row)
+
+    row_lookup: Dict[str, Dict[str, Any]] = {}
+    for row in flat_rows:
+        job_obj = row.get("job")
+        if job_obj:
+            row_lookup[str(job_obj.id)] = row
+
+    display_rows: List[Dict[str, Any]] = []
+    for row in flat_rows:
+        telem = row.get("telemetry") or {}
+        meta = telem.get("metadata") or {}
+        kind = str(meta.get("job_kind", "") or "").lower()
+        source_id = meta.get("source_job_id")
+        parent = row_lookup.get(str(source_id)) if source_id else None
+        if kind.startswith("audio_conversion") and parent:
+            row["is_child"] = True
+            if parent.get("job"):
+                row["parent_id"] = str(parent["job"].id)
+            parent.setdefault("children", []).append(row)
+            parent["children"].sort(
+                key=lambda child: getattr(child.get("job"), "created_at", datetime.min)
+            )
+            continue
+        display_rows.append(row)
+
+    return display_rows, flat_rows
+
+
 def _jobs_by_agent(
     job_rows: List[Dict[str, Any]],
     *,
@@ -1067,6 +1285,10 @@ def _build_tool_panels(
         "jobs_pill": "Live updates",
         "jobs_empty_message": "No jobs recorded yet.",
         "case_id": str(case.id),
+        "jobs_columns": list(CASE_JOB_TABLE_COLUMNS),
+        "jobs_column_ids": [col["id"] for col in CASE_JOB_TABLE_COLUMNS],
+        "jobs_filters": DEFAULT_TABLE_FILTERS,
+        "jobs_show_identifiers": True,
     }
 
     transcription_status = _status_payload("transcription", "Not Started")
@@ -1123,6 +1345,10 @@ def _build_tool_panels(
         "jobs_pill": "Live updates",
         "jobs_empty_message": "No transcription jobs yet.",
         "case_id": str(case.id),
+        "jobs_columns": list(CASE_JOB_TABLE_COLUMNS),
+        "jobs_column_ids": [col["id"] for col in CASE_JOB_TABLE_COLUMNS],
+        "jobs_filters": DEFAULT_TABLE_FILTERS,
+        "jobs_show_identifiers": True,
     }
 
     summary_status = _status_payload("summary", "Not Started")
@@ -1154,6 +1380,10 @@ def _build_tool_panels(
         "jobs_pill": "Automations",
         "jobs_empty_message": "No summary jobs yet. Generate a summary above.",
         "case_id": str(case.id),
+        "jobs_columns": list(GLOBAL_JOB_TABLE_COLUMNS),
+        "jobs_column_ids": [col["id"] for col in GLOBAL_JOB_TABLE_COLUMNS],
+        "jobs_filters": DEFAULT_TABLE_FILTERS,
+        "jobs_show_identifiers": False,
     }
 
     timeline_status = _status_payload("timeline", "Not Started")
@@ -1186,6 +1416,10 @@ def _build_tool_panels(
         "jobs_pill": "Automations",
         "jobs_empty_message": "No timeline jobs yet. Generate a timeline above.",
         "case_id": str(case.id),
+        "jobs_columns": list(GLOBAL_JOB_TABLE_COLUMNS),
+        "jobs_column_ids": [col["id"] for col in GLOBAL_JOB_TABLE_COLUMNS],
+        "jobs_filters": DEFAULT_TABLE_FILTERS,
+        "jobs_show_identifiers": False,
     }
 
     return panels
@@ -1296,12 +1530,7 @@ def _compute_case_tool_state(request: HttpRequest, case: Case) -> Dict[str, Any]
     ).data
     telemetry_map = {item.get("id"): item for item in telemetry}
 
-    flat_rows: List[Dict[str, Any]] = []
-    for job in jobs_list:
-        key = str(job.id)
-        data = telemetry_map.get(key)
-        title = _friendly_job_title(job, data, transcript_artifacts.get(key))
-        flat_rows.append({"job": job, "telemetry": data, "title": title})
+    display_rows, flat_rows = _build_job_rows(jobs_list, telemetry_map, transcript_artifacts)
 
     latest_job = None
     latest_job_telemetry = None
@@ -1318,41 +1547,8 @@ def _compute_case_tool_state(request: HttpRequest, case: Case) -> Dict[str, Any]
 
     memberships = list(case.memberships.select_related("user"))
 
-    row_lookup: Dict[str, Dict[str, Any]] = {}
-    for row in flat_rows:
-        row["children"] = []
-        row["is_child"] = False
-        job_obj = row.get("job")
-        if job_obj:
-            row_lookup[str(job_obj.id)] = row
-
-    display_rows: List[Dict[str, Any]] = []
-    for row in flat_rows:
-        telem = row.get("telemetry") or {}
-        meta = telem.get("metadata") or {}
-        kind = str(meta.get("job_kind", "")).lower()
-        source_id = meta.get("source_job_id")
-        if kind.startswith("audio_conversion") and source_id:
-            parent = row_lookup.get(str(source_id))
-            if parent:
-                row["is_child"] = True
-                parent.setdefault("children", []).append(row)
-                parent["children"].sort(
-                    key=lambda child: getattr(child.get("job"), "created_at", datetime.min)
-                )
-                continue
-        display_rows.append(row)
-
     user = getattr(request, "user", None)
-    dev_open = getattr(settings, "PLATFORM_DEV_OPEN", False)
-    user_can_review = False
-    if dev_open:
-        user_can_review = True
-    elif user and getattr(user, "is_authenticated", False):
-        if case.reviewer_id and str(user.id) == str(case.reviewer_id):
-            user_can_review = True
-        elif has_capability(user, str(case.id), "case.update"):
-            user_can_review = True
+    user_can_review = _user_can_review_case(user, case)
 
     for row in flat_rows:
         row["actions"] = _job_action_entries(
@@ -2259,11 +2455,63 @@ def jobs(request: HttpRequest) -> HttpResponse:
         organization = resolve_request_organization(request, required=True)
     except PermissionDenied:
         raise Http404
-    jobs_qs = Job.objects.select_related("case", "case__organization")
+    jobs_qs = Job.objects.select_related("case", "case__organization", "reviewed_by")
     scoped = scope_jobs(jobs_qs, getattr(request, "user", None))
     scoped = scoped.filter(organization=organization)
-    all_jobs = list(scoped[:200])
-    return render(request, "ui/jobs.html", {"jobs": all_jobs, "active_org": organization})
+    jobs_list = list(scoped[:200])
+
+    telemetry = JobTelemetrySerializer(
+        jobs_list,
+        many=True,
+        context={"request": request, "ui_mode": True},
+    ).data
+    telemetry_map = {item.get("id"): item for item in telemetry}
+
+    job_ids = [str(job.id) for job in jobs_list]
+    transcript_artifacts: Dict[str, CaseArtifact] = {}
+    if job_ids:
+        for art in (
+            CaseArtifact.objects.filter(job_id__in=job_ids, type="TRANSCRIPT")
+            .order_by("-created_at")
+        ):
+            key = art.job_id or ""
+            if key and key not in transcript_artifacts:
+                transcript_artifacts[key] = art
+
+    display_rows, flat_rows = _build_job_rows(jobs_list, telemetry_map, transcript_artifacts)
+
+    user = getattr(request, "user", None)
+    for row in flat_rows:
+        job_obj: Optional[Job] = row.get("job")
+        can_review = False
+        case_obj: Optional[Case] = None
+        if job_obj:
+            case_obj = getattr(job_obj, "case", None)
+            if isinstance(case_obj, Case):
+                can_review = _user_can_review_case(user, case_obj)
+        row["actions"] = _job_action_entries(
+            job_obj,
+            row.get("telemetry"),
+            can_review=can_review,
+            is_child=bool(row.get("is_child")),
+        )
+        if case_obj:
+            display_meta = row.setdefault("display", {})
+            display_meta["case"] = {
+                "title": case_obj.title,
+                "id": str(case_obj.id),
+            }
+
+    context = {
+        "active_org": organization,
+        "job_rows": display_rows,
+        "job_columns": list(GLOBAL_JOB_TABLE_COLUMNS),
+        "job_column_ids": [col["id"] for col in GLOBAL_JOB_TABLE_COLUMNS],
+        "job_filters": DEFAULT_TABLE_FILTERS,
+        "job_total": len(display_rows),
+        "job_show_identifiers": False,
+    }
+    return render(request, "ui/jobs.html", context)
 
 
 @require_http_methods(["GET"])
@@ -2602,8 +2850,23 @@ def case_job_row(request: HttpRequest, case_id: str, job_id: str) -> HttpRespons
         raise Http404
 
     telemetry = JobTelemetrySerializer(job, context={"request": request, "ui_mode": True}).data
-    title = _friendly_job_title(job, telemetry)
-    return render(request, "ui/_job_row.html", {"j": job, "telem": telemetry, "title": title})
+    telemetry_map = {str(job.id): telemetry}
+    display_rows, flat_rows = _build_job_rows([job], telemetry_map)
+    row = flat_rows[0] if flat_rows else {"job": job, "telemetry": telemetry, "title": _friendly_job_title(job, telemetry)}
+    row["actions"] = _job_action_entries(
+        job,
+        telemetry,
+        can_review=_user_can_review_case(getattr(request, "user", None), job.case),
+        is_child=False,
+    )
+    return render(
+        request,
+        "ui/_job_row.html",
+        {
+            "row": row,
+            "table_columns": CASE_JOB_TABLE_COLUMNS,
+        },
+    )
 
 
 @require_http_methods(["GET"])
@@ -2837,7 +3100,23 @@ def create_job(request: HttpRequest, case_id: str) -> HttpResponse:
             response["HX-Trigger"] = json.dumps(trigger_payload)
             return response
 
-    response = render(request, "ui/_job_row.html", {"j": job, "telem": telemetry})
+    telemetry_map = {str(job.id): telemetry}
+    display_rows, flat_rows = _build_job_rows([job], telemetry_map)
+    row = flat_rows[0] if flat_rows else {"job": job, "telemetry": telemetry, "title": _friendly_job_title(job, telemetry)}
+    row["actions"] = _job_action_entries(
+        job,
+        telemetry,
+        can_review=_user_can_review_case(getattr(request, "user", None), job.case),
+        is_child=False,
+    )
+    response = render(
+        request,
+        "ui/_job_row.html",
+        {
+            "row": row,
+            "table_columns": CASE_JOB_TABLE_COLUMNS,
+        },
+    )
     return response
 
 
