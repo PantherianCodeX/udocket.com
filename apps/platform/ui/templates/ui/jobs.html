@@ -76,6 +76,10 @@
         target.style.removeProperty('--status-progress');
       }
     }
+    // Ensure only the pill carries color classes, never the table cell.
+    if (el && el.classList) {
+      el.classList.remove(...STATUS_CLASS_VALUES);
+    }
     if (target.classList.contains('status-pill')) {
       applyStatusPillClasses(target, normalized);
     }
