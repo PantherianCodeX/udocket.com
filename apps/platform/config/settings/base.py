@@ -105,6 +105,7 @@ if not _ok or not storage_root.exists():
         storage_root.mkdir(parents=True, exist_ok=True)
     except Exception:
         pass
+STORAGE_ROOT = str(storage_root)
 default_sqlite_path = storage_root / "udocket_django.db"
 
 # Robust DB config with local fallback when DATABASE_URL points to an
