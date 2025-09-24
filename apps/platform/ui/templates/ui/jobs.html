@@ -82,6 +82,10 @@
     }
     if (target.classList.contains('status-pill')) {
       applyStatusPillClasses(target, normalized);
+      // Guard against any accidental full-width rendering
+      target.style.display = 'inline-flex';
+      target.style.width = 'auto';
+      target.style.maxWidth = 'max-content';
     }
     target.dataset.status = normalized;
     if (el !== target) {
