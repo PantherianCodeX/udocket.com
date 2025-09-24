@@ -782,13 +782,20 @@
       document.addEventListener('pointerdown', (evt) => {
         const transcriptSummary = evt.target.closest('[data-transcript-item] > summary');
         if (transcriptSummary) {
+          evt.preventDefault();
+          evt.stopPropagation();
           const owner = transcriptSummary.parentElement;
+          const willOpen = !owner.open;
           document.querySelectorAll('[data-transcript-item][open]').forEach((item) => {
             if (item !== owner) closeTranscriptDetails(item);
           });
-          if (owner && owner.open) {
+          if (willOpen) {
+            owner.open = true;
             requestAnimationFrame(() => floatTranscriptMenu(owner));
+          } else {
+            closeTranscriptDetails(owner);
           }
+          return;
         }
         const actionSummary = evt.target.closest('[data-job-action-menu] > summary, [data-action-menu] > summary');
         if (actionSummary) {
