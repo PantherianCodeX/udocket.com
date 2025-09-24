@@ -11,6 +11,7 @@
   {% for action in actions %}
     <button type="button"
             class="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-1.5 text-left font-semibold text-slate-200 transition hover:bg-white/10"
+            data-popover-close
             {% for attr,value in action.attrs.items %}{{ attr }}="{{ value }}"{% endfor %}>
       <span>{{ action.label }}</span>
       {% if action.suffix %}<span class="text-[10px] uppercase tracking-wide text-slate-400">{{ action.suffix }}</span>{% endif %}

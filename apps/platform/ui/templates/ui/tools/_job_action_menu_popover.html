@@ -17,6 +17,7 @@
           <a href="{{ item.href }}"
              class="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-1.5 text-left font-semibold text-slate-200 transition hover:bg-white/10"
              data-job-action-item
+             data-popover-close
              {% if item.visible_when %}data-visible-when="{{ item.visible_when }}"{% endif %}>
             <span>{{ item.label }}</span>
           </a>
@@ -27,6 +28,7 @@
                   data-job-action="{{ item.action }}"
                   data-job-action-kind="{{ item.kind|default:'api' }}"
                   data-job-id="{{ item.job_id|default:'' }}"
+                  data-popover-close
                   {% if item.case_id %}data-case-id="{{ item.case_id }}"{% endif %}
                   {% if item.target %}data-job-target="{{ item.target }}"{% endif %}
                   {% if item.query %}data-job-action-query="{{ item.query }}"{% endif %}

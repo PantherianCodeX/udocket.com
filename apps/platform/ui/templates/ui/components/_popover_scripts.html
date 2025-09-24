@@ -321,6 +321,14 @@
   document.addEventListener('click', handleDocumentClick);
   document.addEventListener('keydown', handleDocumentKeydown);
   document.addEventListener('focusin', handleDocumentFocus);
+  document.addEventListener('click', (evt) => {
+    const closer = evt.target.closest('[data-popover-close]');
+    if (!closer) return;
+    const owner = closer.closest('[data-popover]');
+    if (owner) {
+      close(owner);
+    }
+  });
 
   window.udocketPopovers = {
     reset,
