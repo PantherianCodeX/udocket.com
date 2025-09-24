@@ -18,6 +18,7 @@ services:
       - home-config:/root/.config
       - home-cache:/root/.cache
       - home-local-share:/root/.local/share
+      - codex-data:/root/.codex
       - ${PWD}:/app
       - ${PWD}/storage:/app/storage
       - ${PWD}/.env:/app/.env:ro
@@ -43,3 +44,4 @@ volumes:
   home-config: {}
   home-cache: {}
   home-local-share: {}
+  codex-data: {}
