@@ -504,6 +504,112 @@
         }
       }
 
+      async function handleVerifyHash(evt) {
+        const btn = evt.target.closest('[data-verify-hash]');
+        if (!btn) return;
+        evt.preventDefault();
+        if (btn.disabled) return;
+        const jobId = btn.getAttribute('data-job-id');
+        const target = btn.getAttribute('data-target') || 'audio';
+        const scopeAttr = btn.getAttribute('data-scope');
+        if (!jobId) return;
+        const payload = { target };
+        if (scopeAttr) {
+          payload.scope = scopeAttr;
+        }
+        const originalText = btn.textContent;
+        btn.disabled = true;
+        btn.classList.add('cursor-progress');
+        btn.textContent = 'Verifying…';
+        let finalised = false;
+        try {
+          const resp = await fetch(`/api/v1/jobs/${jobId}/verify-hash/`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': getCSRFToken(),
+              Accept: 'application/json',
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify(payload),
+          });
+          let label = 'Failed';
+          let tooltip = null;
+          const ensureTooltip = (text, tone) => {
+            let tip = btn.querySelector('[data-verify-tooltip]');
+            if (!tip) {
+              tip = document.createElement('span');
+              tip.dataset.verifyTooltip = '1';
+              tip.setAttribute('role', 'status');
+              tip.className = 'pointer-events-none absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap rounded-md border border-white/20 bg-slate-900/95 px-2 py-1 text-[10px] font-semibold text-slate-100 shadow-lg shadow-black/40';
+              btn.appendChild(tip);
+            }
+            tip.textContent = text;
+            tip.dataset.tone = tone || '';
+            tooltip = tip;
+          };
+          if (resp.ok) {
+            const data = await resp.json();
+            const observed = typeof data.observed === 'string' && data.observed.length >= 12
+              ? `${data.observed.slice(0, 8)}…${data.observed.slice(-4)}`
+              : (data.observed || 'n/a');
+            const expected = typeof data.expected === 'string' && data.expected.length >= 12
+              ? `${data.expected.slice(0, 8)}…${data.expected.slice(-4)}`
+              : (data.expected || 'n/a');
+            if (data.result === 'match') {
+              label = 'Verified';
+              ensureTooltip(`Hash verified (${observed})`, 'success');
+            } else if (data.result === 'mismatch') {
+              label = 'Failed';
+              ensureTooltip(`Expected ${expected}, got ${observed}`, 'error');
+            } else if (data.result === 'computed') {
+              label = 'Verified';
+              ensureTooltip(`Computed ${observed}`, 'info');
+            } else {
+              label = 'Failed';
+              ensureTooltip('Verification failed', 'error');
+            }
+          } else {
+            try {
+              const err = await resp.json();
+              const detail = err && err.detail ? String(err.detail) : 'Verification failed';
+              label = 'Failed';
+              ensureTooltip(detail, 'error');
+            } catch (e) {
+              label = 'Failed';
+              ensureTooltip('Verification request failed', 'error');
+            }
+          }
+          btn.textContent = label;
+          btn.classList.remove('cursor-progress');
+          btn.classList.add('cursor-not-allowed', 'opacity-70');
+          btn.setAttribute('aria-disabled', 'true');
+          finalised = true;
+        } catch (error) {
+          btn.textContent = 'Failed';
+          btn.classList.remove('cursor-progress');
+          let tip = btn.querySelector('[data-verify-tooltip]');
+          if (!tip) {
+            tip = document.createElement('span');
+            tip.dataset.verifyTooltip = '1';
+            tip.setAttribute('role', 'status');
+            tip.className = 'pointer-events-none absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap rounded-md border border-white/20 bg-slate-900/95 px-2 py-1 text-[10px] font-semibold text-slate-100 shadow-lg shadow-black/40';
+            btn.appendChild(tip);
+          }
+          tip.textContent = 'Verification failed';
+          btn.classList.add('cursor-not-allowed', 'opacity-70');
+          btn.setAttribute('aria-disabled', 'true');
+          finalised = true;
+        } finally {
+          if (!finalised) {
+            btn.textContent = originalText;
+            btn.disabled = false;
+            btn.classList.remove('cursor-progress', 'cursor-not-allowed', 'opacity-70');
+            btn.removeAttribute('aria-disabled');
+          }
+        }
+      }
+
       function getCSRFToken() {
         const match = document.cookie.match(/csrftoken=([^;]+)/);
         if (match) return decodeURIComponent(match[1]);
@@ -1001,6 +1107,7 @@
 
       document.body.addEventListener('keydown', handleRowKey);
       document.body.addEventListener('click', handleJobAction);
+      document.body.addEventListener('click', handleVerifyHash);
 
       document.body.addEventListener('click', async (evt) => {
         const button = evt.target.closest('[data-analysis-action]');

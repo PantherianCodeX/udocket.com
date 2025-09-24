@@ -1368,6 +1368,23 @@ def _job_detail_context(
         and job_kind != "audio_conversion"
     )
 
+    source_audio_meta: Dict[str, Any] | None = None
+    if job_kind == "audio_conversion":
+        source_job_id = telemetry_meta.get("source_job_id")
+        if source_job_id:
+            try:
+                source_job = Job.objects.select_related("case", "case__organization").get(pk=source_job_id, case_id=job.case_id)
+                source_telemetry = JobTelemetrySerializer(
+                    source_job,
+                    context={"request": request, "ui_mode": True},
+                ).data
+                if isinstance(source_telemetry, dict):
+                    source_audio_meta = source_telemetry.get("audio") or {}
+            except Job.DoesNotExist:
+                source_audio_meta = None
+            except Exception:
+                source_audio_meta = None
+
     user_obj = getattr(request, "user", None)
     dev_open = getattr(settings, "PLATFORM_DEV_OPEN", False)
     can_review = False
@@ -1393,6 +1410,9 @@ def _job_detail_context(
         "title_edit": title_edit,
         "show_convert_button": show_convert_button,
         "job_kind": job_kind,
+        "metadata_map": telemetry_meta,
+        "audio_meta": audio_meta,
+        "source_audio": source_audio_meta or {},
     }
 
 
@@ -2096,7 +2116,12 @@ def job_detail_panel(request: HttpRequest, job_id: str) -> HttpResponse:
         # Support forcing the title editor open via query param for HTMX swaps
         title_edit = str(request.GET.get("title_edit") or "").lower() in {"1", "true", "yes", "on"}
         context = _job_detail_context(request, job, title_edit=title_edit)
-        return render(request, "ui/_job_detail.html", context)
+        template = (
+            "ui/_job_detail_audio_conversion.html"
+            if context.get("job_kind", "").lower() == "audio_conversion"
+            else "ui/_job_detail.html"
+        )
+        return render(request, template, context)
     except Http404:
         raise
     except Exception as exc:  # noqa: BLE001
@@ -2130,7 +2155,12 @@ def case_job_detail_panel(request: HttpRequest, case_id: str, job_id: str) -> Ht
         title_edit = str(request.GET.get("title_edit") or "").lower() in {"1", "true", "yes", "on"}
         context = _job_detail_context(request, job, title_edit=title_edit)
         context["case"] = case
-        return render(request, "ui/_job_detail.html", context)
+        template = (
+            "ui/_job_detail_audio_conversion.html"
+            if context.get("job_kind", "").lower() == "audio_conversion"
+            else "ui/_job_detail.html"
+        )
+        return render(request, template, context)
     except Http404:
         raise
     except Exception as exc:  # noqa: BLE001

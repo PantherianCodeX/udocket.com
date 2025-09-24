@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import logging
 import os
 import uuid
@@ -28,6 +29,7 @@ from apps.platform.jobs.serializers import (
     JobSerializer,
     JobTelemetrySerializer,
 )
+from apps.platform.jobs.telemetry import job_telemetry
 from apps.platform.config.celery import app as celery_app
 from apps.platform.operations.tasks import transcribe_job
 from apps.platform.operations.channels import send_job_update
@@ -83,6 +85,17 @@ def _derive_audio_filename(path_obj: Path | None, meta: Dict[str, Any], fallback
         if candidate:
             return candidate
     return fallback or "audio"
+
+
+def _sha256_file(path: Path) -> Optional[str]:
+    try:
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+    except Exception:
+        return None
 
 
 class JobViewSet(viewsets.ModelViewSet):
@@ -393,6 +406,95 @@ class JobViewSet(viewsets.ModelViewSet):
         )
         filename = _derive_audio_filename(path_obj, active_meta, path_obj.name or f"{job.id}_audio")
         return FileResponse(path_obj.open("rb"), filename=filename, as_attachment=True)
+
+    @action(detail=True, methods=["post"], url_path="verify-hash")
+    def verify_hash(self, request, pk=None):
+        job = self.get_object()
+
+        target = str(request.data.get("target") or "").strip().lower()
+        scope = str(request.data.get("scope") or "current").strip().lower()
+        if target not in {"audio", "transcript"}:
+            return Response({"detail": "Unsupported target."}, status=status.HTTP_400_BAD_REQUEST)
+        if target == "audio" and scope not in {"current", "source", "converted"}:
+            return Response({"detail": "Unsupported audio scope."}, status=status.HTTP_400_BAD_REQUEST)
+
+        telemetry = job_telemetry(job)
+        meta = telemetry.meta if isinstance(telemetry.meta, dict) else {}
+
+        storage_root = Path(settings.STORAGE_ROOT).resolve()
+
+        def _resolve_path(candidate: Optional[str]) -> Optional[Path]:
+            if not candidate:
+                return None
+            try:
+                path = Path(candidate).expanduser()
+                if not path.exists():
+                    return None
+                resolved = path.resolve()
+                try:
+                    resolved.relative_to(storage_root)
+                except ValueError:
+                    if not str(resolved).startswith(str(storage_root)):
+                        return None
+                return resolved
+            except Exception:
+                return None
+
+        expected_hash: Optional[str] = None
+        path_obj: Optional[Path] = None
+
+        if target == "audio":
+            if scope == "source":
+                path_obj = _resolve_path(meta.get("source_audio_path"))
+                expected_hash = meta.get("source_audio_sha256")
+                if path_obj is None and meta.get("source_job_id"):
+                    try:
+                        source_job = Job.objects.get(pk=meta.get("source_job_id"))
+                        path_obj = _resolve_path(getattr(source_job, "audio_input", None))
+                        if expected_hash is None:
+                            source_meta = job_telemetry(source_job).meta or {}
+                            if isinstance(source_meta, dict):
+                                expected_hash = source_meta.get("audio_sha256")
+                    except Job.DoesNotExist:
+                        path_obj = None
+            elif scope == "converted":
+                path_obj = _resolve_path(meta.get("converted_wav_path") or getattr(job, "audio_input", None))
+                expected_hash = meta.get("converted_audio_sha256") or meta.get("audio_sha256")
+            else:
+                path_obj = _resolve_path(getattr(job, "audio_input", None))
+                expected_hash = meta.get("audio_sha256")
+        else:  # transcript
+            path_obj = _resolve_path(getattr(job, "transcript_path", None))
+            expected_hash = meta.get("transcript_sha256")
+
+        if path_obj is None or not path_obj.exists():
+            return Response({"detail": "File not found for verification."}, status=status.HTTP_404_NOT_FOUND)
+
+        observed_hash = _sha256_file(path_obj)
+        size_bytes: Optional[int]
+        try:
+            size_bytes = path_obj.stat().st_size
+        except Exception:
+            size_bytes = None
+
+        result: str
+        if observed_hash is None:
+            result = "error"
+        elif expected_hash:
+            result = "match" if observed_hash.lower() == str(expected_hash).lower() else "mismatch"
+        else:
+            result = "computed"
+
+        payload = {
+            "target": target,
+            "scope": scope if target == "audio" else None,
+            "path": str(path_obj),
+            "expected": expected_hash,
+            "observed": observed_hash,
+            "result": result,
+            "size_bytes": size_bytes,
+        }
+        return Response(payload)
 
     @action(detail=True, methods=["post"], url_path="cancel")
     def cancel(self, request, pk=None):

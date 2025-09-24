@@ -196,6 +196,7 @@ def transcribe_job(
                 source_path,
                 case_dir,
                 case_id,
+                metadata=audio_meta_updates or None,
                 diarization=bool(diarization),
                 force=bool(force_wav_conversion),
             )
@@ -379,6 +380,20 @@ def transcribe_job(
                             "conversion_source_extension": source_path.suffix.lower(),
                             "conversion_completed_at": now_ts.isoformat(),
                         }
+                        for key, value in (source_audio_meta or {}).items():
+                            if key.startswith("audio_") and value is not None:
+                                converted_meta_updates.setdefault(f"source_{key}", value)
+                        if audio_meta_updates:
+                            for key, value in audio_meta_updates.items():
+                                if key.startswith("audio_") and value is not None:
+                                    converted_meta_updates.setdefault(f"source_{key}", value)
+                        for key, value in (target_audio_meta or {}).items():
+                            if key.startswith("audio_") and value is not None:
+                                converted_meta_updates.setdefault(f"converted_{key}", value)
+                        if converted_sha:
+                            converted_meta_updates.setdefault("converted_audio_sha256", converted_sha)
+                        if converted_size is not None:
+                            converted_meta_updates.setdefault("converted_audio_size_bytes", converted_size)
                         if converted_stats:
                             converted_meta_updates.update(converted_stats)
                         update_job_meta(case_id, org_id, converted_job_id, converted_meta_updates)
@@ -420,6 +435,10 @@ def transcribe_job(
                         batch_upload_meta["converted_audio_job_id"] = converted_job_id
                     batch_upload_meta["converted_wav_path"] = str(converted_path)
                     batch_upload_meta["converted_audio_file"] = converted_basename
+                    if converted_sha:
+                        batch_upload_meta["converted_audio_sha256"] = converted_sha
+                    if converted_size is not None:
+                        batch_upload_meta["converted_audio_size_bytes"] = converted_size
                     update_job_meta(case_id, org_id, job_id, batch_upload_meta)
                     append_job_log(
                         case_id,
