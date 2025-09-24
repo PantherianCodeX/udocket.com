@@ -51,6 +51,26 @@ def _sha256_file(path: Path) -> Optional[str]:
 
 
 
+def _unique_conversion_title(case_id: str, organization_id: Optional[str], source_job_id: str) -> str:
+    existing: set[str] = set()
+    ops_dir = storage_ops_dir(case_id, organization_id)
+    if ops_dir.exists():
+        for meta_path in ops_dir.glob("*_transcription_log.json"):
+            try:
+                payload = json.loads(meta_path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if (
+                isinstance(payload, dict)
+                and payload.get("job_kind") == "audio_conversion"
+                and str(payload.get("source_job_id")) == str(source_job_id)
+            ):
+                title_val = payload.get("job_title")
+                if isinstance(title_val, str) and title_val.strip():
+                    existing.add(title_val.strip())
+    return unique_title("Conversion", existing)
+
+
 @shared_task(bind=True)
 def transcribe_job(
     self,
@@ -367,7 +387,6 @@ def transcribe_job(
 
                         converted_meta_updates: Dict[str, Any] = {
                             "job_kind": "audio_conversion",
-                            "job_title": converted_basename,
                             "agent_type": "Audio Conversion",
                             "audio_file": converted_basename,
                             "audio_path": str(converted_path),
@@ -394,6 +413,11 @@ def transcribe_job(
                             converted_meta_updates.setdefault("converted_audio_sha256", converted_sha)
                         if converted_size is not None:
                             converted_meta_updates.setdefault("converted_audio_size_bytes", converted_size)
+                        try:
+                            conversion_title = _unique_conversion_title(case_id, org_id, job_id)
+                            converted_meta_updates["job_title"] = conversion_title
+                        except Exception:
+                            converted_meta_updates.setdefault("job_title", converted_basename)
                         if converted_stats:
                             converted_meta_updates.update(converted_stats)
                         update_job_meta(case_id, org_id, converted_job_id, converted_meta_updates)

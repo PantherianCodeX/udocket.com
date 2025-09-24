@@ -29,7 +29,7 @@ from apps.platform.accounts.utils import (
 from apps.platform.jobs.models import Job
 from apps.platform.operations.tasks import transcribe_job
 from apps.platform.operations.storage import ensure_case_dirs, ops_dir as storage_ops_dir
-from apps.platform.operations.utils import append_job_log, update_job_meta
+from apps.platform.operations.utils import append_job_log, update_job_meta, job_log_path
 from apps.platform.authorization.models import PermissionPreset, Role
 from apps.platform.authorization.capabilities import role_capabilities, has_capability
 from apps.platform.artifacts.registry import ARTIFACT_FIELD_REGISTRY
@@ -186,35 +186,56 @@ def _job_action_entries(
     telemetry: Optional[Dict[str, Any]],
     *,
     can_review: bool,
+    is_child: bool,
 ) -> List[Dict[str, Any]]:
     if not job:
         return []
-    actions: List[Dict[str, Any]] = []
-    job_id = str(job.id)
-    status = str(getattr(job, "status", "") or "").upper()
-    meta = (telemetry or {}).get("metadata") or {}
-    converted_available = bool(meta.get("converted_wav_available"))
-    job_kind = str(meta.get("job_kind") or "").lower()
 
+    job_id = str(job.id)
+    case_id = str(job.case_id)
+    status = str(getattr(job, "status", "") or "").upper()
+    telem = telemetry or {}
+    meta = telem.get("metadata") or {}
+    transcript_payload = telem.get("transcript") or {}
+    audio_payload = telem.get("audio") or {}
+    artifact_entry = None
+    artifacts = telem.get("artifacts") or []
+    if artifacts:
+        artifact_entry = artifacts[0]
+
+    job_kind = str(meta.get("job_kind") or "").lower()
+    converted_available = bool(meta.get("converted_wav_available"))
+    source_job_id = meta.get("source_job_id")
+
+    sections: List[Dict[str, Any]] = []
+
+    def _add_section(label: str) -> List[Dict[str, Any]]:
+        section: Dict[str, Any] = {"label": label, "items": []}
+        sections.append(section)
+        return section["items"]
+
+    workflow_items: List[Dict[str, Any]] = []
     if status in CANCELABLE_STATUSES:
-        actions.append(
+        workflow_items.append(
             {
                 "label": "Cancel job",
                 "action": "cancel",
                 "confirm": "Cancel this job?",
                 "visible_when": "cancel",
                 "job_id": job_id,
+                "kind": "api",
             }
         )
 
     if status in RESTARTABLE_STATUSES:
-        actions.append(
+        workflow_items.append(
             {
                 "label": "Restart transcription",
                 "action": "restart",
                 "confirm": "Restart this job?",
                 "visible_when": "restart",
                 "job_id": job_id,
+                "kind": "api",
             }
         )
         force_convert_available = (
@@ -223,7 +244,7 @@ def _job_action_entries(
             and bool(job.audio_input)
         )
         if force_convert_available:
-            actions.append(
+            workflow_items.append(
                 {
                     "label": "Restart with WAV conversion",
                     "action": "restart",
@@ -231,30 +252,112 @@ def _job_action_entries(
                     "confirm": "Restart this job with WAV conversion?",
                     "visible_when": "restart",
                     "job_id": job_id,
+                    "kind": "api",
                 }
             )
 
+    if workflow_items:
+        _items = _add_section("Workflow")
+        _items.extend(workflow_items)
+
+    review_items: List[Dict[str, Any]] = []
     if can_review and status == Job.Status.SUCCEEDED:
-        actions.append(
+        review_items.append(
             {
                 "label": "Approve transcript",
                 "action": "approve",
                 "confirm": "Approve this transcript?",
                 "visible_when": "review",
                 "job_id": job_id,
+                "kind": "api",
             }
         )
-        actions.append(
+        review_items.append(
             {
                 "label": "Reject transcript",
                 "action": "reject",
                 "prompt": "Reason for rejection (optional):",
                 "visible_when": "review",
                 "job_id": job_id,
+                "kind": "api",
             }
         )
+    if review_items:
+        _items = _add_section("Review")
+        _items.extend(review_items)
 
-    return actions
+    files_items: List[Dict[str, Any]] = []
+    if artifact_entry and artifact_entry.get("download_url"):
+        files_items.append(
+            {
+                "label": "Download transcript",
+                "href": artifact_entry.get("download_url"),
+                "kind": "link",
+            }
+        )
+    if transcript_payload.get("path"):
+        files_items.append(
+            {
+                "label": "View transcript",
+                "action": "view-transcript",
+                "job_id": job_id,
+                "kind": "modal",
+            }
+        )
+    audio_download_url = None
+    if audio_payload.get("path"):
+        audio_download_url = f"/api/v1/jobs/{job_id}/download-audio/"
+    elif job_kind != "audio_conversion" and converted_available:
+        audio_download_url = f"/api/v1/jobs/{job_id}/download-audio/?converted=1"
+    if audio_download_url:
+        files_items.append(
+            {
+                "label": "Download audio",
+                "href": audio_download_url,
+                "kind": "link",
+            }
+        )
+    files_items.append(
+        {
+            "label": "View logs",
+            "action": "view-log",
+            "job_id": job_id,
+            "case_id": case_id,
+            "kind": "modal",
+        }
+    )
+    if files_items:
+        _items = _add_section("Files & Logs")
+        _items.extend(files_items)
+
+    navigation_items: List[Dict[str, Any]] = []
+    if job_kind == "audio_conversion" and source_job_id:
+        navigation_items.append(
+            {
+                "label": "View source job",
+                "action": "view-job",
+                "target": str(source_job_id),
+                "kind": "navigate",
+            }
+        )
+    if navigation_items:
+        _items = _add_section("Navigation")
+        _items.extend(navigation_items)
+
+    if not is_child:
+        danger_items: List[Dict[str, Any]] = [
+            {
+                "label": "Delete job",
+                "action": "delete",
+                "confirm": "Delete this job? This cannot be undone.",
+                "job_id": job_id,
+                "kind": "delete",
+            }
+        ]
+        _items = _add_section("Danger zone")
+        _items.extend(danger_items)
+
+    return [section for section in sections if section.get("items")]
 
 
 def _candidate_transcript_paths(job: Job, telemetry: Optional[Dict[str, Any]]) -> List[str]:
@@ -1271,6 +1374,7 @@ def _compute_case_tool_state(request: HttpRequest, case: Case) -> Dict[str, Any]
             row.get("job"),
             row.get("telemetry"),
             can_review=user_can_review,
+            is_child=bool(row.get("is_child")),
         )
 
     progress_ctx = _case_progress_context(case, jobs_list, telemetry_map, memberships)
@@ -1396,6 +1500,9 @@ def _job_detail_context(
         elif has_capability(user_obj, str(job.case_id), "case.update"):
             can_review = True
 
+    is_sub_job = bool(telemetry_meta.get("source_job_id"))
+    allow_title_edit = not (job_kind == "audio_conversion" or is_sub_job)
+
     return {
         "case": job.case,
         "job": job,
@@ -1413,6 +1520,7 @@ def _job_detail_context(
         "metadata_map": telemetry_meta,
         "audio_meta": audio_meta,
         "source_audio": source_audio_meta or {},
+        "allow_title_edit": allow_title_edit,
     }
 
 
@@ -1941,6 +2049,44 @@ def case_job_transcript(request: HttpRequest, case_id: str, job_id: uuid.UUID) -
         "created_at": job.finished_at or job.started_at or job.created_at,
     }
     return render(request, "ui/_transcript_modal.html", context)
+
+
+@require_http_methods(["GET"])
+def case_job_logs_modal(request: HttpRequest, case_id: str, job_id: uuid.UUID) -> HttpResponse:
+    auth_response = _ensure_authenticated(request)
+    if auth_response:
+        return auth_response
+
+    case, _ = _get_case_and_org(request, case_id)
+    job = (
+        Job.objects.select_related("case", "case__organization")
+        .filter(case=case, pk=job_id)
+        .first()
+    )
+    if not job:
+        raise Http404
+
+    log_path = job_log_path(str(case.id), getattr(job, "organization_id", None), str(job.id))
+    if not log_path.exists():
+        log_text = "No log entries recorded for this job yet."
+    else:
+        try:
+            text = log_path.read_text(encoding="utf-8")
+        except Exception:  # noqa: BLE001
+            text = "Unable to read log contents."
+        if len(text) > 50000:
+            text = text[-50000:]
+            text = "…" + text
+        log_text = text
+
+    context = {
+        "case": case,
+        "job": job,
+        "job_id": str(job.id),
+        "log_text": log_text,
+        "log_path": str(log_path) if log_path.exists() else "",
+    }
+    return render(request, "ui/_job_log_modal.html", context)
 
 
 @require_http_methods(["POST"])

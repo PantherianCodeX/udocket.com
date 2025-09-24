@@ -443,64 +443,111 @@
         }
       }
 
-      async function handleJobAction(evt) {
-        const btn = evt.target.closest('[data-job-action]');
-        if (!btn) return;
-        evt.preventDefault();
-        const jobId = btn.getAttribute('data-job-id');
-        const action = btn.getAttribute('data-job-action');
-        if (!jobId || !action) return;
+      function removeJobRow(jobId) {
+        const row = document.querySelector(`[data-job="${jobId}"]`);
+        const detail = document.querySelector(`[data-job-detail="${jobId}"]`);
+        if (row) row.remove();
+        if (detail) detail.remove();
+      }
 
-        const confirmMessage = btn.getAttribute('data-job-action-confirm');
-        if (confirmMessage && !window.confirm(confirmMessage)) {
-          const menu = btn.closest('[data-job-action-menu]');
+      async function handleJobAction(evt) {
+        const control = evt.target.closest('[data-job-action]');
+        if (!control) return;
+        evt.preventDefault();
+        const jobId = control.getAttribute('data-job-id');
+        const kind = control.getAttribute('data-job-action-kind') || 'api';
+        const action = control.getAttribute('data-job-action');
+        const menu = control.closest('[data-job-action-menu]');
+        const closeMenu = () => {
           if (menu) menu.removeAttribute('open');
+        };
+
+        if (kind === 'modal') {
+          if (action === 'view-log') {
+            const caseValue = control.getAttribute('data-case-id') || JobsState.currentCaseId;
+            if (jobId && caseValue) {
+              await openJobLogModal(caseValue, jobId);
+            }
+          } else if (action === 'view-transcript') {
+            if (jobId) await openTranscriptModal(jobId);
+          }
+          closeMenu();
+          return;
+        }
+
+        if (kind === 'navigate') {
+          const targetJob = control.getAttribute('data-job-target');
+          if (targetJob) {
+            const expanded = await expandJobRow(targetJob);
+            if (!expanded && window.udocketShowToastAt) {
+              window.udocketShowToastAt(evt.clientX || window.innerWidth / 2, evt.clientY || window.innerHeight / 2, 'Job not available in this panel');
+            }
+          }
+          closeMenu();
+          return;
+        }
+
+        if (!jobId || !action) {
+          closeMenu();
+          return;
+        }
+
+        const confirmMessage = control.getAttribute('data-job-action-confirm');
+        if (confirmMessage && !window.confirm(confirmMessage)) {
+          closeMenu();
           return;
         }
 
         let requestBody;
         let endpointAction = action;
-        const promptMessage = btn.getAttribute('data-job-action-prompt');
+        const promptMessage = control.getAttribute('data-job-action-prompt');
         if (promptMessage) {
           const response = window.prompt(promptMessage, '');
           if (response === null) {
-            const menu = btn.closest('[data-job-action-menu]');
-            if (menu) menu.removeAttribute('open');
+            closeMenu();
             return;
           }
           requestBody = JSON.stringify({ comment: response });
         }
-        const optionalQuery = btn.getAttribute('data-job-action-query');
+        const optionalQuery = control.getAttribute('data-job-action-query');
         if (optionalQuery) {
           endpointAction = `${endpointAction}?${optionalQuery}`;
         }
 
-        btn.disabled = true;
+        const method = control.getAttribute('data-job-action-method') || (kind === 'delete' ? 'DELETE' : 'POST');
+        const headers = {
+          'X-CSRFToken': getCSRFToken(),
+          Accept: 'application/json',
+        };
+        if (method !== 'DELETE') {
+          headers['Content-Type'] = 'application/json';
+        }
+
+        control.disabled = true;
         try {
-          const url = `/api/v1/jobs/${jobId}/${endpointAction}/`;
+          const url = method === 'DELETE' ? `/api/v1/jobs/${jobId}/` : `/api/v1/jobs/${jobId}/${endpointAction}/`;
           const resp = await fetch(url, {
-            method: 'POST',
-            headers: {
-              'X-CSRFToken': getCSRFToken(),
-              'Accept': 'application/json',
-              'Content-Type': 'application/json',
-            },
+            method,
+            headers,
             credentials: 'same-origin',
-            body: requestBody || null,
+            body: method === 'DELETE' ? null : (requestBody || null),
           });
           if (!resp.ok) {
-            console.warn('Job action failed', endpointAction, await resp.text());
+            const body = await resp.text();
+            console.warn('Job action failed', endpointAction, body);
+          } else if (method === 'DELETE') {
+            removeJobRow(jobId);
+            scheduleTranscribeRefresh();
           } else {
             const data = await resp.json();
             handleJobUpdate(jobId, data, 'action');
             ensurePolling(jobId);
           }
         } catch (error) {
-          console.warn('Job action error', endpointAction, error);
+          console.warn('Job action error', action, error);
         } finally {
-          btn.disabled = false;
-          const menu = btn.closest('[data-job-action-menu]');
-          if (menu) menu.removeAttribute('open');
+          control.disabled = false;
+          closeMenu();
         }
       }
 
@@ -607,6 +654,71 @@
             btn.classList.remove('cursor-progress', 'cursor-not-allowed', 'opacity-70');
             btn.removeAttribute('aria-disabled');
           }
+        }
+      }
+
+      async function openJobLogModal(caseValue, jobId) {
+        if (!caseValue || !jobId) return;
+        try {
+          const resp = await fetch(`/cases/${caseValue}/jobs/${jobId}/logs/modal/`, {
+            headers: { 'HX-Request': 'true' },
+            credentials: 'same-origin',
+          });
+          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+          const html = await resp.text();
+          if (modalRoot) {
+            modalRoot.innerHTML = html;
+          } else {
+            const temp = document.createElement('div');
+            temp.innerHTML = html;
+            document.body.appendChild(temp);
+          }
+        } catch (error) {
+          console.warn('Job log modal failed', jobId, error);
+          if (window.udocketShowToastAt) {
+            window.udocketShowToastAt(window.innerWidth / 2, window.innerHeight / 2, 'Unable to load job log');
+          }
+        }
+      }
+
+      async function handleSourceRefresh(evt) {
+        const btn = evt.target.closest('[data-source-refresh]');
+        if (!btn) return;
+        evt.preventDefault();
+        if (btn.disabled) return;
+        const sourceJobId = btn.getAttribute('data-source-job');
+        const jobId = btn.getAttribute('data-job-id');
+        const caseValue = btn.getAttribute('data-case-id') || JobsState.currentCaseId;
+        if (!sourceJobId || !caseValue || !jobId) return;
+        const originalText = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Refreshing…';
+        try {
+          const resp = await fetch(`/api/v1/jobs/${sourceJobId}/refresh-audio/`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': getCSRFToken(),
+              Accept: 'application/json',
+            },
+            credentials: 'same-origin',
+          });
+          if (!resp.ok) {
+            const text = await resp.text();
+            throw new Error(text || `HTTP ${resp.status}`);
+          }
+          await loadJobDetail(jobId);
+          if (window.udocketShowToastAt) {
+            window.udocketShowToastAt(evt.clientX || window.innerWidth / 2, evt.clientY || window.innerHeight / 2, 'Source metadata refreshed');
+          }
+        } catch (error) {
+          console.warn('Refresh source metadata failed', error);
+          if (window.udocketShowToastAt) {
+            window.udocketShowToastAt(evt.clientX || window.innerWidth / 2, evt.clientY || window.innerHeight / 2, 'Unable to refresh metadata');
+          }
+        } finally {
+          btn.disabled = false;
+          btn.textContent = originalText;
         }
       }
 
@@ -1108,6 +1220,17 @@
       document.body.addEventListener('keydown', handleRowKey);
       document.body.addEventListener('click', handleJobAction);
       document.body.addEventListener('click', handleVerifyHash);
+      document.body.addEventListener('click', handleSourceRefresh);
+      document.body.addEventListener('click', async (evt) => {
+        const trigger = evt.target.closest('[data-job-view-log]');
+        if (!trigger) return;
+        evt.preventDefault();
+        const jobId = trigger.getAttribute('data-job-id');
+        const caseValue = trigger.getAttribute('data-case-id') || JobsState.currentCaseId;
+        if (jobId && caseValue) {
+          await openJobLogModal(caseValue, jobId);
+        }
+      });
 
       document.body.addEventListener('click', async (evt) => {
         const button = evt.target.closest('[data-analysis-action]');

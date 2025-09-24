@@ -12,7 +12,7 @@ from apps.platform.jobs.models import Job
 from apps.platform.operations.storage import ops_dir
 
 
-def _setup_case_with_job(settings, storage_root: Path, *, mismatch: bool = False) -> tuple[Job, User]:
+def _setup_case_with_job(settings, storage_root: Path, *, mismatch: bool = False) -> tuple[Job, User, str]:
     settings.PLATFORM_DEV_OPEN = True
     settings.STORAGE_ROOT = str(storage_root)
 
@@ -46,11 +46,11 @@ def _setup_case_with_job(settings, storage_root: Path, *, mismatch: bool = False
     log_file = ops_path / f"{job.id}_transcription_log.json"
     log_file.write_text(json.dumps(meta), encoding="utf-8")
 
-    return job, user
+    return job, user, observed_hash
 
 
 def test_verify_hash_audio_match(db, settings, tmp_path):
-    job, user = _setup_case_with_job(settings, tmp_path / "storage-verify", mismatch=False)
+    job, user, observed_hash = _setup_case_with_job(settings, tmp_path / "storage-verify", mismatch=False)
 
     client = APIClient()
     client.force_authenticate(user=user)
@@ -59,12 +59,11 @@ def test_verify_hash_audio_match(db, settings, tmp_path):
     assert resp.status_code == 200
     data = resp.json()
     assert data["result"] == "match"
-    assert isinstance(data["observed"], str)
-    assert len(data["observed"]) == 64
+    assert data["observed"] == observed_hash
 
 
 def test_verify_hash_audio_mismatch(db, settings, tmp_path):
-    job, user = _setup_case_with_job(settings, tmp_path / "storage-mismatch", mismatch=True)
+    job, user, _ = _setup_case_with_job(settings, tmp_path / "storage-mismatch", mismatch=True)
 
     client = APIClient()
     client.force_authenticate(user=user)
@@ -74,3 +73,19 @@ def test_verify_hash_audio_mismatch(db, settings, tmp_path):
     data = resp.json()
     assert data["result"] == "mismatch"
     assert data["expected"] == "deadbeef"
+    assert data["observed"] != data["expected"]
+
+
+def test_refresh_audio_metadata_endpoint(db, settings, tmp_path):
+    job, user, observed_hash = _setup_case_with_job(settings, tmp_path / "storage-refresh", mismatch=False)
+
+    client = APIClient()
+    client.force_authenticate(user=user)
+    resp = client.post(f"/api/v1/jobs/{job.id}/refresh-audio/")
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert "audio" in payload
+    audio_payload = payload["audio"]
+    assert audio_payload.get("sha256") == observed_hash
+    assert audio_payload.get("size_bytes_local") or audio_payload.get("size_bytes_remote")

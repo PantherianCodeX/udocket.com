@@ -40,6 +40,7 @@ from apps.platform.tenancy import scope_jobs
 from apps.platform.operations.storage import ensure_case_dirs, ops_dir as storage_ops_dir
 from apps.platform.operations.utils import update_job_meta, append_job_log
 from apps.platform.operations.models import TaskRun
+from packages.udocket_core.audio import probe_audio_metadata
 
 
 def _derive_audio_filename(path_obj: Path | None, meta: Dict[str, Any], fallback: str) -> str:
@@ -496,10 +497,82 @@ class JobViewSet(viewsets.ModelViewSet):
         }
         return Response(payload)
 
+    @action(detail=True, methods=["post"], url_path="refresh-audio")
+    def refresh_audio(self, request, pk=None):
+        job = self.get_object()
+        audio_input = getattr(job, "audio_input", None)
+        if not audio_input:
+            return Response({"detail": "Job has no audio input."}, status=status.HTTP_400_BAD_REQUEST)
+
+        path = Path(str(audio_input))
+        if not path.exists():
+            return Response({"detail": "Audio file is unavailable."}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            meta = probe_audio_metadata(path) or {}
+        except Exception as exc:  # noqa: BLE001
+            return Response({"detail": f"Unable to probe audio: {exc}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        sha256_val = _sha256_file(path)
+        try:
+            size_bytes = path.stat().st_size
+        except Exception:  # noqa: BLE001
+            size_bytes = None
+
+        updates: Dict[str, Any] = {}
+        for key, value in meta.items():
+            if value is not None:
+                updates[key] = value
+        if sha256_val:
+            updates["audio_sha256"] = sha256_val
+        if size_bytes is not None:
+            updates["audio_size_bytes"] = size_bytes
+
+        update_job_meta(str(job.case_id), getattr(job, "organization_id", None), str(job.id), updates)
+
+        dirty_fields: list[str] = []
+        duration_val = meta.get("audio_duration_s")
+        if duration_val is not None:
+            try:
+                job.duration_s = float(duration_val)
+                dirty_fields.append("duration_s")
+            except Exception:  # noqa: BLE001
+                pass
+        bitrate_val = meta.get("audio_bitrate_kbps")
+        if bitrate_val is not None:
+            try:
+                job.audio_bitrate_kbps = int(bitrate_val)
+                dirty_fields.append("audio_bitrate_kbps")
+            except Exception:  # noqa: BLE001
+                pass
+        channels_val = meta.get("audio_channels")
+        if channels_val is not None:
+            try:
+                job.audio_channels = int(channels_val)
+                dirty_fields.append("audio_channels")
+            except Exception:  # noqa: BLE001
+                pass
+        sample_rate_val = meta.get("audio_sample_rate_hz")
+        if sample_rate_val is not None:
+            try:
+                job.sample_rate_hz = int(sample_rate_val)
+                dirty_fields.append("sample_rate_hz")
+            except Exception:  # noqa: BLE001
+                pass
+
+        if dirty_fields:
+            try:
+                job.save(update_fields=dirty_fields)
+            except Exception:  # noqa: BLE001
+                job.save()
+
+        refreshed_payload = job_telemetry(job).audio_payload(include_paths=True)
+        return Response({"audio": refreshed_payload})
+
     @action(detail=True, methods=["post"], url_path="cancel")
     def cancel(self, request, pk=None):
         job = self.get_object()
-        if job.status not in {Job.Status.PENDING, Job.Status.RUNNING, Job.Status.CANCELLING}:
+        if job.status not in {Job.Status.PENDING, Job.Status.RUNNING, Job.Status.CANCELLING, Job.Status.UPLOADING}:
             return Response({"detail": "Job is not cancellable."}, status=status.HTTP_400_BAD_REQUEST)
         case_id = str(job.case_id)
         org_id = str(job.organization_id) if getattr(job, "organization_id", None) else None
