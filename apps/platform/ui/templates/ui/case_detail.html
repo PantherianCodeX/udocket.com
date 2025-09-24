@@ -754,9 +754,12 @@
           top = Math.max(16, top);
           menu.style.left = `${Math.round(left)}px`;
           menu.style.top = `${Math.round(top)}px`;
+          menu.style.visibility = 'visible';
         };
 
         menu.dataset.floating = '1';
+        // Hide until positioned to avoid a flash inside the card
+        menu.style.visibility = 'hidden';
         updatePosition();
         const state = {
           menu,

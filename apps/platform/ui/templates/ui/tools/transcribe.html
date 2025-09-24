@@ -22,11 +22,11 @@
     </div>
   </div>
 
-  <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-stretch">
+  <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
     <form id="transcribe-form"
           method="post"
           enctype="multipart/form-data"
-          class="space-y-5 rounded-2xl border border-white/10 bg-slate-900/70 p-6 h-full"
+          class="space-y-5 rounded-2xl border border-white/10 bg-slate-900/70 p-6"
           data-transcribe-form-panel
           hx-post="{{ body.form_action }}"
           hx-encoding="multipart/form-data"
@@ -71,10 +71,10 @@
       </div>
     </form>
 
-    <div class="flex h-full min-h-[20rem] flex-col gap-4 overflow-visible rounded-2xl border border-white/10 bg-slate-900/70 p-6 text-sm text-slate-200" data-transcript-sidebar>
+    <div class="flex flex-col gap-4 overflow-visible rounded-2xl border border-white/10 bg-slate-900/70 p-6 text-sm text-slate-200" data-transcript-sidebar>
       <p class="text-xs uppercase tracking-wide text-slate-400">Create Case Artifact</p>
       {% if body.approved_transcripts %}
-        <ul class="flex-1 space-y-2 overflow-y-auto pr-1 text-xs" data-transcript-list>
+        <ul class="space-y-2 overflow-y-auto pr-1 text-xs" data-transcript-list>
           {% for transcript in body.approved_transcripts %}
             <li>
               <details class="group relative w-full rounded-lg border border-white/10 bg-slate-900/50 transition hover:border-primary-400 focus-within:border-primary-400" data-transcript-item>
@@ -84,7 +84,7 @@
                     <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.094l3.71-3.86a.75.75 0 111.08 1.04l-4.247 4.41a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
                   </svg>
                 </summary>
-                <div class="absolute right-3 top-full z-40 mt-2 w-60 space-y-3 rounded-xl border border-white/10 bg-slate-900/95 p-3 text-xs text-slate-200 shadow-xl shadow-black/40" data-transcript-menu>
+                <div class="absolute right-3 top-full z-40 mt-2 w-60 space-y-3 rounded-xl border border-white/10 bg-slate-900/95 p-3 text-xs text-slate-200 shadow-xl shadow-black/40" data-transcript-menu style="visibility:hidden;">
                   <div class="space-y-1" data-transcript-promote>
                     <p class="text-[10px] uppercase tracking-wide text-slate-400">Case artifact</p>
                     <button type="button"
