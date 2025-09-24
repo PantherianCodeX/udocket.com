@@ -1220,7 +1220,7 @@
         if (!state) return;
         window.removeEventListener('scroll', state.onScroll, true);
         window.removeEventListener('resize', state.onResize);
-        const { panel, original, placeholder, parent, portal, onScroll, onResize } = state;
+        const { panel, original, placeholder, parent, portal, onScroll, onResize, onWheel } = state;
         if (panel && panel.isConnected) {
           Object.entries(original).forEach(([key, value]) => {
             panel.style[key] = value;
@@ -1237,6 +1237,13 @@
         }
         if (onScroll) window.removeEventListener('scroll', onScroll, true);
         if (onResize) window.removeEventListener('resize', onResize);
+        if (onWheel) {
+          try {
+            panel.removeEventListener('wheel', onWheel, { passive: false });
+          } catch (_) {
+            panel.removeEventListener('wheel', onWheel);
+          }
+        }
         popoverMenuState.delete(detailsEl);
       }
 
@@ -1327,11 +1334,31 @@
           portal,
           onScroll: positionPanel,
           onResize: positionPanel,
+          onWheel: null,
         };
         popoverMenuState.set(detailsEl, state);
         positionPanel();
         window.addEventListener('scroll', positionPanel, true);
         window.addEventListener('resize', positionPanel, true);
+
+        const wheelHandler = (wheelEvt) => {
+          if (!detailsEl.open) return;
+          if (panel.scrollHeight <= panel.clientHeight) return;
+          const delta = wheelEvt.deltaY;
+          const atTop = panel.scrollTop <= 0;
+          const atBottom = panel.scrollTop + panel.clientHeight >= panel.scrollHeight;
+          if ((delta < 0 && atTop) || (delta > 0 && atBottom)) {
+            return;
+          }
+          wheelEvt.preventDefault();
+          panel.scrollTop += delta;
+        };
+        try {
+          panel.addEventListener('wheel', wheelHandler, { passive: false });
+        } catch (_) {
+          panel.addEventListener('wheel', wheelHandler);
+        }
+        state.onWheel = wheelHandler;
       }
 
 
