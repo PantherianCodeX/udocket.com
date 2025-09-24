@@ -107,7 +107,20 @@
       const x = (evt.clientX != null ? evt.clientX : (evt.pageX != null ? (evt.pageX - window.scrollX) : 0));
       const y = (evt.clientY != null ? evt.clientY : (evt.pageY != null ? (evt.pageY - window.scrollY) : 0));
       navigator.clipboard.writeText(value).then(() => {
-        udocketShowToastAt(x, y, 'Copied');
+        // Button feedback: change text and disable briefly
+        const isButton = trigger.tagName === 'BUTTON' || trigger.getAttribute('role') === 'button';
+        if (isButton) {
+          const original = trigger.dataset.copyOriginal || trigger.textContent || 'Copy';
+          trigger.dataset.copyOriginal = original;
+          trigger.textContent = 'Copied!';
+          trigger.disabled = true;
+          setTimeout(() => {
+            trigger.textContent = original;
+            trigger.disabled = false;
+          }, 2000);
+        } else {
+          udocketShowToastAt(x, y, 'Copied');
+        }
       }).catch(() => { try { udocketToast('Copied'); } catch (_) {} });
     });
 

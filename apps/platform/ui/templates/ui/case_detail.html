@@ -694,6 +694,12 @@
         const modal = host.querySelector('[data-modal]');
         if (!modal) return null;
         const wrapper = modal.parentElement;
+        const onKeyDown = (ev) => {
+          if (ev.key === 'Escape') {
+            ev.preventDefault();
+            closeModal();
+          }
+        };
         const closeModal = () => {
           if (modalRoot) {
             modalRoot.innerHTML = '';
@@ -706,6 +712,7 @@
               wrapper.remove();
             }
           }
+          window.removeEventListener('keydown', onKeyDown);
         };
         if (modal.dataset.bound !== '1') {
           modal.dataset.bound = '1';
@@ -716,6 +723,7 @@
             btn.addEventListener('click', closeModal);
           });
         }
+        window.addEventListener('keydown', onKeyDown);
         return { modal, closeModal };
       }
 
@@ -1244,14 +1252,33 @@
         if (!state) return;
         window.removeEventListener('scroll', state.onScroll, true);
         window.removeEventListener('resize', state.onResize);
-        const { menu, original } = state;
+        const { menu, original, placeholder, parent } = state;
         if (menu && menu.isConnected) {
           Object.entries(original).forEach(([key, value]) => {
             menu.style[key] = value;
           });
           menu.dataset.floating = '';
+          // Restore to original DOM location if portaled
+          if (placeholder && placeholder.parentNode) {
+            try { placeholder.parentNode.insertBefore(menu, placeholder); } catch (_) {}
+            try { placeholder.remove(); } catch (_) {}
+          } else if (parent && parent.isConnected) {
+            try { parent.appendChild(menu); } catch (_) {}
+          }
+          menu.style.pointerEvents = '';
         }
         jobMenuState.delete(detailsEl);
+      }
+
+      function getJobMenuPortal() {
+        let portal = document.getElementById('job-menu-portal');
+        if (!portal) {
+          portal = document.createElement('div');
+          portal.id = 'job-menu-portal';
+          portal.className = 'fixed inset-0 z-[120] pointer-events-none';
+          document.body.appendChild(portal);
+        }
+        return portal;
       }
 
       function floatJobMenu(detailsEl) {
@@ -1268,6 +1295,12 @@
           zIndex: menu.style.zIndex,
           maxHeight: menu.style.maxHeight,
         };
+        const placeholder = document.createComment('job-menu-placeholder');
+        const parent = menu.parentElement;
+        try { parent.insertBefore(placeholder, menu); } catch (_) {}
+        const portal = getJobMenuPortal();
+        portal.appendChild(menu);
+        menu.style.pointerEvents = 'auto';
 
         const updatePosition = () => {
           if (!detailsEl.isConnected || !detailsEl.open) {
@@ -1276,17 +1309,17 @@
           }
           menu.dataset.floating = '1';
           menu.style.position = 'fixed';
-          menu.style.zIndex = '9999';
+          menu.style.zIndex = '99999';
           menu.style.maxHeight = 'min(60vh, 360px)';
           const summaryRect = summary.getBoundingClientRect();
-          const menuRect = menu.getBoundingClientRect();
-          const menuWidth = menuRect.width || menu.offsetWidth || 240;
-          let left = summaryRect.right - menuWidth;
-          left = Math.min(left, window.innerWidth - menuWidth - 16);
+          const width = menu.offsetWidth || 240;
+          let left = summaryRect.right - width;
+          left = Math.min(left, window.innerWidth - width - 16);
           left = Math.max(16, left);
+          // Estimate height after making visible
+          const height = menu.offsetHeight || 240;
           let top = summaryRect.bottom + 8;
-          const menuHeight = menuRect.height || menu.offsetHeight || 200;
-          top = Math.min(top, window.innerHeight - menuHeight - 16);
+          top = Math.min(top, window.innerHeight - height - 16);
           top = Math.max(16, top);
           menu.style.left = `${Math.round(left)}px`;
           menu.style.top = `${Math.round(top)}px`;
@@ -1301,6 +1334,8 @@
           original,
           onScroll: updatePosition,
           onResize: updatePosition,
+          placeholder,
+          parent,
         };
         jobMenuState.set(detailsEl, state);
         window.addEventListener('scroll', updatePosition, true);
