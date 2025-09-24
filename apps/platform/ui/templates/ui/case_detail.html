@@ -1343,16 +1343,10 @@
 
         const wheelHandler = (wheelEvt) => {
           if (!detailsEl.open) return;
-          if (panel.scrollHeight <= panel.clientHeight) return;
-          const delta = wheelEvt.deltaY;
-          const atTop = panel.scrollTop <= 0;
-          const atBottom = panel.scrollTop + panel.clientHeight >= panel.scrollHeight;
-          if ((delta < 0 && atTop) || (delta > 0 && atBottom)) {
-            return;
-          }
-          wheelEvt.preventDefault();
-          panel.scrollTop += delta;
-        };
+        const delta = wheelEvt.deltaY;
+        wheelEvt.preventDefault();
+        panel.scrollTop += delta;
+      };
         try {
           panel.addEventListener('wheel', wheelHandler, { passive: false });
         } catch (_) {
