@@ -1317,49 +1317,52 @@
 
       function closeTranscriptDetails(target) {
         if (target instanceof HTMLElement && target.matches('[data-transcript-item]')) {
-          target.removeAttribute('open');
           resetPopoverMenu(target);
+          target.removeAttribute('open');
         }
       }
 
-      document.addEventListener('pointerdown', (evt) => {
-        const transcriptSummary = evt.target.closest('[data-transcript-item] > summary');
-        if (transcriptSummary) {
+      document.addEventListener('click', (evt) => {
+        const summaryTrigger = evt.target.closest('[data-popover] > summary');
+        if (summaryTrigger) {
           evt.preventDefault();
           evt.stopPropagation();
-          const owner = transcriptSummary.parentElement;
+          const owner = summaryTrigger.closest('[data-popover]');
+          if (!(owner instanceof HTMLElement)) return;
           const willOpen = !owner.open;
-          document.querySelectorAll('[data-transcript-item][open]').forEach((item) => {
-            if (item !== owner) closeTranscriptDetails(item);
-          });
+          const isTranscript = owner.matches('[data-transcript-item]');
+          if (isTranscript) {
+            document.querySelectorAll('[data-transcript-item][open]').forEach((item) => {
+              if (item !== owner) {
+                resetPopoverMenu(item);
+                item.removeAttribute('open');
+              }
+            });
+          } else {
+            document.querySelectorAll('[data-popover][open]').forEach((item) => {
+              if (item !== owner) {
+                resetPopoverMenu(item);
+                item.removeAttribute('open');
+              }
+            });
+          }
           if (willOpen) {
             owner.open = true;
             requestAnimationFrame(() => floatPopoverMenu(owner));
           } else {
-            closeTranscriptDetails(owner);
+            resetPopoverMenu(owner);
+            owner.removeAttribute('open');
           }
           return;
         }
-        const actionSummary = evt.target.closest('[data-job-action-menu] > summary, [data-action-menu] > summary');
-        if (actionSummary) {
-          const owner = actionSummary.parentElement;
-          document.querySelectorAll('[data-job-action-menu][open], [data-action-menu][open]').forEach((menu) => {
-            if (menu !== owner) menu.removeAttribute('open');
-          });
-        }
-      });
 
-      document.addEventListener('click', (evt) => {
-        const summaryWithin = evt.target.closest('[data-transcript-item] > summary');
-        if (summaryWithin) {
-          evt.preventDefault();
-          evt.stopPropagation();
-          return;
-        }
-        if (!evt.target.closest('[data-transcript-item], [data-transcript-menu]')) {
+        if (!evt.target.closest('[data-transcript-item]') && !evt.target.closest('[data-transcript-menu]')) {
           document.querySelectorAll('[data-transcript-item][open]').forEach((item) => closeTranscriptDetails(item));
         }
-      });
+        if (!evt.target.closest('[data-job-action-menu]') && !evt.target.closest('[data-action-menu]')) {
+          closeActionMenus();
+        }
+      }, true);
 
       document.addEventListener('toggle', (evt) => {
         const target = evt.target;
