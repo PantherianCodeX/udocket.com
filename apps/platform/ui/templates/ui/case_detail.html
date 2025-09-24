@@ -100,8 +100,7 @@
         refreshTranscribeScheduled: false,
       };
       let transcribeSidebarBinding = null;
-      const transcriptMenuState = new WeakMap();
-      const jobMenuState = new WeakMap();
+      const popoverMenuState = new WeakMap();
 
       function normalizeStatus(status) {
         return (status || '').toString().toUpperCase();
@@ -341,9 +340,9 @@
         }
         if ((!anyVisible || normalized === 'CANCELLED') && menu.hasAttribute('open')) {
           menu.removeAttribute('open');
-          resetJobMenu(menu);
+          resetPopoverMenu(menu);
         } else if (menu.hasAttribute('open')) {
-          requestAnimationFrame(() => floatJobMenu(menu));
+          requestAnimationFrame(() => floatPopoverMenu(menu));
         }
       }
 
@@ -575,7 +574,7 @@
         const closeMenu = () => {
           if (menu) {
             menu.removeAttribute('open');
-            resetJobMenu(menu);
+            resetPopoverMenu(menu);
           }
         };
 
@@ -1198,149 +1197,90 @@
         return true;
       }
 
-      function resetTranscriptMenu(detailsEl) {
-        const state = transcriptMenuState.get(detailsEl);
-        if (!state) return;
-        window.removeEventListener('scroll', state.onScroll, true);
-        window.removeEventListener('resize', state.onResize);
-        const { menu, original } = state;
-        if (menu && menu.isConnected) {
-          Object.entries(original).forEach(([key, value]) => {
-            menu.style[key] = value;
-          });
-          menu.dataset.floating = '';
-        }
-        transcriptMenuState.delete(detailsEl);
-      }
-
-      function floatTranscriptMenu(detailsEl) {
-        const menu = detailsEl.querySelector('[data-transcript-menu]');
-        const summary = detailsEl.querySelector('summary');
-        if (!menu || !summary) return;
-        resetTranscriptMenu(detailsEl);
-        const original = {
-          position: menu.style.position,
-          top: menu.style.top,
-          left: menu.style.left,
-          right: menu.style.right,
-          bottom: menu.style.bottom,
-          zIndex: menu.style.zIndex,
-          maxHeight: menu.style.maxHeight,
-        };
-
-        const updatePosition = () => {
-          if (!detailsEl.isConnected || !detailsEl.open) {
-            resetTranscriptMenu(detailsEl);
-            return;
-          }
-          menu.dataset.floating = '1';
-          menu.style.position = 'fixed';
-          menu.style.zIndex = '9999';
-          menu.style.maxHeight = 'min(60vh, 360px)';
-          const summaryRect = summary.getBoundingClientRect();
-          const menuRect = menu.getBoundingClientRect();
-          const menuWidth = menuRect.width || menu.offsetWidth || 240;
-          let left = summaryRect.right - menuWidth;
-          left = Math.min(left, window.innerWidth - menuWidth - 16);
-          left = Math.max(16, left);
-          let top = summaryRect.bottom + 8;
-          const menuHeight = menuRect.height || menu.offsetHeight || 200;
-          top = Math.min(top, window.innerHeight - menuHeight - 16);
-          top = Math.max(16, top);
-          menu.style.left = `${Math.round(left)}px`;
-          menu.style.top = `${Math.round(top)}px`;
-          menu.style.visibility = 'visible';
-        };
-
-        menu.dataset.floating = '1';
-        // Hide until positioned to avoid a flash inside the card
-        menu.style.visibility = 'hidden';
-        updatePosition();
-        const state = {
-          menu,
-          original,
-          onScroll: updatePosition,
-          onResize: updatePosition,
-        };
-        transcriptMenuState.set(detailsEl, state);
-        window.addEventListener('scroll', updatePosition, true);
-        window.addEventListener('resize', updatePosition);
-      }
-      function resetJobMenu(detailsEl) {
-        const state = jobMenuState.get(detailsEl);
-        if (!state) return;
-        window.removeEventListener('scroll', state.onScroll, true);
-        window.removeEventListener('resize', state.onResize);
-        const { menu, original, placeholder, parent } = state;
-        if (menu && menu.isConnected) {
-          Object.entries(original).forEach(([key, value]) => {
-            menu.style[key] = value;
-          });
-          menu.dataset.floating = '';
-          // Restore to original DOM location if portaled
-          if (placeholder && placeholder.parentNode) {
-            try { placeholder.parentNode.insertBefore(menu, placeholder); } catch (_) {}
-            try { placeholder.remove(); } catch (_) {}
-          } else if (parent && parent.isConnected) {
-            try { parent.appendChild(menu); } catch (_) {}
-          }
-          menu.style.pointerEvents = '';
-        }
-        try { const portal = document.getElementById('job-menu-portal'); if (portal) portal.style.zIndex = '100'; } catch (_) {}
-        jobMenuState.delete(detailsEl);
-      }
-
-      function getJobMenuPortal() {
-        let portal = document.getElementById('job-menu-portal');
+      function getPopoverPortal(kind) {
+        const id = kind ? `popover-portal-${kind}` : 'popover-portal-default';
+        let portal = document.getElementById(id);
         if (!portal) {
           portal = document.createElement('div');
-          portal.id = 'job-menu-portal';
+          portal.id = id;
           portal.style.position = 'fixed';
           portal.style.top = '0';
           portal.style.left = '0';
           portal.style.width = '100%';
           portal.style.height = '100%';
-          portal.style.pointerEvents = 'auto';
-          portal.style.zIndex = '2147483638';
+          portal.style.pointerEvents = 'none';
+          portal.style.zIndex = '2147483636';
           document.body.appendChild(portal);
         }
         return portal;
       }
 
-      function floatJobMenu(detailsEl) {
-        const menu = detailsEl.querySelector('[data-job-action-menu-panel]');
+      function resetPopoverMenu(detailsEl) {
+        const state = popoverMenuState.get(detailsEl);
+        if (!state) return;
+        window.removeEventListener('scroll', state.onScroll, true);
+        window.removeEventListener('resize', state.onResize);
+        const { panel, original, placeholder, parent, portal } = state;
+        if (panel && panel.isConnected) {
+          Object.entries(original).forEach(([key, value]) => {
+            panel.style[key] = value;
+          });
+          panel.dataset.floating = '';
+          if (placeholder && parent && parent.isConnected) {
+            try { parent.insertBefore(panel, placeholder); } catch (_) {}
+            try { placeholder.remove(); } catch (_) {}
+          }
+        }
+        if (portal) {
+          portal.style.zIndex = '2147483636';
+          portal.style.pointerEvents = 'none';
+        }
+        popoverMenuState.delete(detailsEl);
+      }
+
+      function floatPopoverMenu(detailsEl) {
+        const panel = detailsEl.querySelector('[data-popover-panel]');
         const summary = detailsEl.querySelector('summary');
-        if (!menu || !summary) return;
-        resetJobMenu(detailsEl);
+        if (!panel || !summary) return;
+        resetPopoverMenu(detailsEl);
         const original = {
-          position: menu.style.position,
-          top: menu.style.top,
-          left: menu.style.left,
-          right: menu.style.right,
-          bottom: menu.style.bottom,
-          zIndex: menu.style.zIndex,
-          maxHeight: menu.style.maxHeight,
+          position: panel.style.position,
+          top: panel.style.top,
+          left: panel.style.left,
+          right: panel.style.right,
+          bottom: panel.style.bottom,
+          zIndex: panel.style.zIndex,
+          maxHeight: panel.style.maxHeight,
+          pointerEvents: panel.style.pointerEvents,
+          visibility: panel.style.visibility,
         };
-        const placeholder = document.createComment('job-menu-placeholder');
-        const parent = menu.parentElement;
-        try { parent.insertBefore(placeholder, menu); } catch (_) {}
-        const portal = getJobMenuPortal();
-        portal.appendChild(menu);
-        menu.style.pointerEvents = 'auto';
-        menu.style.zIndex = '2147483640';
+        const parent = panel.parentElement;
+        const usePortal = (detailsEl.getAttribute('data-popover-portal') || '').toLowerCase() === 'body';
+        let placeholder = null;
+        let portal = null;
+        if (usePortal && parent) {
+          placeholder = document.createComment('popover-placeholder');
+          try { parent.insertBefore(placeholder, panel); } catch (_) {}
+          const key = detailsEl.getAttribute('data-popover') || 'menu';
+          portal = getPopoverPortal(key);
+          portal.style.zIndex = '2147483638';
+          portal.style.pointerEvents = 'auto';
+          portal.appendChild(panel);
+          panel.style.pointerEvents = 'auto';
+        }
 
         const updatePosition = () => {
           if (!detailsEl.isConnected || !detailsEl.open) {
-            resetJobMenu(detailsEl);
+            resetPopoverMenu(detailsEl);
             return;
           }
-          menu.dataset.floating = '1';
-          menu.style.position = 'fixed';
-          menu.style.zIndex = '2147483640';
-          menu.style.maxHeight = 'min(60vh, 360px)';
+          panel.dataset.floating = '1';
+          panel.style.position = 'fixed';
+          panel.style.zIndex = usePortal ? '2147483640' : '9999';
+          panel.style.maxHeight = 'min(60vh, 360px)';
           const summaryRect = summary.getBoundingClientRect();
-          const width = menu.offsetWidth || menu.scrollWidth || 240;
-          const height = menu.offsetHeight || menu.scrollHeight || 240;
+          const width = panel.offsetWidth || panel.scrollWidth || 240;
+          const height = panel.offsetHeight || panel.scrollHeight || 200;
           let left = summaryRect.right - width;
           left = Math.min(left, window.innerWidth - width - 16);
           left = Math.max(16, left);
@@ -1352,32 +1292,33 @@
             top = Math.min(summaryRect.bottom + 8, window.innerHeight - height - 16);
             top = Math.max(16, top);
           }
-          menu.style.left = `${Math.round(left)}px`;
-          menu.style.top = `${Math.round(top)}px`;
-          menu.style.visibility = 'visible';
+          panel.style.left = `${Math.round(left)}px`;
+          panel.style.top = `${Math.round(top)}px`;
+          panel.style.visibility = 'visible';
         };
 
-        menu.dataset.floating = '1';
-        menu.style.visibility = 'hidden';
-        updatePosition();
+        panel.dataset.floating = '1';
+        panel.style.visibility = 'hidden';
         const state = {
-          menu,
+          panel,
           original,
           onScroll: updatePosition,
           onResize: updatePosition,
           placeholder,
           parent,
+          portal,
         };
-        jobMenuState.set(detailsEl, state);
+        popoverMenuState.set(detailsEl, state);
         window.addEventListener('scroll', updatePosition, true);
         window.addEventListener('resize', updatePosition);
+        updatePosition();
       }
 
 
       function closeTranscriptDetails(target) {
         if (target instanceof HTMLElement && target.matches('[data-transcript-item]')) {
           target.removeAttribute('open');
-          resetTranscriptMenu(target);
+          resetPopoverMenu(target);
         }
       }
 
@@ -1393,7 +1334,7 @@
           });
           if (willOpen) {
             owner.open = true;
-            requestAnimationFrame(() => floatTranscriptMenu(owner));
+            requestAnimationFrame(() => floatPopoverMenu(owner));
           } else {
             closeTranscriptDetails(owner);
           }
@@ -1427,9 +1368,9 @@
             document.querySelectorAll('[data-transcript-item][open]').forEach((item) => {
               if (item !== target) closeTranscriptDetails(item);
             });
-            requestAnimationFrame(() => floatTranscriptMenu(target));
+            requestAnimationFrame(() => floatPopoverMenu(target));
           } else {
-            resetTranscriptMenu(target);
+            resetPopoverMenu(target);
           }
         }
       });
@@ -1443,15 +1384,15 @@
               if (menu !== target) {
                 menu.removeAttribute('open');
                 if (menu.matches('[data-job-action-menu]')) {
-                  resetJobMenu(menu);
+                  resetPopoverMenu(menu);
                 }
               }
             });
             if (target.matches('[data-job-action-menu]')) {
-              requestAnimationFrame(() => floatJobMenu(target));
+              requestAnimationFrame(() => floatPopoverMenu(target));
             }
           } else if (target.matches('[data-job-action-menu]')) {
-            resetJobMenu(target);
+            resetPopoverMenu(target);
           }
         }
       });
@@ -1459,8 +1400,8 @@
       const closeActionMenus = () => {
         document.querySelectorAll('[data-job-action-menu][open], [data-action-menu][open]').forEach((menu) => {
           menu.removeAttribute('open');
-          if (menu.matches('[data-job-action-menu]')) {
-            resetJobMenu(menu);
+          if (menu.matches('[data-job-action-menu]') || menu.matches('[data-action-menu]')) {
+            resetPopoverMenu(menu);
           }
         });
       };

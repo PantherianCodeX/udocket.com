@@ -71,7 +71,7 @@
   <td class="px-4 py-3 text-slate-300"><time data-ts="{{ j.created_at|date:'c' }}">{{ j.created_at|date:'M j, Y g:i A' }}</time></td>
   <td class="px-4 py-3">
     <div class="flex justify-end">
-      {% include "ui/tools/_job_action_menu.html" with actions=job_actions only %}
+      {% include "ui/tools/_job_action_menu.html" with actions=job_actions popover_key='job-actions' only %}
     </div>
   </td>
   <td class="px-4 py-3 text-right text-slate-300">
