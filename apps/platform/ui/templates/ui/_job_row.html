@@ -38,8 +38,12 @@
         <span class="status-pill inline-flex items-center rounded-full border border-slate-400/40 bg-slate-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-100" data-status="CANCELLING">Cancelling</span>
       {% elif normalized == 'UPLOADING' %}
         <span class="status-pill inline-flex items-center rounded-full border border-primary-400/40 bg-primary-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-primary-100" data-status-progress="{{ progress|default_if_none:0 }}" data-status="UPLOADING">Uploading{% if progress is not None %} {{ progress|floatformat:0 }}%{% endif %}</span>
-      {% else %}
+      {% elif normalized == 'QUEUED' %}
+        <span class="status-pill inline-flex items-center rounded-full border border-amber-400/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-100" data-status="QUEUED">Queued</span>
+      {% elif normalized == 'PENDING' or normalized == 'CONVERTING' or normalized == 'RUNNING' %}
         <span class="status-pill inline-flex items-center rounded-full border border-primary-400/40 bg-primary-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-primary-100" data-status="{{ normalized }}">{{ normalized|lower|capfirst }}</span>
+      {% else %}
+        <span class="status-pill inline-flex items-center rounded-full border border-white/20 bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-300" data-status="{{ normalized }}">{{ normalized|lower|capfirst }}</span>
       {% endif %}
     {% endwith %}
   </td>
