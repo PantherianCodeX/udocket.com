@@ -54,11 +54,12 @@ STATUS_CLASS_MAP = {
     "Ready": "border-emerald-400/40 bg-emerald-500/10 text-emerald-200",
     "Not Started": "border-white/20 bg-white/5 text-slate-200",
     "No Transcript": "border-amber-400/40 bg-amber-500/10 text-amber-100",
+    "Corrupted": "border-rose-400/40 bg-rose-500/15 text-rose-200",
 }
 
 CANCELABLE_STATUSES = {"RUNNING", "PENDING", "QUEUED", "UPLOADING", "CANCELLING", "CONVERTING"}
 
-RESTARTABLE_STATUSES = {"SUCCEEDED", "FAILED", "CANCELLED"}
+RESTARTABLE_STATUSES = {"SUCCEEDED", "FAILED", "CANCELLED", "CORRUPTED"}
 
 
 def _format_metadata(metadata: dict[str, Any] | None) -> list[dict[str, Any]]:
@@ -238,23 +239,6 @@ def _job_action_entries(
                 "kind": "api",
             }
         )
-        force_convert_available = (
-            not converted_available
-            and not job_kind.startswith("audio_conversion")
-            and bool(job.audio_input)
-        )
-        if force_convert_available:
-            workflow_items.append(
-                {
-                    "label": "Restart with WAV conversion",
-                    "action": "restart",
-                    "query": "convert=1",
-                    "confirm": "Restart this job with WAV conversion?",
-                    "visible_when": "restart",
-                    "job_id": job_id,
-                    "kind": "api",
-                }
-            )
 
     if workflow_items:
         _items = _add_section("Workflow")
@@ -2041,12 +2025,20 @@ def case_job_transcript(request: HttpRequest, case_id: str, job_id: uuid.UUID) -
             break
 
     friendly_title = _friendly_job_title(job, telemetry, None)
+    modal_created = job.finished_at or job.started_at or job.created_at
     context = {
         "title": friendly_title,
         "job_id": job.id,
-        "transcript_text": transcript_text,
-        "download_url": download_url,
-        "created_at": job.finished_at or job.started_at or job.created_at,
+        "created_at": modal_created,
+        "modal_heading": "Transcript Preview",
+        "modal_title_text": friendly_title,
+        "modal_text": transcript_text,
+        "modal_text_id": f"modal-text-{job.id}",
+        "modal_download_url": download_url,
+        "modal_download_label": "Download transcript",
+        "modal_copy_label": "Copy transcript",
+        "modal_close_label": "Close",
+        "modal_empty_text": "Transcript not available for this job.",
     }
     return render(request, "ui/_transcript_modal.html", context)
 
@@ -2079,14 +2071,29 @@ def case_job_logs_modal(request: HttpRequest, case_id: str, job_id: uuid.UUID) -
             text = "…" + text
         log_text = text
 
+    serializer = JobTelemetrySerializer(job, context={"request": request, "ui_mode": True})
+    telemetry = serializer.data
+    friendly_title = _friendly_job_title(job, telemetry, None)
+    modal_created = job.finished_at or job.started_at or job.created_at
+    meta_items = []
+    if log_path.exists():
+        meta_items.append({"label": "Log path", "copy_text": str(log_path), "display": str(log_path)})
     context = {
-        "case": case,
-        "job": job,
+        "title": friendly_title,
         "job_id": str(job.id),
-        "log_text": log_text,
-        "log_path": str(log_path) if log_path.exists() else "",
+        "created_at": modal_created,
+        "modal_heading": "Job Logs",
+        "modal_title_text": friendly_title,
+        "modal_text": log_text,
+        "modal_text_id": f"modal-log-{job.id}",
+        "modal_download_url": f"/api/v1/jobs/{job.id}/logs/",
+        "modal_download_label": "Download log",
+        "modal_copy_label": "Copy log",
+        "modal_close_label": "Close",
+        "modal_empty_text": "No log entries recorded for this job.",
+        "modal_meta_items": meta_items,
     }
-    return render(request, "ui/_job_log_modal.html", context)
+    return render(request, "ui/_log_modal.html", context)
 
 
 @require_http_methods(["POST"])

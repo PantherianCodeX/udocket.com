@@ -88,6 +88,29 @@
       }).catch(() => { try { udocketToast('Copied'); } catch (_) {} });
     });
 
+    document.addEventListener('click', (evt) => {
+      const trigger = evt.target && evt.target.closest ? evt.target.closest('[data-copy-target]') : null;
+      if (!trigger) return;
+      const selector = trigger.getAttribute('data-copy-target');
+      if (!selector || !navigator.clipboard) return;
+      let source = null;
+      try {
+        source = document.querySelector(selector);
+      } catch (_) {
+        source = null;
+      }
+      if (!source) return;
+      const raw = 'value' in source && source.value != null ? source.value : source.textContent;
+      if (raw == null) return;
+      evt.preventDefault();
+      const value = String(raw);
+      const x = (evt.clientX != null ? evt.clientX : (evt.pageX != null ? (evt.pageX - window.scrollX) : 0));
+      const y = (evt.clientY != null ? evt.clientY : (evt.pageY != null ? (evt.pageY - window.scrollY) : 0));
+      navigator.clipboard.writeText(value).then(() => {
+        udocketShowToastAt(x, y, 'Copied');
+      }).catch(() => { try { udocketToast('Copied'); } catch (_) {} });
+    });
+
     function udocketLogClientError(payload) {
       try {
         const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });

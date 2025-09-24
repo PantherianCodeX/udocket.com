@@ -32,6 +32,8 @@
         <span class="status-pill inline-flex items-center rounded-full border border-emerald-400/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-emerald-200" data-status="SUCCEEDED">Succeeded</span>
       {% elif normalized == 'FAILED' %}
         <span class="status-pill inline-flex items-center rounded-full border border-rose-400/40 bg-rose-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-rose-200" data-status="FAILED">Failed</span>
+      {% elif normalized == 'CORRUPTED' %}
+        <span class="status-pill inline-flex items-center rounded-full border border-rose-400/40 bg-rose-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-rose-200" data-status="CORRUPTED">Corrupted</span>
       {% elif normalized == 'CANCELLED' %}
         <span class="status-pill inline-flex items-center rounded-full border border-slate-400/40 bg-slate-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-100" data-status="CANCELLED">Cancelled</span>
       {% elif normalized == 'CANCELLING' %}

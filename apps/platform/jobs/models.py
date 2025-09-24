@@ -23,6 +23,7 @@ class Job(models.Model):
         SUCCEEDED = "SUCCEEDED"
         FAILED = "FAILED"
         CANCELLED = "CANCELLED"
+        CORRUPTED = "CORRUPTED"
 
     class Mode(models.TextChoices):
         BATCH = "batch"

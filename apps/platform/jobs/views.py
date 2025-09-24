@@ -569,6 +569,35 @@ class JobViewSet(viewsets.ModelViewSet):
         refreshed_payload = job_telemetry(job).audio_payload(include_paths=True)
         return Response({"audio": refreshed_payload})
 
+    @action(detail=True, methods=["post"], url_path="mark-corrupted")
+    def mark_corrupted(self, request, pk=None):
+        job = self.get_object()
+        now = timezone.now()
+        if job.status != Job.Status.CORRUPTED:
+            job.status = Job.Status.CORRUPTED
+            job.finished_at = job.finished_at or now
+            job.error_message = job.error_message or "Hash verification failed"
+            job.save(update_fields=["status", "finished_at", "error_message"])
+            append_job_log(
+                str(job.case_id),
+                getattr(job, "organization_id", None),
+                str(job.id),
+                "Job marked as corrupted after hash verification mismatch",
+                level="error",
+            )
+            try:
+                send_job_update(
+                    str(job.id),
+                    event="job.corrupted",
+                    status=Job.Status.CORRUPTED,
+                    case_id=str(job.case_id),
+                )
+            except Exception:
+                log.exception("job corrupted update emit failed", extra={"job_id": job.id})
+
+        serializer = JobTelemetrySerializer(job, context={"request": request, "ui_mode": True})
+        return Response(serializer.data)
+
     @action(detail=True, methods=["post"], url_path="cancel")
     def cancel(self, request, pk=None):
         job = self.get_object()
