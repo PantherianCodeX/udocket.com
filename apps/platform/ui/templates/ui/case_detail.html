@@ -857,6 +857,13 @@
         }
       });
 
+      document.addEventListener('keydown', (evt) => {
+        if (evt.key === 'Escape') {
+          document.querySelectorAll('[data-transcript-item][open]').forEach((item) => closeTranscriptDetails(item));
+          closeActionMenus();
+        }
+      });
+
       document.body.addEventListener('click', async (evt) => {
         const transcriptAction = evt.target.closest('[data-transcript-action]');
         if (!transcriptAction) return;
