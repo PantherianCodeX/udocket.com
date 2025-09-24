@@ -93,6 +93,9 @@
     panel.style.contain = 'layout paint';
     panel.style.isolation = 'isolate';
     panel.style.transform = 'translateZ(0)';
+    // Neutralize conflicting utility classes like right-0/top-full when floating
+    panel.style.right = 'auto';
+    panel.style.bottom = 'auto';
 
     const gap = 8;
     const margin = 16;
