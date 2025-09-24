@@ -1280,8 +1280,8 @@
           portal.style.left = '0';
           portal.style.width = '100%';
           portal.style.height = '100%';
-          portal.style.pointerEvents = 'none';
-          portal.style.zIndex = '100000';
+          portal.style.pointerEvents = 'auto';
+          portal.style.zIndex = '2147483638';
           document.body.appendChild(portal);
         }
         return portal;
@@ -1307,6 +1307,7 @@
         const portal = getJobMenuPortal();
         portal.appendChild(menu);
         menu.style.pointerEvents = 'auto';
+        menu.style.zIndex = '2147483640';
 
         const updatePosition = () => {
           if (!detailsEl.isConnected || !detailsEl.open) {
@@ -1315,7 +1316,7 @@
           }
           menu.dataset.floating = '1';
           menu.style.position = 'fixed';
-          menu.style.zIndex = '100001';
+          menu.style.zIndex = '2147483640';
           menu.style.maxHeight = 'min(60vh, 360px)';
           const summaryRect = summary.getBoundingClientRect();
           const width = menu.offsetWidth || menu.scrollWidth || 240;
