@@ -18,6 +18,7 @@ from django.urls import reverse
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
+import base64
 
 from apps.platform.cases.models import Case, CaseMembership
 from apps.platform.accounts.models import OrganizationMembership, User
@@ -2095,6 +2096,17 @@ def case_job_logs_modal(request: HttpRequest, case_id: str, job_id: uuid.UUID) -
     }
     return render(request, "ui/_log_modal.html", context)
 
+
+@require_http_methods(["GET"])
+def favicon(request: HttpRequest) -> HttpResponse:
+    """Serve a tiny in-memory PNG favicon to avoid 404 noise."""
+    # 1x1 transparent PNG
+    data = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII="
+    )
+    resp = HttpResponse(data, content_type="image/png")
+    resp["Cache-Control"] = "public, max-age=86400"
+    return resp
 
 @require_http_methods(["POST"])
 def case_assign_reviewer(request: HttpRequest, case_id: str) -> HttpResponse:

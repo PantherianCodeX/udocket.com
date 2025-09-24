@@ -3,6 +3,7 @@ from apps.platform.ui import views
 
 
 urlpatterns = [
+    path("favicon.ico", views.favicon, name="ui-favicon"),
     path("", views.index, name="ui-index"),
     path("cases/<str:case_id>/", views.case_detail, name="ui-case-detail"),
     path("ui/log", views.ui_log, name="ui-log"),
