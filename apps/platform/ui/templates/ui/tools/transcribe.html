@@ -27,12 +27,13 @@
           method="post"
           enctype="multipart/form-data"
           class="space-y-5 rounded-2xl border border-white/10 bg-slate-900/70 p-6 h-full"
+          data-transcribe-form-panel
           hx-post="{{ body.form_action }}"
           hx-encoding="multipart/form-data"
           hx-target="#tool-workspace"
           hx-swap="innerHTML">
       {% csrf_token %}
-      <div class="grid gap-4 md:grid-cols-2">
+      <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start">
         <label class="group flex h-full cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-white/15 bg-slate-900/60 px-4 py-6 text-center text-sm text-slate-200 transition hover:border-primary-400 hover:bg-slate-900/70">
           <input type="file" id="transcribe-audio" name="audio" accept="audio/*" class="sr-only">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-primary-300" viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -42,54 +43,48 @@
           <span class="mt-3 font-semibold">Select audio file</span>
           <span class="mt-1 text-xs text-slate-400">WAV, MP3, M4A and more. Maximizes accuracy by converting to 16 kHz when needed.</span>
         </label>
-        <div class="flex flex-col justify-center gap-3 rounded-xl border border-dashed border-white/10 bg-slate-900/40 p-4 text-sm text-slate-200">
-          <p class="text-sm text-slate-300">Audio uploads auto-convert to reviewer-ready WAV when needed. You can also queue conversions or restarts from the Job actions menu.</p>
-          <p class="text-xs text-slate-500">Need transcript options? Expand Advanced options below to set SAS URLs, alternate languages, or diarization preferences.</p>
+        <div class="flex flex-col gap-3 rounded-xl border border-white/10 bg-slate-900/60 p-4">
+          <button type="submit" class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-primary-500/30 transition hover:bg-primary-400 disabled:cursor-not-allowed disabled:opacity-60" data-transcribe-submit disabled>
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M6.5 4.5l9 5.5-9 5.5v-11z" /></svg>
+            Upload &amp; Transcribe
+          </button>
+          <details class="group rounded-lg border border-white/10 bg-slate-900/60" data-transcribe-advanced>
+            <summary class="flex cursor-pointer items-center justify-between px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-300">
+              Advanced options
+              <svg class="h-4 w-4 transition-transform group-open:rotate-180" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.094l3.71-3.86a.75.75 0 111.08 1.04l-4.247 4.41a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z" clip-rule="evenodd" /></svg>
+            </summary>
+            <div class="space-y-4 border-t border-white/10 px-3 py-4 text-sm text-slate-200">
+              <label class="block text-xs uppercase tracking-wide text-slate-400">SAS URL
+                <input type="url" name="audio_url" placeholder="https://storage.azure.com/..." class="mt-2 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none">
+              </label>
+              <label class="block text-xs uppercase tracking-wide text-slate-400">Language
+                <input type="text" name="language" value="{{ body.language_default }}" class="mt-2 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none">
+              </label>
+              <label class="inline-flex items-center gap-2 text-sm text-slate-200">
+                <input type="checkbox" name="diarization" value="on" class="h-4 w-4 rounded border-white/20 bg-slate-900/70 text-primary-500 focus:ring-primary-400" checked>
+                Enable diarization (batch mode)
+              </label>
+              <p class="text-[11px] text-slate-500">Jobs queue in canadacentral or canadaeast only. On-demand jobs auto-convert audio to 16 kHz WAV where needed.</p>
+            </div>
+          </details>
         </div>
-      </div>
-
-      <details class="rounded-lg border border-white/10 bg-slate-900/60">
-        <summary class="flex cursor-pointer items-center justify-between px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-300">
-          Advanced options
-          <svg class="h-4 w-4 transition-transform group-open:rotate-180" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.094l3.71-3.86a.75.75 0 111.08 1.04l-4.247 4.41a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z" clip-rule="evenodd" /></svg>
-        </summary>
-        <div class="space-y-4 border-t border-white/10 px-3 py-4 text-sm text-slate-200">
-          <label class="block text-xs uppercase tracking-wide text-slate-400">SAS URL
-            <input type="url" name="audio_url" placeholder="https://storage.azure.com/..." class="mt-2 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none">
-          </label>
-          <label class="block text-xs uppercase tracking-wide text-slate-400">Language
-            <input type="text" name="language" value="{{ body.language_default }}" class="mt-2 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none">
-          </label>
-          <label class="inline-flex items-center gap-2 text-sm text-slate-200">
-            <input type="checkbox" name="diarization" value="on" class="h-4 w-4 rounded border-white/20 bg-slate-900/70 text-primary-500 focus:ring-primary-400" checked>
-            Enable diarization (batch mode)
-          </label>
-          <p class="text-[11px] text-slate-500">Jobs queue in canadacentral or canadaeast only. On-demand jobs auto-convert audio to 16 kHz WAV where needed.</p>
-        </div>
-      </details>
-
-      <div class="flex flex-wrap items-center justify-end gap-3">
-        <button type="submit" class="inline-flex items-center gap-2 rounded-lg bg-primary-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-primary-500/30 transition hover:bg-primary-400 disabled:cursor-not-allowed disabled:opacity-60" data-transcribe-submit disabled>
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M6.5 4.5l9 5.5-9 5.5v-11z" /></svg>
-          Upload &amp; Transcribe
-        </button>
       </div>
     </form>
 
-    <div class="flex h-full min-h-[20rem] flex-col gap-4 rounded-2xl border border-white/10 bg-slate-900/70 p-6 text-sm text-slate-200" data-transcript-sidebar>
+    <div class="flex h-full min-h-[20rem] flex-col gap-4 overflow-visible rounded-2xl border border-white/10 bg-slate-900/70 p-6 text-sm text-slate-200" data-transcript-sidebar>
       <p class="text-xs uppercase tracking-wide text-slate-400">Create Case Artifact</p>
       {% if body.approved_transcripts %}
         <ul class="flex-1 space-y-2 overflow-y-auto pr-1 text-xs" data-transcript-list>
           {% for transcript in body.approved_transcripts %}
             <li>
-              <details class="group w-full rounded-lg border border-white/10 bg-slate-900/50 transition hover:border-primary-400 focus-within:border-primary-400" data-transcript-item>
-                <summary class="flex w-full cursor-pointer items-start justify-between gap-3 px-3 py-2 text-left text-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400">
-                  <span class="line-clamp-3 text-sm leading-snug" title="{{ transcript.label }}">{{ transcript.label }}</span>
-                  <svg xmlns="http://www.w3.org/2000/svg" class="mt-1 h-4 w-4 flex-none text-slate-400 transition group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor">
+              <details class="group relative w-full rounded-lg border border-white/10 bg-slate-900/50 transition hover:border-primary-400 focus-within:border-primary-400" data-transcript-item>
+                <summary class="flex w-full cursor-pointer items-center justify-between gap-3 px-3 py-2 text-left text-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400">
+                  <span class="line-clamp-2 text-sm leading-snug" title="{{ transcript.label }}">{{ transcript.label }}</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-none text-slate-400 transition group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor">
                     <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.094l3.71-3.86a.75.75 0 111.08 1.04l-4.247 4.41a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
                   </svg>
                 </summary>
-                <div class="mt-2 space-y-3 border-t border-white/10 px-3 py-2 text-xs text-slate-200" data-transcript-menu>
+                <div class="absolute right-3 top-full z-40 mt-2 w-60 space-y-3 rounded-xl border border-white/10 bg-slate-900/95 p-3 text-xs text-slate-200 shadow-xl shadow-black/40" data-transcript-menu>
                   <div class="space-y-1" data-transcript-promote>
                     <p class="text-[10px] uppercase tracking-wide text-slate-400">Case artifact</p>
                     <button type="button"

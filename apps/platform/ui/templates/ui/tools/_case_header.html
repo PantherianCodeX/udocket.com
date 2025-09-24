@@ -1,45 +1,40 @@
 <details class="group rounded-2xl border border-white/10 bg-white/5 shadow-xl shadow-black/30" data-case-header>
-  <summary class="flex cursor-pointer flex-col gap-5 px-6 py-5 text-left transition group-open:bg-white/10">
-    <div class="flex flex-col gap-4 md:flex-row md:items-start">
-      <div class="flex min-w-0 flex-1 flex-col gap-3">
-        <div class="flex min-w-0 flex-wrap items-center gap-4">
+  <summary class="relative flex cursor-pointer flex-col gap-4 px-5 py-4 text-left transition group-open:bg-white/10">
+    <div class="w-full space-y-3">
+      <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_20rem] lg:items-stretch">
+        <!-- Col 1: Title + Client (stacked) -->
+        <div class="min-w-0">
           <h1 class="truncate text-2xl font-semibold text-white">{{ case_header.title }}</h1>
-          {% if case_header.owner_labels %}
-            <span class="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-[11px] uppercase tracking-wide text-slate-200 whitespace-nowrap">
-              Owner: <span class="font-semibold text-white/90">{{ case_header.owner_labels|join:", " }}</span>
-            </span>
+          <p class="mt-1 text-xs uppercase tracking-wide text-slate-400">
+            Client · <span class="font-semibold text-slate-100"{% if case_header.client_label %} title="Client user: {{ case_header.client_label }}"{% endif %}>{{ case_header.client_name }}</span>
+          </p>
+        </div>
+        <!-- Col 2: Case Owner (row 1) + Reviewer (row 2) -->
+        <div class="min-w-0">
+          <p class="text-xs uppercase tracking-wide text-slate-400">Case Owner</p>
+          <p class="mt-1 text-sm font-semibold text-slate-100">{{ case_header.owner_labels|join:", "|default:"Unassigned" }}</p>
+          <p class="mt-3 text-xs uppercase tracking-wide text-slate-400">Reviewer</p>
+          <p class="mt-1 text-sm font-semibold text-slate-100">{{ case_header.reviewer_label|default:"Unassigned" }}</p>
+        </div>
+        <!-- Col 3: Next Hearing (row 1) + Filing Deadline (row 2) -->
+        <div class="min-w-0">
+          <p class="text-xs uppercase tracking-wide text-slate-400">Next Hearing</p>
+          {% if case_header.next_hearing and case_header.next_hearing.value %}
+            <time class="mt-1 block text-sm font-semibold text-white" data-ts="{{ case_header.next_hearing.value|date:'c' }}">{{ case_header.next_hearing.display }}</time>
+          {% else %}
+            <span class="mt-1 block text-sm text-slate-400">Not scheduled</span>
           {% endif %}
-          {% if case_header.reviewer_label %}
-            <span class="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-[11px] uppercase tracking-wide text-slate-200 whitespace-nowrap">
-              Reviewer: <span class="font-semibold text-white/90">{{ case_header.reviewer_label }}</span>
-            </span>
+          <p class="mt-3 text-xs uppercase tracking-wide text-slate-400">Filing Deadline</p>
+          {% if case_header.filing_deadline and case_header.filing_deadline.value %}
+            <time class="mt-1 block text-sm font-semibold text-white" data-ts="{{ case_header.filing_deadline.value|date:'c' }}">{{ case_header.filing_deadline.display }}</time>
+          {% else %}
+            <span class="mt-1 block text-sm text-slate-400">Not set</span>
           {% endif %}
         </div>
-        {% if case_header.filing_deadline and case_header.filing_deadline.value or case_header.next_hearing and case_header.next_hearing.value %}
-          <div class="flex flex-wrap items-center gap-2 text-xs uppercase tracking-wide text-slate-300">
-            {% if case_header.filing_deadline and case_header.filing_deadline.value %}
-              <span class="inline-flex items-center rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-slate-200">
-                Filing Deadline: <time class="ml-1 font-semibold text-white/90" data-ts="{{ case_header.filing_deadline.value|date:'c' }}">{{ case_header.filing_deadline.display }}</time>
-              </span>
-            {% endif %}
-            {% if case_header.next_hearing and case_header.next_hearing.value %}
-              <span class="inline-flex items-center rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-slate-200">
-                Next Hearing: <time class="ml-1 font-semibold text-white/90" data-ts="{{ case_header.next_hearing.value|date:'c' }}">{{ case_header.next_hearing.display }}</time>
-              </span>
-            {% endif %}
-          </div>
-        {% endif %}
-        <div class="text-sm text-slate-300">
-          <span class="block">Client · <span class="font-medium text-slate-100">{{ case_header.client_name }}</span></span>
-          {% if case_header.client_label %}
-            <span class="mt-1 inline-flex items-center rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-[11px] uppercase tracking-wide text-slate-200">Client User: <span class="ml-1 font-semibold text-white/90">{{ case_header.client_label }}</span></span>
-          {% endif %}
-        </div>
-      </div>
-      <div class="ml-auto w-full md:w-72">
-        <div class="w-full rounded-xl border border-white/10 bg-slate-900/60 p-4 text-sm text-slate-200">
-          <p class="text-xs uppercase tracking-wide text-slate-500">Last Activity</p>
-          <p class="mt-2 font-semibold text-white">
+        <!-- Col 4: Last Activity, stretch to match tallest column -->
+        <div class="rounded-lg border border-white/12 bg-slate-900/60 px-4 py-3 text-xs text-slate-300 lg:justify-self-end lg:self-stretch h-full">
+          <p class="uppercase tracking-wide text-slate-500">Last activity</p>
+          <p class="mt-1 font-semibold text-white">
             {% if case_header.last_activity_ts %}
               {% if case_header.last_activity_label %}
                 {{ case_header.last_activity_label }} ·
@@ -52,7 +47,7 @@
         </div>
       </div>
     </div>
-    <span class="text-[11px] text-center uppercase tracking-wide text-slate-500">Click for details</span>
+    <span class="pointer-events-none absolute bottom-2 left-5 text-[11px] uppercase tracking-wide text-slate-500">Click for details</span>
   </summary>
   <div class="border-t border-white/10 px-6 py-5 text-sm text-slate-200">
     <div class="rounded-xl border border-white/10 bg-slate-900/60 p-4">

@@ -624,6 +624,21 @@ def _case_owner_labels(memberships: List[CaseMembership]) -> List[str]:
     return [_user_label(m.user) for m in _case_owner_memberships(memberships) if m.user]
 
 
+def _case_owner_details(memberships: List[CaseMembership]) -> List[Dict[str, str]]:
+    details: List[Dict[str, str]] = []
+    for membership in _case_owner_memberships(memberships):
+        user = membership.user
+        if not user:
+            continue
+        details.append(
+            {
+                "label": _user_label(user),
+                "username": user.username or "",
+            }
+        )
+    return details
+
+
 def _case_field_specs() -> List[Dict[str, Any]]:
     return [
         {"name": "title", "label": "Title", "type": "text"},
@@ -1097,8 +1112,16 @@ def _build_case_header_context(
     memberships: List[CaseMembership],
     job_summary_last_update: Optional[datetime],
 ) -> Dict[str, Any]:
-    owners = _case_owner_labels(memberships)
-    reviewer_label = _user_label(case.reviewer) if case.reviewer else None
+    owner_details = _case_owner_details(memberships)
+    owners = [item["label"] for item in owner_details]
+    reviewer_detail = (
+        {
+            "label": _user_label(case.reviewer),
+            "username": case.reviewer.username or "",
+        }
+        if case.reviewer
+        else None
+    )
     client_label = _user_label(case.client_user) if case.client_user else None
 
     activity_candidates: List[Tuple[Optional[datetime], Optional[str]]] = []
@@ -1124,7 +1147,9 @@ def _build_case_header_context(
         "title": case.title,
         "client_name": case.client_name or "—",
         "owner_labels": owners,
-        "reviewer_label": reviewer_label,
+        "owner_details": owner_details,
+        "reviewer_detail": reviewer_detail,
+        "reviewer_label": reviewer_detail["label"] if reviewer_detail else None,
         "client_label": client_label,
         "next_hearing": next_hearing_field,
         "filing_deadline": filing_deadline_field,

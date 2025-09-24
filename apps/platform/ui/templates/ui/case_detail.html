@@ -88,6 +88,7 @@
       const TERMINAL_STATUSES = ['SUCCEEDED', 'FAILED', 'CANCELLED', 'ERROR'];
       const CANCEL_ACTIVE = new Set(['RUNNING', 'PENDING', 'QUEUED', 'UPLOADING', 'CANCELLING', 'CONVERTING']);
       const RESTART_ACTIVE = new Set(['SUCCEEDED', 'FAILED', 'CANCELLED']);
+      const JOB_ROW_STATUS_CLASSES = ['bg-emerald-500/10', 'bg-rose-500/10', 'bg-amber-500/10', 'bg-primary-500/10', 'bg-white/5'];
 
       const JobsState = {
         sockets: {},
@@ -95,6 +96,8 @@
         lastStatus: {},
         currentCaseId: caseId,
       };
+      let transcribeSidebarBinding = null;
+      const transcriptMenuState = new WeakMap();
 
       function normalizeStatus(status) {
         return (status || '').toString().toUpperCase();
@@ -181,6 +184,10 @@
         const statusCell = document.getElementById(`job-status-${jobId}`);
       if (statusCell) {
           renderStatusLabel(statusCell, status, progress);
+        }
+        const jobRow = document.querySelector(`[data-job="${jobId}"]`);
+        if (jobRow) {
+          jobRow.classList.remove(...JOB_ROW_STATUS_CLASSES);
         }
         updateJobActions(jobId, status);
         const detailContainer = document.querySelector(`[data-job-detail="${jobId}"]`);
@@ -447,6 +454,86 @@
         return meta ? meta.getAttribute('content') || '' : '';
       }
 
+      function syncTranscribeSidebar(root) {
+        const container = root && root.closest ? root.closest('[data-transcribe]') || root : root;
+        if (!container) return;
+        const formPanel = container.querySelector('[data-transcribe-form-panel]');
+        const sidebar = container.querySelector('[data-transcript-sidebar]');
+        if (!formPanel || !sidebar) return;
+
+        if (transcribeSidebarBinding) {
+          window.removeEventListener('resize', transcribeSidebarBinding.onResize);
+          if (transcribeSidebarBinding.mediaQuery && transcribeSidebarBinding.onMediaChange) {
+            const previousQuery = transcribeSidebarBinding.mediaQuery;
+            if (previousQuery.removeEventListener) {
+              previousQuery.removeEventListener('change', transcribeSidebarBinding.onMediaChange);
+            } else if (previousQuery.removeListener) {
+              previousQuery.removeListener(transcribeSidebarBinding.onMediaChange);
+            }
+          }
+          if (transcribeSidebarBinding.observer) {
+            transcribeSidebarBinding.observer.disconnect();
+          }
+          if (transcribeSidebarBinding.sidebar && transcribeSidebarBinding.sidebar !== sidebar) {
+            transcribeSidebarBinding.sidebar.style.maxHeight = '';
+          }
+          transcribeSidebarBinding = null;
+        }
+
+        const mediaQuery = window.matchMedia('(min-width: 1024px)');
+        const apply = () => {
+          if (!document.body.contains(formPanel) || !document.body.contains(sidebar)) {
+            if (transcribeSidebarBinding) {
+              window.removeEventListener('resize', transcribeSidebarBinding.onResize);
+              if (transcribeSidebarBinding.mediaQuery && transcribeSidebarBinding.onMediaChange) {
+                const registeredQuery = transcribeSidebarBinding.mediaQuery;
+                if (registeredQuery.removeEventListener) {
+                  registeredQuery.removeEventListener('change', transcribeSidebarBinding.onMediaChange);
+                } else if (registeredQuery.removeListener) {
+                  registeredQuery.removeListener(transcribeSidebarBinding.onMediaChange);
+                }
+              }
+              if (transcribeSidebarBinding.observer) {
+                transcribeSidebarBinding.observer.disconnect();
+              }
+              if (transcribeSidebarBinding.sidebar) {
+                transcribeSidebarBinding.sidebar.style.maxHeight = '';
+              }
+              transcribeSidebarBinding = null;
+            }
+            return;
+          }
+          if (mediaQuery.matches) {
+            const height = formPanel.getBoundingClientRect().height;
+            sidebar.style.maxHeight = `${Math.max(320, Math.round(height))}px`;
+          } else {
+            sidebar.style.maxHeight = '';
+          }
+        };
+
+        const onResize = () => apply();
+        window.addEventListener('resize', onResize, { passive: true });
+        let observer = null;
+        if (window.ResizeObserver) {
+          observer = new ResizeObserver(() => apply());
+          observer.observe(formPanel);
+        }
+        const onMediaChange = () => apply();
+        if (mediaQuery.addEventListener) {
+          mediaQuery.addEventListener('change', onMediaChange);
+        } else if (mediaQuery.addListener) {
+          mediaQuery.addListener(onMediaChange);
+        }
+        apply();
+        transcribeSidebarBinding = {
+          onResize,
+          observer,
+          mediaQuery,
+          onMediaChange,
+          sidebar,
+        };
+      }
+
       function setupTranscribeSection(root) {
         const form = root.querySelector('#transcribe-form');
         if (!form) return;
@@ -466,6 +553,7 @@
 
         form.addEventListener('change', updateSubmitState);
         updateSubmitState();
+        syncTranscribeSidebar(root);
 
         document.body.addEventListener('htmx:beforeRequest', (evt) => {
           if (evt.target !== form) return;
@@ -615,18 +703,116 @@
         return true;
       }
 
+      function resetTranscriptMenu(detailsEl) {
+        const state = transcriptMenuState.get(detailsEl);
+        if (!state) return;
+        window.removeEventListener('scroll', state.onScroll, true);
+        window.removeEventListener('resize', state.onResize);
+        const { menu, original } = state;
+        if (menu && menu.isConnected) {
+          Object.entries(original).forEach(([key, value]) => {
+            menu.style[key] = value;
+          });
+          menu.dataset.floating = '';
+        }
+        transcriptMenuState.delete(detailsEl);
+      }
+
+      function floatTranscriptMenu(detailsEl) {
+        const menu = detailsEl.querySelector('[data-transcript-menu]');
+        const summary = detailsEl.querySelector('summary');
+        if (!menu || !summary) return;
+        resetTranscriptMenu(detailsEl);
+        const original = {
+          position: menu.style.position,
+          top: menu.style.top,
+          left: menu.style.left,
+          right: menu.style.right,
+          bottom: menu.style.bottom,
+          zIndex: menu.style.zIndex,
+          maxHeight: menu.style.maxHeight,
+        };
+
+        const updatePosition = () => {
+          if (!detailsEl.isConnected || !detailsEl.open) {
+            resetTranscriptMenu(detailsEl);
+            return;
+          }
+          menu.dataset.floating = '1';
+          menu.style.position = 'fixed';
+          menu.style.zIndex = '9999';
+          menu.style.maxHeight = 'min(60vh, 360px)';
+          const summaryRect = summary.getBoundingClientRect();
+          const menuRect = menu.getBoundingClientRect();
+          const menuWidth = menuRect.width || menu.offsetWidth || 240;
+          let left = summaryRect.right - menuWidth;
+          left = Math.min(left, window.innerWidth - menuWidth - 16);
+          left = Math.max(16, left);
+          let top = summaryRect.bottom + 8;
+          const menuHeight = menuRect.height || menu.offsetHeight || 200;
+          top = Math.min(top, window.innerHeight - menuHeight - 16);
+          top = Math.max(16, top);
+          menu.style.left = `${Math.round(left)}px`;
+          menu.style.top = `${Math.round(top)}px`;
+        };
+
+        menu.dataset.floating = '1';
+        updatePosition();
+        const state = {
+          menu,
+          original,
+          onScroll: updatePosition,
+          onResize: updatePosition,
+        };
+        transcriptMenuState.set(detailsEl, state);
+        window.addEventListener('scroll', updatePosition, true);
+        window.addEventListener('resize', updatePosition);
+      }
+
+      function closeTranscriptDetails(target) {
+        if (target instanceof HTMLElement && target.matches('[data-transcript-item]')) {
+          target.removeAttribute('open');
+          resetTranscriptMenu(target);
+        }
+      }
+
+      document.addEventListener('pointerdown', (evt) => {
+        const transcriptSummary = evt.target.closest('[data-transcript-item] > summary');
+        if (transcriptSummary) {
+          const owner = transcriptSummary.parentElement;
+          document.querySelectorAll('[data-transcript-item][open]').forEach((item) => {
+            if (item !== owner) closeTranscriptDetails(item);
+          });
+          if (owner && owner.open) {
+            requestAnimationFrame(() => floatTranscriptMenu(owner));
+          }
+        }
+        const actionSummary = evt.target.closest('[data-job-action-menu] > summary, [data-action-menu] > summary');
+        if (actionSummary) {
+          const owner = actionSummary.parentElement;
+          document.querySelectorAll('[data-job-action-menu][open], [data-action-menu][open]').forEach((menu) => {
+            if (menu !== owner) menu.removeAttribute('open');
+          });
+        }
+      });
+
       document.addEventListener('click', (evt) => {
-        if (!evt.target.closest('[data-transcript-item]')) {
-          document.querySelectorAll('[data-transcript-item][open]').forEach((item) => item.removeAttribute('open'));
+        if (!evt.target.closest('[data-transcript-item], [data-transcript-menu]')) {
+          document.querySelectorAll('[data-transcript-item][open]').forEach((item) => closeTranscriptDetails(item));
         }
       });
 
       document.addEventListener('toggle', (evt) => {
         const target = evt.target;
-        if (target instanceof HTMLElement && target.matches('[data-transcript-item]') && target.open) {
-          document.querySelectorAll('[data-transcript-item][open]').forEach((item) => {
-            if (item !== target) item.removeAttribute('open');
-          });
+        if (target instanceof HTMLElement && target.matches('[data-transcript-item]')) {
+          if (target.open) {
+            document.querySelectorAll('[data-transcript-item][open]').forEach((item) => {
+              if (item !== target) closeTranscriptDetails(item);
+            });
+            requestAnimationFrame(() => floatTranscriptMenu(target));
+          } else {
+            resetTranscriptMenu(target);
+          }
         }
       });
 

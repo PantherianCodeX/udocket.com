@@ -3,14 +3,15 @@ from __future__ import annotations
 from typing import Iterable
 import re
 
-_UNIQUE_SUFFIX_RE = re.compile(r"\((\d+)\)$")
+_UNIQUE_SUFFIX_RE = re.compile(r"(?:\(|-)(\d+)\)?$")
 
 
 def unique_title(base: str, existing: Iterable[str]) -> str:
-    """Return a title unique within *existing* by adding (n) suffixes.
+    """Return a title unique within *existing* by adding -n suffixes.
 
-    Titles are compared case-sensitively. Existing titles ending with ``(n)`` will
-    be considered when computing the next suffix. ``existing`` can be any
+    Titles are compared case-sensitively. Existing titles ending with ``-n`` (or
+    legacy ``(n)`` values) will be considered when computing the next suffix.
+    ``existing`` can be any
     iterable and is consumed entirely in memory.
     """
 
@@ -33,4 +34,4 @@ def unique_title(base: str, existing: Iterable[str]) -> str:
         if idx > max_idx:
             max_idx = idx
 
-    return f"{base_clean}({max_idx + 1})"
+    return f"{base_clean}-{max_idx + 1}"

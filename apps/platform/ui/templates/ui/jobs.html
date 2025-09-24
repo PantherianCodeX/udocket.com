@@ -180,6 +180,28 @@
   window.addEventListener('DOMContentLoaded', bootstrapJobs);
 
   document.addEventListener('htmx:afterSwap', bootstrapJobs);
+
+  const closeJobMenus = () => {
+    document.querySelectorAll('[data-job-action-menu][open]').forEach(menu => menu.removeAttribute('open'));
+  };
+
+  document.addEventListener('pointerdown', (evt) => {
+    const summary = evt.target.closest('[data-job-action-menu] > summary');
+    if (summary) {
+      const owner = summary.parentElement;
+      document.querySelectorAll('[data-job-action-menu][open]').forEach(menu => {
+        if (menu !== owner) menu.removeAttribute('open');
+      });
+      return;
+    }
+    if (!evt.target.closest('[data-job-action-menu]')) {
+      closeJobMenus();
+    }
+  });
+
+  document.addEventListener('keydown', (evt) => {
+    if (evt.key === 'Escape') closeJobMenus();
+  });
 </script>
 {% endblock %}
 {% block content %}
@@ -218,7 +240,7 @@
           </thead>
           <tbody id="jobs-body" class="divide-y divide-white/5 bg-slate-900/40 text-slate-100">
             {% for j in jobs %}
-            <tr data-job="{{ j.id }}" class="transition hover:bg-white/10">
+            <tr data-job="{{ j.id }}" class="transition">
               <td class="px-4 py-3">
                 <button type="button" class="inline-flex items-center gap-1 rounded border border-white/15 bg-white/5 px-2 py-0.5 text-[11px] font-mono text-primary-200 transition hover:border-primary-300 cursor-copy underline decoration-dotted decoration-white/20 hover:decoration-primary-300" data-copy-text="{{ j.id }}" title="{{ j.id }}">
                   {{ j.id|short_uuid }}
@@ -233,21 +255,21 @@
               <td class="px-4 py-3" id="job-status-{{ j.id }}">
                 {% with status=j.status|upper %}
                   {% if status == 'SUCCEEDED' %}
-                    <span class="status-pill inline-flex items-center rounded-full border border-emerald-400/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-emerald-200" data-status="{{ status }}">Succeeded</span>
+                    <span class="status-pill inline-flex items-center rounded-full border border-emerald-400/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-emerald-200" data-status="{{ status }}"><span data-job-status-label>Succeeded</span></span>
                   {% elif status == 'FAILED' %}
-                    <span class="status-pill inline-flex items-center rounded-full border border-rose-400/40 bg-rose-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-rose-200" data-status="{{ status }}">Failed</span>
+                    <span class="status-pill inline-flex items-center rounded-full border border-rose-400/40 bg-rose-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-rose-200" data-status="{{ status }}"><span data-job-status-label>Failed</span></span>
                   {% elif status == 'CANCELLED' %}
-                    <span class="status-pill inline-flex items-center rounded-full border border-slate-400/40 bg-slate-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-100" data-status="{{ status }}">Cancelled</span>
+                    <span class="status-pill inline-flex items-center rounded-full border border-slate-400/40 bg-slate-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-100" data-status="{{ status }}"><span data-job-status-label>Cancelled</span></span>
                   {% elif status == 'CANCELLING' %}
-                    <span class="status-pill inline-flex items-center rounded-full border border-slate-400/40 bg-slate-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-100" data-status="{{ status }}">Cancelling</span>
+                    <span class="status-pill inline-flex items-center rounded-full border border-slate-400/40 bg-slate-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-100" data-status="{{ status }}"><span data-job-status-label>Cancelling</span></span>
                   {% elif status == 'UPLOADING' %}
-                    <span class="status-pill inline-flex items-center rounded-full border border-primary-400/40 bg-primary-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-primary-100" data-status="{{ status }}">Uploading</span>
+                    <span class="status-pill inline-flex items-center rounded-full border border-primary-400/40 bg-primary-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-primary-100" data-status="{{ status }}"><span data-job-status-label>Uploading</span></span>
                   {% elif status == 'RUNNING' or status == 'PENDING' or status == 'CONVERTING' %}
-                    <span class="status-pill inline-flex items-center rounded-full border border-primary-400/40 bg-primary-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-primary-100" data-status="{{ status }}">{{ status|lower|capfirst }}</span>
+                    <span class="status-pill inline-flex items-center rounded-full border border-primary-400/40 bg-primary-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-primary-100" data-status="{{ status }}"><span data-job-status-label>{{ status|lower|capfirst }}</span></span>
                   {% elif status == 'QUEUED' %}
-                    <span class="status-pill inline-flex items-center rounded-full border border-amber-400/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-100" data-status="{{ status }}">Queued</span>
+                    <span class="status-pill inline-flex items-center rounded-full border border-amber-400/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-100" data-status="{{ status }}"><span data-job-status-label>Queued</span></span>
                   {% else %}
-                    <span class="status-pill inline-flex items-center rounded-full border border-white/20 bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-300" data-status="{{ status }}">{{ status|lower|capfirst }}</span>
+                    <span class="status-pill inline-flex items-center rounded-full border border-white/20 bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-300" data-status="{{ status }}"><span data-job-status-label>{{ status|lower|capfirst }}</span></span>
                   {% endif %}
                 {% endwith %}
               </td>

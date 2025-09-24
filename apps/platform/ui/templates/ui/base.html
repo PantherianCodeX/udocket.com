@@ -141,6 +141,8 @@
     details.group > summary { display: inline-flex; align-items: center; gap: 0.5rem; }
     details.group > div { display: none; }
     details.group[open] > div { display: block; }
+    /* Case header override: make summary span full width */
+    details[data-case-header] > summary { display: block; width: 100%; }
     /* Site-wide copy-to-clipboard affordance */
     [data-copy-text] {
       cursor: copy;
