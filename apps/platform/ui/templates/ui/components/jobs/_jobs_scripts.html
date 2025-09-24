@@ -1,0 +1,121 @@
+<script>
+  window.jobPollers = window.jobPollers || {};
+  window.jobSockets = window.jobSockets || {};
+
+  const statusUtils = window.udocketStatus || {};
+  const renderStatusLabel = statusUtils.renderStatusLabel || (() => {});
+  const TERMINAL_STATUSES = statusUtils.TERMINAL_STATUSES || ['SUCCEEDED', 'FAILED', 'CANCELLED', 'ERROR', 'CORRUPTED'];
+
+  function connectWS(jobId) {
+    const statusEl = document.getElementById(`job-status-${jobId}`);
+    const transcriptEl = document.getElementById(`job-transcript-${jobId}`);
+    const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + `/ws/jobs/${jobId}/`;
+    const ws = new WebSocket(url);
+    window.jobSockets[jobId] = ws;
+    ws.onopen = () => {
+      if (window.jobPollers[jobId]) {
+        clearInterval(window.jobPollers[jobId]);
+        delete window.jobPollers[jobId];
+      }
+    };
+    ws.onmessage = (ev) => {
+      try {
+        const data = JSON.parse(ev.data);
+        const progress = data.progress_percent ?? data.upload_progress;
+        if (statusEl) renderStatusLabel(statusEl, data.status, progress);
+        const transcriptPath = data.transcript_file || data.transcript_path;
+        if (transcriptEl && (transcriptPath || (statusEl && statusEl.dataset && statusEl.dataset.status === 'SUCCEEDED'))) {
+          transcriptEl.innerHTML = `<a class="font-medium text-primary-300 underline" href="/api/v1/jobs/${data.job_id || jobId}/download/">Download</a>`;
+        }
+        const normalized = statusEl && statusEl.dataset ? statusEl.dataset.status : '';
+        if (normalized && TERMINAL_STATUSES.includes(normalized)) {
+          clearInterval(window.jobPollers[jobId]);
+          delete window.jobPollers[jobId];
+        }
+      } catch (_) {}
+    };
+    ws.onerror = (err) => {
+      console.warn('Job websocket error', jobId, err);
+    };
+    ws.onclose = () => {
+      delete window.jobSockets[jobId];
+      ensurePolling(jobId, true);
+    };
+  }
+
+  async function pollJob(jobId) {
+    try {
+      const resp = await fetch(`/api/v1/jobs/${jobId}/status/`);
+      if (!resp.ok) return;
+      const data = await resp.json();
+      const statusEl = document.getElementById(`job-status-${jobId}`);
+      const transcriptEl = document.getElementById(`job-transcript-${jobId}`);
+      const progress = data.progress_percent ?? data.upload_progress;
+      if (statusEl) renderStatusLabel(statusEl, data.status, progress);
+      if (transcriptEl && (data.transcript_path || (statusEl && statusEl.dataset && statusEl.dataset.status === 'SUCCEEDED'))) {
+        transcriptEl.innerHTML = `<a class="font-medium text-primary-300 underline" href="/api/v1/jobs/${jobId}/download/">Download</a>`;
+      }
+      const normalized = statusEl && statusEl.dataset ? statusEl.dataset.status : '';
+      if (normalized && TERMINAL_STATUSES.includes(normalized)) {
+        clearInterval(window.jobPollers[jobId]);
+        delete window.jobPollers[jobId];
+      }
+    } catch (_) {}
+  }
+
+  function ensurePolling(jobId, force = false) {
+    if (window.jobPollers[jobId]) return;
+    const statusEl = document.getElementById(`job-status-${jobId}`);
+    if (!statusEl) return;
+    const normalized = statusEl.dataset ? statusEl.dataset.status : '';
+    if (normalized && TERMINAL_STATUSES.includes(normalized)) return;
+    const socket = window.jobSockets[jobId];
+    if (!force && socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+      return;
+    }
+    window.jobPollers[jobId] = setInterval(() => pollJob(jobId), 2000);
+  }
+
+  function bootstrapJobs() {
+    document.querySelectorAll('[data-job]').forEach(row => {
+      const jobId = row.dataset.job;
+      if (!row.dataset.ws) {
+        connectWS(jobId);
+        row.dataset.ws = '1';
+      }
+      ensurePolling(jobId);
+      const statusEl = document.getElementById(`job-status-${jobId}`);
+      if (statusEl) {
+        const statusValue = statusEl.dataset && statusEl.dataset.status ? statusEl.dataset.status : statusEl.textContent;
+        const progressValue = statusEl.dataset && statusEl.dataset.progress ? parseFloat(statusEl.dataset.progress) : undefined;
+        renderStatusLabel(statusEl, statusValue, progressValue);
+      }
+    });
+  }
+
+  window.addEventListener('DOMContentLoaded', bootstrapJobs);
+
+  document.addEventListener('htmx:afterSwap', bootstrapJobs);
+
+  const closeJobMenus = () => {
+    document.querySelectorAll('[data-job-action-menu][open]').forEach(menu => menu.removeAttribute('open'));
+  };
+
+  document.addEventListener('pointerdown', (evt) => {
+    const summary = evt.target.closest('[data-job-action-menu] > summary');
+    if (summary) {
+      const owner = summary.parentElement;
+      document.querySelectorAll('[data-job-action-menu][open]').forEach(menu => {
+        if (menu !== owner) menu.removeAttribute('open');
+      });
+      return;
+    }
+    if (!evt.target.closest('[data-job-action-menu]')) {
+      closeJobMenus();
+    }
+  });
+
+  document.addEventListener('keydown', (evt) => {
+    if (evt.key === 'Escape') closeJobMenus();
+  });
+</script>

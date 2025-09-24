@@ -1,0 +1,82 @@
+<section class="space-y-6">
+  <div class="rounded-2xl border border-white/10 bg-white/10 p-6 shadow-lg shadow-black/30">
+    <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      <div>
+        <p class="text-xs uppercase tracking-wide text-slate-300">Jobs · {{ active_org.name }}</p>
+        <h1 class="text-3xl font-semibold text-white">Recent transcription jobs</h1>
+        <p class="mt-2 text-sm text-slate-300">Monitoring jobs per organization helps keep tenant boundaries intact while surfacing operational issues quickly.</p>
+      </div>
+      <div class="rounded-xl border border-white/10 bg-slate-900/60 px-4 py-3 text-center text-sm text-slate-200">
+        <p class="text-xs uppercase tracking-wide text-slate-400">Displayed</p>
+        <p class="mt-1 text-xl font-semibold text-white">{{ jobs|length }}</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="rounded-2xl border border-white/10 bg-white/5 shadow-xl shadow-black/30">
+    <div class="flex items-center justify-between border-b border-white/10 px-6 py-4">
+      <h2 class="text-lg font-semibold text-white">Jobs</h2>
+      <span class="text-xs uppercase tracking-wide text-slate-400">Live updates</span>
+    </div>
+    <div class="overflow-hidden">
+      <table class="min-w-full divide-y divide-white/10 text-sm">
+        <thead class="bg-white/5 text-left text-xs uppercase tracking-wide text-slate-400">
+          <tr>
+            <th class="px-4 py-3">ID</th>
+            <th class="px-4 py-3">Case</th>
+            <th class="px-4 py-3">Mode</th>
+            <th class="px-4 py-3">Status</th>
+            <th class="px-4 py-3">Transcript</th>
+            <th class="px-4 py-3">Logs</th>
+            <th class="px-4 py-3">Created</th>
+          </tr>
+        </thead>
+        <tbody id="jobs-body" class="divide-y divide-white/5 bg-slate-900/40 text-slate-100">
+          {% for j in jobs %}
+          <tr data-job="{{ j.id }}" class="transition">
+            <td class="px-4 py-3">
+              <button type="button" class="inline-flex items-center gap-1 rounded border border-white/15 bg-white/5 px-2 py-0.5 text-[11px] font-mono text-primary-200 transition hover:border-primary-300 cursor-copy underline decoration-dotted decoration-white/20 hover:decoration-primary-300" data-copy-text="{{ j.id }}" title="{{ j.id }}">
+                {{ j.id|short_uuid }}
+              </button>
+            </td>
+            <td class="px-4 py-3 text-primary-200">
+              <a class="inline-flex items-center gap-1 rounded border border-white/15 bg-white/5 px-2 py-0.5 text-[11px] font-mono text-primary-200 transition hover:border-primary-300 underline decoration-dotted decoration-white/20 hover:decoration-primary-300" href="/cases/{{ j.case_id }}/" data-copy-text="{{ j.case_id }}" title="{{ j.case_id }}">
+                {{ j.case_id|short_uuid }}
+              </a>
+            </td>
+            <td class="px-4 py-3 text-slate-200 capitalize">{{ j.mode }}</td>
+            <td class="px-4 py-3" id="job-status-{{ j.id }}">
+              {% with status=j.status|upper %}
+                {% if status == 'SUCCEEDED' %}
+                  <span class="status-pill inline-flex items-center rounded-full border border-emerald-400/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-emerald-200" data-status="{{ status }}"><span data-job-status-label>Succeeded</span></span>
+                {% elif status == 'FAILED' %}
+                  <span class="status-pill inline-flex items-center rounded-full border border-rose-400/40 bg-rose-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-rose-200" data-status="{{ status }}"><span data-job-status-label>Failed</span></span>
+                {% elif status == 'CANCELLED' %}
+                  <span class="status-pill inline-flex items-center rounded-full border border-slate-400/40 bg-slate-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-100" data-status="{{ status }}"><span data-job-status-label>Cancelled</span></span>
+                {% elif status == 'CANCELLING' %}
+                  <span class="status-pill inline-flex items-center rounded-full border border-slate-400/40 bg-slate-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-100" data-status="{{ status }}"><span data-job-status-label>Cancelling</span></span>
+                {% elif status == 'UPLOADING' %}
+                  <span class="status-pill inline-flex items-center rounded-full border border-primary-400/40 bg-primary-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-primary-100" data-status="{{ status }}"><span data-job-status-label>Uploading</span></span>
+                {% elif status == 'RUNNING' or status == 'PENDING' or status == 'CONVERTING' %}
+                  <span class="status-pill inline-flex items-center rounded-full border border-primary-400/40 bg-primary-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-primary-100" data-status="{{ status }}"><span data-job-status-label>{{ status|lower|capfirst }}</span></span>
+                {% elif status == 'QUEUED' %}
+                  <span class="status-pill inline-flex items-center rounded-full border border-amber-400/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-100" data-status="{{ status }}"><span data-job-status-label>Queued</span></span>
+                {% else %}
+                  <span class="status-pill inline-flex items-center rounded-full border border-white/20 bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-300" data-status="{{ status }}"><span data-job-status-label>{{ status|lower|capfirst }}</span></span>
+                {% endif %}
+              {% endwith %}
+            </td>
+            <td class="px-4 py-3" id="job-transcript-{{ j.id }}">{% if j.transcript_path %}<a class="font-medium text-primary-300 underline" href="/api/v1/jobs/{{ j.id }}/download/">Download</a>{% else %}—{% endif %}</td>
+            <td class="px-4 py-3 text-primary-200"><a class="underline" href="/api/v1/jobs/{{ j.id }}/logs/">Logs</a></td>
+            <td class="px-4 py-3 text-slate-300"><time data-ts="{{ j.created_at|date:'c' }}">{{ j.created_at }}</time></td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="7" class="px-4 py-6 text-center text-slate-400">No jobs yet.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>

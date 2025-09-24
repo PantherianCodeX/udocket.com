@@ -1,0 +1,33 @@
+<section class="space-y-8" data-case-view data-case-id="{{ case.id }}">
+  <div id="case-header" data-case-header-container>
+    {% include "ui/tools/_case_header.html" %}
+  </div>
+
+  <section aria-label="Case Developer" class="space-y-4" data-case-developer>
+    <div class="rounded-2xl border border-white/10 bg-white/5 p-5 shadow-xl shadow-black/30">
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 class="text-lg font-semibold text-white">Case Developer</h2>
+          <p class="text-sm text-slate-300">Launch tools and manage the Transcription workflow and intake for this case.</p>
+        </div>
+        <span class="text-[11px] uppercase tracking-wide text-slate-400">Live updates</span>
+      </div>
+      <div id="case-developer-cards" data-case-developer-cards class="mt-4">
+        {% include "ui/tools/_developer_cards.html" with cards=case_developer_cards active_tool=initial_tool_key %}
+      </div>
+    </div>
+  </section>
+
+  <section aria-label="Tool Workspace" class="space-y-4">
+    <div id="tool-workspace" data-tool-workspace>
+      {% if initial_tool_panel %}
+        {% include "ui/tools/_panel.html" with panel=initial_tool_panel %}
+      {% else %}
+        <div class="rounded-2xl border border-dashed border-white/15 bg-white/5 p-6 text-center text-sm text-slate-400">
+          Select a tool from Case Developer to get started.
+        </div>
+      {% endif %}
+    </div>
+  </section>
+</section>
+<div id="modal-root"></div>

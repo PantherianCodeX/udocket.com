@@ -1,0 +1,105 @@
+<script>
+  (function () {
+    if (window.udocketStatus) return;
+
+    const STATUS_LABELS = {
+      CONVERTING: 'Converting',
+      UPLOADING: 'Uploading',
+      RUNNING: 'Running',
+      PENDING: 'Pending',
+      QUEUED: 'Queued',
+      SUCCEEDED: 'Succeeded',
+      FAILED: 'Failed',
+      CANCELLED: 'Cancelled',
+      CANCELLING: 'Cancelling',
+      ERROR: 'Error',
+      CORRUPTED: 'Corrupted',
+      APPROVED: 'Approved',
+      REJECTED: 'Rejected',
+    };
+
+    const STATUS_CLASS_MAP = {
+      SUCCEEDED: ['border-emerald-400/40', 'bg-emerald-500/10', 'text-emerald-200'],
+      APPROVED: ['border-emerald-400/40', 'bg-emerald-500/10', 'text-emerald-200'],
+      FAILED: ['border-rose-400/40', 'bg-rose-500/10', 'text-rose-200'],
+      REJECTED: ['border-rose-400/40', 'bg-rose-500/10', 'text-rose-200'],
+      ERROR: ['border-rose-400/40', 'bg-rose-500/10', 'text-rose-200'],
+      CORRUPTED: ['border-rose-400/40', 'bg-rose-500/10', 'text-rose-200'],
+      CONVERTING: ['border-primary-400/40', 'bg-primary-500/10', 'text-primary-100'],
+      RUNNING: ['border-primary-400/40', 'bg-primary-500/10', 'text-primary-100'],
+      UPLOADING: ['border-primary-400/40', 'bg-primary-500/10', 'text-primary-100'],
+      PENDING: ['border-amber-400/40', 'bg-amber-500/10', 'text-amber-100'],
+      QUEUED: ['border-amber-400/40', 'bg-amber-500/10', 'text-amber-100'],
+      CANCELLED: ['border-slate-400/40', 'bg-slate-500/20', 'text-slate-100'],
+      CANCELLING: ['border-slate-400/40', 'bg-slate-500/20', 'text-slate-100'],
+      DEFAULT: ['border-white/20', 'bg-white/5', 'text-slate-300'],
+    };
+
+    const STATUS_CLASS_VALUES = Array.from(new Set(Object.values(STATUS_CLASS_MAP).flat()));
+    const TERMINAL_STATUSES = ['SUCCEEDED', 'FAILED', 'CANCELLED', 'ERROR', 'CORRUPTED'];
+
+    function normalizeStatus(value) {
+      return (value || '').toString().trim().toUpperCase();
+    }
+
+    function friendlyStatus(value) {
+      const normalized = normalizeStatus(value);
+      if (STATUS_LABELS[normalized]) return STATUS_LABELS[normalized];
+      if (!normalized) return 'Status';
+      return normalized.charAt(0) + normalized.slice(1).toLowerCase();
+    }
+
+    function applyStatusPillClasses(target, normalized) {
+      if (!target || !target.classList) return;
+      target.classList.remove(...STATUS_CLASS_VALUES);
+      const next = STATUS_CLASS_MAP[normalized] || STATUS_CLASS_MAP.DEFAULT;
+      target.classList.add(...next);
+    }
+
+    function renderStatusLabel(container, status, progress) {
+      if (!container) return;
+      const target = container.querySelector('[data-status]') || (container.matches('[data-status]') ? container : container);
+      const normalized = normalizeStatus(status);
+      const labelEl = target.querySelector('[data-job-status-label]');
+      const setText = (value) => {
+        if (labelEl) {
+          labelEl.textContent = value;
+        } else {
+          target.textContent = value;
+        }
+      };
+
+      if (normalized === 'UPLOADING' && Number.isFinite(progress)) {
+        const pct = Math.max(0, Math.min(100, Math.round(progress)));
+        setText(`Uploading ${pct}%`);
+        target.dataset.progress = String(pct);
+        if (target.classList.contains('status-pill')) {
+          target.style.setProperty('--status-progress', (pct / 100).toString());
+        }
+      } else {
+        setText(friendlyStatus(normalized || status));
+        target.dataset.progress = '';
+        if (target.classList.contains('status-pill')) {
+          target.style.removeProperty('--status-progress');
+        }
+      }
+
+      applyStatusPillClasses(target, normalized);
+      target.dataset.status = normalized;
+      if (container !== target) {
+        delete container.dataset.status;
+      }
+    }
+
+    window.udocketStatus = {
+      STATUS_LABELS,
+      STATUS_CLASS_MAP,
+      STATUS_CLASS_VALUES,
+      TERMINAL_STATUSES,
+      normalizeStatus,
+      friendlyStatus,
+      applyStatusPillClasses,
+      renderStatusLabel,
+    };
+  })();
+</script>
