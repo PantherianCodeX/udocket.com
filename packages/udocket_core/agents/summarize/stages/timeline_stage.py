@@ -7,6 +7,7 @@ import json
 
 from ...common.azure_client import AzureChatClient
 from ...common.io import TranscriptParse
+from ..exceptions import AzureStageFailure
 
 TIMELINE_SCHEMA = {
     "type": "object",
@@ -68,6 +69,7 @@ def generate_timeline(
     parse: TranscriptParse,
     outline_issues: List[Dict[str, Any]],
     context_snippet: str,
+    case_brief: Dict[str, Any],
     azure_client: Optional[AzureChatClient],
     temperature: float,
     max_tokens: int,
@@ -84,6 +86,7 @@ def generate_timeline(
         user_prompt = (
             "Use these transcript excerpts to generate events. Ensure every object includes labels array.\n"
             f"Outline issues (for context): {json.dumps(outline_issues, ensure_ascii=False)}\n\n"
+            f"Case brief summary: {json.dumps(case_brief, ensure_ascii=False)}\n\n"
             + context_snippet
         )
         content, usage = azure_client.chat(
@@ -118,8 +121,8 @@ def generate_timeline(
         if not normalized:
             return TimelineStageResult(fallback, {})
         return TimelineStageResult(normalized, _usage_dict(usage))
-    except Exception:
-        return TimelineStageResult(fallback, {})
+    except Exception as exc:
+        raise AzureStageFailure("timeline", exc, TimelineStageResult(fallback, {})) from exc
 
 
 __all__ = ["TimelineStageResult", "generate_timeline"]

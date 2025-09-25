@@ -7,6 +7,7 @@ import json
 
 from ...common.azure_client import AzureChatClient
 from ...common.io import TranscriptParse
+from ..exceptions import AzureStageFailure
 
 ENTITY_SCHEMA = {
     "type": "object",
@@ -102,6 +103,7 @@ def generate_entities(
     parse: TranscriptParse,
     outline_parties: Dict[str, Any],
     context_snippet: str,
+    case_brief: Dict[str, Any],
     azure_client: Optional[AzureChatClient],
     temperature: float,
     max_tokens: int,
@@ -118,6 +120,7 @@ def generate_entities(
         user_prompt = (
             "Use the outline and transcript snippets. Provide aliases where obvious."
             f"\nOutline parties: {json.dumps(outline_parties, ensure_ascii=False)}\n"
+            f"\nCase brief summary: {json.dumps(case_brief, ensure_ascii=False)}\n"
             f"\nTranscript excerpts:\n{context_snippet}\n"
         )
         content, usage = azure_client.chat(
@@ -139,8 +142,8 @@ def generate_entities(
         if not isinstance(entities, list) or not entities:
             return EntityStageResult(fallback, {})
         return EntityStageResult(payload, _usage_dict(usage))
-    except Exception:
-        return EntityStageResult(fallback, {})
+    except Exception as exc:
+        raise AzureStageFailure("entities", exc, EntityStageResult(fallback, {})) from exc
 
 
 __all__ = ["EntityStageResult", "generate_entities"]

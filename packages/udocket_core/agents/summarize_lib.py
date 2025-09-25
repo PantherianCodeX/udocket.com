@@ -1,42 +1,36 @@
 from __future__ import annotations
 
-import json
 import os
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .common import (
     AzureChatClient,
     AzureClientConfig,
-    append_jsonl,
-    ensure_dir,
-    next_versioned,
     parse_transcript,
-    sha256_file,
     TranscriptParse,
 )
 from .common.azure_client import _endpoint_is_canadian
 from .common.io import TranscriptSegment  # re-export for legacy imports
-from .summarize.stages import (
-    DraftStageResult,
-    EntityStageResult,
-    OutlineStageResult,
-    TimelineStageResult,
-    generate_entities,
-    generate_outline,
-    generate_summary_markdown,
-    generate_timeline,
-)
+from .langgraph_orchestrator import build_summarize_graph
+from .summarize.utils import FinalizedOutputs, SummarizePipeline
 
 MAX_PROMPT_SEGMENTS = 120
 MAX_PROMPT_CHARS = 8000
 
 
-def _now_utc() -> str:
-    return datetime.utcnow().isoformat(timespec="seconds") + "Z"
-
+PIPELINE_NODE_ORDER = [
+    "input_discovery",
+    "parse_transcript",
+    "context_builder",
+    "extract_outline",
+    "build_timeline_seeds",
+    "build_entity_hints",
+    "draft_markdown",
+    "qa_and_finalize",
+    "write_ops_and_artifacts",
+]
 
 @dataclass
 class SummarizeConfig:
@@ -48,6 +42,8 @@ class SummarizeConfig:
     temperature: float = 0.2
     max_output_tokens: int = 24000
     debug: bool = False
+    enable_offline_fallback: bool = False
+    force_offline_mode: bool = False
 
     @classmethod
     def from_env(cls) -> "SummarizeConfig":
@@ -59,6 +55,8 @@ class SummarizeConfig:
         temperature = float(os.getenv("SUMMARY_TEMPERATURE", "0.2") or 0.2)
         max_tokens = int(os.getenv("SUMMARY_MAX_TOKENS", "24000") or 24000)
         debug = (os.getenv("DEBUG", "0").strip() == "1")
+        allow_offline = (os.getenv("SUMMARY_ALLOW_OFFLINE_FALLBACK", "0").strip() == "1")
+        force_offline = (os.getenv("SUMMARY_FORCE_OFFLINE", "0").strip() == "1")
 
         if endpoint and not _endpoint_is_canadian(endpoint):
             raise ValueError("AZURE_OPENAI_ENDPOINT must target canadacentral or canadaeast")
@@ -72,6 +70,8 @@ class SummarizeConfig:
             temperature=temperature,
             max_output_tokens=max_tokens,
             debug=debug,
+            enable_offline_fallback=allow_offline,
+            force_offline_mode=force_offline,
         )
 
     @property
@@ -107,6 +107,7 @@ class SummarizeResult:
     outline_file: Optional[Path]
     timeline_seeds_file: Optional[Path]
     entity_hints_file: Optional[Path]
+    case_brief_file: Optional[Path]
     words: int
     source_transcript: Path
     meta_json: Path
@@ -126,151 +127,75 @@ class SummarizeAgent:
         job_id: str,
         intake: Optional[Dict[str, Any]] = None,
         transcript_hint: Optional[Dict[str, Any]] = None,
+        allow_offline_fallback: Optional[bool] = None,
     ) -> SummarizeResult:
         case_dir = Path(case_dir)
-        transcript_path = self._resolve_transcript(input, case_dir)
-        parse = parse_transcript(transcript_path)
-
-        summary_dir = case_dir / "analysis"
-        ops_dir = case_dir / "ops"
-        ensure_dir(summary_dir)
-        ensure_dir(ops_dir)
+        state: Dict[str, Any] = {
+            "case_id": case_id,
+            "job_id": job_id,
+            "case_dir": case_dir,
+        }
+        if input is not None:
+            state["input_path"] = Path(input)
 
         azure_client = None
         azure_cfg = self.config.azure_client_config()
-        if azure_cfg is not None:
+        if not self.config.force_offline_mode and azure_cfg is not None:
             azure_client = AzureChatClient(azure_cfg)
 
-        intake_payload = intake or {}
-        context_snippet = self._build_context(parse, intake_payload)
-
-        outline_result = generate_outline(
-            parse=parse,
-            intake=intake_payload,
-            context_snippet=context_snippet,
+        offline_flag = (
+            allow_offline_fallback
+            if allow_offline_fallback is not None
+            else self.config.enable_offline_fallback
+        )
+        pipeline = SummarizePipeline(
+            case_id=case_id,
+            job_id=job_id,
+            case_dir=case_dir,
+            intake=intake,
+            transcript_hint=transcript_hint,
+            config=self.config,
             azure_client=azure_client,
-            temperature=self.config.temperature,
-            max_tokens=self.config.max_output_tokens,
+            resolve_transcript=self._resolve_transcript,
+            build_context=self._build_context,
+            allow_offline_fallback=offline_flag,
         )
 
-        timeline_result = generate_timeline(
-            parse=parse,
-            outline_issues=outline_result.outline.get("issues", []),
-            context_snippet=context_snippet,
-            azure_client=azure_client,
-            temperature=self.config.temperature,
-            max_tokens=self.config.max_output_tokens,
-        )
+        final_state = self._execute_pipeline(pipeline, state)
+        final_outputs = final_state.get("final_outputs")
+        if not isinstance(final_outputs, FinalizedOutputs):
+            raise RuntimeError("Summarize pipeline did not produce outputs")
 
-        entity_result = generate_entities(
-            parse=parse,
-            outline_parties=outline_result.outline.get("parties", {}),
-            context_snippet=context_snippet,
-            azure_client=azure_client,
-            temperature=self.config.temperature,
-            max_tokens=self.config.max_output_tokens,
-        )
-
-        summary_result = generate_summary_markdown(
-            parse=parse,
-            outline=outline_result.outline,
-            timeline=timeline_result.events,
-            entities=entity_result.hints,
-            intake=intake_payload,
-            context_snippet=context_snippet,
-            azure_client=azure_client,
-            temperature=self.config.temperature,
-            max_tokens=self.config.max_output_tokens,
-        )
-
-        summary_path = next_versioned(summary_dir / f"{job_id}__summary_v1.md")
-        summary_path.write_text(summary_result.markdown, encoding="utf-8")
-
-        outline_path = next_versioned(summary_dir / f"{job_id}__outline_v1.json")
-        outline_path.write_text(json.dumps(outline_result.outline, ensure_ascii=False, indent=2), encoding="utf-8")
-
-        timeline_path = next_versioned(summary_dir / f"{job_id}__timeline_seeds_v1.json")
-        timeline_payload = {"events": timeline_result.events}
-        timeline_path.write_text(json.dumps(timeline_payload, ensure_ascii=False, indent=2), encoding="utf-8")
-
-        entity_path = next_versioned(summary_dir / f"{job_id}__entity_hints_v1.json")
-        entity_path.write_text(json.dumps(entity_result.hints, ensure_ascii=False, indent=2), encoding="utf-8")
-
-        summary_sha = sha256_file(summary_path)
-        outline_sha = sha256_file(outline_path)
-        timeline_sha = sha256_file(timeline_path)
-        entity_sha = sha256_file(entity_path)
-
-        token_usage: Dict[str, Dict[str, int]] = {}
-        if outline_result.usage:
-            token_usage["outline"] = outline_result.usage
-        if timeline_result.usage:
-            token_usage["timeline"] = timeline_result.usage
-        if entity_result.usage:
-            token_usage["entities"] = entity_result.usage
-        if summary_result.usage:
-            token_usage["summary"] = summary_result.usage
-
-        meta: Dict[str, Any] = {
-            "case_id": case_id,
-            "job_id": job_id,
-            "source_transcript": str(transcript_path),
-            "summary_file": summary_path.name,
-            "summary_sha256": summary_sha,
-            "outline_file": outline_path.name,
-            "outline_sha256": outline_sha,
-            "timeline_seeds_file": timeline_path.name,
-            "timeline_seeds_sha256": timeline_sha,
-            "entity_hints_file": entity_path.name,
-            "entity_hints_sha256": entity_sha,
-            "language": self.config.language,
-            "azure_enabled": self.config.azure_enabled,
-            "azure_region": self.config.azure_region,
-            "timestamp_utc": _now_utc(),
-            "status": "ok",
-            "words": len(summary_result.markdown.split()),
-            "diarized": parse.diarized,
-            "facts": len(outline_result.outline.get("facts", [])),
-            "timeline_events": len(timeline_result.events),
-            "entity_count": len(entity_result.hints.get("entities", [])),
-        }
-        if intake_payload:
-            meta["intake"] = intake_payload
-        if transcript_hint:
-            meta["transcript_hint"] = transcript_hint
-        if token_usage:
-            meta["token_usage"] = token_usage
-
-        meta_path = ops_dir / f"{job_id}__summary_log.json"
-        meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
-
-        audit_path = ops_dir / "ops_summary.jsonl"
-        append_jsonl(
-            audit_path,
-            {
-                "ts": _now_utc(),
-                "case_id": case_id,
-                "job_id": job_id,
-                "event": "summary.created",
-                "summary_file": str(summary_path),
-                "outline_file": str(outline_path),
-                "timeline_file": str(timeline_path),
-                "entity_file": str(entity_path),
-                "words": meta["words"],
-            },
-        )
+        transcript_path = final_state.get("transcript_path")
+        if not isinstance(transcript_path, Path):
+            transcript_path = self._resolve_transcript(state.get("input_path"), case_dir)
 
         return SummarizeResult(
-            status="ok",
-            summary_file=summary_path,
-            outline_file=outline_path,
-            timeline_seeds_file=timeline_path,
-            entity_hints_file=entity_path,
-            words=meta["words"],
+            status=final_state.get("status", "ok"),
+            summary_file=final_outputs.summary_path,
+            outline_file=final_outputs.outline_path,
+            timeline_seeds_file=final_outputs.timeline_seed_path,
+            entity_hints_file=final_outputs.entity_hint_path,
+            case_brief_file=final_outputs.case_brief_path,
+            words=final_outputs.words,
             source_transcript=transcript_path,
-            meta_json=meta_path,
-            audit_jsonl=audit_path,
+            meta_json=final_outputs.meta_path,
+            audit_jsonl=final_outputs.audit_path,
         )
+
+    def _execute_pipeline(self, pipeline: SummarizePipeline, state: Dict[str, Any]) -> Dict[str, Any]:
+        current_state: Dict[str, Any] = dict(state)
+        graph = None
+        try:
+            graph = build_summarize_graph(pipeline)
+        except RuntimeError:
+            graph = None
+        if graph is not None:
+            return graph.invoke(current_state)
+        for node_name in PIPELINE_NODE_ORDER:
+            node = getattr(pipeline, node_name)
+            current_state = node(current_state)
+        return current_state
 
     def _resolve_transcript(self, input_path: Optional[Path], case_dir: Path) -> Path:
         if input_path:
@@ -318,6 +243,7 @@ __all__ = [
     "SummarizeAgent",
     "SummarizeConfig",
     "SummarizeResult",
+    "parse_transcript",
     "TranscriptParse",
     "TranscriptSegment",
 ]

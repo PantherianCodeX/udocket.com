@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -11,6 +12,11 @@ from packages.udocket_core.agents.summarize_lib import (
     TranscriptSegment,
     parse_transcript,
 )
+from packages.udocket_core.agents.summarize.exceptions import (
+    AzureStageFailure,
+    AzureUnavailableError,
+)
+from packages.udocket_core.agents.summarize.stages import OutlineStageResult
 
 
 def _write_transcript(path: Path, text: str) -> Path:
@@ -55,18 +61,38 @@ def test_summarize_agent_offline_writes_artifacts(tmp_path):
     )
 
     agent = SummarizeAgent(SummarizeConfig())
-    result = agent.summarize(case_id="CASE-1", case_dir=case_dir, job_id="JOB-1")
+    result = agent.summarize(
+        case_id="CASE-1",
+        case_dir=case_dir,
+        job_id="JOB-1",
+        allow_offline_fallback=True,
+    )
 
     assert result.status == "ok"
     assert result.summary_file.exists()
     assert result.outline_file and result.outline_file.exists()
     assert result.timeline_seeds_file and result.timeline_seeds_file.exists()
     assert result.entity_hints_file and result.entity_hints_file.exists()
+    assert result.case_brief_file and result.case_brief_file.exists()
     assert result.meta_json.exists()
     assert result.audit_jsonl.exists()
     meta_text = result.meta_json.read_text(encoding="utf-8")
     assert "summary_file" in meta_text
     assert "outline_file" in meta_text
+    assert "case_brief_file" in meta_text
+    summary_text = result.summary_file.read_text(encoding="utf-8")
+    assert summary_text.startswith("# Header line")
+    required_headings = [
+        "## Case metadata summary",
+        "## Executive summary",
+        "## Detailed narrative",
+        "## Claims and remedies sought",
+        "## Procedural posture, orders, and deadlines",
+        "## Risks, gaps, and questions",
+        "## Next-step checklist",
+    ]
+    for heading in required_headings:
+        assert heading in summary_text
 
 
 def test_summarize_agent_versioned_outputs(tmp_path):
@@ -79,13 +105,107 @@ def test_summarize_agent_versioned_outputs(tmp_path):
     )
 
     agent = SummarizeAgent(SummarizeConfig())
-    first = agent.summarize(case_id="CASE-2", case_dir=case_dir, job_id="JOB-2")
-    second = agent.summarize(case_id="CASE-2", case_dir=case_dir, job_id="JOB-2")
+    first = agent.summarize(
+        case_id="CASE-2",
+        case_dir=case_dir,
+        job_id="JOB-2",
+        allow_offline_fallback=True,
+    )
+    second = agent.summarize(
+        case_id="CASE-2",
+        case_dir=case_dir,
+        job_id="JOB-2",
+        allow_offline_fallback=True,
+    )
 
     assert first.summary_file.exists()
     assert second.summary_file.exists()
     assert first.summary_file != second.summary_file
     assert second.summary_file.name.endswith("_v2.md")
+    assert first.case_brief_file and first.case_brief_file.exists()
+    assert second.case_brief_file and second.case_brief_file.exists()
+    assert first.case_brief_file != second.case_brief_file
+    assert second.case_brief_file.name.endswith("_v2.json")
+
+
+def test_summarize_agent_adds_default_header(tmp_path):
+    case_dir = tmp_path / "cases" / "CASE-3"
+    transcript_dir = case_dir / "transcript"
+    transcript_path = transcript_dir / "JOB-3__transcript.txt"
+    _write_transcript(
+        transcript_path,
+        """[00:01] Speaker: Hello\n[00:05] Another line\n""",
+    )
+
+    agent = SummarizeAgent(SummarizeConfig())
+    result = agent.summarize(
+        case_id="CASE-3",
+        case_dir=case_dir,
+        job_id="JOB-3",
+        allow_offline_fallback=True,
+    )
+
+    summary_text = result.summary_file.read_text(encoding="utf-8")
+    assert summary_text.startswith("# Summary for case CASE-3 (job JOB-3)")
+
+
+def test_azure_failure_requires_consent(monkeypatch, tmp_path):
+    fallback_outline = {
+        "parties": {
+            "client": {"name": None, "role": None},
+            "opposing": {"name": None, "role": None},
+            "counsel": [],
+        },
+        "issues": [],
+        "claims_and_remedies": [],
+        "facts": [],
+        "deadlines": [],
+        "orders_and_directions": [],
+        "exhibits": [],
+        "legal_refs": [],
+    }
+    fallback_result = OutlineStageResult(fallback_outline, {})
+
+    def boom(**kwargs):
+        raise AzureStageFailure("outline", RuntimeError("boom"), fallback_result)
+
+    monkeypatch.setattr(
+        "packages.udocket_core.agents.summarize.utils.generate_outline",
+        boom,
+    )
+    monkeypatch.setattr(
+        "packages.udocket_core.agents.common.azure_client.AzureChatClient.chat",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("network down")),
+    )
+
+    case_dir = tmp_path / "cases" / "CASE-4"
+    transcript_dir = case_dir / "transcript"
+    transcript_path = transcript_dir / "JOB-4__transcript.txt"
+    _write_transcript(
+        transcript_path,
+        """Header\n---------------------------\n[00:01] SPK_1: Test line\n""",
+    )
+
+    config = SummarizeConfig(
+        azure_openai_endpoint="https://unit-canadacentral.openai.azure.com",
+        azure_openai_key="test-key",
+        azure_openai_deployment="test-deploy",
+    )
+    agent = SummarizeAgent(config)
+
+    with pytest.raises(AzureUnavailableError):
+        agent.summarize(case_id="CASE-4", case_dir=case_dir, job_id="JOB-4")
+
+    result = agent.summarize(
+        case_id="CASE-4",
+        case_dir=case_dir,
+        job_id="JOB-4",
+        allow_offline_fallback=True,
+    )
+    meta = json.loads(result.meta_json.read_text(encoding="utf-8"))
+    assert meta.get("offline_fallback_used") is True
+    assert result.summary_file.exists()
+    assert result.case_brief_file and result.case_brief_file.exists()
 
 
 def test_build_summarize_graph_requires_langgraph():

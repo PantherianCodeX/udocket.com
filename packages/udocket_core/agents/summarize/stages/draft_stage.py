@@ -7,6 +7,7 @@ import json
 
 from ...common.azure_client import AzureChatClient
 from ...common.io import TranscriptParse
+from ..exceptions import AzureStageFailure
 
 
 @dataclass
@@ -31,16 +32,24 @@ def _fallback_markdown(
     entities: Dict[str, Any],
     intake: Dict[str, Any],
 ) -> str:
-    lines: List[str] = ["# Summarize output", ""]
+    lines: List[str] = []
     if intake:
-        lines.append("## Case metadata")
+        lines.append("## Case metadata summary")
         for key, value in intake.items():
             lines.append(f"- **{key.replace('_', ' ').title()}**: {value}")
         lines.append("")
+    else:
+        lines.extend([
+            "## Case metadata summary",
+            "- Case intake details not provided in offline mode.",
+            "",
+        ])
+
     lines.append("## Executive summary")
     lines.append("- Offline fallback summary generated without Azure OpenAI.")
     lines.append("- Configure Azure credentials for richer analysis.")
     lines.append("")
+
     lines.append("## Detailed narrative")
     for seg in parse.segments[:10]:
         prefix = ""
@@ -50,14 +59,18 @@ def _fallback_markdown(
             prefix = f"[{minutes:02d}:{seconds:02d}] "
         speaker = f"{seg.speaker}: " if seg.speaker else ""
         lines.append(f"- {prefix}{speaker}{seg.text}")
+    if len(parse.segments[:10]) == 0:
+        lines.append("- Transcript content not available.")
     lines.append("")
-    lines.append("## Claims and remedies")
+
+    lines.append("## Claims and remedies sought")
     if outline.get("claims_and_remedies"):
         for claim in outline["claims_and_remedies"]:
             lines.append(f"- {claim.get('claim', 'Unknown claim')}")
     else:
         lines.append("- Not available in offline mode.")
     lines.append("")
+
     lines.append("## Procedural posture, orders, and deadlines")
     if outline.get("orders_and_directions"):
         for order in outline["orders_and_directions"]:
@@ -65,14 +78,17 @@ def _fallback_markdown(
     else:
         lines.append("- Not available in offline mode.")
     lines.append("")
-    lines.append("## Risks, gaps, questions")
+
+    lines.append("## Risks, gaps, and questions")
     lines.append("- Review transcript manually to confirm key issues.")
     lines.append("- Verify filing deadlines in court records.")
     lines.append("")
+
     lines.append("## Next-step checklist")
     lines.append("- Configure Azure OpenAI for full summarize pipeline.")
     lines.append("- Confirm transcript approval status before sharing.")
     lines.append("")
+
     lines.append("_Offline fallback summary. Configure Azure OpenAI for richer outputs._")
     lines.append("")
     return "\n".join(lines)
@@ -86,6 +102,7 @@ def generate_summary_markdown(
     entities: Dict[str, Any],
     intake: Dict[str, Any],
     context_snippet: str,
+    case_brief: Dict[str, Any],
     azure_client: Optional[AzureChatClient],
     temperature: float,
     max_tokens: int,
@@ -110,6 +127,8 @@ def generate_summary_markdown(
             f"{json.dumps(timeline, ensure_ascii=False, indent=2)}\n\n"
             "Entity hints:\n"
             f"{json.dumps(entities, ensure_ascii=False, indent=2)}\n\n"
+            "Case brief summary:\n"
+            f"{json.dumps(case_brief, ensure_ascii=False, indent=2)}\n\n"
             "Transcript excerpts:\n"
             f"{context_snippet}\n"
         )
@@ -125,8 +144,8 @@ def generate_summary_markdown(
         if not markdown:
             return DraftStageResult(fallback, {})
         return DraftStageResult(markdown, _usage_dict(usage))
-    except Exception:
-        return DraftStageResult(fallback, {})
+    except Exception as exc:
+        raise AzureStageFailure("draft", exc, DraftStageResult(fallback, {})) from exc
 
 
 __all__ = ["DraftStageResult", "generate_summary_markdown"]

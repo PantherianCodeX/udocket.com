@@ -7,6 +7,7 @@ import json
 
 from ...common.azure_client import AzureChatClient
 from ...common.io import TranscriptParse
+from ..exceptions import AzureStageFailure
 
 OUTLINE_SCHEMA = {
     "type": "object",
@@ -229,6 +230,7 @@ def generate_outline(
     parse: TranscriptParse,
     intake: Dict[str, Any],
     context_snippet: str,
+    case_brief: Dict[str, Any],
     azure_client: Optional[AzureChatClient],
     temperature: float,
     max_tokens: int,
@@ -245,6 +247,8 @@ def generate_outline(
         user_prompt = (
             "Case intake info (may be empty):\n"
             f"{json.dumps(intake, ensure_ascii=False, indent=2)}\n\n"
+            "Case brief summary:\n"
+            f"{json.dumps(case_brief, ensure_ascii=False, indent=2)}\n\n"
             "Transcript excerpts:\n" + context_snippet + "\n"
         )
         content, usage = azure_client.chat(
@@ -261,8 +265,8 @@ def generate_outline(
         )
         outline = _coerce_outline(json.loads(content), fallback)
         return OutlineStageResult(outline, _usage_dict(usage))
-    except Exception:
-        return OutlineStageResult(fallback, {})
+    except Exception as exc:
+        raise AzureStageFailure("outline", exc, OutlineStageResult(fallback, {})) from exc
 
 
 __all__ = ["OutlineStageResult", "generate_outline"]
