@@ -81,6 +81,8 @@ def test_summarize_agent_offline_writes_artifacts(tmp_path):
     assert "outline_file" in meta
     assert "case_brief_file" in meta
     assert meta.get("provider_chain")
+    assert result.provider_chain
+    assert result.offline_fallback_used is True
     summary_text = result.summary_file.read_text(encoding="utf-8")
     assert summary_text.startswith("# Header line")
     required_headings = [
@@ -127,6 +129,7 @@ def test_summarize_agent_versioned_outputs(tmp_path):
     assert second.case_brief_file and second.case_brief_file.exists()
     assert first.case_brief_file != second.case_brief_file
     assert second.case_brief_file.name.endswith("_v2.json")
+    assert first.provider_chain
 
 
 def test_summarize_agent_adds_default_header(tmp_path):
@@ -208,6 +211,29 @@ def test_azure_failure_requires_consent(monkeypatch, tmp_path):
     assert meta.get("provider_chain")
     assert result.summary_file.exists()
     assert result.case_brief_file and result.case_brief_file.exists()
+
+
+def test_summarize_agent_provider_override(tmp_path):
+    case_dir = tmp_path / "cases" / "CASE-5"
+    transcript_dir = case_dir / "transcript"
+    transcript_path = transcript_dir / "JOB-5__transcript.txt"
+    _write_transcript(
+        transcript_path,
+        """Header\n---------------------------\n[00:01] SPK_1: Custom provider test\n""",
+    )
+
+    agent = SummarizeAgent(SummarizeConfig())
+    result = agent.summarize(
+        case_id="CASE-5",
+        case_dir=case_dir,
+        job_id="JOB-5",
+        allow_offline_fallback=True,
+        provider_chain=["local"],
+    )
+
+    assert result.provider_chain == ["local"]
+    meta = json.loads(result.meta_json.read_text(encoding="utf-8"))
+    assert meta.get("provider_chain") == ["local"]
 
 
 def test_build_summarize_graph_requires_langgraph():

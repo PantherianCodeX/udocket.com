@@ -17,6 +17,60 @@
           <p class="rounded-lg border border-dashed border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-300">Run a transcription first to enable summarization.</p>
         {% endif %}
       </div>
+      <details class="group rounded-xl border border-white/10 bg-slate-900/60" data-summary-advanced>
+        <summary class="flex cursor-pointer items-center justify-between px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-300">
+          Advanced settings
+          <svg class="h-4 w-4 transition-transform group-open:rotate-180" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.094l3.71-3.86a.75.75 0 111.08 1.04l-4.247 4.41a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z" clip-rule="evenodd" /></svg>
+        </summary>
+        <div class="space-y-4 border-t border-white/10 px-3 py-4 text-sm text-slate-200">
+          <div class="space-y-2">
+            <label for="summary-provider-primary" class="text-xs uppercase tracking-wide text-slate-400">Primary provider</label>
+            <select id="summary-provider-primary"
+                    name="summary_provider_primary"
+                    class="w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none"
+                    data-summary-provider-primary
+                    {% if body.provider_defaults.force_offline %}disabled{% endif %}>
+              {% for option in body.provider_options %}
+                <option value="{{ option.value }}"
+                        {% if not option.available %}disabled data-disabled="true"{% endif %}
+                        {% if option.value == body.provider_defaults.primary %}selected{% endif %}>
+                  {{ option.label }}{% if not option.available %} · Configure credentials{% endif %}
+                </option>
+              {% endfor %}
+            </select>
+            {% if body.provider_defaults.force_offline %}
+              <p class="text-[11px] text-amber-400">Force offline mode enabled via environment configuration.</p>
+            {% endif %}
+          </div>
+          <div class="space-y-2">
+            <label for="summary-provider-fallback" class="text-xs uppercase tracking-wide text-slate-400">Fallback providers</label>
+            <select id="summary-provider-fallback"
+                    name="summary_provider_fallback"
+                    multiple
+                    size="{{ body.provider_options|length }}"
+                    class="w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none"
+                    data-summary-provider-fallback
+                    {% if body.provider_defaults.force_offline %}disabled{% endif %}>
+              {% for option in body.provider_options %}
+                <option value="{{ option.value }}"
+                        {% if not option.available %}disabled data-disabled="true"{% endif %}
+                        {% if option.value in body.provider_defaults.fallbacks %}selected{% endif %}>
+                  {{ option.label }}
+                </option>
+              {% endfor %}
+            </select>
+            <p class="text-[11px] text-slate-500">Selection order sets fallback priority.</p>
+          </div>
+          <label class="inline-flex items-center gap-2 text-sm text-slate-200">
+            <input type="checkbox"
+                   class="h-4 w-4 rounded border-white/20 bg-slate-900/70 text-primary-500 focus:ring-primary-400"
+                   data-summary-allow-offline
+                   {% if body.provider_defaults.allow_offline %}checked{% endif %}
+                   {% if body.provider_defaults.force_offline %}disabled{% endif %}>
+            Allow local fallback when available
+          </label>
+        </div>
+      </details>
       <div class="flex items-center justify-end gap-3">
         <button type="button"
                 class="inline-flex items-center gap-2 rounded-lg bg-primary-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-primary-500/30 transition hover:bg-primary-400 disabled:cursor-not-allowed disabled:opacity-60"
@@ -52,6 +106,15 @@
             {% if module.latest.details.entity_hint_name %}
               <p><span class="font-semibold text-slate-300">Entity hints:</span> {{ module.latest.details.entity_hint_name }}</p>
             {% endif %}
+            {% if module.latest.details.case_brief_name %}
+              <p><span class="font-semibold text-slate-300">Case brief:</span> {{ module.latest.details.case_brief_name }}</p>
+            {% endif %}
+            {% if module.latest.details.provider_chain %}
+              <p><span class="font-semibold text-slate-300">Providers:</span> {{ module.latest.details.provider_chain|join:", " }}</p>
+            {% endif %}
+            {% if module.latest.details.offline_fallback_used %}
+              <p><span class="font-semibold text-slate-300">Fallback used:</span> Local</p>
+            {% endif %}
           </div>
         {% endif %}
       {% else %}
@@ -85,8 +148,17 @@
                   {% if item.details.timeline_seed_name %}
                     <p>Timeline seeds: {{ item.details.timeline_seed_name }}</p>
                   {% endif %}
-                  {% if item.details.entity_hint_name %}
-                    <p>Entity hints: {{ item.details.entity_hint_name }}</p>
+                 {% if item.details.entity_hint_name %}
+                   <p>Entity hints: {{ item.details.entity_hint_name }}</p>
+                 {% endif %}
+                  {% if item.details.case_brief_name %}
+                    <p>Case brief: {{ item.details.case_brief_name }}</p>
+                  {% endif %}
+                  {% if item.details.provider_chain %}
+                    <p>Providers: {{ item.details.provider_chain|join:", " }}</p>
+                  {% endif %}
+                  {% if item.details.offline_fallback_used %}
+                    <p>Fallback used: Local</p>
                   {% endif %}
                 </div>
               {% endif %}

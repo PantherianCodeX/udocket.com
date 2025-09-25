@@ -26,6 +26,7 @@ from ..presenters.jobs import (
     map_job_status,
     select_agent,
 )
+from packages.udocket_core.agents.summarize_lib import SummarizeConfig
 
 
 def _latest_successful_transcription_job(jobs: List[Job]) -> Optional[Job]:
@@ -798,6 +799,34 @@ def build_tool_panels(
         ),
     }
 
+    try:
+        summarize_cfg = SummarizeConfig.from_env()
+    except Exception:  # noqa: BLE001
+        summarize_cfg = SummarizeConfig()
+
+    provider_chain = list(summarize_cfg.provider_chain or ["azure", "local"])
+    if summarize_cfg.force_offline_mode:
+        provider_chain = ["local"]
+    primary_default = provider_chain[0] if provider_chain else "azure"
+    if primary_default == "azure" and not summarize_cfg.azure_enabled:
+        primary_default = "local"
+    fallback_defaults = [value for value in provider_chain if value != primary_default]
+
+    provider_options = [
+        {
+            "value": "azure",
+            "label": "Azure OpenAI (Canada)",
+            "description": "Requires AZURE_OPENAI_* credentials.",
+            "available": summarize_cfg.azure_enabled,
+        },
+        {
+            "value": "local",
+            "label": "Local (offline summarizer)",
+            "description": "Runs on this worker; consistent output for testing.",
+            "available": True,
+        },
+    ]
+
     summary_status = status_payload(progress_lookup, "summary", "Not Started")
     summary_module = analysis_lookup.get("summary") or {}
     summary_latest = summary_module.get("latest") or {}
@@ -824,6 +853,14 @@ def build_tool_panels(
             "module": summary_module,
             "transcripts": transcript_sources,
             "job_endpoint_template": "/api/v1/jobs/{job_id}/analyze/summary/",
+            "provider_options": provider_options,
+            "provider_defaults": {
+                "primary": primary_default,
+                "fallbacks": fallback_defaults,
+                "allow_offline": summarize_cfg.enable_offline_fallback,
+                "force_offline": summarize_cfg.force_offline_mode,
+                "azure_available": summarize_cfg.azure_enabled,
+            },
         },
         "jobs": summary_jobs,
         "jobs_title": "Summarize Jobs",

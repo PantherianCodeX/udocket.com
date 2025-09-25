@@ -144,6 +144,8 @@ class SummarizeResult:
     source_transcript: Path
     meta_json: Path
     audit_jsonl: Path
+    provider_chain: List[str]
+    offline_fallback_used: bool
 
 
 class SummarizeAgent:
@@ -160,6 +162,7 @@ class SummarizeAgent:
         intake: Optional[Dict[str, Any]] = None,
         transcript_hint: Optional[Dict[str, Any]] = None,
         allow_offline_fallback: Optional[bool] = None,
+        provider_chain: Optional[List[str]] = None,
     ) -> SummarizeResult:
         case_dir = Path(case_dir)
         state: Dict[str, Any] = {
@@ -170,7 +173,15 @@ class SummarizeAgent:
         if input is not None:
             state["input_path"] = Path(input)
 
-        provider_chain = list(self.config.provider_chain) or list(DEFAULT_PROVIDER_CHAIN)
+        if provider_chain is None:
+            provider_chain = list(self.config.provider_chain)
+        else:
+            provider_chain = [value for value in provider_chain if value in SUPPORTED_PROVIDERS]
+        if not provider_chain:
+            provider_chain = list(DEFAULT_PROVIDER_CHAIN)
+        if self.config.force_offline_mode:
+            provider_chain = ["local"]
+
         azure_client = None
         azure_cfg = self.config.azure_client_config()
         if provider_chain and provider_chain[0] == "azure" and azure_cfg is not None:
@@ -218,6 +229,8 @@ class SummarizeAgent:
             source_transcript=transcript_path,
             meta_json=final_outputs.meta_path,
             audit_jsonl=final_outputs.audit_path,
+            provider_chain=list(final_outputs.provider_chain),
+            offline_fallback_used=final_outputs.offline_fallback_used,
         )
 
     def _execute_pipeline(self, pipeline: SummarizePipeline, state: Dict[str, Any]) -> Dict[str, Any]:

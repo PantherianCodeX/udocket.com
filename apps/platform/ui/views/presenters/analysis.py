@@ -33,6 +33,18 @@ def enrich_summary_artifacts(
         outline_path = _normalize_path(meta_payload.get("summary_outline_file"))
         timeline_seed_path = _normalize_path(meta_payload.get("summary_timeline_file"))
         entity_hint_path = _normalize_path(meta_payload.get("summary_entity_file"))
+        case_brief_path = _normalize_path(
+            meta_payload.get("summary_case_brief_file") or meta_payload.get("case_brief_file")
+        )
+        provider_chain = meta_payload.get("summary_provider_chain") or meta_payload.get("provider_chain") or []
+        if isinstance(provider_chain, str):
+            provider_chain = [provider_chain]
+        elif not isinstance(provider_chain, list):
+            provider_chain = []
+        offline_used = bool(
+            meta_payload.get("summary_offline_fallback_used")
+            or meta_payload.get("offline_fallback_used")
+        )
         details: Dict[str, Any] = {
             "summary_path": summary_path,
             "summary_name": Path(summary_path).name if summary_path else None,
@@ -45,6 +57,10 @@ def enrich_summary_artifacts(
             "words": meta_payload.get("summary_words"),
             "token_usage": as_dict(meta_payload.get("token_usage")) or None,
             "sha256": meta_payload.get("summary_sha256"),
+            "case_brief_path": case_brief_path,
+            "case_brief_name": Path(case_brief_path).name if case_brief_path else None,
+            "provider_chain": provider_chain,
+            "offline_fallback_used": offline_used,
         }
         meta_by_job[str(job_id)] = details
 

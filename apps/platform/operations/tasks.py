@@ -1003,7 +1003,13 @@ def _case_intake_payload(case: Case | None) -> Dict[str, Any]:
 
 
 @shared_task(bind=True)
-def summarize_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
+def summarize_job(
+    *_args,
+    case_id: str,
+    job_id: str,
+    provider_chain: Optional[List[str]] = None,
+    allow_offline_fallback: Optional[bool] = None,
+) -> Dict[str, Any]:
     job = Job.objects.select_related("case").get(pk=job_id)
     org_id = job.organization_id or job.case.organization_id
     case_dir, _, _ = _case_paths(case_id, org_id)
@@ -1019,6 +1025,8 @@ def summarize_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
         case_dir=case_dir,
         job_id=job_id,
         intake=intake_payload or None,
+        allow_offline_fallback=allow_offline_fallback,
+        provider_chain=provider_chain,
     )
 
     checksum = _sha256_file(result.summary_file)
@@ -1027,8 +1035,11 @@ def summarize_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
         "summary_outline_file": str(result.outline_file) if result.outline_file else None,
         "summary_timeline_file": str(result.timeline_seeds_file) if result.timeline_seeds_file else None,
         "summary_entity_file": str(result.entity_hints_file) if result.entity_hints_file else None,
+        "summary_case_brief_file": str(result.case_brief_file) if result.case_brief_file else None,
         "summary_words": result.words,
         "summary_sha256": checksum,
+        "summary_provider_chain": result.provider_chain,
+        "summary_offline_fallback_used": result.offline_fallback_used,
     }
     try:
         CaseArtifact.objects.create(

@@ -538,9 +538,47 @@
     if (summaryContainer) {
       const select = summaryContainer.querySelector('[data-summary-source]');
       const button = summaryContainer.querySelector('[data-analysis-action="summary"]');
+      const advanced = summaryContainer.querySelector('[data-summary-advanced]');
+      const primarySelect = advanced?.querySelector('[data-summary-provider-primary]');
+      const fallbackSelect = advanced?.querySelector('[data-summary-provider-fallback]');
+      const allowOfflineCheckbox = advanced?.querySelector('[data-summary-allow-offline]');
+
+      const syncAdvancedControls = () => {
+        if (!advanced) return;
+        const primaryValue = primarySelect?.value || null;
+        if (fallbackSelect) {
+          Array.from(fallbackSelect.options).forEach((option) => {
+            if (!option.value) return;
+            const isPrimary = primaryValue && option.value === primaryValue;
+            const constrained = option.hasAttribute('data-disabled');
+            option.disabled = isPrimary || constrained;
+            if (option.disabled && option.selected) {
+              option.selected = false;
+            }
+          });
+        }
+        if (allowOfflineCheckbox) {
+          const chain = [];
+          if (primaryValue) {
+            chain.push(primaryValue);
+          }
+          if (fallbackSelect) {
+            Array.from(fallbackSelect.options).forEach((option) => {
+              if (option.selected && option.value && option.value !== primaryValue) {
+                chain.push(option.value);
+              }
+            });
+          }
+          const hasLocal = chain.includes('local');
+          allowOfflineCheckbox.disabled = !hasLocal;
+          if (!hasLocal) {
+            allowOfflineCheckbox.checked = false;
+          }
+        }
+      };
+
       const updateDisabled = () => {
         if (!button) return;
-        const option = select ? select.querySelector('option[value][disabled]:not([value=""])') : null;
         if (select && select.selectedOptions.length) {
           const selected = select.selectedOptions[0];
           button.disabled = selected.hasAttribute('disabled');
@@ -548,10 +586,18 @@
           button.disabled = true;
         }
       };
+
       if (select) {
         select.addEventListener('change', updateDisabled);
         updateDisabled();
       }
+      if (primarySelect) {
+        primarySelect.addEventListener('change', syncAdvancedControls);
+      }
+      if (fallbackSelect) {
+        fallbackSelect.addEventListener('change', syncAdvancedControls);
+      }
+      syncAdvancedControls();
     }
 
     const timelineContainer = root.querySelector('[data-timeline]');
@@ -699,6 +745,30 @@
         return;
       }
       jobId = select.value;
+
+      const advanced = button.closest('[data-summary]')?.querySelector('[data-summary-advanced]');
+      if (advanced) {
+        const primarySelect = advanced.querySelector('[data-summary-provider-primary]');
+        const fallbackSelect = advanced.querySelector('[data-summary-provider-fallback]');
+        const allowOfflineCheckbox = advanced.querySelector('[data-summary-allow-offline]');
+        const chain = [];
+        if (primarySelect && primarySelect.value) {
+          chain.push(primarySelect.value);
+        }
+        if (fallbackSelect) {
+          Array.from(fallbackSelect.options).forEach((option) => {
+            if (option.selected && option.value && (!primarySelect || option.value !== primarySelect.value)) {
+              chain.push(option.value);
+            }
+          });
+        }
+        if (chain.length) {
+          payload.provider_chain = chain;
+        }
+        if (allowOfflineCheckbox && !allowOfflineCheckbox.disabled) {
+          payload.allow_offline_fallback = allowOfflineCheckbox.checked;
+        }
+      }
     } else if (action === 'timeline') {
       const container = button.closest('[data-timeline]');
       const transcriptSelect = container?.querySelector('[data-timeline-transcript]');

@@ -943,8 +943,37 @@ class JobViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="analyze/summary")
     def analyze_summary(self, request, pk=None):
         job = self.get_object()
-        summarize_job.delay(case_id=str(job.case_id), job_id=str(job.id))
-        audit_emit(request, case_id=str(job.case_id), event="analysis.summary.requested", data={"job_id": str(job.id)})
+        payload = request.data if hasattr(request, "data") else {}
+        provider_chain = payload.get("provider_chain") if isinstance(payload, dict) else None
+        if isinstance(provider_chain, list):
+            provider_chain = [str(value).lower() for value in provider_chain if isinstance(value, str) and value]
+        else:
+            provider_chain = None
+        allow_offline_raw = payload.get("allow_offline_fallback") if isinstance(payload, dict) else None
+        allow_offline: Optional[bool]
+        if isinstance(allow_offline_raw, bool):
+            allow_offline = allow_offline_raw
+        elif isinstance(allow_offline_raw, str):
+            allow_offline = allow_offline_raw.strip().lower() in {"1", "true", "yes"}
+        else:
+            allow_offline = None
+
+        summarize_job.delay(
+            case_id=str(job.case_id),
+            job_id=str(job.id),
+            provider_chain=provider_chain,
+            allow_offline_fallback=allow_offline,
+        )
+        audit_emit(
+            request,
+            case_id=str(job.case_id),
+            event="analysis.summary.requested",
+            data={
+                "job_id": str(job.id),
+                "provider_chain": provider_chain,
+                "allow_offline_fallback": allow_offline,
+            },
+        )
         return Response({"status": "queued"}, status=status.HTTP_202_ACCEPTED)
 
     @action(detail=True, methods=["post"], url_path="analyze/timeline")

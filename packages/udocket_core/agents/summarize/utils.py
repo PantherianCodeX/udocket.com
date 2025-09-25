@@ -5,7 +5,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, MutableMapping, Optional
+from typing import Any, Dict, List, MutableMapping, Optional
 
 from ..common import (
     AnalysisArtifact,
@@ -52,6 +52,8 @@ class FinalizedOutputs:
     words: int
     sha_map: Dict[str, str]
     artifacts: Dict[str, AnalysisArtifact]
+    offline_fallback_used: bool
+    provider_chain: List[str]
 
 
 class SummarizePipeline:
@@ -70,7 +72,7 @@ class SummarizePipeline:
         resolve_transcript,
         build_context,
         allow_offline_fallback: bool,
-        provider_chain: Optional[list[str]],
+        provider_chain: Optional[List[str]],
     ) -> None:
         self.case_id = case_id
         self.job_id = job_id
@@ -85,6 +87,8 @@ class SummarizePipeline:
         self.offline_mode = azure_client is None
         self.offline_fallback_used = self.offline_mode
         self.provider_chain = list(provider_chain or [])
+        if not self.provider_chain:
+            self.provider_chain = ["local"] if self.offline_mode else ["azure", "local"]
 
     # LangGraph-compatible node implementations -----------------------
 
@@ -390,7 +394,7 @@ def finalize_outputs(
         "offline_fallback_used": offline_fallback_used,
     }
     if provider_chain:
-        meta["provider_chain"] = provider_chain
+        meta["provider_chain"] = list(provider_chain)
     if intake_payload:
         meta["intake"] = intake_payload
     if transcript_hint:
@@ -438,6 +442,8 @@ def finalize_outputs(
         words=words,
         sha_map=sha_map,
         artifacts=artifacts,
+        offline_fallback_used=offline_fallback_used,
+        provider_chain=list(provider_chain or []),
     )
 
 
