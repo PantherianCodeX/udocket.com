@@ -1009,6 +1009,7 @@ def summarize_job(
     job_id: str,
     provider_chain: Optional[List[str]] = None,
     allow_offline_fallback: Optional[bool] = None,
+    stage_overrides: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     job = Job.objects.select_related("case").get(pk=job_id)
     org_id = job.organization_id or job.case.organization_id
@@ -1027,6 +1028,7 @@ def summarize_job(
         intake=intake_payload or None,
         allow_offline_fallback=allow_offline_fallback,
         provider_chain=provider_chain,
+        stage_overrides=stage_overrides,
     )
 
     checksum = _sha256_file(result.summary_file)
@@ -1040,6 +1042,7 @@ def summarize_job(
         "summary_sha256": checksum,
         "summary_provider_chain": result.provider_chain,
         "summary_offline_fallback_used": result.offline_fallback_used,
+        "summary_stage_overrides": stage_overrides,
     }
     try:
         CaseArtifact.objects.create(

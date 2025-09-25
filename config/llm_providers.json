@@ -1,0 +1,34 @@
+{
+  "providers": {
+    "azure": {
+      "display_name": "Azure OpenAI (Canada)",
+      "env_requirements": ["AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_API_KEY"],
+      "models": {
+        "gpt-4o-mini": {
+          "label": "GPT-4o Mini",
+          "cost_tier": "standard",
+          "max_output_tokens": 4000,
+          "default_temperature": 0.2
+        },
+        "gpt-4o": {
+          "label": "GPT-4o Premium",
+          "cost_tier": "premium",
+          "max_output_tokens": 8000,
+          "default_temperature": 0.2,
+          "deployment_env": "AZURE_OPENAI_DEPLOYMENT_GPT_4O"
+        }
+      }
+    },
+    "local": {
+      "display_name": "Local Summarizer",
+      "models": {
+        "offline_v1": {
+          "label": "Offline Deterministic",
+          "cost_tier": "free",
+          "max_output_tokens": 2000,
+          "default_temperature": 0.0
+        }
+      }
+    }
+  }
+}

@@ -223,12 +223,21 @@ def test_summarize_agent_provider_override(tmp_path):
     )
 
     agent = SummarizeAgent(SummarizeConfig())
+    overrides = {
+        "summarize.context_builder": {"provider": "local", "fallbacks": [], "model": "offline_v1"},
+        "summarize.extract_outline": {"provider": "local", "fallbacks": [], "model": "offline_v1"},
+        "summarize.build_timeline_seeds": {"provider": "local", "fallbacks": [], "model": "offline_v1"},
+        "summarize.build_entity_hints": {"provider": "local", "fallbacks": [], "model": "offline_v1"},
+        "summarize.draft_markdown": {"provider": "local", "fallbacks": [], "model": "offline_v1"},
+        "summarize.qa_and_finalize": {"provider": "local", "fallbacks": [], "model": "offline_v1"},
+    }
     result = agent.summarize(
         case_id="CASE-5",
         case_dir=case_dir,
         job_id="JOB-5",
         allow_offline_fallback=True,
         provider_chain=["local"],
+        stage_overrides=overrides,
     )
 
     assert result.provider_chain == ["local"]

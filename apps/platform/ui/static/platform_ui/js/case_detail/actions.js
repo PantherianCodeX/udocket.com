@@ -18,6 +18,166 @@
     deps = value || {};
   }
 
+  function updateModelOptions(row) {
+    if (!row) return;
+    const providerSelect = row.querySelector('[data-llm-provider]');
+    const modelSelect = row.querySelector('[data-llm-model]');
+    const fallbackSelect = row.querySelector('[data-llm-fallback]');
+    if (!providerSelect || !modelSelect) return;
+    const provider = providerSelect.value;
+    Array.from(modelSelect.options).forEach((option) => {
+      const match = option.getAttribute('data-provider');
+      if (!match || match === provider) {
+        option.hidden = false;
+        option.disabled = false;
+      } else {
+        option.hidden = true;
+        option.disabled = true;
+        if (option.selected) {
+          option.selected = false;
+        }
+      }
+    });
+    if (!modelSelect.value) {
+      const firstVisible = Array.from(modelSelect.options).find((opt) => !opt.hidden && !opt.disabled);
+      if (firstVisible) {
+        firstVisible.selected = true;
+      }
+    }
+    if (fallbackSelect) {
+      Array.from(fallbackSelect.options).forEach((option) => {
+        if (option.value === provider) {
+          option.disabled = true;
+          option.selected = false;
+        } else if (!option.hasAttribute('data-disabled')) {
+          option.disabled = false;
+        }
+      });
+    }
+    const allowCheckbox = row.querySelector('[data-llm-allow-offline]');
+    if (allowCheckbox) {
+      const hasLocalFallback = provider === 'local'
+        || (fallbackSelect && Array.from(fallbackSelect.options).some((opt) => opt.selected && opt.value === 'local'));
+      allowCheckbox.disabled = !hasLocalFallback;
+      if (!hasLocalFallback) {
+        allowCheckbox.checked = false;
+      }
+    }
+  }
+
+  function collectProviderChain(overrides) {
+    const sequence = [];
+    Object.values(overrides || {}).forEach((config) => {
+      if (!config) return;
+      const primary = config.provider;
+      const fallbacks = config.fallbacks || [];
+      [primary].concat(fallbacks).forEach((name) => {
+        if (name && !sequence.includes(name)) {
+          sequence.push(name);
+        }
+      });
+    });
+    return sequence;
+  }
+
+  function openLLMModal(container) {
+    if (!caseDetail.modals || typeof caseDetail.modals.openFromHTML !== 'function') {
+      return;
+    }
+    const template = container.querySelector('[data-summary-llm-modal-template]');
+    if (!template) return;
+    const modal = caseDetail.modals.openFromHTML(template.innerHTML, { container: ctx?.modalRoot || undefined });
+    if (!modal) return;
+    const form = modal.querySelector('[data-summary-llm-form]');
+    if (!form) return;
+    const stageRows = Array.from(form.querySelectorAll('[data-llm-stage]'));
+    let existingOverrides = {};
+    if (container.dataset.llmOverrides) {
+      try {
+        existingOverrides = JSON.parse(container.dataset.llmOverrides);
+      } catch (error) {
+        existingOverrides = {};
+      }
+    }
+
+    stageRows.forEach((row) => {
+      const stageKey = row.getAttribute('data-stage-key');
+      const override = stageKey ? existingOverrides[stageKey] : null;
+      const providerSelect = row.querySelector('[data-llm-provider]');
+      const fallbackSelect = row.querySelector('[data-llm-fallback]');
+      const modelSelect = row.querySelector('[data-llm-model]');
+      const allowCheckbox = row.querySelector('[data-llm-allow-offline]');
+      if (override && providerSelect) {
+        if (override.provider) {
+          providerSelect.value = override.provider;
+        }
+        updateModelOptions(row);
+        if (fallbackSelect && Array.isArray(override.fallbacks)) {
+          const set = new Set(override.fallbacks.map(String));
+          Array.from(fallbackSelect.options).forEach((option) => {
+            option.selected = set.has(option.value) && !option.disabled;
+          });
+        }
+        if (modelSelect && override.model) {
+          modelSelect.value = override.model;
+        }
+        if (allowCheckbox && typeof override.allow_offline_fallback === 'boolean') {
+          allowCheckbox.checked = override.allow_offline_fallback;
+        }
+      }
+      if (providerSelect) {
+        providerSelect.addEventListener('change', () => updateModelOptions(row));
+      }
+      if (fallbackSelect) {
+        fallbackSelect.addEventListener('change', () => updateModelOptions(row));
+      }
+      updateModelOptions(row);
+    });
+
+    form.addEventListener('submit', (evt) => {
+      evt.preventDefault();
+      const overrides = {};
+      stageRows.forEach((row) => {
+        const key = row.getAttribute('data-stage-key');
+        if (!key) return;
+        const providerSelect = row.querySelector('[data-llm-provider]');
+        const modelSelect = row.querySelector('[data-llm-model]');
+        const fallbackSelect = row.querySelector('[data-llm-fallback]');
+        const allowCheckbox = row.querySelector('[data-llm-allow-offline]');
+        if (!providerSelect) return;
+        const fallbacks = fallbackSelect
+          ? Array.from(fallbackSelect.options)
+              .filter((opt) => opt.selected && opt.value && opt.value !== providerSelect.value)
+              .map((opt) => opt.value)
+          : [];
+        overrides[key] = {
+          provider: providerSelect.value,
+          fallbacks,
+          model: modelSelect ? modelSelect.value : '',
+          allow_offline_fallback: allowCheckbox ? allowCheckbox.checked : false,
+        };
+      });
+      container.dataset.llmOverrides = JSON.stringify(overrides);
+      const chain = collectProviderChain(overrides);
+      if (chain.length) {
+        container.dataset.llmProviderChain = JSON.stringify(chain);
+      } else {
+        delete container.dataset.llmProviderChain;
+      }
+      if (caseDetail.modals && typeof caseDetail.modals.message === 'function') {
+        caseDetail.modals.message({
+          heading: 'LLM tuning',
+          body: 'Settings applied for this job run.',
+          container: ctx?.modalRoot || undefined,
+        });
+      }
+      const closeButton = modal.querySelector('[data-modal-close]');
+      if (closeButton) {
+        closeButton.click();
+      }
+    });
+  }
+
   function closeActionMenu(menu) {
     if (!menu) return;
     menu.removeAttribute('open');
@@ -598,6 +758,14 @@
         fallbackSelect.addEventListener('change', syncAdvancedControls);
       }
       syncAdvancedControls();
+
+      const llmButton = summaryContainer.querySelector('[data-summary-open-llm-modal]');
+      if (llmButton) {
+        llmButton.addEventListener('click', async (evt) => {
+          evt.preventDefault();
+          openLLMModal(summaryContainer);
+        });
+      }
     }
 
     const timelineContainer = root.querySelector('[data-timeline]');
@@ -767,6 +935,28 @@
         }
         if (allowOfflineCheckbox && !allowOfflineCheckbox.disabled) {
           payload.allow_offline_fallback = allowOfflineCheckbox.checked;
+        }
+      }
+      const overridesValue = summaryContainer.dataset.llmOverrides;
+      if (overridesValue) {
+        try {
+          const overrides = JSON.parse(overridesValue);
+          if (overrides && typeof overrides === 'object') {
+            payload.stage_overrides = overrides;
+          }
+        } catch (error) {
+          console.warn('Invalid LLM overrides payload', error);
+        }
+      }
+      const chainOverride = summaryContainer.dataset.llmProviderChain;
+      if (chainOverride && !payload.provider_chain) {
+        try {
+          const chain = JSON.parse(chainOverride);
+          if (Array.isArray(chain) && chain.length) {
+            payload.provider_chain = chain;
+          }
+        } catch (error) {
+          console.warn('Invalid provider chain override', error);
         }
       }
     } else if (action === 'timeline') {

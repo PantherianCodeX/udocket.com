@@ -27,6 +27,7 @@ from ..presenters.jobs import (
     select_agent,
 )
 from packages.udocket_core.agents.summarize_lib import SummarizeConfig
+from packages.udocket_core.llm import load_llm_settings
 
 
 def _latest_successful_transcription_job(jobs: List[Job]) -> Optional[Job]:
@@ -804,6 +805,8 @@ def build_tool_panels(
     except Exception:  # noqa: BLE001
         summarize_cfg = SummarizeConfig()
 
+    llm_settings = load_llm_settings()
+
     provider_chain = list(summarize_cfg.provider_chain or ["azure", "local"])
     if summarize_cfg.force_offline_mode:
         provider_chain = ["local"]
@@ -826,6 +829,63 @@ def build_tool_panels(
             "available": True,
         },
     ]
+
+    stage_label_map = {
+        "summarize.context_builder": "Context builder",
+        "summarize.extract_outline": "Outline extraction",
+        "summarize.build_timeline_seeds": "Timeline seeds",
+        "summarize.build_entity_hints": "Entity hints",
+        "summarize.draft_markdown": "Draft summary",
+        "summarize.qa_and_finalize": "QA and finalize",
+    }
+
+    llm_stage_configs: List[Dict[str, Any]] = []
+    for stage_key, stage_label in stage_label_map.items():
+        assignment = llm_settings.stage(stage_key)
+        if not assignment:
+            continue
+        stage_providers: List[Dict[str, Any]] = []
+        for provider_name, provider in llm_settings.providers.items():
+            model_options = []
+            for model_name, model_meta in provider.models.items():
+                model_options.append(
+                    {
+                        "value": model_name,
+                        "label": model_meta.label,
+                        "cost_tier": model_meta.cost_tier,
+                    }
+                )
+            stage_providers.append(
+                {
+                    "value": provider_name,
+                    "label": provider.display_name,
+                    "available": provider.is_available(),
+                    "models": model_options,
+                }
+            )
+
+        selected_providers = assignment.providers or provider_chain
+        selected_providers = [p for p in selected_providers if p in {item["value"] for item in stage_providers}]
+        if not selected_providers:
+            selected_providers = provider_chain
+        selected_provider = selected_providers[0] if selected_providers else primary_default
+        selected_fallbacks = [value for value in selected_providers if value != selected_provider]
+        selected_model = assignment.model or (
+            next((opt["value"] for opt in next((sp["models"] for sp in stage_providers if sp["value"] == selected_provider), []) if opt), "")
+        )
+        allow_offline_default = "local" in selected_fallbacks or selected_provider == "local"
+
+        llm_stage_configs.append(
+            {
+                "key": stage_key,
+                "label": stage_label,
+                "providers": stage_providers,
+                "selected_provider": selected_provider,
+                "selected_fallbacks": selected_fallbacks,
+                "selected_model": selected_model,
+                "allow_offline_default": allow_offline_default,
+            }
+        )
 
     summary_status = status_payload(progress_lookup, "summary", "Not Started")
     summary_module = analysis_lookup.get("summary") or {}
@@ -861,6 +921,7 @@ def build_tool_panels(
                 "force_offline": summarize_cfg.force_offline_mode,
                 "azure_available": summarize_cfg.azure_enabled,
             },
+            "llm_stage_configs": llm_stage_configs,
         },
         "jobs": summary_jobs,
         "jobs_title": "Summarize Jobs",

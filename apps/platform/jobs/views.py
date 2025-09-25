@@ -958,11 +958,21 @@ class JobViewSet(viewsets.ModelViewSet):
         else:
             allow_offline = None
 
+        stage_overrides = payload.get("stage_overrides") if isinstance(payload, dict) else None
+        if isinstance(stage_overrides, str):
+            try:
+                stage_overrides = json.loads(stage_overrides)
+            except Exception:  # noqa: BLE001
+                stage_overrides = None
+        if not isinstance(stage_overrides, dict):
+            stage_overrides = None
+
         summarize_job.delay(
             case_id=str(job.case_id),
             job_id=str(job.id),
             provider_chain=provider_chain,
             allow_offline_fallback=allow_offline,
+            stage_overrides=stage_overrides,
         )
         audit_emit(
             request,
@@ -972,6 +982,7 @@ class JobViewSet(viewsets.ModelViewSet):
                 "job_id": str(job.id),
                 "provider_chain": provider_chain,
                 "allow_offline_fallback": allow_offline,
+                "stage_overrides": stage_overrides,
             },
         )
         return Response({"status": "queued"}, status=status.HTTP_202_ACCEPTED)

@@ -68,11 +68,12 @@ class SummarizePipeline:
         intake: Optional[Dict[str, Any]],
         transcript_hint: Optional[Dict[str, Any]],
         config: Any,
-        azure_client: Optional[AzureChatClient],
         resolve_transcript,
         build_context,
-        allow_offline_fallback: bool,
         provider_chain: Optional[List[str]],
+        stage_runtimes: Dict[str, Any],
+        default_temperature: float,
+        global_allow_offline: bool,
     ) -> None:
         self.case_id = case_id
         self.job_id = job_id
@@ -80,15 +81,20 @@ class SummarizePipeline:
         self.intake = intake or {}
         self.transcript_hint = transcript_hint
         self.config = config
-        self.azure_client = azure_client
         self._resolve_transcript = resolve_transcript
         self._build_context = build_context
-        self.allow_offline_fallback = allow_offline_fallback
-        self.offline_mode = azure_client is None
-        self.offline_fallback_used = self.offline_mode
+        self.stage_runtimes = stage_runtimes
+        self.default_temperature = default_temperature
+        self.global_allow_offline = global_allow_offline
+        self.offline_fallback_used = False
         self.provider_chain = list(provider_chain or [])
         if not self.provider_chain:
-            self.provider_chain = ["local"] if self.offline_mode else ["azure", "local"]
+            self.provider_chain = ["local"]
+        # mark offline usage if any stage configured as local
+        for runtime in stage_runtimes.values():
+            if runtime.primary_provider == "local":
+                self.offline_fallback_used = True
+                break
 
     # LangGraph-compatible node implementations -----------------------
 
@@ -134,20 +140,31 @@ class SummarizePipeline:
         parse: TranscriptParse = state["parse"]
         context_snippet: str = state["context_snippet"]
         case_brief: Dict[str, Any] = state["case_brief"]
+        runtime = self.stage_runtimes.get("summarize.extract_outline")
+        azure_client = runtime.azure_client if runtime else None
+        max_tokens = runtime.max_output_tokens if runtime and runtime.max_output_tokens else self.config.max_output_tokens
+        temperature = runtime.temperature if runtime else self.default_temperature
         try:
             outline_result = generate_outline(
                 parse=parse,
                 intake=self.intake,
                 context_snippet=context_snippet,
                 case_brief=case_brief,
-                azure_client=self.azure_client,
-                temperature=self.config.temperature,
-                max_tokens=self.config.max_output_tokens,
+                azure_client=azure_client,
+                temperature=temperature,
+                max_tokens=max_tokens,
             )
         except AzureStageFailure as exc:
-            outline_result = self._handle_stage_failure(state, exc)
+            outline_result = self._handle_stage_failure(state, exc, runtime)
         state["outline_result"] = outline_result
         self._record_usage(state, "outline", outline_result.usage)
+        if runtime:
+            if runtime.primary_provider == "local":
+                self.offline_fallback_used = True
+                state["offline_fallback_used"] = True
+            elif runtime.primary_provider == "azure" and runtime.allow_local_fallback and runtime.azure_client is None:
+                self.offline_fallback_used = True
+                state["offline_fallback_used"] = True
         return state
 
     def build_timeline_seeds(self, state: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
@@ -155,20 +172,28 @@ class SummarizePipeline:
         context_snippet: str = state["context_snippet"]
         outline_result: OutlineStageResult = state["outline_result"]
         case_brief: Dict[str, Any] = state["case_brief"]
+        runtime = self.stage_runtimes.get("summarize.build_timeline_seeds")
+        azure_client = runtime.azure_client if runtime else None
+        max_tokens = runtime.max_output_tokens if runtime and runtime.max_output_tokens else self.config.max_output_tokens
+        temperature = runtime.temperature if runtime else self.default_temperature
         try:
             timeline_result = generate_timeline(
                 parse=parse,
                 outline_issues=outline_result.outline.get("issues", []),
                 context_snippet=context_snippet,
                 case_brief=case_brief,
-                azure_client=self.azure_client,
-                temperature=self.config.temperature,
-                max_tokens=self.config.max_output_tokens,
+                azure_client=azure_client,
+                temperature=temperature,
+                max_tokens=max_tokens,
             )
         except AzureStageFailure as exc:
-            timeline_result = self._handle_stage_failure(state, exc)
+            timeline_result = self._handle_stage_failure(state, exc, runtime)
         state["timeline_result"] = timeline_result
         self._record_usage(state, "timeline", timeline_result.usage)
+        if runtime:
+            if runtime.primary_provider == "local" or (runtime.primary_provider == "azure" and runtime.allow_local_fallback and runtime.azure_client is None):
+                self.offline_fallback_used = True
+                state["offline_fallback_used"] = True
         return state
 
     def build_entity_hints(self, state: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
@@ -176,20 +201,28 @@ class SummarizePipeline:
         context_snippet: str = state["context_snippet"]
         outline_result: OutlineStageResult = state["outline_result"]
         case_brief: Dict[str, Any] = state["case_brief"]
+        runtime = self.stage_runtimes.get("summarize.build_entity_hints")
+        azure_client = runtime.azure_client if runtime else None
+        max_tokens = runtime.max_output_tokens if runtime and runtime.max_output_tokens else self.config.max_output_tokens
+        temperature = runtime.temperature if runtime else self.default_temperature
         try:
             entity_result = generate_entities(
                 parse=parse,
                 outline_parties=outline_result.outline.get("parties", {}),
                 context_snippet=context_snippet,
                 case_brief=case_brief,
-                azure_client=self.azure_client,
-                temperature=self.config.temperature,
-                max_tokens=self.config.max_output_tokens,
+                azure_client=azure_client,
+                temperature=temperature,
+                max_tokens=max_tokens,
             )
         except AzureStageFailure as exc:
-            entity_result = self._handle_stage_failure(state, exc)
+            entity_result = self._handle_stage_failure(state, exc, runtime)
         state["entity_result"] = entity_result
         self._record_usage(state, "entities", entity_result.usage)
+        if runtime:
+            if runtime.primary_provider == "local" or (runtime.primary_provider == "azure" and runtime.allow_local_fallback and runtime.azure_client is None):
+                self.offline_fallback_used = True
+                state["offline_fallback_used"] = True
         return state
 
     def draft_markdown(self, state: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
@@ -199,6 +232,10 @@ class SummarizePipeline:
         timeline_result: TimelineStageResult = state["timeline_result"]
         entity_result: EntityStageResult = state["entity_result"]
         case_brief: Dict[str, Any] = state["case_brief"]
+        runtime = self.stage_runtimes.get("summarize.draft_markdown")
+        azure_client = runtime.azure_client if runtime else None
+        max_tokens = runtime.max_output_tokens if runtime and runtime.max_output_tokens else self.config.max_output_tokens
+        temperature = runtime.temperature if runtime else self.default_temperature
         try:
             summary_result = generate_summary_markdown(
                 parse=parse,
@@ -208,18 +245,25 @@ class SummarizePipeline:
                 intake=self.intake,
                 context_snippet=context_snippet,
                 case_brief=case_brief,
-                azure_client=self.azure_client,
-                temperature=self.config.temperature,
-                max_tokens=self.config.max_output_tokens,
+                azure_client=azure_client,
+                temperature=temperature,
+                max_tokens=max_tokens,
             )
         except AzureStageFailure as exc:
-            summary_result = self._handle_stage_failure(state, exc)
+            summary_result = self._handle_stage_failure(state, exc, runtime)
         state["summary_result"] = summary_result
         self._record_usage(state, "summary", summary_result.usage)
+        if runtime:
+            if runtime.primary_provider == "local" or (runtime.primary_provider == "azure" and runtime.allow_local_fallback and runtime.azure_client is None):
+                self.offline_fallback_used = True
+                state["offline_fallback_used"] = True
         return state
 
     def qa_and_finalize(self, state: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
         parse: TranscriptParse = state["parse"]
+        runtime = self.stage_runtimes.get("summarize.qa_and_finalize")
+        if runtime and runtime.primary_provider == "local":
+            self.offline_fallback_used = True
         summary_result: DraftStageResult = state["summary_result"]
         markdown = summary_result.markdown.strip()
         markdown = self._ensure_header(markdown, parse)
@@ -272,8 +316,14 @@ class SummarizePipeline:
         self,
         state: MutableMapping[str, Any],
         exc: AzureStageFailure,
+        runtime: Optional[Any],
     ) -> Any:
-        if self.allow_offline_fallback or self.offline_mode:
+        allow = False
+        if runtime and runtime.primary_provider == "local":
+            allow = True
+        elif runtime and runtime.allow_local_fallback and self.global_allow_offline:
+            allow = True
+        if allow:
             state["offline_fallback_used"] = True
             self.offline_fallback_used = True
             return exc.fallback

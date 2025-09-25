@@ -1,0 +1,36 @@
+{
+  "stages": {
+    "summarize.context_builder": {
+      "providers": ["local"],
+      "model": "offline_v1"
+    },
+    "summarize.extract_outline": {
+      "providers": ["azure", "local"],
+      "model": "gpt-4o-mini"
+    },
+    "summarize.build_timeline_seeds": {
+      "providers": ["azure", "local"],
+      "model": "gpt-4o-mini"
+    },
+    "summarize.build_entity_hints": {
+      "providers": ["azure", "local"],
+      "model": "gpt-4o-mini"
+    },
+    "summarize.draft_markdown": {
+      "providers": ["azure", "local"],
+      "model": "gpt-4o"
+    },
+    "summarize.qa_and_finalize": {
+      "providers": ["azure", "local"],
+      "model": "gpt-4o-mini"
+    },
+    "timeline.builder": {
+      "providers": ["azure", "local"],
+      "model": "gpt-4o-mini"
+    },
+    "graph.extractor": {
+      "providers": ["azure", "local"],
+      "model": "gpt-4o-mini"
+    }
+  }
+}

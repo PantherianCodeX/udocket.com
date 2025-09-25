@@ -15,12 +15,44 @@ from .common.azure_client import _endpoint_is_canadian
 from .common.io import TranscriptSegment  # re-export for legacy imports
 from .langgraph_orchestrator import build_summarize_graph
 from .summarize.utils import FinalizedOutputs, SummarizePipeline
+from ..llm import LLMSettings, load_llm_settings
 
 MAX_PROMPT_SEGMENTS = 120
 MAX_PROMPT_CHARS = 8000
 
 SUPPORTED_PROVIDERS = {"azure", "local"}
 DEFAULT_PROVIDER_CHAIN: List[str] = ["azure", "local"]
+LLM_STAGE_KEYS = {
+    "context_builder": "summarize.context_builder",
+    "extract_outline": "summarize.extract_outline",
+    "build_timeline_seeds": "summarize.build_timeline_seeds",
+    "build_entity_hints": "summarize.build_entity_hints",
+    "draft_markdown": "summarize.draft_markdown",
+    "qa_and_finalize": "summarize.qa_and_finalize",
+}
+LLM_SETTINGS: Optional[LLMSettings] = None
+
+
+def _load_llm_settings() -> LLMSettings:
+    global LLM_SETTINGS
+    if LLM_SETTINGS is None:
+        LLM_SETTINGS = load_llm_settings()
+    return LLM_SETTINGS
+
+
+@dataclass
+class StageRuntime:
+    stage_key: str
+    providers: List[str]
+    model: str
+    azure_client: Optional[AzureChatClient]
+    max_output_tokens: int
+    allow_local_fallback: bool
+    temperature: float
+
+    @property
+    def primary_provider(self) -> str:
+        return self.providers[0] if self.providers else "local"
 
 
 PIPELINE_NODE_ORDER = [
@@ -131,6 +163,14 @@ class SummarizeConfig:
             api_version=self.azure_openai_api_version,
         )
 
+    def azure_client_config_for(self, deployment: Optional[str]) -> Optional[AzureClientConfig]:
+        cfg = self.azure_client_config()
+        if cfg is None:
+            return None
+        if deployment:
+            cfg.deployment = deployment
+        return cfg
+
 
 @dataclass
 class SummarizeResult:
@@ -163,6 +203,7 @@ class SummarizeAgent:
         transcript_hint: Optional[Dict[str, Any]] = None,
         allow_offline_fallback: Optional[bool] = None,
         provider_chain: Optional[List[str]] = None,
+        stage_overrides: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> SummarizeResult:
         case_dir = Path(case_dir)
         state: Dict[str, Any] = {
@@ -173,6 +214,14 @@ class SummarizeAgent:
         if input is not None:
             state["input_path"] = Path(input)
 
+        settings = _load_llm_settings()
+        stage_overrides = stage_overrides or {}
+
+        if allow_offline_fallback is None:
+            global_allow_offline = self.config.enable_offline_fallback
+        else:
+            global_allow_offline = bool(allow_offline_fallback)
+
         if provider_chain is None:
             provider_chain = list(self.config.provider_chain)
         else:
@@ -182,18 +231,82 @@ class SummarizeAgent:
         if self.config.force_offline_mode:
             provider_chain = ["local"]
 
-        azure_client = None
-        azure_cfg = self.config.azure_client_config()
-        if provider_chain and provider_chain[0] == "azure" and azure_cfg is not None:
-            azure_client = AzureChatClient(azure_cfg)
+        azure_enabled = self.config.azure_enabled
+        stage_runtimes: Dict[str, StageRuntime] = {}
+        provider_sequence: List[str] = []
 
-        if allow_offline_fallback is None:
-            offline_flag = self.config.enable_offline_fallback
-        else:
-            offline_flag = allow_offline_fallback
-        if "local" not in provider_chain:
-            offline_flag = False
-        offline_flag = bool(offline_flag)
+        for stage_attr, stage_key in LLM_STAGE_KEYS.items():
+            assignment = settings.stage(stage_key)
+            providers = list(assignment.providers if assignment and assignment.providers else provider_chain)
+            model = assignment.model if assignment and assignment.model else (providers[0] if providers else "local")
+            options = dict(assignment.options) if assignment else {}
+
+            override = stage_overrides.get(stage_key) or stage_overrides.get(stage_attr)
+            if override:
+                override_providers = override.get("providers")
+                if isinstance(override_providers, list) and override_providers:
+                    providers = [p for p in override_providers if p in SUPPORTED_PROVIDERS]
+                else:
+                    primary_override = override.get("provider")
+                    fallbacks_override = override.get("fallbacks") if isinstance(override.get("fallbacks"), list) else []
+                    chain_override: List[str] = []
+                    if primary_override:
+                        chain_override.append(primary_override)
+                    chain_override.extend(fallbacks_override)
+                    if chain_override:
+                        providers = [p for p in chain_override if p in SUPPORTED_PROVIDERS]
+                if override.get("model"):
+                    model = str(override["model"])
+                if isinstance(override.get("options"), dict):
+                    options.update({str(k): str(v) for k, v in override["options"].items()})
+
+            providers = [p for p in providers if p in SUPPORTED_PROVIDERS]
+            if not providers:
+                providers = list(DEFAULT_PROVIDER_CHAIN)
+            if self.config.force_offline_mode:
+                providers = ["local"]
+
+            model = model or providers[0]
+
+            provider_meta = settings.provider(providers[0])
+            model_meta = provider_meta.models.get(model) if provider_meta and model in provider_meta.models else None
+
+            deployment = options.get("azure_deployment") if options else None
+            if not deployment and model_meta and model_meta.deployment_env:
+                deployment = os.getenv(model_meta.deployment_env)
+
+            azure_client: Optional[AzureChatClient] = None
+            if providers[0] == "azure" and azure_enabled:
+                cfg = self.config.azure_client_config_for(deployment)
+                if cfg:
+                    azure_client = AzureChatClient(cfg)
+
+            stage_max_tokens = model_meta.max_output_tokens if model_meta and model_meta.max_output_tokens else self.config.max_output_tokens
+            stage_temperature = (
+                model_meta.default_temperature if model_meta and model_meta.default_temperature is not None else self.config.temperature
+            )
+
+            allow_override = override.get("allow_offline_fallback") if override else None
+            allow_local = providers[0] == "local" or ("local" in providers[1:])
+            if allow_override is not None:
+                allow_local = bool(allow_override)
+            if not global_allow_offline and providers[0] != "local":
+                allow_local = False
+
+            runtime = StageRuntime(
+                stage_key=stage_key,
+                providers=providers,
+                model=model,
+                azure_client=azure_client,
+                max_output_tokens=stage_max_tokens or self.config.max_output_tokens,
+                allow_local_fallback=allow_local,
+                temperature=stage_temperature,
+            )
+            stage_runtimes[stage_key] = runtime
+
+            for provider in providers:
+                if provider not in provider_sequence:
+                    provider_sequence.append(provider)
 
         pipeline = SummarizePipeline(
             case_id=case_id,
@@ -202,11 +315,12 @@ class SummarizeAgent:
             intake=intake,
             transcript_hint=transcript_hint,
             config=self.config,
-            azure_client=azure_client,
             resolve_transcript=self._resolve_transcript,
             build_context=self._build_context,
-            allow_offline_fallback=offline_flag,
-            provider_chain=provider_chain,
+            provider_chain=provider_sequence,
+            stage_runtimes=stage_runtimes,
+            default_temperature=self.config.temperature,
+            global_allow_offline=global_allow_offline,
         )
 
         final_state = self._execute_pipeline(pipeline, state)
