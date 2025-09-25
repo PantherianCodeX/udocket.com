@@ -59,10 +59,14 @@ def test_summarize_agent_offline_writes_artifacts(tmp_path):
 
     assert result.status == "ok"
     assert result.summary_file.exists()
+    assert result.outline_file and result.outline_file.exists()
+    assert result.timeline_seeds_file and result.timeline_seeds_file.exists()
+    assert result.entity_hints_file and result.entity_hints_file.exists()
     assert result.meta_json.exists()
     assert result.audit_jsonl.exists()
     meta_text = result.meta_json.read_text(encoding="utf-8")
     assert "summary_file" in meta_text
+    assert "outline_file" in meta_text
 
 
 def test_build_summarize_graph_requires_langgraph():
