@@ -2,6 +2,23 @@
 
 This document defines how automation and contributors should add and operate "agents" in the uDocket stack. It covers the current transcription agent and lays down clear conventions for future agents such as summarization, timelines, and relationship/graph extraction.
 
+Note: This is the root guide. For area‑specific practices (UI, operations, jobs, artifacts, accounts, authorization, core libs, config, infra, tests), also read the AGENTS.md files colocated in those directories. When working in any area, you must follow the closest AGENTS.md in that subtree.
+
+Quick index of AGENTS guides in this repo:
+- apps/platform/AGENTS.md
+- apps/platform/ui/AGENTS.md
+- apps/platform/operations/AGENTS.md
+- apps/platform/jobs/AGENTS.md
+- apps/platform/cases/AGENTS.md
+- apps/platform/artifacts/AGENTS.md
+- apps/platform/accounts/AGENTS.md
+- apps/platform/authorization/AGENTS.md
+- packages/udocket_core/AGENTS.md
+- apps/api/AGENTS.md
+- config/AGENTS.md
+- infra/AGENTS.md
+- tests/AGENTS.md
+
 ## Overview
 - Services:
   - `apps/platform` (Django + Channels + Celery): primary UI, API surface, and background workers.
