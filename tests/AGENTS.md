@@ -17,10 +17,11 @@ Scope: `tests/` across platform and legacy API.
 - Marker: `e2e_transcribe` (registered in `pytest.ini`). These tests are skipped by default.
 - Enable explicitly with: `E2E_TRANSCRIBE=1 pytest -m e2e_transcribe`
 - Requirements:
-  - `AZURE_SPEECH_KEY` and `AZURE_SPEECH_REGION` set to `canadacentral` or `canadaeast`.
-  - `ffmpeg` and `ffprobe` available in PATH.
-  - Optional: provide an input speech clip via `E2E_SPEECH_FILE` or `E2E_SPEECH_URL`. If not provided, the tests try `espeak`/`pico2wave`/`say` to synthesize a 1-second clip.
-- Scope: exercises the agent’s audio normalization (format conversion) and on‑demand Azure STT end‑to‑end. Designed to be very short to minimize upload/processing time and cost.
+  - `AZURE_SPEECH_KEY` and `AZURE_SPEECH_REGION` set to `canadacentral` or `canadaeast` (only needed for the Azure e2e tests).
+  - `ffmpeg` and `ffprobe` available in PATH (normalization depends on ffmpeg).
+- Fixtures:
+  - Curated short audio clips live in `tests/fixtures/audio/` and include compliant and non‑compliant formats: `*.wav`, `*.mp3`, `*.m4a`, `*.ogg`, `*.flac`.
+- Scope: exercises the agent’s audio normalization (format conversion) and on‑demand Azure STT end‑to‑end. Clips are only ~1–2s to minimize upload/processing time and cost.
 
 ## Storage & Isolation
 - Use sqlite DBs under a temp storage root where possible; settings already fall back to repo `storage/` path for developer environments.

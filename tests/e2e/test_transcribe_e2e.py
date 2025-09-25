@@ -4,9 +4,12 @@ import os
 import shutil
 from pathlib import Path
 import pytest
+import os
 
-# E2E tests are expensive and hit Azure; skip unless explicitly enabled
+# E2E tests are expensive; skip entire module unless explicitly enabled
 pytestmark = pytest.mark.e2e_transcribe
+if os.getenv("E2E_TRANSCRIBE") != "1":  # pragma: no cover - opt-in
+    pytest.skip("Set E2E_TRANSCRIBE=1 to run e2e transcription tests", allow_module_level=True)
 
 
 def _have(cmd: str) -> bool:
@@ -52,6 +55,13 @@ def _make_test_variants() -> dict[str, Path]:
     }
 
 
+def _copy_to_tmp(src: Path, tmp_dir: Path) -> Path:
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    dst = tmp_dir / src.name
+    shutil.copy2(src, dst)
+    return dst
+
+
 @pytest.mark.django_db
 def test_audio_normalization_exercises_conversion(tmp_path):
     _ensure_ffmpeg()
@@ -60,18 +70,21 @@ def test_audio_normalization_exercises_conversion(tmp_path):
     from packages.udocket_core.agents import normalize_audio
 
     # Already target format should not convert
-    res_ok = normalize_audio(variants["wav_ok"], tmp_path, case_id="CASE-E2E")
+    ok_local = _copy_to_tmp(variants["wav_ok"], tmp_path)
+    res_ok = normalize_audio(ok_local, tmp_path, case_id="CASE-E2E")
     assert res_ok.converted is False
     assert res_ok.reasons == []
 
     # Non-wav formats should be converted (format reason)
     for key in ("mp3_bad", "m4a_bad", "ogg_bad", "flac_bad"):
-        res = normalize_audio(variants[key], tmp_path, case_id="CASE-E2E")
+        local = _copy_to_tmp(variants[key], tmp_path)
+        res = normalize_audio(local, tmp_path, case_id="CASE-E2E")
         assert res.converted is True
         assert "format" in set(res.reasons)
 
     # Wav with wrong sample rate/channels should be converted for those reasons
-    res_wav_bad = normalize_audio(variants["wav_bad"], tmp_path, case_id="CASE-E2E")
+    wav_local = _copy_to_tmp(variants["wav_bad"], tmp_path)
+    res_wav_bad = normalize_audio(wav_local, tmp_path, case_id="CASE-E2E")
     assert res_wav_bad.converted is True
     reasons = set(res_wav_bad.reasons)
     assert {"sample_rate", "channels"}.issubset(reasons)
