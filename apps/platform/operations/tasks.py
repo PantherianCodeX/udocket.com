@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 import hashlib
 import uuid
 import json
@@ -883,6 +883,16 @@ def _ops_dir(case_id: str, organization_id: str | None = None) -> Path:
     return storage_ops_dir(case_id, organization_id)
 
 
+def _load_job_meta(case_id: str, organization_id: str | None, job_id: str) -> Dict[str, Any]:
+    meta_path = _ops_dir(case_id, organization_id) / f"{job_id}_transcription_log.json"
+    if not meta_path.exists():
+        return {}
+    try:
+        return json.loads(meta_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
 def _latest_transcript(case_id: str, organization_id: str | None = None) -> Path | None:
     _, tdir, _ = _case_paths(case_id, organization_id)
     if not tdir.exists():
@@ -1006,25 +1016,58 @@ def summarize_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
 def timeline_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
     job = Job.objects.select_related("case").get(pk=job_id)
     org_id = job.organization_id or job.case.organization_id
-    _, _, analysis_dir = _case_paths(case_id, org_id)
+    case_dir, _, analysis_dir = _case_paths(case_id, org_id)
     src = Path(job.transcript_path) if job.transcript_path else _latest_transcript(case_id, org_id)
     if not src or not src.exists():
         raise RuntimeError("No transcript found to build timeline")
-    rx = re.compile(r"^\[(\d{2}):(\d{2})\]\s+(?:SPK_(\d+):\s+)?(.*)$")
-    events: list[dict[str, Any]] = []
-    for ln in src.read_text(encoding="utf-8", errors="ignore").splitlines():
-        m = rx.match(ln.strip())
-        if not m:
-            continue
-        mm, ss, spk, text = m.groups()
-        ts = int(mm) * 60 + int(ss)
-        events.append({
-            "ts_start": ts,
-            "ts_end": None,
-            "speaker": f"SPK_{spk}" if spk else None,
-            "text": text.strip(),
-            "labels": [],
-        })
+    meta = _load_job_meta(case_id, org_id, job_id)
+    events: List[Dict[str, Any]] = []
+    seeds_path: Optional[Path] = None
+
+    timeline_seed_str = meta.get("summary_timeline_file") if isinstance(meta, dict) else None
+    if timeline_seed_str:
+        candidate = Path(timeline_seed_str)
+        if not candidate.exists():
+            candidate = case_dir / timeline_seed_str
+        if candidate.exists():
+            try:
+                loaded = json.loads(candidate.read_text(encoding="utf-8"))
+                if isinstance(loaded, dict) and "events" in loaded:
+                    loaded = loaded["events"]
+                if isinstance(loaded, list):
+                    for item in loaded:
+                        if not isinstance(item, dict):
+                            continue
+                        events.append(
+                            {
+                                "ts_start": item.get("ts_start"),
+                                "ts_end": item.get("ts_end"),
+                                "speaker": item.get("speaker"),
+                                "text": item.get("text", ""),
+                                "labels": list(item.get("labels") or []),
+                            }
+                        )
+                    seeds_path = candidate
+            except Exception:
+                events = []
+
+    if not events:
+        rx = re.compile(r"^\[(\d{2}):(\d{2})\]\s+(?:SPK_(\d+):\s+)?(.*)$")
+        for ln in src.read_text(encoding="utf-8", errors="ignore").splitlines():
+            m = rx.match(ln.strip())
+            if not m:
+                continue
+            mm, ss, spk, text = m.groups()
+            ts = int(mm) * 60 + int(ss)
+            events.append(
+                {
+                    "ts_start": ts,
+                    "ts_end": None,
+                    "speaker": f"SPK_{spk}" if spk else None,
+                    "text": text.strip(),
+                    "labels": [],
+                }
+            )
     out = analysis_dir / f"{job_id}__timeline_v1.json"
     _write_json(out, events)
     try:
@@ -1034,6 +1077,9 @@ def timeline_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
         with open(out, "rb") as f:
             for ch in iter(lambda: f.read(65536), b""):
                 h.update(ch)
+        artifact_meta = {"source_transcript": str(src), "events": len(events)}
+        if seeds_path:
+            artifact_meta["seed_source"] = str(seeds_path)
         CaseArtifact.objects.create(
             case_id=case_id,
             case_fk=job.case,
@@ -1043,11 +1089,14 @@ def timeline_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
             path=str(out),
             checksum=h.hexdigest(),
             schema_version="v1",
-            metadata={"source_transcript": str(src), "events": len(events)},
+            metadata=artifact_meta,
         )
     except Exception:
         pass
-    audit_emit(None, case_id=case_id, event="analysis.timeline.created", data={"job_id": job_id, "events": len(events)})
+    audit_payload = {"job_id": job_id, "events": len(events)}
+    if seeds_path:
+        audit_payload["seed_source"] = str(seeds_path)
+    audit_emit(None, case_id=case_id, event="analysis.timeline.created", data=audit_payload)
     try:
         opsd = _ops_dir(case_id, org_id)
         meta = {
@@ -1061,6 +1110,8 @@ def timeline_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
             "schema_version": "v1",
             "status": "ok",
         }
+        if seeds_path:
+            meta["seed_source"] = str(seeds_path)
         _write_json(opsd / f"{job_id}__timeline_log.json", meta)
         _append_jsonl(opsd / "ops_timeline.jsonl", meta)
     except Exception:
@@ -1076,21 +1127,133 @@ def timeline_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
 def graph_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
     job = Job.objects.select_related("case").get(pk=job_id)
     org_id = job.organization_id or job.case.organization_id
-    _, _, analysis_dir = _case_paths(case_id, org_id)
+    case_dir, _, analysis_dir = _case_paths(case_id, org_id)
     src = Path(job.transcript_path) if job.transcript_path else _latest_transcript(case_id, org_id)
     if not src or not src.exists():
         raise RuntimeError("No transcript found to extract entities/graph")
     text = src.read_text(encoding="utf-8", errors="ignore")
-    # Extremely lightweight: pick capitalized tokens as candidate entities (demo only)
-    tokens = re.findall(r"\b([A-Z][a-zA-Z]{2,})\b", text)
-    names = sorted(set(tokens))[:50]
-    entities = [{
-        "id": f"E{i+1}",
-        "name": n,
-        "type": "OTHER",
-        "mentions": [],
-    } for i, n in enumerate(names)]
-    graph = {"nodes": [{"id": e["id"], "label": e["name"], "type": e["type"]} for e in entities], "edges": []}
+    meta = _load_job_meta(case_id, org_id, job_id)
+
+    hints_path: Optional[Path] = None
+    hints_data: Optional[Dict[str, Any]] = None
+    hints_str = meta.get("summary_entity_file") if isinstance(meta, dict) else None
+    if hints_str:
+        candidate = Path(hints_str)
+        if not candidate.exists():
+            candidate = case_dir / hints_str
+        if candidate.exists():
+            try:
+                data = json.loads(candidate.read_text(encoding="utf-8"))
+                if isinstance(data, dict):
+                    hints_data = data
+                    hints_path = candidate
+            except Exception:
+                hints_data = None
+
+    entities: List[Dict[str, Any]] = []
+    graph: Dict[str, Any]
+
+    if hints_data:
+        entity_map: Dict[str, Dict[str, Any]] = {}
+        for raw in hints_data.get("entities", []):
+            if not isinstance(raw, dict):
+                continue
+            ent_id = str(raw.get("id") or f"E{len(entity_map) + 1}")
+            name = raw.get("name") or ent_id
+            ent_type = raw.get("type") or "OTHER"
+            mentions_list: List[Dict[str, Any]] = []
+            mentions_raw = raw.get("mentions")
+            if isinstance(mentions_raw, list):
+                for item in mentions_raw:
+                    if isinstance(item, dict):
+                        mentions_list.append(
+                            {
+                                "ts": item.get("ts"),
+                                "text": item.get("text", ""),
+                            }
+                        )
+            entity_map[ent_id] = {
+                "id": ent_id,
+                "name": name,
+                "type": ent_type,
+                "mentions": mentions_list,
+            }
+
+        edges: List[Dict[str, Any]] = []
+        for raw_rel in hints_data.get("relations", []):
+            if not isinstance(raw_rel, dict):
+                continue
+            source = raw_rel.get("source")
+            target = raw_rel.get("target")
+            if not source or not target:
+                continue
+            rel_type = raw_rel.get("type") or "relation"
+            evidence_list: List[Dict[str, Any]] = []
+            evidence_raw = raw_rel.get("evidence")
+            if isinstance(evidence_raw, list):
+                for item in evidence_raw:
+                    if isinstance(item, dict):
+                        evidence_list.append(
+                            {
+                                "ts": item.get("ts"),
+                                "text": item.get("text", ""),
+                            }
+                        )
+            if source not in entity_map:
+                entity_map[source] = {
+                    "id": source,
+                    "name": source,
+                    "type": "OTHER",
+                    "mentions": [],
+                }
+            if target not in entity_map:
+                entity_map[target] = {
+                    "id": target,
+                    "name": target,
+                    "type": "OTHER",
+                    "mentions": [],
+                }
+            edges.append(
+                {
+                    "id": f"REL-{len(edges) + 1}",
+                    "source": source,
+                    "target": target,
+                    "type": rel_type,
+                    "evidence": evidence_list,
+                }
+            )
+
+        if not entity_map:
+            hints_data = None
+        else:
+            entities = list(entity_map.values())
+            graph = {
+                "nodes": [
+                    {"id": ent["id"], "label": ent["name"], "type": ent.get("type") or "OTHER"}
+                    for ent in entities
+                ],
+                "edges": edges,
+            }
+
+    if not hints_data:
+        tokens = re.findall(r"\b([A-Z][a-zA-Z]{2,})\b", text)
+        names = sorted(set(tokens))[:50]
+        entities = [
+            {
+                "id": f"E{i+1}",
+                "name": n,
+                "type": "OTHER",
+                "mentions": [],
+            }
+            for i, n in enumerate(names)
+        ]
+        graph = {
+            "nodes": [
+                {"id": ent["id"], "label": ent["name"], "type": ent["type"]}
+                for ent in entities
+            ],
+            "edges": [],
+        }
     entities_file = analysis_dir / f"{job_id}__entities_v1.json"
     graph_file = analysis_dir / f"{job_id}__graph_v1.json"
     _write_json(entities_file, {"entities": entities})
@@ -1100,6 +1263,11 @@ def graph_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
 
         h1 = hashlib.sha256(entities_file.read_bytes()).hexdigest()
         h2 = hashlib.sha256(graph_file.read_bytes()).hexdigest()
+        artifact_entities_meta = {"source_transcript": str(src), "entities": len(entities)}
+        artifact_graph_meta = {"source_transcript": str(src), "nodes": len(graph["nodes"]), "edges": len(graph.get("edges", []))}
+        if hints_path:
+            artifact_entities_meta["hint_source"] = str(hints_path)
+            artifact_graph_meta["hint_source"] = str(hints_path)
         CaseArtifact.objects.create(
             case_id=case_id,
             case_fk=job.case,
@@ -1109,7 +1277,7 @@ def graph_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
             path=str(entities_file),
             checksum=h1,
             schema_version="v1",
-            metadata={"source_transcript": str(src), "entities": len(entities)},
+            metadata=artifact_entities_meta,
         )
         CaseArtifact.objects.create(
             case_id=case_id,
@@ -1120,11 +1288,14 @@ def graph_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
             path=str(graph_file),
             checksum=h2,
             schema_version="v1",
-            metadata={"source_transcript": str(src), "nodes": len(graph["nodes"]), "edges": 0},
+            metadata=artifact_graph_meta,
         )
     except Exception:
         pass
-    audit_emit(None, case_id=case_id, event="analysis.graph.created", data={"job_id": job_id, "entities": len(entities)})
+    audit_payload = {"job_id": job_id, "entities": len(entities), "edges": len(graph.get("edges", []))}
+    if hints_path:
+        audit_payload["hint_source"] = str(hints_path)
+    audit_emit(None, case_id=case_id, event="analysis.graph.created", data=audit_payload)
     try:
         opsd = _ops_dir(case_id, org_id)
         meta = {
@@ -1136,11 +1307,13 @@ def graph_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
             "graph_checksum": h2 if 'h2' in locals() else None,
             "source_transcript": str(src),
             "entities": len(entities),
-            "edges": 0,
+            "edges": len(graph.get("edges", [])),
             "ts": timezone.now().isoformat(),
             "schema_version": "v1",
             "status": "ok",
         }
+        if hints_path:
+            meta["hint_source"] = str(hints_path)
         _write_json(opsd / f"{job_id}__graph_log.json", meta)
         _append_jsonl(opsd / "ops_graph.jsonl", meta)
     except Exception:
@@ -1149,4 +1322,10 @@ def graph_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
         send_case_update(case_id, event="artifact.created", kind="graph", job_id=job_id)
     except Exception:
         pass
-    return {"status": "ok", "entities_file": str(entities_file), "graph_file": str(graph_file), "entities": len(entities), "edges": 0}
+    return {
+        "status": "ok",
+        "entities_file": str(entities_file),
+        "graph_file": str(graph_file),
+        "entities": len(entities),
+        "edges": len(graph.get("edges", [])),
+    }

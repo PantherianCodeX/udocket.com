@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import json
 from pathlib import Path
 
 import pytest
@@ -89,10 +90,42 @@ def test_analysis_tasks_generate_artifacts(db, settings):
     out2 = op_tasks.timeline_job.run(None, case_id=str(case.id), job_id=str(job.id))
     out3 = op_tasks.graph_job.run(None, case_id=str(case.id), job_id=str(job.id))
 
-    assert Path(out1["summary_file"]).exists()
-    assert Path(out2["timeline_file"]).exists()
-    assert Path(out3["entities_file"]).exists()
-    assert Path(out3["graph_file"]).exists()
+    summary_path = Path(out1["summary_file"])
+    timeline_seed_path = Path(out1["timeline_file"])
+    outline_path = Path(out1["outline_file"])
+    entity_hint_path = Path(out1["entity_file"])
+    timeline_path = Path(out2["timeline_file"])
+    entities_path = Path(out3["entities_file"])
+    graph_path = Path(out3["graph_file"])
+
+    assert summary_path.exists()
+    assert outline_path.exists()
+    assert timeline_seed_path.exists()
+    assert entity_hint_path.exists()
+    assert timeline_path.exists()
+    assert entities_path.exists()
+    assert graph_path.exists()
+
+    seeds = json.loads(timeline_seed_path.read_text(encoding="utf-8"))
+    timeline_events = json.loads(timeline_path.read_text(encoding="utf-8"))
+    assert timeline_events == seeds
+
+    hints = json.loads(entity_hint_path.read_text(encoding="utf-8"))
+    entity_payload = json.loads(entities_path.read_text(encoding="utf-8"))
+    graph_payload = json.loads(graph_path.read_text(encoding="utf-8"))
+
+    hint_names = {
+        ent.get("name")
+        for ent in hints.get("entities", [])
+        if isinstance(ent, dict) and ent.get("name")
+    }
+    produced_names = {
+        ent.get("name")
+        for ent in entity_payload.get("entities", [])
+        if isinstance(ent, dict) and ent.get("name")
+    }
+    assert hint_names <= produced_names
+    assert len(graph_payload.get("nodes", [])) == len(produced_names)
 
     arts = list(CaseArtifact.objects.filter(case_id=str(case.id)))
     kinds = sorted(a.type for a in arts)
