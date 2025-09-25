@@ -325,7 +325,10 @@
     </main>
 
     <footer class="relative z-10 mt-12 border-t border-white/10 bg-white/5 py-6 text-center text-xs text-slate-400">
-      uDocket Platform · Build resilient case operations with trustworthy transcripts & analysis
+      <div class="mx-auto flex max-w-6xl items-center justify-between px-6">
+        <p class="text-slate-400">uDocket Platform · Build resilient case operations</p>
+        <p class="text-slate-400">Build: <span class="font-mono" data-copy-text="{{ APP_BUILD }}">{{ APP_BUILD }}</span></p>
+      </div>
     </footer>
   </div>
   {% block body_scripts %}{% endblock %}
