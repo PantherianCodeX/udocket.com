@@ -5,10 +5,11 @@
 <script src="{% static 'platform_ui/js/case_detail/actions.js' %}"></script>
 <script src="{% static 'platform_ui/js/jobs_table.js' %}"></script>
 <script>
+(function () {
   window.jobPollers = window.jobPollers || {};
   window.jobSockets = window.jobSockets || {};
 
-  const platformUI = window.platformUI || {};
+  const platformUI = (window.platformUI = window.platformUI || {});
   const jobsTableApi = platformUI.jobsTable;
   if (!jobsTableApi || typeof jobsTableApi.init !== 'function') {
     console.warn('platformUI.jobsTable.init is required for jobs table interactions');
@@ -170,10 +171,8 @@
     }
   });
 
-  const caseDetail = platformUI.caseDetail || {};
+  const caseDetail = (platformUI.caseDetail = platformUI.caseDetail || {});
   const modalRoot = document.getElementById('modal-root');
-
-  caseDetail.helpers = caseDetail.helpers || platformUI.caseDetail?.helpers || {};
 
   if (caseDetail.modals && typeof caseDetail.modals.setContext === 'function') {
     caseDetail.modals.setContext({
@@ -192,21 +191,21 @@
   const noopRealtime = {
     handleJobUpdate: (jobId, payload) => {
       if (!payload || !payload.notes) return;
-      const count = typeof payload.notes.count === 'number' ? payload.notes.count : Array.isArray(payload.notes.entries) ? payload.notes.entries.length : 0;
-      if (caseDetail.ui && typeof caseDetail.ui.updateNotesIndicator === 'function') {
-        caseDetail.ui.updateNotesIndicator(jobId, count);
-      }
+      const count = typeof payload.notes.count === 'number'
+        ? payload.notes.count
+        : Array.isArray(payload.notes.entries)
+          ? payload.notes.entries.length
+          : 0;
+      caseDetail.ui?.updateNotesIndicator?.(jobId, count);
     },
     ensurePolling: (jobId) => ensurePolling(jobId, true),
   };
 
   if (caseDetail.ui && typeof caseDetail.ui.setDeps === 'function') {
     caseDetail.ui.setDeps({
-      helpers: caseDetail.helpers,
+      helpers: caseDetail.helpers || {},
       getTableController: () => jobsTableController,
-      updateNotesIndicator: (jobId, count) => {
-        caseDetail.ui.updateNotesIndicator?.(jobId, count);
-      },
+      updateNotesIndicator: (jobId, count) => caseDetail.ui?.updateNotesIndicator?.(jobId, count),
       scheduleTranscribeRefresh: () => {},
       refreshCaseJobs: () => {},
     });
@@ -219,7 +218,7 @@
       jobsState: { currentCaseId: null },
     });
     caseDetail.actions.setDeps?.({
-      helpers: caseDetail.helpers,
+      helpers: caseDetail.helpers || {},
       ui: {
         getTableController: () => jobsTableController,
         scheduleTranscribeRefresh: () => {},
@@ -242,4 +241,5 @@
       window.__jobsActionsBound = true;
     }
   }
+})();
 </script>
