@@ -81,7 +81,8 @@
       jobLog: (evt) => actions.handleJobViewLog(evt),
       analysisAction: (evt) => actions.handleAnalysisAction(evt),
       toolCardBefore: (evt) => {
-        const button = evt.target.closest('[data-tool-card]');
+        const src = (evt.detail && evt.detail.elt) || evt.target;
+        const button = src && src.closest ? src.closest('[data-tool-card]') : null;
         if (!button) return;
         global.document.querySelectorAll('[data-tool-card]').forEach((el) => {
           el.classList.remove('ring-1', 'ring-primary-400/60');
@@ -92,11 +93,11 @@
         button.setAttribute('data-tool-card-active', 'true');
       },
       toolCardAfter: (evt) => {
-        const button = evt.target.closest('[data-tool-card]');
+        const src = (evt.detail && evt.detail.elt) || evt.target;
+        const button = src && src.closest ? src.closest('[data-tool-card]') : null;
         if (button) {
           button.classList.remove('ring-1', 'ring-primary-400/60');
           button.removeAttribute('data-tool-card-active');
-          controller.ui.boost(controller.ctx.caseId);
           return;
         }
         if (evt.target === controller.ctx.workspace || (evt.target && evt.target.id === 'tool-workspace')) {
@@ -123,14 +124,16 @@
         }
       },
       toolCardAfterRequest: (evt) => {
-        const button = evt.target.closest('[data-tool-card]');
+        const src = (evt.detail && evt.detail.elt) || evt.target;
+        const button = src && src.closest ? src.closest('[data-tool-card]') : null;
         if (button) {
           button.classList.remove('ring-1', 'ring-primary-400/60');
           button.removeAttribute('data-tool-card-active');
         }
       },
       toolCardError: (evt) => {
-        const button = evt.target.closest('[data-tool-card]');
+        const src = (evt.detail && evt.detail.elt) || evt.target;
+        const button = src && src.closest ? src.closest('[data-tool-card]') : null;
         if (button) {
           button.classList.remove('ring-1', 'ring-primary-400/60');
           button.removeAttribute('data-tool-card-active');
