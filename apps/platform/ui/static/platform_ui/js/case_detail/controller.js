@@ -99,7 +99,7 @@
           controller.ui.boost(controller.ctx.caseId);
           return;
         }
-        if (evt.target === controller.ctx.workspace) {
+        if (evt.target === controller.ctx.workspace || (evt.target && evt.target.id === 'tool-workspace')) {
           // Clean up any stale UI state on tool cards after panel swaps
           const allCards = global.document.querySelectorAll('[data-tool-card]');
           allCards.forEach((el) => {
@@ -124,10 +124,20 @@
           });
         }
       },
+      toolCardAfterRequest: (evt) => {
+        const button = evt.target.closest('[data-tool-card]');
+        if (button) {
+          button.classList.remove('ring-1', 'ring-primary-400/60');
+          button.removeAttribute('disabled');
+          button.removeAttribute('aria-busy');
+        }
+      },
       toolCardError: (evt) => {
         const button = evt.target.closest('[data-tool-card]');
         if (button) {
           button.classList.remove('ring-1', 'ring-primary-400/60');
+          button.removeAttribute('disabled');
+          button.removeAttribute('aria-busy');
         }
       },
       htmxAfterOnLoad: (evt) => {
@@ -166,6 +176,7 @@
     global.document.body.addEventListener('htmx:beforeRequest', handlers.toolCardBefore);
     global.document.body.addEventListener('htmx:afterSwap', handlers.toolCardAfter);
     global.document.body.addEventListener('htmx:afterSettle', handlers.toolCardSettle);
+    global.document.body.addEventListener('htmx:afterRequest', handlers.toolCardAfterRequest);
     global.document.body.addEventListener('htmx:error', handlers.toolCardError);
     global.document.body.addEventListener('htmx:afterOnLoad', handlers.htmxAfterOnLoad);
 
