@@ -46,8 +46,21 @@
         sockets: {},
         lastStatus: {},
         refreshTranscribeScheduled: false,
+        fallbackJobs: new Set(),
+        fallbackTimer: null,
+        connectTimeouts: {},
       };
     jobsState.currentCaseId = caseId;
+    if (!(jobsState.fallbackJobs instanceof Set)) {
+      const existing = Array.isArray(jobsState.fallbackJobs)
+        ? jobsState.fallbackJobs
+        : [];
+      jobsState.fallbackJobs = new Set(existing);
+    }
+    jobsState.connectTimeouts = jobsState.connectTimeouts || {};
+    jobsState.pollers = jobsState.pollers || {};
+    jobsState.sockets = jobsState.sockets || {};
+    jobsState.lastStatus = jobsState.lastStatus || {};
     global.JobsState = jobsState;
 
     const ctx = {

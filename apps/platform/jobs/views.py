@@ -167,6 +167,55 @@ class JobViewSet(viewsets.ModelViewSet):
         }
         return Response(payload)
 
+    @action(detail=False, methods=["get"], url_path="status/bulk")
+    def bulk_status(self, request):
+        """Return status payloads for multiple jobs in a single response.
+
+        Expects a comma-delimited ``ids`` query parameter and respects tenancy
+        constraints through ``scope_jobs``.
+        """
+
+        ids_param = (request.query_params.get("ids") or "").strip()
+        if not ids_param:
+            return Response({"detail": "Parameter 'ids' is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            job_ids = [uuid.UUID(part.strip()) for part in ids_param.split(",") if part.strip()]
+        except (ValueError, AttributeError):
+            return Response({"detail": "Parameter 'ids' must contain valid UUIDs."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not job_ids:
+            return Response([], status=status.HTTP_200_OK)
+
+        qs = self.get_queryset().filter(pk__in=job_ids)
+        case_id_param = request.query_params.get("case_id")
+        if case_id_param:
+            try:
+                uuid.UUID(case_id_param)
+            except ValueError:
+                return Response({"detail": "Parameter 'case_id' must be a valid UUID."}, status=status.HTTP_400_BAD_REQUEST)
+            qs = qs.filter(case_id=case_id_param)
+
+        payloads: list[dict[str, Any]] = []
+        for job in qs:
+            payloads.append(
+                {
+                    "id": str(job.id),
+                    "status": job.status,
+                    "upload_progress": job.upload_progress,
+                    "progress_percent": job.upload_progress,
+                    "transcript_path": job.transcript_path,
+                    "finished_at": job.finished_at,
+                    "review_status": job.review_status,
+                    "review_comment": job.review_comment,
+                    "reviewed_at": job.reviewed_at,
+                    "reviewed_by": self._user_label(job.reviewed_by),
+                    "review_activity_id": str(job.review_activity_id) if job.review_activity_id else None,
+                }
+            )
+
+        return Response(payloads)
+
     def _can_review(self, request, job: Job) -> bool:
         user = getattr(request, "user", None)
         if getattr(settings, "PLATFORM_DEV_OPEN", False):

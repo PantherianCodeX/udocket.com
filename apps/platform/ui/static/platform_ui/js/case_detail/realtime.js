@@ -6,6 +6,14 @@
   }
 
   const DEFAULT_TERMINAL = ['SUCCEEDED', 'FAILED', 'CANCELLED', 'ERROR', 'CORRUPTED'];
+  const FALLBACK_INTERVAL_MS = 5000;
+  const CONNECT_TIMEOUT_MS = 5000;
+  const WS_READY = {
+    CONNECTING: 0,
+    OPEN: 1,
+    CLOSING: 2,
+    CLOSED: 3,
+  };
 
   let ctx = null;
   let deps = {};
@@ -16,6 +24,20 @@
 
   function setDeps(value) {
     deps = value || {};
+  }
+
+  function supportsWebSocket() {
+    return typeof global.WebSocket === 'function';
+  }
+
+  function ensureStateCollections() {
+    if (!ctx) return;
+    if (!(ctx.jobsState.fallbackJobs instanceof Set)) {
+      ctx.jobsState.fallbackJobs = new Set();
+    }
+    ctx.jobsState.connectTimeouts = ctx.jobsState.connectTimeouts || {};
+    ctx.jobsState.fallbackTimer = ctx.jobsState.fallbackTimer || null;
+    ctx.jobsState.fallbackInFlight = ctx.jobsState.fallbackInFlight || false;
   }
 
   function renderStatusLabelFactory() {
@@ -39,31 +61,156 @@
       : DEFAULT_TERMINAL;
   }
 
-  function ensurePolling(jobId) {
-    if (!ctx || !jobId) return;
-    if (ctx.jobsState.pollers[jobId]) return;
-    const statusEl = global.document.getElementById(`job-status-${jobId}`);
-    const current = statusEl && statusEl.dataset ? statusEl.dataset.status : '';
-    if (terminalStatuses().includes(normalizeStatus(current))) {
+  function getFallbackJobs() {
+    if (!ctx) return new Set();
+    ensureStateCollections();
+    return ctx.jobsState.fallbackJobs;
+  }
+
+  function startFallbackTimer() {
+    if (!ctx) return;
+    ensureStateCollections();
+    if (ctx.jobsState.fallbackTimer) return;
+    ctx.jobsState.fallbackTimer = global.setInterval(runFallbackPoll, FALLBACK_INTERVAL_MS);
+  }
+
+  function stopFallbackTimer() {
+    if (!ctx) return;
+    if (ctx.jobsState.fallbackTimer && getFallbackJobs().size === 0) {
+      global.clearInterval(ctx.jobsState.fallbackTimer);
+      ctx.jobsState.fallbackTimer = null;
+    }
+  }
+
+  async function runFallbackPoll(explicitIds) {
+    if (!ctx) return;
+    ensureStateCollections();
+    if (ctx.jobsState.fallbackInFlight) {
       return;
     }
-    ctx.jobsState.pollers[jobId] = global.setInterval(() => pollJob(jobId), 3000);
+    const fallbackJobs = getFallbackJobs();
+    const ids = explicitIds ? Array.from(new Set(explicitIds)) : Array.from(fallbackJobs);
+    if (!ids.length) {
+      stopFallbackTimer();
+      return;
+    }
+
+    const params = new URLSearchParams();
+    params.set('ids', ids.join(','));
+    if (ctx.jobsState.currentCaseId) {
+      params.set('case_id', ctx.jobsState.currentCaseId);
+    }
+
+    ctx.jobsState.fallbackInFlight = true;
+    try {
+      const resp = await fetch(`/api/v1/jobs/status/bulk/?${params.toString()}`, {
+        credentials: 'same-origin',
+      });
+      if (!resp.ok) {
+        if (resp.status === 404) {
+          ids.forEach((jobId) => clearFallback(jobId));
+        }
+        return;
+      }
+      const records = await resp.json();
+      const seen = new Set();
+      if (Array.isArray(records)) {
+        records.forEach((item) => {
+          const jobId = String(item.id || '').trim();
+          if (!jobId) return;
+          seen.add(jobId);
+          handleJobUpdate(jobId, item, 'bulk');
+          const normalized = normalizeStatus(item.status);
+          if (normalized && terminalStatuses().includes(normalized)) {
+            clearFallback(jobId);
+          }
+        });
+      }
+      ids.forEach((jobId) => {
+        if (!seen.has(jobId)) {
+          clearFallback(jobId);
+        }
+      });
+    } catch (error) {
+      console.warn('Job bulk poll failed', ids, error);
+    } finally {
+      ctx.jobsState.fallbackInFlight = false;
+      if (!getFallbackJobs().size) {
+        stopFallbackTimer();
+      }
+    }
+  }
+
+  function markForFallback(jobId, immediate) {
+    if (!ctx || !jobId) return;
+    ensureStateCollections();
+    const fallbackJobs = getFallbackJobs();
+    if (!fallbackJobs.has(jobId)) {
+      fallbackJobs.add(jobId);
+    }
+    startFallbackTimer();
+    if (immediate) {
+      runFallbackPoll([jobId]);
+    }
+  }
+
+  function clearFallback(jobId) {
+    if (!ctx || !jobId) return;
+    const fallbackJobs = getFallbackJobs();
+    if (fallbackJobs.delete(jobId)) {
+      stopFallbackTimer();
+    }
+  }
+
+  function scheduleConnectTimeout(jobId) {
+    if (!ctx) return;
+    ensureStateCollections();
+    const timers = ctx.jobsState.connectTimeouts;
+    if (timers[jobId]) return;
+    timers[jobId] = global.setTimeout(() => {
+      delete timers[jobId];
+      const socket = ctx.jobsState.sockets && ctx.jobsState.sockets[jobId];
+      if (!socket || socket.readyState !== WS_READY.OPEN) {
+        markForFallback(jobId, true);
+      }
+    }, CONNECT_TIMEOUT_MS);
+  }
+
+  function clearConnectTimeout(jobId) {
+    if (!ctx) return;
+    ensureStateCollections();
+    const timers = ctx.jobsState.connectTimeouts;
+    if (timers && timers[jobId]) {
+      global.clearTimeout(timers[jobId]);
+      delete timers[jobId];
+    }
+  }
+
+  function ensurePolling(jobId) {
+    if (!ctx || !jobId) return;
+    if (!supportsWebSocket()) {
+      markForFallback(jobId, true);
+      return;
+    }
+    const socket = ctx.jobsState.sockets && ctx.jobsState.sockets[jobId];
+    if (!socket || socket.readyState === WS_READY.CLOSED) {
+      connectSocket(jobId);
+      markForFallback(jobId);
+      return;
+    }
+    if (socket.readyState === WS_READY.CLOSING) {
+      markForFallback(jobId);
+      return;
+    }
+    if (socket.readyState === WS_READY.CONNECTING) {
+      scheduleConnectTimeout(jobId);
+    } else if (socket.readyState === WS_READY.OPEN) {
+      clearFallback(jobId);
+    }
   }
 
   async function pollJob(jobId) {
-    try {
-      const resp = await fetch(`/api/v1/jobs/${jobId}/status/`);
-      if (!resp.ok) return;
-      const data = await resp.json();
-      handleJobUpdate(jobId, data, 'poll');
-      const normalized = normalizeStatus(data.status);
-      if (terminalStatuses().includes(normalized) && ctx.jobsState.pollers[jobId]) {
-        clearInterval(ctx.jobsState.pollers[jobId]);
-        delete ctx.jobsState.pollers[jobId];
-      }
-    } catch (error) {
-      console.warn('Job poll failed', jobId, error);
-    }
+    await runFallbackPoll(jobId ? [jobId] : undefined);
   }
 
   function handleJobUpdate(jobId, payload, source) {
@@ -85,23 +232,48 @@
       deps.scheduleTranscribeRefresh?.();
     }
 
-    if (status && terminalStatuses().includes(status) && ctx.jobsState.pollers[jobId]) {
-      clearInterval(ctx.jobsState.pollers[jobId]);
-      delete ctx.jobsState.pollers[jobId];
+    if (status && terminalStatuses().includes(status)) {
+      clearFallback(jobId);
+      const socket = ctx.jobsState.sockets && ctx.jobsState.sockets[jobId];
+      if (socket && socket.readyState <= WS_READY.OPEN) {
+        try {
+          socket.close(1000, 'job-terminal');
+        } catch (_) {}
+      }
     }
   }
 
   function connectSocket(jobId) {
     if (!ctx || !jobId) return;
-    if (ctx.jobsState.sockets[jobId]) return;
-    const url = (global.location.protocol === 'https:' ? 'wss://' : 'ws://') + global.location.host + `/ws/jobs/${jobId}/`;
-    const ws = new global.WebSocket(url);
+    if (!supportsWebSocket()) {
+      markForFallback(jobId, false);
+      return;
+    }
+    const existing = ctx.jobsState.sockets && ctx.jobsState.sockets[jobId];
+    if (existing && (existing.readyState === WS_READY.OPEN || existing.readyState === WS_READY.CONNECTING)) {
+      return;
+    }
+    if (existing) {
+      try {
+        existing.close();
+      } catch (_) {}
+    }
+    const schema = global.location.protocol === 'https:' ? 'wss://' : 'ws://';
+    const url = `${schema}${global.location.host}/ws/jobs/${jobId}/`;
+    let ws;
+    try {
+      ws = new global.WebSocket(url);
+    } catch (error) {
+      console.warn('Job websocket init failed', jobId, error);
+      markForFallback(jobId, true);
+      return;
+    }
     ctx.jobsState.sockets[jobId] = ws;
+    scheduleConnectTimeout(jobId);
+
     ws.onopen = () => {
-      if (ctx.jobsState.pollers[jobId]) {
-        clearInterval(ctx.jobsState.pollers[jobId]);
-        delete ctx.jobsState.pollers[jobId];
-      }
+      clearConnectTimeout(jobId);
+      clearFallback(jobId);
     };
     ws.onmessage = (ev) => {
       try {
@@ -113,16 +285,29 @@
     };
     ws.onerror = (err) => {
       console.warn('Job websocket error', jobId, err);
+      markForFallback(jobId, true);
     };
     ws.onclose = () => {
       delete ctx.jobsState.sockets[jobId];
-      ensurePolling(jobId);
+      clearConnectTimeout(jobId);
+      markForFallback(jobId);
     };
+  }
+
+  function watchJob(jobId) {
+    if (!ctx || !jobId) return;
+    if (supportsWebSocket()) {
+      connectSocket(jobId);
+    } else {
+      markForFallback(jobId, true);
+    }
+    ensurePolling(jobId);
   }
 
   caseDetail.realtime = {
     setContext,
     setDeps,
+    watchJob,
     ensurePolling,
     pollJob,
     handleJobUpdate,

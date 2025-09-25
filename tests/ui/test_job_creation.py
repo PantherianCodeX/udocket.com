@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 
 from unittest import mock
+import uuid
 
 import pytest
 from django.test import override_settings
@@ -60,3 +61,45 @@ def test_ui_job_creation_forces_batch_when_diarization(settings):
     job = Job.objects.filter(case=case).latest("created_at")
     assert job.diarization is True
     assert job.mode == Job.Mode.BATCH
+
+
+@pytest.mark.django_db
+def test_bulk_status_endpoint_returns_multiple_jobs(settings):
+    settings.PLATFORM_DEV_OPEN = True
+    org = Organization.objects.create(id="org-status", name="Status Org")
+    case_uuid = uuid.uuid4()
+    case = Case.objects.create(id=case_uuid, title="Status Case", organization=org)
+    user = User.objects.create_user(username="status-user", password="pw")
+    CaseMembership.objects.create(case=case, user=user, role=CaseMembership.Role.OWNER)
+
+    job1 = Job.objects.create(
+        case=case,
+        organization=org,
+        audio_input="/tmp/source-a.wav",
+        mode=Job.Mode.BATCH,
+        language="en-CA",
+        status=Job.Status.RUNNING,
+        upload_progress=42.0,
+    )
+    job2 = Job.objects.create(
+        case=case,
+        organization=org,
+        audio_input="/tmp/source-b.wav",
+        mode=Job.Mode.ON_DEMAND,
+        language="fr-CA",
+        status=Job.Status.PENDING,
+        upload_progress=None,
+    )
+
+    client = Client()
+    client.force_login(user)
+
+    resp = client.get(f"/api/v1/jobs/status/bulk/?ids={job1.id},{job2.id}&case_id={case_uuid}")
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert isinstance(payload, list)
+    ids = {item["id"] for item in payload}
+    assert ids == {str(job1.id), str(job2.id)}
+    status_map = {item["id"]: item["status"] for item in payload}
+    assert status_map[str(job1.id)] == job1.status
+    assert status_map[str(job2.id)] == job2.status

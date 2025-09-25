@@ -232,8 +232,12 @@
     jobsBody.querySelectorAll('[data-job]').forEach((row) => {
       const jobId = row.dataset.job;
       if (!jobId) return;
-      deps.realtime?.connectSocket(jobId);
-      deps.realtime?.ensurePolling(jobId);
+      if (deps.realtime?.watchJob) {
+        deps.realtime.watchJob(jobId);
+      } else {
+        deps.realtime?.connectSocket(jobId);
+        deps.realtime?.ensurePolling(jobId);
+      }
       const statusEl = global.document.getElementById(`job-status-${jobId}`);
       if (statusEl) {
         const statusValue = statusEl.dataset && statusEl.dataset.status ? statusEl.dataset.status : statusEl.textContent;
