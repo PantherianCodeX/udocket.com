@@ -160,6 +160,10 @@ Scope: everything beneath `apps/platform/ui/` (templates, views, presenters, sel
   - `components/jobs/_jobs_scripts.html` for jobs list behaviors
   - Modal/Popover core in `_modal_scripts.html` and `_popover_scripts.html`
 - Prefer progressive enhancement: templates render fully functional HTML; JS adds affordances.
+- Case detail scripts are modular:
+  - `static/platform_ui/js/case_detail/helpers.js` (formatting, DOM utilities)
+  - `.../ui.js`, `.../realtime.js`, `.../modals.js`, `.../actions.js`
+  - `.../controller.js` wires them together and should be the only entry you call.
 
 
 ## Python Conventions
