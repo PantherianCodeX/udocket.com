@@ -9,7 +9,7 @@ from django.http import HttpRequest
 from apps.platform.jobs.models import Job
 from apps.platform.jobs.serializers import JobTelemetrySerializer
 
-from .common import JobTelemetryPayload, as_dict
+from ..common import JobTelemetryPayload, as_dict
 
 
 def job_telemetry_payload(
