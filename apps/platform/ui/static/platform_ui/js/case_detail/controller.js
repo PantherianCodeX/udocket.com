@@ -83,19 +83,19 @@
       toolCardBefore: (evt) => {
         const button = evt.target.closest('[data-tool-card]');
         if (!button) return;
+        global.document.querySelectorAll('[data-tool-card]').forEach((el) => {
+          el.classList.remove('ring-1', 'ring-primary-400/60');
+        });
         const key = button.getAttribute('data-tool-card');
         ui.setActiveCard(key);
         button.classList.add('ring-1', 'ring-primary-400/60');
-        // Mark busy to avoid double submits while HTMX is in flight
-        button.setAttribute('aria-busy', 'true');
-        button.setAttribute('disabled', 'true');
+        button.setAttribute('data-tool-card-active', 'true');
       },
       toolCardAfter: (evt) => {
         const button = evt.target.closest('[data-tool-card]');
         if (button) {
           button.classList.remove('ring-1', 'ring-primary-400/60');
-          button.removeAttribute('disabled');
-          button.removeAttribute('aria-busy');
+          button.removeAttribute('data-tool-card-active');
           controller.ui.boost(controller.ctx.caseId);
           return;
         }
@@ -104,8 +104,7 @@
           const allCards = global.document.querySelectorAll('[data-tool-card]');
           allCards.forEach((el) => {
             el.classList.remove('ring-1', 'ring-primary-400/60');
-            el.removeAttribute('disabled');
-            el.removeAttribute('aria-busy');
+            el.removeAttribute('data-tool-card-active');
           });
           const table = ui.getTableController();
           if (table && typeof table.collapseAll === 'function') {
@@ -119,8 +118,7 @@
           const allCards = global.document.querySelectorAll('[data-tool-card]');
           allCards.forEach((el) => {
             el.classList.remove('ring-1', 'ring-primary-400/60');
-            el.removeAttribute('disabled');
-            el.removeAttribute('aria-busy');
+            el.removeAttribute('data-tool-card-active');
           });
         }
       },
@@ -128,16 +126,14 @@
         const button = evt.target.closest('[data-tool-card]');
         if (button) {
           button.classList.remove('ring-1', 'ring-primary-400/60');
-          button.removeAttribute('disabled');
-          button.removeAttribute('aria-busy');
+          button.removeAttribute('data-tool-card-active');
         }
       },
       toolCardError: (evt) => {
         const button = evt.target.closest('[data-tool-card]');
         if (button) {
           button.classList.remove('ring-1', 'ring-primary-400/60');
-          button.removeAttribute('disabled');
-          button.removeAttribute('aria-busy');
+          button.removeAttribute('data-tool-card-active');
         }
       },
       htmxAfterOnLoad: (evt) => {
