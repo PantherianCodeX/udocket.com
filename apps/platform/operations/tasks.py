@@ -950,6 +950,14 @@ def summarize_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
     )
 
     checksum = _sha256_file(result.summary_file)
+    meta_updates: Dict[str, Any] = {
+        "summary_file": str(result.summary_file),
+        "summary_outline_file": str(result.outline_file) if result.outline_file else None,
+        "summary_timeline_file": str(result.timeline_seeds_file) if result.timeline_seeds_file else None,
+        "summary_entity_file": str(result.entity_hints_file) if result.entity_hints_file else None,
+        "summary_words": result.words,
+        "summary_sha256": checksum,
+    }
     try:
         CaseArtifact.objects.create(
             case_id=case_id,
@@ -980,8 +988,17 @@ def summarize_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
     payload: Dict[str, Any] = {
         "status": "ok",
         "summary_file": str(result.summary_file),
+        "outline_file": str(result.outline_file) if result.outline_file else None,
+        "timeline_file": str(result.timeline_seeds_file) if result.timeline_seeds_file else None,
+        "entity_file": str(result.entity_hints_file) if result.entity_hints_file else None,
         "words": result.words,
     }
+
+    try:
+        update_job_meta(case_id, org_id, job_id, {k: v for k, v in meta_updates.items() if v})
+    except Exception:
+        pass
+
     return payload
 
 
