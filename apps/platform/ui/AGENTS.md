@@ -17,8 +17,7 @@ Scope: everything beneath `apps/platform/ui/` (templates, views, presenters, sel
 ## Directory Layout
 - Templates root: `apps/platform/ui/templates/platform_ui/`
   - Base layout: `platform_ui/layouts/base.html` (apps/platform/ui/templates/platform_ui/layouts/base.html:1)
-  - Partials: `platform_ui/partials/` (server‑rendered modal variants, job rows, metadata views)
-  - Components: `platform_ui/components/` (JS/CSS includes and reusable UI fragments)
+  - Components: `platform_ui/components/` (server-rendered fragments, modals, reusable HTML/JS assets)
   - Tools: `platform_ui/tools/` (case tools such as transcribe, summary, timeline)
   - Pages: dashboard, cases, jobs
 - Views root: `apps/platform/ui/views/` (HTTP endpoints and context builders)
@@ -36,9 +35,9 @@ Scope: everything beneath `apps/platform/ui/` (templates, views, presenters, sel
   - Create a shared analysis/tools base template (planned: `platform_ui/tools/_panel_base.html`).
   - Transcribe, Summary, Timeline, and Relationships should inherit this base.
   - The base defines: panel header (label/status/pill), left action area (form/buttons), right sidebar (latest artifact), and history section.
-- For modals, inherit from `platform_ui/partials/modal_base.html` and only override the relevant blocks.
-  - Example pattern: `platform_ui/partials/text_modal.html` (apps/platform/ui/templates/platform_ui/partials/text_modal.html:1) extends the base and defines header/body/actions.
-  - Specialized modals (e.g., transcript) extend `text_modal.html` (apps/platform/ui/templates/platform_ui/partials/transcript_modal.html:1).
+- For modals, inherit from `platform_ui/components/modals/modal_base.html` and only override the relevant blocks.
+  - Example pattern: `platform_ui/components/modals/text_modal.html` (apps/platform/ui/templates/platform_ui/components/modals/text_modal.html:1) extends the base and defines header/body/actions.
+  - Specialized modals (e.g., transcript) extend `text_modal.html` (apps/platform/ui/templates/platform_ui/components/modals/transcript_modal.html:1).
 - Name fragments with a leading underscore when the file is intended for include‑only usage under `components/` and `tools/` (e.g., `_panel.html`, `_job_action_menu.html`).
 
 
@@ -81,9 +80,9 @@ Scope: everything beneath `apps/platform/ui/` (templates, views, presenters, sel
 
 ## Modals & Popovers (Usage)
 - Server‑rendered modal pattern:
-  - View prepares `modal_*` context keys, then `render(..., "platform_ui/partials/<modal>.html", ctx)`.
+  - View prepares `modal_*` context keys, then `render(..., "platform_ui/components/modals/<modal>.html", ctx)`.
   - The modal template extends `modal_base.html` or `text_modal.html` and fills header/body/actions.
-  - Example: Transcript modal (apps/platform/ui/views/jobs.py:34) renders `platform_ui/partials/transcript_modal.html`.
+  - Example: Transcript modal (apps/platform/ui/views/jobs.py:34) renders `platform_ui/components/modals/transcript_modal.html`.
 - Client-created modal pattern:
   - Use `platformUI.modal.create({ heading, title, bodyText|bodyHTML|bodyNode, actions })` and `platformUI.modal.open(...)` from `_modal_scripts.html`.
 - Popovers: reuse `components/_popover_menu.html` and `components/_action_menu_popover.html`; wire triggers with `data-popover` attributes.
@@ -94,7 +93,7 @@ Scope: everything beneath `apps/platform/ui/` (templates, views, presenters, sel
   - `build_job_rows` returns `display_rows` and `flat_rows` dictionaries ready for templates (apps/platform/ui/views/presenters/jobs.py:124).
   - Add row actions via `build_job_action_entries` in `views/presenters/job_actions.py`.
 - Use shared table configs via `table_config(...)` in `presenters/cases.py` to standardize columns/filters and row templates.
-- When updating a single job row, render `platform_ui/partials/job_row.html` and pass the same row shape used by tables.
+- When updating a single job row, render `platform_ui/components/jobs/job_row.html` and pass the same row shape used by tables.
 
 
 ## Adding a New Tool Panel (e.g., Entities/Graph)
@@ -181,7 +180,7 @@ Scope: everything beneath `apps/platform/ui/` (templates, views, presenters, sel
 
 ## Do / Don’t
 - Do
-  - Inherit from `layouts/base.html` and `partials/modal_base.html` where applicable
+  - Inherit from `layouts/base.html` and `components/modals/modal_base.html` where applicable
   - Centralize repeated HTML/JS in `components/`
   - Use presenters/selectors for shaping data passed to templates
   - Reuse status helpers and table configs
@@ -195,8 +194,8 @@ Scope: everything beneath `apps/platform/ui/` (templates, views, presenters, sel
 
 ## Quick References
 - Base layout: `apps/platform/ui/templates/platform_ui/layouts/base.html:1`
-- Modal base: `apps/platform/ui/templates/platform_ui/partials/modal_base.html:1`
-- Transcript modal: `apps/platform/ui/templates/platform_ui/partials/transcript_modal.html:1`
+- Modal base: `apps/platform/ui/templates/platform_ui/components/modals/modal_base.html:1`
+- Transcript modal: `apps/platform/ui/templates/platform_ui/components/modals/transcript_modal.html:1`
 - Tools panel include: `apps/platform/ui/templates/platform_ui/tools/_panel.html:1`
 - Case tool state: `apps/platform/ui/views/contexts.py:70`
 - Jobs presenters: `apps/platform/ui/views/presenters/jobs.py:1`

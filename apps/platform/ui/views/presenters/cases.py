@@ -459,7 +459,7 @@ def table_config(
         "columns": list(columns),
         "column_ids": list(column_ids),
         "filters": list(filters),
-        "row_template": "platform_ui/partials/job_row.html",
+        "row_template": "platform_ui/components/jobs/job_row.html",
         "empty_message": empty_message,
         "show_identifiers": show_identifiers,
         "body_id": "jobs-body",

@@ -55,7 +55,7 @@ def case_progress_response(request: HttpRequest, case: Case) -> HttpResponse:
     jobs_sequence = list(jobs_list)
     telemetry_map = job_telemetry_map(jobs_sequence, request)
     context = {"case": case, **case_progress_context(case, jobs_sequence, telemetry_map)}
-    return render(request, "platform_ui/partials/case_progress.html", context)
+    return render(request, "platform_ui/components/cases/case_progress.html", context)
 
 
 def resolve_tool_key(

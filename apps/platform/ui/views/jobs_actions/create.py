@@ -168,7 +168,7 @@ def create_job(request: HttpRequest, case_id: str) -> HttpResponse:
     )
     return render(
         request,
-        "platform_ui/partials/job_row.html",
+        "platform_ui/components/jobs/job_row.html",
         {
             "row": row,
             "table_columns": CASE_JOB_TABLE_COLUMNS,

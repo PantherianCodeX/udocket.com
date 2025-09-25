@@ -42,6 +42,6 @@ def case_analysis_module(request: HttpRequest, case_id: str, agent: str) -> Http
 
     return render(
         request,
-        "platform_ui/partials/analysis_module.html",
+        "platform_ui/components/cases/analysis_module.html",
         {"module": module, "case": case},
     )

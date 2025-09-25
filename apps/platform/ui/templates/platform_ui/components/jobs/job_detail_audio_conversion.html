@@ -3,7 +3,7 @@
   {% with metadata=metadata_map audio=audio_meta source=source_audio %}
   <div class="flex flex-wrap items-start justify-between gap-4 border-b border-white/10 pb-4">
     <div class="space-y-3">
-      {% include "platform_ui/partials/job_detail_title_form.html" %}
+      {% include "platform_ui/components/jobs/job_detail_title_form.html" %}
       <div class="flex flex-wrap items-center gap-3 text-xs text-slate-400">
         <span>Source codec: {% if source.codec %}{{ source.codec|upper }}{% else %}—{% endif %}</span>
         <span>Converted codec: {{ audio.codec|default:"—" }}</span>

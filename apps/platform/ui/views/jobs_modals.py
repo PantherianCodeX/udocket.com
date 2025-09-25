@@ -88,7 +88,7 @@ def case_job_transcript(request: HttpRequest, case_id: str, job_id: UUID) -> Htt
         "modal_close_label": "Close",
         "modal_empty_text": "Transcript not available for this job.",
     }
-    return render(request, "platform_ui/partials/transcript_modal.html", context)
+    return render(request, "platform_ui/components/modals/transcript_modal.html", context)
 
 
 @require_http_methods(["GET"])
@@ -133,7 +133,7 @@ def case_job_logs_modal(request: HttpRequest, case_id: str, job_id: UUID) -> Htt
         "modal_empty_text": "No log entries recorded for this job.",
         "modal_meta_items": meta_items,
     }
-    return render(request, "platform_ui/partials/log_modal.html", context)
+    return render(request, "platform_ui/components/modals/log_modal.html", context)
 
 
 @require_http_methods(["GET"])
@@ -170,4 +170,4 @@ def case_job_metadata_modal(request: HttpRequest, case_id: str, job_id: UUID) ->
         "metadata_empty_text": "Metadata not recorded for this job.",
         "modal_meta_items": meta_summary,
     }
-    return render(request, "platform_ui/partials/job_metadata_modal.html", context)
+    return render(request, "platform_ui/components/modals/job_metadata_modal.html", context)

@@ -75,10 +75,10 @@
              {% if table.key %}data-tool-key="{{ table.key }}"{% endif %}>
         {% if table.rows %}
           {% for row in table.rows %}
-            {% include table.row_template|default:'platform_ui/partials/job_row.html' with row=row table_columns=table.columns table_column_ids=table.column_ids table_id=resolved_id table_filters=table.filters table_show_identifiers=table.show_identifiers|default:False table_key=table.key only %}
+            {% include table.row_template|default:'platform_ui/components/jobs/job_row.html' with row=row table_columns=table.columns table_column_ids=table.column_ids table_id=resolved_id table_filters=table.filters table_show_identifiers=table.show_identifiers|default:False table_key=table.key only %}
             {% if row.children %}
               {% for child in row.children %}
-                {% include table.row_template|default:'platform_ui/partials/job_row.html' with row=child table_columns=table.columns table_column_ids=table.column_ids table_id=resolved_id table_filters=table.filters table_show_identifiers=table.show_identifiers|default:False table_key=table.key only %}
+                {% include table.row_template|default:'platform_ui/components/jobs/job_row.html' with row=child table_columns=table.columns table_column_ids=table.column_ids table_id=resolved_id table_filters=table.filters table_show_identifiers=table.show_identifiers|default:False table_key=table.key only %}
               {% endfor %}
             {% endif %}
           {% endfor %}

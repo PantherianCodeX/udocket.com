@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import io
 
-from importlib import import_module
 from unittest import mock
 
 import pytest
@@ -13,8 +12,6 @@ from django.test import Client
 from apps.platform.accounts.models import Organization, User
 from apps.platform.cases.models import Case, CaseMembership
 from apps.platform.jobs.models import Job
-jobs_module = import_module("apps.platform.ui.views.jobs_actions")
-
 
 def _wav_bytes() -> bytes:
     # Tiny PCM WAV header with silence (44-byte header + 4 bytes payload)
@@ -46,7 +43,8 @@ def test_ui_job_creation_forces_batch_when_diarization(settings):
     client.force_login(user)
 
     upload = SimpleUploadedFile("sample.wav", _wav_bytes(), content_type="audio/wav")
-    with mock.patch.object(jobs_module.transcribe_job_task, "delay") as mocked_delay:
+    with mock.patch("apps.platform.ui.views.jobs_actions.create.get_transcribe_job_task") as mocked_get_task:
+        mocked_delay = mocked_get_task.return_value.delay
         resp = client.post(
             f"/cases/{case.id}/jobs/new",
             {

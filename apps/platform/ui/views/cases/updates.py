@@ -32,7 +32,7 @@ def case_update_title(request: HttpRequest, case_id: str) -> HttpResponse:
     if new_title != case.title:
         case.title = new_title
         case.save(update_fields=["title"])
-    return render(request, "platform_ui/partials/case_title.html", {"case": case})
+    return render(request, "platform_ui/components/cases/case_title.html", {"case": case})
 
 
 @require_http_methods(["POST"])

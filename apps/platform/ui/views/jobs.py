@@ -130,9 +130,9 @@ def job_detail_panel(request: HttpRequest, job_id: UUID) -> HttpResponse:
         title_edit = str(request.GET.get("title_edit") or "").lower() in {"1", "true", "yes", "on"}
         context = job_detail_context(request, job, title_edit=title_edit)
         template = (
-            "platform_ui/partials/job_detail_audio_conversion.html"
+            "platform_ui/components/jobs/job_detail_audio_conversion.html"
             if context.get("job_kind", "").lower() == "audio_conversion"
-            else "platform_ui/partials/job_detail.html"
+            else "platform_ui/components/jobs/job_detail.html"
         )
         return render(request, template, context)
     except Http404:
@@ -168,9 +168,9 @@ def case_job_detail_panel(request: HttpRequest, case_id: str, job_id: UUID) -> H
         context = job_detail_context(request, job, title_edit=title_edit)
         context["case"] = case
         template = (
-            "platform_ui/partials/job_detail_audio_conversion.html"
+            "platform_ui/components/jobs/job_detail_audio_conversion.html"
             if context.get("job_kind", "").lower() == "audio_conversion"
-            else "platform_ui/partials/job_detail.html"
+            else "platform_ui/components/jobs/job_detail.html"
         )
         return render(request, template, context)
     except Http404:

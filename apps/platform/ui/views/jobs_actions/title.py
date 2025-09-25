@@ -37,7 +37,7 @@ def case_job_title_form(request: HttpRequest, case_id: str, job_id: UUID) -> Htt
     }
     context = job_detail_context(request, job, title_edit=edit_flag)
     context["case"] = case
-    return render(request, "platform_ui/partials/job_detail_title_form.html", context)
+    return render(request, "platform_ui/components/jobs/job_detail_title_form.html", context)
 
 
 @require_http_methods(["POST"])
@@ -106,7 +106,7 @@ def case_job_update_title(request: HttpRequest, case_id: str, job_id: UUID) -> H
         )
         context["case"] = case
         context["job_title"] = new_title or context.get("job_title")
-        return render(request, "platform_ui/partials/job_detail_title_form.html", context, status=400)
+        return render(request, "platform_ui/components/jobs/job_detail_title_form.html", context, status=400)
 
     assert artifact is not None
     artifact_obj: CaseArtifactLike = cast(CaseArtifactLike, artifact)
@@ -145,6 +145,6 @@ def case_job_update_title(request: HttpRequest, case_id: str, job_id: UUID) -> H
     context = job_detail_context(request, job)
     context["case"] = case
     trigger = json.dumps({"job-title-updated": {"job_id": str(job.id), "title": new_title}})
-    response = render(request, "platform_ui/partials/job_detail_title_form.html", context)
+    response = render(request, "platform_ui/components/jobs/job_detail_title_form.html", context)
     response["HX-Trigger"] = trigger
     return response
