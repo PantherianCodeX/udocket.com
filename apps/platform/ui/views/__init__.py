@@ -21,16 +21,21 @@ from .contexts import (
 )
 from .dashboard import index
 from .jobs import (
-    case_job_create_artifact,
     case_job_detail_panel,
-    case_job_logs_modal,
-    case_job_row,
-    case_job_title_form,
-    case_job_transcript,
-    case_job_update_title,
-    create_job,
     job_detail_panel,
     jobs,
+)
+from .jobs_actions import (
+    case_job_create_artifact,
+    case_job_row,
+    case_job_title_form,
+    case_job_update_title,
+    create_job,
+)
+from .jobs_modals import (
+    case_job_logs_modal,
+    case_job_metadata_modal,
+    case_job_transcript,
 )
 from .misc import favicon, ui_log
 from .permissions import permissions_overview
@@ -52,6 +57,7 @@ __all__ = [
     "case_job_create_artifact",
     "case_job_detail_panel",
     "case_job_logs_modal",
+    "case_job_metadata_modal",
     "case_job_row",
     "case_job_title_form",
     "case_job_transcript",

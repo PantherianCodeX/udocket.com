@@ -23,6 +23,11 @@ urlpatterns = [
         name="ui-case-job-logs-modal",
     ),
     path(
+        "cases/<str:case_id>/jobs/<uuid:job_id>/metadata/modal/",
+        views.case_job_metadata_modal,
+        name="ui-case-job-metadata-modal",
+    ),
+    path(
         "cases/<str:case_id>/analysis/<str:agent>/module/",
         views.case_analysis_module,
         name="ui-case-analysis-module",
