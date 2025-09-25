@@ -338,24 +338,26 @@
         });
         Object.entries(panels).forEach(([key, panel]) => {
           if (!panel) return;
-          if (key === name) {
-            panel.classList.remove('hidden');
+          const show = key === name;
+          panel.classList.toggle('hidden', !show);
+          panel.hidden = !show;
+          if (show) {
+            panel.removeAttribute('aria-hidden');
           } else {
-            panel.classList.add('hidden');
+            panel.setAttribute('aria-hidden', 'true');
           }
         });
       }
 
-      if (panelButtons.length) {
-        panelButtons.forEach((btn) => {
-          btn.addEventListener('click', (evt) => {
-            evt.preventDefault();
-            const key = btn.getAttribute('data-llm-panel-toggle');
-            if (key) activatePanel(key);
-          });
-        });
-        activatePanel('stages');
-      }
+      // Delegate clicks for robust tab switching (handles nested SVG/icon clicks)
+      modalEl.addEventListener('click', (evt) => {
+        const trigger = evt.target && evt.target.closest ? evt.target.closest('[data-llm-panel-toggle]') : null;
+        if (!trigger) return;
+        evt.preventDefault();
+        const key = trigger.getAttribute('data-llm-panel-toggle');
+        if (key) activatePanel(key);
+      });
+      activatePanel('stages');
 
       const providerListContainer = modalEl.querySelector('[data-llm-provider-list]');
       if (providerListContainer) {
@@ -441,7 +443,7 @@
       if (providerForm) {
         providerForm.addEventListener('submit', async (evt) => {
           evt.preventDefault();
-          const wrapper = modalHost.querySelector('[data-llm-provider-form-wrapper]');
+          const wrapper = modalEl.querySelector('[data-llm-provider-form-wrapper]');
           const providerKey = wrapper?.dataset.activeProvider;
           if (!providerKey) return;
           const nameInput = providerForm.querySelector('[data-llm-provider-name]');
@@ -501,8 +503,8 @@
             }
             const data = await resp.json();
             providerState.credentials = data.credentials || providerState.credentials;
-            renderProviderList(modalHost, providerState);
-            openProviderForm(modalHost, providerState, providerKey);
+            renderProviderList(modalEl, providerState);
+            openProviderForm(modalEl, providerState, providerKey);
             caseDetail.modals?.message({ heading: 'Provider saved', body: payload.display_name, container: ctx?.modalRoot || undefined });
             apiKeyInput.value = '';
           } catch (error) {
@@ -515,8 +517,8 @@
 
     container.llmProviderState = providerState;
     container.llmInitModal = attachProviderModalHandlers;
-    if (modalHost) {
-      attachProviderModalHandlers(modalHost);
+    if (modal) {
+      attachProviderModalHandlers(modal);
     }
   }
 
