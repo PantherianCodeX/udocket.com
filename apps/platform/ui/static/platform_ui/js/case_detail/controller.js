@@ -95,11 +95,28 @@
           return;
         }
         if (evt.target === controller.ctx.workspace) {
+          // Clean up any stale UI state on tool cards after panel swaps
+          const allCards = global.document.querySelectorAll('[data-tool-card]');
+          allCards.forEach((el) => {
+            el.classList.remove('ring-1', 'ring-primary-400/60');
+            el.removeAttribute('disabled');
+            el.removeAttribute('aria-busy');
+          });
           const table = ui.getTableController();
           if (table && typeof table.collapseAll === 'function') {
             table.collapseAll();
           }
           controller.ui.boost(controller.ctx.caseId);
+        }
+      },
+      toolCardSettle: (evt) => {
+        if (evt.target === controller.ctx.workspace) {
+          const allCards = global.document.querySelectorAll('[data-tool-card]');
+          allCards.forEach((el) => {
+            el.classList.remove('ring-1', 'ring-primary-400/60');
+            el.removeAttribute('disabled');
+            el.removeAttribute('aria-busy');
+          });
         }
       },
       toolCardError: (evt) => {
@@ -143,6 +160,7 @@
     global.document.body.addEventListener('click', handlers.analysisAction);
     global.document.body.addEventListener('htmx:beforeRequest', handlers.toolCardBefore);
     global.document.body.addEventListener('htmx:afterSwap', handlers.toolCardAfter);
+    global.document.body.addEventListener('htmx:afterSettle', handlers.toolCardSettle);
     global.document.body.addEventListener('htmx:error', handlers.toolCardError);
     global.document.body.addEventListener('htmx:afterOnLoad', handlers.htmxAfterOnLoad);
 
