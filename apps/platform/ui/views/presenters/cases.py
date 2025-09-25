@@ -137,14 +137,17 @@ def _build_provider_cache(
 
 def _build_llm_stage_configs(
     *,
-    stage_label_map: Dict[str, str],
+    stage_defs: List[Dict[str, str]],
     llm_settings,
     overrides: Dict[str, Dict[str, Any]],
     provider_cache: Dict[str, Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
     stage_configs: List[Dict[str, Any]] = []
 
-    for stage_key, stage_label in stage_label_map.items():
+    for stage in stage_defs:
+        stage_key = stage.get("key")
+        stage_label = stage.get("label", stage_key)
+        stage_description = stage.get("description", "")
         assignment = llm_settings.stage(stage_key)
         provider_configs = list(provider_cache.values())
         selected_provider = assignment.providers[0] if assignment and assignment.providers else "azure"
@@ -170,6 +173,7 @@ def _build_llm_stage_configs(
             {
                 "key": stage_key,
                 "label": stage_label,
+                "description": stage_description,
                 "providers": provider_configs,
                 "selected_provider": selected_provider,
                 "selected_model": selected_model,
@@ -976,18 +980,43 @@ def build_tool_panels(
         )
         seen_providers.add(name)
 
-    stage_label_map = {
-        "summarize.context_builder": "Context builder",
-        "summarize.extract_outline": "Outline extraction",
-        "summarize.build_timeline_seeds": "Timeline seeds",
-        "summarize.build_entity_hints": "Entity hints",
-        "summarize.draft_markdown": "Draft summary",
-        "summarize.qa_and_finalize": "QA and finalize",
-    }
+    summary_stage_defs = [
+        {
+            "key": "summarize.context_builder",
+            "label": "Context builder",
+            "description": "Collects intake details and transcript metadata for downstream prompts.",
+        },
+        {
+            "key": "summarize.extract_outline",
+            "label": "Outline extraction",
+            "description": "Structures issues, facts, remedies, and legal references as JSON schema.",
+        },
+        {
+            "key": "summarize.build_timeline_seeds",
+            "label": "Timeline seeds",
+            "description": "Proposes timestamped events to seed the timeline automation.",
+        },
+        {
+            "key": "summarize.build_entity_hints",
+            "label": "Entity hints",
+            "description": "Identifies people, organizations, and relationships for the graph agent.",
+        },
+        {
+            "key": "summarize.draft_markdown",
+            "label": "Draft summary",
+            "description": "Drafts the layered legal summary referencing transcript timestamps.",
+        },
+        {
+            "key": "summarize.qa_and_finalize",
+            "label": "QA and finalize",
+            "description": "Ensures required sections exist, computes checksums, and prepares ops logs.",
+        },
+    ]
 
-    summary_overrides = {k: org_overrides[k] for k in stage_label_map if k in org_overrides}
+    summary_stage_keys = [stage["key"] for stage in summary_stage_defs]
+    summary_overrides = {k: org_overrides[k] for k in summary_stage_keys if k in org_overrides}
     summary_stage_configs = _build_llm_stage_configs(
-        stage_label_map=stage_label_map,
+        stage_defs=summary_stage_defs,
         llm_settings=llm_settings,
         overrides=summary_overrides,
         provider_cache=provider_cache,
@@ -1000,12 +1029,17 @@ def build_tool_panels(
     summary_overrides_json = json.dumps(summary_overrides)
     summary_chain_json = json.dumps(summary_chain)
 
-    timeline_stage_label_map = {
-        "timeline.builder": "Timeline builder",
-    }
-    timeline_overrides = {k: org_overrides[k] for k in timeline_stage_label_map if k in org_overrides}
+    timeline_stage_defs = [
+        {
+            "key": "timeline.builder",
+            "label": "Timeline builder",
+            "description": "Generates a normalized timeline from transcripts and timeline seeds.",
+        }
+    ]
+    timeline_stage_keys = [stage["key"] for stage in timeline_stage_defs]
+    timeline_overrides = {k: org_overrides[k] for k in timeline_stage_keys if k in org_overrides}
     timeline_stage_configs = _build_llm_stage_configs(
-        stage_label_map=timeline_stage_label_map,
+        stage_defs=timeline_stage_defs,
         llm_settings=llm_settings,
         overrides=timeline_overrides,
         provider_cache=provider_cache,

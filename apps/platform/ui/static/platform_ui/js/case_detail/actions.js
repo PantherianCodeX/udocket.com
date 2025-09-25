@@ -5,6 +5,26 @@
     return;
   }
 
+  if (typeof platformUI.llmDebug === 'undefined') {
+    let storedDebug = false;
+    try {
+      storedDebug = global.localStorage && global.localStorage.getItem('platformUI.llmDebug') === '1';
+    } catch (_) {
+      storedDebug = false;
+    }
+    platformUI.llmDebug = storedDebug;
+    platformUI.enableLLMDebug = () => {
+      try { global.localStorage && global.localStorage.setItem('platformUI.llmDebug', '1'); } catch (_) {}
+      platformUI.llmDebug = true;
+      console.info('[LLM] Debug logging enabled');
+    };
+    platformUI.disableLLMDebug = () => {
+      try { global.localStorage && global.localStorage.removeItem('platformUI.llmDebug'); } catch (_) {}
+      platformUI.llmDebug = false;
+      console.info('[LLM] Debug logging disabled');
+    };
+  }
+
   const helpers = caseDetail.helpers || {};
 
   let ctx = null;
@@ -88,20 +108,37 @@
     const fallbackSelect = advanced.querySelector('[data-llm-provider-fallback]');
     const allowOfflineCheckbox = advanced.querySelector('[data-llm-allow-offline]');
 
+    const llmDebug = !!platformUI.llmDebug;
     let catalog = {};
     let credentials = {};
-    const safeParse = (raw) => {
+    const safeParse = (raw, label) => {
       if (!raw || typeof raw !== 'string') return {};
       const t = raw.trim();
       if (!t || !/[\[{]/.test(t[0])) return {};
-      try { return JSON.parse(t); } catch (_) { return {}; }
+      try {
+        const parsed = JSON.parse(t);
+        if (llmDebug) console.debug('[LLM] Parsed dataset', label, parsed);
+        return parsed;
+      } catch (error) {
+        if (llmDebug) console.warn('[LLM] Failed to parse dataset', label, error);
+        return {};
+      }
     };
-    catalog = safeParse(container.dataset.llmCatalog);
-    credentials = safeParse(container.dataset.llmCredentials);
+    catalog = safeParse(container.dataset.llmCatalog, 'catalog');
+    credentials = safeParse(container.dataset.llmCredentials, 'credentials');
     const providerState = {
       catalog,
       credentials,
+      debug: llmDebug,
     };
+    if (llmDebug) {
+      console.debug('[LLM] Setup controls', {
+        target: container.dataset.llmTarget,
+        overrides: container.dataset.llmOverrides,
+        providerChain: container.dataset.llmProviderChain,
+        providerOptions: (container.dataset.llmCatalog || '').length,
+      });
+    }
 
     const syncAdvancedControls = () => {
       const primaryValue = primarySelect?.value || null;
@@ -192,6 +229,12 @@
         }
       });
 
+      if (state.debug) {
+        console.debug('[LLM] Render provider list', {
+          entries: Array.from(entries.keys()),
+        });
+      }
+
       if (!entries.size) {
         if (empty) empty.classList.remove('hidden');
         return;
@@ -219,6 +262,13 @@
           statusEl.classList.toggle('text-emerald-300', configured);
           statusEl.classList.toggle('text-slate-400', !configured);
           statusEl.textContent = configured ? 'Configured' : 'Not configured';
+        }
+        if (state.debug) {
+          console.debug('[LLM] Provider card', {
+            provider: entry.key,
+            configured,
+            endpoint: credentialInfo.endpoint || catalogInfo.default_endpoint,
+          });
         }
         card.addEventListener('click', () => openProviderForm(modalEl, state, entry.key));
         list.appendChild(card);
@@ -278,6 +328,12 @@
             modelsContainer.appendChild(renderModelRow(templateModel, model));
           });
         }
+      }
+      if (state.debug) {
+        console.debug('[LLM] Open provider form', {
+          provider: providerKey,
+          configured: Boolean(state.credentials[providerKey]),
+        });
       }
       ensureModelRow(modalEl);
     }
@@ -343,13 +399,13 @@
         });
       }
 
-      // Delegate clicks for robust tab switching (handles nested SVG/icon clicks)
-      modalEl.addEventListener('click', (evt) => {
-        const trigger = evt.target && evt.target.closest ? evt.target.closest('[data-llm-panel-toggle]') : null;
-        if (!trigger) return;
-        evt.preventDefault();
-        const key = trigger.getAttribute('data-llm-panel-toggle');
-        if (key) activatePanel(key);
+      panelButtons.forEach((btn) => {
+        btn.addEventListener('click', (evt) => {
+          evt.preventDefault();
+          const key = btn.getAttribute('data-llm-panel-toggle');
+          if (providerState.debug) console.debug('[LLM] Panel switch', key);
+          if (key) activatePanel(key);
+        });
       });
       activatePanel('stages');
 
@@ -499,10 +555,19 @@
             providerState.credentials = data.credentials || providerState.credentials;
             renderProviderList(modalEl, providerState);
             openProviderForm(modalEl, providerState, providerKey);
+            if (providerState.debug) {
+              console.debug('[LLM] Provider saved', {
+                provider: providerKey,
+                credentialKeys: Object.keys(providerState.credentials || {}),
+              });
+            }
             caseDetail.modals?.message({ heading: 'Provider saved', body: payload.display_name, container: ctx?.modalRoot || undefined });
             apiKeyInput.value = '';
           } catch (error) {
             console.warn('Unable to save provider', providerKey, error);
+            if (providerState.debug) {
+              console.debug('[LLM] Provider save failed', { provider: providerKey, error });
+            }
             caseDetail.modals?.message({ heading: 'Save failed', body: error.message || 'Unable to persist provider.', container: ctx?.modalRoot || undefined });
           }
         });
@@ -510,7 +575,7 @@
     }
 
     container.llmProviderState = providerState;
-    container.llmInitModal = attachProviderModalHandlers;
+    container.llmInitModal = (modalEl) => attachProviderModalHandlers(modalEl);
   }
 
   async function persistLLMOverrides(target, overrides, chain) {
@@ -557,6 +622,12 @@
       }
       return;
     }
+    if (platformUI.llmDebug) {
+      console.debug('[LLM] Modal opened', {
+        target: container.dataset.llmTarget,
+        modalRoot: ctx?.modalRoot || 'body',
+      });
+    }
     // Nudge modal into view in cases where host disables scroll
     try {
       const modalEl = (modal.querySelector && modal.querySelector('[data-modal]')) || modal;
@@ -572,7 +643,12 @@
         } catch (_) {}
       }, 0);
     } catch (_) {}
-    try { attachProviderModalHandlers(modal); } catch (_) {}
+    try {
+      const initModal = typeof container.llmInitModal === 'function' ? container.llmInitModal : attachProviderModalHandlers;
+      initModal(modal);
+    } catch (error) {
+      console.warn('[LLM] Unable to initialise modal handlers', error);
+    }
     const form = modal.querySelector('[data-llm-form]');
     if (!form) return;
     const saveButton = form.querySelector('[data-llm-save]');
@@ -580,10 +656,15 @@
     const target = container.dataset.llmTarget || 'summary';
     let existingOverrides = {};
     if (container.dataset.llmOverrides) {
-      try {
-        existingOverrides = JSON.parse(container.dataset.llmOverrides);
-      } catch (error) {
-        existingOverrides = {};
+      const rawOverrides = container.dataset.llmOverrides.trim();
+      if (rawOverrides && /[\[{]/.test(rawOverrides[0])) {
+        try {
+          existingOverrides = JSON.parse(rawOverrides);
+          if (platformUI.llmDebug) console.debug('[LLM] Existing overrides', existingOverrides);
+        } catch (error) {
+          if (platformUI.llmDebug) console.warn('[LLM] Unable to parse overrides in modal', error);
+          existingOverrides = {};
+        }
       }
     }
 
@@ -1198,6 +1279,12 @@
 
   function setupAnalysisActions(root) {
     if (!root) return;
+    if (platformUI.llmDebug) {
+      console.debug('[LLM] setupAnalysisActions', {
+        hasSummary: Boolean(root.querySelector('[data-summary]')),
+        hasTimeline: Boolean(root.querySelector('[data-timeline]')),
+      });
+    }
     const summaryContainer = root.querySelector('[data-summary]');
     if (summaryContainer) {
       setupLLMControls(summaryContainer);

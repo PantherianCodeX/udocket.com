@@ -117,13 +117,13 @@ def test_build_llm_stage_configs_uses_defaults_and_overrides(llm_settings):
     )
 
     # No overrides: should use assignment defaults and enable local fallback
-    stage_map = {
-        "summarize.context_builder": "Context",
-        "summarize.qa_and_finalize": "QA",
-    }
+    stage_defs = [
+        {"key": "summarize.context_builder", "label": "Context", "description": "Context stage"},
+        {"key": "summarize.qa_and_finalize", "label": "QA", "description": "QA stage"},
+    ]
 
     configs = presenters._build_llm_stage_configs(
-        stage_label_map=stage_map,
+        stage_defs=stage_defs,
         llm_settings=llm_settings,
         overrides={},
         provider_cache=provider_cache,
@@ -134,6 +134,7 @@ def test_build_llm_stage_configs_uses_defaults_and_overrides(llm_settings):
     assert first["selected_provider"] == "azure"
     assert first["selected_fallbacks"] == ["local"]
     assert first["allow_offline_default"] is True
+    assert first["description"] == "Context stage"
     # Providers should include every cache entry so the UI can surface unsupported options.
     assert [entry["value"] for entry in first["providers"]] == ["azure", "local", "openai"]
 
@@ -148,7 +149,7 @@ def test_build_llm_stage_configs_uses_defaults_and_overrides(llm_settings):
     }
 
     configs_with_override = presenters._build_llm_stage_configs(
-        stage_label_map=stage_map,
+        stage_defs=stage_defs,
         llm_settings=llm_settings,
         overrides=overrides,
         provider_cache=provider_cache,

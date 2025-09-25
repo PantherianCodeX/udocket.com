@@ -13,6 +13,8 @@
   ].join(',');
 
   const modalStack = [];
+  let scrollLocked = false;
+  let prevOverflowValue = '';
 
   function escapeHTML(value) {
     return String(value || '')
@@ -23,23 +25,20 @@
       .replace(/'/g, '&#39;');
   }
 
-  function lockBodyScroll() {
-    if (modalStack.length === 1) {
+  function syncBodyScrollLock() {
+    const shouldLock = modalStack.some((entry) => entry && entry.modal && entry.allowScroll !== true);
+    if (shouldLock && !scrollLocked) {
+      scrollLocked = true;
       document.documentElement.classList.add('modal-open');
       document.body.classList.add('modal-open');
-      const prev = document.body.style.overflow;
-      modalStack._prevOverflow = prev;
+      prevOverflowValue = document.body.style.overflow;
       document.body.style.overflow = 'hidden';
-    }
-  }
-
-  function unlockBodyScroll() {
-    if (modalStack.length === 0) {
+    } else if (!shouldLock && scrollLocked) {
+      scrollLocked = false;
       document.documentElement.classList.remove('modal-open');
       document.body.classList.remove('modal-open');
-      const prev = modalStack._prevOverflow;
-      document.body.style.overflow = prev || '';
-      delete modalStack._prevOverflow;
+      document.body.style.overflow = prevOverflowValue || '';
+      prevOverflowValue = '';
     }
   }
 
@@ -166,8 +165,9 @@
       container.innerHTML = '';
     }
     container.appendChild(modal);
+    entry.allowScroll = options.allowScroll === true || modal.hasAttribute('data-modal-allow-scroll');
     modalStack.push(entry);
-    lockBodyScroll();
+    syncBodyScrollLock();
     requestAnimationFrame(() => focusFirst(modal));
     return modal;
   }
@@ -182,7 +182,7 @@
       try { entry.cleanupHandlers(); } catch (err) {}
     }
     removeModalElement(entry);
-    unlockBodyScroll();
+    syncBodyScrollLock();
     if (typeof entry.onClose === 'function') {
       try {
         entry.onClose(meta);
