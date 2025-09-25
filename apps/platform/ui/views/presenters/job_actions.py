@@ -21,15 +21,17 @@ def build_job_action_entries(
     job_id = str(job.id)
     case_id = str(job.case_id)
     status = str(getattr(job, "status", "") or "").upper()
-    telem = telemetry or {}
+    telem: JobTelemetryPayload = dict(telemetry or {})
     meta = as_dict(telem.get("metadata"))
     transcript_payload = as_dict(telem.get("transcript"))
     audio_payload = as_dict(telem.get("audio"))
-    artifact_entry = None
-    artifacts = telem.get("artifacts") or []
-    if artifacts:
-        candidate = artifacts[0]
-        artifact_entry = as_dict(candidate) if isinstance(candidate, dict) else candidate
+
+    artifact_entry: Optional[Dict[str, Any]] = None
+    artifacts_raw = telem.get("artifacts")
+    if isinstance(artifacts_raw, list) and artifacts_raw:
+        first_artifact: Any = artifacts_raw[0]
+        if isinstance(first_artifact, dict):
+            artifact_entry = as_dict(first_artifact)
 
     job_kind = str(meta.get("job_kind") or "").lower()
     converted_available = bool(meta.get("converted_wav_available"))

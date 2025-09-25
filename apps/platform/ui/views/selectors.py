@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# pyright: reportUnknownArgumentType=false, reportUnknownVariableType=false
+
 from typing import Dict, List, Optional
 
 from django.http import HttpRequest
