@@ -1,0 +1,18 @@
+{% load ui_display %}
+<section class="space-y-6">
+  <div class="rounded-2xl border border-white/10 bg-white/10 p-6 shadow-lg shadow-black/30">
+    <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      <div>
+        <p class="text-xs uppercase tracking-wide text-slate-300">Jobs · {{ active_org.name }}</p>
+        <h1 class="text-3xl font-semibold text-white">Recent jobs</h1>
+        <p class="mt-2 text-sm text-slate-300">Track transcription and analysis automations across this tenant, including their status, agent, and originating case.</p>
+      </div>
+      <div class="rounded-xl border border-white/10 bg-slate-900/60 px-4 py-3 text-center text-sm text-slate-200">
+        <p class="text-xs uppercase tracking-wide text-slate-400">Displayed</p>
+        <p class="mt-1 text-xl font-semibold text-white">{{ job_total }}</p>
+      </div>
+    </div>
+  </div>
+
+  {% include "platform_ui/components/tables/_table.html" with table=jobs_table %}
+</section>

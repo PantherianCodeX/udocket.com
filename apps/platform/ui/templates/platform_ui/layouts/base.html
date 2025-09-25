@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="csrf-token" content="{{ csrf_token }}" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>uDocket Platform</title>
+  <script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              50: '#ecf3ff',
+              100: '#dae7ff',
+              200: '#b9d1ff',
+              300: '#8eb4ff',
+              400: '#5b8bff',
+              500: '#3363f5',
+              600: '#2648d1',
+              700: '#1f3ab1',
+              800: '#1d338d',
+              900: '#1b2e72',
+            }
+          }
+        }
+      }
+    }
+
+    function renderLocalTimes(){
+      document.querySelectorAll('[data-ts]').forEach(el => {
+        const iso = el.getAttribute('data-ts');
+        if (!iso) return;
+        const d = new Date(iso);
+        if (!isNaN(d.getTime())) {
+          el.textContent = d.toLocaleString();
+          el.setAttribute('title', d.toISOString());
+        }
+      });
+    }
+    window.addEventListener('DOMContentLoaded', renderLocalTimes);
+
+    // Global click-to-copy handler and toast utility
+    function udocketToast(text) {
+      try {
+        const cont = document.getElementById('udocket-toaster');
+        const toast = document.createElement('div');
+        toast.textContent = text || 'Copied';
+        toast.setAttribute('role', 'status');
+        toast.className = 'pointer-events-none rounded-md border border-white/20 bg-slate-800/90 px-2 py-1 text-[11px] font-semibold text-slate-100 shadow-lg shadow-black/40';
+        (cont || document.body).appendChild(toast);
+        setTimeout(() => {
+          toast.style.opacity = '0';
+          toast.style.transition = 'opacity 150ms ease-in-out';
+          setTimeout(() => toast.remove(), 200);
+        }, 800);
+      } catch (_) {}
+    }
+    function udocketShowToastAt(x, y, text) {
+      try {
+        const toast = document.createElement('div');
+        toast.textContent = text || 'Copied';
+        toast.setAttribute('role', 'status');
+        toast.className = 'pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full rounded-md border border-white/20 bg-slate-800/90 px-2 py-1 text-[11px] font-semibold text-slate-100 shadow-lg shadow-black/40';
+        const vx = Math.max(8, Math.min(window.innerWidth - 8, x || 0));
+        const vy = Math.max(8, Math.min(window.innerHeight - 8, y || 0));
+        toast.style.left = vx + 'px';
+        toast.style.top = vy + 'px';
+        document.body.appendChild(toast);
+        setTimeout(() => {
+          toast.style.opacity = '0';
+          toast.style.transition = 'opacity 150ms ease-in-out';
+          setTimeout(() => toast.remove(), 200);
+        }, 600);
+      } catch (_) {}
+    }
+
+    document.addEventListener('click', (evt) => {
+      const target = evt.target && evt.target.closest ? evt.target.closest('[data-copy-text]') : null;
+      if (!target) return;
+      const value = target.getAttribute('data-copy-text');
+      if (!value || !navigator.clipboard) return;
+      const x = (evt.clientX != null ? evt.clientX : (evt.pageX != null ? (evt.pageX - window.scrollX) : 0));
+      const y = (evt.clientY != null ? evt.clientY : (evt.pageY != null ? (evt.pageY - window.scrollY) : 0));
+      navigator.clipboard.writeText(value).then(() => {
+        udocketShowToastAt(x, y, 'Copied');
+      }).catch(() => { try { udocketToast('Copied'); } catch (_) {} });
+    });
+
+    document.addEventListener('click', (evt) => {
+      const trigger = evt.target && evt.target.closest ? evt.target.closest('[data-copy-target]') : null;
+      if (!trigger) return;
+      const selector = trigger.getAttribute('data-copy-target');
+      if (!selector || !navigator.clipboard) return;
+      let source = null;
+      try {
+        source = document.querySelector(selector);
+      } catch (_) {
+        source = null;
+      }
+      if (!source) return;
+      const raw = 'value' in source && source.value != null ? source.value : source.textContent;
+      if (raw == null) return;
+      evt.preventDefault();
+      const value = String(raw);
+      const x = (evt.clientX != null ? evt.clientX : (evt.pageX != null ? (evt.pageX - window.scrollX) : 0));
+      const y = (evt.clientY != null ? evt.clientY : (evt.pageY != null ? (evt.pageY - window.scrollY) : 0));
+      navigator.clipboard.writeText(value).then(() => {
+        // Button feedback: change text and disable briefly
+        const isButton = trigger.tagName === 'BUTTON' || trigger.getAttribute('role') === 'button';
+        if (isButton) {
+          const original = trigger.dataset.copyOriginal || trigger.textContent || 'Copy';
+          trigger.dataset.copyOriginal = original;
+          trigger.textContent = 'Copied!';
+          trigger.disabled = true;
+          setTimeout(() => {
+            trigger.textContent = original;
+            trigger.disabled = false;
+          }, 2000);
+        } else {
+          udocketShowToastAt(x, y, 'Copied');
+        }
+      }).catch(() => { try { udocketToast('Copied'); } catch (_) {} });
+    });
+
+    function udocketLogClientError(payload) {
+      try {
+        const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+        const headers = {'Content-Type': 'application/json'};
+        const token = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+        if (token) headers['X-CSRFToken'] = token;
+        const canBeacon = typeof navigator.sendBeacon === 'function';
+        if (!canBeacon || navigator.sendBeacon('/ui/log', blob) === false) {
+          fetch('/ui/log', {
+            method: 'POST',
+            headers,
+            body: blob,
+            keepalive: true,
+          }).catch(() => {});
+        }
+      } catch (_) {}
+    }
+
+    window.addEventListener('error', (event) => {
+      if (!event) return;
+      udocketLogClientError({
+        type: 'error',
+        message: event.message,
+        filename: event.filename,
+        lineno: event.lineno,
+        colno: event.colno,
+        stack: event.error && event.error.stack,
+        href: window.location.href,
+        userAgent: navigator.userAgent,
+      });
+    });
+
+    window.addEventListener('unhandledrejection', (event) => {
+      if (!event) return;
+      const reason = event.reason || {};
+      udocketLogClientError({
+        type: 'unhandledrejection',
+        message: reason.message || String(reason),
+        stack: reason.stack,
+        href: window.location.href,
+        userAgent: navigator.userAgent,
+      });
+    });
+  </script>
+  <style>
+    .htmx-request .hide-during-request { display: none !important; }
+    .show-during-request { display: none !important; }
+    .htmx-request .show-during-request { display: inline-flex !important; }
+    details > summary { list-style: none; cursor: pointer; }
+    details > summary::-webkit-details-marker { display: none; }
+    details.group > summary { display: inline-flex; align-items: center; gap: 0.5rem; }
+    details.group > div { display: none; }
+    details.group[open] > div { display: block; }
+    /* Case header override: make summary span full width */
+    details[data-case-header] > summary { display: block; width: 100%; }
+    /* Site-wide copy-to-clipboard affordance */
+    [data-copy-text] {
+      cursor: copy;
+      text-decoration-line: underline;
+      text-decoration-style: dotted;
+      text-underline-offset: 2px;
+      text-decoration-color: rgba(255, 255, 255, 0.2);
+    }
+    [data-copy-text]:hover {
+      /* Tailwind primary-400 (#5b8bff) approximation */
+      text-decoration-color: rgba(91, 139, 255, 0.9);
+    }
+    /* Utility for inline clipping (head-tail handled by template filter) */
+    .clip-inline {
+      max-width: 28rem;
+      display: inline-block;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      vertical-align: bottom;
+    }
+    .status-pill {
+      position: relative;
+      overflow: hidden;
+      z-index: 0;
+    }
+    .status-pill::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, rgba(91, 139, 255, 0.45), rgba(91, 139, 255, 0.18));
+      transform: scaleX(var(--status-progress, 0));
+      transform-origin: left center;
+      transition: transform 150ms ease-in-out;
+      z-index: -1;
+    }
+    /* Ensure popover panels are visible when details is open (native fallback) */
+    [data-popover][open] [data-popover-panel] {
+      visibility: visible !important;
+    }
+  </style>
+  {% block head %}{% endblock %}
+  {% include "platform_ui/components/_popover_scripts.html" %}
+  {% include "platform_ui/components/_job_action_menu_scripts.html" %}
+  {% csrf_token %}
+</head>
+<body class="min-h-full bg-slate-900 text-slate-100">
+  <div class="relative min-h-screen pb-24">
+    <div id="udocket-toaster" class="pointer-events-none fixed right-4 bottom-4 z-50 flex flex-col items-end gap-2"></div>
+    <div class="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-900 to-slate-950"></div>
+    <header class="sticky top-0 z-50 border-b border-white/10 bg-white/5 backdrop-blur">
+      <div class="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+        <a href="/" class="flex items-center gap-3 text-lg font-semibold text-white">
+          <span class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-500/90 text-white shadow-lg">uD</span>
+          <span>uDocket Platform</span>
+        </a>
+        <nav class="hidden items-center gap-6 text-sm font-medium text-slate-200 md:flex">
+          {% if request.user.is_authenticated %}
+            <a href="/" class="transition hover:text-white">Cases</a>
+            <a href="/jobs/" class="transition hover:text-white">Jobs</a>
+            <a href="/permissions/" class="transition hover:text-white">Permissions</a>
+          {% endif %}
+        </nav>
+        <div class="flex items-center gap-4 text-sm text-slate-200">
+          {% if request.user.is_authenticated %}
+            {% include "platform_ui/components/_profile_menu.html" with popover_key='profile-menu' %}
+          {% else %}
+            <a href="/oidc/authenticate/" class="rounded-md bg-primary-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-primary-500/30 transition hover:bg-primary-400">Login</a>
+          {% endif %}
+        </div>
+      </div>
+    </header>
+
+    <main class="relative z-10 mx-auto max-w-6xl px-6 py-8">
+      {% if error %}
+        <div class="mb-6 rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+          {{ error }}
+        </div>
+      {% endif %}
+      {% block content %}{% endblock %}
+    </main>
+
+    <footer class="relative z-10 mt-12 border-t border-white/10 bg-white/5 py-6 text-center text-xs text-slate-400">
+      uDocket Platform · Build resilient case operations with trustworthy transcripts & analysis
+    </footer>
+  </div>
+  {% block body_scripts %}{% endblock %}
+</body>
+</html>

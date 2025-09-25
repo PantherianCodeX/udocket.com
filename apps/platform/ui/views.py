@@ -4,7 +4,7 @@ import json
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Tuple, Protocol, cast
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Protocol, cast
 
 import re
 
@@ -109,6 +109,21 @@ STATUS_CLASS_MAP = {
     "Not Started": "border-white/20 bg-white/5 text-slate-200",
     "No Transcript": "border-amber-400/40 bg-amber-500/10 text-amber-100",
     "Corrupted": "border-rose-400/40 bg-rose-500/15 text-rose-200",
+}
+
+STATUS_PILL_STYLES: Dict[str, str] = {
+    "SUCCEEDED": "border-emerald-400/40 bg-emerald-500/10 text-emerald-200",
+    "READY": "border-emerald-400/40 bg-emerald-500/10 text-emerald-200",
+    "FAILED": "border-rose-400/40 bg-rose-500/10 text-rose-200",
+    "CORRUPTED": "border-rose-400/40 bg-rose-500/10 text-rose-200",
+    "ERROR": "border-rose-400/40 bg-rose-500/10 text-rose-200",
+    "CANCELLED": "border-slate-400/40 bg-slate-500/20 text-slate-200",
+    "CANCELLING": "border-slate-400/40 bg-slate-500/20 text-slate-200",
+    "PENDING": "border-primary-400/40 bg-primary-500/10 text-primary-100",
+    "RUNNING": "border-primary-400/40 bg-primary-500/10 text-primary-100",
+    "CONVERTING": "border-primary-400/40 bg-primary-500/10 text-primary-100",
+    "UPLOADING": "border-primary-400/40 bg-primary-500/10 text-primary-100",
+    "QUEUED": "border-amber-400/40 bg-amber-500/10 text-amber-100",
 }
 
 CANCELABLE_STATUSES = {"RUNNING", "PENDING", "QUEUED", "UPLOADING", "CANCELLING", "CONVERTING"}
@@ -373,6 +388,15 @@ def _build_row_table_meta(row: Dict[str, Any]) -> None:
     if isinstance(meta, dict):
         metadata_source = str(meta.get("source_name") or meta.get("source_label") or "")
 
+    job_kind_value = ""
+    if isinstance(meta, dict):
+        job_kind_value = str(meta.get("job_kind") or "")
+    if not job_kind_value and job and getattr(job, "mode", None):
+        job_kind_value = str(job.mode)
+
+    status_display = status_raw.title() if status_raw else ""
+    status_style = STATUS_PILL_STYLES.get(status_raw, "border-white/20 bg-white/5 text-slate-300")
+
     filter_parts = [
         title,
         status_raw,
@@ -398,6 +422,8 @@ def _build_row_table_meta(row: Dict[str, Any]) -> None:
     row_table["filter"] = " ".join(_safe_lower(value) for value in filter_parts if value)
     row_table["status"] = status_raw
     row_table["status_rank"] = STATUS_SORT_ORDER.get(status_raw, 900)
+    row_table["status_display"] = status_display or "—"
+    row_table["status_style"] = status_style
     row_table["agent_label"] = agent_label
     row_table["type_label"] = job_type_label
     row_table["case_label"] = getattr(getattr(job, "case", None), "title", "") or ""
@@ -405,8 +431,10 @@ def _build_row_table_meta(row: Dict[str, Any]) -> None:
     row_table["job_id"] = str(getattr(job, "id", "") or "")
     row_table["audio_name"] = audio_name
     row_table["metadata_source"] = metadata_source
+    row_table["job_kind"] = job_kind_value
     row_table["review_status"] = review_status or "PENDING"
     row_table["created_iso"] = created_at.isoformat() if isinstance(created_at, datetime) else ""
+    row_table["created_at"] = created_at if isinstance(created_at, datetime) else None
 
 def _user_can_review_case(user: Optional[User], case: Case) -> bool:
     if getattr(settings, "PLATFORM_DEV_OPEN", False):
@@ -1202,6 +1230,36 @@ def _jobs_by_agent(
     return filtered
 
 
+def _table_config(
+    *,
+    panel_key: str,
+    title: str,
+    pill: Optional[str],
+    rows: List[Dict[str, Any]],
+    columns: Sequence[Dict[str, Any]],
+    column_ids: Sequence[str],
+    filters: Sequence[Dict[str, Any]],
+    empty_message: str,
+    show_identifiers: bool,
+    case_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    return {
+        "id": f"{panel_key}-jobs",
+        "key": panel_key,
+        "title": title,
+        "pill": pill,
+        "rows": rows,
+        "columns": list(columns),
+        "column_ids": list(column_ids),
+        "filters": list(filters),
+        "row_template": "platform_ui/partials/job_row.html",
+        "empty_message": empty_message,
+        "show_identifiers": show_identifiers,
+        "body_id": "jobs-body",
+        "case_id": case_id,
+    }
+
+
 def _build_tool_panels(
     request: HttpRequest,
     case: Case,
@@ -1334,7 +1392,7 @@ def _build_tool_panels(
             {"label": "Client", "value": client_label or "Unassigned"},
             {"label": "Case ID", "value": case.id},
         ],
-        "body_template": "ui/tools/case_details.html",
+        "body_template": "platform_ui/tools/case_details.html",
         "body_context": {
             "case": case,
             "fields": case_fields,
@@ -1366,6 +1424,18 @@ def _build_tool_panels(
         "jobs_column_ids": [col["id"] for col in CASE_JOB_TABLE_COLUMNS],
         "jobs_filters": DEFAULT_TABLE_FILTERS,
         "jobs_show_identifiers": True,
+        "jobs_table": _table_config(
+            panel_key="case-details",
+            title="All Jobs",
+            pill="Live updates",
+            rows=job_rows,
+            columns=CASE_JOB_TABLE_COLUMNS,
+            column_ids=[col["id"] for col in CASE_JOB_TABLE_COLUMNS],
+            filters=DEFAULT_TABLE_FILTERS,
+            empty_message="No jobs recorded yet.",
+            show_identifiers=True,
+            case_id=str(case.id),
+        ),
     }
 
     transcription_status = _status_payload("transcription", "Not Started")
@@ -1397,7 +1467,7 @@ def _build_tool_panels(
                 "value": len(transcription_jobs),
             },
         ],
-        "body_template": "ui/tools/transcribe.html",
+        "body_template": "platform_ui/tools/transcribe.html",
         "body_context": {
             "case": case,
             "form_action": reverse("ui-job-create", kwargs={"case_id": case.id}),
@@ -1420,6 +1490,18 @@ def _build_tool_panels(
         "jobs_column_ids": [col["id"] for col in CASE_JOB_TABLE_COLUMNS],
         "jobs_filters": DEFAULT_TABLE_FILTERS,
         "jobs_show_identifiers": True,
+        "jobs_table": _table_config(
+            panel_key="transcribe",
+            title="Transcription Jobs",
+            pill="Live updates",
+            rows=transcription_jobs,
+            columns=CASE_JOB_TABLE_COLUMNS,
+            column_ids=[col["id"] for col in CASE_JOB_TABLE_COLUMNS],
+            filters=DEFAULT_TABLE_FILTERS,
+            empty_message="No transcription jobs yet.",
+            show_identifiers=True,
+            case_id=str(case.id),
+        ),
     }
 
     summary_status = _status_payload("summary", "Not Started")
@@ -1439,7 +1521,7 @@ def _build_tool_panels(
             {"label": "Summaries", "value": len(summary_history) + (1 if summary_latest else 0)},
             {"label": "Approved transcripts", "value": sum(1 for src in transcript_sources if src["approved"])},
         ],
-        "body_template": "ui/tools/summary.html",
+        "body_template": "platform_ui/tools/summary.html",
         "body_context": {
             "case": case,
             "module": summary_module,
@@ -1455,6 +1537,18 @@ def _build_tool_panels(
         "jobs_column_ids": [col["id"] for col in GLOBAL_JOB_TABLE_COLUMNS],
         "jobs_filters": DEFAULT_TABLE_FILTERS,
         "jobs_show_identifiers": False,
+        "jobs_table": _table_config(
+            panel_key="summary",
+            title="Summary Jobs",
+            pill="Automations",
+            rows=summary_jobs,
+            columns=GLOBAL_JOB_TABLE_COLUMNS,
+            column_ids=[col["id"] for col in GLOBAL_JOB_TABLE_COLUMNS],
+            filters=DEFAULT_TABLE_FILTERS,
+            empty_message="No summary jobs yet. Generate a summary above.",
+            show_identifiers=False,
+            case_id=str(case.id),
+        ),
     }
 
     timeline_status = _status_payload("timeline", "Not Started")
@@ -1474,7 +1568,7 @@ def _build_tool_panels(
             {"label": "Timelines", "value": len(timeline_history) + (1 if timeline_latest else 0)},
             {"label": "Artifacts", "value": len(artifacts)},
         ],
-        "body_template": "ui/tools/timeline.html",
+        "body_template": "platform_ui/tools/timeline.html",
         "body_context": {
             "case": case,
             "module": timeline_module,
@@ -1491,6 +1585,18 @@ def _build_tool_panels(
         "jobs_column_ids": [col["id"] for col in GLOBAL_JOB_TABLE_COLUMNS],
         "jobs_filters": DEFAULT_TABLE_FILTERS,
         "jobs_show_identifiers": False,
+        "jobs_table": _table_config(
+            panel_key="timeline",
+            title="Timeline Jobs",
+            pill="Automations",
+            rows=timeline_jobs,
+            columns=GLOBAL_JOB_TABLE_COLUMNS,
+            column_ids=[col["id"] for col in GLOBAL_JOB_TABLE_COLUMNS],
+            filters=DEFAULT_TABLE_FILTERS,
+            empty_message="No timeline jobs yet. Generate a timeline above.",
+            show_identifiers=False,
+            case_id=str(case.id),
+        ),
     }
 
     return panels
@@ -1821,7 +1927,7 @@ def index(request: HttpRequest) -> HttpResponse:
                 "court_division_choices": Case.CourtDivision.choices,
                 "representation_choices": Case.Representation.choices,
             }
-            return render(request, "ui/index.html", context)
+            return render(request, "platform_ui/dashboard/index.html", context)
 
         title = (request.POST.get("title") or "").strip()
         client_name = (request.POST.get("client_name") or "").strip()
@@ -1888,7 +1994,7 @@ def index(request: HttpRequest) -> HttpResponse:
         "court_division_choices": Case.CourtDivision.choices,
         "representation_choices": Case.Representation.choices,
     }
-    return render(request, "ui/index.html", context)
+    return render(request, "platform_ui/dashboard/index.html", context)
 
 
 @require_http_methods(["GET", "POST"])
@@ -1951,7 +2057,7 @@ def case_detail(request: HttpRequest, case_id: str) -> HttpResponse:
         "initial_tool_key": initial_tool_key,
         "initial_tool_panel": initial_panel,
     }
-    return render(request, "ui/case_detail.html", context)
+    return render(request, "platform_ui/cases/detail.html", context)
 
 
 @require_http_methods(["GET"])
@@ -1976,7 +2082,7 @@ def case_analysis_module(request: HttpRequest, case_id: str, agent: str) -> Http
     if not module:
         raise Http404
 
-    return render(request, "ui/_analysis_module.html", {"module": module, "case": case})
+    return render(request, "platform_ui/partials/analysis_module.html", {"module": module, "case": case})
 
 
 @require_http_methods(["POST"])
@@ -1992,7 +2098,7 @@ def case_update_title(request: HttpRequest, case_id: str) -> HttpResponse:
     if new_title != case.title:
         case.title = new_title
         case.save(update_fields=["title"])
-    return render(request, "ui/_case_title.html", {"case": case})
+    return render(request, "platform_ui/partials/case_title.html", {"case": case})
 
 
 @require_http_methods(["POST"])
@@ -2057,7 +2163,7 @@ def case_details_update(request: HttpRequest, case_id: str) -> HttpResponse:
         if panel:
             panel_body = panel.get("body_context", {})
             panel_body["form_errors"] = form_errors
-        return render(request, "ui/tools/_panel.html", {"panel": panel}, status=400)
+        return render(request, "platform_ui/tools/_panel.html", {"panel": panel}, status=400)
 
     update_fields: List[str] = []
     for field_name, value in case_updates.items():
@@ -2196,16 +2302,16 @@ def case_details_update(request: HttpRequest, case_id: str) -> HttpResponse:
 
     state = _compute_case_tool_state(request, case)
     panel = state["tool_panels"].get("case-details")
-    response = render(request, "ui/tools/_panel.html", {"panel": panel})
+    response = render(request, "platform_ui/tools/_panel.html", {"panel": panel})
     trigger_payload = {
         "case-view-refreshed": {
             "tools": ["case-details"],
             "header_html": render_to_string(
-                "ui/tools/_case_header.html",
+                "platform_ui/tools/_case_header.html",
                 {"case": case, "case_header": state["case_header"]},
             ),
             "cards_html": render_to_string(
-                "ui/tools/_developer_cards.html",
+                "platform_ui/tools/_developer_cards.html",
                 {"case": case, "cards": state["developer_cards"], "active_tool": "case-details"},
             ),
             "active_tool": "case-details",
@@ -2241,7 +2347,7 @@ def case_tool_panel(request: HttpRequest, case_id: str, tool_key: str) -> HttpRe
     if not panel:
         raise Http404
 
-    response = render(request, "ui/tools/_panel.html", {"panel": panel})
+    response = render(request, "platform_ui/tools/_panel.html", {"panel": panel})
     response["HX-Trigger"] = json.dumps({"case-view-refreshed": {"tools": [resolved_key], "active_tool": resolved_key}})
     return response
 
@@ -2296,7 +2402,7 @@ def case_job_transcript(request: HttpRequest, case_id: str, job_id: uuid.UUID) -
         "modal_close_label": "Close",
         "modal_empty_text": "Transcript not available for this job.",
     }
-    return render(request, "ui/_transcript_modal.html", context)
+    return render(request, "platform_ui/partials/transcript_modal.html", context)
 
 
 @require_http_methods(["GET"])
@@ -2348,7 +2454,7 @@ def case_job_logs_modal(request: HttpRequest, case_id: str, job_id: uuid.UUID) -
         "modal_empty_text": "No log entries recorded for this job.",
         "modal_meta_items": meta_items,
     }
-    return render(request, "ui/_log_modal.html", context)
+    return render(request, "platform_ui/partials/log_modal.html", context)
 
 
 @require_http_methods(["GET"])
@@ -2410,7 +2516,7 @@ def case_assign_reviewer(request: HttpRequest, case_id: str) -> HttpResponse:
     jobs_list = list(scope_jobs(jobs_qs, getattr(request, "user", None)))
     telemetry_map = _job_telemetry_map(jobs_list, request)
     context = {"case": case, **_case_progress_context(case, jobs_list, telemetry_map)}
-    return render(request, "ui/_case_progress.html", context)
+    return render(request, "platform_ui/partials/case_progress.html", context)
 
 
 @require_http_methods(["POST"])
@@ -2491,7 +2597,7 @@ def case_assign_client(request: HttpRequest, case_id: str) -> HttpResponse:
     jobs_list = list(scope_jobs(jobs_qs, getattr(request, "user", None)))
     telemetry_map = _job_telemetry_map(jobs_list, request)
     context = {"case": case, **_case_progress_context(case, jobs_list, telemetry_map)}
-    return render(request, "ui/_case_progress.html", context)
+    return render(request, "platform_ui/partials/case_progress.html", context)
 
 
 def jobs(request: HttpRequest) -> HttpResponse:
@@ -2553,8 +2659,20 @@ def jobs(request: HttpRequest) -> HttpResponse:
         "job_filters": DEFAULT_TABLE_FILTERS,
         "job_total": len(display_rows),
         "job_show_identifiers": False,
+        "jobs_table": _table_config(
+            panel_key="jobs",
+            title="Jobs",
+            pill="Live updates",
+            rows=display_rows,
+            columns=GLOBAL_JOB_TABLE_COLUMNS,
+            column_ids=[col["id"] for col in GLOBAL_JOB_TABLE_COLUMNS],
+            filters=DEFAULT_TABLE_FILTERS,
+            empty_message="No jobs yet.",
+            show_identifiers=False,
+            case_id=None,
+        ),
     }
-    return render(request, "ui/jobs.html", context)
+    return render(request, "platform_ui/jobs/index.html", context)
 
 
 @require_http_methods(["GET"])
@@ -2573,9 +2691,9 @@ def job_detail_panel(request: HttpRequest, job_id: str) -> HttpResponse:
         title_edit = str(request.GET.get("title_edit") or "").lower() in {"1", "true", "yes", "on"}
         context = _job_detail_context(request, job, title_edit=title_edit)
         template = (
-            "ui/_job_detail_audio_conversion.html"
+            "platform_ui/partials/job_detail_audio_conversion.html"
             if context.get("job_kind", "").lower() == "audio_conversion"
-            else "ui/_job_detail.html"
+            else "platform_ui/partials/job_detail.html"
         )
         return render(request, template, context)
     except Http404:
@@ -2612,9 +2730,9 @@ def case_job_detail_panel(request: HttpRequest, case_id: str, job_id: str) -> Ht
         context = _job_detail_context(request, job, title_edit=title_edit)
         context["case"] = case
         template = (
-            "ui/_job_detail_audio_conversion.html"
+            "platform_ui/partials/job_detail_audio_conversion.html"
             if context.get("job_kind", "").lower() == "audio_conversion"
-            else "ui/_job_detail.html"
+            else "platform_ui/partials/job_detail.html"
         )
         return render(request, template, context)
     except Http404:
@@ -2655,7 +2773,7 @@ def case_job_title_form(request: HttpRequest, case_id: str, job_id: str) -> Http
     }
     context = _job_detail_context(request, job, title_edit=edit_flag)
     context["case"] = case
-    return render(request, "ui/_job_detail_title_form.html", context)
+    return render(request, "platform_ui/partials/job_detail_title_form.html", context)
 
 
 @require_http_methods(["POST"])
@@ -2727,7 +2845,7 @@ def case_job_update_title(request: HttpRequest, case_id: str, job_id: str) -> Ht
         )
         context["case"] = case
         context["job_title"] = new_title or context.get("job_title")
-        return render(request, "ui/_job_detail_title_form.html", context, status=400)
+        return render(request, "platform_ui/partials/job_detail_title_form.html", context, status=400)
 
     artifact.title = new_title
     if isinstance(artifact.metadata, dict):
@@ -2761,7 +2879,7 @@ def case_job_update_title(request: HttpRequest, case_id: str, job_id: str) -> Ht
     context = _job_detail_context(request, job)
     context["case"] = case
     trigger = json.dumps({"job-title-updated": {"job_id": str(job.id), "title": new_title}})
-    response = render(request, "ui/_job_detail_title_form.html", context)
+    response = render(request, "platform_ui/partials/job_detail_title_form.html", context)
     response["HX-Trigger"] = trigger
     return response
 
@@ -2916,7 +3034,7 @@ def case_job_row(request: HttpRequest, case_id: str, job_id: str) -> HttpRespons
     )
     return render(
         request,
-        "ui/_job_row.html",
+        "platform_ui/partials/job_row.html",
         {
             "row": row,
             "table_columns": CASE_JOB_TABLE_COLUMNS,
@@ -2996,7 +3114,7 @@ def permissions_overview(request: HttpRequest) -> HttpResponse:
         )
 
     context = {"registry": registry, "presets": presets, "roles": roles}
-    return render(request, "ui/permissions.html", context)
+    return render(request, "platform_ui/permissions/index.html", context)
 
 
 def logout_view(request: HttpRequest) -> HttpResponse:
@@ -3128,7 +3246,7 @@ def create_job(request: HttpRequest, case_id: str) -> HttpResponse:
         state = _compute_case_tool_state(request, case)
         panel = state["tool_panels"].get("transcribe")
         if panel:
-            response = render(request, "ui/tools/_panel.html", {"panel": panel})
+            response = render(request, "platform_ui/tools/_panel.html", {"panel": panel})
             trigger_payload = {
                 "job-enqueued": {
                     "job_id": str(job.id),
@@ -3139,11 +3257,11 @@ def create_job(request: HttpRequest, case_id: str) -> HttpResponse:
                     "tools": ["transcribe"],
                     "active_tool": "transcribe",
                     "header_html": render_to_string(
-                        "ui/tools/_case_header.html",
+                        "platform_ui/tools/_case_header.html",
                         {"case": case, "case_header": state["case_header"]},
                     ),
                     "cards_html": render_to_string(
-                        "ui/tools/_developer_cards.html",
+                        "platform_ui/tools/_developer_cards.html",
                         {
                             "case": case,
                             "cards": state["developer_cards"],
@@ -3176,7 +3294,7 @@ def create_job(request: HttpRequest, case_id: str) -> HttpResponse:
     )
     response = render(
         request,
-        "ui/_job_row.html",
+        "platform_ui/partials/job_row.html",
         {
             "row": row,
             "table_columns": CASE_JOB_TABLE_COLUMNS,

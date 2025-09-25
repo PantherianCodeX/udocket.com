@@ -1,5 +1,0 @@
-{% if actions %}
-  {% include "ui/tools/_job_action_menu_popover.html" with actions=actions popover_key=popover_key|default:'job-actions' only %}
-{% else %}
-  <span class="text-xs text-slate-500">—</span>
-{% endif %}

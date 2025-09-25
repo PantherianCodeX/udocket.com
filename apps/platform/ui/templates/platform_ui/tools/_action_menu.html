@@ -1,0 +1,3 @@
+{% if actions %}
+  {% include "platform_ui/tools/_action_menu_popover.html" with actions=actions title=title popover_key=popover_key|default:'action-menu' only %}
+{% endif %}

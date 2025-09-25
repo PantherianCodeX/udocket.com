@@ -1,0 +1,125 @@
+{% load ui_display %}
+{% with columns=table_columns column_ids=table_column_ids job=row.job telemetry=row.telemetry table_meta=row.table %}
+{% if job %}
+{% with sort=table_meta.sort status_value=telemetry.status|default:job.status normalized=status_value|default:''|upper is_child=row.is_child|default:False parent_ref=row.parent_id|default:job.case_id job_title=row.title|default:job.id type_label=table_meta.type_label|default:'' case_title=table_meta.case_label|default:'' case_id=table_meta.case_id|default:job.case_id audio_name=table_meta.audio_name created_dt=table_meta.created_at|default:job.created_at review_status=table_meta.review_status|default:job.review_status|default:'PENDING' progress=telemetry.upload_progress show_identifiers=table_show_identifiers|default:False parent_id=parent_ref|default:job.id filter_value=table_meta.filter|default:'' %}
+    <tr data-job="{{ job.id }}"
+        data-job-row
+        data-job-status="{{ normalized }}"
+        data-job-case-id="{{ job.case_id }}"
+        data-job-kind="{{ table_meta.job_kind|default:job.mode|default:'' }}"
+        data-table-row
+        data-table-row-id="{{ job.id }}"
+        data-table-parent-id="{{ parent_id }}"
+        data-table-depth="{% if is_child %}1{% else %}0{% endif %}"
+        data-table-filter="{{ filter_value }}"
+        data-table-value-title="{{ sort.title|default:'' }}"
+        data-table-value-status="{{ sort.status|default:'' }}"
+        data-table-value-review="{{ sort.review|default:'' }}"
+        data-table-value-agent="{{ sort.agent|default:'' }}"
+        data-table-value-type="{{ sort.type|default:'' }}"
+        data-table-value-case="{{ sort.case|default:'' }}"
+        data-table-value-created="{{ sort.created|default:'' }}"
+        class="cursor-pointer transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 {% if is_child %}bg-slate-900/70{% endif %}"
+        tabindex="0"
+        aria-expanded="false"
+        data-review-status="{{ review_status }}">
+      {% for column in columns %}
+        {% if column.id == 'title' %}
+          <td class="px-4 py-3 {% if is_child %}pl-10{% endif %}">
+            <div class="flex items-center gap-3">
+              <div class="min-w-0">
+                <p class="max-w-[22rem] truncate font-medium text-slate-100" data-job-title title="{{ job_title }}">{{ job_title }}</p>
+                <div class="mt-1 truncate text-[11px] text-slate-400">
+                  {% if audio_name %}
+                    <span class="truncate">{{ audio_name }}</span>
+                  {% elif table_meta.metadata_source %}
+                    <span class="truncate">Source · {{ table_meta.metadata_source }}</span>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+          </td>
+        {% elif column.id == 'status' %}
+          <td class="px-4 py-3" id="job-status-{{ job.id }}">
+            {% with status_display=table_meta.status_display|default:normalized|lower|capfirst status_style=table_meta.status_style|default:'border-white/20 bg-white/5 text-slate-300' %}
+              <span class="status-pill inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase {{ status_style }}" data-status="{{ normalized }}">
+                <span data-job-status-label>
+                  {% if normalized == 'UPLOADING' and progress %}
+                    {{ status_display }} {{ progress|floatformat:0 }}%
+                  {% else %}
+                    {{ status_display }}
+                  {% endif %}
+                </span>
+              </span>
+            {% endwith %}
+          </td>
+        {% elif column.id == 'review' %}
+          <td class="px-4 py-3">
+            {% if not is_child %}
+              {% if review_status == 'APPROVED' %}
+                <span id="job-review-badge-{{ job.id }}" data-review-badge class="inline-flex items-center rounded-full border border-emerald-400/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-emerald-200">Approved</span>
+              {% elif review_status == 'REJECTED' %}
+                <span id="job-review-badge-{{ job.id }}" data-review-badge class="inline-flex items-center rounded-full border border-rose-400/40 bg-rose-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-rose-200">Rejected</span>
+              {% else %}
+                <span id="job-review-badge-{{ job.id }}" data-review-badge class="inline-flex items-center rounded-full border border-white/20 bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-300">Pending</span>
+              {% endif %}
+            {% else %}
+              <span class="sr-only">Sub-job</span>
+            {% endif %}
+          </td>
+        {% elif column.id == 'type' %}
+          <td class="px-4 py-3 text-slate-200">
+            {% if type_label %}
+              {{ type_label }}
+            {% else %}
+              {{ table_meta.job_kind|default:job.mode|default:'—'|title }}
+            {% endif %}
+          </td>
+        {% elif column.id == 'agent' %}
+          <td class="px-4 py-3 text-slate-200">{{ table_meta.agent_label|default:job.mode }}</td>
+        {% elif column.id == 'case' %}
+          <td class="px-4 py-3 text-slate-200">
+            {% if case_id %}
+              <a href="/cases/{{ case_id }}/" class="font-medium text-primary-200 underline decoration-dotted decoration-white/20 hover:decoration-primary-300">{{ case_title|default:case_id|short_uuid }}</a>
+            {% else %}
+              <span>—</span>
+            {% endif %}
+          </td>
+        {% elif column.id == 'created' %}
+          <td class="px-4 py-3 text-slate-300">
+            {% if created_dt %}
+              {# Standard datetime block: keep date on top, hh:mm AM/PM below. Reuse this snippet when rendering datetimes. #}
+              <div class="leading-tight">
+                <div><time data-ts="{{ created_dt|date:'c' }}">{{ created_dt|date:'M j, Y' }}</time></div>
+                <div class="text-[11px] text-slate-400"><time data-ts="{{ created_dt|date:'c' }}">{{ created_dt|date:'g:i A' }}</time></div>
+              </div>
+            {% else %}
+              <span>—</span>
+            {% endif %}
+          </td>
+        {% elif column.id == 'actions' %}
+          <td class="px-4 py-3">
+            <div class="flex justify-end">
+              {% include "platform_ui/tools/_job_action_menu.html" with actions=row.actions popover_key=table_key|default:'job-actions' only %}
+            </div>
+          </td>
+        {% elif column.id == 'expander' %}
+          <td class="px-4 py-3 text-right text-slate-300">
+            <svg xmlns="http://www.w3.org/2000/svg" class="ml-auto h-4 w-4 transition-transform duration-150" viewBox="0 0 20 20" fill="currentColor" data-job-chevron>
+              <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.27a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
+            </svg>
+          </td>
+        {% else %}
+          <td class="px-4 py-3 text-slate-200">—</td>
+        {% endif %}
+      {% endfor %}
+    </tr>
+    <tr class="hidden bg-slate-900/50" style="display:none;" data-job-detail="{{ job.id }}" data-table-detail-for="{{ job.id }}" data-table-parent-id="{{ parent_id }}" data-table-filter="{{ filter_value }}">
+      <td colspan="{{ columns|length }}" class="px-6 py-4">
+        <div class="rounded-xl border border-white/10 bg-slate-900/80 p-4" data-job-detail-container="{{ job.id }}"></div>
+      </td>
+    </tr>
+  {% endwith %}
+{% endif %}
+{# closing outer with (columns, column_ids, job, telemetry, table_meta) #}
+{% endwith %}

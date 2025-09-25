@@ -869,7 +869,7 @@ class JobViewSet(viewsets.ModelViewSet):
                 "title_edit": True,
                 "user_can_review": True,
             }
-            return render(request, "ui/_job_detail.html", context)
+            return render(request, "platform_ui/partials/job_detail.html", context)
 
         artifact.title = new_title
         artifact.save(update_fields=["title"])
@@ -885,7 +885,7 @@ class JobViewSet(viewsets.ModelViewSet):
             "metadata_items": [],
             "user_can_review": True,
         }
-        return render(request, "ui/_job_detail.html", context, headers=headers)
+        return render(request, "platform_ui/partials/job_detail.html", context, headers=headers)
 
     @action(detail=False, methods=["post"], url_path="upload")
     def upload(self, request):
