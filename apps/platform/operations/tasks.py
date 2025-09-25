@@ -915,7 +915,7 @@ def summarize_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
     head = "\n".join(lines[:200])
     if len(head) > 2000:
         head = head[:2000] + "\n…"
-    content = f"# Summary for {job_id}\n\nGenerated from transcript: {src.name}\n\n{head}\n"
+    content = f"# Summarize output for {job_id}\n\nGenerated from transcript: {src.name}\n\n{head}\n"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(content, encoding="utf-8")
 
@@ -932,7 +932,7 @@ def summarize_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
             case_fk=job.case,
             job_id=str(job_id),
             type="SUMMARY",
-            title=f"Summary {job_id}",
+            title=f"Summarize {job_id}",
             path=str(out),
             checksum=h.hexdigest(),
             schema_version="v1",

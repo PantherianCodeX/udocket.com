@@ -13,7 +13,7 @@ Scope: `apps/platform/operations/` (tasks, storage paths, websocket updates, ops
 - Write ops meta via `update_job_meta` and human logs via `append_job_log` (apps/platform/operations/utils.py:1). Ensure append-only behavior.
 - Handle cancellation, retries, and terminal states consistently; prefer `Job.Status` enums.
  - For analysis tasks, follow standard filenames and audit streams:
-   - Summary: `analysis/<job_id>__summary_v1.md`, ops `<job_id>__summary_log.json`, audit `ops_summary.jsonl`
+   - Summarize: `analysis/<job_id>__summary_v1.md`, ops `<job_id>__summary_log.json`, audit `ops_summary.jsonl`
    - Timeline: `analysis/<job_id>__timeline_v1.json`, ops `<job_id>__timeline_log.json`, audit `ops_timeline.jsonl`
    - Graph: `analysis/<job_id>__entities_v1.json`, `analysis/<job_id>__graph_v1.json`, ops `<job_id>__graph_log.json`, audit `ops_graph.jsonl`
 

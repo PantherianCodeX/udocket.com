@@ -16,5 +16,5 @@ def test_unique_title_takes_highest_suffix():
 
 
 def test_unique_title_preserves_other_titles():
-    existing = ["Summary", "Transcript-2"]
+    existing = ["Summarize", "Transcript-2"]
     assert unique_title("Transcript", existing) == "Transcript-3"

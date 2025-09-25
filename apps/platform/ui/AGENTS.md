@@ -33,7 +33,7 @@ Scope: everything beneath `apps/platform/ui/` (templates, views, presenters, sel
   - Do not duplicate those resources in child templates.
 - Tools panel base (all tools share):
   - Create a shared analysis/tools base template (planned: `platform_ui/tools/_panel_base.html`).
-  - Transcribe, Summary, Timeline, and Relationships should inherit this base.
+  - Transcribe, Summarize, Timeline, and Relationships should inherit this base.
   - The base defines: panel header (label/status/pill), left action area (form/buttons), right sidebar (latest artifact), and history section.
 - For modals, inherit from `platform_ui/components/modals/modal_base.html` and only override the relevant blocks.
   - Example pattern: `platform_ui/components/modals/text_modal.html` (apps/platform/ui/templates/platform_ui/components/modals/text_modal.html:1) extends the base and defines header/body/actions.

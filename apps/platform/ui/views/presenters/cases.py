@@ -156,12 +156,12 @@ def analysis_modules_context(
     return [
         build_module(
             key="summary",
-            label="Summarization",
+            label="Summarize",
             description="Generate layered summaries of transcripts with AI assistance.",
             artifacts=summary_artifacts,
-            empty_message="No summaries yet. Generate one from the latest transcript.",
-            action_label="Generate summary",
-            success_label="Summary queued",
+            empty_message="No summarize jobs yet. Generate one from the latest transcript.",
+            action_label="Queue summarize job",
+            success_label="Summarize queued",
         ),
         build_module(
             key="timeline",
@@ -248,7 +248,7 @@ def build_case_progress(case: Case, jobs: List[Job], telemetry_map: Dict[str, Di
 
     mappings = [
         ("transcription", "Transcription", ("transcription", "speech", "audio")),
-        ("summary", "Summary", ("summary",)),
+        ("summary", "Summarize", ("summary",)),
         ("timeline", "Timeline", ("timeline", "events")),
     ]
 
@@ -798,10 +798,10 @@ def build_tool_panels(
     summary_module = analysis_lookup.get("summary") or {}
     summary_latest = summary_module.get("latest") or {}
     summary_history = summary_module.get("history") or []
-    summary_jobs = jobs_by_agent(all_rows_iterable, keywords=("summary", "summarization"))
+    summary_jobs = jobs_by_agent(all_rows_iterable, keywords=("summary", "summarization", "summarize"))
     panels["summary"] = {
         "key": "summary",
-        "label": "Summary",
+        "label": "Summarize",
         "description": "Generate layered summaries from approved transcripts.",
         "status_label": summary_status["label"],
         "status_class": summary_status["class"],
@@ -822,9 +822,9 @@ def build_tool_panels(
             "job_endpoint_template": "/api/v1/jobs/{job_id}/analyze/summary/",
         },
         "jobs": summary_jobs,
-        "jobs_title": "Summary Jobs",
+        "jobs_title": "Summarize Jobs",
         "jobs_pill": "Automations",
-        "jobs_empty_message": "No summary jobs yet. Generate a summary above.",
+        "jobs_empty_message": "No summarize jobs yet. Queue one above.",
         "case_id": str(case.id),
         "jobs_columns": list(GLOBAL_JOB_TABLE_COLUMNS),
         "jobs_column_ids": [col["id"] for col in GLOBAL_JOB_TABLE_COLUMNS],
@@ -832,13 +832,13 @@ def build_tool_panels(
         "jobs_show_identifiers": False,
         "jobs_table": table_config(
             panel_key="summary",
-            title="Summary Jobs",
+            title="Summarize Jobs",
             pill="Automations",
             rows=summary_jobs,
             columns=GLOBAL_JOB_TABLE_COLUMNS,
             column_ids=[col["id"] for col in GLOBAL_JOB_TABLE_COLUMNS],
             filters=DEFAULT_TABLE_FILTERS,
-            empty_message="No summary jobs yet. Generate a summary above.",
+            empty_message="No summarize jobs yet. Queue one above.",
             show_identifiers=False,
             case_id=str(case.id),
         ),

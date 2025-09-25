@@ -57,9 +57,9 @@ Scope: this file governs contributions across `apps/platform/` (accounts, author
 - Start with focused unit tests for presenters/selectors and model utils, then integration tests for views and tasks.
 - Tests avoid executing external services; mock Azure and blob uploads; exercise task code directly when feasible (see tests/test_platform_flow.py:18).
 
-## Analysis Agents (summary/timeline/graph)
+## Analysis Agents (summarize/timeline/graph)
 - Implement Celery tasks that read the latest transcript (or a specified one) and write artifacts under `analysis/` with per‑run ops meta and audit JSONL:
-  - Summary: `<job_id>__summary_v1.md`, ops `<job_id>__summary_log.json`, audit `ops_summary.jsonl`
+  - Summarize: `<job_id>__summary_v1.md`, ops `<job_id>__summary_log.json`, audit `ops_summary.jsonl`
   - Timeline: `<job_id>__timeline_v1.json`, ops `<job_id>__timeline_log.json`, audit `ops_timeline.jsonl`
   - Entities/Graph: `<job_id>__entities_v1.json`, `<job_id>__graph_v1.json`, ops `<job_id>__graph_log.json`, audit `ops_graph.jsonl`
 - Emit `send_case_update(..., event="artifact.created", kind=<type>, job_id=<id>)` after writing artifacts to notify UI modules.
