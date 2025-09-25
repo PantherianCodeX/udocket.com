@@ -1,8 +1,35 @@
+x-develop:
+  api-watch: &api-watch
+    watch:
+      - action: sync
+        path: apps/api
+        target: /app/apps/api
+      - action: sync
+        path: packages
+        target: /app/packages
+      - action: rebuild
+        path: apps/api/requirements.txt
+      - action: rebuild
+        path: infra/docker/Dockerfile.api
+  platform-watch: &platform-watch
+    watch:
+      - action: sync
+        path: apps/platform
+        target: /app/apps/platform
+      - action: sync
+        path: packages
+        target: /app/packages
+      - action: rebuild
+        path: apps/platform/requirements.txt
+      - action: rebuild
+        path: infra/docker/Dockerfile.platform
+
 services:
   api:
     build:
       context: .
       dockerfile: infra/docker/Dockerfile.api
+    develop: *api-watch
     env_file: .env
     volumes:
       - ./storage:/app/storage
@@ -15,6 +42,7 @@ services:
     build:
       context: .
       dockerfile: infra/docker/Dockerfile.platform
+    develop: *platform-watch
     env_file: .env
     environment:
       DJANGO_SETTINGS_MODULE: apps.platform.config.settings.prod
@@ -35,6 +63,7 @@ services:
     build:
       context: .
       dockerfile: infra/docker/Dockerfile.platform
+    develop: *platform-watch
     env_file: .env
     environment:
       DJANGO_SETTINGS_MODULE: apps.platform.config.settings.prod
@@ -54,6 +83,7 @@ services:
     build:
       context: .
       dockerfile: infra/docker/Dockerfile.platform
+    develop: *platform-watch
     env_file: .env
     environment:
       DJANGO_SETTINGS_MODULE: apps.platform.config.settings.prod
