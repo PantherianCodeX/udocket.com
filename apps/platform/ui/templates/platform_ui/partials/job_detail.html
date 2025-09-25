@@ -30,6 +30,9 @@
       <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-100 transition hover:border-primary-400 hover:text-white" data-job-view-log data-job-id="{{ job.id }}" data-case-id="{{ case.id }}">
         View logs
       </button>
+      <a class="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-100 transition hover:border-primary-400 hover:text-white" href="/api/v1/jobs/{{ job.id }}/logs/" download>
+        Download log
+      </a>
       {% if telemetry.metadata and telemetry.metadata.converted_audio_job_id %}
         <a class="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-100 transition hover:border-primary-400 hover:text-white" href="/api/v1/jobs/{{ telemetry.metadata.converted_audio_job_id }}/download-audio/">Download converted WAV</a>
       {% elif telemetry.metadata and telemetry.metadata.converted_wav_available %}

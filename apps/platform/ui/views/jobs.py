@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Protocol, cast
 
 from django.conf import settings
 from django.core.exceptions import PermissionDenied
@@ -12,7 +13,6 @@ from django.shortcuts import redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
-from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from apps.platform.accounts.utils import resolve_request_organization
@@ -22,23 +22,35 @@ from apps.platform.cases.models import Case
 from apps.platform.jobs.models import Job
 from apps.platform.jobs.utils import unique_title
 from apps.platform.operations.storage import ensure_case_dirs, ops_dir as storage_ops_dir
+from apps.platform.operations.tasks import transcribe_job
 from apps.platform.operations.utils import append_job_log, job_log_path, update_job_meta
 from apps.platform.tenancy import scope_jobs
 
+from .auth import _ensure_authenticated
 from .common import JobTelemetryPayload
+from .contexts import (
+    _compute_case_tool_state,
+    _get_case_and_org,
+    _job_detail_context,
+    _user_can_review_case,
+)
 from .constants import CASE_JOB_TABLE_COLUMNS, DEFAULT_TABLE_FILTERS, GLOBAL_JOB_TABLE_COLUMNS
+from .presenters.cases import _table_config
+from .presenters.job_actions import build_job_action_entries
 from .presenters.jobs import _build_job_rows, _friendly_job_title
 from .selectors import _job_telemetry_map, _job_telemetry_payload
-from . import (
-    _ensure_authenticated,
-    _ensure_transcript_artifact,
-    _get_case_and_org,
-    _job_action_entries,
-    _job_detail_context,
-    _table_config,
-    _user_can_review_case,
-    transcribe_job_task,
-)
+from .transcripts import ensure_transcript_artifact, unique_transcript_title, default_transcript_title
+
+
+log = logging.getLogger("apps.platform.ui")
+
+
+class _TaskWithDelay(Protocol):
+    def delay(self, *args: Any, **kwargs: Any) -> Any:
+        ...
+
+
+transcribe_job_task: _TaskWithDelay = cast(_TaskWithDelay, transcribe_job)
 
 
 @require_http_methods(["GET"])
@@ -186,7 +198,7 @@ def jobs(request: HttpRequest) -> HttpResponse:
             case_obj = getattr(job_obj, "case", None)
             if isinstance(case_obj, Case):
                 can_review = _user_can_review_case(user, case_obj)
-        row["actions"] = _job_action_entries(
+        row["actions"] = build_job_action_entries(
             job_obj,
             row.get("telemetry"),
             can_review=can_review,
@@ -377,7 +389,7 @@ def case_job_update_title(request: HttpRequest, case_id: str, job_id: str) -> Ht
             title_error = "A transcript with that title already exists in this case."
 
     if not title_error:
-        artifact = artifact or _ensure_transcript_artifact(
+        artifact = artifact or ensure_transcript_artifact(
             case=case,
             job=job,
             telemetry=telemetry_dict,
@@ -473,10 +485,12 @@ def case_job_create_artifact(request: HttpRequest, case_id: str, job_id: str) ->
         .first()
     )
 
-    artifact = existing or _ensure_transcript_artifact(
+    artifact = existing or ensure_transcript_artifact(
+        case_id=str(case.id),
         case=case,
         job=job,
         telemetry=telemetry_dict,
+        organization_id=getattr(case, "organization_id", None),
         metadata_source="ui.transcript_promote",
     )
 
@@ -490,13 +504,13 @@ def case_job_create_artifact(request: HttpRequest, case_id: str, job_id: str) ->
     metadata_changed = False
     title_changed = False
     if title_input:
-        desired_title = _unique_transcript_title(str(case.id), title_input, getattr(case, "organization_id", None))
+        desired_title = unique_transcript_title(str(case.id), title_input, getattr(case, "organization_id", None))
         if artifact.title != desired_title:
             artifact.title = desired_title
             title_changed = True
     elif not artifact.title:
-        default_title = _default_transcript_title(job, telemetry_dict)
-        unique_transcript_title_val = _unique_transcript_title(
+        default_title = default_transcript_title(job, telemetry_dict)
+        unique_transcript_title_val = unique_transcript_title(
             str(case.id), default_title, getattr(case, "organization_id", None)
         )
         if artifact.title != unique_transcript_title_val:
@@ -580,7 +594,7 @@ def case_job_row(request: HttpRequest, case_id: str, job_id: str) -> HttpRespons
             "actions": [],
         }
     )
-    row["actions"] = _job_action_entries(
+    row["actions"] = build_job_action_entries(
         job,
         telemetry_dict,
         can_review=_user_can_review_case(getattr(request, "user", None), job.case),
@@ -741,7 +755,7 @@ def create_job(request: HttpRequest, case_id: str) -> HttpResponse:
             "actions": [],
         }
     )
-    row["actions"] = _job_action_entries(
+    row["actions"] = build_job_action_entries(
         job,
         telemetry_dict,
         can_review=_user_can_review_case(getattr(request, "user", None), job.case),

@@ -20,16 +20,15 @@ from apps.platform.cases.models import Case, CaseMembership
 from apps.platform.jobs.models import Job
 from apps.platform.tenancy import scope_jobs
 
+from .auth import _ensure_authenticated
 from .common import JobTelemetryPayload
-from .selectors import _job_telemetry_map
-from . import (
+from .contexts import _compute_case_tool_state, _get_case_and_org
+from .presenters.cases import (
     _analysis_modules_context,
     _case_field_specs,
     _case_progress_context,
-    _compute_case_tool_state,
-    _ensure_authenticated,
-    _get_case_and_org,
 )
+from .selectors import _job_telemetry_map
 
 from .jobs import create_job
 
