@@ -19,6 +19,26 @@ class LLMProviderSetting(models.Model):
         unique_together = ("organization", "stage_key")
 
 
+class LLMProviderCredential(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    organization = models.ForeignKey(
+        "accounts.Organization",
+        on_delete=models.CASCADE,
+        related_name="llm_provider_credentials",
+    )
+    provider = models.CharField(max_length=64)
+    display_name = models.CharField(max_length=128, blank=True)
+    endpoint = models.CharField(max_length=255, blank=True)
+    api_key_encrypted = models.TextField(blank=True)
+    models_payload = models.JSONField(default=list, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ("organization", "provider")
+
+
 class AuditEvent(models.Model):
     id = models.BigAutoField(primary_key=True)
     ts = models.DateTimeField(auto_now_add=True)

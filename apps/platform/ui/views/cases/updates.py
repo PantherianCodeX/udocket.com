@@ -16,7 +16,14 @@ from ..contexts import compute_case_tool_state, get_case_and_org
 from ..presenters.cases import case_field_specs
 from .helpers import check_case_update_permission, render_case_panel_with_refresh
 from .membership import reconcile_case_memberships
-from apps.platform.operations.llm import get_org_llm_overrides, set_org_llm_overrides
+from apps.platform.operations.llm import (
+    delete_org_provider_credential,
+    get_org_llm_overrides,
+    get_org_provider_credentials,
+    load_provider_catalog,
+    set_org_llm_overrides,
+    upsert_org_provider_credential,
+)
 
 
 LLM_STAGE_GROUPS: Dict[str, List[str]] = {
@@ -263,3 +270,88 @@ def case_llm_settings(request: HttpRequest, case_id: str) -> HttpResponse:
             "provider_chain": provider_chain,
         }
     )
+
+
+@require_http_methods(["GET", "POST"])
+def case_llm_providers(request: HttpRequest, case_id: str) -> HttpResponse:
+    auth_response = ensure_authenticated(request)
+    if auth_response:
+        return auth_response
+
+    case, _ = get_case_and_org(request, case_id)
+
+    permission_denied = check_case_update_permission(request, case)
+    if permission_denied:
+        return permission_denied
+
+    catalog = load_provider_catalog()
+    credentials = get_org_provider_credentials(case.organization_id)
+
+    if request.method == "GET":
+        return JsonResponse(
+            {
+                "catalog": catalog,
+                "credentials": credentials,
+            }
+        )
+
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+    except Exception:  # noqa: BLE001
+        return HttpResponseBadRequest("Invalid JSON payload.")
+
+    if not isinstance(payload, dict):
+        return HttpResponseBadRequest("Invalid payload format.")
+
+    provider_key = str(payload.get("provider") or "").strip().lower()
+    if not provider_key:
+        return HttpResponseBadRequest("Provider is required.")
+
+    display_name = str(payload.get("display_name") or catalog.get(provider_key, {}).get("display_name") or provider_key)
+    endpoint = str(payload.get("endpoint") or catalog.get(provider_key, {}).get("default_endpoint") or "").strip()
+    api_key = payload.get("api_key")
+    if api_key == "":  # allow clearing key
+        api_key = None
+    models_payload = payload.get("models")
+    if models_payload is None:
+        models_payload = catalog.get(provider_key, {}).get("models") or []
+    metadata = payload.get("metadata") or {}
+
+    credential = upsert_org_provider_credential(
+        organization_id=str(case.organization_id),
+        provider=provider_key,
+        display_name=display_name,
+        endpoint=endpoint,
+        api_key=api_key,
+        models=models_payload,
+        metadata=metadata,
+    )
+
+    credentials = get_org_provider_credentials(case.organization_id)
+
+    return JsonResponse(
+        {
+            "status": "ok",
+            "credential": credential,
+            "credentials": credentials,
+        }
+    )
+
+
+@require_http_methods(["POST"])
+def case_llm_provider_delete(request: HttpRequest, case_id: str, provider: str) -> HttpResponse:
+    auth_response = ensure_authenticated(request)
+    if auth_response:
+        return auth_response
+
+    case, _ = get_case_and_org(request, case_id)
+
+    permission_denied = check_case_update_permission(request, case)
+    if permission_denied:
+        return permission_denied
+
+    delete_org_provider_credential(str(case.organization_id), provider)
+
+    credentials = get_org_provider_credentials(case.organization_id)
+
+    return JsonResponse({"status": "ok", "credentials": credentials})

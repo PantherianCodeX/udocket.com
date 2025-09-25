@@ -29,7 +29,16 @@ from ..presenters.jobs import (
 )
 from packages.udocket_core.agents.summarize_lib import SummarizeConfig
 from packages.udocket_core.llm import load_llm_settings
-from apps.platform.operations.llm import get_org_llm_overrides
+from apps.platform.operations.llm import (
+    get_org_llm_overrides,
+    get_org_provider_credentials,
+    load_provider_catalog,
+)
+
+
+# Providers the current summarization pipeline can execute end-to-end.
+# Keep this set in sync with packages.udocket_core.agents.summarize_lib.SUPPORTED_PROVIDERS.
+SUMMARIZE_SUPPORTED_PROVIDERS = {"azure", "local"}
 
 
 def _latest_successful_transcription_job(jobs: List[Job]) -> Optional[Job]:
@@ -89,19 +98,31 @@ def _collect_provider_chain(overrides: Dict[str, Dict[str, Any]], default_chain:
     return sequence
 
 
-def _build_llm_stage_configs(
+def _build_provider_cache(
     *,
-    stage_label_map: Dict[str, str],
     llm_settings,
-    overrides: Dict[str, Dict[str, Any]],
-) -> List[Dict[str, Any]]:
-    stage_configs: List[Dict[str, Any]] = []
-    provider_cache: Dict[str, Dict[str, Any]] = {}
+    provider_catalog: Dict[str, Dict[str, Any]],
+    provider_credentials: Dict[str, Dict[str, Any]],
+) -> Dict[str, Dict[str, Any]]:
+    cache: Dict[str, Dict[str, Any]] = {}
     for provider_name, provider in llm_settings.providers.items():
-        provider_cache[provider_name] = {
+        catalog_entry = provider_catalog.get(provider_name, {})
+        configured = provider_name in provider_credentials
+        runtime_supported = provider_name in SUMMARIZE_SUPPORTED_PROVIDERS
+        available = runtime_supported and (provider.is_available() or configured)
+        reason = ""
+        if not runtime_supported:
+            reason = "Not supported yet"
+        elif not available and not configured:
+            reason = "Configure credentials"
+        cache[provider_name] = {
             "value": provider_name,
             "label": provider.display_name,
-            "available": provider.is_available(),
+            "available": available,
+            "configured": configured,
+            "default_endpoint": catalog_entry.get("default_endpoint"),
+            "requires_api_key": bool(catalog_entry.get("requires_api_key", True)),
+            "unavailable_reason": reason,
             "models": [
                 {
                     "value": model_name,
@@ -111,6 +132,17 @@ def _build_llm_stage_configs(
                 for model_name, model_meta in provider.models.items()
             ],
         }
+    return cache
+
+
+def _build_llm_stage_configs(
+    *,
+    stage_label_map: Dict[str, str],
+    llm_settings,
+    overrides: Dict[str, Dict[str, Any]],
+    provider_cache: Dict[str, Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    stage_configs: List[Dict[str, Any]] = []
 
     for stage_key, stage_label in stage_label_map.items():
         assignment = llm_settings.stage(stage_key)
@@ -887,6 +919,13 @@ def build_tool_panels(
 
     llm_settings = load_llm_settings()
     org_overrides = get_org_llm_overrides(case.organization_id)
+    provider_catalog = load_provider_catalog()
+    provider_credentials = get_org_provider_credentials(case.organization_id)
+    provider_cache = _build_provider_cache(
+        llm_settings=llm_settings,
+        provider_catalog=provider_catalog,
+        provider_credentials=provider_credentials,
+    )
 
     provider_chain = list(summarize_cfg.provider_chain or ["azure", "local"])
     if summarize_cfg.force_offline_mode:
@@ -896,15 +935,46 @@ def build_tool_panels(
         primary_default = "local"
     fallback_defaults = [value for value in provider_chain if value != primary_default]
 
-    provider_options = [
-        {
+    provider_options: List[Dict[str, Any]] = []
+    seen_providers: set[str] = set()
+    for name, provider in llm_settings.providers.items():
+        catalog_entry = provider_catalog.get(name, {})
+        credential_entry = provider_credentials.get(name, {})
+        configured = bool(credential_entry)
+        available = provider_cache[name]["available"]
+        option = {
             "value": name,
             "label": provider.display_name,
-            "description": None,
-            "available": provider.is_available(),
+            "description": catalog_entry.get("description"),
+            "available": available,
+            "configured": configured,
+            "default_endpoint": catalog_entry.get("default_endpoint"),
+            "requires_api_key": bool(catalog_entry.get("requires_api_key", True)),
+            "endpoint": credential_entry.get("endpoint"),
+            "models": credential_entry.get("models") or catalog_entry.get("models"),
+            "reason": provider_cache[name].get("unavailable_reason"),
         }
-        for name, provider in llm_settings.providers.items()
-    ]
+        provider_options.append(option)
+        seen_providers.add(name)
+
+    for name, credential in provider_credentials.items():
+        if name in seen_providers:
+            continue
+        provider_options.append(
+            {
+                "value": name,
+                "label": credential.get("display_name") or name,
+                "description": None,
+                "available": True,
+                "configured": True,
+                "default_endpoint": credential.get("endpoint"),
+                "requires_api_key": True,
+                "endpoint": credential.get("endpoint"),
+                "models": credential.get("models"),
+                "reason": "",
+            }
+        )
+        seen_providers.add(name)
 
     stage_label_map = {
         "summarize.context_builder": "Context builder",
@@ -920,6 +990,7 @@ def build_tool_panels(
         stage_label_map=stage_label_map,
         llm_settings=llm_settings,
         overrides=summary_overrides,
+        provider_cache=provider_cache,
     )
     summary_chain = _collect_provider_chain(summary_overrides, provider_chain)
     summary_primary = summary_chain[0] if summary_chain else primary_default
@@ -937,6 +1008,7 @@ def build_tool_panels(
         stage_label_map=timeline_stage_label_map,
         llm_settings=llm_settings,
         overrides=timeline_overrides,
+        provider_cache=provider_cache,
     )
     timeline_chain = _collect_provider_chain(timeline_overrides, provider_chain)
     timeline_primary = timeline_chain[0] if timeline_chain else primary_default
@@ -986,6 +1058,10 @@ def build_tool_panels(
                 "overrides": summary_overrides,
                 "overrides_json": summary_overrides_json,
                 "provider_chain_json": summary_chain_json,
+                "catalog": provider_catalog,
+                "catalog_json": json.dumps(provider_catalog),
+                "credentials": provider_credentials,
+                "credentials_json": json.dumps(provider_credentials),
             },
         },
         "jobs": summary_jobs,
@@ -1049,6 +1125,10 @@ def build_tool_panels(
                 "overrides": timeline_overrides,
                 "overrides_json": timeline_overrides_json,
                 "provider_chain_json": timeline_chain_json,
+                "catalog": provider_catalog,
+                "catalog_json": json.dumps(provider_catalog),
+                "credentials": provider_credentials,
+                "credentials_json": json.dumps(provider_credentials),
             },
         },
         "jobs": timeline_jobs,

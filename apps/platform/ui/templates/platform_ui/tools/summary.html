@@ -3,7 +3,9 @@
      data-summary
      data-llm-target="summary"
      {% if summary_llm and summary_llm.provider_chain_json %}data-llm-provider-chain="{{ summary_llm.provider_chain_json|escapejs }}"{% endif %}
-     {% if summary_llm and summary_llm.overrides_json %}data-llm-overrides="{{ summary_llm.overrides_json|escapejs }}"{% endif %}>
+     {% if summary_llm and summary_llm.overrides_json %}data-llm-overrides="{{ summary_llm.overrides_json|escapejs }}"{% endif %}
+     {% if summary_llm and summary_llm.catalog_json %}data-llm-catalog="{{ summary_llm.catalog_json|escapejs }}"{% endif %}
+     {% if summary_llm and summary_llm.credentials_json %}data-llm-credentials="{{ summary_llm.credentials_json|escapejs }}"{% endif %}>
   <div class="grid gap-4 md:grid-cols-3">
     <div class="md:col-span-2 space-y-4 rounded-2xl border border-white/10 bg-slate-900/70 p-5">
       <div class="flex flex-col gap-2">

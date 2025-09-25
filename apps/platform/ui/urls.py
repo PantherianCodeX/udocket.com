@@ -42,6 +42,16 @@ urlpatterns = [
         views.case_llm_settings,
         name="ui-case-llm-settings",
     ),
+    path(
+        "cases/<str:case_id>/llm/providers/",
+        views.case_llm_providers,
+        name="ui-case-llm-providers",
+    ),
+    path(
+        "cases/<str:case_id>/llm/providers/<str:provider>/delete/",
+        views.case_llm_provider_delete,
+        name="ui-case-llm-provider-delete",
+    ),
     path("cases/<str:case_id>/title", views.case_update_title, name="ui-case-update-title"),
     path("cases/<str:case_id>/jobs/<uuid:job_id>/detail/", views.case_job_detail_panel, name="ui-case-job-detail"),
     path(

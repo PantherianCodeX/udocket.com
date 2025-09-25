@@ -88,6 +88,27 @@
     const fallbackSelect = advanced.querySelector('[data-llm-provider-fallback]');
     const allowOfflineCheckbox = advanced.querySelector('[data-llm-allow-offline]');
 
+    let catalog = {};
+    let credentials = {};
+    try {
+      if (container.dataset.llmCatalog) {
+        catalog = JSON.parse(container.dataset.llmCatalog);
+      }
+    } catch (error) {
+      console.warn('Unable to parse LLM catalog', error);
+    }
+    try {
+      if (container.dataset.llmCredentials) {
+        credentials = JSON.parse(container.dataset.llmCredentials);
+      }
+    } catch (error) {
+      console.warn('Unable to parse LLM credentials', error);
+    }
+    const providerState = {
+      catalog,
+      credentials,
+    };
+
     const syncAdvancedControls = () => {
       const primaryValue = primarySelect?.value || null;
       if (fallbackSelect) {
@@ -130,12 +151,372 @@
     }
     syncAdvancedControls();
 
+    const modalHost = advanced.closest('[data-modal]');
     const llmButton = advanced.querySelector('[data-llm-open-modal]') || container.querySelector('[data-llm-open-modal]');
     if (llmButton) {
       llmButton.addEventListener('click', (evt) => {
         evt.preventDefault();
         openLLMModal(container);
       });
+    }
+
+    function renderModelRow(template, model = {}) {
+      const clone = template.content.firstElementChild.cloneNode(true);
+      const nameInput = clone.querySelector('[data-llm-model-name]');
+      const labelInput = clone.querySelector('[data-llm-model-label]');
+      const costInput = clone.querySelector('[data-llm-model-cost]');
+      const maxInput = clone.querySelector('[data-llm-model-max]');
+      if (nameInput) nameInput.value = model.name || '';
+      if (labelInput) labelInput.value = model.label || '';
+      if (costInput) costInput.value = model.cost_tier || '';
+      if (maxInput) {
+        maxInput.value = model.max_output_tokens != null ? model.max_output_tokens : '';
+      }
+      const removeBtn = clone.querySelector('[data-llm-model-remove]');
+      if (removeBtn) {
+        removeBtn.addEventListener('click', (evt) => {
+          evt.preventDefault();
+          clone.remove();
+        });
+      }
+      return clone;
+    }
+
+    function renderProviderList(modalEl, state) {
+      const list = modalEl.querySelector('[data-llm-provider-list]');
+      const empty = modalEl.querySelector('[data-llm-provider-empty]');
+      if (!list) return;
+      list.innerHTML = '';
+      const template = modalEl.querySelector('[data-llm-provider-card-template]');
+      const entries = new Map();
+      Object.entries(state.catalog || {}).forEach(([key, info]) => {
+        entries.set(key, { key, catalog: info, credential: state.credentials[key] || null });
+      });
+      Object.entries(state.credentials || {}).forEach(([key, credential]) => {
+        if (!entries.has(key)) {
+          entries.set(key, { key, catalog: null, credential });
+        }
+      });
+
+      if (!entries.size) {
+        if (empty) empty.classList.remove('hidden');
+        return;
+      }
+      if (empty) empty.classList.add('hidden');
+
+      entries.forEach((entry) => {
+        const card = template ? template.content.firstElementChild.cloneNode(true) : document.createElement('button');
+        card.setAttribute('type', 'button');
+        card.dataset.provider = entry.key;
+        const titleEl = card.querySelector('[data-llm-provider-card-title]');
+        const descEl = card.querySelector('[data-llm-provider-card-description]');
+        const endpointEl = card.querySelector('[data-llm-provider-card-endpoint]');
+        const statusEl = card.querySelector('[data-llm-provider-card-status]');
+        const catalogInfo = entry.catalog || {};
+        const credentialInfo = entry.credential || {};
+        const configured = Boolean(credentialInfo && (credentialInfo.has_api_key || credentialInfo.endpoint || (credentialInfo.models || []).length));
+        const label = credentialInfo.display_name || catalogInfo.display_name || catalogInfo.label || entry.key;
+        if (titleEl) titleEl.textContent = label;
+        if (descEl) {
+          descEl.textContent = catalogInfo.description || (catalogInfo.requires_api_key === false ? 'No credential required' : 'Credential required');
+        }
+        if (endpointEl) endpointEl.textContent = credentialInfo.endpoint || catalogInfo.default_endpoint || '';
+        if (statusEl) {
+          statusEl.classList.toggle('text-emerald-300', configured);
+          statusEl.classList.toggle('text-slate-400', !configured);
+          statusEl.textContent = configured ? 'Configured' : 'Not configured';
+        }
+        card.addEventListener('click', () => openProviderForm(modalEl, state, entry.key));
+        list.appendChild(card);
+      });
+    }
+
+    function ensureModelRow(modalEl) {
+      const containerModels = modalEl.querySelector('[data-llm-models]');
+      const templateModel = modalEl.querySelector('[data-llm-model-row-template]');
+      if (!containerModels || !templateModel) return;
+      if (!containerModels.children.length) {
+        containerModels.appendChild(renderModelRow(templateModel));
+      }
+    }
+
+    function openProviderForm(modalEl, state, providerKey) {
+      const wrapper = modalEl.querySelector('[data-llm-provider-form-wrapper]');
+      const form = modalEl.querySelector('[data-llm-provider-form]');
+      if (!wrapper || !form) return;
+      const catalogInfo = state.catalog[providerKey] || {};
+      const credentialInfo = state.credentials[providerKey] || {};
+      wrapper.classList.remove('hidden');
+      wrapper.dataset.activeProvider = providerKey;
+      const titleEl = wrapper.querySelector('[data-llm-provider-form-title]');
+      const subtitleEl = wrapper.querySelector('[data-llm-provider-form-subtitle]');
+      const keyInput = wrapper.querySelector('[data-llm-provider-key]');
+      const hiddenInput = wrapper.querySelector('[data-llm-provider-input]');
+      const nameInput = wrapper.querySelector('[data-llm-provider-name]');
+      const endpointInput = wrapper.querySelector('[data-llm-provider-endpoint]');
+      const apiKeyInput = wrapper.querySelector('[data-llm-provider-apikey]');
+      const deleteBtn = wrapper.querySelector('[data-llm-provider-delete]');
+      const modelsContainer = wrapper.querySelector('[data-llm-models]');
+      const templateModel = wrapper.querySelector('[data-llm-model-row-template]');
+      if (titleEl) titleEl.textContent = `Configure ${catalogInfo.display_name || credentialInfo.display_name || providerKey}`;
+      if (subtitleEl) {
+        const requiresKey = catalogInfo.requires_api_key !== false;
+        subtitleEl.textContent = requiresKey ? 'Enter API credentials and adjust models.' : 'No API key required for this provider.';
+      }
+      if (keyInput) keyInput.value = providerKey;
+      if (hiddenInput) hiddenInput.value = providerKey;
+      if (nameInput) nameInput.value = credentialInfo.display_name || catalogInfo.display_name || catalogInfo.label || providerKey;
+      if (endpointInput) endpointInput.value = credentialInfo.endpoint || catalogInfo.default_endpoint || '';
+      if (apiKeyInput) apiKeyInput.value = '';
+      if (deleteBtn) {
+        if (state.credentials[providerKey]) {
+          deleteBtn.classList.remove('hidden');
+          deleteBtn.disabled = false;
+        } else {
+          deleteBtn.classList.add('hidden');
+        }
+      }
+      if (modelsContainer && templateModel) {
+        modelsContainer.innerHTML = '';
+        const models = (credentialInfo.models && credentialInfo.models.length ? credentialInfo.models : catalogInfo.models) || [];
+        if (models.length) {
+          models.forEach((model) => {
+            modelsContainer.appendChild(renderModelRow(templateModel, model));
+          });
+        }
+      }
+      ensureModelRow(modalEl);
+    }
+
+    function closeProviderForm(modalEl) {
+      const wrapper = modalEl.querySelector('[data-llm-provider-form-wrapper]');
+      if (wrapper) {
+        wrapper.classList.add('hidden');
+        wrapper.dataset.activeProvider = '';
+      }
+    }
+
+    function addCustomProvider(modalEl, state) {
+      const key = global.prompt('Enter a provider key (letters, numbers, hyphen, underscore):', 'custom');
+      if (!key) return;
+      const normalized = key.trim().toLowerCase();
+      if (!/^[a-z0-9_-]+$/.test(normalized)) {
+        global.alert('Provider key must contain only letters, numbers, hyphen, or underscore.');
+        return;
+      }
+      if (!state.catalog[normalized]) {
+        state.catalog[normalized] = {
+          display_name: normalized,
+          description: 'Custom provider',
+          requires_api_key: true,
+        };
+      }
+      if (!state.credentials[normalized]) {
+        state.credentials[normalized] = {};
+      }
+      renderProviderList(modalEl, state);
+      openProviderForm(modalEl, state, normalized);
+    }
+    function attachProviderModalHandlers(modalEl) {
+      if (!modalEl) return;
+      const panelButtons = Array.from(modalEl.querySelectorAll('[data-llm-panel-toggle]'));
+      const panels = panelButtons.reduce((acc, btn) => {
+        const key = btn.getAttribute('data-llm-panel-toggle');
+        if (key) {
+          acc[key] = modalEl.querySelector(`[data-llm-panel="${key}"]`);
+        }
+        return acc;
+      }, {});
+
+      function activatePanel(name) {
+        panelButtons.forEach((btn) => {
+          const isActive = btn.getAttribute('data-llm-panel-toggle') === name;
+          btn.classList.toggle('bg-primary-500/80', isActive);
+          btn.classList.toggle('shadow-primary-500/40', isActive);
+          btn.classList.toggle('border-white/15', !isActive);
+          btn.classList.toggle('text-white', isActive);
+        });
+        Object.entries(panels).forEach(([key, panel]) => {
+          if (!panel) return;
+          if (key === name) {
+            panel.classList.remove('hidden');
+          } else {
+            panel.classList.add('hidden');
+          }
+        });
+      }
+
+      if (panelButtons.length) {
+        panelButtons.forEach((btn) => {
+          btn.addEventListener('click', (evt) => {
+            evt.preventDefault();
+            const key = btn.getAttribute('data-llm-panel-toggle');
+            if (key) activatePanel(key);
+          });
+        });
+        activatePanel('stages');
+      }
+
+      const providerListContainer = modalEl.querySelector('[data-llm-provider-list]');
+      if (providerListContainer) {
+        renderProviderList(modalEl, providerState);
+        ensureModelRow(modalEl);
+      }
+      const addProviderBtn = modalEl.querySelector('[data-llm-provider-add]');
+      if (addProviderBtn) {
+        addProviderBtn.addEventListener('click', (evt) => {
+          evt.preventDefault();
+          addCustomProvider(modalEl, providerState);
+        });
+      }
+      const refreshBtn = modalEl.querySelector('[data-llm-provider-refresh]');
+      if (refreshBtn) {
+        refreshBtn.addEventListener('click', async (evt) => {
+          evt.preventDefault();
+          try {
+            const resp = await fetch(`/cases/${ctx.caseId}/llm/providers/`, { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
+            if (resp.ok) {
+              const data = await resp.json();
+              providerState.catalog = data.catalog || providerState.catalog;
+              providerState.credentials = data.credentials || providerState.credentials;
+              renderProviderList(modalEl, providerState);
+            }
+          } catch (error) {
+            console.warn('Failed to refresh providers', error);
+          }
+        });
+      }
+      const cancelButtons = modalEl.querySelectorAll('[data-llm-provider-cancel]');
+      cancelButtons.forEach((btn) => {
+        btn.addEventListener('click', (evt) => {
+          evt.preventDefault();
+          closeProviderForm(modalEl);
+        });
+      });
+      const addModelBtn = modalEl.querySelector('[data-llm-model-add]');
+      if (addModelBtn) {
+        addModelBtn.addEventListener('click', (evt) => {
+          evt.preventDefault();
+          const templateModel = modalEl.querySelector('[data-llm-model-row-template]');
+          const modelsContainer = modalEl.querySelector('[data-llm-models]');
+          if (templateModel && modelsContainer) {
+            modelsContainer.appendChild(renderModelRow(templateModel));
+          }
+        });
+      }
+      const deleteBtn = modalEl.querySelector('[data-llm-provider-delete]');
+      if (deleteBtn) {
+        deleteBtn.addEventListener('click', async (evt) => {
+          evt.preventDefault();
+          const wrapper = modalEl.querySelector('[data-llm-provider-form-wrapper]');
+          const providerKey = wrapper?.dataset.activeProvider;
+          if (!providerKey) return;
+          const confirmed = await caseDetail.modals?.confirm({
+            heading: 'Remove provider',
+            body: 'Remove credentials for this provider?',
+          });
+          if (!confirmed) return;
+          try {
+            const resp = await fetch(`/cases/${ctx.caseId}/llm/providers/${providerKey}/delete/`, {
+              method: 'POST',
+              headers: {
+                'X-CSRFToken': helpers.getCSRFToken(),
+                Accept: 'application/json',
+              },
+              credentials: 'same-origin',
+            });
+            if (resp.ok) {
+              const data = await resp.json();
+              providerState.credentials = data.credentials || {};
+              closeProviderForm(modalEl);
+              renderProviderList(modalEl, providerState);
+              caseDetail.modals?.message({ heading: 'Provider removed', body: providerKey.toUpperCase(), container: ctx?.modalRoot || undefined });
+            }
+          } catch (error) {
+            console.warn('Unable to delete provider', providerKey, error);
+          }
+        });
+      }
+      const providerForm = modalEl.querySelector('[data-llm-provider-form]');
+      if (providerForm) {
+        providerForm.addEventListener('submit', async (evt) => {
+          evt.preventDefault();
+          const wrapper = modalHost.querySelector('[data-llm-provider-form-wrapper]');
+          const providerKey = wrapper?.dataset.activeProvider;
+          if (!providerKey) return;
+          const nameInput = providerForm.querySelector('[data-llm-provider-name]');
+          const endpointInput = providerForm.querySelector('[data-llm-provider-endpoint]');
+          const apiKeyInput = providerForm.querySelector('[data-llm-provider-apikey]');
+          const modelsContainer = providerForm.querySelector('[data-llm-models]');
+          const models = [];
+          if (modelsContainer) {
+            Array.from(modelsContainer.querySelectorAll('[data-llm-model-row]')).forEach((row) => {
+              const modelName = row.querySelector('[data-llm-model-name]')?.value.trim();
+              if (!modelName) return;
+              const modelLabel = row.querySelector('[data-llm-model-label]')?.value.trim();
+              const modelCost = row.querySelector('[data-llm-model-cost]')?.value.trim();
+              const modelMaxRaw = row.querySelector('[data-llm-model-max]')?.value.trim();
+              const modelEntry = {
+                name: modelName,
+                label: modelLabel || modelName,
+              };
+              if (modelCost) modelEntry.cost_tier = modelCost;
+              if (modelMaxRaw) {
+                const parsed = Number(modelMaxRaw);
+                if (!Number.isNaN(parsed)) {
+                  modelEntry.max_output_tokens = parsed;
+                }
+              }
+              models.push(modelEntry);
+            });
+          }
+          const payload = {
+            provider: providerKey,
+            display_name: nameInput?.value.trim() || providerKey,
+            endpoint: endpointInput?.value.trim() || '',
+            models,
+          };
+          if (apiKeyInput) {
+            const apiKeyValue = apiKeyInput.value.trim();
+            if (apiKeyValue !== '') {
+              payload.api_key = apiKeyValue;
+            } else {
+              payload.api_key = '';
+            }
+          }
+          try {
+            const resp = await fetch(`/cases/${ctx.caseId}/llm/providers/`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': helpers.getCSRFToken(),
+                Accept: 'application/json',
+              },
+              credentials: 'same-origin',
+              body: JSON.stringify(payload),
+            });
+            if (!resp.ok) {
+              const text = await resp.text();
+              throw new Error(text || `HTTP ${resp.status}`);
+            }
+            const data = await resp.json();
+            providerState.credentials = data.credentials || providerState.credentials;
+            renderProviderList(modalHost, providerState);
+            openProviderForm(modalHost, providerState, providerKey);
+            caseDetail.modals?.message({ heading: 'Provider saved', body: payload.display_name, container: ctx?.modalRoot || undefined });
+            apiKeyInput.value = '';
+          } catch (error) {
+            console.warn('Unable to save provider', providerKey, error);
+            caseDetail.modals?.message({ heading: 'Save failed', body: error.message || 'Unable to persist provider.', container: ctx?.modalRoot || undefined });
+          }
+        });
+      }
+    }
+
+    container.llmProviderState = providerState;
+    container.llmInitModal = attachProviderModalHandlers;
+    if (modalHost) {
+      attachProviderModalHandlers(modalHost);
     }
   }
 
