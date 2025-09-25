@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 import hashlib
@@ -15,6 +16,8 @@ from django.conf import settings
 from django.utils import timezone
 
 from packages.udocket_core.agents import (
+    SummarizeAgent,
+    SummarizeConfig,
     TranscriptionAgent,
     TranscriptionConfig,
     normalize_audio,
@@ -899,70 +902,87 @@ def _append_jsonl(p: Path, data: Any) -> None:
         f.write(json.dumps(data, ensure_ascii=False) + "\n")
 
 
+def _case_intake_payload(case: Case | None) -> Dict[str, Any]:
+    if case is None:
+        return {}
+    fields = [
+        "client_position",
+        "court_level",
+        "court_division",
+        "court_location",
+        "court_case_number",
+        "court_date",
+        "filing_deadline",
+        "client_name",
+        "opposing_party",
+    ]
+    payload: Dict[str, Any] = {}
+    for field in fields:
+        value = getattr(case, field, None)
+        if value in (None, ""):
+            continue
+        if isinstance(value, datetime):
+            payload[field] = value.isoformat()
+        elif isinstance(value, date):
+            payload[field] = value.isoformat()
+        else:
+            payload[field] = value
+    return payload
+
+
 @shared_task(bind=True)
 def summarize_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
     job = Job.objects.select_related("case").get(pk=job_id)
     org_id = job.organization_id or job.case.organization_id
-    case_dir, _, analysis_dir = _case_paths(case_id, org_id)
-    src = Path(job.transcript_path) if job.transcript_path else _latest_transcript(case_id, org_id)
-    if not src or not src.exists():
+    case_dir, _, _ = _case_paths(case_id, org_id)
+    transcript = Path(job.transcript_path) if job.transcript_path else _latest_transcript(case_id, org_id)
+    if not transcript or not transcript.exists():
         raise RuntimeError("No transcript found to summarize")
 
-    out = analysis_dir / f"{job_id}__summary_v1.md"
-    text = Path(src).read_text(encoding="utf-8", errors="ignore")
-    # Simple offline summary: first 200 lines or 2000 chars
-    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
-    head = "\n".join(lines[:200])
-    if len(head) > 2000:
-        head = head[:2000] + "\n…"
-    content = f"# Summarize output for {job_id}\n\nGenerated from transcript: {src.name}\n\n{head}\n"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(content, encoding="utf-8")
+    summarize_agent = SummarizeAgent(SummarizeConfig.from_env())
+    intake_payload = _case_intake_payload(job.case)
+    result = summarize_agent.summarize(
+        input=transcript,
+        case_id=case_id,
+        case_dir=case_dir,
+        job_id=job_id,
+        intake=intake_payload or None,
+    )
 
-    # Register artifact
+    checksum = _sha256_file(result.summary_file)
     try:
-        import hashlib
-
-        h = hashlib.sha256()
-        with open(out, "rb") as f:
-            for ch in iter(lambda: f.read(65536), b""):
-                h.update(ch)
         CaseArtifact.objects.create(
             case_id=case_id,
             case_fk=job.case,
             job_id=str(job_id),
             type="SUMMARY",
             title=f"Summarize {job_id}",
-            path=str(out),
-            checksum=h.hexdigest(),
+            path=str(result.summary_file),
+            checksum=checksum or "",
             schema_version="v1",
-            metadata={"source_transcript": str(src)},
+            metadata={"source_transcript": str(result.source_transcript)},
         )
     except Exception:
         pass
-    audit_emit(None, case_id=case_id, event="analysis.summary.created", data={"job_id": job_id, "file": str(out)})
-    # Ops logs
-    try:
-        opsd = _ops_dir(case_id, org_id)
-        meta = {
-            "case_id": case_id,
-            "job_id": job_id,
-            "artifact": str(out),
-            "checksum": h.hexdigest() if 'h' in locals() else None,
-            "source_transcript": str(src),
-            "ts": timezone.now().isoformat(),
-            "schema_version": "v1",
-            "status": "ok",
-        }
-        _write_json(opsd / f"{job_id}__summary_log.json", meta)
-        _append_jsonl(opsd / "ops_summary.jsonl", meta)
-    except Exception:
-        pass
+
+    audit_emit(
+        None,
+        case_id=case_id,
+        event="analysis.summary.created",
+        data={"job_id": job_id, "file": str(result.summary_file)},
+    )
+
     try:
         send_case_update(case_id, event="artifact.created", kind="summary", job_id=job_id)
     except Exception:
         pass
-    return {"status": "ok", "summary_file": str(out)}
+
+    payload: Dict[str, Any] = {
+        "status": "ok",
+        "summary_file": str(result.summary_file),
+        "words": result.words,
+    }
+    return payload
 
 
 @shared_task(bind=True)
