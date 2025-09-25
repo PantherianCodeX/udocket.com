@@ -10,6 +10,7 @@ import logging
 import mimetypes
 import shutil
 import subprocess
+import os
 
 from celery import shared_task
 from django.conf import settings
@@ -1019,7 +1020,24 @@ def summarize_job(
     if not transcript or not transcript.exists():
         raise RuntimeError("No transcript found to summarize")
 
-    summarize_agent = SummarizeAgent(SummarizeConfig.from_env())
+    try:
+        summarize_config = SummarizeConfig.from_env()
+    except ValueError as exc:
+        log.warning(
+            "summarize config invalid; falling back to offline mode",
+            extra={"job_id": job_id, "case_id": case_id, "reason": str(exc)},
+        )
+        summarize_config = SummarizeConfig(
+            azure_openai_endpoint="",
+            azure_openai_key="",
+            azure_openai_deployment="",
+            debug=os.getenv("DEBUG", "0").strip() == "1",
+            enable_offline_fallback=True,
+            force_offline_mode=True,
+            provider_chain=["local"],
+        )
+
+    summarize_agent = SummarizeAgent(summarize_config)
     log.info(
         "summarize job started",
         extra={"job_id": job_id, "case_id": case_id, "org_id": str(org_id)},
