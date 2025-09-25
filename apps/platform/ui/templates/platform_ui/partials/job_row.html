@@ -114,7 +114,7 @@
         {% endif %}
       {% endfor %}
     </tr>
-    <tr class="hidden bg-slate-900/50" style="display:none;" data-job-detail="{{ job.id }}" data-table-detail-for="{{ job.id }}" data-table-parent-id="{{ parent_id }}" data-table-filter="{{ filter_value }}">
+    <tr class="hidden bg-slate-900/50" data-job-detail="{{ job.id }}" data-table-detail-for="{{ job.id }}" data-table-parent-id="{{ parent_id }}" data-table-filter="{{ filter_value }}">
       <td colspan="{{ columns|length }}" class="px-6 py-4">
         <div class="rounded-xl border border-white/10 bg-slate-900/80 p-4" data-job-detail-container="{{ job.id }}"></div>
       </td>

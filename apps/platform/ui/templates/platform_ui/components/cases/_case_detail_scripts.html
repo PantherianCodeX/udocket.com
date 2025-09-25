@@ -324,6 +324,7 @@
         const isExpanded = !detailRow.classList.contains('hidden');
         if (isExpanded) {
           detailRow.classList.add('hidden');
+          detailRow.style.display = 'none';
           row.setAttribute('aria-expanded', 'false');
           row.classList.remove('bg-white/10');
           return;
@@ -331,13 +332,17 @@
         document.querySelectorAll('[data-job-row]').forEach((other) => {
           if (other !== row) {
             const d = document.querySelector(`[data-job-detail="${other.dataset.job}"]`);
-            if (d) d.classList.add('hidden');
+            if (d) {
+              d.classList.add('hidden');
+              d.style.display = 'none';
+            }
             other.setAttribute('aria-expanded', 'false');
             other.classList.remove('bg-white/10');
           }
         });
         loadJobDetail(row.dataset.job).then(() => {
           detailRow.classList.remove('hidden');
+          detailRow.style.display = 'table-row';
           row.setAttribute('aria-expanded', 'true');
           row.classList.add('bg-white/10');
         });

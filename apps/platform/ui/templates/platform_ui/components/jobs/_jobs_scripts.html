@@ -147,6 +147,7 @@
     const detailRow = getDetailRow(jobId);
     if (detailRow) {
       detailRow.classList.add('hidden');
+      detailRow.style.display = 'none';
     }
     row.setAttribute('aria-expanded', 'false');
     const chevron = row.querySelector('[data-job-chevron]');
@@ -168,6 +169,7 @@
     collapseAllExcept(row);
     loadJobDetail(jobId).then(() => {
       detailRow.classList.remove('hidden');
+      detailRow.style.display = 'table-row';
       row.setAttribute('aria-expanded', 'true');
       const chevron = row.querySelector('[data-job-chevron]');
       if (chevron) chevron.classList.add('rotate-90');
