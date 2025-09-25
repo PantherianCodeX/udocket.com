@@ -148,9 +148,9 @@
         <span>Converted WAV</span>
         <button type="button" class="inline-flex items-center gap-1 rounded border border-white/20 bg-white/10 px-2 py-0.5 text-[11px] font-semibold text-slate-200 transition hover:border-primary-400" data-audio-refresh data-panel="converted" data-refresh-job="{{ job.id }}" data-display-job="{{ job.id }}" data-case-id="{{ case.id }}">Refresh</button>
       </div>
-      <dl class="mt-3 grid gap-x-4 gap-y-2 text-xs text-slate-300 sm:grid-cols-2" data-audio-panel="converted" data-job-id="{{ job.id }}">
+      <dl class="mt-3 grid gap-x-4 gap-y-2 text-xs text-slate-300" data-audio-panel="converted" data-job-id="{{ job.id }}">
         <div>
-          <dt class="text-slate-400">File name</dt>
+          <dt class="text-slate-400">Original name</dt>
           <dd class="mt-1 text-slate-100"><span data-audio-field="original_name">{% if metadata.converted_audio_file %}{{ metadata.converted_audio_file }}{% elif audio.original_name %}{{ audio.original_name }}{% else %}—{% endif %}</span></dd>
         </div>
         <div>
@@ -158,64 +158,30 @@
           <dd class="mt-1 text-slate-100"><span data-audio-field="duration">{% if audio.duration_s %}{{ audio.duration_s|floatformat:1 }} s{% else %}—{% endif %}</span></dd>
         </div>
         <div>
-          <dt class="text-slate-400">Channels</dt>
-          <dd class="mt-1 text-slate-100"><span data-audio-field="channels">{{ audio.channels|default:"—" }}</span></dd>
-        </div>
-        <div>
-          <dt class="text-slate-400">Sample rate</dt>
-          <dd class="mt-1 text-slate-100"><span data-audio-field="sample_rate">{% if audio.sample_rate_hz %}{{ audio.sample_rate_hz }} Hz{% else %}—{% endif %}</span></dd>
-        </div>
-        <div>
-          <dt class="text-slate-400">Bitrate</dt>
-          <dd class="mt-1 text-slate-100"><span data-audio-field="bitrate">{% if audio.bitrate_kbps %}{{ audio.bitrate_kbps }} kbps{% else %}—{% endif %}</span></dd>
-        </div>
-        <div>
-          <dt class="text-slate-400">Codec</dt>
-          <dd class="mt-1 text-slate-100"><span data-audio-field="codec">{{ audio.codec|default:"—" }}</span></dd>
-        </div>
-        <div>
-          <dt class="text-slate-400">Layout</dt>
-          <dd class="mt-1 text-slate-100"><span data-audio-field="layout">{{ audio.channel_layout|default:"—" }}</span></dd>
-        </div>
-        <div>
-          <dt class="text-slate-400">MIME</dt>
-          <dd class="mt-1 text-slate-100"><span data-audio-field="mime">{{ audio.mime|default:"—" }}</span></dd>
-        </div>
-        <div class="sm:col-span-2">
-          <dt class="text-slate-400">Path</dt>
-          <dd class="mt-1">
-            {% if audio.path %}
-              <span class="clip-inline font-mono text-[11px] text-primary-100" data-copy-text="{{ audio.path }}" data-audio-field="path" title="{{ audio.path }}">{{ audio.path|truncate_middle:"28,16" }}</span>
-            {% else %}
-              <span data-audio-field="path">—</span>
-            {% endif %}
-          </dd>
-        </div>
-        <div>
           <dt class="text-slate-400">Size</dt>
           <dd class="mt-1 text-slate-100">
-            {% if audio.size_bytes_local %}
-              <span data-audio-field="size">{{ audio.size_bytes_local|filesizeformat }}</span>
-            {% elif audio.size_bytes_remote %}
-              <span data-audio-field="size">{{ audio.size_bytes_remote|filesizeformat }}</span>
-            {% else %}
-              {% with size=metadata.converted_audio_size_bytes %}
-                <span data-audio-field="size">{% if size is not None %}{{ size|filesizeformat }}{% else %}—{% endif %}</span>
-              {% endwith %}
-            {% endif %}
+            <span data-audio-field="size">
+              {% if audio.size_bytes_local %}
+                {{ audio.size_bytes_local|filesizeformat }}
+              {% elif audio.size_bytes_remote %}
+                {{ audio.size_bytes_remote|filesizeformat }}
+              {% elif metadata.converted_audio_size_bytes %}
+                {{ metadata.converted_audio_size_bytes|filesizeformat }}
+              {% else %}—{% endif %}
+            </span>
           </dd>
         </div>
         <div>
           <dt class="text-slate-400">SHA-256</dt>
           <dd class="mt-1 flex items-center justify-between gap-3 text-slate-100">
             <span>
-              {% if audio.sha256 %}
-                <span class="font-mono text-[11px] text-primary-100" data-copy-text="{{ audio.sha256 }}" data-audio-field="hash" title="{{ audio.sha256 }}">{{ audio.sha256|slice:":8" }}…{{ audio.sha256|slice:"-4:" }}</span>
-              {% elif metadata.converted_audio_sha256 %}
-                <span class="font-mono text-[11px] text-primary-100" data-copy-text="{{ metadata.converted_audio_sha256 }}" data-audio-field="hash" title="{{ metadata.converted_audio_sha256 }}">{{ metadata.converted_audio_sha256|slice:":8" }}…{{ metadata.converted_audio_sha256|slice:"-4:" }}</span>
-              {% else %}
-                <span data-audio-field="hash" class="text-slate-500">Not recorded</span>
-              {% endif %}
+              {% with converted_hash=audio.sha256|default:metadata.converted_audio_sha256 %}
+                {% if converted_hash %}
+                  <span class="font-mono text-[11px] text-primary-100" data-copy-text="{{ converted_hash }}" data-audio-field="hash" title="{{ converted_hash }}">{{ converted_hash|slice:":8" }}…{{ converted_hash|slice:"-4:" }}</span>
+                {% else %}
+                  <span data-audio-field="hash" class="text-slate-500">Not recorded</span>
+                {% endif %}
+              {% endwith %}
             </span>
             {% if audio.path %}
               <button type="button" class="relative inline-flex items-center gap-2 rounded border border-white/20 bg-white/10 px-2 py-0.5 text-[11px] font-semibold text-slate-200 transition hover:border-primary-400" data-verify-hash data-target="audio" data-scope="converted" data-job-id="{{ job.id }}" data-mark-corrupted="{{ job.id }}{% if metadata.source_job_id %},{{ metadata.source_job_id }}{% endif %}">

@@ -10,7 +10,7 @@ from apps.platform.accounts.models import Organization, User
 from apps.platform.cases.models import Case, CaseMembership
 from apps.platform.jobs.models import Job
 from apps.platform.artifacts.models import CaseArtifact
-from apps.platform.operations.storage import ops_dir
+from apps.platform.operations.storage import ensure_case_dirs, ops_dir
 from apps.platform.operations.tasks import _update_job_meta
 
 
@@ -145,3 +145,37 @@ def test_update_job_meta_merges(db, settings):
     assert updated["audio_sha256"] == "abc"
     assert updated["audio_size_bytes"] == 1024
     assert "audio_channels" not in updated  # None filtered out
+
+
+def test_notes_endpoint_updates_metadata(db, settings):
+    case, owner, reviewer, _ = _make_case(settings)
+    ensure_case_dirs(str(case.id), case.organization_id)
+    job = _make_job(case)
+    client = APIClient()
+    client.force_authenticate(user=reviewer)
+
+    from django.urls import reverse
+
+    url = reverse('job-notes', args=[job.id])
+    resp = client.post(url, {"notes": "Team note"}, format="json")
+    print('DEBUG status', resp.status_code, resp.content)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "ok"
+    assert body["notes"]["text"] == "Team note"
+
+    meta_path = ops_dir(str(case.id), case.organization_id) / f"{job.id}_transcription_log.json"
+    assert meta_path.exists()
+    stored = json.loads(meta_path.read_text(encoding="utf-8"))
+    assert stored["ui_notes"]["text"] == "Team note"
+
+
+def test_notes_endpoint_requires_permission(db, settings):
+    case, owner, reviewer, outsider = _make_case(settings)
+    ensure_case_dirs(str(case.id), case.organization_id)
+    job = _make_job(case)
+    client = APIClient()
+    client.force_authenticate(user=outsider)
+
+    resp = client.post(f"/api/v1/jobs/{job.id}/notes/", {"notes": "should fail"}, format="json")
+    assert resp.status_code in {403, 404}

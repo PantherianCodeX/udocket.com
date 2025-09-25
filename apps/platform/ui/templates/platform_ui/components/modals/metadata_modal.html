@@ -11,26 +11,39 @@
 {% endblock %}
 
 {% block modal_body %}
-  {% if metadata_items %}
-    <dl class="grid gap-4 text-sm text-slate-200 sm:grid-cols-2">
-      {% for item in metadata_items %}
-        <div class="rounded-lg border border-white/10 bg-slate-950/20 p-3">
-          <dt class="text-[11px] font-semibold uppercase tracking-wide text-slate-400" title="{{ item.key }}">{{ item.label }}</dt>
-          <dd class="mt-2 text-[13px] leading-relaxed">
-            {% if item.is_multiline %}
-              <pre data-copy-text="{{ item.value }}" class="max-h-48 overflow-y-auto whitespace-pre-wrap break-words rounded border border-white/10 bg-slate-950/40 p-2 font-mono text-[12px] text-primary-100">{{ item.value }}</pre>
-            {% elif item.value %}
-              <span data-copy-text="{{ item.value }}" class="cursor-copy break-words text-slate-100 decoration-dotted decoration-white/20 hover:underline">{{ item.value }}</span>
+  {% with sections=metadata_sections|default:metadata_items %}
+    {% if sections %}
+      <div class="space-y-4">
+        {% for section in sections %}
+          <section class="rounded-lg border border-white/10 bg-slate-950/20 p-4">
+            <p class="text-xs uppercase tracking-wide text-slate-400">{{ section.title|default:'Details' }}</p>
+            {% if section.items %}
+              <dl class="mt-3 grid gap-3 text-sm text-slate-200 sm:grid-cols-2">
+                {% for item in section.items %}
+                  <div class="rounded border border-white/5 bg-slate-950/30 p-3">
+                    <dt class="text-[11px] font-semibold uppercase tracking-wide text-slate-400" title="{{ item.key|default:item.label }}">{{ item.label }}</dt>
+                    <dd class="mt-2 text-[13px] leading-relaxed">
+                      {% if item.is_multiline %}
+                        <pre data-copy-text="{{ item.copy_text|default:item.value }}" class="max-h-48 overflow-y-auto whitespace-pre-wrap break-words rounded border border-white/10 bg-slate-950/40 p-2 font-mono text-[12px] text-primary-100">{{ item.value }}</pre>
+                      {% elif item.value %}
+                        <span data-copy-text="{{ item.copy_text|default:item.value }}" class="cursor-copy break-words text-slate-100 decoration-dotted decoration-white/20 hover:underline">{{ item.value }}</span>
+                      {% else %}
+                        <span class="text-slate-500">—</span>
+                      {% endif %}
+                    </dd>
+                  </div>
+                {% endfor %}
+              </dl>
             {% else %}
-              <span class="text-slate-500">—</span>
+              <p class="mt-2 text-sm text-slate-400">No metadata recorded for this section.</p>
             {% endif %}
-          </dd>
-        </div>
-      {% endfor %}
-    </dl>
-  {% else %}
-    <p class="text-sm text-slate-400">{{ metadata_empty_text|default:'Metadata not recorded for this item.' }}</p>
-  {% endif %}
+          </section>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="text-sm text-slate-400">{{ metadata_empty_text|default:'Metadata not recorded for this item.' }}</p>
+    {% endif %}
+  {% endwith %}
 {% endblock %}
 
 {% block modal_actions %}

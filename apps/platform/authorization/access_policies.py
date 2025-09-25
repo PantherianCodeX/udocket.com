@@ -188,7 +188,8 @@ class _MembershipMixin:
             return self._is_dev_open()
         case_id = self._resolve_case_id(request, view)
         if not case_id:
-            return False
+            # Allow the request to proceed so object-level evaluation can enforce membership.
+            return True
         if self._has_cap(request, view, "case.update"):
             return True
         if CaseMembership.objects.filter(case_id=case_id, user=user, role=CaseMembership.Role.REVIEWER).exists():
@@ -237,6 +238,7 @@ class JobAccessPolicy(_MembershipMixin, AccessPolicy):
         {"action": ["list", "retrieve", "telemetry"], "principal": "*", "effect": "allow", "condition": "is_case_member"},
         {"action": ["create", "upload", "analyze_summary", "analyze_timeline", "analyze_graph"], "principal": "*", "effect": "allow", "condition": "can_manage_jobs"},
         {"action": ["status"], "principal": "*", "effect": "allow", "condition": "is_case_member"},
+        {"action": ["notes"], "principal": "*", "effect": "allow", "condition": "can_review_job"},
         {"action": ["download", "logs"], "principal": "*", "effect": "allow", "condition": "can_download_artifacts"},
         {"action": ["approve", "reject"], "principal": "*", "effect": "allow", "condition": "is_case_member"},
         {"action": ["destroy", "update", "partial_update"], "principal": "*", "effect": "deny"},

@@ -167,6 +167,73 @@ class JobViewSet(viewsets.ModelViewSet):
         }
         return Response(payload)
 
+    @action(detail=True, methods=["post"], url_path="notes", url_name="notes")
+    def notes(self, request, pk=None):
+        job = self.get_object()
+        if not self._can_review(request, job):
+            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+
+        incoming = request.data or {}
+        notes_value = incoming.get("notes")
+        if notes_value is None:
+            return Response({"detail": "Field 'notes' is required."}, status=status.HTTP_400_BAD_REQUEST)
+        if not isinstance(notes_value, str):
+            return Response({"detail": "Field 'notes' must be a string."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Normalise newlines but keep intentional spacing inside the message.
+        text_value = notes_value.replace("\r\n", "\n")
+        text_value = text_value.strip()
+
+        user = getattr(request, "user", None)
+        timestamp = timezone.now()
+        try:
+            iso_timestamp = timestamp.isoformat(timespec="seconds")
+        except TypeError:  # pragma: no cover - Python < 3.11 safety
+            iso_timestamp = timestamp.isoformat()
+
+        notes_payload: Dict[str, Any] = {
+            "text": text_value,
+            "updated_at": iso_timestamp,
+        }
+        if user and getattr(user, "is_authenticated", False):
+            user_id = getattr(user, "id", None)
+            if user_id is not None:
+                notes_payload["updated_by"] = str(user_id)
+            label = self._user_label(user)
+            if label:
+                notes_payload["updated_by_label"] = label
+
+        ensure_case_dirs(str(job.case_id), job.organization_id)
+        update_job_meta(
+            str(job.case_id),
+            job.organization_id,
+            str(job.id),
+            {"ui_notes": notes_payload},
+        )
+
+        snippet = text_value.splitlines()[0] if text_value else ""
+        if len(snippet) > 80:
+            snippet = f"{snippet[:77]}…"
+        try:
+            append_job_log(
+                str(job.case_id),
+                job.organization_id,
+                str(job.id),
+                f"UI notes updated by {notes_payload.get('updated_by_label') or notes_payload.get('updated_by', 'unknown')}: {snippet or '[cleared]'}",
+            )
+        except Exception:
+            pass
+
+        send_job_update(
+            str(job.id),
+            event="job.notes",
+            status=job.status,
+            case_id=str(job.case_id),
+            notes=notes_payload,
+        )
+
+        return Response({"status": "ok", "notes": notes_payload})
+
     @action(detail=False, methods=["get"], url_path="status/bulk")
     def bulk_status(self, request):
         """Return status payloads for multiple jobs in a single response.

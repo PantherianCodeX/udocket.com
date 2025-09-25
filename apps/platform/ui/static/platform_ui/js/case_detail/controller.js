@@ -103,6 +103,7 @@
     const handlers = {
       // Row click/key handlers are owned by platformUI.jobsTable; avoid double toggles here.
       jobAction: (evt) => actions.handleJobAction(evt),
+      jobNotesSave: (evt) => actions.handleJobNotesSave(evt),
       verifyHash: (evt) => actions.handleVerifyHash(evt),
       audioRefresh: (evt) => actions.handleAudioRefresh(evt),
       transcriptAction: (evt) => actions.handleTranscriptAction(evt),
@@ -211,6 +212,7 @@
 
     // Rely on jobsTable to handle row click/key events
     global.document.body.addEventListener('click', handlers.jobAction);
+    global.document.body.addEventListener('click', handlers.jobNotesSave);
     global.document.body.addEventListener('click', handlers.verifyHash);
     global.document.body.addEventListener('click', handlers.audioRefresh);
     global.document.body.addEventListener('click', handlers.transcriptAction);

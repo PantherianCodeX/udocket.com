@@ -182,6 +182,73 @@
     }
   }
 
+  async function handleJobNotesSave(evt) {
+    if (!ctx) return;
+    const button = evt.target.closest('[data-job-notes-save]');
+    if (!button) return;
+    evt.preventDefault();
+    if (button.disabled) return;
+    const container = button.closest('[data-job-notes]');
+    if (!container) return;
+    const jobId = button.getAttribute('data-job-id') || container.getAttribute('data-job-id');
+    if (!jobId) return;
+    const textarea = container.querySelector('[data-job-notes-input]');
+    if (!textarea) return;
+    const metaEl = container.querySelector('[data-job-notes-meta]');
+
+    const originalLabel = button.textContent;
+    button.disabled = true;
+    button.textContent = 'Saving…';
+
+    try {
+      const resp = await fetch(`/api/v1/jobs/${jobId}/notes/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': helpers.getCSRFToken(),
+          Accept: 'application/json',
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify({ notes: textarea.value }),
+      });
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(text || `HTTP ${resp.status}`);
+      }
+      const data = await resp.json();
+      const notes = data && data.notes ? data.notes : {};
+      if (metaEl) {
+        const updatedAt = notes.updated_at || '';
+        const updatedBy = notes.updated_by_label || notes.updated_by || '';
+        if (updatedAt) {
+          metaEl.innerHTML = `Updated <time data-ts="${updatedAt}" data-ts-format="datetime">${updatedAt}</time>${updatedBy ? ` · <span class="font-semibold text-slate-200">${updatedBy}</span>` : ''}`;
+          if (typeof global.renderLocalTimes === 'function') {
+            global.renderLocalTimes();
+          }
+        } else if (updatedBy) {
+          metaEl.textContent = `Updated by ${updatedBy}`;
+        } else {
+          metaEl.textContent = 'Updated just now';
+        }
+      }
+      button.textContent = 'Saved!';
+      if (deps.notify) {
+        deps.notify(evt.clientX || global.innerWidth / 2, evt.clientY || global.innerHeight / 2, 'Notes updated');
+      }
+    } catch (error) {
+      console.error('Job notes save failed', jobId, error);
+      button.textContent = originalLabel || 'Save notes';
+      if (deps.notify) {
+        deps.notify(evt.clientX || global.innerWidth / 2, evt.clientY || global.innerHeight / 2, 'Unable to save notes');
+      }
+    } finally {
+      setTimeout(() => {
+        button.disabled = false;
+        button.textContent = originalLabel || 'Save notes';
+      }, 2000);
+    }
+  }
+
   async function markJobsCorrupted(jobIds) {
     if (!Array.isArray(jobIds) || !jobIds.length) return;
     for (const id of jobIds) {
@@ -688,6 +755,7 @@
     handleRowKey,
     removeJobRow,
     handleJobAction,
+    handleJobNotesSave,
     markJobsCorrupted,
     handleVerifyHash,
     handleAudioRefresh,

@@ -214,6 +214,15 @@ def job_detail_context(
         and job_kind != "audio_conversion"
     )
 
+    ui_notes_meta = as_dict(metadata_map.get("ui_notes")) if metadata_map else {}
+    notes_text = str(ui_notes_meta.get("text") or "")
+    notes_updated_at = ui_notes_meta.get("updated_at") or None
+    notes_updated_by = (
+        ui_notes_meta.get("updated_by_label")
+        or ui_notes_meta.get("updated_by")
+        or ""
+    )
+
     source_audio_meta: Dict[str, Any] | None = None
     if job_kind == "audio_conversion":
         source_job_id = telemetry_meta.get("source_job_id")
@@ -259,6 +268,10 @@ def job_detail_context(
         "audio_meta": audio_meta,
         "source_audio": source_audio_meta or {},
         "allow_title_edit": allow_title_edit,
+        "notes_text": notes_text,
+        "notes_updated_at": notes_updated_at,
+        "notes_updated_by": notes_updated_by,
+        "notes_meta": ui_notes_meta,
     }
 
 

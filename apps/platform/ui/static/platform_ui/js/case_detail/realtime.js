@@ -224,6 +224,33 @@
     deps.ui?.updateStatusDisplays(jobId, status, progressValue);
     ctx.jobsState.lastStatus[jobId] = status;
 
+    if (payload.notes) {
+      const notesContainer = global.document.querySelector(
+        `[data-job-notes][data-job-id="${jobId}"]`,
+      );
+      if (notesContainer) {
+        const textarea = notesContainer.querySelector('[data-job-notes-input]');
+        if (textarea && typeof payload.notes.text === 'string') {
+          textarea.value = payload.notes.text;
+        }
+        const metaEl = notesContainer.querySelector('[data-job-notes-meta]');
+        if (metaEl) {
+          const updatedAt = payload.notes.updated_at || '';
+          const updatedBy = payload.notes.updated_by_label || payload.notes.updated_by || '';
+          if (updatedAt) {
+            metaEl.innerHTML = `Updated <time data-ts="${updatedAt}" data-ts-format="datetime">${updatedAt}</time>${updatedBy ? ` · <span class="font-semibold text-slate-200">${updatedBy}</span>` : ''}`;
+            if (typeof global.renderLocalTimes === 'function') {
+              global.renderLocalTimes();
+            }
+          } else if (updatedBy) {
+            metaEl.textContent = `Updated by ${updatedBy}`;
+          } else {
+            metaEl.textContent = 'Updated just now';
+          }
+        }
+      }
+    }
+
     const jobKind = (payload.job_kind || payload.agent_type || '').toString().toLowerCase();
     if (
       payload.converted_audio_job_id ||
