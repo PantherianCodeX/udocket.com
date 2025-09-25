@@ -67,6 +67,7 @@ PIPELINE_NODE_ORDER = [
     "write_ops_and_artifacts",
 ]
 
+
 @dataclass
 class SummarizeConfig:
     azure_openai_endpoint: str = ""
@@ -79,28 +80,40 @@ class SummarizeConfig:
     debug: bool = False
     enable_offline_fallback: bool = False
     force_offline_mode: bool = False
-    provider_chain: List[str] = field(default_factory=lambda: list(DEFAULT_PROVIDER_CHAIN))
+    provider_chain: List[str] = field(
+        default_factory=lambda: list(DEFAULT_PROVIDER_CHAIN)
+    )
 
     @classmethod
     def from_env(cls) -> "SummarizeConfig":
         endpoint = (os.getenv("AZURE_OPENAI_ENDPOINT") or "").strip()
         key = (os.getenv("AZURE_OPENAI_API_KEY") or "").strip()
         deployment = (os.getenv("AZURE_OPENAI_DEPLOYMENT") or "").strip()
-        api_version = (os.getenv("AZURE_OPENAI_API_VERSION") or "2024-08-01-preview").strip()
+        api_version = (
+            os.getenv("AZURE_OPENAI_API_VERSION") or "2024-08-01-preview"
+        ).strip()
         language = (os.getenv("LANGUAGE") or "en-CA").strip() or "en-CA"
         temperature = float(os.getenv("SUMMARY_TEMPERATURE", "0.2") or 0.2)
         max_tokens = int(os.getenv("SUMMARY_MAX_TOKENS", "24000") or 24000)
-        debug = (os.getenv("DEBUG", "0").strip() == "1")
-        allow_offline = (os.getenv("SUMMARY_ALLOW_OFFLINE_FALLBACK", "0").strip() == "1")
-        force_offline = (os.getenv("SUMMARY_FORCE_OFFLINE", "0").strip() == "1")
-        primary_provider = (os.getenv("SUMMARY_PRIMARY_PROVIDER") or "azure").strip().lower()
+        debug = os.getenv("DEBUG", "0").strip() == "1"
+        allow_offline = (
+            os.getenv("SUMMARY_ALLOW_OFFLINE_FALLBACK", "0").strip() == "1"
+        )
+        force_offline = os.getenv("SUMMARY_FORCE_OFFLINE", "0").strip() == "1"
+        primary_provider = (
+            (os.getenv("SUMMARY_PRIMARY_PROVIDER") or "azure").strip().lower()
+        )
         fallback_raw = os.getenv("SUMMARY_FALLBACK_PROVIDERS")
         fallback_values: List[str] = []
         if fallback_raw is None:
             if primary_provider == "azure":
                 fallback_values = ["local"]
         else:
-            fallback_values = [value.strip().lower() for value in fallback_raw.split(",") if value.strip()]
+            fallback_values = [
+                value.strip().lower()
+                for value in fallback_raw.split(",")
+                if value.strip()
+            ]
 
         providers = [primary_provider] + fallback_values
         filtered_chain: List[str] = []
@@ -108,7 +121,9 @@ class SummarizeConfig:
             if not provider:
                 continue
             if provider not in SUPPORTED_PROVIDERS:
-                raise ValueError(f"Unsupported summarize provider '{provider}'")
+                raise ValueError(
+                    "Unsupported summarize provider " f"'{provider}'"
+                )
             if provider in filtered_chain:
                 continue
             filtered_chain.append(provider)
@@ -118,7 +133,9 @@ class SummarizeConfig:
             filtered_chain = ["local"]
 
         if endpoint and not _endpoint_is_canadian(endpoint):
-            raise ValueError("AZURE_OPENAI_ENDPOINT must target canadacentral or canadaeast")
+            raise ValueError(
+                "AZURE_OPENAI_ENDPOINT must target canadacentral or canadaeast"
+            )
 
         return cls(
             azure_openai_endpoint=endpoint,
@@ -140,7 +157,11 @@ class SummarizeConfig:
             return False
         if "azure" not in self.provider_chain:
             return False
-        return bool(self.azure_openai_endpoint and self.azure_openai_key and self.azure_openai_deployment)
+        return bool(
+            self.azure_openai_endpoint
+            and self.azure_openai_key
+            and self.azure_openai_deployment
+        )
 
     @property
     def azure_region(self) -> Optional[str]:
@@ -163,7 +184,9 @@ class SummarizeConfig:
             api_version=self.azure_openai_api_version,
         )
 
-    def azure_client_config_for(self, deployment: Optional[str]) -> Optional[AzureClientConfig]:
+    def azure_client_config_for(
+        self, deployment: Optional[str]
+    ) -> Optional[AzureClientConfig]:
         cfg = self.azure_client_config()
         if cfg is None:
             return None
@@ -225,7 +248,11 @@ class SummarizeAgent:
         if provider_chain is None:
             provider_chain = list(self.config.provider_chain)
         else:
-            provider_chain = [value for value in provider_chain if value in SUPPORTED_PROVIDERS]
+            provider_chain = [
+                value
+                for value in provider_chain
+                if value in SUPPORTED_PROVIDERS
+            ]
         if not provider_chain:
             provider_chain = list(DEFAULT_PROVIDER_CHAIN)
         if self.config.force_offline_mode:
@@ -237,28 +264,55 @@ class SummarizeAgent:
 
         for stage_attr, stage_key in LLM_STAGE_KEYS.items():
             assignment = settings.stage(stage_key)
-            providers = list(assignment.providers if assignment and assignment.providers else provider_chain)
-            model = assignment.model if assignment and assignment.model else (providers[0] if providers else "local")
+            providers = list(
+                assignment.providers
+                if assignment and assignment.providers
+                else provider_chain
+            )
+            model = (
+                assignment.model
+                if assignment and assignment.model
+                else (providers[0] if providers else "local")
+            )
             options = dict(assignment.options) if assignment else {}
 
-            override = stage_overrides.get(stage_key) or stage_overrides.get(stage_attr)
+            override = stage_overrides.get(stage_key) or stage_overrides.get(
+                stage_attr
+            )
             if override:
                 override_providers = override.get("providers")
                 if isinstance(override_providers, list) and override_providers:
-                    providers = [p for p in override_providers if p in SUPPORTED_PROVIDERS]
+                    providers = [
+                        p
+                        for p in override_providers
+                        if p in SUPPORTED_PROVIDERS
+                    ]
                 else:
                     primary_override = override.get("provider")
-                    fallbacks_override = override.get("fallbacks") if isinstance(override.get("fallbacks"), list) else []
+                    fallbacks_override = (
+                        override.get("fallbacks")
+                        if isinstance(override.get("fallbacks"), list)
+                        else []
+                    )
                     chain_override: List[str] = []
                     if primary_override:
                         chain_override.append(primary_override)
                     chain_override.extend(fallbacks_override)
                     if chain_override:
-                        providers = [p for p in chain_override if p in SUPPORTED_PROVIDERS]
+                        providers = [
+                            p
+                            for p in chain_override
+                            if p in SUPPORTED_PROVIDERS
+                        ]
                 if override.get("model"):
                     model = str(override["model"])
                 if isinstance(override.get("options"), dict):
-                    options.update({str(k): str(v) for k, v in override["options"].items()})
+                    options.update(
+                        {
+                            str(key): str(value)
+                            for key, value in override["options"].items()
+                        }
+                    )
 
             providers = [p for p in providers if p in SUPPORTED_PROVIDERS]
             if not providers:
@@ -269,7 +323,11 @@ class SummarizeAgent:
             model = model or providers[0]
 
             provider_meta = settings.provider(providers[0])
-            model_meta = provider_meta.models.get(model) if provider_meta and model in provider_meta.models else None
+            model_meta = (
+                provider_meta.models.get(model)
+                if provider_meta and model in provider_meta.models
+                else None
+            )
 
             deployment = options.get("azure_deployment") if options else None
             if not deployment and model_meta and model_meta.deployment_env:
@@ -281,12 +339,20 @@ class SummarizeAgent:
                 if cfg:
                     azure_client = AzureChatClient(cfg)
 
-            stage_max_tokens = model_meta.max_output_tokens if model_meta and model_meta.max_output_tokens else self.config.max_output_tokens
+            stage_max_tokens = (
+                model_meta.max_output_tokens
+                if model_meta and model_meta.max_output_tokens
+                else self.config.max_output_tokens
+            )
             stage_temperature = (
-                model_meta.default_temperature if model_meta and model_meta.default_temperature is not None else self.config.temperature
+                model_meta.default_temperature
+                if model_meta and model_meta.default_temperature is not None
+                else self.config.temperature
             )
 
-            allow_override = override.get("allow_offline_fallback") if override else None
+            allow_override = (
+                override.get("allow_offline_fallback") if override else None
+            )
             allow_local = providers[0] == "local" or ("local" in providers[1:])
             if allow_override is not None:
                 allow_local = bool(allow_override)
@@ -298,7 +364,8 @@ class SummarizeAgent:
                 providers=providers,
                 model=model,
                 azure_client=azure_client,
-                max_output_tokens=stage_max_tokens or self.config.max_output_tokens,
+                max_output_tokens=stage_max_tokens
+                or self.config.max_output_tokens,
                 allow_local_fallback=allow_local,
                 temperature=stage_temperature,
             )
@@ -330,7 +397,9 @@ class SummarizeAgent:
 
         transcript_path = final_state.get("transcript_path")
         if not isinstance(transcript_path, Path):
-            transcript_path = self._resolve_transcript(state.get("input_path"), case_dir)
+            transcript_path = self._resolve_transcript(
+                state.get("input_path"), case_dir
+            )
 
         return SummarizeResult(
             status=final_state.get("status", "ok"),
@@ -347,7 +416,9 @@ class SummarizeAgent:
             offline_fallback_used=final_outputs.offline_fallback_used,
         )
 
-    def _execute_pipeline(self, pipeline: SummarizePipeline, state: Dict[str, Any]) -> Dict[str, Any]:
+    def _execute_pipeline(
+        self, pipeline: SummarizePipeline, state: Dict[str, Any]
+    ) -> Dict[str, Any]:
         current_state: Dict[str, Any] = dict(state)
         graph = None
         try:
@@ -361,7 +432,9 @@ class SummarizeAgent:
             current_state = node(current_state)
         return current_state
 
-    def _resolve_transcript(self, input_path: Optional[Path], case_dir: Path) -> Path:
+    def _resolve_transcript(
+        self, input_path: Optional[Path], case_dir: Path
+    ) -> Path:
         if input_path:
             resolved = Path(input_path)
             if not resolved.exists():
@@ -369,9 +442,15 @@ class SummarizeAgent:
             return resolved
         transcript_dir = case_dir / "transcript"
         if not transcript_dir.exists():
-            raise FileNotFoundError(f"No transcript directory at {transcript_dir}")
+            raise FileNotFoundError(
+                f"No transcript directory at {transcript_dir}"
+            )
         candidates = sorted(
-            (p for p in transcript_dir.glob("*__transcript.txt") if p.is_file()),
+            (
+                p
+                for p in transcript_dir.glob("*__transcript.txt")
+                if p.is_file()
+            ),
             key=lambda p: p.stat().st_mtime,
             reverse=True,
         )
@@ -379,7 +458,9 @@ class SummarizeAgent:
             raise FileNotFoundError("No transcript files found for case")
         return candidates[0]
 
-    def _build_context(self, parse: TranscriptParse, intake: Dict[str, Any]) -> str:
+    def _build_context(
+        self, parse: TranscriptParse, intake: Dict[str, Any]
+    ) -> str:
         snippets: List[str] = []
         chars = 0
         for seg in parse.segments:
@@ -395,7 +476,10 @@ class SummarizeAgent:
             line = prefix + text
             snippets.append(line)
             chars += len(line)
-            if len(snippets) >= MAX_PROMPT_SEGMENTS or chars >= MAX_PROMPT_CHARS:
+            if (
+                len(snippets) >= MAX_PROMPT_SEGMENTS
+                or chars >= MAX_PROMPT_CHARS
+            ):
                 break
         context = "\n".join(snippets)
         if intake.get("court_case_number"):

@@ -36,6 +36,26 @@
     }
   };
 
+  const getEmbeddedJSON = (container, key) => {
+    if (!container) return null;
+    try {
+      const script = container.querySelector(`[data-llm-json="${key}"]`);
+      if (!script) return null;
+      const text = script.textContent || '';
+      if (!text.trim()) return null;
+      const parsed = JSON.parse(text);
+      if (platformUI.llmDebug) {
+        console.debug('[LLM] Parsed embedded JSON', key, parsed);
+      }
+      return parsed;
+    } catch (error) {
+      if (platformUI.llmDebug) {
+        console.warn('[LLM] Failed to parse embedded JSON', key, error);
+      }
+      return null;
+    }
+  };
+
   const helpers = caseDetail.helpers || {};
 
   let ctx = null;
