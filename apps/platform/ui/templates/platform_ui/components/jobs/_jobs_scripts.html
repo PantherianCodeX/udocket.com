@@ -4,7 +4,14 @@
   window.jobPollers = window.jobPollers || {};
   window.jobSockets = window.jobSockets || {};
 
-  const jobsTableController = window.udocketJobsTable.init({
+  const platformUI = window.platformUI || {};
+  const jobsTableApi = platformUI.jobsTable;
+  if (!jobsTableApi || typeof jobsTableApi.init !== 'function') {
+    console.warn('platformUI.jobsTable.init is required for jobs table interactions');
+    return;
+  }
+
+  const jobsTableController = jobsTableApi.init({
     root: document,
     loadDetail: async (jobId, container) => {
       const resp = await fetch(`/jobs/${jobId}/detail-panel/`, {
@@ -29,7 +36,7 @@
     },
   });
 
-  const statusUtils = window.udocketStatus || {};
+  const statusUtils = platformUI.status || {};
   const renderStatusLabel = statusUtils.renderStatusLabel || (() => {});
   const TERMINAL_STATUSES = statusUtils.TERMINAL_STATUSES || ['SUCCEEDED', 'FAILED', 'CANCELLED', 'ERROR', 'CORRUPTED'];
 
@@ -153,8 +160,9 @@
   document.addEventListener('click', (evt) => {
     const item = evt.target.closest('[data-job-action-item]');
     if (!item) return;
-    if (window.udocketPopovers && typeof window.udocketPopovers.closeAll === 'function') {
-      window.udocketPopovers.closeAll();
+    const popovers = platformUI.popovers;
+    if (popovers && typeof popovers.closeAll === 'function') {
+      popovers.closeAll();
     }
   });
 </script>

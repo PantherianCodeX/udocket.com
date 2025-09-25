@@ -1,10 +1,11 @@
 (function (global) {
-  const namespace = (global.udocketCaseDetail = global.udocketCaseDetail || {});
-  if (namespace._bootstrapped) {
+  const platformUI = (global.platformUI = global.platformUI || {});
+  const caseDetail = (platformUI.caseDetail = platformUI.caseDetail || {});
+  if (caseDetail._bootstrapped) {
     return;
   }
 
-  namespace._bootstrapped = true;
+  caseDetail._bootstrapped = true;
 
   function init(options = {}) {
     // TODO(layout-refresh): Investigate more reliable template update tooling to reduce manual patch churn during upcoming refactor.
@@ -19,8 +20,8 @@
 
     // Initialize shared jobs state namespace used across handlers in this view
     const jobsState =
-      (namespace.state =
-        namespace.state ||
+      (caseDetail.state =
+        caseDetail.state ||
         global.JobsState || {
           currentCaseId: caseId,
           pollers: {},
@@ -29,11 +30,59 @@
           refreshTranscribeScheduled: false,
         });
     global.JobsState = jobsState;
+
+    const jobsTableApi = platformUI.jobsTable;
+    if (!jobsTableApi || typeof jobsTableApi.init !== 'function') {
+      console.warn('platformUI.jobsTable.init is required for case detail interactions');
+      return;
+    }
+
+    const statusUtils = platformUI.status || {};
+    const jobActions = platformUI.jobActions || {};
+    const modalApi = platformUI.modal || {};
+    const toastAt = typeof platformUI.toastAt === 'function' ? platformUI.toastAt : null;
+    const toast = typeof platformUI.toast === 'function' ? platformUI.toast : null;
+    const notify = (x, y, text) => {
+      if (toastAt) {
+        toastAt(x, y, text);
+      } else if (toast) {
+        toast(text);
+      }
+    };
+
+    const confirmWithModal = async (options = {}) => {
+      if (typeof modalApi.confirm === 'function') {
+        return modalApi.confirm(options);
+      }
+      if (typeof window.confirm === 'function') {
+        const message = options.body || options.title || 'Are you sure?';
+        return window.confirm(message);
+      }
+      return true;
+    };
+
+    const openModalHTML = (html, modalOptions = {}) => {
+      if (typeof modalApi.openFromHTML === 'function') {
+        return modalApi.openFromHTML(html, modalOptions);
+      }
+      return null;
+    };
+
+    const showModalMessage = (options = {}) => {
+      if (typeof modalApi.message === 'function') {
+        return modalApi.message(options);
+      }
+      const body = options.body || options.title || options.heading;
+      if (body) {
+        notify(window.innerWidth / 2, window.innerHeight / 2, body);
+      }
+      return Promise.resolve();
+    };
     
       const JOB_DETAIL_LOADING = '<div class="flex items-center gap-2 text-xs text-slate-300"><svg class="h-3 w-3 animate-spin text-primary-300" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle class="opacity-30" cx="12" cy="12" r="10" stroke-width="2"></circle><path d="M22 12a10 10 0 00-10-10" stroke-width="2" stroke-linecap="round"></path></svg><span>Loading…</span></div>';
       const JOB_DETAIL_ERROR = '<div class="text-xs text-rose-300">Unable to load job detail.</div>';
     
-      const jobsTableController = window.udocketJobsTable.init({
+      const jobsTableController = jobsTableApi.init({
         root: caseView,
         activeRowClass: 'bg-white/10',
         detailRowSelector: (jobId) => `[data-job-detail="${jobId}"]`,
@@ -63,8 +112,7 @@
     
       jobsState.table = jobsTableController;
     
-      const statusUtils = window.udocketStatus || {};
-      const renderStatusLabel = statusUtils.renderStatusLabel || (() => {});
+            const renderStatusLabel = statusUtils.renderStatusLabel || (() => {});
       const normalizeStatus = statusUtils.normalizeStatus || ((value) => (value || '').toString().trim().toUpperCase());
       const TERMINAL_STATUSES = statusUtils.TERMINAL_STATUSES || ['SUCCEEDED', 'FAILED', 'CANCELLED', 'ERROR', 'CORRUPTED'];
       const JOB_ROW_STATUS_CLASSES = ['bg-emerald-500/10', 'bg-rose-500/10', 'bg-amber-500/10', 'bg-primary-500/10', 'bg-white/5'];
@@ -221,8 +269,8 @@
         if (jobRow) {
           jobRow.classList.remove(...JOB_ROW_STATUS_CLASSES);
         }
-        if (window.udocketJobActions && typeof window.udocketJobActions.updateForRow === 'function') {
-          window.udocketJobActions.updateForRow(jobId, status);
+        if (jobActions && typeof jobActions.updateForRow === 'function') {
+          jobActions.updateForRow(jobId, status);
         }
         const detailContainer = document.querySelector(`[data-job-detail="${jobId}"]`);
         if (!detailContainer) return;
@@ -428,8 +476,8 @@
           const targetJob = control.getAttribute('data-job-target');
           if (targetJob) {
             const expanded = await expandJobRow(targetJob);
-            if (!expanded && window.udocketShowToastAt) {
-              window.udocketShowToastAt(evt.clientX || window.innerWidth / 2, evt.clientY || window.innerHeight / 2, 'Job not available in this panel');
+            if (!expanded && notify) {
+              notify(evt.clientX || window.innerWidth / 2, evt.clientY || window.innerHeight / 2, 'Job not available in this panel');
             }
           }
           closeMenu();
@@ -444,7 +492,7 @@
         const confirmMessage = control.getAttribute('data-job-action-confirm');
         if (confirmMessage) {
           const label = (control.textContent || control.getAttribute('aria-label') || '').trim();
-          const confirmed = await window.udocketModal.confirm({
+          const confirmed = await confirmWithModal({
             heading: 'Confirm action',
             title: label || 'Please confirm',
             body: confirmMessage,
@@ -667,10 +715,10 @@
         const displayJob = btn.getAttribute('data-display-job') || refreshJobId;
         if (!panelKey || !displayJob) return;
         if (!refreshJobId) {
-          if (window.udocketShowToastAt) {
+          if (notify) {
             const toastX = evt.clientX || window.innerWidth / 2;
             const toastY = evt.clientY || window.innerHeight / 2;
-            window.udocketShowToastAt(toastX, toastY, 'Metadata unavailable for this panel');
+            notify(toastX, toastY, 'Metadata unavailable for this panel');
           }
           return;
         }
@@ -698,14 +746,14 @@
           const data = await resp.json();
           if (data && data.audio) {
             updateAudioPanel(panel, data.audio);
-            if (window.udocketShowToastAt) {
-              window.udocketShowToastAt(toastX, toastY, 'Audio metadata updated');
+            if (notify) {
+              notify(toastX, toastY, 'Audio metadata updated');
             }
           }
         } catch (error) {
           console.warn('Audio metadata refresh failed', refreshJobId, error);
-          if (window.udocketShowToastAt) {
-            window.udocketShowToastAt(toastX, toastY, 'Unable to refresh metadata');
+          if (notify) {
+            notify(toastX, toastY, 'Unable to refresh metadata');
           }
         } finally {
           btn.disabled = false;
@@ -721,7 +769,7 @@
         const showErrorModal = (title, detail) => {
           const content = typeof detail === 'string' ? detail : (detail && detail.message) || '';
           const safe = (content || '').toString().slice(0, 2000) || 'No details available.';
-          window.udocketModal.message({
+          showModalMessage({
             heading: 'Job Logs',
             title: title || 'Unable to load job log',
             body: safe,
@@ -739,7 +787,7 @@
             showErrorModal(`HTTP ${resp.status}`, text);
             return;
           }
-          const modal = window.udocketModal.openFromHTML(text, { container });
+          const modal = openModalHTML(text, { container });
           if (!modal) {
             console.error('Job log modal missing [data-modal] wrapper');
             showErrorModal('Log content unavailable', text);
@@ -757,7 +805,7 @@
         const showErrorModal = (title, detail) => {
           const content = typeof detail === 'string' ? detail : (detail && detail.message) || '';
           const safe = (content || '').toString().slice(0, 2000) || 'No metadata available.';
-          window.udocketModal.message({
+          showModalMessage({
             heading: 'Job Metadata',
             title: title || 'Unable to load metadata',
             body: safe,
@@ -775,7 +823,7 @@
             showErrorModal(`HTTP ${resp.status}`, text);
             return;
           }
-          const modal = window.udocketModal.openFromHTML(text, { container });
+          const modal = openModalHTML(text, { container });
           if (!modal) {
             console.error('Job metadata modal missing [data-modal] wrapper');
             showErrorModal('Metadata unavailable', text);
@@ -986,11 +1034,11 @@
           });
           if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
           const html = await resp.text();
-          const modal = window.udocketModal.openFromHTML(html, {
+          const modal = openModalHTML(html, {
             container: modalRoot || undefined,
           });
           if (!modal) {
-            window.udocketModal.message({
+            showModalMessage({
               heading: 'Transcript Preview',
               title: 'Unable to load transcript',
               body: 'No transcript content available.',
@@ -999,8 +1047,8 @@
           }
         } catch (error) {
           console.error('Transcript preview failed', jobId, error);
-          if (window.udocketShowToastAt) {
-            window.udocketShowToastAt(window.innerWidth / 2, window.innerHeight / 2, 'Unable to load transcript');
+          if (notify) {
+            notify(window.innerWidth / 2, window.innerHeight / 2, 'Unable to load transcript');
           }
         }
       }
@@ -1030,13 +1078,13 @@
           await openTranscriptModal(jobId);
         } else if (action === 'job') {
           const success = await expandJobRow(jobId);
-          if (!success && window.udocketShowToastAt) {
-            window.udocketShowToastAt(evt.clientX || window.innerWidth / 2, evt.clientY || window.innerHeight / 2, 'Job not available in this panel');
+          if (!success && notify) {
+            notify(evt.clientX || window.innerWidth / 2, evt.clientY || window.innerHeight / 2, 'Job not available in this panel');
           }
         } else if (action === 'create-artifact') {
           const endpoint = transcriptAction.getAttribute('data-artifact-endpoint');
           if (!endpoint) return;
-          const confirmed = await window.udocketModal.confirm({
+          const confirmed = await confirmWithModal({
             heading: 'Create Artifact',
             title: 'Promote transcript?',
             body: 'Add this transcript as a case artifact?',
@@ -1061,13 +1109,13 @@
               const text = await resp.text();
               throw new Error(text || `HTTP ${resp.status}`);
             }
-            if (window.udocketShowToastAt) {
-              window.udocketShowToastAt(toastX, toastY, 'Case artifact created');
+            if (notify) {
+              notify(toastX, toastY, 'Case artifact created');
             }
           } catch (error) {
             console.error('Create artifact failed', error);
-            if (window.udocketShowToastAt) {
-              window.udocketShowToastAt(toastX, toastY, 'Unable to create artifact');
+            if (notify) {
+              notify(toastX, toastY, 'Unable to create artifact');
             }
           } finally {
             transcriptAction.disabled = false;
@@ -1084,10 +1132,10 @@
         const linkCaseId = jobLink.getAttribute('data-job-link-case');
         if (!linkCaseId || linkCaseId === caseId) {
           const success = await expandJobRow(targetJobId);
-          if (!success && window.udocketShowToastAt) {
+          if (!success && notify) {
             const toastX = evt.clientX || window.innerWidth / 2;
             const toastY = evt.clientY || window.innerHeight / 2;
-            window.udocketShowToastAt(toastX, toastY, 'Job not available in this panel');
+            notify(toastX, toastY, 'Job not available in this panel');
           }
           return;
         }
@@ -1135,8 +1183,8 @@
           }
           const selectedOption = select.selectedOptions[0];
           if (selectedOption && selectedOption.disabled) {
-            if (window.udocketShowToastAt) {
-              window.udocketShowToastAt(evt.clientX, evt.clientY, 'Transcript pending approval.');
+            if (notify) {
+              notify(evt.clientX, evt.clientY, 'Transcript pending approval.');
             }
             return;
           }
@@ -1178,14 +1226,14 @@
             const text = await resp.text();
             throw new Error(text || `HTTP ${resp.status}`);
           }
-          if (window.udocketShowToastAt) {
-            window.udocketShowToastAt(toastX, toastY, 'Automation queued');
+          if (notify) {
+            notify(toastX, toastY, 'Automation queued');
           }
           htmx.ajax('GET', `/cases/${caseId}/tools/${action}/`, '#tool-workspace');
         } catch (error) {
           console.error('Automation queue failed', action, error);
-          if (window.udocketShowToastAt) {
-            window.udocketShowToastAt(toastX, toastY, 'Unable to queue automation');
+          if (notify) {
+            notify(toastX, toastY, 'Unable to queue automation');
           }
         } finally {
           button.disabled = false;
@@ -1227,28 +1275,25 @@
             const statusValue = statusEl.dataset && statusEl.dataset.status ? statusEl.dataset.status : statusEl.textContent;
             const progressValue = statusEl.dataset && statusEl.dataset.progress ? parseFloat(statusEl.dataset.progress) : undefined;
             renderStatusLabel(statusEl, statusValue, progressValue);
-            if (window.udocketJobActions && typeof window.udocketJobActions.updateForRow === 'function') {
-              window.udocketJobActions.updateForRow(jobId, statusValue);
+            if (jobActions && typeof jobActions.updateForRow === 'function') {
+              jobActions.updateForRow(jobId, statusValue);
             }
           }
         });
       };
 
-      namespace.refresh = refreshCaseJobs;
-      if (!global.udocketCaseJobs) {
-        global.udocketCaseJobs = refreshCaseJobs;
-      }
+      caseDetail.refresh = refreshCaseJobs;
 
       function boostJobs() {
         refreshCaseJobs(caseId);
       }
 
-      namespace.boost = boostJobs;
-    
+      caseDetail.boost = boostJobs;
+
       setActiveCard(initialToolKey);
       boostJobs();
   }
 
-  namespace.init = init;
+  caseDetail.init = init;
   init();
 })(window);

@@ -1,5 +1,6 @@
 (function (global) {
-  if (global.udocketJobsTable) return;
+  const platformUI = (global.platformUI = global.platformUI || {});
+  if (platformUI.jobsTable) return;
 
   const INTERACTIVE_SELECTOR = 'a, button, input, textarea, select, [role="button"], [data-job-action-menu], [data-popover]';
 
@@ -189,7 +190,7 @@
     };
   }
 
-  global.udocketJobsTable = {
+  platformUI.jobsTable = {
     init,
   };
 })(window);

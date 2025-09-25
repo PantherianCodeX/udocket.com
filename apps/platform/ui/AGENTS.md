@@ -54,7 +54,7 @@ Scope: everything beneath `apps/platform/ui/` (templates, views, presenters, sel
   - Copy‑to‑clipboard via `[data-copy-text]` and `[data-copy-target]` with toast feedback (apps/platform/ui/templates/platform_ui/layouts/base.html:1).
   - Local time rendering via `[data-ts]` attributes.
   - Error reporting beacon to `/ui/log`.
-- Modals: include `platform_ui/components/_modal_scripts.html` from base and use the `udocketModal` API for programmatic dialogs.
+- Modals: include `platform_ui/components/_modal_scripts.html` from base and use the `platformUI.modal` API for programmatic dialogs.
   - Server‑rendered modals should use `modal_base.html` to inherit focus/ARIA patterns.
 - Popovers: use `platform_ui/components/_popover_scripts.html` and existing popover menu templates.
 
@@ -84,8 +84,8 @@ Scope: everything beneath `apps/platform/ui/` (templates, views, presenters, sel
   - View prepares `modal_*` context keys, then `render(..., "platform_ui/partials/<modal>.html", ctx)`.
   - The modal template extends `modal_base.html` or `text_modal.html` and fills header/body/actions.
   - Example: Transcript modal (apps/platform/ui/views/jobs.py:34) renders `platform_ui/partials/transcript_modal.html`.
-- Client‑created modal pattern:
-  - Use `udocketModal.create({ heading, title, bodyText|bodyHTML|bodyNode, actions })` and `udocketModal.open(...)` from `_modal_scripts.html`.
+- Client-created modal pattern:
+  - Use `platformUI.modal.create({ heading, title, bodyText|bodyHTML|bodyNode, actions })` and `platformUI.modal.open(...)` from `_modal_scripts.html`.
 - Popovers: reuse `components/_popover_menu.html` and `components/_action_menu_popover.html`; wire triggers with `data-popover` attributes.
 
 

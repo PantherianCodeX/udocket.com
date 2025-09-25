@@ -1,6 +1,7 @@
 <script>
-(function() {
-  if (window.udocketJobActions) return;
+(function (global) {
+  const platformUI = (global.platformUI = global.platformUI || {});
+  if (platformUI.jobActions) return;
 
   const CANCEL_ACTIVE = new Set(['RUNNING', 'PENDING', 'QUEUED', 'UPLOADING', 'CANCELLING', 'CONVERTING']);
   const RESTART_ACTIVE = new Set(['SUCCEEDED', 'FAILED', 'CANCELLED', 'CORRUPTED']);
@@ -11,7 +12,7 @@
 
   function applyMenuState(menu, normalized) {
     if (!(menu instanceof HTMLElement)) return false;
-    const helpers = window.udocketPopovers || {};
+    const helpers = platformUI.popovers || {};
     const visibilityRules = {
       cancel: () => CANCEL_ACTIVE.has(normalized),
       restart: () => RESTART_ACTIVE.has(normalized),
@@ -107,7 +108,7 @@
   document.addEventListener('DOMContentLoaded', bootstrapMenus);
   document.addEventListener('htmx:afterSwap', bootstrapMenus);
 
-  window.udocketJobActions = {
+  platformUI.jobActions = {
     normalizeStatus,
     updateMenu,
     updateForRow,
@@ -116,5 +117,5 @@
     CANCEL_ACTIVE,
     RESTART_ACTIVE,
   };
-})();
+})(window);
 </script>

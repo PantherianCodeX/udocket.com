@@ -1,6 +1,7 @@
 <script>
-(function() {
-  if (window.udocketPopovers) return;
+(function (global) {
+  const platformUI = (global.platformUI = global.platformUI || {});
+  if (platformUI.popovers) return;
 
   const popoverState = new WeakMap();
   const PORTAL_BASE_Z = 2147483636;
@@ -285,7 +286,7 @@
     } else {
       close(owner);
     }
-    evt.udocketPopoverHandled = true;
+    evt.popoverHandled = true;
     return true;
   }
 
@@ -295,7 +296,7 @@
   }
 
   function handleDocumentClick(evt) {
-    if (evt.udocketPopoverHandled) return;
+    if (evt.popoverHandled) return;
     if (handleSummaryClick(evt)) return;
     if (!isWithinPopover(evt.target)) {
       closeAll();
@@ -330,12 +331,12 @@
     }
   });
 
-  window.udocketPopovers = {
+  platformUI.popovers = {
     reset,
     float,
     close,
     closeAll,
     state: popoverState,
   };
-})();
+})(window);
 </script>

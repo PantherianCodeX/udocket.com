@@ -1,6 +1,7 @@
 <script>
-(function() {
-  if (window.udocketModal) return;
+(function (global) {
+  const platformUI = (global.platformUI = global.platformUI || {});
+  if (platformUI.modal) return;
 
   const FOCUSABLE_SELECTORS = [
     'a[href]',
@@ -90,14 +91,14 @@
     const keydownHandler = (evt) => {
       if (evt.key === 'Escape') {
         evt.preventDefault();
-        udocketModal.close(modal, { reason: 'escape' });
+        close(modal, { reason: 'escape' });
       } else {
         trapFocus(evt, modal);
       }
     };
     const clickHandler = (evt) => {
       if (evt.target === modal) {
-        udocketModal.close(modal, { reason: 'backdrop' });
+        close(modal, { reason: 'backdrop' });
       }
     };
     const closeHandler = (evt) => {
@@ -108,7 +109,7 @@
         const value = target.getAttribute('data-modal-close');
         if (value) reason = value;
       }
-      udocketModal.close(modal, { reason });
+      close(modal, { reason });
     };
 
     modal.addEventListener('keydown', keydownHandler);
@@ -149,7 +150,7 @@
     if (!(modal instanceof HTMLElement)) return null;
     const container = options.container || document.getElementById('modal-root') || document.body;
     if (!options.stack) {
-      udocketModal.closeAll();
+      closeAll();
     }
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const entry = {
@@ -326,7 +327,7 @@
           if (typeof action.onClick === 'function') {
             action.onClick({ modal: overlay, event: evt });
           } else {
-            udocketModal.close(overlay, { reason: action.reason || 'action' });
+            close(overlay, { reason: action.reason || 'action' });
           }
         });
         actionsWrap.appendChild(btn);
@@ -349,7 +350,7 @@
             label: options.cancelLabel || 'Cancel',
             variant: 'secondary',
             onClick: () => {
-              udocketModal.close(modal, { reason: 'cancel' });
+              close(modal, { reason: 'cancel' });
               resolve(false);
             },
           },
@@ -358,7 +359,7 @@
             variant: options.destructive ? 'danger' : 'primary',
             autoFocus: true,
             onClick: () => {
-              udocketModal.close(modal, { reason: 'confirm' });
+              close(modal, { reason: 'confirm' });
               resolve(true);
             },
           },
@@ -380,7 +381,7 @@
             label: options.dismissLabel || 'Close',
             autoFocus: true,
             onClick: () => {
-              udocketModal.close(modal, { reason: 'dismiss' });
+              close(modal, { reason: 'dismiss' });
               resolve();
             },
           },
@@ -390,7 +391,7 @@
     });
   }
 
-  const udocketModal = {
+  const modalApi = {
     open: openElement,
     openFromHTML,
     close,
@@ -400,6 +401,6 @@
     message,
   };
 
-  window.udocketModal = udocketModal;
-})();
+  platformUI.modal = modalApi;
+})(window);
 </script>

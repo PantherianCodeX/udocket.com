@@ -1,6 +1,7 @@
 <script>
-  (function () {
-    if (window.udocketStatus) return;
+  (function (global) {
+    const platformUI = (global.platformUI = global.platformUI || {});
+    if (platformUI.status) return;
 
     const STATUS_LABELS = {
       CONVERTING: 'Converting',
@@ -91,7 +92,7 @@
       }
     }
 
-    window.udocketStatus = {
+    platformUI.status = {
       STATUS_LABELS,
       STATUS_CLASS_MAP,
       STATUS_CLASS_VALUES,
@@ -101,5 +102,5 @@
       applyStatusPillClasses,
       renderStatusLabel,
     };
-  })();
+  })(window);
 </script>

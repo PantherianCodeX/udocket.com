@@ -42,9 +42,11 @@
     window.addEventListener('DOMContentLoaded', renderLocalTimes);
 
     // Global click-to-copy handler and toast utility
-    function udocketToast(text) {
+    const platformUI = (window.platformUI = window.platformUI || {});
+
+    function toast(text) {
       try {
-        const cont = document.getElementById('udocket-toaster');
+        const cont = document.getElementById('platform-ui-toaster');
         const toast = document.createElement('div');
         toast.textContent = text || 'Copied';
         toast.setAttribute('role', 'status');
@@ -57,7 +59,7 @@
         }, 800);
       } catch (_) {}
     }
-    function udocketShowToastAt(x, y, text) {
+    function toastAt(x, y, text) {
       try {
         const toast = document.createElement('div');
         toast.textContent = text || 'Copied';
@@ -84,8 +86,12 @@
       const x = (evt.clientX != null ? evt.clientX : (evt.pageX != null ? (evt.pageX - window.scrollX) : 0));
       const y = (evt.clientY != null ? evt.clientY : (evt.pageY != null ? (evt.pageY - window.scrollY) : 0));
       navigator.clipboard.writeText(value).then(() => {
-        udocketShowToastAt(x, y, 'Copied');
-      }).catch(() => { try { udocketToast('Copied'); } catch (_) {} });
+        toastAt(x, y, 'Copied');
+      }).catch(() => {
+        try {
+          toast('Copied');
+        } catch (_) {}
+      });
     });
 
     document.addEventListener('click', (evt) => {
@@ -119,12 +125,16 @@
             trigger.disabled = false;
           }, 2000);
         } else {
-          udocketShowToastAt(x, y, 'Copied');
+          toastAt(x, y, 'Copied');
         }
-      }).catch(() => { try { udocketToast('Copied'); } catch (_) {} });
+      }).catch(() => {
+        try {
+          toast('Copied');
+        } catch (_) {}
+      });
     });
 
-    function udocketLogClientError(payload) {
+    function logClientError(payload) {
       try {
         const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
         const headers = {'Content-Type': 'application/json'};
@@ -144,7 +154,7 @@
 
     window.addEventListener('error', (event) => {
       if (!event) return;
-      udocketLogClientError({
+      logClientError({
         type: 'error',
         message: event.message,
         filename: event.filename,
@@ -159,7 +169,7 @@
     window.addEventListener('unhandledrejection', (event) => {
       if (!event) return;
       const reason = event.reason || {};
-      udocketLogClientError({
+      logClientError({
         type: 'unhandledrejection',
         message: reason.message || String(reason),
         stack: reason.stack,
@@ -167,6 +177,10 @@
         userAgent: navigator.userAgent,
       });
     });
+
+    platformUI.toast = toast;
+    platformUI.toastAt = toastAt;
+    platformUI.logClientError = logClientError;
   </script>
   {% include "platform_ui/components/_modal_scripts.html" %}
   <style>
@@ -231,7 +245,7 @@
 </head>
 <body class="min-h-full bg-slate-900 text-slate-100">
   <div class="relative min-h-screen pb-24">
-    <div id="udocket-toaster" class="pointer-events-none fixed right-4 bottom-4 z-50 flex flex-col items-end gap-2"></div>
+    <div id="platform-ui-toaster" class="pointer-events-none fixed right-4 bottom-4 z-50 flex flex-col items-end gap-2"></div>
     <div class="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-900 to-slate-950"></div>
     <header class="sticky top-0 z-50 border-b border-white/10 bg-white/5 backdrop-blur">
       <div class="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
