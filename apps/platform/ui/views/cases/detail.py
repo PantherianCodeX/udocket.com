@@ -2,7 +2,6 @@ from __future__ import annotations
 
 # pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false, reportAttributeAccessIssue=false
 
-import json
 from typing import Dict
 
 from django.core.exceptions import PermissionDenied
@@ -16,7 +15,7 @@ from apps.platform.cases.models import Case
 from ..auth import ensure_authenticated
 from ..contexts import compute_case_tool_state, get_case_and_org
 from ..jobs import create_job
-from .helpers import resolve_panel, resolve_tool_key
+from .helpers import render_case_panel_with_refresh, resolve_panel, resolve_tool_key
 
 
 @require_http_methods(["GET", "POST"])
@@ -78,6 +77,11 @@ def case_tool_panel(request: HttpRequest, case_id: str, tool_key: str) -> HttpRe
     if not resolved_key or not panel:
         raise Http404
 
-    response = render(request, "platform_ui/tools/_panel.html", {"panel": panel})
-    response["HX-Trigger"] = json.dumps({"case-view-refreshed": {"tools": [resolved_key], "active_tool": resolved_key}})
-    return response
+    return render_case_panel_with_refresh(
+        request,
+        panel,
+        case=case,
+        state=state,
+        active_tool=resolved_key,
+        tools=[resolved_key],
+    )
