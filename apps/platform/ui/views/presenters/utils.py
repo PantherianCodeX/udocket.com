@@ -31,3 +31,26 @@ def status_sort_value(status: str) -> str:
 def status_class(status: str) -> str:
     """Map a status label to the configured pill class."""
     return STATUS_CLASS_MAP.get(status, "border-white/20 bg-white/5 text-slate-200")
+
+
+def user_label(user: Any) -> str:
+    """Return a human-friendly label for a user instance."""
+    if not user:
+        return ""
+    display = getattr(user, 'display_name', None)
+    if display:
+        return display
+    getter = getattr(user, 'get_full_name', None)
+    if callable(getter):
+        full_name = getter()
+        if full_name:
+            return full_name
+    email = getattr(user, 'email', None)
+    if email:
+        return email
+    username = getattr(user, 'username', None)
+    if username:
+        return username
+    pk = getattr(user, 'pk', None)
+    return str(pk) if pk is not None else ''
+

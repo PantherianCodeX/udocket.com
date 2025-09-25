@@ -119,6 +119,25 @@ def _select_agent(latest: Dict[str, JobRow], keywords: tuple[str, ...]) -> Optio
             return payload
     return None
 
+
+def _map_job_status(job: Optional[Job]) -> str:
+    if not job:
+        return 'Created'
+    status = str(getattr(job, 'status', '') or '').upper()
+    if status == getattr(Job.Status, 'CONVERTING', 'CONVERTING'):
+        return 'Converting'
+    if status == Job.Status.UPLOADING:
+        return 'Uploading'
+    if status in {Job.Status.RUNNING, Job.Status.PENDING}:
+        return 'Running'
+    if status == Job.Status.SUCCEEDED:
+        return 'Created'
+    if status == getattr(Job.Status, 'CANCELLING', 'CANCELLING'):
+        return 'Cancelling'
+    if status in {Job.Status.FAILED, getattr(Job.Status, 'CANCELLED', 'CANCELLED')}:
+        return 'Rejected'
+    return 'Created'
+
 def _build_row_table_meta(row: Dict[str, Any]) -> None:
     """Populate a job row dict with deterministic sort/filter metadata for UI tables."""
     job = row.get("job")
