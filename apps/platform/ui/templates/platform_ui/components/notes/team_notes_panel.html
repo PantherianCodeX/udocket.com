@@ -1,4 +1,4 @@
-<div class="flex h-full flex-col rounded-lg border border-white/10 bg-slate-900/60 p-4" data-job-notes data-job-id="{{ job_id }}">
+<div class="rounded-lg border border-white/10 bg-slate-900/60 p-4" data-job-notes data-job-id="{{ job_id }}">
   <div class="flex flex-wrap items-start justify-between gap-3">
     <div>
       <p class="text-xs uppercase tracking-wide text-slate-400">Team Notes</p>
@@ -18,24 +18,22 @@
     {% endif %}
   </div>
 
-  <div class="mt-3 flex-1 overflow-hidden">
-    <div class="max-h-64 space-y-3 overflow-y-auto pr-2" data-job-notes-list>
-      {% if notes_entries %}
-        {% for note in notes_entries %}
-          <article class="rounded border border-white/10 bg-slate-950/40 p-3" data-job-note="{{ note.id|default:forloop.counter }}">
-            <div class="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400">
-              <span class="font-semibold text-slate-200">{{ note.created_by_label|default:note.created_by|default:'User' }}</span>
-              {% if note.created_at %}
-                <time data-ts="{{ note.created_at }}" data-ts-format="datetime">{{ note.created_at }}</time>
-              {% endif %}
-            </div>
-            <p class="mt-2 whitespace-pre-wrap text-sm text-slate-100">{{ note.text }}</p>
-          </article>
-        {% endfor %}
-      {% else %}
-        <p class="rounded border border-dashed border-white/10 bg-slate-950/20 px-3 py-2 text-sm text-slate-500" data-job-notes-empty>No notes yet. Add the first note for your team.</p>
-      {% endif %}
-    </div>
+  <div class="mt-3 space-y-3" data-job-notes-list>
+    {% if notes_entries %}
+      {% for note in notes_entries %}
+        <article class="rounded border border-white/10 bg-slate-950/40 p-3" data-job-note="{{ note.id|default:forloop.counter }}">
+          <div class="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400">
+            <span class="font-semibold text-slate-200">{{ note.created_by_label|default:note.created_by|default:'User' }}</span>
+            {% if note.created_at %}
+              <time data-ts="{{ note.created_at }}" data-ts-format="datetime">{{ note.created_at }}</time>
+            {% endif %}
+          </div>
+          <p class="mt-2 whitespace-pre-wrap text-sm text-slate-100">{{ note.text }}</p>
+        </article>
+      {% endfor %}
+    {% else %}
+      <p class="rounded border border-dashed border-white/10 bg-slate-950/20 px-3 py-2 text-sm text-slate-500" data-job-notes-empty>No notes yet. Add the first note for your team.</p>
+    {% endif %}
   </div>
 
   {% if user_can_add_notes %}
