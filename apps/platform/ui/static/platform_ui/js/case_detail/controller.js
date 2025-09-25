@@ -176,10 +176,14 @@
           if (refreshed.header_html) {
             const headerContainer = global.document.querySelector('[data-case-header-container]');
             if (headerContainer) headerContainer.innerHTML = refreshed.header_html;
+            try { if (global.htmx && global.htmx.process) { global.htmx.process(headerContainer); } } catch (_) {}
           }
           if (refreshed.cards_html) {
             const cardsContainer = global.document.querySelector('[data-case-developer-cards]');
-            if (cardsContainer) cardsContainer.innerHTML = refreshed.cards_html;
+            if (cardsContainer) {
+              cardsContainer.innerHTML = refreshed.cards_html;
+              try { if (global.htmx && global.htmx.process) { global.htmx.process(cardsContainer); } } catch (_) {}
+            }
           }
           if (refreshed.active_tool) {
             ui.setActiveCard(refreshed.active_tool);
