@@ -140,6 +140,20 @@ def build_job_action_entries(
     if files_items:
         _add_section("Files & Logs").extend(files_items)
 
+    detail_items: List[Dict[str, Any]] = []
+    if meta:
+        detail_items.append(
+            {
+                "label": "View metadata",
+                "action": "view-metadata",
+                "job_id": job_id,
+                "case_id": case_id,
+                "kind": "modal",
+            }
+        )
+    if detail_items:
+        _add_section("Details").extend(detail_items)
+
     navigation_items: List[Dict[str, Any]] = []
     if job_kind == "audio_conversion" and source_job_id:
         navigation_items.append(

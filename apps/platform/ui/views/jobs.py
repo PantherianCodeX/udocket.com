@@ -160,6 +160,49 @@ def case_job_logs_modal(request: HttpRequest, case_id: str, job_id: uuid.UUID) -
     return render(request, "platform_ui/partials/log_modal.html", context)
 
 
+@require_http_methods(["GET"])
+def case_job_metadata_modal(request: HttpRequest, case_id: str, job_id: uuid.UUID) -> HttpResponse:
+    auth_response = ensure_authenticated(request)
+    if auth_response:
+        return auth_response
+
+    case, _ = get_case_and_org(request, case_id)
+    job = (
+        Job.objects.select_related("case", "case__organization", "reviewed_by")
+        .filter(case=case, pk=job_id)
+        .first()
+    )
+    if not job:
+        raise Http404
+
+    telemetry = job_telemetry_payload(job, request, ui_mode=True)
+    detail_context = job_detail_context(request, job, telemetry=telemetry)
+    metadata_items = detail_context.get("metadata_items") or []
+    friendly_title = detail_context.get("job_title") or friendly_job_title(job, telemetry, detail_context.get("artifact"))
+    modal_created = job.finished_at or job.started_at or job.created_at
+    meta_summary: List[Dict[str, Any]] = []
+    case_obj = getattr(job, "case", None)
+    if case_obj:
+        meta_summary.append(
+            {
+                "label": "Case",
+                "display": getattr(case_obj, "title", "") or str(case_obj.id),
+                "copy_text": str(case_obj.id),
+            }
+        )
+    meta_summary.append({"label": "Job ID", "display": str(job.id), "copy_text": str(job.id)})
+    context = {
+        "title": friendly_title,
+        "job_id": str(job.id),
+        "created_at": modal_created,
+        "modal_title_text": friendly_title,
+        "metadata_items": metadata_items,
+        "metadata_empty_text": "Metadata not recorded for this job.",
+        "modal_meta_items": meta_summary,
+    }
+    return render(request, "platform_ui/partials/job_metadata_modal.html", context)
+
+
 
 def jobs(request: HttpRequest) -> HttpResponse:
     auth_response = ensure_authenticated(request)

@@ -1,0 +1,42 @@
+{% extends "platform_ui/partials/text_modal.html" %}
+
+{% block modal_heading %}
+  {% block metadata_heading %}
+    {% with heading=metadata_heading|default:modal_heading|default:'Metadata' %}
+      {% if heading %}
+        <p class="text-xs uppercase tracking-wide text-slate-400">{{ heading }}</p>
+      {% endif %}
+    {% endwith %}
+  {% endblock %}
+{% endblock %}
+
+{% block modal_body %}
+  {% if metadata_items %}
+    <dl class="grid gap-4 text-sm text-slate-200 sm:grid-cols-2">
+      {% for item in metadata_items %}
+        <div class="rounded-lg border border-white/10 bg-slate-950/20 p-3">
+          <dt class="text-[11px] font-semibold uppercase tracking-wide text-slate-400" title="{{ item.key }}">{{ item.label }}</dt>
+          <dd class="mt-2 text-[13px] leading-relaxed">
+            {% if item.is_multiline %}
+              <pre data-copy-text="{{ item.value }}" class="max-h-48 overflow-y-auto whitespace-pre-wrap break-words rounded border border-white/10 bg-slate-950/40 p-2 font-mono text-[12px] text-primary-100">{{ item.value }}</pre>
+            {% elif item.value %}
+              <span data-copy-text="{{ item.value }}" class="cursor-copy break-words text-slate-100 decoration-dotted decoration-white/20 hover:underline">{{ item.value }}</span>
+            {% else %}
+              <span class="text-slate-500">—</span>
+            {% endif %}
+          </dd>
+        </div>
+      {% endfor %}
+    </dl>
+  {% else %}
+    <p class="text-sm text-slate-400">{{ metadata_empty_text|default:'Metadata not recorded for this item.' }}</p>
+  {% endif %}
+{% endblock %}
+
+{% block modal_actions %}
+  {% block metadata_actions %}
+    <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 font-semibold text-slate-200 transition hover:border-primary-400 hover:text-white" data-modal-close>
+      {{ metadata_close_label|default:'Close' }}
+    </button>
+  {% endblock %}
+{% endblock %}

@@ -24,20 +24,6 @@
       </div>
     </div>
     <div class="flex flex-col items-end gap-2 sm:flex-row sm:items-start sm:justify-end">
-      {% if telemetry.audio.path %}
-        <a class="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-100 transition hover:border-primary-400 hover:text-white" href="/api/v1/jobs/{{ job.id }}/download-audio/">Download audio</a>
-      {% endif %}
-      <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-100 transition hover:border-primary-400 hover:text-white" data-job-view-log data-job-id="{{ job.id }}" data-case-id="{{ case.id }}">
-        View logs
-      </button>
-      <a class="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-100 transition hover:border-primary-400 hover:text-white" href="/api/v1/jobs/{{ job.id }}/logs/" download>
-        Download log
-      </a>
-      {% if telemetry.metadata and telemetry.metadata.converted_audio_job_id %}
-        <a class="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-100 transition hover:border-primary-400 hover:text-white" href="/api/v1/jobs/{{ telemetry.metadata.converted_audio_job_id }}/download-audio/">Download converted WAV</a>
-      {% elif telemetry.metadata and telemetry.metadata.converted_wav_available %}
-        <a class="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-100 transition hover:border-primary-400 hover:text-white" href="/api/v1/jobs/{{ job.id }}/download-audio/?converted=1">Download converted WAV</a>
-      {% endif %}
       {% if telemetry.transcript.path %}
         <a class="inline-flex items-center gap-2 rounded-lg border border-primary-400/40 bg-primary-500/10 px-3 py-1.5 text-xs font-semibold text-primary-100 transition hover:bg-primary-500/25" href="/api/v1/jobs/{{ job.id }}/download/" download>Download transcript</a>
       {% endif %}
@@ -268,35 +254,5 @@
     </div>
   </div>
 
-  {% if metadata_items %}
-    <details class="rounded-lg border border-white/10 bg-slate-900/60" data-preserve-state="ops">
-      <summary class="cursor-pointer px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-300">Ops metadata</summary>
-      <div class="px-4 pb-4 pt-3 text-xs text-slate-200">
-        <div class="grid gap-x-6 gap-y-2 sm:grid-cols-2">
-          {% for item in metadata_items %}
-            <div class="flex min-w-0 items-start gap-3 py-1">
-              <div class="shrink-0 basis-32 text-[11px] uppercase tracking-wide text-slate-400">{{ item.label }}</div>
-              <div class="min-w-0 flex-1">
-                {% if item.is_multiline %}
-                  <pre data-copy-text="{{ item.value }}" data-preserve-scroll="ops" class="max-h-40 cursor-copy overflow-y-auto whitespace-pre-wrap break-words font-mono text-[11px] text-slate-100 underline decoration-dotted decoration-white/20 hover:decoration-primary-300">{{ item.value }}</pre>
-                {% else %}
-                  <p data-copy-text="{{ item.value }}" class="break-words text-slate-100 cursor-copy underline decoration-dotted decoration-white/20 hover:decoration-primary-300">{{ item.value }}</p>
-                {% endif %}
-              </div>
-            </div>
-          {% endfor %}
-        </div>
-      </div>
-    </details>
-  {% endif %}
-
-  {% if telemetry.log_excerpt %}
-    <details class="rounded-lg border border-white/10 bg-slate-900/60" data-preserve-state="log">
-      <summary class="cursor-pointer px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-300">Agent log excerpt</summary>
-      <div class="px-4 pt-3 text-[11px] text-slate-300">
-        <button type="button" class="inline-flex items-center gap-1 rounded border border-white/20 bg-white/10 px-2 py-1 text-xs font-semibold text-slate-200 transition hover:border-primary-400" data-job-view-log data-job-id="{{ job.id }}" data-case-id="{{ case.id }}">View full log</button>
-      </div>
-      <pre data-copy-text="{{ telemetry.log_excerpt }}" data-preserve-scroll="log" class="max-h-60 cursor-copy overflow-y-auto px-4 pb-4 text-[11px] text-slate-100 whitespace-pre-wrap break-words underline decoration-dotted decoration-white/20 hover:decoration-primary-300">{{ telemetry.log_excerpt }}</pre>
-    </details>
-  {% endif %}
+  {# Metadata and log excerpt moved to dedicated modal actions. #}
 </div>

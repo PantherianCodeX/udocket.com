@@ -411,6 +411,11 @@
             }
           } else if (action === 'view-transcript') {
             if (jobId) await openTranscriptModal(jobId);
+          } else if (action === 'view-metadata') {
+            const caseValue = control.getAttribute('data-case-id') || JobsState.currentCaseId;
+            if (jobId && caseValue) {
+              await openJobMetadataModal(caseValue, jobId);
+            }
           }
           closeMenu();
           return;
@@ -434,9 +439,21 @@
         }
 
         const confirmMessage = control.getAttribute('data-job-action-confirm');
-        if (confirmMessage && !window.confirm(confirmMessage)) {
-          closeMenu();
-          return;
+        if (confirmMessage) {
+          const label = (control.textContent || control.getAttribute('aria-label') || '').trim();
+          const confirmed = await window.udocketModal.confirm({
+            heading: 'Confirm action',
+            title: label || 'Please confirm',
+            body: confirmMessage,
+            confirmLabel: control.getAttribute('data-job-action-confirm-label') || (kind === 'delete' ? 'Delete' : 'Confirm'),
+            cancelLabel: control.getAttribute('data-job-action-cancel-label') || 'Cancel',
+            destructive: kind === 'delete',
+            container: modalRoot || undefined,
+          });
+          if (!confirmed) {
+            closeMenu();
+            return;
+          }
         }
 
         let requestBody;
@@ -464,6 +481,8 @@
           headers['Content-Type'] = 'application/json';
         }
 
+        closeMenu();
+
         control.disabled = true;
         try {
           const url = method === 'DELETE' ? `/api/v1/jobs/${jobId}/` : `/api/v1/jobs/${jobId}/${endpointAction}/`;
@@ -488,7 +507,6 @@
           console.warn('Job action error', action, error);
         } finally {
           control.disabled = false;
-          closeMenu();
         }
       }
 
@@ -513,45 +531,6 @@
           }
         }
       }
-      function mountModal() {
-        const host = modalRoot || document.body;
-        const modal = host.querySelector('[data-modal]');
-        if (!modal) return null;
-        const wrapper = modal.parentElement;
-        const onKeyDown = (ev) => {
-          if (ev.key === 'Escape') {
-            ev.preventDefault();
-            closeModal();
-          }
-        };
-        const closeModal = () => {
-          if (modalRoot) {
-            modalRoot.innerHTML = '';
-          } else if (modal.isConnected) {
-            const parentNode = modal.parentElement;
-            modal.remove();
-            if (parentNode && parentNode !== document.body && parentNode.childElementCount === 0) {
-              parentNode.remove();
-            } else if (wrapper && wrapper !== document.body && wrapper.childElementCount === 0) {
-              wrapper.remove();
-            }
-          }
-          window.removeEventListener('keydown', onKeyDown);
-        };
-        if (modal.dataset.bound !== '1') {
-          modal.dataset.bound = '1';
-          modal.addEventListener('click', (evt) => {
-            if (evt.target === modal) closeModal();
-          });
-          modal.querySelectorAll('[data-modal-close]').forEach((btn) => {
-            btn.addEventListener('click', closeModal);
-          });
-        }
-        window.addEventListener('keydown', onKeyDown);
-        return { modal, closeModal };
-      }
-
-
       async function handleVerifyHash(evt) {
         const btn = evt.target.closest('[data-verify-hash]');
         if (!btn) return;
@@ -735,18 +714,16 @@
 
       async function openJobLogModal(caseValue, jobId) {
         if (!caseValue || !jobId) return;
+        const container = modalRoot || undefined;
         const showErrorModal = (title, detail) => {
           const content = typeof detail === 'string' ? detail : (detail && detail.message) || '';
-          const safe = (content || '').toString().slice(0, 2000);
-          const html = `\n<div class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm" data-modal>\n  <div class="w-full max-w-3xl rounded-2xl border border-white/10 bg-slate-900/95 p-6 shadow-2xl shadow-black/60">\n    <div class="flex items-start justify-between gap-4">\n      <div>\n        <p class="text-xs uppercase tracking-wide text-slate-400">Job Logs</p>\n        <h3 class="mt-1 text-lg font-semibold text-white">${title || 'Unable to load job log'}</h3>\n      </div>\n      <button type="button" class="rounded-lg border border-white/20 bg-white/10 p-2 text-slate-300 transition hover:border-primary-400 hover:text-white" data-modal-close>\n        <span class="sr-only">Close modal</span>\n        <svg xmlns=\"http://www.w3.org/2000/svg\" class=\"h-4 w-4\" viewBox=\"0 0 20 20\" fill=\"currentColor\"><path fill-rule=\"evenodd\" d=\"M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z\" clip-rule=\"evenodd\" /></svg>\n      </button>\n    </div>\n    <div class="mt-4 max-h-[28rem] overflow-y-auto rounded-lg border border-white/10 bg-slate-950/30 p-4 text-[13px] leading-relaxed text-slate-100">\n      <pre class="whitespace-pre-wrap break-words">${safe || 'No details available.'}</pre>\n    </div>\n  </div>\n</div>`;
-          if (modalRoot) {
-            modalRoot.innerHTML = html;
-          } else {
-            const temp = document.createElement('div');
-            temp.innerHTML = html;
-            document.body.appendChild(temp);
-          }
-          mountModal();
+          const safe = (content || '').toString().slice(0, 2000) || 'No details available.';
+          window.udocketModal.message({
+            heading: 'Job Logs',
+            title: title || 'Unable to load job log',
+            body: safe,
+            container,
+          });
         };
         try {
           const resp = await fetch(`/cases/${caseValue}/jobs/${jobId}/logs/modal/`, {
@@ -759,21 +736,50 @@
             showErrorModal(`HTTP ${resp.status}`, text);
             return;
           }
-          if (modalRoot) {
-            modalRoot.innerHTML = text;
-          } else {
-            const temp = document.createElement('div');
-            temp.innerHTML = text;
-            document.body.appendChild(temp);
-          }
-          const mounted = mountModal();
-          if (!mounted || !mounted.modal) {
+          const modal = window.udocketModal.openFromHTML(text, { container });
+          if (!modal) {
             console.error('Job log modal missing [data-modal] wrapper');
             showErrorModal('Log content unavailable', text);
           }
         } catch (error) {
           console.error('Job log modal failed', jobId, error);
           showErrorModal('Unable to load job log', error && error.message ? error.message : String(error));
+        }
+      }
+
+
+      async function openJobMetadataModal(caseValue, jobId) {
+        if (!caseValue || !jobId) return;
+        const container = modalRoot || undefined;
+        const showErrorModal = (title, detail) => {
+          const content = typeof detail === 'string' ? detail : (detail && detail.message) || '';
+          const safe = (content || '').toString().slice(0, 2000) || 'No metadata available.';
+          window.udocketModal.message({
+            heading: 'Job Metadata',
+            title: title || 'Unable to load metadata',
+            body: safe,
+            container,
+          });
+        };
+        try {
+          const resp = await fetch(`/cases/${caseValue}/jobs/${jobId}/metadata/modal/`, {
+            headers: { 'HX-Request': 'true' },
+            credentials: 'same-origin',
+          });
+          const text = await resp.text();
+          if (!resp.ok) {
+            console.error('Job metadata modal HTTP error', resp.status, text.slice(0, 500));
+            showErrorModal(`HTTP ${resp.status}`, text);
+            return;
+          }
+          const modal = window.udocketModal.openFromHTML(text, { container });
+          if (!modal) {
+            console.error('Job metadata modal missing [data-modal] wrapper');
+            showErrorModal('Metadata unavailable', text);
+          }
+        } catch (error) {
+          console.error('Job metadata modal failed', jobId, error);
+          showErrorModal('Unable to load metadata', error && error.message ? error.message : String(error));
         }
       }
 
@@ -977,14 +983,17 @@
           });
           if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
           const html = await resp.text();
-          if (modalRoot) {
-            modalRoot.innerHTML = html;
-          } else {
-            const temp = document.createElement('div');
-            temp.innerHTML = html;
-            document.body.appendChild(temp);
+          const modal = window.udocketModal.openFromHTML(html, {
+            container: modalRoot || undefined,
+          });
+          if (!modal) {
+            window.udocketModal.message({
+              heading: 'Transcript Preview',
+              title: 'Unable to load transcript',
+              body: 'No transcript content available.',
+              container: modalRoot || undefined,
+            });
           }
-          mountModal();
         } catch (error) {
           console.error('Transcript preview failed', jobId, error);
           if (window.udocketShowToastAt) {
@@ -1042,7 +1051,15 @@
         } else if (action === 'create-artifact') {
           const endpoint = transcriptAction.getAttribute('data-artifact-endpoint');
           if (!endpoint) return;
-          if (!window.confirm('Add this transcript as a case artifact?')) return;
+          const confirmed = await window.udocketModal.confirm({
+            heading: 'Create Artifact',
+            title: 'Promote transcript?',
+            body: 'Add this transcript as a case artifact?',
+            confirmLabel: 'Create artifact',
+            cancelLabel: 'Cancel',
+            container: modalRoot || undefined,
+          });
+          if (!confirmed) return;
           transcriptAction.disabled = true;
           const toastX = evt.clientX || window.innerWidth / 2;
           const toastY = evt.clientY || window.innerHeight / 2;
