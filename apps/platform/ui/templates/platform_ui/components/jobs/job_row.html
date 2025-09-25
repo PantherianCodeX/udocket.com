@@ -91,8 +91,9 @@
             {% if created_dt %}
               {# Standard datetime block: keep date on top, hh:mm AM/PM below. Reuse this snippet when rendering datetimes. #}
               <div class="leading-tight">
-                <div><time data-ts="{{ created_dt|date:'c' }}">{{ created_dt|date:'M j, Y' }}</time></div>
-                <div class="text-[11px] text-slate-400"><time data-ts="{{ created_dt|date:'c' }}">{{ created_dt|date:'g:i A' }}</time></div>
+                {# Timestamp layout: keep date on first line, time on second. Update renderLocalTimes when changing this structure. #}
+                <div><time data-ts="{{ created_dt|date:'c' }}" data-ts-format="date">{{ created_dt|date:'M d, Y' }}</time></div>
+                <div class="text-[11px] text-slate-400"><time data-ts="{{ created_dt|date:'c' }}" data-ts-format="time">{{ created_dt|date:'h:i A' }}</time></div>
               </div>
             {% else %}
               <span>—</span>

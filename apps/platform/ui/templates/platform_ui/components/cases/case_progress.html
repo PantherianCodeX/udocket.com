@@ -5,7 +5,7 @@
       <p class="text-xs text-slate-300">Track reviewer assignment and downstream analyses.</p>
     </div>
     {% if case.updated_at %}
-      <p class="text-xs text-slate-400">Updated <time data-ts="{{ case.updated_at|date:'c' }}">{{ case.updated_at }}</time></p>
+      <p class="text-xs text-slate-400">Updated <time data-ts="{{ case.updated_at|date:'c' }}" data-ts-format="datetime">{{ case.updated_at|date:'M d, Y h:i A' }}</time></p>
     {% endif %}
   </div>
 
@@ -34,7 +34,7 @@
           </p>
           <p class="mt-1 text-xs text-slate-300" data-status-detail>
             {% if item.updated %}
-              Updated <time data-ts="{{ item.updated|date:'c' }}">{{ item.updated }}</time>
+              Updated <time data-ts="{{ item.updated|date:'c' }}" data-ts-format="datetime">{{ item.updated|date:'M d, Y h:i A' }}</time>
             {% else %}
               Awaiting first transcription run.
             {% endif %}
@@ -52,7 +52,7 @@
           </p>
           <p class="mt-2 text-xs text-slate-300" id="module-transcription-summary-text">
             {% if item.telemetry and item.telemetry.status %}
-              Latest job {{ item.telemetry.status|title }}{% if item.updated %} · <time data-ts="{{ item.updated|date:'c' }}">{{ item.updated }}</time>{% endif %}
+              Latest job {{ item.telemetry.status|title }}{% if item.updated %} · <time data-ts="{{ item.updated|date:'c' }}" data-ts-format="datetime">{{ item.updated|date:'M d, Y h:i A' }}</time>{% endif %}
             {% else %}
               Ready to launch the first transcription.
             {% endif %}
@@ -71,7 +71,7 @@
             <span class="inline-flex items-center rounded-full border {{ item.status_class }} px-2 py-1 text-[10px] font-semibold uppercase">{{ item.status }}</span>
           </div>
           {% if item.job %}
-            <p class="mt-2 text-xs text-slate-300">Latest: <span class="font-semibold text-white">{{ item.job.status }}</span>{% if item.updated %} · <time data-ts="{{ item.updated|date:'c' }}">{{ item.updated }}</time>{% endif %}</p>
+            <p class="mt-2 text-xs text-slate-300">Latest: <span class="font-semibold text-white">{{ item.job.status }}</span>{% if item.updated %} · <time data-ts="{{ item.updated|date:'c' }}" data-ts-format="datetime">{{ item.updated|date:'M d, Y h:i A' }}</time>{% endif %}</p>
           {% else %}
             <p class="mt-2 text-xs text-slate-400">Not started</p>
           {% endif %}

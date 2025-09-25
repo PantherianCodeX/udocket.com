@@ -27,7 +27,7 @@
       </div>
       <div class="flex flex-col items-start gap-2 text-xs text-slate-400 md:items-end">
         {% if panel.updated_at %}
-          <span>Last activity <time data-ts="{{ panel.updated_at|date:'c' }}">{{ panel.updated_at|date:'M j, Y g:i A' }}</time></span>
+          <span>Last activity <time data-ts="{{ panel.updated_at|date:'c' }}" data-ts-format="datetime">{{ panel.updated_at|date:'M d, Y h:i A' }}</time></span>
         {% endif %}
         {% if panel.header_actions %}
           <div class="flex flex-wrap justify-end gap-2">{{ panel.header_actions|safe }}</div>

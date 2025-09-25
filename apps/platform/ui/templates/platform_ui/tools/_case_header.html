@@ -20,13 +20,13 @@
         <div class="min-w-0">
           <p class="text-xs uppercase tracking-wide text-slate-400">Next Hearing</p>
           {% if case_header.next_hearing and case_header.next_hearing.value %}
-            <time class="mt-1 block text-sm font-semibold text-white" data-ts="{{ case_header.next_hearing.value|date:'c' }}">{{ case_header.next_hearing.display }}</time>
+            <time class="mt-1 block text-sm font-semibold text-white" data-ts-format="datetime" data-ts="{{ case_header.next_hearing.value|date:'c' }}">{{ case_header.next_hearing.display }}</time>
           {% else %}
             <span class="mt-1 block text-sm text-slate-400">Not scheduled</span>
           {% endif %}
           <p class="mt-3 text-xs uppercase tracking-wide text-slate-400">Filing Deadline</p>
           {% if case_header.filing_deadline and case_header.filing_deadline.value %}
-            <time class="mt-1 block text-sm font-semibold text-white" data-ts="{{ case_header.filing_deadline.value|date:'c' }}">{{ case_header.filing_deadline.display }}</time>
+            <time class="mt-1 block text-sm font-semibold text-white" data-ts-format="date" data-ts="{{ case_header.filing_deadline.value|date:'c' }}">{{ case_header.filing_deadline.display }}</time>
           {% else %}
             <span class="mt-1 block text-sm text-slate-400">Not set</span>
           {% endif %}
@@ -39,7 +39,7 @@
               {% if case_header.last_activity_label %}
                 {{ case_header.last_activity_label }} ·
               {% endif %}
-              <time data-ts="{{ case_header.last_activity_ts|date:'c' }}">{{ case_header.last_activity_ts|date:'M j, Y g:i A' }}</time>
+              <time data-ts="{{ case_header.last_activity_ts|date:'c' }}" data-ts-format="datetime">{{ case_header.last_activity_ts|date:'M d, Y h:i A' }}</time>
             {% else %}
               Not recorded
             {% endif %}
@@ -60,7 +60,7 @@
             {% else %}
               <dd class="mt-1 text-sm text-slate-100">
                 {% if field.type == 'datetime' and field.value %}
-                  <time data-ts="{{ field.value|date:'c' }}">{{ field.display }}</time>
+                  <time data-ts="{{ field.value|date:'c' }}" data-ts-format="datetime">{{ field.display }}</time>
                 {% else %}
                   {{ field.display|default:'—' }}
                 {% endif %}
@@ -77,7 +77,7 @@
           {% if case_header.last_activity_label %}
             {{ case_header.last_activity_label }} ·
           {% endif %}
-          <time data-ts="{{ case_header.last_activity_ts|date:'c' }}">{{ case_header.last_activity_ts|date:'M j, Y g:i A' }}</time>
+          <time data-ts="{{ case_header.last_activity_ts|date:'c' }}" data-ts-format="datetime">{{ case_header.last_activity_ts|date:'M d, Y h:i A' }}</time>
         {% else %}
           Not recorded
         {% endif %}

@@ -20,7 +20,7 @@
         <p class="text-xs text-slate-400">
           {% if job_id %}Job {{ job_id|short_uuid }}{% endif %}
           {% if created_at %}
-            {% if job_id %} · {% endif %}<time data-ts="{{ created_at|date:'c' }}">{{ created_at|date:'M j, Y g:i A' }}</time>
+            {% if job_id %} · {% endif %}<time data-ts="{{ created_at|date:'c' }}" data-ts-format="datetime">{{ created_at|date:'M d, Y h:i A' }}</time>
           {% endif %}
         </p>
       {% endif %}

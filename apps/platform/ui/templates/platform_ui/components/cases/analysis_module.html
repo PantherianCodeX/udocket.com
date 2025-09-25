@@ -4,7 +4,7 @@
       <p class="text-xs uppercase tracking-wide text-slate-400">{{ module.label }}</p>
       <p class="mt-0.5 text-xs text-slate-300">{{ module.description }}</p>
       {% if module.latest and module.header_hint == "Latest run" %}
-        <p class="mt-1 text-xs text-slate-400">Latest run <time data-ts="{{ module.header_hint_time|date:'c' }}">{{ module.header_hint_time }}</time></p>
+        <p class="mt-1 text-xs text-slate-400">Latest run <time data-ts="{{ module.header_hint_time|date:'c' }}" data-ts-format="datetime">{{ module.header_hint_time|date:'M d, Y h:i A' }}</time></p>
       {% else %}
         <p class="mt-1 text-xs text-slate-400">{{ module.header_hint }}</p>
       {% endif %}
@@ -58,7 +58,7 @@
           {% endif %}
         </div>
         <div class="flex items-center gap-2 text-xs text-slate-400">
-          <time data-ts="{{ module.latest.created_at|date:'c' }}">{{ module.latest.created_at }}</time>
+          <time data-ts="{{ module.latest.created_at|date:'c' }}" data-ts-format="datetime">{{ module.latest.created_at|date:'M d, Y h:i A' }}</time>
           {% if module.latest.download_url %}
             <a class="inline-flex items-center gap-1 rounded border border-white/20 bg-white/5 px-2 py-1 text-[11px] font-semibold text-slate-100 transition hover:border-primary-400 hover:text-white"
                href="{{ module.latest.download_url }}" download>
@@ -90,7 +90,7 @@
               {% endif %}
             </div>
             <div class="flex items-center gap-2">
-              <time data-ts="{{ item.created_at|date:'c' }}">{{ item.created_at }}</time>
+              <time data-ts="{{ item.created_at|date:'c' }}" data-ts-format="datetime">{{ item.created_at|date:'M d, Y h:i A' }}</time>
               {% if item.download_url %}
                 <a class="inline-flex items-center gap-1 rounded border border-white/20 bg-white/5 px-2 py-1 text-[11px] font-semibold text-slate-100 transition hover:border-primary-400 hover:text-white"
                    href="{{ item.download_url }}" download>

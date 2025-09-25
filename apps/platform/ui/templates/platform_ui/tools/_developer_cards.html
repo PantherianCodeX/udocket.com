@@ -21,7 +21,7 @@
       </div>
       <div class="mt-4 text-[11px] uppercase tracking-wide text-slate-500">
         {% if card.updated_at %}
-          Updated <time data-ts="{{ card.updated_at|date:'c' }}">{{ card.updated_at|date:'M j, Y g:i A' }}</time>
+          Updated <time data-ts="{{ card.updated_at|date:'c' }}" data-ts-format="datetime">{{ card.updated_at|date:'M d, Y h:i A' }}</time>
         {% else %}
           No activity yet
         {% endif %}

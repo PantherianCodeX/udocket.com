@@ -11,15 +11,15 @@
       <div class="grid gap-3 text-xs text-slate-400 sm:grid-cols-3">
         <div>
           <span class="uppercase tracking-wide text-slate-500">Created</span>
-          <div class="mt-1 text-slate-100">{% if job.created_at %}<time data-ts="{{ job.created_at|date:'c' }}">{{ job.created_at|date:'M j, Y g:i:s A' }}</time>{% else %}—{% endif %}</div>
+          <div class="mt-1 text-slate-100">{% if job.created_at %}<time data-ts="{{ job.created_at|date:'c' }}" data-ts-format="datetime-seconds">{{ job.created_at|date:'M d, Y h:i:s A' }}</time>{% else %}—{% endif %}</div>
         </div>
         <div>
           <span class="uppercase tracking-wide text-slate-500">Started</span>
-          <div class="mt-1 text-slate-100">{% if job.started_at %}<time data-ts="{{ job.started_at|date:'c' }}">{{ job.started_at|date:'M j, Y g:i:s A' }}</time>{% else %}—{% endif %}</div>
+          <div class="mt-1 text-slate-100">{% if job.started_at %}<time data-ts="{{ job.started_at|date:'c' }}" data-ts-format="datetime-seconds">{{ job.started_at|date:'M d, Y h:i:s A' }}</time>{% else %}—{% endif %}</div>
         </div>
         <div>
           <span class="uppercase tracking-wide text-slate-500">Finished</span>
-          <div class="mt-1 text-slate-100">{% if job.finished_at %}<time data-ts="{{ job.finished_at|date:'c' }}">{{ job.finished_at|date:'M j, Y g:i:s A' }}</time>{% else %}—{% endif %}</div>
+          <div class="mt-1 text-slate-100">{% if job.finished_at %}<time data-ts="{{ job.finished_at|date:'c' }}" data-ts-format="datetime-seconds">{{ job.finished_at|date:'M d, Y h:i:s A' }}</time>{% else %}—{% endif %}</div>
         </div>
       </div>
     </div>
@@ -245,7 +245,7 @@
         <p class="mt-2 text-xs text-slate-500" data-review-meta>
           {% if telemetry.reviewed_by %}
             Reviewed by <span class="font-semibold text-slate-100">{{ telemetry.reviewed_by.label }}</span>
-            {% if telemetry.reviewed_at %} · <time data-ts="{{ telemetry.reviewed_at|date:'c' }}">{{ telemetry.reviewed_at }}</time>{% endif %}
+            {% if telemetry.reviewed_at %} · <time data-ts="{{ telemetry.reviewed_at|date:'c' }}" data-ts-format="datetime">{{ telemetry.reviewed_at|date:'M d, Y h:i A' }}</time>{% endif %}
           {% else %}
             Awaiting reviewer decision.
           {% endif %}

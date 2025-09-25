@@ -44,7 +44,7 @@
                   </span>
                   <span class="font-medium">{{ c.title|default:c.id }}</span>
                 </td>
-                <td class="px-4 py-3 text-slate-300"><time data-ts="{{ c.created_at|date:'c' }}">{{ c.created_at }}</time></td>
+                <td class="px-4 py-3 text-slate-300"><time data-ts="{{ c.created_at|date:'c' }}" data-ts-format="datetime">{{ c.created_at|date:'M d, Y h:i A' }}</time></td>
                 <td class="px-4 py-3 text-slate-300" data-case-jobs="loading">—</td>
                 <td class="px-4 py-3 text-right">
                   <div class="inline-flex items-center gap-2" onclick="event.stopPropagation();">

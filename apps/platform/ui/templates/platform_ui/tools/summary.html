@@ -31,7 +31,7 @@
       <p class="text-xs uppercase tracking-wide text-slate-400">Latest summary</p>
       {% if module.latest %}
         <p class="font-semibold text-white">{{ module.latest.title }}</p>
-        <p class="text-xs text-slate-400">Generated <time data-ts="{{ module.latest.created_at|date:'c' }}">{{ module.latest.created_at|date:'M j, Y g:i A' }}</time></p>
+        <p class="text-xs text-slate-400">Generated <time data-ts="{{ module.latest.created_at|date:'c' }}" data-ts-format="datetime">{{ module.latest.created_at|date:'M d, Y h:i A' }}</time></p>
         {% if module.latest.download_url %}
           <a href="{{ module.latest.download_url }}" class="inline-flex items-center gap-1 rounded border border-white/15 bg-white/5 px-2 py-1 text-[11px] font-semibold text-slate-100 transition hover:border-primary-400 hover:text-white" download>Download</a>
         {% endif %}
@@ -60,7 +60,7 @@
               {% endif %}
             </div>
             <div class="flex items-center gap-3 text-xs text-slate-400">
-              <time data-ts="{{ item.created_at|date:'c' }}">{{ item.created_at|date:'M j, Y g:i A' }}</time>
+              <time data-ts="{{ item.created_at|date:'c' }}" data-ts-format="datetime">{{ item.created_at|date:'M d, Y h:i A' }}</time>
               {% if item.download_url %}
                 <a href="{{ item.download_url }}" class="inline-flex items-center gap-1 rounded border border-white/15 bg-white/5 px-2 py-1 text-[11px] font-semibold text-slate-100 transition hover:border-primary-400 hover:text-white" download>Download</a>
               {% endif %}

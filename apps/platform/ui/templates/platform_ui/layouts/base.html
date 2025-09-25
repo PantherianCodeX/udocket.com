@@ -28,15 +28,55 @@
       }
     }
 
+    function formatDate(date){
+      const month = date.toLocaleString('en-US', { month: 'short' });
+      const day = date.toLocaleString('en-US', { day: '2-digit' });
+      const year = date.toLocaleString('en-US', { year: 'numeric' });
+      return `${month} ${day}, ${year}`;
+    }
+
+    function cleanTime(str){
+      return (str || '').replace(/\u202f/gi, ' ').replace(/\s+/g, ' ').trim();
+    }
+
+    function formatTime(date, includeSeconds){
+      const opts = { hour: '2-digit', minute: '2-digit', hour12: true };
+      if (includeSeconds) opts.second = '2-digit';
+      return cleanTime(date.toLocaleString('en-US', opts));
+    }
+
+    function formatDateTime(date, includeSeconds){
+      return `${formatDate(date)} ${formatTime(date, includeSeconds)}`;
+    }
+
     function renderLocalTimes(){
       document.querySelectorAll('[data-ts]').forEach(el => {
         const iso = el.getAttribute('data-ts');
         if (!iso) return;
         const d = new Date(iso);
-        if (!isNaN(d.getTime())) {
-          el.textContent = d.toLocaleString();
-          el.setAttribute('title', d.toISOString());
+        if (Number.isNaN(d.getTime())) return;
+        const mode = (el.getAttribute('data-ts-format') || '').toLowerCase();
+        let text;
+        switch (mode) {
+          case 'date':
+            text = formatDate(d);
+            break;
+          case 'time':
+            text = formatTime(d, false);
+            break;
+          case 'time-seconds':
+            text = formatTime(d, true);
+            break;
+          case 'datetime-seconds':
+            text = formatDateTime(d, true);
+            break;
+          case 'datetime':
+          default:
+            text = formatDateTime(d, false);
+            break;
         }
+        el.textContent = text;
+        el.setAttribute('title', d.toISOString());
       });
     }
     window.addEventListener('DOMContentLoaded', renderLocalTimes);

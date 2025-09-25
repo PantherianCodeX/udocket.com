@@ -29,9 +29,9 @@
         <span class="uppercase tracking-wide text-slate-500">Last Updated</span>
         <p class="mt-1 font-medium text-slate-100">
           {% if body.job_summary_last_dt %}
-            <time data-ts="{{ body.job_summary_last_dt|date:'c' }}">{{ body.job_summary_last_dt|date:'M j, Y g:i A' }}</time>
+            <time data-ts="{{ body.job_summary_last_dt|date:'c' }}" data-ts-format="datetime">{{ body.job_summary_last_dt|date:'M d, Y h:i A' }}</time>
           {% elif body.job_summary.last_update %}
-            <time data-ts="{{ body.job_summary.last_update }}">{{ body.job_summary.last_update }}</time>
+            <time data-ts="{{ body.job_summary.last_update }}" data-ts-format="datetime">{{ body.job_summary.last_update|date:'M d, Y h:i A' }}</time>
           {% else %}
             Not recorded
           {% endif %}
