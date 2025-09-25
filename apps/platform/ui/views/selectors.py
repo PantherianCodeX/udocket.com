@@ -7,20 +7,20 @@ from django.http import HttpRequest
 from apps.platform.jobs.models import Job
 from apps.platform.jobs.serializers import JobTelemetrySerializer
 
-from .common import JobTelemetryPayload, _as_dict
+from .common import JobTelemetryPayload, as_dict
 
 
-def _job_telemetry_payload(
+def job_telemetry_payload(
     job: Job,
     request: Optional[HttpRequest],
     *,
     ui_mode: bool = True,
 ) -> JobTelemetryPayload:
     serializer = JobTelemetrySerializer(job, context={"request": request, "ui_mode": ui_mode})
-    return _as_dict(serializer.data)
+    return as_dict(serializer.data)
 
 
-def _job_telemetry_map(
+def job_telemetry_map(
     jobs: List[Job],
     request: Optional[HttpRequest],
     *,
@@ -29,7 +29,7 @@ def _job_telemetry_map(
     serializer = JobTelemetrySerializer(jobs, many=True, context={"request": request, "ui_mode": ui_mode})
     payloads: List[JobTelemetryPayload] = []
     for item in serializer.data:
-        payloads.append(_as_dict(item))
+        payloads.append(as_dict(item))
     telemetry_map: Dict[str, JobTelemetryPayload] = {}
     for payload in payloads:
         identifier = payload.get("id")

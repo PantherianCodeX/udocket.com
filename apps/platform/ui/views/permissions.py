@@ -13,12 +13,12 @@ from apps.platform.authorization.capabilities import role_capabilities
 from apps.platform.authorization.models import PermissionPreset, Role
 from apps.platform.tenancy import accessible_organization_ids
 
-from .auth import _ensure_authenticated
+from .auth import ensure_authenticated
 
 
 @require_http_methods(["GET"])
 def permissions_overview(request: HttpRequest) -> HttpResponse:
-    auth_response = _ensure_authenticated(request)
+    auth_response = ensure_authenticated(request)
     if auth_response:
         return auth_response
 

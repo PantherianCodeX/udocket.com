@@ -1,20 +1,16 @@
 from __future__ import annotations
 
 from django.conf import settings
+from django.contrib.auth import logout
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.views.decorators.http import require_http_methods
-from django.contrib.auth import logout
 
-from apps.platform.accounts.utils import (
-    resolve_request_organization,
-    set_active_admin_org_id,
-    user_accessible_organizations,
-)
+from apps.platform.accounts.utils import set_active_admin_org_id, user_accessible_organizations
 
 
-def _ensure_authenticated(request: HttpRequest) -> HttpResponse | None:
+def ensure_authenticated(request: HttpRequest) -> HttpResponse | None:
     """Gate UI views when dev-open mode is disabled."""
 
     user = getattr(request, "user", None)

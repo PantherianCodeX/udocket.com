@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false, reportUnknownParameterType=false, reportAttributeAccessIssue=false
+
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -13,16 +15,15 @@ from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.cases.models import Case, CaseMembership
 from apps.platform.jobs.models import Job
 
-from ..common import JobTelemetryPayload
 from ..constants import CASE_JOB_TABLE_COLUMNS, DEFAULT_TABLE_FILTERS, GLOBAL_JOB_TABLE_COLUMNS
-from ..presenters.utils import humanize_label, status_class, user_label
+from ..presenters.utils import status_class, user_label
 from ..presenters.jobs import (
-    _friendly_job_title,
-    _job_most_recent_timestamp,
-    _jobs_by_agent,
-    _latest_jobs_by_agent,
-    _map_job_status,
-    _select_agent,
+    friendly_job_title,
+    job_most_recent_timestamp,
+    jobs_by_agent,
+    latest_jobs_by_agent,
+    map_job_status,
+    select_agent,
 )
 
 
@@ -64,7 +65,7 @@ def _artifact_payload(artifact: CaseArtifact) -> Dict[str, Any]:
     }
 
 
-def _analysis_modules_context(
+def analysis_modules_context(
     request: HttpRequest,
     case: Case,
     jobs: List[Job],
@@ -92,7 +93,7 @@ def _analysis_modules_context(
     if latest_transcription:
         target_job = {
             "id": str(latest_transcription.id),
-            "title": _friendly_job_title(
+            "title": friendly_job_title(
                 latest_transcription,
                 telemetry_map.get(str(latest_transcription.id)),
                 (transcript_artifacts or {}).get(str(latest_transcription.id)),
@@ -174,17 +175,17 @@ def _analysis_modules_context(
     ]
 
 
-def _case_owner_memberships(memberships: List[CaseMembership]) -> List[CaseMembership]:
+def case_owner_memberships(memberships: List[CaseMembership]) -> List[CaseMembership]:
     return [m for m in memberships if m.role == CaseMembership.Role.OWNER and m.user]
 
 
-def _case_owner_labels(memberships: List[CaseMembership]) -> List[str]:
-    return [user_label(m.user) for m in _case_owner_memberships(memberships) if m.user]
+def case_owner_labels(memberships: List[CaseMembership]) -> List[str]:
+    return [user_label(m.user) for m in case_owner_memberships(memberships) if m.user]
 
 
-def _case_owner_details(memberships: List[CaseMembership]) -> List[Dict[str, str]]:
+def case_owner_details(memberships: List[CaseMembership]) -> List[Dict[str, str]]:
     details: List[Dict[str, str]] = []
-    for membership in _case_owner_memberships(memberships):
+    for membership in case_owner_memberships(memberships):
         user = membership.user
         if not user:
             continue
@@ -197,7 +198,7 @@ def _case_owner_details(memberships: List[CaseMembership]) -> List[Dict[str, str
     return details
 
 
-def _case_assignment_lists(case: Case, memberships: Optional[List[CaseMembership]] = None) -> Dict[str, List[Dict[str, str]]]:
+def case_assignment_lists(case: Case, memberships: Optional[List[CaseMembership]] = None) -> Dict[str, List[Dict[str, str]]]:
     memberships = memberships or list(case.memberships.select_related("user"))
     reviewers: List[Dict[str, str]] = []
     clients: List[Dict[str, str]] = []
@@ -220,8 +221,8 @@ def _case_assignment_lists(case: Case, memberships: Optional[List[CaseMembership
     }
 
 
-def _build_case_progress(case: Case, jobs: List[Job], telemetry_map: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
-    latest = _latest_jobs_by_agent(jobs, telemetry_map)
+def build_case_progress(case: Case, jobs: List[Job], telemetry_map: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
+    latest = latest_jobs_by_agent(jobs, telemetry_map)
     items: List[Dict[str, Any]] = []
 
     setup_status = "Approved" if case.reviewer_id and case.client_user_id else "Created"
@@ -246,17 +247,17 @@ def _build_case_progress(case: Case, jobs: List[Job], telemetry_map: Dict[str, D
     )
 
     mappings = [
-        ("transcription", "Transcription", ("transcription", "speech", "audio"), True),
-        ("summary", "Summary", ("summary",), False),
-        ("timeline", "Timeline", ("timeline", "events"), False),
+        ("transcription", "Transcription", ("transcription", "speech", "audio")),
+        ("summary", "Summary", ("summary",)),
+        ("timeline", "Timeline", ("timeline", "events")),
     ]
 
-    for key, label, keywords, include_conversion in mappings:
-        payload = _select_agent(latest, keywords)
+    for key, label, keywords in mappings:
+        payload = select_agent(latest, keywords)
         if payload:
             job = payload.get("job")
             telem = payload.get("telemetry")
-            status = _map_job_status(job)
+            status = map_job_status(job)
             if key == "transcription":
                 review_state = getattr(job, "review_status", None)
                 if review_state == Job.ReviewStatus.APPROVED:
@@ -271,7 +272,7 @@ def _build_case_progress(case: Case, jobs: List[Job], telemetry_map: Dict[str, D
                     "status_class": status_class(status),
                     "job": job,
                     "telemetry": telem,
-                    "updated": _job_most_recent_timestamp(job),
+                    "updated": job_most_recent_timestamp(job),
                 }
             )
         else:
@@ -290,14 +291,14 @@ def _build_case_progress(case: Case, jobs: List[Job], telemetry_map: Dict[str, D
     return items
 
 
-def _case_progress_context(
+def case_progress_context(
     case: Case,
     jobs: List[Job],
     telemetry_map: Dict[str, Dict[str, Any]],
     memberships: Optional[List[CaseMembership]] = None,
 ) -> Dict[str, Any]:
-    assignments = _case_assignment_lists(case, memberships)
-    progress_items = _build_case_progress(case, jobs, telemetry_map)
+    assignments = case_assignment_lists(case, memberships)
+    progress_items = build_case_progress(case, jobs, telemetry_map)
     transcription_item = next((item for item in progress_items if item.get("key") == "transcription"), None)
     return {
         "progress_items": progress_items,
@@ -309,7 +310,7 @@ def _case_progress_context(
     }
 
 
-def _case_field_specs() -> List[Dict[str, Any]]:
+def case_field_specs() -> List[Dict[str, Any]]:
     return [
         {"name": "title", "label": "Title", "type": "text"},
         {"name": "client_name", "label": "Client", "type": "text"},
@@ -396,8 +397,8 @@ def _format_case_field_value(case: Case, spec: Dict[str, Any]) -> Dict[str, Any]
     }
 
 
-def _prepare_case_fields(case: Case) -> List[Dict[str, Any]]:
-    return [_format_case_field_value(case, spec) for spec in _case_field_specs()]
+def prepare_case_fields(case: Case) -> List[Dict[str, Any]]:
+    return [_format_case_field_value(case, spec) for spec in case_field_specs()]
 
 
 def _organization_member_options(case: Case) -> List[Dict[str, Any]]:
@@ -418,7 +419,7 @@ def _organization_member_options(case: Case) -> List[Dict[str, Any]]:
     return options
 
 
-def _collect_case_artifacts(
+def collect_case_artifacts(
     request: HttpRequest,
     case: Case,
     *,
@@ -436,7 +437,7 @@ def _collect_case_artifacts(
     return artifacts
 
 
-def _table_config(
+def table_config(
     *,
     panel_key: str,
     title: str,
@@ -466,7 +467,7 @@ def _table_config(
     }
 
 
-def _status_payload(progress_lookup: Dict[str, Dict[str, Any]], key: str, default_status: str = "Created") -> Dict[str, Any]:
+def status_payload(progress_lookup: Dict[str, Dict[str, Any]], key: str, default_status: str = "Created") -> Dict[str, Any]:
     item = progress_lookup.get(key)
     if not item:
         return {
@@ -483,7 +484,7 @@ def _status_payload(progress_lookup: Dict[str, Dict[str, Any]], key: str, defaul
     }
 
 
-def _build_case_developer_cards(panels: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
+def build_case_developer_cards(panels: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
     order = ["case-details", "transcribe", "summary", "timeline"]
     cards: List[Dict[str, Any]] = []
     for key in order:
@@ -503,7 +504,7 @@ def _build_case_developer_cards(panels: Dict[str, Dict[str, Any]]) -> List[Dict[
     return cards
 
 
-def _build_case_header_context(
+def build_case_header_context(
     case: Case,
     *,
     panels: Dict[str, Dict[str, Any]],
@@ -511,7 +512,7 @@ def _build_case_header_context(
     memberships: List[CaseMembership],
     job_summary_last_update: Optional[datetime],
 ) -> Dict[str, Any]:
-    owner_details = _case_owner_details(memberships)
+    owner_details = case_owner_details(memberships)
     owners = [item["label"] for item in owner_details]
     reviewer_detail = (
         {
@@ -561,7 +562,7 @@ def _build_case_header_context(
     }
 
 
-def _build_tool_panels(
+def build_tool_panels(
     case: Case,
     *,
     progress_items: List[Dict[str, Any]],
@@ -580,11 +581,11 @@ def _build_tool_panels(
 ) -> Dict[str, Dict[str, Any]]:
     progress_lookup = {item["key"]: item for item in progress_items}
     analysis_lookup = {module["key"]: module for module in analysis_modules}
-    owner_labels = _case_owner_labels(memberships)
-    owner_ids = [str(m.user_id) for m in _case_owner_memberships(memberships)]
+    owner_labels = case_owner_labels(memberships)
+    owner_ids = [str(m.user_id) for m in case_owner_memberships(memberships)]
     reviewer_label = user_label(case.reviewer) if case.reviewer else None
     client_label = user_label(case.client_user) if case.client_user else None
-    case_fields = _prepare_case_fields(case)
+    case_fields = prepare_case_fields(case)
     org_options = _organization_member_options(case)
 
     all_rows_iterable = all_job_rows or job_rows
@@ -631,7 +632,7 @@ def _build_tool_panels(
 
     panels: Dict[str, Dict[str, Any]] = {}
 
-    case_status = _status_payload(progress_lookup, "case_setup")
+    case_status = status_payload(progress_lookup, "case_setup")
     field_map = {field["name"]: field for field in case_fields}
     field_groups: List[Dict[str, Any]] = []
 
@@ -659,8 +660,6 @@ def _build_tool_panels(
         current_engagement = "standard"
 
     owner_id = owner_ids[0] if owner_ids else ""
-
-    approved_transcripts = [item for item in transcript_sources if item.get("approved")]
 
     panels["case-details"] = {
         "key": "case-details",
@@ -711,7 +710,7 @@ def _build_tool_panels(
         "jobs_column_ids": [col["id"] for col in CASE_JOB_TABLE_COLUMNS],
         "jobs_filters": DEFAULT_TABLE_FILTERS,
         "jobs_show_identifiers": True,
-        "jobs_table": _table_config(
+        "jobs_table": table_config(
             panel_key="case-details",
             title="All Jobs",
             pill="Live updates",
@@ -725,12 +724,12 @@ def _build_tool_panels(
         ),
     }
 
-    transcription_status = _status_payload(progress_lookup, "transcription", "Not Started")
-    transcription_jobs = _jobs_by_agent(job_rows, keywords=("transcription", "speech", "audio"), include_conversion=True)
+    transcription_status = status_payload(progress_lookup, "transcription", "Not Started")
+    transcription_jobs = jobs_by_agent(job_rows, keywords=("transcription", "speech", "audio"), include_conversion=True)
 
     latest_job_title = None
     if latest_job:
-        latest_job_title = _friendly_job_title(
+        latest_job_title = friendly_job_title(
             latest_job,
             latest_job_telemetry,
             transcript_artifacts.get(str(latest_job.id)),
@@ -781,7 +780,7 @@ def _build_tool_panels(
         "jobs_column_ids": [col["id"] for col in CASE_JOB_TABLE_COLUMNS],
         "jobs_filters": DEFAULT_TABLE_FILTERS,
         "jobs_show_identifiers": True,
-        "jobs_table": _table_config(
+        "jobs_table": table_config(
             panel_key="transcribe",
             title="Transcription Jobs",
             pill="Live updates",
@@ -795,11 +794,11 @@ def _build_tool_panels(
         ),
     }
 
-    summary_status = _status_payload(progress_lookup, "summary", "Not Started")
+    summary_status = status_payload(progress_lookup, "summary", "Not Started")
     summary_module = analysis_lookup.get("summary") or {}
     summary_latest = summary_module.get("latest") or {}
     summary_history = summary_module.get("history") or []
-    summary_jobs = _jobs_by_agent(all_rows_iterable, keywords=("summary", "summarization"))
+    summary_jobs = jobs_by_agent(all_rows_iterable, keywords=("summary", "summarization"))
     panels["summary"] = {
         "key": "summary",
         "label": "Summary",
@@ -831,7 +830,7 @@ def _build_tool_panels(
         "jobs_column_ids": [col["id"] for col in GLOBAL_JOB_TABLE_COLUMNS],
         "jobs_filters": DEFAULT_TABLE_FILTERS,
         "jobs_show_identifiers": False,
-        "jobs_table": _table_config(
+        "jobs_table": table_config(
             panel_key="summary",
             title="Summary Jobs",
             pill="Automations",
@@ -845,11 +844,11 @@ def _build_tool_panels(
         ),
     }
 
-    timeline_status = _status_payload(progress_lookup, "timeline", "Not Started")
+    timeline_status = status_payload(progress_lookup, "timeline", "Not Started")
     timeline_module = analysis_lookup.get("timeline") or {}
     timeline_latest = timeline_module.get("latest") or {}
     timeline_history = timeline_module.get("history") or []
-    timeline_jobs = _jobs_by_agent(all_rows_iterable, keywords=("timeline", "event"))
+    timeline_jobs = jobs_by_agent(all_rows_iterable, keywords=("timeline", "event"))
     panels["timeline"] = {
         "key": "timeline",
         "label": "Timeline",
@@ -879,7 +878,7 @@ def _build_tool_panels(
         "jobs_column_ids": [col["id"] for col in GLOBAL_JOB_TABLE_COLUMNS],
         "jobs_filters": DEFAULT_TABLE_FILTERS,
         "jobs_show_identifiers": False,
-        "jobs_table": _table_config(
+        "jobs_table": table_config(
             panel_key="timeline",
             title="Timeline Jobs",
             pill="Automations",

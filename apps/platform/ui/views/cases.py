@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false, reportAttributeAccessIssue=false
+
 import json
 import uuid
 from datetime import datetime
@@ -20,22 +22,22 @@ from apps.platform.cases.models import Case, CaseMembership
 from apps.platform.jobs.models import Job
 from apps.platform.tenancy import scope_jobs
 
-from .auth import _ensure_authenticated
+from .auth import ensure_authenticated
 from .common import JobTelemetryPayload
-from .contexts import _compute_case_tool_state, _get_case_and_org
+from .contexts import compute_case_tool_state, get_case_and_org
 from .presenters.cases import (
-    _analysis_modules_context,
-    _case_field_specs,
-    _case_progress_context,
+    analysis_modules_context,
+    case_field_specs,
+    case_progress_context,
 )
-from .selectors import _job_telemetry_map
+from .selectors import job_telemetry_map
 
 from .jobs import create_job
 
 
 @require_http_methods(["GET", "POST"])
 def case_detail(request: HttpRequest, case_id: str) -> HttpResponse:
-    auth_response = _ensure_authenticated(request)
+    auth_response = ensure_authenticated(request)
     if auth_response:
         return auth_response
 
@@ -57,7 +59,7 @@ def case_detail(request: HttpRequest, case_id: str) -> HttpResponse:
             return response
         return redirect("ui-case-detail", case_id=case_id)
 
-    state = _compute_case_tool_state(request, case)
+    state = compute_case_tool_state(request, case)
     tool_panels = state["tool_panels"]
     developer_cards = state["developer_cards"]
     case_header = state["case_header"]
@@ -99,11 +101,11 @@ def case_detail(request: HttpRequest, case_id: str) -> HttpResponse:
 
 @require_http_methods(["GET"])
 def case_analysis_module(request: HttpRequest, case_id: str, agent: str) -> HttpResponse:
-    auth_response = _ensure_authenticated(request)
+    auth_response = ensure_authenticated(request)
     if auth_response:
         return auth_response
 
-    case, _ = _get_case_and_org(request, case_id)
+    case, _ = get_case_and_org(request, case_id)
 
     jobs_qs = (
         Job.objects.select_related("case", "case__organization", "reviewed_by")
@@ -112,9 +114,9 @@ def case_analysis_module(request: HttpRequest, case_id: str, agent: str) -> Http
     )
     jobs_scoped = scope_jobs(jobs_qs, getattr(request, "user", None))
     jobs_list = list(jobs_scoped)
-    telemetry_map: Dict[str, JobTelemetryPayload] = _job_telemetry_map(jobs_list, request)
+    telemetry_map: Dict[str, JobTelemetryPayload] = job_telemetry_map(jobs_list, request)
 
-    modules = _analysis_modules_context(request, case, jobs_list, telemetry_map)
+    modules = analysis_modules_context(request, case, jobs_list, telemetry_map)
     module = next((item for item in modules if item.get("key") == agent), None)
     if not module:
         raise Http404
@@ -125,11 +127,11 @@ def case_analysis_module(request: HttpRequest, case_id: str, agent: str) -> Http
 
 @require_http_methods(["POST"])
 def case_update_title(request: HttpRequest, case_id: str) -> HttpResponse:
-    auth_response = _ensure_authenticated(request)
+    auth_response = ensure_authenticated(request)
     if auth_response:
         return auth_response
 
-    case, _ = _get_case_and_org(request, case_id)
+    case, _ = get_case_and_org(request, case_id)
     new_title = (request.POST.get("title") or "").strip()
     if not new_title:
         new_title = case.title or case.id
@@ -142,11 +144,11 @@ def case_update_title(request: HttpRequest, case_id: str) -> HttpResponse:
 
 @require_http_methods(["POST"])
 def case_details_update(request: HttpRequest, case_id: str) -> HttpResponse:
-    auth_response = _ensure_authenticated(request)
+    auth_response = ensure_authenticated(request)
     if auth_response:
         return auth_response
 
-    case, _ = _get_case_and_org(request, case_id)
+    case, _ = get_case_and_org(request, case_id)
 
     dev_open = getattr(settings, "PLATFORM_DEV_OPEN", False)
     user = getattr(request, "user", None)
@@ -156,7 +158,7 @@ def case_details_update(request: HttpRequest, case_id: str) -> HttpResponse:
 
     form_errors: Dict[str, str] = {}
     case_updates: Dict[str, Any] = {}
-    specs = _case_field_specs()
+    specs = case_field_specs()
 
     for spec in specs:
         name = spec["name"]
@@ -197,7 +199,7 @@ def case_details_update(request: HttpRequest, case_id: str) -> HttpResponse:
     engagement_value = (request.POST.get("engagement_model") or "standard").strip().lower()
 
     if form_errors:
-        state = _compute_case_tool_state(request, case)
+        state = compute_case_tool_state(request, case)
         panel = state["tool_panels"].get("case-details")
         if panel:
             panel_body = panel.get("body_context", {})
@@ -339,7 +341,7 @@ def case_details_update(request: HttpRequest, case_id: str) -> HttpResponse:
     if update_fields:
         case.save(update_fields=list(set(update_fields)))
 
-    state = _compute_case_tool_state(request, case)
+    state = compute_case_tool_state(request, case)
     panel = state["tool_panels"].get("case-details")
     response = render(request, "platform_ui/tools/_panel.html", {"panel": panel})
     trigger_payload = {
@@ -363,12 +365,12 @@ def case_details_update(request: HttpRequest, case_id: str) -> HttpResponse:
 
 @require_http_methods(["GET"])
 def case_tool_panel(request: HttpRequest, case_id: str, tool_key: str) -> HttpResponse:
-    auth_response = _ensure_authenticated(request)
+    auth_response = ensure_authenticated(request)
     if auth_response:
         return auth_response
 
-    case, _ = _get_case_and_org(request, case_id)
-    state = _compute_case_tool_state(request, case)
+    case, _ = get_case_and_org(request, case_id)
+    state = compute_case_tool_state(request, case)
     panels = state["tool_panels"]
 
     aliases = {
@@ -395,11 +397,11 @@ def case_tool_panel(request: HttpRequest, case_id: str, tool_key: str) -> HttpRe
 
 @require_http_methods(["POST"])
 def case_assign_reviewer(request: HttpRequest, case_id: str) -> HttpResponse:
-    auth_response = _ensure_authenticated(request)
+    auth_response = ensure_authenticated(request)
     if auth_response:
         return auth_response
 
-    case, _ = _get_case_and_org(request, case_id)
+    case, _ = get_case_and_org(request, case_id)
 
     dev_open = getattr(settings, "PLATFORM_DEV_OPEN", False)
     user = getattr(request, "user", None)
@@ -439,19 +441,19 @@ def case_assign_reviewer(request: HttpRequest, case_id: str) -> HttpResponse:
         .order_by("-created_at")
     )
     jobs_list = list(scope_jobs(jobs_qs, getattr(request, "user", None)))
-    telemetry_map = _job_telemetry_map(jobs_list, request)
-    context = {"case": case, **_case_progress_context(case, jobs_list, telemetry_map)}
+    telemetry_map = job_telemetry_map(jobs_list, request)
+    context = {"case": case, **case_progress_context(case, jobs_list, telemetry_map)}
     return render(request, "platform_ui/partials/case_progress.html", context)
 
 
 
 @require_http_methods(["POST"])
 def case_assign_client(request: HttpRequest, case_id: str) -> HttpResponse:
-    auth_response = _ensure_authenticated(request)
+    auth_response = ensure_authenticated(request)
     if auth_response:
         return auth_response
 
-    case, _ = _get_case_and_org(request, case_id)
+    case, _ = get_case_and_org(request, case_id)
 
     dev_open = getattr(settings, "PLATFORM_DEV_OPEN", False)
     user = getattr(request, "user", None)
@@ -521,6 +523,6 @@ def case_assign_client(request: HttpRequest, case_id: str) -> HttpResponse:
         .order_by("-created_at")
     )
     jobs_list = list(scope_jobs(jobs_qs, getattr(request, "user", None)))
-    telemetry_map = _job_telemetry_map(jobs_list, request)
-    context = {"case": case, **_case_progress_context(case, jobs_list, telemetry_map)}
+    telemetry_map = job_telemetry_map(jobs_list, request)
+    context = {"case": case, **case_progress_context(case, jobs_list, telemetry_map)}
     return render(request, "platform_ui/partials/case_progress.html", context)

@@ -37,20 +37,27 @@ def user_label(user: Any) -> str:
     """Return a human-friendly label for a user instance."""
     if not user:
         return ""
-    display = getattr(user, 'display_name', None)
-    if display:
+    display = getattr(user, "display_name", None)
+    if isinstance(display, str) and display:
         return display
-    getter = getattr(user, 'get_full_name', None)
+    if display is not None:
+        text = str(display)
+        if text:
+            return text
+    getter = getattr(user, "get_full_name", None)
     if callable(getter):
         full_name = getter()
-        if full_name:
+        if isinstance(full_name, str) and full_name:
             return full_name
-    email = getattr(user, 'email', None)
-    if email:
+        if full_name is not None:
+            text = str(full_name)
+            if text:
+                return text
+    email = getattr(user, "email", None)
+    if isinstance(email, str) and email:
         return email
-    username = getattr(user, 'username', None)
-    if username:
+    username = getattr(user, "username", None)
+    if isinstance(username, str) and username:
         return username
-    pk = getattr(user, 'pk', None)
-    return str(pk) if pk is not None else ''
-
+    pk = getattr(user, "pk", None)
+    return str(pk) if pk is not None else ""

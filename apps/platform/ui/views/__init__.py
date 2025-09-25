@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from apps.platform.operations.tasks import transcribe_job
 
-from .auth import _ensure_authenticated, logout_view, select_organization
+from .auth import ensure_authenticated, logout_view, select_organization
 from .cases import (
     case_analysis_module,
     case_assign_client,
@@ -13,11 +13,11 @@ from .cases import (
     case_update_title,
 )
 from .contexts import (
-    _compute_case_tool_state,
-    _format_metadata,
-    _get_case_and_org,
-    _job_detail_context,
-    _user_can_review_case,
+    compute_case_tool_state,
+    format_metadata,
+    get_case_and_org,
+    job_detail_context,
+    user_can_review_case,
 )
 from .dashboard import index
 from .jobs import (
@@ -34,16 +34,16 @@ from .jobs import (
 )
 from .misc import favicon, ui_log
 from .permissions import permissions_overview
-from .presenters.cases import _table_config
+from .presenters.cases import table_config
 
 __all__ = [
-    "_compute_case_tool_state",
-    "_ensure_authenticated",
-    "_format_metadata",
-    "_get_case_and_org",
-    "_job_detail_context",
-    "_table_config",
-    "_user_can_review_case",
+    "compute_case_tool_state",
+    "ensure_authenticated",
+    "format_metadata",
+    "get_case_and_org",
+    "job_detail_context",
+    "table_config",
+    "user_can_review_case",
     "case_analysis_module",
     "case_assign_client",
     "case_assign_reviewer",

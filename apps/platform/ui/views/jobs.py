@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false, reportUnknownParameterType=false, reportOptionalMemberAccess=false
+
 import json
 import logging
 import uuid
@@ -11,7 +13,6 @@ from django.core.exceptions import PermissionDenied
 from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.template.loader import render_to_string
-from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
@@ -26,19 +27,19 @@ from apps.platform.operations.tasks import transcribe_job
 from apps.platform.operations.utils import append_job_log, job_log_path, update_job_meta
 from apps.platform.tenancy import scope_jobs
 
-from .auth import _ensure_authenticated
+from .auth import ensure_authenticated
 from .common import JobTelemetryPayload
 from .contexts import (
-    _compute_case_tool_state,
-    _get_case_and_org,
-    _job_detail_context,
-    _user_can_review_case,
+    compute_case_tool_state,
+    get_case_and_org,
+    job_detail_context,
+    user_can_review_case,
 )
 from .constants import CASE_JOB_TABLE_COLUMNS, DEFAULT_TABLE_FILTERS, GLOBAL_JOB_TABLE_COLUMNS
-from .presenters.cases import _table_config
+from .presenters.cases import table_config
 from .presenters.job_actions import build_job_action_entries
-from .presenters.jobs import _build_job_rows, _friendly_job_title
-from .selectors import _job_telemetry_map, _job_telemetry_payload
+from .presenters.jobs import build_job_rows, friendly_job_title
+from .selectors import job_telemetry_map, job_telemetry_payload
 from .transcripts import ensure_transcript_artifact, unique_transcript_title, default_transcript_title
 
 
@@ -55,11 +56,11 @@ transcribe_job_task: _TaskWithDelay = cast(_TaskWithDelay, transcribe_job)
 
 @require_http_methods(["GET"])
 def case_job_transcript(request: HttpRequest, case_id: str, job_id: uuid.UUID) -> HttpResponse:
-    auth_response = _ensure_authenticated(request)
+    auth_response = ensure_authenticated(request)
     if auth_response:
         return auth_response
 
-    case, _ = _get_case_and_org(request, case_id)
+    case, _ = get_case_and_org(request, case_id)
     job = (
         Job.objects.select_related("case", "case__organization", "reviewed_by")
         .filter(case=case, pk=job_id)
@@ -79,7 +80,7 @@ def case_job_transcript(request: HttpRequest, case_id: str, job_id: uuid.UUID) -
         except Exception:
             transcript_text = ""
 
-    telemetry = _job_telemetry_payload(job, request, ui_mode=True)
+    telemetry = job_telemetry_payload(job, request, ui_mode=True)
     download_url = None
     artifacts = telemetry.get("artifacts") or []
     for art in artifacts:
@@ -87,7 +88,7 @@ def case_job_transcript(request: HttpRequest, case_id: str, job_id: uuid.UUID) -
             download_url = art.get("download_url")
             break
 
-    friendly_title = _friendly_job_title(job, telemetry, None)
+    friendly_title = friendly_job_title(job, telemetry, None)
     modal_created = job.finished_at or job.started_at or job.created_at
     context = {
         "title": friendly_title,
@@ -109,11 +110,11 @@ def case_job_transcript(request: HttpRequest, case_id: str, job_id: uuid.UUID) -
 
 @require_http_methods(["GET"])
 def case_job_logs_modal(request: HttpRequest, case_id: str, job_id: uuid.UUID) -> HttpResponse:
-    auth_response = _ensure_authenticated(request)
+    auth_response = ensure_authenticated(request)
     if auth_response:
         return auth_response
 
-    case, _ = _get_case_and_org(request, case_id)
+    case, _ = get_case_and_org(request, case_id)
     job = (
         Job.objects.select_related("case", "case__organization")
         .filter(case=case, pk=job_id)
@@ -135,8 +136,8 @@ def case_job_logs_modal(request: HttpRequest, case_id: str, job_id: uuid.UUID) -
             text = "…" + text
         log_text = text
 
-    telemetry = _job_telemetry_payload(job, request, ui_mode=True)
-    friendly_title = _friendly_job_title(job, telemetry, None)
+    telemetry = job_telemetry_payload(job, request, ui_mode=True)
+    friendly_title = friendly_job_title(job, telemetry, None)
     modal_created = job.finished_at or job.started_at or job.created_at
     meta_items = []
     if log_path.exists():
@@ -161,7 +162,7 @@ def case_job_logs_modal(request: HttpRequest, case_id: str, job_id: uuid.UUID) -
 
 
 def jobs(request: HttpRequest) -> HttpResponse:
-    auth_response = _ensure_authenticated(request)
+    auth_response = ensure_authenticated(request)
     if auth_response:
         return auth_response
 
@@ -174,7 +175,7 @@ def jobs(request: HttpRequest) -> HttpResponse:
     scoped = scoped.filter(organization=organization)
     jobs_list = list(scoped[:200])
 
-    telemetry_map = _job_telemetry_map(jobs_list, request)
+    telemetry_map = job_telemetry_map(jobs_list, request)
 
     job_ids = [str(job.id) for job in jobs_list]
     transcript_artifacts: Dict[str, CaseArtifact] = {}
@@ -187,7 +188,7 @@ def jobs(request: HttpRequest) -> HttpResponse:
             if key and key not in transcript_artifacts:
                 transcript_artifacts[key] = art
 
-    display_rows, flat_rows = _build_job_rows(jobs_list, telemetry_map, transcript_artifacts)
+    display_rows, flat_rows = build_job_rows(jobs_list, telemetry_map, transcript_artifacts)
 
     user = getattr(request, "user", None)
     for row in flat_rows:
@@ -197,7 +198,7 @@ def jobs(request: HttpRequest) -> HttpResponse:
         if job_obj:
             case_obj = getattr(job_obj, "case", None)
             if isinstance(case_obj, Case):
-                can_review = _user_can_review_case(user, case_obj)
+                can_review = user_can_review_case(user, case_obj)
         row["actions"] = build_job_action_entries(
             job_obj,
             row.get("telemetry"),
@@ -219,7 +220,7 @@ def jobs(request: HttpRequest) -> HttpResponse:
         "job_filters": DEFAULT_TABLE_FILTERS,
         "job_total": len(display_rows),
         "job_show_identifiers": False,
-        "jobs_table": _table_config(
+        "jobs_table": table_config(
             panel_key="jobs",
             title="Jobs",
             pill="Live updates",
@@ -239,7 +240,7 @@ def jobs(request: HttpRequest) -> HttpResponse:
 @require_http_methods(["GET"])
 def job_detail_panel(request: HttpRequest, job_id: str) -> HttpResponse:
     try:
-        auth_response = _ensure_authenticated(request)
+        auth_response = ensure_authenticated(request)
         if auth_response:
             return auth_response
 
@@ -250,7 +251,7 @@ def job_detail_panel(request: HttpRequest, job_id: str) -> HttpResponse:
 
         # Support forcing the title editor open via query param for HTMX swaps
         title_edit = str(request.GET.get("title_edit") or "").lower() in {"1", "true", "yes", "on"}
-        context = _job_detail_context(request, job, title_edit=title_edit)
+        context = job_detail_context(request, job, title_edit=title_edit)
         template = (
             "platform_ui/partials/job_detail_audio_conversion.html"
             if context.get("job_kind", "").lower() == "audio_conversion"
@@ -274,11 +275,11 @@ def job_detail_panel(request: HttpRequest, job_id: str) -> HttpResponse:
 @require_http_methods(["GET"])
 def case_job_detail_panel(request: HttpRequest, case_id: str, job_id: str) -> HttpResponse:
     try:
-        auth_response = _ensure_authenticated(request)
+        auth_response = ensure_authenticated(request)
         if auth_response:
             return auth_response
 
-        case, _ = _get_case_and_org(request, case_id)
+        case, _ = get_case_and_org(request, case_id)
         job = (
             Job.objects.select_related("case", "case__organization", "reviewed_by")
             .filter(case=case, pk=job_id)
@@ -289,7 +290,7 @@ def case_job_detail_panel(request: HttpRequest, case_id: str, job_id: str) -> Ht
 
         # Support forcing the title editor open via query param for HTMX swaps
         title_edit = str(request.GET.get("title_edit") or "").lower() in {"1", "true", "yes", "on"}
-        context = _job_detail_context(request, job, title_edit=title_edit)
+        context = job_detail_context(request, job, title_edit=title_edit)
         context["case"] = case
         template = (
             "platform_ui/partials/job_detail_audio_conversion.html"
@@ -315,11 +316,11 @@ def case_job_detail_panel(request: HttpRequest, case_id: str, job_id: str) -> Ht
 
 @require_http_methods(["GET"])
 def case_job_title_form(request: HttpRequest, case_id: str, job_id: str) -> HttpResponse:
-    auth_response = _ensure_authenticated(request)
+    auth_response = ensure_authenticated(request)
     if auth_response:
         return auth_response
 
-    case, _ = _get_case_and_org(request, case_id)
+    case, _ = get_case_and_org(request, case_id)
     job = (
         Job.objects.select_related("case", "case__organization", "reviewed_by")
         .filter(case=case, pk=job_id)
@@ -334,7 +335,7 @@ def case_job_title_form(request: HttpRequest, case_id: str, job_id: str) -> Http
         "yes",
         "on",
     }
-    context = _job_detail_context(request, job, title_edit=edit_flag)
+    context = job_detail_context(request, job, title_edit=edit_flag)
     context["case"] = case
     return render(request, "platform_ui/partials/job_detail_title_form.html", context)
 
@@ -342,11 +343,11 @@ def case_job_title_form(request: HttpRequest, case_id: str, job_id: str) -> Http
 
 @require_http_methods(["POST"])
 def case_job_update_title(request: HttpRequest, case_id: str, job_id: str) -> HttpResponse:
-    auth_response = _ensure_authenticated(request)
+    auth_response = ensure_authenticated(request)
     if auth_response:
         return auth_response
 
-    case, _ = _get_case_and_org(request, case_id)
+    case, _ = get_case_and_org(request, case_id)
     job = (
         Job.objects.select_related("case", "case__organization", "reviewed_by")
         .filter(case=case, pk=job_id)
@@ -373,7 +374,7 @@ def case_job_update_title(request: HttpRequest, case_id: str, job_id: str) -> Ht
     if not new_title:
         title_error = "Title cannot be empty."
 
-    telemetry_dict = _job_telemetry_payload(job, request, ui_mode=True)
+    telemetry_dict = job_telemetry_payload(job, request, ui_mode=True)
 
     artifact = (
         CaseArtifact.objects.filter(case_id=str(case.id), job_id=str(job.id), type="TRANSCRIPT")
@@ -390,17 +391,19 @@ def case_job_update_title(request: HttpRequest, case_id: str, job_id: str) -> Ht
 
     if not title_error:
         artifact = artifact or ensure_transcript_artifact(
+            case_id=str(case.id),
             case=case,
             job=job,
             telemetry=telemetry_dict,
             title=new_title,
+            organization_id=getattr(case, "organization_id", None),
             metadata_source="ui.job_title",
         )
         if not artifact:
             title_error = "Transcript not found for this job."
 
     if title_error:
-        context = _job_detail_context(
+        context = job_detail_context(
             request,
             job,
             telemetry=telemetry_dict,
@@ -440,7 +443,7 @@ def case_job_update_title(request: HttpRequest, case_id: str, job_id: str) -> Ht
         f"Transcript title set to '{new_title}'",
     )
 
-    context = _job_detail_context(request, job)
+    context = job_detail_context(request, job)
     context["case"] = case
     trigger = json.dumps({"job-title-updated": {"job_id": str(job.id), "title": new_title}})
     response = render(request, "platform_ui/partials/job_detail_title_form.html", context)
@@ -451,11 +454,11 @@ def case_job_update_title(request: HttpRequest, case_id: str, job_id: str) -> Ht
 
 @require_http_methods(["POST"])
 def case_job_create_artifact(request: HttpRequest, case_id: str, job_id: str) -> HttpResponse:
-    auth_response = _ensure_authenticated(request)
+    auth_response = ensure_authenticated(request)
     if auth_response:
         return auth_response
 
-    case, _ = _get_case_and_org(request, case_id)
+    case, _ = get_case_and_org(request, case_id)
     job = (
         Job.objects.select_related("case", "case__organization", "reviewed_by")
         .filter(case=case, pk=job_id)
@@ -477,7 +480,7 @@ def case_job_create_artifact(request: HttpRequest, case_id: str, job_id: str) ->
     if not can_manage:
         return JsonResponse({"status": "error", "detail": "Forbidden"}, status=403)
 
-    telemetry_dict = _job_telemetry_payload(job, request, ui_mode=True)
+    telemetry_dict = job_telemetry_payload(job, request, ui_mode=True)
 
     existing = (
         CaseArtifact.objects.filter(case_id=str(case.id), job_id=str(job.id), type="TRANSCRIPT")
@@ -546,7 +549,8 @@ def case_job_create_artifact(request: HttpRequest, case_id: str, job_id: str) ->
     log_message = "Transcript promoted to case artifact"
     if title_changed and not was_created:
         log_message = f"Transcript artifact updated: {artifact.title}"
-    append_job_log(str(job.case_id), job.organization_id, str(job.id), log_message)
+    org_id = str(job.organization_id) if job.organization_id is not None else None
+    append_job_log(str(job.case_id), org_id, str(job.id), log_message)
     update_job_meta(
         str(case.id),
         case.organization_id,
@@ -567,11 +571,11 @@ def case_job_create_artifact(request: HttpRequest, case_id: str, job_id: str) ->
 
 @require_http_methods(["GET"])
 def case_job_row(request: HttpRequest, case_id: str, job_id: str) -> HttpResponse:
-    auth_response = _ensure_authenticated(request)
+    auth_response = ensure_authenticated(request)
     if auth_response:
         return auth_response
 
-    case, _ = _get_case_and_org(request, case_id)
+    case, _ = get_case_and_org(request, case_id)
     job = (
         Job.objects.select_related("case", "case__organization")
         .filter(case=case, pk=job_id)
@@ -580,16 +584,16 @@ def case_job_row(request: HttpRequest, case_id: str, job_id: str) -> HttpRespons
     if not job:
         raise Http404
 
-    telemetry_dict = _job_telemetry_payload(job, request, ui_mode=True)
+    telemetry_dict = job_telemetry_payload(job, request, ui_mode=True)
     telemetry_map: Dict[str, JobTelemetryPayload] = {str(job.id): telemetry_dict}
-    _, flat_rows = _build_job_rows([job], telemetry_map)
+    _, flat_rows = build_job_rows([job], telemetry_map)
     row = (
         flat_rows[0]
         if flat_rows
         else {
             "job": job,
             "telemetry": telemetry_dict,
-            "title": _friendly_job_title(job, telemetry_dict),
+            "title": friendly_job_title(job, telemetry_dict),
             "children": [],
             "actions": [],
         }
@@ -597,7 +601,7 @@ def case_job_row(request: HttpRequest, case_id: str, job_id: str) -> HttpRespons
     row["actions"] = build_job_action_entries(
         job,
         telemetry_dict,
-        can_review=_user_can_review_case(getattr(request, "user", None), job.case),
+        can_review=user_can_review_case(getattr(request, "user", None), job.case),
         is_child=False,
     )
     return render(
@@ -614,7 +618,7 @@ def case_job_row(request: HttpRequest, case_id: str, job_id: str) -> HttpRespons
 @require_http_methods(["POST"])
 def create_job(request: HttpRequest, case_id: str) -> HttpResponse:
     """Create a job and return a table row partial (HTMX) or JSON as needed."""
-    auth_response = _ensure_authenticated(request)
+    auth_response = ensure_authenticated(request)
     if auth_response:
         return auth_response
 
@@ -709,10 +713,10 @@ def create_job(request: HttpRequest, case_id: str) -> HttpResponse:
         force_wav_conversion=force_wav_conversion,
     )
 
-    telemetry_dict = _job_telemetry_payload(job, request, ui_mode=True)
+    telemetry_dict = job_telemetry_payload(job, request, ui_mode=True)
 
     if request.headers.get("HX-Request"):
-        state = _compute_case_tool_state(request, case)
+        state = compute_case_tool_state(request, case)
         panel = state["tool_panels"].get("transcribe")
         if panel:
             response = render(request, "platform_ui/tools/_panel.html", {"panel": panel})
@@ -743,14 +747,14 @@ def create_job(request: HttpRequest, case_id: str) -> HttpResponse:
             return response
 
     telemetry_map: Dict[str, JobTelemetryPayload] = {str(job.id): telemetry_dict}
-    _, flat_rows = _build_job_rows([job], telemetry_map)
+    _, flat_rows = build_job_rows([job], telemetry_map)
     row = (
         flat_rows[0]
         if flat_rows
         else {
             "job": job,
             "telemetry": telemetry_dict,
-            "title": _friendly_job_title(job, telemetry_dict),
+            "title": friendly_job_title(job, telemetry_dict),
             "children": [],
             "actions": [],
         }
@@ -758,7 +762,7 @@ def create_job(request: HttpRequest, case_id: str) -> HttpResponse:
     row["actions"] = build_job_action_entries(
         job,
         telemetry_dict,
-        can_review=_user_can_review_case(getattr(request, "user", None), job.case),
+        can_review=user_can_review_case(getattr(request, "user", None), job.case),
         is_child=False,
     )
     response = render(

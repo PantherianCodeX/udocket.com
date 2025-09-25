@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from django.core.exceptions import PermissionDenied
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
@@ -11,12 +10,12 @@ from django.views.decorators.http import require_http_methods
 from apps.platform.accounts.utils import resolve_request_organization
 from apps.platform.cases.models import Case, CaseMembership
 
-from .auth import _ensure_authenticated
+from .auth import ensure_authenticated
 
 
 @require_http_methods(["GET", "POST"])
 def index(request: HttpRequest) -> HttpResponse:
-    auth_response = _ensure_authenticated(request)
+    auth_response = ensure_authenticated(request)
     if auth_response:
         return auth_response
 

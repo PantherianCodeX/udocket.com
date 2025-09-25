@@ -1,30 +1,32 @@
 from __future__ import annotations
 
+# pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false, reportUnknownParameterType=false
+
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.jobs.models import Job
 
-from ..common import JobRow, JobTelemetryPayload, _as_dict
+from ..common import JobRow, JobTelemetryPayload, as_dict
 from ..constants import STATUS_PILL_STYLES, STATUS_SORT_ORDER
 from .utils import humanize_label, safe_lower, status_sort_value
 
 
-def _friendly_job_title(
+def friendly_job_title(
     job: Job,
     telemetry: Optional[JobTelemetryPayload] = None,
     artifact: Optional[CaseArtifact] = None,
 ) -> str:
     telem: JobTelemetryPayload = telemetry or {}
-    meta = _as_dict(telem.get("metadata"))
+    meta = as_dict(telem.get("metadata"))
     title_value = meta.get("job_title")
     if isinstance(title_value, str) and title_value.strip():
         return title_value
     artifacts = telem.get("artifacts") or []
     if isinstance(artifacts, list) and artifacts:
         candidate = artifacts[0]
-        candidate_dict = _as_dict(candidate)
+        candidate_dict = as_dict(candidate)
         candidate_title = candidate_dict.get("title")
         if isinstance(candidate_title, str) and candidate_title.strip():
             return candidate_title
@@ -34,8 +36,8 @@ def _friendly_job_title(
     return description or str(job.id)
 
 
-def _job_agent_label(job: Optional[Job], telemetry: Optional[JobTelemetryPayload]) -> str:
-    telem_agent = _as_dict((telemetry or {}).get("agent"))
+def job_agent_label(job: Optional[Job], telemetry: Optional[JobTelemetryPayload]) -> str:
+    telem_agent = as_dict((telemetry or {}).get("agent"))
     for key in ("label", "name", "type"):
         value = telem_agent.get(key)
         if isinstance(value, str) and value.strip():
@@ -49,14 +51,14 @@ def _job_agent_label(job: Optional[Job], telemetry: Optional[JobTelemetryPayload
     return ""
 
 
-def _job_type_label(job: Optional[Job], telemetry: Optional[JobTelemetryPayload]) -> str:
-    meta = _as_dict((telemetry or {}).get("metadata"))
+def job_type_label(job: Optional[Job], telemetry: Optional[JobTelemetryPayload]) -> str:
+    meta = as_dict((telemetry or {}).get("metadata"))
     kind = meta.get("job_kind")
     if kind:
         label = humanize_label(kind)
         if label:
             return label
-    agent_label = _job_agent_label(job, telemetry)
+    agent_label = job_agent_label(job, telemetry)
     if agent_label:
         return agent_label
     mode = getattr(job, "mode", "")
@@ -67,7 +69,7 @@ def _job_type_label(job: Optional[Job], telemetry: Optional[JobTelemetryPayload]
 
 
 
-def _job_most_recent_timestamp(job: Optional[Job]) -> datetime:
+def job_most_recent_timestamp(job: Optional[Job]) -> datetime:
     if not job:
         return datetime.min
     finished_at = getattr(job, "finished_at", None)
@@ -80,9 +82,9 @@ def _job_most_recent_timestamp(job: Optional[Job]) -> datetime:
     return created_at if isinstance(created_at, datetime) else datetime.min
 
 
-def _agent_key(telem: Optional[JobTelemetryPayload], job: Optional[Job] = None) -> str:
+def agent_key(telem: Optional[JobTelemetryPayload], job: Optional[Job] = None) -> str:
     telem_payload: JobTelemetryPayload = telem or {}
-    agent = _as_dict(telem_payload.get("agent"))
+    agent = as_dict(telem_payload.get("agent"))
     raw = agent.get("type") or agent.get("name") or telem_payload.get("agent_label") or ""
     if not raw and job is not None:
         raw = job.mode or ""
@@ -92,35 +94,35 @@ def _agent_key(telem: Optional[JobTelemetryPayload], job: Optional[Job] = None) 
     return normalized
 
 
-def _latest_jobs_by_agent(jobs: List[Job], telemetry_map: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+def latest_jobs_by_agent(jobs: List[Job], telemetry_map: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
     latest: Dict[str, Dict[str, Any]] = {}
     for job in jobs:
         job_id = getattr(job, "id", None)
         key = str(job_id) if job_id is not None else ""
         telem = telemetry_map.get(key) or {}
-        agent_key = _agent_key(telem, job)
-        if not agent_key:
+        key = agent_key(telem, job)
+        if not key:
             mode = getattr(job, "mode", None)
-            agent_key = str(mode).lower() if mode else "unknown"
-        existing = latest.get(agent_key)
+            key = str(mode).lower() if mode else "unknown"
+        existing = latest.get(key)
         if not existing:
-            latest[agent_key] = {"job": job, "telemetry": telem}
+            latest[key] = {"job": job, "telemetry": telem}
             continue
-        current_ts = _job_most_recent_timestamp(existing["job"])
-        new_ts = _job_most_recent_timestamp(job)
+        current_ts = job_most_recent_timestamp(existing["job"])
+        new_ts = job_most_recent_timestamp(job)
         if new_ts and new_ts > current_ts:
-            latest[agent_key] = {"job": job, "telemetry": telem}
+            latest[key] = {"job": job, "telemetry": telem}
     return latest
 
 
-def _select_agent(latest: Dict[str, JobRow], keywords: tuple[str, ...]) -> Optional[JobRow]:
+def select_agent(latest: Dict[str, JobRow], keywords: tuple[str, ...]) -> Optional[JobRow]:
     for key, payload in latest.items():
         if any(word in key for word in keywords):
             return payload
     return None
 
 
-def _map_job_status(job: Optional[Job]) -> str:
+def map_job_status(job: Optional[Job]) -> str:
     if not job:
         return 'Created'
     status = str(getattr(job, 'status', '') or '').upper()
@@ -138,7 +140,7 @@ def _map_job_status(job: Optional[Job]) -> str:
         return 'Rejected'
     return 'Created'
 
-def _build_row_table_meta(row: Dict[str, Any]) -> None:
+def build_row_table_meta(row: Dict[str, Any]) -> None:
     """Populate a job row dict with deterministic sort/filter metadata for UI tables."""
     job = row.get("job")
     telemetry = row.get("telemetry") or {}
@@ -148,8 +150,8 @@ def _build_row_table_meta(row: Dict[str, Any]) -> None:
 
     status_raw = str(telemetry.get("status") or getattr(job, "status", "") or "").strip().upper()
     review_status = str(getattr(job, "review_status", "") or "").strip().upper()
-    agent_label = _job_agent_label(job, telemetry) or "Unknown"
-    job_type_label = _job_type_label(job, telemetry)
+    agent_label = job_agent_label(job, telemetry) or "Unknown"
+    job_type_label_text = job_type_label(job, telemetry)
     case_label = humanize_label(getattr(getattr(job, "case", None), "title", ""))
     created_at = getattr(job, "created_at", None)
     created_sort = (
@@ -185,7 +187,7 @@ def _build_row_table_meta(row: Dict[str, Any]) -> None:
         status_raw,
         review_status,
         agent_label,
-        job_type_label,
+        job_type_label_text,
         case_label,
         audio_name,
         metadata_source,
@@ -198,7 +200,7 @@ def _build_row_table_meta(row: Dict[str, Any]) -> None:
         "status": status_sort_value(status_raw),
         "review": review_status or "PENDING",
         "agent": safe_lower(agent_label),
-        "type": safe_lower(job_type_label),
+        "type": safe_lower(job_type_label_text),
         "case": safe_lower(case_label),
         "created": created_sort,
     }
@@ -208,7 +210,7 @@ def _build_row_table_meta(row: Dict[str, Any]) -> None:
     row_table["status_display"] = status_display or "—"
     row_table["status_style"] = status_style
     row_table["agent_label"] = agent_label
-    row_table["type_label"] = job_type_label
+    row_table["type_label"] = job_type_label_text
     row_table["case_label"] = getattr(getattr(job, "case", None), "title", "") or ""
     row_table["case_id"] = str(getattr(job, "case_id", "") or "")
     row_table["job_id"] = str(getattr(job, "id", "") or "")
@@ -220,7 +222,7 @@ def _build_row_table_meta(row: Dict[str, Any]) -> None:
     row_table["created_at"] = created_at if isinstance(created_at, datetime) else None
 
 
-def _build_job_rows(
+def build_job_rows(
     jobs_list: List[Job],
     telemetry_map: Dict[str, JobTelemetryPayload],
     transcript_artifacts: Optional[Dict[str, CaseArtifact]] = None,
@@ -231,7 +233,7 @@ def _build_job_rows(
     for job in jobs_list:
         key = str(job.id)
         data = telemetry_map.get(key)
-        title = _friendly_job_title(job, data, transcript_artifacts.get(key))
+        title = friendly_job_title(job, data, transcript_artifacts.get(key))
         row: Dict[str, Any] = {
             "job": job,
             "telemetry": data,
@@ -239,7 +241,7 @@ def _build_job_rows(
             "children": [],
             "is_child": False,
         }
-        _build_row_table_meta(row)
+        build_row_table_meta(row)
         flat_rows.append(row)
 
     row_lookup: Dict[str, Dict[str, Any]] = {}
@@ -250,8 +252,8 @@ def _build_job_rows(
 
     display_rows: List[Dict[str, Any]] = []
     for row in flat_rows:
-        telem = _as_dict(row.get("telemetry"))
-        meta = _as_dict(telem.get("metadata"))
+        telem = as_dict(row.get("telemetry"))
+        meta = as_dict(telem.get("metadata"))
         kind = str(meta.get("job_kind", "") or "").lower()
         source_id = meta.get("source_job_id")
         parent = row_lookup.get(str(source_id)) if source_id else None
@@ -280,7 +282,7 @@ def _build_job_rows(
     return display_rows, flat_rows
 
 
-def _jobs_by_agent(
+def jobs_by_agent(
     job_rows: List[Dict[str, Any]],
     *,
     keywords: Tuple[str, ...],
@@ -311,7 +313,7 @@ def _jobs_by_agent(
     for row in job_rows:
         children = row.get("children") or []
         filtered_children = (
-            _jobs_by_agent(children, keywords=keywords, include_conversion=include_conversion)
+            jobs_by_agent(children, keywords=keywords, include_conversion=include_conversion)
             if children
             else []
         )

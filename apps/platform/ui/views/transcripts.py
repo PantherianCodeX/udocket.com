@@ -6,19 +6,20 @@ from typing import List, Optional
 from django.db.utils import IntegrityError
 
 from apps.platform.artifacts.models import CaseArtifact
+from apps.platform.cases.models import Case
 from apps.platform.jobs.models import Job
 from apps.platform.jobs.utils import unique_title
 from apps.platform.operations.storage import ops_dir as storage_ops_dir
 
-from .common import JobTelemetryPayload, _as_dict
-from .presenters.jobs import _friendly_job_title  # lazy usage inside helpers
+from .common import JobTelemetryPayload, as_dict
+from .presenters.jobs import friendly_job_title  # lazy usage inside helpers
 
 
 def candidate_transcript_paths(job: Job, telemetry: Optional[JobTelemetryPayload]) -> List[str]:
     paths: List[str] = []
     if isinstance(job.transcript_path, str) and job.transcript_path:
         paths.append(job.transcript_path)
-    transcript_payload = _as_dict((telemetry or {}).get("transcript"))
+    transcript_payload = as_dict((telemetry or {}).get("transcript"))
     path_from_telem = transcript_payload.get("path")
     if isinstance(path_from_telem, str) and path_from_telem and path_from_telem not in paths:
         paths.append(path_from_telem)
@@ -26,15 +27,15 @@ def candidate_transcript_paths(job: Job, telemetry: Optional[JobTelemetryPayload
 
 
 def default_transcript_title(job: Job, telemetry: Optional[JobTelemetryPayload]) -> str:
-    transcript_payload = _as_dict((telemetry or {}).get("transcript"))
+    transcript_payload = as_dict((telemetry or {}).get("transcript"))
     title_value = transcript_payload.get("title")
     if isinstance(title_value, str) and title_value.strip():
         return title_value.strip()
-    meta = _as_dict((telemetry or {}).get("metadata"))
+    meta = as_dict((telemetry or {}).get("metadata"))
     job_title = meta.get("job_title")
     if isinstance(job_title, str) and job_title.strip():
         return job_title.strip()
-    return _friendly_job_title(job, telemetry)
+    return friendly_job_title(job, telemetry)
 
 
 def unique_transcript_title(case_id: str, base_title: str, organization_id: Optional[str] = None) -> str:
@@ -72,7 +73,7 @@ def unique_transcript_title(case_id: str, base_title: str, organization_id: Opti
 def ensure_transcript_artifact(
     *,
     case_id: str,
-    case,
+    case: Case,
     job: Job,
     telemetry: Optional[JobTelemetryPayload] = None,
     title: Optional[str] = None,

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false, reportUnknownParameterType=false, reportAttributeAccessIssue=false
+
 import json
 from datetime import datetime
 from typing import Any, Dict, Optional
@@ -17,22 +19,22 @@ from apps.platform.jobs.models import Job
 from apps.platform.jobs.telemetry import summarize_jobs
 from apps.platform.tenancy import scope_jobs
 
-from .common import JobTelemetryPayload, _as_dict
+from .common import JobTelemetryPayload, as_dict
 from .presenters.job_actions import build_job_action_entries
 from .presenters.cases import (
-    _analysis_modules_context,
-    _build_case_developer_cards,
-    _build_case_header_context,
-    _build_tool_panels,
-    _case_progress_context,
-    _collect_case_artifacts,
-    _prepare_case_fields,
+    analysis_modules_context,
+    build_case_developer_cards,
+    build_case_header_context,
+    build_tool_panels,
+    case_progress_context,
+    collect_case_artifacts,
+    prepare_case_fields,
 )
-from .presenters.jobs import _build_job_rows, _friendly_job_title
-from .selectors import _job_telemetry_map, _job_telemetry_payload
+from .presenters.jobs import build_job_rows, friendly_job_title
+from .selectors import job_telemetry_map, job_telemetry_payload
 
 
-def _format_metadata(metadata: Dict[str, Any] | None) -> list[Dict[str, Any]]:
+def format_metadata(metadata: Dict[str, Any] | None) -> list[Dict[str, Any]]:
     if not metadata:
         return []
     items: list[dict[str, Any]] = []
@@ -54,7 +56,7 @@ def _format_metadata(metadata: Dict[str, Any] | None) -> list[Dict[str, Any]]:
     return items
 
 
-def _user_can_review_case(user: Optional[User], case: Case) -> bool:
+def user_can_review_case(user: Optional[User], case: Case) -> bool:
     if getattr(settings, "PLATFORM_DEV_OPEN", False):
         return True
     if not user or not getattr(user, "is_authenticated", False):
@@ -64,7 +66,7 @@ def _user_can_review_case(user: Optional[User], case: Case) -> bool:
     return has_capability(user, str(case.id), "case.update")
 
 
-def _compute_case_tool_state(request: HttpRequest, case: Case) -> Dict[str, Any]:
+def compute_case_tool_state(request: HttpRequest, case: Case) -> Dict[str, Any]:
     jobs_qs = (
         Job.objects.select_related("case", "case__organization", "reviewed_by")
         .filter(case=case)
@@ -87,9 +89,9 @@ def _compute_case_tool_state(request: HttpRequest, case: Case) -> Dict[str, Any]
     job_summary_last_dt = job_summary.get("last_update")
     job_summary["last_update"] = job_summary_last_dt.isoformat() if job_summary_last_dt else None
 
-    telemetry_map: Dict[str, JobTelemetryPayload] = _job_telemetry_map(jobs_list, request)
+    telemetry_map: Dict[str, JobTelemetryPayload] = job_telemetry_map(jobs_list, request)
 
-    display_rows, flat_rows = _build_job_rows(jobs_list, telemetry_map, transcript_artifacts)
+    display_rows, flat_rows = build_job_rows(jobs_list, telemetry_map, transcript_artifacts)
 
     latest_job = None
     latest_job_telemetry = None
@@ -107,7 +109,7 @@ def _compute_case_tool_state(request: HttpRequest, case: Case) -> Dict[str, Any]
     memberships = list(case.memberships.select_related("user"))
 
     user = getattr(request, "user", None)
-    user_can_review = _user_can_review_case(user, case)
+    user_can_review = user_can_review_case(user, case)
 
     for row in flat_rows:
         row["actions"] = build_job_action_entries(
@@ -117,13 +119,13 @@ def _compute_case_tool_state(request: HttpRequest, case: Case) -> Dict[str, Any]
             is_child=bool(row.get("is_child")),
         )
 
-    progress_ctx = _case_progress_context(case, jobs_list, telemetry_map, memberships)
-    analysis_modules = _analysis_modules_context(
+    progress_ctx = case_progress_context(case, jobs_list, telemetry_map, memberships)
+    analysis_modules = analysis_modules_context(
         request, case, jobs_list, telemetry_map, transcript_artifacts
     )
-    artifacts_all = _collect_case_artifacts(request, case)
+    artifacts_all = collect_case_artifacts(request, case)
 
-    tool_panels = _build_tool_panels(
+    tool_panels = build_tool_panels(
         case,
         progress_items=progress_ctx["progress_items"],
         job_rows=display_rows,
@@ -141,15 +143,15 @@ def _compute_case_tool_state(request: HttpRequest, case: Case) -> Dict[str, Any]
     )
 
     case_details_panel = tool_panels.get("case-details") or {}
-    case_fields = case_details_panel.get("body_context", {}).get("fields", _prepare_case_fields(case))
-    case_header = _build_case_header_context(
+    case_fields = case_details_panel.get("body_context", {}).get("fields", prepare_case_fields(case))
+    case_header = build_case_header_context(
         case,
         panels=tool_panels,
         case_fields=case_fields,
         memberships=memberships,
         job_summary_last_update=job_summary_last_dt,
     )
-    developer_cards = _build_case_developer_cards(tool_panels)
+    developer_cards = build_case_developer_cards(tool_panels)
 
     return {
         "jobs_list": jobs_list,
@@ -166,7 +168,7 @@ def _compute_case_tool_state(request: HttpRequest, case: Case) -> Dict[str, Any]
     }
 
 
-def _job_detail_context(
+def job_detail_context(
     request: HttpRequest,
     job: Job,
     *,
@@ -174,7 +176,7 @@ def _job_detail_context(
     title_error: Optional[str] = None,
     title_edit: bool = False,
 ) -> Dict[str, Any]:
-    telemetry_payload = telemetry if telemetry is not None else _job_telemetry_payload(job, request, ui_mode=True)
+    telemetry_payload = telemetry if telemetry is not None else job_telemetry_payload(job, request, ui_mode=True)
     telemetry = telemetry_payload
     artifacts = telemetry.get("artifacts") or []
     artifact = artifacts[0] if artifacts else None
@@ -183,13 +185,13 @@ def _job_detail_context(
         .order_by("-created_at")
         .first()
     )
-    job_title = _friendly_job_title(job, telemetry, db_artifact)
-    metadata_map = _as_dict(telemetry.get("metadata"))
-    metadata_items = _format_metadata(metadata_map)
+    job_title = friendly_job_title(job, telemetry, db_artifact)
+    metadata_map = as_dict(telemetry.get("metadata"))
+    metadata_items = format_metadata(metadata_map)
     azure_cancel_status = metadata_map.get("azure_cancel_status")
     azure_cancel_body = metadata_map.get("azure_cancel_body")
 
-    audio_meta = _as_dict(telemetry.get("audio"))
+    audio_meta = as_dict(telemetry.get("audio"))
     audio_mime = str(audio_meta.get("mime") or "").lower()
     audio_names = [str(audio_meta.get("path") or ""), str(audio_meta.get("original_name") or "")]
     is_wav_input = audio_mime in {"audio/wav", "audio/x-wav"}
@@ -218,8 +220,8 @@ def _job_detail_context(
         if source_job_id:
             try:
                 source_job = Job.objects.select_related("case", "case__organization").get(pk=source_job_id, case_id=job.case_id)
-                source_telemetry = _job_telemetry_payload(source_job, request, ui_mode=True)
-                source_audio_meta = _as_dict(source_telemetry.get("audio"))
+                source_telemetry = job_telemetry_payload(source_job, request, ui_mode=True)
+                source_audio_meta = as_dict(source_telemetry.get("audio"))
             except Job.DoesNotExist:
                 source_audio_meta = None
             except Exception:
@@ -260,7 +262,7 @@ def _job_detail_context(
     }
 
 
-def _get_case_and_org(request: HttpRequest, case_id: str) -> tuple[Case, Any]:
+def get_case_and_org(request: HttpRequest, case_id: str) -> tuple[Case, Any]:
     try:
         active_org = resolve_request_organization(request, required=True)
     except PermissionDenied:

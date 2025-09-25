@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 
 from apps.platform.jobs.models import Job
 
-from ..common import JobTelemetryPayload, _as_dict
+from ..common import JobTelemetryPayload, as_dict
 from ..constants import CANCELABLE_STATUSES, RESTARTABLE_STATUSES
 
 
@@ -22,14 +22,14 @@ def build_job_action_entries(
     case_id = str(job.case_id)
     status = str(getattr(job, "status", "") or "").upper()
     telem = telemetry or {}
-    meta = _as_dict(telem.get("metadata"))
-    transcript_payload = _as_dict(telem.get("transcript"))
-    audio_payload = _as_dict(telem.get("audio"))
+    meta = as_dict(telem.get("metadata"))
+    transcript_payload = as_dict(telem.get("transcript"))
+    audio_payload = as_dict(telem.get("audio"))
     artifact_entry = None
     artifacts = telem.get("artifacts") or []
     if artifacts:
         candidate = artifacts[0]
-        artifact_entry = _as_dict(candidate) if isinstance(candidate, dict) else candidate
+        artifact_entry = as_dict(candidate) if isinstance(candidate, dict) else candidate
 
     job_kind = str(meta.get("job_kind") or "").lower()
     converted_available = bool(meta.get("converted_wav_available"))
