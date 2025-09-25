@@ -517,9 +517,6 @@
 
     container.llmProviderState = providerState;
     container.llmInitModal = attachProviderModalHandlers;
-    if (modal) {
-      attachProviderModalHandlers(modal);
-    }
   }
 
   async function persistLLMOverrides(target, overrides, chain) {
@@ -581,6 +578,7 @@
         } catch (_) {}
       }, 0);
     } catch (_) {}
+    try { attachProviderModalHandlers(modal); } catch (_) {}
     const form = modal.querySelector('[data-llm-form]');
     if (!form) return;
     const saveButton = form.querySelector('[data-llm-save]');
