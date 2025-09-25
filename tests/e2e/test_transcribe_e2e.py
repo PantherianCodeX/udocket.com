@@ -11,6 +11,8 @@ pytestmark = pytest.mark.e2e_transcribe
 if os.getenv("E2E_TRANSCRIBE") != "1":  # pragma: no cover - opt-in
     pytest.skip("Set E2E_TRANSCRIBE=1 to run e2e transcription tests", allow_module_level=True)
 
+RUN_ONDEMAND = os.getenv("E2E_TRANSCRIBE_ONDEMAND") == "1"
+
 
 def _have(cmd: str) -> bool:
     return shutil.which(cmd) is not None
@@ -34,6 +36,8 @@ def _require_azure() -> None:
 
 
 def _require_on_demand_sdk() -> None:
+    if not RUN_ONDEMAND:
+        pytest.skip("Set E2E_TRANSCRIBE_ONDEMAND=1 to exercise on-demand Azure SDK e2e")
     try:
         __import__("azure.cognitiveservices.speech")
     except Exception:
@@ -152,12 +156,14 @@ def test_transcription_agent_on_demand_e2e(tmp_path):
 @pytest.mark.django_db
 def test_transcribe_task_on_demand_e2e(tmp_path, settings):
     _require_azure()
+    _require_on_demand_sdk()
     _ensure_ffmpeg()
     variants = _make_test_variants()
 
     # Configure storage root under tmp
     settings.PLATFORM_DEV_OPEN = True
     settings.STORAGE_ROOT = str(tmp_path / "storage")
+    settings.MEDIA_ROOT = str(tmp_path / "media")
 
     from apps.platform.accounts.models import Organization
     from apps.platform.cases.models import Case
@@ -176,7 +182,7 @@ def test_transcribe_task_on_demand_e2e(tmp_path, settings):
 
     job = Job.objects.create(case=case, organization=org, audio_input=str(audio_path), mode=Job.Mode.ON_DEMAND, diarization=False, language="en-CA")
 
-    result = op_tasks.transcribe_job.run(None, case_id=str(case.id), job_id=str(job.id), audio_input=str(audio_path), mode=Job.Mode.ON_DEMAND, diarization=False)
+    result = op_tasks.transcribe_job.run(case_id=str(case.id), job_id=str(job.id), audio_input=str(audio_path), mode=Job.Mode.ON_DEMAND, diarization=False)
     assert result["status"] == "SUCCEEDED"
 
     job.refresh_from_db()
@@ -204,6 +210,7 @@ def test_transcribe_task_batch_diarization_e2e(tmp_path, settings):
 
     settings.PLATFORM_DEV_OPEN = True
     settings.STORAGE_ROOT = str(tmp_path / "storage")
+    settings.MEDIA_ROOT = str(tmp_path / "media")
 
     from apps.platform.accounts.models import Organization
     from apps.platform.cases.models import Case
@@ -221,7 +228,7 @@ def test_transcribe_task_batch_diarization_e2e(tmp_path, settings):
     shutil.copy2(src_wav, audio_path)
 
     job = Job.objects.create(case=case, organization=org, audio_input=str(audio_path), mode=Job.Mode.BATCH, diarization=True, language="en-CA")
-    result = op_tasks.transcribe_job.run(None, case_id=str(case.id), job_id=str(job.id), audio_input=str(audio_path), mode=Job.Mode.BATCH, diarization=True)
+    result = op_tasks.transcribe_job.run(case_id=str(case.id), job_id=str(job.id), audio_input=str(audio_path), mode=Job.Mode.BATCH, diarization=True)
     assert result["status"] == "SUCCEEDED"
     job.refresh_from_db()
     assert job.status == Job.Status.SUCCEEDED
@@ -249,6 +256,7 @@ def test_transcribe_task_batch_convert_and_diarize_e2e(tmp_path, settings):
 
     settings.PLATFORM_DEV_OPEN = True
     settings.STORAGE_ROOT = str(tmp_path / "storage")
+    settings.MEDIA_ROOT = str(tmp_path / "media")
 
     from apps.platform.accounts.models import Organization
     from apps.platform.cases.models import Case
@@ -267,7 +275,7 @@ def test_transcribe_task_batch_convert_and_diarize_e2e(tmp_path, settings):
     shutil.copy2(src_bad, audio_path)
 
     job = Job.objects.create(case=case, organization=org, audio_input=str(audio_path), mode=Job.Mode.BATCH, diarization=True, language="en-CA")
-    result = op_tasks.transcribe_job.run(None, case_id=str(case.id), job_id=str(job.id), audio_input=str(audio_path), mode=Job.Mode.BATCH, diarization=True, force_wav_conversion=False)
+    result = op_tasks.transcribe_job.run(case_id=str(case.id), job_id=str(job.id), audio_input=str(audio_path), mode=Job.Mode.BATCH, diarization=True, force_wav_conversion=False)
     assert result["status"] == "SUCCEEDED"
     job.refresh_from_db()
     assert job.status == Job.Status.SUCCEEDED

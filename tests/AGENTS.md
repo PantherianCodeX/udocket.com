@@ -22,7 +22,11 @@ Scope: `tests/` across platform and legacy API.
 - Fixtures:
   - Curated short audio clips live in `tests/fixtures/audio/` and include compliant and non‑compliant formats: `*.wav`, `*.mp3`, `*.m4a`, `*.ogg`, `*.flac`.
 - Scope: exercises the agent’s audio normalization (format conversion) and on‑demand Azure STT end‑to‑end. Clips are only ~1–2s to minimize upload/processing time and cost.
- - Batch diarization: multi‑speaker dialogue fixtures are included; batch e2e tests require Azure Blob settings (`AZURE_BLOB_CONTAINER` and either `AZURE_BLOB_CONNECTION_STRING` or `AZURE_BLOB_ACCOUNT` + `AZURE_BLOB_KEY`).
+- Batch diarization: multi‑speaker dialogue fixtures are included; batch e2e tests require Azure Blob settings (`AZURE_BLOB_CONTAINER` and either `AZURE_BLOB_CONNECTION_STRING` or `AZURE_BLOB_ACCOUNT` + `AZURE_BLOB_KEY`).
+- Container workflow: run against the full stack (Postgres/Redis) using
+  `docker compose exec -e E2E_TRANSCRIBE=1 platform pytest -q -m e2e_transcribe`.
+  Only set `E2E_TRANSCRIBE_ONDEMAND=1` if the container has the Azure Speech SDK
+  patched for callback wiring; otherwise the on-demand tests skip.
 
 ## Storage & Isolation
 - Use sqlite DBs under a temp storage root where possible; settings already fall back to repo `storage/` path for developer environments.
