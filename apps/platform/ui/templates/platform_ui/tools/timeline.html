@@ -63,6 +63,9 @@
         {% if module.latest.metadata.events %}
           <p class="text-xs text-slate-400">Events: {{ module.latest.metadata.events }}</p>
         {% endif %}
+        {% if module.latest.details.seed_source %}
+          <p class="text-[11px] text-slate-400">Seed source: {{ module.latest.details.seed_source }}</p>
+        {% endif %}
       {% else %}
         <p class="text-xs text-slate-400">No timelines yet. Queue one to populate this section.</p>
       {% endif %}
@@ -82,6 +85,9 @@
               <p class="font-semibold text-white">{{ item.title }}</p>
               {% if item.source %}
                 <p class="text-xs text-slate-400">Source: {{ item.source }}</p>
+              {% endif %}
+              {% if item.details.seed_source %}
+                <p class="text-[11px] text-slate-500">Seed source: {{ item.details.seed_source }}</p>
               {% endif %}
             </div>
             <div class="flex items-center gap-3 text-xs text-slate-400">

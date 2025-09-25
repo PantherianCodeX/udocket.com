@@ -17,6 +17,7 @@ from apps.platform.jobs.models import Job
 
 from ..constants import CASE_JOB_TABLE_COLUMNS, DEFAULT_TABLE_FILTERS, GLOBAL_JOB_TABLE_COLUMNS
 from ..presenters.utils import status_class, user_label
+from .analysis import enrich_summary_artifacts, enrich_timeline_artifacts
 from ..presenters.jobs import (
     friendly_job_title,
     job_most_recent_timestamp,
@@ -87,6 +88,9 @@ def analysis_modules_context(
             summary_artifacts.append(payload)
         elif artifact.type == "TIMELINE":
             timeline_artifacts.append(payload)
+
+    summary_artifacts = enrich_summary_artifacts(summary_artifacts, jobs, telemetry_map)
+    timeline_artifacts = enrich_timeline_artifacts(timeline_artifacts)
 
     latest_transcription = _latest_successful_transcription_job(jobs)
     target_job: Optional[Dict[str, Any]] = None

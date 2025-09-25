@@ -38,6 +38,22 @@
         {% if module.latest.source %}
           <p class="text-xs text-slate-400">Source: {{ module.latest.source }}</p>
         {% endif %}
+        {% if module.latest.details %}
+          <div class="mt-3 space-y-1 text-[11px] text-slate-400">
+            {% if module.latest.details.words %}
+              <p><span class="font-semibold text-slate-300">Words:</span> {{ module.latest.details.words }}</p>
+            {% endif %}
+            {% if module.latest.details.outline_name %}
+              <p><span class="font-semibold text-slate-300">Outline:</span> {{ module.latest.details.outline_name }}</p>
+            {% endif %}
+            {% if module.latest.details.timeline_seed_name %}
+              <p><span class="font-semibold text-slate-300">Timeline seeds:</span> {{ module.latest.details.timeline_seed_name }}</p>
+            {% endif %}
+            {% if module.latest.details.entity_hint_name %}
+              <p><span class="font-semibold text-slate-300">Entity hints:</span> {{ module.latest.details.entity_hint_name }}</p>
+            {% endif %}
+          </div>
+        {% endif %}
       {% else %}
         <p class="text-xs text-slate-400">No summarize result yet. Queue one to populate this section.</p>
       {% endif %}
@@ -57,6 +73,22 @@
               <p class="font-semibold text-white">{{ item.title }}</p>
               {% if item.source %}
                 <p class="text-xs text-slate-400">Source: {{ item.source }}</p>
+              {% endif %}
+              {% if item.details %}
+                <div class="mt-1 space-y-0.5 text-[11px] text-slate-500">
+                  {% if item.details.words %}
+                    <p>Words: {{ item.details.words }}</p>
+                  {% endif %}
+                  {% if item.details.outline_name %}
+                    <p>Outline: {{ item.details.outline_name }}</p>
+                  {% endif %}
+                  {% if item.details.timeline_seed_name %}
+                    <p>Timeline seeds: {{ item.details.timeline_seed_name }}</p>
+                  {% endif %}
+                  {% if item.details.entity_hint_name %}
+                    <p>Entity hints: {{ item.details.entity_hint_name }}</p>
+                  {% endif %}
+                </div>
               {% endif %}
             </div>
             <div class="flex items-center gap-3 text-xs text-slate-400">
