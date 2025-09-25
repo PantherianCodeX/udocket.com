@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 from django.core.exceptions import PermissionDenied
+from django.http import HttpRequest
 
 from apps.platform.accounts.models import Organization
 from apps.platform.accounts.utils import (
@@ -11,7 +12,7 @@ from apps.platform.accounts.utils import (
 )
 
 
-def ui_context(request) -> dict:
+def ui_context(request: HttpRequest) -> Dict[str, Any]:
     """Inject active organization and choices into templates."""
 
     active_org: Optional[Organization] = None
@@ -20,7 +21,7 @@ def ui_context(request) -> dict:
     except PermissionDenied:
         active_org = None
 
-    org_choices = []
+    org_choices: List[Organization] = []
     user = getattr(request, "user", None)
     if user and getattr(user, "is_authenticated", False):
         org_choices = list(user_accessible_organizations(user))

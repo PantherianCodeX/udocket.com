@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from uuid import UUID
-from typing import Any, Dict, List, Optional
+from typing import Dict, Optional, cast
 
 from django.core.exceptions import PermissionDenied
 from django.http import Http404, HttpRequest, HttpResponse
@@ -22,6 +22,18 @@ from .presenters.cases import table_config
 from .presenters.job_actions import build_job_action_entries
 from .presenters.jobs import build_job_rows
 from .selectors import job_telemetry_map
+
+# Backwards-compatible exports for tests and legacy imports
+from .jobs_actions import create_job as create_job
+from .jobs_actions import transcribe_job_task as transcribe_job_task
+
+__all__ = [
+    "jobs",
+    "job_detail_panel",
+    "case_job_detail_panel",
+    "create_job",
+    "transcribe_job_task",
+]
 
 log = logging.getLogger("apps.platform.ui")
 
@@ -51,9 +63,9 @@ def jobs(request: HttpRequest) -> HttpResponse:
             CaseArtifact.objects.filter(job_id__in=job_ids, type="TRANSCRIPT")
             .order_by("-created_at")
         ):
-            key = art.job_id or ""
-            if key and key not in transcript_artifacts:
-                transcript_artifacts[key] = art
+            job_id_value = cast(Optional[str], getattr(art, "job_id", None))
+            if job_id_value and job_id_value not in transcript_artifacts:
+                transcript_artifacts[job_id_value] = art
 
     display_rows, flat_rows = build_job_rows(jobs_list, telemetry_map, transcript_artifacts)
 

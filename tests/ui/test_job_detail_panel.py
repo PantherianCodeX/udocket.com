@@ -45,7 +45,7 @@ def test_job_detail_panel_renders_for_member(db, settings):
     assert resp.status_code == 200
     content = resp.content.decode()
     assert str(job.id) in content
-    assert "Download log" in content
+    assert "Audio" in content
 
 
 def test_job_detail_panel_denies_non_member(db, settings):

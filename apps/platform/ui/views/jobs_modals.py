@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 from uuid import UUID
 
 from django.http import Http404, HttpRequest, HttpResponse
@@ -12,9 +12,21 @@ from apps.platform.jobs.models import Job
 from apps.platform.operations.utils import job_log_path
 
 from .auth import ensure_authenticated
+from .common import JobTelemetryPayload
 from .contexts import get_case_and_org, job_detail_context
 from .presenters.jobs import friendly_job_title
 from .selectors import job_telemetry_payload
+
+
+def _dict_list(value: Any) -> List[Dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    typed_items: List[Dict[str, Any]] = []
+    for element in cast(List[Any], value):
+        if not isinstance(element, dict):
+            continue
+        typed_items.append(cast(Dict[str, Any], element))
+    return typed_items
 
 
 def _resolve_job_or_404(case_id: str, job_id: UUID, request: HttpRequest) -> Job:
@@ -48,16 +60,19 @@ def case_job_transcript(request: HttpRequest, case_id: str, job_id: UUID) -> Htt
         except Exception:
             transcript_text = ""
 
-    telemetry = job_telemetry_payload(job, request, ui_mode=True)
+    telemetry_dict: JobTelemetryPayload = job_telemetry_payload(job, request, ui_mode=True)
     download_url: Optional[str] = None
-    artifacts = telemetry.get("artifacts") or []
-    for art in artifacts:
-        artifact_type = (art.get("type") or "").upper()
-        if artifact_type == "TRANSCRIPT" and art.get("download_url"):
-            download_url = art.get("download_url")
-            break
+    raw_artifacts = telemetry_dict.get("artifacts")
+    artifacts_list: List[Dict[str, Any]] = _dict_list(raw_artifacts)
+    for artifact in artifacts_list:
+        artifact_type = str(artifact.get("type") or "").upper()
+        download_candidate = artifact.get("download_url")
+        if artifact_type != "TRANSCRIPT" or not isinstance(download_candidate, str):
+            continue
+        download_url = download_candidate
+        break
 
-    friendly_title = friendly_job_title(job, telemetry, None)
+    friendly_title = friendly_job_title(job, telemetry_dict, None)
     modal_created = job.finished_at or job.started_at or job.created_at
     context = {
         "title": friendly_title,
@@ -97,8 +112,8 @@ def case_job_logs_modal(request: HttpRequest, case_id: str, job_id: UUID) -> Htt
             text = "…" + text
         log_text = text
 
-    telemetry = job_telemetry_payload(job, request, ui_mode=True)
-    friendly_title = friendly_job_title(job, telemetry, None)
+    telemetry_dict = job_telemetry_payload(job, request, ui_mode=True)
+    friendly_title = friendly_job_title(job, telemetry_dict, None)
     modal_created = job.finished_at or job.started_at or job.created_at
     meta_items: List[Dict[str, Any]] = []
     if log_path.exists():
@@ -129,10 +144,11 @@ def case_job_metadata_modal(request: HttpRequest, case_id: str, job_id: UUID) ->
 
     job = _resolve_job_or_404(case_id, job_id, request)
 
-    telemetry = job_telemetry_payload(job, request, ui_mode=True)
-    detail_context = job_detail_context(request, job, telemetry=telemetry)
-    metadata_items = detail_context.get("metadata_items") or []
-    friendly_title = detail_context.get("job_title") or friendly_job_title(job, telemetry, detail_context.get("artifact"))
+    telemetry_dict = job_telemetry_payload(job, request, ui_mode=True)
+    detail_context = job_detail_context(request, job, telemetry=telemetry_dict)
+    raw_metadata_items = detail_context.get("metadata_items")
+    metadata_items: List[Dict[str, Any]] = _dict_list(raw_metadata_items)
+    friendly_title = detail_context.get("job_title") or friendly_job_title(job, telemetry_dict, detail_context.get("artifact"))
     modal_created = job.finished_at or job.started_at or job.created_at
     meta_summary: List[Dict[str, Any]] = []
     case_obj = getattr(job, "case", None)

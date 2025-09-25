@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from apps.platform.jobs.models import Job
 
@@ -28,10 +28,11 @@ def build_job_action_entries(
 
     artifact_entry: Optional[Dict[str, Any]] = None
     artifacts_raw = telem.get("artifacts")
-    if isinstance(artifacts_raw, list) and artifacts_raw:
-        first_artifact: Any = artifacts_raw[0]
-        if isinstance(first_artifact, dict):
-            artifact_entry = as_dict(first_artifact)
+    if isinstance(artifacts_raw, list):
+        for candidate in cast(List[Any], artifacts_raw):
+            if isinstance(candidate, dict):
+                artifact_entry = as_dict(candidate)
+                break
 
     job_kind = str(meta.get("job_kind") or "").lower()
     converted_available = bool(meta.get("converted_wav_available"))

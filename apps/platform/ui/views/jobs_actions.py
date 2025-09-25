@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import json
 import logging
+import uuid
 from uuid import UUID
-from typing import Any, Dict, List, Optional, Protocol, cast
+from typing import Any, Dict, Iterable, List, Optional, Protocol, cast
 
 from django.conf import settings
 from django.core.exceptions import PermissionDenied
@@ -13,6 +14,7 @@ from django.template.loader import render_to_string
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
+from apps.platform.accounts.models import Organization
 from apps.platform.accounts.utils import resolve_request_organization
 from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.cases.models import Case
@@ -23,10 +25,12 @@ from apps.platform.operations.tasks import transcribe_job
 from apps.platform.operations.utils import append_job_log, update_job_meta
 
 from .auth import ensure_authenticated
+from .common import JobRow, JobTelemetryPayload
 from .contexts import compute_case_tool_state, get_case_and_org, job_detail_context, user_can_review_case
+from .constants import CASE_JOB_TABLE_COLUMNS
 from .presenters.job_actions import build_job_action_entries
 from .presenters.jobs import build_job_rows, friendly_job_title
-from .selectors import job_telemetry_map, job_telemetry_payload
+from .selectors import job_telemetry_payload
 from .transcripts import ensure_transcript_artifact, unique_transcript_title, default_transcript_title
 
 log = logging.getLogger("apps.platform.ui")
@@ -34,6 +38,15 @@ log = logging.getLogger("apps.platform.ui")
 
 class _TaskWithDelay(Protocol):
     def delay(self, *args: Any, **kwargs: Any) -> Any:
+        ...
+
+
+class CaseArtifactLike(Protocol):
+    id: UUID
+    title: str
+    metadata: Any
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
         ...
 
 
@@ -55,6 +68,16 @@ def _resolve_case(case_id: str, request: HttpRequest) -> Case:
 
 
 transcribe_job_task: _TaskWithDelay = cast(_TaskWithDelay, transcribe_job)
+
+
+def _fallback_job_row(job: Job, telemetry: JobTelemetryPayload) -> JobRow:
+    return {
+        "job": job,
+        "telemetry": telemetry,
+        "title": friendly_job_title(job, telemetry),
+        "children": [],
+        "actions": [],
+    }
 
 
 @require_http_methods(["GET"])
@@ -106,7 +129,7 @@ def case_job_update_title(request: HttpRequest, case_id: str, job_id: UUID) -> H
 
     telemetry_dict = job_telemetry_payload(job, request, ui_mode=True)
 
-    artifact = (
+    artifact: Optional[CaseArtifact] = (
         CaseArtifact.objects.filter(case_id=str(case.id), job_id=str(job.id), type="TRANSCRIPT")
         .order_by("-created_at")
         .first()
@@ -120,16 +143,17 @@ def case_job_update_title(request: HttpRequest, case_id: str, job_id: UUID) -> H
             title_error = "A transcript with that title already exists in this case."
 
     if not title_error:
-        artifact = artifact or ensure_transcript_artifact(
-            case_id=str(case.id),
-            case=case,
-            job=job,
-            telemetry=telemetry_dict,
-            title=new_title,
-            organization_id=getattr(case, "organization_id", None),
-            metadata_source="ui.job_title",
-        )
-        if not artifact:
+        if artifact is None:
+            artifact = ensure_transcript_artifact(
+                case_id=str(case.id),
+                case=case,
+                job=job,
+                telemetry=telemetry_dict,
+                title=new_title,
+                organization_id=getattr(case, "organization_id", None),
+                metadata_source="ui.job_title",
+            )
+        if artifact is None:
             title_error = "Transcript not found for this job."
 
     if title_error:
@@ -144,8 +168,16 @@ def case_job_update_title(request: HttpRequest, case_id: str, job_id: UUID) -> H
         context["job_title"] = new_title or context.get("job_title")
         return render(request, "platform_ui/partials/job_detail_title_form.html", context, status=400)
 
-    artifact.title = new_title
-    metadata = dict(artifact.metadata) if isinstance(artifact.metadata, dict) else {}
+    assert artifact is not None  # Narrowing for type checkers
+    artifact_obj: CaseArtifactLike = cast(CaseArtifactLike, artifact)
+
+    artifact_obj.title = new_title
+    raw_metadata = getattr(artifact_obj, "metadata", None)
+    metadata: Dict[str, Any]
+    if isinstance(raw_metadata, dict):
+        metadata = dict(cast(Dict[str, Any], raw_metadata))
+    else:
+        metadata = {}
     metadata.update({
         "transcript_title": new_title,
         "job_title": new_title,
@@ -153,8 +185,8 @@ def case_job_update_title(request: HttpRequest, case_id: str, job_id: UUID) -> H
     })
     if user and getattr(user, "is_authenticated", False):
         metadata["title_updated_by"] = str(getattr(user, "id", ""))
-    artifact.metadata = metadata
-    artifact.save(update_fields=["title", "metadata"])
+    artifact_obj.metadata = metadata
+    artifact_obj.save(update_fields=["title", "metadata"])
 
     update_job_meta(
         str(case.id),
@@ -202,7 +234,7 @@ def case_job_create_artifact(request: HttpRequest, case_id: str, job_id: UUID) -
 
     telemetry_dict = job_telemetry_payload(job, request, ui_mode=True)
 
-    existing = (
+    existing: Optional[CaseArtifact] = (
         CaseArtifact.objects.filter(case_id=str(case.id), job_id=str(job.id), type="TRANSCRIPT")
         .order_by("-created_at")
         .first()
@@ -217,31 +249,34 @@ def case_job_create_artifact(request: HttpRequest, case_id: str, job_id: UUID) -
         metadata_source="ui.transcript_promote",
     )
 
-    if not artifact:
+    if artifact is None:
         return JsonResponse({"status": "error", "detail": "Transcript not found for this job."}, status=404)
+
+    artifact_obj: CaseArtifactLike = cast(CaseArtifactLike, artifact)
 
     title_input = (request.POST.get("title") or "").strip()
     metadata_changed = False
     title_changed = False
     if title_input:
         desired_title = unique_transcript_title(str(case.id), title_input, getattr(case, "organization_id", None))
-        if artifact.title != desired_title:
-            artifact.title = desired_title
+        if artifact_obj.title != desired_title:
+            artifact_obj.title = desired_title
             title_changed = True
-    elif not artifact.title:
+    elif not artifact_obj.title:
         default_title = default_transcript_title(job, telemetry_dict)
         unique_transcript_title_val = unique_transcript_title(
             str(case.id), default_title, getattr(case, "organization_id", None)
         )
-        if artifact.title != unique_transcript_title_val:
-            artifact.title = unique_transcript_title_val
+        if artifact_obj.title != unique_transcript_title_val:
+            artifact_obj.title = unique_transcript_title_val
             title_changed = True
 
-    metadata = artifact.metadata or {}
-    if not isinstance(metadata, dict):
-        metadata = {}
+    raw_metadata = getattr(artifact_obj, "metadata", None)
+    metadata: Dict[str, Any]
+    if isinstance(raw_metadata, dict):
+        metadata = dict(cast(Dict[str, Any], raw_metadata))
     else:
-        metadata = dict(metadata)
+        metadata = {}
     if metadata.get("created_via") is None:
         metadata["created_via"] = "ui.transcript_promote"
         metadata_changed = True
@@ -250,9 +285,9 @@ def case_job_create_artifact(request: HttpRequest, case_id: str, job_id: UUID) -
     if user and getattr(user, "is_authenticated", False):
         metadata["last_promoted_by"] = str(getattr(user, "id", ""))
     if title_changed:
-        metadata["job_title"] = artifact.title
-        metadata["transcript_title"] = artifact.title
-    artifact.metadata = metadata
+        metadata["job_title"] = artifact_obj.title
+        metadata["transcript_title"] = artifact_obj.title
+    artifact_obj.metadata = metadata
 
     update_fields: List[str] = []
     if title_changed:
@@ -260,26 +295,26 @@ def case_job_create_artifact(request: HttpRequest, case_id: str, job_id: UUID) -
     if metadata_changed or title_changed:
         update_fields.append("metadata")
     if update_fields:
-        artifact.save(update_fields=update_fields)
+        artifact_obj.save(update_fields=update_fields)
 
     was_created = existing is None
     log_message = "Transcript promoted to case artifact"
     if title_changed and not was_created:
-        log_message = f"Transcript artifact updated: {artifact.title}"
+        log_message = f"Transcript artifact updated: {artifact_obj.title}"
     org_id = str(job.organization_id) if job.organization_id is not None else None
     append_job_log(str(job.case_id), org_id, str(job.id), log_message)
     update_job_meta(
         str(case.id),
         case.organization_id,
         str(job.id),
-        {"transcript_artifact_id": str(artifact.id)},
+        {"transcript_artifact_id": str(artifact_obj.id)},
     )
 
     return JsonResponse(
         {
             "status": "ok",
-            "artifact_id": artifact.id,
-            "title": artifact.title,
+            "artifact_id": artifact_obj.id,
+            "title": artifact_obj.title,
             "created": was_created,
         }
     )
@@ -301,20 +336,27 @@ def case_job_row(request: HttpRequest, case_id: str, job_id: UUID) -> HttpRespon
     if not job:
         raise Http404
 
-    telemetry_dict = job_telemetry_payload(job, request, ui_mode=True)
-    telemetry_map: Dict[str, Any] = {str(job.id): telemetry_dict}
+    telemetry_dict: JobTelemetryPayload = job_telemetry_payload(job, request, ui_mode=True)
+    telemetry_map: Dict[str, JobTelemetryPayload] = {str(job.id): telemetry_dict}
     _, flat_rows = build_job_rows([job], telemetry_map)
-    row = (
-        flat_rows[0]
-        if flat_rows
-        else {
-            "job": job,
-            "telemetry": telemetry_dict,
-            "title": friendly_job_title(job, telemetry_dict),
-            "children": [],
-            "actions": [],
-        }
-    )
+    if not flat_rows:
+        fallback_row = _fallback_job_row(job, telemetry_dict)
+        fallback_row["actions"] = build_job_action_entries(
+            job,
+            telemetry_dict,
+            can_review=user_can_review_case(getattr(request, "user", None), job.case),
+            is_child=False,
+        )
+        return render(
+            request,
+            "platform_ui/partials/job_row.html",
+            {
+                "row": fallback_row,
+                "table_columns": CASE_JOB_TABLE_COLUMNS,
+            },
+        )
+
+    row = flat_rows[0]
     row["actions"] = build_job_action_entries(
         job,
         telemetry_dict,
@@ -325,7 +367,7 @@ def case_job_row(request: HttpRequest, case_id: str, job_id: UUID) -> HttpRespon
         request,
         "platform_ui/partials/job_row.html",
         {
-            "row": row,
+            "row": cast(Any, row),
             "table_columns": CASE_JOB_TABLE_COLUMNS,
         },
     )
@@ -338,13 +380,15 @@ def create_job(request: HttpRequest, case_id: str) -> HttpResponse:
         return auth_response
 
     try:
-        active_org = resolve_request_organization(request, required=True)
+        active_org = cast(Organization, resolve_request_organization(request, required=True))
     except PermissionDenied:
         return redirect("ui-index")
 
     cases_qs = Case.objects.select_related("organization")
     case = cases_qs.for_user(getattr(request, "user", None)).filter(pk=case_id).first()
-    if not case or case.organization_id != getattr(active_org, "id", None):
+    if not isinstance(case, Case):
+        raise Http404
+    if getattr(case, "organization_id", None) != getattr(active_org, "id", None):
         raise Http404
 
     mode = request.POST.get("mode") or Job.Mode.ON_DEMAND
@@ -365,8 +409,9 @@ def create_job(request: HttpRequest, case_id: str) -> HttpResponse:
     if upload:
         dest = audio_dir / f"{job_id}__{upload.name}"
         with dest.open("wb") as handle:
-            for chunk in upload.chunks():
-                handle.write(chunk)
+            chunks_iter = cast(Iterable[bytes], upload.chunks())
+            for chunk_bytes in chunks_iter:
+                handle.write(chunk_bytes)
         audio_input = str(dest)
     elif sas_url:
         audio_input = sas_url
@@ -375,10 +420,12 @@ def create_job(request: HttpRequest, case_id: str) -> HttpResponse:
     else:
         return HttpResponse("Upload a file or provide a SAS URL.", status=400)
 
+    case_org = cast(Optional[Organization], getattr(case, "organization", None))
+
     job = Job.objects.create(
         id=job_id,
         case=case,
-        organization=case.organization,
+        organization=case_org,
         audio_input=audio_input,
         mode=mode,
         diarization=diarization,
@@ -460,19 +507,13 @@ def create_job(request: HttpRequest, case_id: str) -> HttpResponse:
             response["HX-Trigger"] = json.dumps(trigger_payload)
             return response
 
-    telemetry_map: Dict[str, Any] = {str(job.id): telemetry_dict}
+    telemetry_map: Dict[str, JobTelemetryPayload] = {str(job.id): telemetry_dict}
     _, flat_rows = build_job_rows([job], telemetry_map)
-    row = (
-        flat_rows[0]
-        if flat_rows
-        else {
-            "job": job,
-            "telemetry": telemetry_dict,
-            "title": friendly_job_title(job, telemetry_dict),
-            "children": [],
-            "actions": [],
-        }
-    )
+    if flat_rows:
+        row = cast(JobRow, flat_rows[0])  # pyright: ignore[reportUnnecessaryCast]
+    else:
+        row = _fallback_job_row(job, telemetry_dict)
+
     row["actions"] = build_job_action_entries(
         job,
         telemetry_dict,
