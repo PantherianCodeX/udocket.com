@@ -146,8 +146,9 @@ def case_job_metadata_modal(request: HttpRequest, case_id: str, job_id: UUID) ->
 
     telemetry_dict = job_telemetry_payload(job, request, ui_mode=True)
     detail_context = job_detail_context(request, job, telemetry=telemetry_dict)
-    raw_metadata_items = detail_context.get("metadata_items")
-    metadata_items: List[Dict[str, Any]] = _dict_list(raw_metadata_items)
+    metadata_sections = detail_context.get("metadata_sections") or detail_context.get("metadata_items") or []
+    if not isinstance(metadata_sections, list):
+        metadata_sections = []
     friendly_title = detail_context.get("job_title") or friendly_job_title(job, telemetry_dict, detail_context.get("artifact"))
     modal_created = job.finished_at or job.started_at or job.created_at
     meta_summary: List[Dict[str, Any]] = []
@@ -166,7 +167,8 @@ def case_job_metadata_modal(request: HttpRequest, case_id: str, job_id: UUID) ->
         "job_id": str(job.id),
         "created_at": modal_created,
         "modal_title_text": friendly_title,
-        "metadata_items": metadata_items,
+        "metadata_sections": metadata_sections,
+        "metadata_items": metadata_sections,
         "metadata_empty_text": "Metadata not recorded for this job.",
         "modal_meta_items": meta_summary,
     }
