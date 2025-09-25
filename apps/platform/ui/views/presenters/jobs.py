@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.jobs.models import Job
 
-from ..common import JobTelemetryPayload, _as_dict
+from ..common import JobRow, JobTelemetryPayload, _as_dict
 from ..constants import STATUS_PILL_STYLES, STATUS_SORT_ORDER
 from .utils import humanize_label, safe_lower, status_sort_value
 
@@ -64,6 +64,60 @@ def _job_type_label(job: Optional[Job], telemetry: Optional[JobTelemetryPayload]
         return humanize_label(mode)
     return "Job"
 
+
+
+
+def _job_most_recent_timestamp(job: Optional[Job]) -> datetime:
+    if not job:
+        return datetime.min
+    finished_at = getattr(job, "finished_at", None)
+    if isinstance(finished_at, datetime):
+        return finished_at
+    started_at = getattr(job, "started_at", None)
+    if isinstance(started_at, datetime):
+        return started_at
+    created_at = getattr(job, "created_at", None)
+    return created_at if isinstance(created_at, datetime) else datetime.min
+
+
+def _agent_key(telem: Optional[JobTelemetryPayload], job: Optional[Job] = None) -> str:
+    telem_payload: JobTelemetryPayload = telem or {}
+    agent = _as_dict(telem_payload.get("agent"))
+    raw = agent.get("type") or agent.get("name") or telem_payload.get("agent_label") or ""
+    if not raw and job is not None:
+        raw = job.mode or ""
+    normalized = str(raw).strip().lower()
+    normalized = normalized.replace("agent", "").replace("analysis", "")
+    normalized = normalized.replace(" ", "_")
+    return normalized
+
+
+def _latest_jobs_by_agent(jobs: List[Job], telemetry_map: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    latest: Dict[str, Dict[str, Any]] = {}
+    for job in jobs:
+        job_id = getattr(job, "id", None)
+        key = str(job_id) if job_id is not None else ""
+        telem = telemetry_map.get(key) or {}
+        agent_key = _agent_key(telem, job)
+        if not agent_key:
+            mode = getattr(job, "mode", None)
+            agent_key = str(mode).lower() if mode else "unknown"
+        existing = latest.get(agent_key)
+        if not existing:
+            latest[agent_key] = {"job": job, "telemetry": telem}
+            continue
+        current_ts = _job_most_recent_timestamp(existing["job"])
+        new_ts = _job_most_recent_timestamp(job)
+        if new_ts and new_ts > current_ts:
+            latest[agent_key] = {"job": job, "telemetry": telem}
+    return latest
+
+
+def _select_agent(latest: Dict[str, JobRow], keywords: tuple[str, ...]) -> Optional[JobRow]:
+    for key, payload in latest.items():
+        if any(word in key for word in keywords):
+            return payload
+    return None
 
 def _build_row_table_meta(row: Dict[str, Any]) -> None:
     """Populate a job row dict with deterministic sort/filter metadata for UI tables."""

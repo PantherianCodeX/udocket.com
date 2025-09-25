@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from ..constants import STATUS_SORT_ORDER
+from ..constants import STATUS_SORT_ORDER, STATUS_CLASS_MAP
 
 
 def safe_lower(value: Any) -> str:
@@ -26,3 +26,8 @@ def status_sort_value(status: str) -> str:
     normalized = (status or "").strip().upper()
     rank = STATUS_SORT_ORDER.get(normalized, 900)
     return f"{rank:03d}-{normalized}"
+
+
+def status_class(status: str) -> str:
+    """Map a status label to the configured pill class."""
+    return STATUS_CLASS_MAP.get(status, "border-white/20 bg-white/5 text-slate-200")

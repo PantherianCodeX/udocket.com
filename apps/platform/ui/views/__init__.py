@@ -54,19 +54,23 @@ from .constants import (
     GLOBAL_JOB_TABLE_COLUMNS,
 )
 
-from .presenters.utils import humanize_label, safe_lower, status_sort_value
+from .presenters.utils import humanize_label, safe_lower, status_class, status_sort_value
 
 from .common import JobTelemetryPayload, JobRow, _as_dict
 
 from .selectors import _job_telemetry_map, _job_telemetry_payload
 
 from .presenters.jobs import (
+    _agent_key,
     _build_job_rows,
     _build_row_table_meta,
     _friendly_job_title,
     _job_agent_label,
+    _job_most_recent_timestamp,
     _job_type_label,
     _jobs_by_agent,
+    _latest_jobs_by_agent,
+    _select_agent,
 )
 
 log = logging.getLogger("apps.platform.ui")
@@ -104,10 +108,6 @@ def _format_metadata(metadata: dict[str, Any] | None) -> list[dict[str, Any]]:
     return items
 
 
-def _status_class(status: str) -> str:
-    return STATUS_CLASS_MAP.get(status, "border-white/20 bg-white/5 text-slate-200")
-
-
 def _user_label(user: User) -> str:
     return (
         user.display_name
@@ -116,61 +116,6 @@ def _user_label(user: User) -> str:
         or user.username
         or str(user.pk)
     )
-
-
-def _job_most_recent_timestamp(job: Optional[Job]) -> datetime:
-    if not job:
-        return datetime.min
-    finished_at = getattr(job, "finished_at", None)
-    if isinstance(finished_at, datetime):
-        return finished_at
-    started_at = getattr(job, "started_at", None)
-    if isinstance(started_at, datetime):
-        return started_at
-    created_at = getattr(job, "created_at", None)
-    return created_at if isinstance(created_at, datetime) else datetime.min
-
-
-def _agent_key(telem: Optional[JobTelemetryPayload], job: Optional[Job] = None) -> str:
-    telem_payload: JobTelemetryPayload = telem or {}
-    agent = _as_dict(telem_payload.get("agent"))
-    raw = agent.get("type") or agent.get("name") or telem_payload.get("agent_label") or ""
-    if not raw and job is not None:
-        raw = job.mode or ""
-    normalized = str(raw).strip().lower()
-    normalized = normalized.replace("agent", "").replace("analysis", "")
-    normalized = normalized.replace(" ", "_")
-    return normalized
-
-
-def _latest_jobs_by_agent(jobs: List[Job], telemetry_map: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
-    latest: Dict[str, Dict[str, Any]] = {}
-    for job in jobs:
-        job_id = getattr(job, "id", None)
-        key = str(job_id) if job_id is not None else ""
-        telem = telemetry_map.get(key) or {}
-        agent_key = _agent_key(telem, job)
-        if not agent_key:
-            mode = getattr(job, "mode", None)
-            agent_key = str(mode).lower() if mode else "unknown"
-        existing = latest.get(agent_key)
-        if not existing:
-            latest[agent_key] = {"job": job, "telemetry": telem}
-            continue
-        current_ts = _job_most_recent_timestamp(existing["job"])
-        new_ts = _job_most_recent_timestamp(job)
-        if new_ts and new_ts > current_ts:
-            latest[agent_key] = {"job": job, "telemetry": telem}
-    return latest
-
-
-def _select_agent(latest: Dict[str, JobRow], keywords: tuple[str, ...]) -> Optional[JobRow]:
-    for key, payload in latest.items():
-        if any(word in key for word in keywords):
-            return payload
-    return None
-
-
 def _map_job_status(job: Optional[Job]) -> str:
     if not job:
         return "Created"
@@ -579,7 +524,7 @@ def _analysis_modules_context(
             "description": description,
             "panel_id": f"module-{key}",
             "status": status,
-            "status_class": _status_class(status),
+            "status_class": status_class(status),
             "header_hint": header_hint,
             "header_hint_time": latest["created_at"] if latest else None,
             "latest": latest,
@@ -635,7 +580,7 @@ def _build_case_progress(case: Case, jobs: List[Job], telemetry_map: Dict[str, D
             "key": "case_setup",
             "label": "Case Setup",
             "status": setup_status,
-            "status_class": _status_class(setup_status),
+            "status_class": status_class(setup_status),
             "detail": " · ".join(setup_detail_parts),
             "updated": case.updated_at,
             "job": None,
@@ -666,7 +611,7 @@ def _build_case_progress(case: Case, jobs: List[Job], telemetry_map: Dict[str, D
                     "key": key,
                     "label": label,
                     "status": status,
-                    "status_class": _status_class(status),
+                    "status_class": status_class(status),
                     "job": job,
                     "telemetry": telem,
                     "updated": _job_most_recent_timestamp(job),
@@ -678,7 +623,7 @@ def _build_case_progress(case: Case, jobs: List[Job], telemetry_map: Dict[str, D
                     "key": key,
                     "label": label,
                     "status": "Created",
-                    "status_class": _status_class("Created"),
+                    "status_class": status_class("Created"),
                     "job": None,
                     "telemetry": None,
                     "updated": None,
@@ -987,13 +932,13 @@ def _build_tool_panels(
         if not item:
             return {
                 "label": default_status,
-                "class": _status_class(default_status),
+                "class": status_class(default_status),
                 "updated": None,
                 "detail": None,
             }
         return {
             "label": item.get("status") or default_status,
-            "class": item.get("status_class") or _status_class(default_status),
+            "class": item.get("status_class") or status_class(default_status),
             "updated": item.get("updated"),
             "detail": item.get("detail"),
         }
