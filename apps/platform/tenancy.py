@@ -2,7 +2,7 @@ from __future__ import annotations
 
 """Shared helpers for tenant-aware filtering."""
 
-from typing import Sequence
+from typing import Any, Sequence
 
 from django.apps import apps
 from django.conf import settings
@@ -22,7 +22,7 @@ def _is_dev_open() -> bool:
     return bool(getattr(settings, "PLATFORM_DEV_OPEN", False))
 
 
-def organization_ids_for_user(user) -> Sequence[str]:
+def organization_ids_for_user(user: Any) -> Sequence[str]:
     if not user or not getattr(user, "is_authenticated", False):
         return []
     OrganizationMembership = apps.get_model("accounts", "OrganizationMembership")
@@ -31,20 +31,20 @@ def organization_ids_for_user(user) -> Sequence[str]:
     )
 
 
-def case_ids_for_user(user) -> Sequence[str]:
+def case_ids_for_user(user: Any) -> Sequence[str]:
     if not user or not getattr(user, "is_authenticated", False):
         return []
     CaseMembership = apps.get_model("cases", "CaseMembership")
     return list(CaseMembership.objects.filter(user=user).values_list("case_id", flat=True))
 
 
-def _return_when_unauthenticated(qs: QuerySet, user) -> QuerySet:
+def _return_when_unauthenticated(qs: QuerySet[Any], user: Any) -> QuerySet[Any]:
     if user and getattr(user, "is_authenticated", False):
         return qs
     return qs if _is_dev_open() else qs.none()
 
 
-def scope_cases(qs: QuerySet, user) -> QuerySet:
+def scope_cases(qs: QuerySet[Any], user: Any) -> QuerySet[Any]:
     qs = _return_when_unauthenticated(qs, user)
     if not user or not getattr(user, "is_authenticated", False):
         return qs
@@ -60,7 +60,7 @@ def scope_cases(qs: QuerySet, user) -> QuerySet:
     return qs.filter(filters).distinct()
 
 
-def scope_jobs(qs: QuerySet, user) -> QuerySet:
+def scope_jobs(qs: QuerySet[Any], user: Any) -> QuerySet[Any]:
     qs = _return_when_unauthenticated(qs, user)
     if not user or not getattr(user, "is_authenticated", False):
         return qs
@@ -77,7 +77,7 @@ def scope_jobs(qs: QuerySet, user) -> QuerySet:
     return qs.filter(filters).distinct()
 
 
-def scope_artifacts(qs: QuerySet, user) -> QuerySet:
+def scope_artifacts(qs: QuerySet[Any], user: Any) -> QuerySet[Any]:
     qs = _return_when_unauthenticated(qs, user)
     if not user or not getattr(user, "is_authenticated", False):
         return qs
@@ -95,7 +95,7 @@ def scope_artifacts(qs: QuerySet, user) -> QuerySet:
     return qs.filter(filters).distinct()
 
 
-def accessible_organization_ids(user) -> set[str]:
+def accessible_organization_ids(user: Any) -> set[str]:
     """Return organization IDs the user may access.
 
     Superusers gain access to all organizations, authenticated users receive

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Iterable, Optional
+from typing import Any, Iterable, Optional
 
 from django.conf import settings
 from django.db.models import Q
@@ -129,7 +129,7 @@ def role_capabilities(role_name: str, organization_id: Optional[str] = None) -> 
 
 
 
-def has_capability(user, case_id: str | None, capability: str) -> bool:
+def has_capability(user: Any, case_id: str | None, capability: str) -> bool:
     if not user or not getattr(user, "is_authenticated", False):
         return bool(getattr(settings, "PLATFORM_DEV_OPEN", True))
     if not case_id:

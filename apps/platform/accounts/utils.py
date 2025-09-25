@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from typing import Iterable, Optional
+from typing import Any, Iterable, Optional
 
 from django.contrib.auth import get_user_model
 from django.db import models
 from django.core.exceptions import PermissionDenied
+from django.http import HttpRequest
 from django.conf import settings
 
 from apps.platform.accounts.models import Organization, OrganizationMembership
@@ -15,7 +16,7 @@ AdminOrgChoice = dict[str, str]
 _SESSION_KEY = "admin_active_org_id"
 
 
-def user_accessible_organizations(user) -> models.QuerySet[Organization]:
+def user_accessible_organizations(user: Any) -> models.QuerySet[Organization]:
     """Return queryset of organizations the user may manage."""
     if not user or not getattr(user, "is_authenticated", False):
         return Organization.objects.none()
@@ -34,16 +35,16 @@ def user_accessible_organizations(user) -> models.QuerySet[Organization]:
     return Organization.objects.filter(id__in=org_ids).order_by("name")
 
 
-def user_accessible_org_ids(user) -> list[str]:
+def user_accessible_org_ids(user: Any) -> list[str]:
     return list(user_accessible_organizations(user).values_list("id", flat=True))
 
 
-def get_active_admin_org_id(request) -> Optional[str]:
+def get_active_admin_org_id(request: HttpRequest) -> Optional[str]:
     org = get_active_admin_org(request)
     return org.id if org else None
 
 
-def get_active_admin_org(request) -> Optional[Organization]:
+def get_active_admin_org(request: HttpRequest) -> Optional[Organization]:
     session = getattr(request, "session", None)
     if session is None:
         request.admin_active_org = None  # type: ignore[attr-defined]
@@ -72,7 +73,7 @@ def get_active_admin_org(request) -> Optional[Organization]:
     return None
 
 
-def set_active_admin_org_id(request, org_id: Optional[str]) -> None:
+def set_active_admin_org_id(request: HttpRequest, org_id: Optional[str]) -> None:
     session = getattr(request, "session", None)
     if session is None:
         return
@@ -83,12 +84,14 @@ def set_active_admin_org_id(request, org_id: Optional[str]) -> None:
     session.modified = True
 
 
-def admin_org_choices(request) -> list[AdminOrgChoice]:
+def admin_org_choices(request: HttpRequest) -> list[AdminOrgChoice]:
     orgs = user_accessible_organizations(getattr(request, "user", None))
     return [{"id": org.id, "name": org.name} for org in orgs]
 
 
-def resolve_request_organization(request, *, required: bool = True) -> Optional[Organization]:
+def resolve_request_organization(
+    request: HttpRequest, *, required: bool = True
+) -> Optional[Organization]:
     """Resolve the active organization for the current request.
 
     Preference order:
@@ -134,7 +137,7 @@ def resolve_request_organization(request, *, required: bool = True) -> Optional[
     return None
 
 
-def sync_user_access_flags(user) -> None:
+def sync_user_access_flags(user: Any) -> None:
     """Synchronize Django staff/superuser flags from organization roles."""
 
     if not user or not getattr(user, "pk", None):

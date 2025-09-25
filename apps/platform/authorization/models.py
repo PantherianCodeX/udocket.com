@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import uuid
 
+import typing
+
 from django.db import models
 
 
@@ -42,6 +44,16 @@ class Role(models.Model):
         if not self.uuid:
             self.uuid = uuid.uuid4()
         super().save(*args, **kwargs)
+
+    if typing.TYPE_CHECKING:  # pragma: no cover - typing aids
+        from django.db.models.manager import BaseManager
+        from apps.platform.accounts.models import Organization
+
+        uuid: uuid.UUID | None
+        organization_id: str | None
+        organization: Organization | None
+        presets: BaseManager["PermissionPreset"]
+        capabilities: BaseManager["RoleCapability"]
 
 
 class RoleCapability(models.Model):
@@ -92,6 +104,15 @@ class PermissionPreset(models.Model):
             self.uuid = uuid.uuid4()
         super().save(*args, **kwargs)
 
+    if typing.TYPE_CHECKING:  # pragma: no cover - typing aids
+        from django.db.models.manager import BaseManager
+        from apps.platform.accounts.models import Organization
+
+        uuid: uuid.UUID | None
+        organization_id: str | None
+        organization: Organization | None
+        capabilities: BaseManager["PresetCapability"]
+
 
 class PresetCapability(models.Model):
     preset = models.ForeignKey(PermissionPreset, on_delete=models.CASCADE, related_name="capabilities")
@@ -103,3 +124,6 @@ class PresetCapability(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return f"{self.preset.name}:{self.capability}"
+
+    if typing.TYPE_CHECKING:  # pragma: no cover - typing aids
+        preset: PermissionPreset

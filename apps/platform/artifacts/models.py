@@ -1,13 +1,16 @@
+import typing
+from typing import Any
+
 from django.db import models
 from django.conf import settings
 from simple_history.models import HistoricalRecords
 
 
-class CaseArtifactQuerySet(models.QuerySet):
-    def for_user(self, user):
+class CaseArtifactQuerySet(models.QuerySet["CaseArtifact"]):
+    def for_user(self, user: Any) -> "CaseArtifactQuerySet":
         from apps.platform import tenancy
 
-        return tenancy.scope_artifacts(self, user)
+        return typing.cast("CaseArtifactQuerySet", tenancy.scope_artifacts(self, user))
 
 
 class CaseArtifact(models.Model):
@@ -62,4 +65,3 @@ class CaseArtifact(models.Model):
             if org_id:
                 self.organization_id = org_id
         super().save(*args, **kwargs)
-

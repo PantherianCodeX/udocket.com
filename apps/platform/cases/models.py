@@ -1,14 +1,18 @@
+import typing
+from datetime import datetime, date
+from typing import Any
+
 from django.db import models
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from simple_history.models import HistoricalRecords
 
 
-class CaseQuerySet(models.QuerySet):
-    def for_user(self, user):
+class CaseQuerySet(models.QuerySet["Case"]):
+    def for_user(self, user: Any) -> "CaseQuerySet":
         from apps.platform import tenancy
 
-        return tenancy.scope_cases(self, user)
+        return typing.cast("CaseQuerySet", tenancy.scope_cases(self, user))
 
 
 CaseManager = CaseQuerySet.as_manager()
@@ -86,6 +90,21 @@ class Case(models.Model):
 
     objects = CaseManager
 
+    if typing.TYPE_CHECKING:  # pragma: no cover - typing aids
+        id: str
+        title: str
+        organization_id: str
+        organization: "Organization"
+        reviewer_id: str | None
+        client_user_id: str | None
+        reviewer: "User | None"
+        client_user: "User | None"
+        created_at: datetime
+        updated_at: datetime
+        court_date: datetime | None
+        filing_deadline: date | None
+        objects: CaseQuerySet
+
     def __str__(self) -> str:  # pragma: no cover - trivial
         return f"{self.id} — {self.title}"
 
@@ -113,3 +132,12 @@ class CaseMembership(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return f"{self.case_id}:{self.user_id}:{self.role}"
+
+    if typing.TYPE_CHECKING:  # pragma: no cover - typing aids
+        from apps.platform.cases.models import Case
+        from apps.platform.accounts.models import User
+
+        case: Case
+        case_id: str
+        user: User
+        user_id: int

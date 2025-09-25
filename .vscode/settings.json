@@ -1,5 +1,5 @@
 {
-  "python.analysis.typeCheckingMode": "basic",
+  "python.analysis.typeCheckingMode": "strict",
   "python.analysis.djangoEnabled": true,
   "python.analysis.djangoSettingsModule": "apps.platform.config.settings.dev",
   "python.analysis.exclude": [
@@ -8,4 +8,3 @@
     "**/__pycache__"
   ]
 }
-

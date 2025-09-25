@@ -2,19 +2,20 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any, Dict
 
 from django.conf import settings
 from rest_framework import serializers
 
 from apps.platform.authorization.capabilities import has_capability
 from apps.platform.jobs.models import Job
-from apps.platform.jobs.telemetry import job_telemetry
+from apps.platform.jobs.telemetry import JobTelemetry, job_telemetry
 
 
 class JobTelemetrySerializer(serializers.Serializer):
     """Enriched job diagnostics payload mirroring worker metadata."""
 
-    def to_representation(self, instance: Job) -> dict:  # type: ignore[override]
+    def to_representation(self, instance: Job) -> Dict[str, Any]:  # type: ignore[override]
         request = self.context.get("request") if hasattr(self, "context") else None
         ui_mode = bool(self.context.get("ui_mode"))
         user = getattr(request, "user", None)
@@ -44,11 +45,11 @@ class JobTelemetrySerializer(serializers.Serializer):
                 allow_transcript = False
                 allow_transcript_path = False
 
-        telem = job_telemetry(instance)
-        audio_payload = telem.audio_payload(include_paths=allow_audio)
-        transcript_payload = telem.transcript_payload(include_paths=allow_transcript_path)
-        agent_payload = telem.agent_payload()
-        meta_payload = dict(telem.meta) if isinstance(telem.meta, dict) else {}
+        telem: JobTelemetry = job_telemetry(instance)
+        audio_payload: Dict[str, Any] = telem.audio_payload(include_paths=allow_audio)
+        transcript_payload: Dict[str, Any] = telem.transcript_payload(include_paths=allow_transcript_path)
+        agent_payload: Dict[str, Any] = telem.agent_payload()
+        meta_payload: Dict[str, Any] = dict(telem.meta)
         # Enrich with availability flags for UI gating (e.g., converted WAV download)
         converted_available = False
         converted_job_id = meta_payload.get("converted_audio_job_id") or meta_payload.get("converted_wav_job_id")
@@ -108,7 +109,7 @@ class JobTelemetrySerializer(serializers.Serializer):
             # expose minimal error when user lacks artifact rights
             error_message = "Restricted"
 
-        data = {
+        data: Dict[str, Any] = {
             "id": str(instance.id),
             "case_id": str(instance.case_id),
             "status": instance.status,
@@ -149,7 +150,7 @@ class JobTelemetrySerializer(serializers.Serializer):
             data["reviewed_by"] = None
 
         if allow_transcript:
-            transcript_entry = {
+            transcript_entry: Dict[str, Any] = {
                 "type": transcript_payload.get("artifact_type", "TRANSCRIPT"),
                 "path": transcript_payload.get("path") if allow_transcript_path else None,
                 "download_url": None,

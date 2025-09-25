@@ -1,16 +1,21 @@
 from __future__ import annotations
 
+import typing
 import uuid
 
 from django.conf import settings
 from django.db import models
+from typing import Any
+
+if typing.TYPE_CHECKING:  # pragma: no cover
+    from apps.platform.cases.models import Case
 
 
-class JobQuerySet(models.QuerySet):
-    def for_user(self, user):
+class JobQuerySet(models.QuerySet["Job"]):
+    def for_user(self, user: Any) -> "JobQuerySet":
         from apps.platform import tenancy
 
-        return tenancy.scope_jobs(self, user)
+        return typing.cast("JobQuerySet", tenancy.scope_jobs(self, user))
 
 
 class Job(models.Model):
@@ -75,6 +80,21 @@ class Job(models.Model):
         ordering = ["-created_at"]
 
     objects = JobQuerySet.as_manager()
+
+    if typing.TYPE_CHECKING:  # pragma: no cover - typing aids
+        from datetime import datetime
+
+        id: uuid.UUID
+        case_id: uuid.UUID
+        organization_id: uuid.UUID | None
+        case: "Case"
+        mode: str
+        status: str
+        transcript_path: str | None
+        finished_at: datetime | None
+        started_at: datetime | None
+        created_at: datetime
+        review_status: str
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return f"{self.id} {self.status}"

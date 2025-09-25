@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import uuid
 
+import typing
+
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 
@@ -34,6 +36,11 @@ class Organization(models.Model):
         if not self.uid:
             self.uid = uuid.uuid4()
         super().save(*args, **kwargs)
+
+    if typing.TYPE_CHECKING:  # pragma: no cover - typing aids
+        id: str
+        uid: uuid.UUID | None
+        name: str
 
 
 class User(AbstractUser):
@@ -68,3 +75,11 @@ class OrganizationMembership(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return f"{self.organization_id}:{self.user_id}:{self.role}"
+
+    if typing.TYPE_CHECKING:  # pragma: no cover - typing aids
+        from apps.platform.accounts.models import Organization, User
+
+        organization: Organization
+        organization_id: str
+        user: User
+        user_id: int

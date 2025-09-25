@@ -1,13 +1,18 @@
 from __future__ import annotations
 
+from typing import Callable, Optional, cast
+
 from django.db import connection
 from django.conf import settings
+from django.http import HttpRequest, HttpResponse
 
 
-def org_session_middleware(get_response):
-    def middleware(request):
+def org_session_middleware(
+    get_response: Callable[[HttpRequest], HttpResponse]
+) -> Callable[[HttpRequest], HttpResponse]:
+    def middleware(request: HttpRequest) -> HttpResponse:
         header_name = getattr(settings, "ORG_HEADER_NAME", "HTTP_X_ORGANIZATION_ID")
-        org_id = request.META.get(header_name)
+        org_id: Optional[str] = cast(Optional[str], request.META.get(header_name))
         user = getattr(request, "user", None)
         # Only set when on Postgres and a valid organization header is present and user is a member
         if connection.vendor == "postgresql" and org_id and user and getattr(user, "is_authenticated", False):
@@ -19,8 +24,7 @@ def org_session_middleware(get_response):
                         cur.execute("SET LOCAL app.current_organization = %s", [str(org_id)])
             except Exception:
                 pass
-        response = get_response(request)
+        response: HttpResponse = get_response(request)
         return response
 
     return middleware
-

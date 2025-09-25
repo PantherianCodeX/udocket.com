@@ -5,6 +5,8 @@ services:
       dockerfile: infra/docker/Dockerfile.platform
       args:
         DEV_TOOLS: "1"
+        # Allow choosing a different base image without editing the Dockerfile
+        PYTHON_BASE: "${PYTHON_BASE:-mcr.microsoft.com/devcontainers/python:3.11}"
     env_file:
       - ${PWD}/.env
     environment:

@@ -4,7 +4,7 @@ import json
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple, Protocol, cast
 
 import re
 
@@ -13,6 +13,7 @@ import logging
 
 from django.conf import settings
 from django.db import models
+from django.db.utils import IntegrityError
 from django.http import Http404, HttpRequest, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import redirect, render
 from django.template.loader import render_to_string
@@ -44,6 +45,56 @@ from apps.platform.jobs.serializers import JobTelemetrySerializer
 from apps.platform.jobs.telemetry import summarize_jobs
 
 log = logging.getLogger("apps.platform.ui")
+
+
+class _TaskWithDelay(Protocol):
+    def delay(self, *args: Any, **kwargs: Any) -> Any:
+        ...
+
+
+transcribe_job_task: _TaskWithDelay = cast(_TaskWithDelay, transcribe_job)
+
+
+JobTelemetryPayload = Dict[str, Any]
+JobRow = Dict[str, Any]
+
+
+def _as_dict(payload: Any) -> Dict[str, Any]:
+    if isinstance(payload, Mapping):
+        mapping = cast(Mapping[Any, Any], payload)
+        result: Dict[str, Any] = {}
+        for key, value in mapping.items():
+            result[str(key)] = value
+        return result
+    return {}
+
+
+def _job_telemetry_payload(
+    job: Job,
+    request: Optional[HttpRequest],
+    *,
+    ui_mode: bool = True,
+) -> JobTelemetryPayload:
+    serializer = JobTelemetrySerializer(job, context={"request": request, "ui_mode": ui_mode})
+    return _as_dict(serializer.data)
+
+
+def _job_telemetry_map(
+    jobs: List[Job],
+    request: Optional[HttpRequest],
+    *,
+    ui_mode: bool = True,
+) -> Dict[str, JobTelemetryPayload]:
+    serializer = JobTelemetrySerializer(jobs, many=True, context={"request": request, "ui_mode": ui_mode})
+    payloads: List[JobTelemetryPayload] = []
+    for item in serializer.data:
+        payloads.append(_as_dict(item))
+    telemetry_map: Dict[str, JobTelemetryPayload] = {}
+    for payload in payloads:
+        identifier = payload.get("id")
+        if isinstance(identifier, (str, int)):
+            telemetry_map[str(identifier)] = payload
+    return telemetry_map
 
 
 STATUS_CLASS_MAP = {
@@ -144,15 +195,23 @@ def _user_label(user: User) -> str:
     )
 
 
-def _job_most_recent_timestamp(job: Job) -> datetime:
-    return job.finished_at or job.started_at or job.created_at
+def _job_most_recent_timestamp(job: Optional[Job]) -> datetime:
+    if not job:
+        return datetime.min
+    finished_at = getattr(job, "finished_at", None)
+    if isinstance(finished_at, datetime):
+        return finished_at
+    started_at = getattr(job, "started_at", None)
+    if isinstance(started_at, datetime):
+        return started_at
+    created_at = getattr(job, "created_at", None)
+    return created_at if isinstance(created_at, datetime) else datetime.min
 
 
-def _agent_key(telem: Optional[Dict[str, Any]], job: Optional[Job] = None) -> str:
-    if not telem:
-        telem = {}
-    agent = telem.get("agent") or {}
-    raw = agent.get("type") or agent.get("name") or telem.get("agent_label") or ""
+def _agent_key(telem: Optional[JobTelemetryPayload], job: Optional[Job] = None) -> str:
+    telem_payload: JobTelemetryPayload = telem or {}
+    agent = _as_dict(telem_payload.get("agent"))
+    raw = agent.get("type") or agent.get("name") or telem_payload.get("agent_label") or ""
     if not raw and job is not None:
         raw = job.mode or ""
     normalized = str(raw).strip().lower()
@@ -164,11 +223,13 @@ def _agent_key(telem: Optional[Dict[str, Any]], job: Optional[Job] = None) -> st
 def _latest_jobs_by_agent(jobs: List[Job], telemetry_map: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
     latest: Dict[str, Dict[str, Any]] = {}
     for job in jobs:
-        key = str(job.id)
+        job_id = getattr(job, "id", None)
+        key = str(job_id) if job_id is not None else ""
         telem = telemetry_map.get(key) or {}
         agent_key = _agent_key(telem, job)
         if not agent_key:
-            agent_key = job.mode.lower() if job.mode else "unknown"
+            mode = getattr(job, "mode", None)
+            agent_key = str(mode).lower() if mode else "unknown"
         existing = latest.get(agent_key)
         if not existing:
             latest[agent_key] = {"job": job, "telemetry": telem}
@@ -180,15 +241,17 @@ def _latest_jobs_by_agent(jobs: List[Job], telemetry_map: Dict[str, Dict[str, An
     return latest
 
 
-def _select_agent(latest: Dict[str, Dict[str, Any]], keywords: tuple[str, ...]) -> Optional[Dict[str, Any]]:
+def _select_agent(latest: Dict[str, JobRow], keywords: tuple[str, ...]) -> Optional[JobRow]:
     for key, payload in latest.items():
         if any(word in key for word in keywords):
             return payload
     return None
 
 
-def _map_job_status(job: Job) -> str:
-    status = str(job.status or "").upper()
+def _map_job_status(job: Optional[Job]) -> str:
+    if not job:
+        return "Created"
+    status = str(getattr(job, "status", "") or "").upper()
     if status == getattr(Job.Status, "CONVERTING", "CONVERTING"):
         return "Converting"
     if status == Job.Status.UPLOADING:
@@ -206,22 +269,21 @@ def _map_job_status(job: Job) -> str:
 
 def _friendly_job_title(
     job: Job,
-    telemetry: Optional[Dict[str, Any]] = None,
+    telemetry: Optional[JobTelemetryPayload] = None,
     artifact: Optional[CaseArtifact] = None,
 ) -> str:
-    telem = telemetry or {}
-    meta = telem.get("metadata") or {}
-    if isinstance(meta, dict):
-        title = meta.get("job_title")
-        if title:
-            return str(title)
+    telem: JobTelemetryPayload = telemetry or {}
+    meta = _as_dict(telem.get("metadata"))
+    title_value = meta.get("job_title")
+    if isinstance(title_value, str) and title_value.strip():
+        return title_value
     artifacts = telem.get("artifacts") or []
-    if artifacts:
+    if isinstance(artifacts, list) and artifacts:
         candidate = artifacts[0]
-        if isinstance(candidate, dict):
-            title = candidate.get("title")
-            if title:
-                return title
+        candidate_dict = _as_dict(candidate)
+        candidate_title = candidate_dict.get("title")
+        if isinstance(candidate_title, str) and candidate_title.strip():
+            return candidate_title
     if artifact and getattr(artifact, "title", None):
         return artifact.title
     description = getattr(job, "description", None)
@@ -241,19 +303,23 @@ def _humanize_label(value: Any) -> str:
     return text.title() if text else ""
 
 
-def _job_agent_label(job: Optional[Job], telemetry: Optional[Dict[str, Any]]) -> str:
-    telem_agent = (telemetry or {}).get("agent") or {}
+def _job_agent_label(job: Optional[Job], telemetry: Optional[JobTelemetryPayload]) -> str:
+    telem_agent = _as_dict((telemetry or {}).get("agent"))
     for key in ("label", "name", "type"):
         value = telem_agent.get(key)
+        if isinstance(value, str) and value.strip():
+            return value
         if value:
             return str(value)
-    if job and getattr(job, "mode", None):
-        return _humanize_label(job.mode)
+    if job:
+        mode = getattr(job, "mode", None)
+        if mode:
+            return _humanize_label(mode)
     return ""
 
 
-def _job_type_label(job: Optional[Job], telemetry: Optional[Dict[str, Any]]) -> str:
-    meta = (telemetry or {}).get("metadata") or {}
+def _job_type_label(job: Optional[Job], telemetry: Optional[JobTelemetryPayload]) -> str:
+    meta = _as_dict((telemetry or {}).get("metadata"))
     kind = meta.get("job_kind")
     if kind:
         label = _humanize_label(kind)
@@ -354,7 +420,7 @@ def _user_can_review_case(user: Optional[User], case: Case) -> bool:
 
 def _job_action_entries(
     job: Optional[Job],
-    telemetry: Optional[Dict[str, Any]],
+    telemetry: Optional[JobTelemetryPayload],
     *,
     can_review: bool,
     is_child: bool,
@@ -366,13 +432,14 @@ def _job_action_entries(
     case_id = str(job.case_id)
     status = str(getattr(job, "status", "") or "").upper()
     telem = telemetry or {}
-    meta = telem.get("metadata") or {}
-    transcript_payload = telem.get("transcript") or {}
-    audio_payload = telem.get("audio") or {}
+    meta = _as_dict(telem.get("metadata"))
+    transcript_payload = _as_dict(telem.get("transcript"))
+    audio_payload = _as_dict(telem.get("audio"))
     artifact_entry = None
     artifacts = telem.get("artifacts") or []
     if artifacts:
-        artifact_entry = artifacts[0]
+        candidate = artifacts[0]
+        artifact_entry = _as_dict(candidate) if isinstance(candidate, Mapping) else candidate
 
     job_kind = str(meta.get("job_kind") or "").lower()
     converted_available = bool(meta.get("converted_wav_available"))
@@ -514,30 +581,26 @@ def _job_action_entries(
     return [section for section in sections if section.get("items")]
 
 
-def _candidate_transcript_paths(job: Job, telemetry: Optional[Dict[str, Any]]) -> List[str]:
+def _candidate_transcript_paths(job: Job, telemetry: Optional[JobTelemetryPayload]) -> List[str]:
     paths: List[str] = []
     if isinstance(job.transcript_path, str) and job.transcript_path:
         paths.append(job.transcript_path)
-    transcript_payload = (telemetry or {}).get("transcript") or {}
-    if isinstance(transcript_payload, dict):
-        path_from_telem = transcript_payload.get("path")
-        if isinstance(path_from_telem, str) and path_from_telem and path_from_telem not in paths:
-            paths.append(path_from_telem)
+    transcript_payload = _as_dict((telemetry or {}).get("transcript"))
+    path_from_telem = transcript_payload.get("path")
+    if isinstance(path_from_telem, str) and path_from_telem and path_from_telem not in paths:
+        paths.append(path_from_telem)
     return paths
 
 
-def _default_transcript_title(job: Job, telemetry: Optional[Dict[str, Any]]) -> str:
-    telem = telemetry or {}
-    transcript_payload = telem.get("transcript") or {}
-    if isinstance(transcript_payload, dict):
-        title_value = transcript_payload.get("title")
-        if isinstance(title_value, str) and title_value.strip():
-            return title_value.strip()
-    meta = telem.get("metadata") or {}
-    if isinstance(meta, dict):
-        job_title = meta.get("job_title")
-        if isinstance(job_title, str) and job_title.strip():
-            return job_title.strip()
+def _default_transcript_title(job: Job, telemetry: Optional[JobTelemetryPayload]) -> str:
+    transcript_payload = _as_dict((telemetry or {}).get("transcript"))
+    title_value = transcript_payload.get("title")
+    if isinstance(title_value, str) and title_value.strip():
+        return title_value.strip()
+    meta = _as_dict((telemetry or {}).get("metadata"))
+    job_title = meta.get("job_title")
+    if isinstance(job_title, str) and job_title.strip():
+        return job_title.strip()
     return _friendly_job_title(job, telemetry)
 
 
@@ -566,7 +629,7 @@ def _unique_transcript_title(case_id: str, base_title: str, organization_id: Opt
         return candidate
 
     if "-" in candidate:
-        stem, suffix = candidate.rsplit("-", 1)
+        _stem, suffix = candidate.rsplit("-", 1)
         trimmed = base[: max(0, 200 - len(suffix) - 1)] or base[:200]
         return f"{trimmed}-{suffix}"[:200]
 
@@ -577,7 +640,7 @@ def _ensure_transcript_artifact(
     *,
     case: Case,
     job: Job,
-    telemetry: Optional[Dict[str, Any]] = None,
+    telemetry: Optional[JobTelemetryPayload] = None,
     title: Optional[str] = None,
     metadata_source: str = "ui.transcript_promote",
 ) -> Optional[CaseArtifact]:
@@ -954,7 +1017,7 @@ def _format_case_field_value(case: Case, spec: Dict[str, Any]) -> Dict[str, Any]
     name = spec["name"]
     raw_value = getattr(case, name, None)
     field_type = spec.get("type", "text")
-    display: Optional[str]
+    display: str
     form_value: Any = raw_value
 
     if field_type == "boolean":
@@ -977,13 +1040,19 @@ def _format_case_field_value(case: Case, spec: Dict[str, Any]) -> Dict[str, Any]
             form_value = ""
     elif field_type == "choice":
         getter = getattr(case, f"get_{name}_display", None)
-        display = getter() if callable(getter) else (raw_value or "—")
+        if callable(getter):
+            try:
+                display = str(getter())
+            except Exception:
+                display = "—"
+        else:
+            display = str(raw_value) if raw_value is not None else "—"
         form_value = raw_value or ""
     elif field_type == "textarea":
-        display = raw_value or "—"
+        display = str(raw_value) if raw_value is not None else "—"
         form_value = raw_value or ""
     else:
-        display = raw_value or "—"
+        display = str(raw_value) if raw_value is not None else "—"
         form_value = raw_value or ""
 
     return {
@@ -1010,8 +1079,6 @@ def _organization_member_options(case: Case) -> List[Dict[str, Any]]:
     seen: set[str] = set()
     for membership in memberships:
         user = membership.user
-        if not user:
-            continue
         key = str(user.pk)
         if key in seen:
             continue
@@ -1040,7 +1107,7 @@ def _collect_case_artifacts(
 
 def _build_job_rows(
     jobs_list: List[Job],
-    telemetry_map: Dict[str, Dict[str, Any]],
+    telemetry_map: Dict[str, JobTelemetryPayload],
     transcript_artifacts: Optional[Dict[str, CaseArtifact]] = None,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """Return hierarchical job rows ready for rendering with shared table components."""
@@ -1068,8 +1135,8 @@ def _build_job_rows(
 
     display_rows: List[Dict[str, Any]] = []
     for row in flat_rows:
-        telem = row.get("telemetry") or {}
-        meta = telem.get("metadata") or {}
+        telem = _as_dict(row.get("telemetry"))
+        meta = _as_dict(telem.get("metadata"))
         kind = str(meta.get("job_kind", "") or "").lower()
         source_id = meta.get("source_job_id")
         parent = row_lookup.get(str(source_id)) if source_id else None
@@ -1077,10 +1144,20 @@ def _build_job_rows(
             row["is_child"] = True
             if parent.get("job"):
                 row["parent_id"] = str(parent["job"].id)
-            parent.setdefault("children", []).append(row)
-            parent["children"].sort(
-                key=lambda child: getattr(child.get("job"), "created_at", datetime.min)
-            )
+            def child_sort_key(child_row: Dict[str, Any]) -> datetime:
+                job_obj = child_row.get("job")
+                if isinstance(job_obj, Job):
+                    if job_obj.finished_at:
+                        return job_obj.finished_at
+                    if job_obj.started_at:
+                        return job_obj.started_at
+                    if job_obj.created_at:
+                        return job_obj.created_at
+                return datetime.min
+
+            children_list = parent.setdefault("children", [])
+            children_list.append(row)
+            children_list.sort(key=child_sort_key)
             continue
         display_rows.append(row)
 
@@ -1293,12 +1370,6 @@ def _build_tool_panels(
 
     transcription_status = _status_payload("transcription", "Not Started")
     transcription_jobs = _jobs_by_agent(job_rows, keywords=("transcription", "speech", "audio"), include_conversion=True)
-    latest_transcription = transcription_jobs[0] if transcription_jobs else None
-    latest_status = (getattr(latest_job, "status", "") or "").upper() if latest_job else ""
-    latest_meta = (latest_job_telemetry or {}).get("metadata") if latest_job_telemetry else {}
-    converted_available = False
-    if isinstance(latest_meta, dict):
-        converted_available = bool(latest_meta.get("converted_wav_available"))
 
     latest_job_title = None
     if latest_job:
@@ -1477,7 +1548,11 @@ def _build_case_header_context(
         activity_candidates.append((case.updated_at, None))
 
     activity_candidates = [item for item in activity_candidates if item[0]]
-    activity_candidates.sort(key=lambda item: item[0], reverse=True)
+    # Sort by timestamp with explicit None-safe tuple key for Pyright
+    activity_candidates.sort(
+        key=lambda item: (False if item[0] else True, item[0] or datetime.min),
+        reverse=True,
+    )
     last_activity_ts = activity_candidates[0][0] if activity_candidates else None
     last_activity_label = activity_candidates[0][1] if activity_candidates else None
 
@@ -1523,12 +1598,7 @@ def _compute_case_tool_state(request: HttpRequest, case: Case) -> Dict[str, Any]
     job_summary_last_dt = job_summary.get("last_update")
     job_summary["last_update"] = job_summary_last_dt.isoformat() if job_summary_last_dt else None
 
-    telemetry = JobTelemetrySerializer(
-        jobs_list,
-        many=True,
-        context={"request": request, "ui_mode": True},
-    ).data
-    telemetry_map = {item.get("id"): item for item in telemetry}
+    telemetry_map: Dict[str, JobTelemetryPayload] = _job_telemetry_map(jobs_list, request)
 
     display_rows, flat_rows = _build_job_rows(jobs_list, telemetry_map, transcript_artifacts)
 
@@ -1614,7 +1684,8 @@ def _job_detail_context(
     title_error: Optional[str] = None,
     title_edit: bool = False,
 ) -> Dict[str, Any]:
-    telemetry = telemetry or JobTelemetrySerializer(job, context={"request": request, "ui_mode": True}).data
+    telemetry_payload = telemetry if telemetry is not None else _job_telemetry_payload(job, request, ui_mode=True)
+    telemetry = telemetry_payload
     artifacts = telemetry.get("artifacts") or []
     artifact = artifacts[0] if artifacts else None
     db_artifact = (
@@ -1623,23 +1694,21 @@ def _job_detail_context(
         .first()
     )
     job_title = _friendly_job_title(job, telemetry, db_artifact)
-    metadata_items = _format_metadata(telemetry.get("metadata"))
-    azure_cancel_status = telemetry.get("metadata", {}).get("azure_cancel_status") if isinstance(telemetry.get("metadata"), dict) else None
-    azure_cancel_body = telemetry.get("metadata", {}).get("azure_cancel_body") if isinstance(telemetry.get("metadata"), dict) else None
+    metadata_map = _as_dict(telemetry.get("metadata"))
+    metadata_items = _format_metadata(metadata_map)
+    azure_cancel_status = metadata_map.get("azure_cancel_status")
+    azure_cancel_body = metadata_map.get("azure_cancel_body")
 
-    audio_meta = telemetry.get("audio") or {}
+    audio_meta = _as_dict(telemetry.get("audio"))
     audio_mime = str(audio_meta.get("mime") or "").lower()
-    audio_names = [
-        str(audio_meta.get("path") or ""),
-        str(audio_meta.get("original_name") or ""),
-    ]
+    audio_names = [str(audio_meta.get("path") or ""), str(audio_meta.get("original_name") or "")]
     is_wav_input = audio_mime in {"audio/wav", "audio/x-wav"}
     if not is_wav_input:
         for name in audio_names:
             if name.lower().endswith(".wav"):
                 is_wav_input = True
                 break
-    telemetry_meta = telemetry.get("metadata") or {}
+    telemetry_meta = metadata_map
     converted_flag = bool(
         telemetry_meta.get("converted_wav_path")
         or telemetry_meta.get("batch_upload_converted")
@@ -1659,12 +1728,8 @@ def _job_detail_context(
         if source_job_id:
             try:
                 source_job = Job.objects.select_related("case", "case__organization").get(pk=source_job_id, case_id=job.case_id)
-                source_telemetry = JobTelemetrySerializer(
-                    source_job,
-                    context={"request": request, "ui_mode": True},
-                ).data
-                if isinstance(source_telemetry, dict):
-                    source_audio_meta = source_telemetry.get("audio") or {}
+                source_telemetry = _job_telemetry_payload(source_job, request, ui_mode=True)
+                source_audio_meta = _as_dict(source_telemetry.get("audio"))
             except Job.DoesNotExist:
                 source_audio_meta = None
             except Exception:
@@ -1904,12 +1969,7 @@ def case_analysis_module(request: HttpRequest, case_id: str, agent: str) -> Http
     )
     jobs_scoped = scope_jobs(jobs_qs, getattr(request, "user", None))
     jobs_list = list(jobs_scoped)
-    telemetry = JobTelemetrySerializer(
-        jobs_list,
-        many=True,
-        context={"request": request, "ui_mode": True},
-    ).data
-    telemetry_map = {item.get("id"): item for item in telemetry}
+    telemetry_map: Dict[str, JobTelemetryPayload] = _job_telemetry_map(jobs_list, request)
 
     modules = _analysis_modules_context(request, case, jobs_list, telemetry_map)
     module = next((item for item in modules if item.get("key") == agent), None)
@@ -2212,8 +2272,7 @@ def case_job_transcript(request: HttpRequest, case_id: str, job_id: uuid.UUID) -
         except Exception:
             transcript_text = ""
 
-    serializer = JobTelemetrySerializer(job, context={"request": request, "ui_mode": True})
-    telemetry = serializer.data
+    telemetry = _job_telemetry_payload(job, request, ui_mode=True)
     download_url = None
     artifacts = telemetry.get("artifacts") or []
     for art in artifacts:
@@ -2268,8 +2327,7 @@ def case_job_logs_modal(request: HttpRequest, case_id: str, job_id: uuid.UUID) -
             text = "…" + text
         log_text = text
 
-    serializer = JobTelemetrySerializer(job, context={"request": request, "ui_mode": True})
-    telemetry = serializer.data
+    telemetry = _job_telemetry_payload(job, request, ui_mode=True)
     friendly_title = _friendly_job_title(job, telemetry, None)
     modal_created = job.finished_at or job.started_at or job.created_at
     meta_items = []
@@ -2350,12 +2408,7 @@ def case_assign_reviewer(request: HttpRequest, case_id: str) -> HttpResponse:
         .order_by("-created_at")
     )
     jobs_list = list(scope_jobs(jobs_qs, getattr(request, "user", None)))
-    telemetry = JobTelemetrySerializer(
-        jobs_list,
-        many=True,
-        context={"request": request, "ui_mode": True},
-    ).data
-    telemetry_map = {item.get("id"): item for item in telemetry}
+    telemetry_map = _job_telemetry_map(jobs_list, request)
     context = {"case": case, **_case_progress_context(case, jobs_list, telemetry_map)}
     return render(request, "ui/_case_progress.html", context)
 
@@ -2436,12 +2489,7 @@ def case_assign_client(request: HttpRequest, case_id: str) -> HttpResponse:
         .order_by("-created_at")
     )
     jobs_list = list(scope_jobs(jobs_qs, getattr(request, "user", None)))
-    telemetry = JobTelemetrySerializer(
-        jobs_list,
-        many=True,
-        context={"request": request, "ui_mode": True},
-    ).data
-    telemetry_map = {item.get("id"): item for item in telemetry}
+    telemetry_map = _job_telemetry_map(jobs_list, request)
     context = {"case": case, **_case_progress_context(case, jobs_list, telemetry_map)}
     return render(request, "ui/_case_progress.html", context)
 
@@ -2460,12 +2508,7 @@ def jobs(request: HttpRequest) -> HttpResponse:
     scoped = scoped.filter(organization=organization)
     jobs_list = list(scoped[:200])
 
-    telemetry = JobTelemetrySerializer(
-        jobs_list,
-        many=True,
-        context={"request": request, "ui_mode": True},
-    ).data
-    telemetry_map = {item.get("id"): item for item in telemetry}
+    telemetry_map = _job_telemetry_map(jobs_list, request)
 
     job_ids = [str(job.id) for job in jobs_list]
     transcript_artifacts: Dict[str, CaseArtifact] = {}
@@ -2648,7 +2691,7 @@ def case_job_update_title(request: HttpRequest, case_id: str, job_id: str) -> Ht
     if not new_title:
         title_error = "Title cannot be empty."
 
-    telemetry_payload = JobTelemetrySerializer(job, context={"request": request, "ui_mode": True}).data
+    telemetry_dict = _job_telemetry_payload(job, request, ui_mode=True)
 
     artifact = (
         CaseArtifact.objects.filter(case_id=str(case.id), job_id=str(job.id), type="TRANSCRIPT")
@@ -2667,7 +2710,7 @@ def case_job_update_title(request: HttpRequest, case_id: str, job_id: str) -> Ht
         artifact = artifact or _ensure_transcript_artifact(
             case=case,
             job=job,
-            telemetry=telemetry_payload,
+            telemetry=telemetry_dict,
             title=new_title,
             metadata_source="ui.job_title",
         )
@@ -2678,7 +2721,7 @@ def case_job_update_title(request: HttpRequest, case_id: str, job_id: str) -> Ht
         context = _job_detail_context(
             request,
             job,
-            telemetry=telemetry_payload,
+            telemetry=telemetry_dict,
             title_error=title_error,
             title_edit=True,
         )
@@ -2710,7 +2753,7 @@ def case_job_update_title(request: HttpRequest, case_id: str, job_id: str) -> Ht
 
     append_job_log(
         str(job.case_id),
-        job.organization_id,
+        str(job.organization_id) if job.organization_id is not None else None,
         str(job.id),
         f"Transcript title set to '{new_title}'",
     )
@@ -2751,7 +2794,7 @@ def case_job_create_artifact(request: HttpRequest, case_id: str, job_id: str) ->
     if not can_manage:
         return JsonResponse({"status": "error", "detail": "Forbidden"}, status=403)
 
-    telemetry_payload = JobTelemetrySerializer(job, context={"request": request, "ui_mode": True}).data
+    telemetry_dict = _job_telemetry_payload(job, request, ui_mode=True)
 
     existing = (
         CaseArtifact.objects.filter(case_id=str(case.id), job_id=str(job.id), type="TRANSCRIPT")
@@ -2762,7 +2805,7 @@ def case_job_create_artifact(request: HttpRequest, case_id: str, job_id: str) ->
     artifact = existing or _ensure_transcript_artifact(
         case=case,
         job=job,
-        telemetry=telemetry_payload,
+        telemetry=telemetry_dict,
         metadata_source="ui.transcript_promote",
     )
 
@@ -2781,10 +2824,12 @@ def case_job_create_artifact(request: HttpRequest, case_id: str, job_id: str) ->
             artifact.title = desired_title
             title_changed = True
     elif not artifact.title:
-        default_title = _default_transcript_title(job, telemetry_payload)
-        unique_title = _unique_transcript_title(str(case.id), default_title, getattr(case, "organization_id", None))
-        if artifact.title != unique_title:
-            artifact.title = unique_title
+        default_title = _default_transcript_title(job, telemetry_dict)
+        unique_transcript_title_val = _unique_transcript_title(
+            str(case.id), default_title, getattr(case, "organization_id", None)
+        )
+        if artifact.title != unique_transcript_title_val:
+            artifact.title = unique_transcript_title_val
             title_changed = True
 
     metadata = artifact.metadata or {}
@@ -2849,13 +2894,23 @@ def case_job_row(request: HttpRequest, case_id: str, job_id: str) -> HttpRespons
     if not job:
         raise Http404
 
-    telemetry = JobTelemetrySerializer(job, context={"request": request, "ui_mode": True}).data
-    telemetry_map = {str(job.id): telemetry}
-    display_rows, flat_rows = _build_job_rows([job], telemetry_map)
-    row = flat_rows[0] if flat_rows else {"job": job, "telemetry": telemetry, "title": _friendly_job_title(job, telemetry)}
+    telemetry_dict = _job_telemetry_payload(job, request, ui_mode=True)
+    telemetry_map: Dict[str, JobTelemetryPayload] = {str(job.id): telemetry_dict}
+    _, flat_rows = _build_job_rows([job], telemetry_map)
+    row = (
+        flat_rows[0]
+        if flat_rows
+        else {
+            "job": job,
+            "telemetry": telemetry_dict,
+            "title": _friendly_job_title(job, telemetry_dict),
+            "children": [],
+            "actions": [],
+        }
+    )
     row["actions"] = _job_action_entries(
         job,
-        telemetry,
+        telemetry_dict,
         can_review=_user_can_review_case(getattr(request, "user", None), job.case),
         is_child=False,
     )
@@ -3057,7 +3112,7 @@ def create_job(request: HttpRequest, case_id: str) -> HttpResponse:
             "force_wav_conversion": force_wav_conversion,
         },
     )
-    transcribe_job.delay(
+    transcribe_job_task.delay(
         case_id=str(case.id),
         job_id=str(job.id),
         audio_input=audio_input,
@@ -3067,7 +3122,7 @@ def create_job(request: HttpRequest, case_id: str) -> HttpResponse:
         force_wav_conversion=force_wav_conversion,
     )
 
-    telemetry = JobTelemetrySerializer(job, context={"request": request, "ui_mode": True}).data
+    telemetry_dict = _job_telemetry_payload(job, request, ui_mode=True)
 
     if request.headers.get("HX-Request"):
         state = _compute_case_tool_state(request, case)
@@ -3100,12 +3155,22 @@ def create_job(request: HttpRequest, case_id: str) -> HttpResponse:
             response["HX-Trigger"] = json.dumps(trigger_payload)
             return response
 
-    telemetry_map = {str(job.id): telemetry}
-    display_rows, flat_rows = _build_job_rows([job], telemetry_map)
-    row = flat_rows[0] if flat_rows else {"job": job, "telemetry": telemetry, "title": _friendly_job_title(job, telemetry)}
+    telemetry_map: Dict[str, JobTelemetryPayload] = {str(job.id): telemetry_dict}
+    _, flat_rows = _build_job_rows([job], telemetry_map)
+    row = (
+        flat_rows[0]
+        if flat_rows
+        else {
+            "job": job,
+            "telemetry": telemetry_dict,
+            "title": _friendly_job_title(job, telemetry_dict),
+            "children": [],
+            "actions": [],
+        }
+    )
     row["actions"] = _job_action_entries(
         job,
-        telemetry,
+        telemetry_dict,
         can_review=_user_can_review_case(getattr(request, "user", None), job.case),
         is_child=False,
     )
