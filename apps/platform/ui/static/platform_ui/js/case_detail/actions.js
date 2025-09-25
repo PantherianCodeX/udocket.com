@@ -90,20 +90,14 @@
 
     let catalog = {};
     let credentials = {};
-    try {
-      if (container.dataset.llmCatalog) {
-        catalog = JSON.parse(container.dataset.llmCatalog);
-      }
-    } catch (error) {
-      console.warn('Unable to parse LLM catalog', error);
-    }
-    try {
-      if (container.dataset.llmCredentials) {
-        credentials = JSON.parse(container.dataset.llmCredentials);
-      }
-    } catch (error) {
-      console.warn('Unable to parse LLM credentials', error);
-    }
+    const safeParse = (raw) => {
+      if (!raw || typeof raw !== 'string') return {};
+      const t = raw.trim();
+      if (!t || !/[\[{]/.test(t[0])) return {};
+      try { return JSON.parse(t); } catch (_) { return {}; }
+    };
+    catalog = safeParse(container.dataset.llmCatalog);
+    credentials = safeParse(container.dataset.llmCredentials);
     const providerState = {
       catalog,
       credentials,
