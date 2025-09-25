@@ -72,8 +72,7 @@
     const { actions, ui } = controller;
 
     const handlers = {
-      rowClick: (evt) => actions.handleRowClick(evt),
-      rowKey: (evt) => actions.handleRowKey(evt),
+      // Row click/key handlers are owned by platformUI.jobsTable; avoid double toggles here.
       jobAction: (evt) => actions.handleJobAction(evt),
       verifyHash: (evt) => actions.handleVerifyHash(evt),
       audioRefresh: (evt) => actions.handleAudioRefresh(evt),
@@ -134,8 +133,7 @@
       },
     };
 
-    global.document.body.addEventListener('click', handlers.rowClick);
-    global.document.body.addEventListener('keydown', handlers.rowKey);
+    // Rely on jobsTable to handle row click/key events
     global.document.body.addEventListener('click', handlers.jobAction);
     global.document.body.addEventListener('click', handlers.verifyHash);
     global.document.body.addEventListener('click', handlers.audioRefresh);
