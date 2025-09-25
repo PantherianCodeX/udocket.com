@@ -360,6 +360,14 @@ class JobViewSet(viewsets.ModelViewSet):
             meta = job_meta
             converted_job_id = meta.get("converted_audio_job_id") or meta.get("converted_wav_job_id")
             converted_meta: Dict[str, Any] = {}
+            # Fast-path: if this job itself produced a converted audio file, prefer it
+            if path_obj is None and getattr(job, "audio_input", None):
+                try:
+                    candidate = Path(getattr(job, "audio_input"))
+                    if candidate.exists():
+                        path_obj = candidate
+                except Exception:
+                    path_obj = None
             if converted_job_id:
                 try:
                     converted_job = Job.objects.get(pk=converted_job_id)
@@ -385,7 +393,10 @@ class JobViewSet(viewsets.ModelViewSet):
         else:
             audio_path = getattr(job, "audio_input", None)
             if not audio_path or not str(audio_path).startswith("/"):
-                raise Http404
+                # Try resolving via metadata in case source path is stored there
+                audio_path = (job_meta.get("source_audio_path") or job_meta.get("audio_path") or "")
+                if not audio_path or not str(audio_path).startswith("/"):
+                    raise Http404
             path_obj = Path(audio_path)
             active_meta = job_meta
         if not path_obj.exists():
