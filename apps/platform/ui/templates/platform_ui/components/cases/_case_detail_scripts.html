@@ -3,9 +3,18 @@
       // TODO(layout-refresh): Investigate more reliable template update tooling to reduce manual patch churn during upcoming refactor.
       const caseView = document.querySelector('[data-case-view]');
       if (!caseView) return;
-      const caseId = caseView.getAttribute('data-case-id');
-      const workspace = caseView.querySelector('#tool-workspace');
-      const modalRoot = document.getElementById('modal-root');
+  const caseId = caseView.getAttribute('data-case-id');
+  const workspace = caseView.querySelector('#tool-workspace');
+  const modalRoot = document.getElementById('modal-root');
+
+  // Initialize shared jobs state namespace used across handlers in this view
+  window.JobsState = window.JobsState || {
+    currentCaseId: caseId,
+    pollers: {},
+    sockets: {},
+    lastStatus: {},
+    refreshTranscribeScheduled: false,
+  };
 
       const statusUtils = window.udocketStatus || {};
       const renderStatusLabel = statusUtils.renderStatusLabel || (() => {});
@@ -165,7 +174,9 @@
         if (jobRow) {
           jobRow.classList.remove(...JOB_ROW_STATUS_CLASSES);
         }
-        jobActions.updateForRow(jobId, status);
+        if (window.udocketJobActions && typeof window.udocketJobActions.updateForRow === 'function') {
+          window.udocketJobActions.updateForRow(jobId, status);
+        }
         const detailContainer = document.querySelector(`[data-job-detail="${jobId}"]`);
         if (!detailContainer) return;
         const pill = detailContainer.querySelector('[data-job-status-pill]');
@@ -1197,7 +1208,9 @@
             const statusValue = statusEl.dataset && statusEl.dataset.status ? statusEl.dataset.status : statusEl.textContent;
             const progressValue = statusEl.dataset && statusEl.dataset.progress ? parseFloat(statusEl.dataset.progress) : undefined;
             renderStatusLabel(statusEl, statusValue, progressValue);
-            jobActions.updateForRow(jobId, statusValue);
+            if (window.udocketJobActions && typeof window.udocketJobActions.updateForRow === 'function') {
+              window.udocketJobActions.updateForRow(jobId, statusValue);
+            }
           }
         });
       };

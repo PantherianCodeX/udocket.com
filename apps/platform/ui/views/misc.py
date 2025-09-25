@@ -6,6 +6,7 @@ import logging
 from typing import Any, Dict
 
 from django.http import HttpRequest, HttpResponse
+from django.views.decorators.csrf import csrf_exempt
 
 log = logging.getLogger("apps.platform.ui")
 
@@ -20,6 +21,7 @@ def favicon(request: HttpRequest) -> HttpResponse:
     return resp
 
 
+@csrf_exempt
 def ui_log(request: HttpRequest) -> HttpResponse:
     try:
         body = request.body.decode("utf-8") if request.body else "{}"
