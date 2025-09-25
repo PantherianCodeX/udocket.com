@@ -1394,9 +1394,12 @@
       const overridesValue = summaryContainer?.dataset.llmOverrides;
       if (overridesValue) {
         try {
-          const overrides = JSON.parse(overridesValue);
-          if (overrides && typeof overrides === 'object') {
-            payload.stage_overrides = overrides;
+          const t = overridesValue.trim();
+          if (t && /[\[{]/.test(t[0])) {
+            const overrides = JSON.parse(t);
+            if (overrides && typeof overrides === 'object') {
+              payload.stage_overrides = overrides;
+            }
           }
         } catch (error) {
           console.warn('Invalid LLM overrides payload', error);
@@ -1405,9 +1408,12 @@
       const chainOverride = summaryContainer?.dataset.llmProviderChain;
       if (chainOverride && !payload.provider_chain) {
         try {
-          const chain = JSON.parse(chainOverride);
-          if (Array.isArray(chain) && chain.length) {
-            payload.provider_chain = chain;
+          const t = chainOverride.trim();
+          if (t && /[\[{\"]/.test(t[0])) {
+            const chain = JSON.parse(t);
+            if (Array.isArray(chain) && chain.length) {
+              payload.provider_chain = chain;
+            }
           }
         } catch (error) {
           console.warn('Invalid provider chain override', error);
