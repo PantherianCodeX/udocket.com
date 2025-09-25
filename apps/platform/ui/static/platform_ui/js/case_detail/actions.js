@@ -172,7 +172,17 @@
     const template = container.querySelector('[data-llm-modal-template]');
     if (!template) return;
     const modal = caseDetail.modals.openFromHTML(template.innerHTML, { container: ctx?.modalRoot || undefined });
-    if (!modal) return;
+    if (!modal) {
+      // Fallback: notify if modal system isn’t available
+      if (caseDetail.modals && typeof caseDetail.modals.message === 'function') {
+        caseDetail.modals.message({
+          heading: 'LLM tuning',
+          body: 'Unable to open modal window. Is the modal system loaded?',
+          container: ctx?.modalRoot || undefined,
+        });
+      }
+      return;
+    }
     const form = modal.querySelector('[data-llm-form]');
     if (!form) return;
     const saveButton = form.querySelector('[data-llm-save]');
