@@ -201,4 +201,13 @@
       toggleRow(row);
     }
   });
+
+  // Proactively close the job action popover after any selection
+  document.addEventListener('click', (evt) => {
+    const item = evt.target.closest('[data-job-action-item]');
+    if (!item) return;
+    if (window.udocketPopovers && typeof window.udocketPopovers.closeAll === 'function') {
+      window.udocketPopovers.closeAll();
+    }
+  });
 </script>

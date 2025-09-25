@@ -63,7 +63,14 @@ CASE_JOB_TABLE_COLUMNS: Tuple[Dict[str, Any], ...] = (
     {"id": "status", "label": "Status", "sortable": True, "sort_key": "status"},
     {"id": "review", "label": "Approval", "sortable": True, "sort_key": "review"},
     {"id": "agent", "label": "Agent", "sortable": True, "sort_key": "agent"},
-    {"id": "created", "label": "Created", "sortable": True, "sort_key": "created", "align": "right"},
+    {
+        "id": "created",
+        "label": "Created",
+        "sortable": True,
+        "sort_key": "created",
+        "align": "right",
+        "default_direction": "desc",
+    },
     {"id": "actions", "label": "Actions", "sortable": False, "align": "right"},
     {"id": "expander", "label": "", "sortable": False, "align": "right"},
 )
