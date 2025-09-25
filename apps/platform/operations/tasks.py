@@ -31,6 +31,7 @@ from apps.platform.operations.models import TaskRun
 from apps.platform.cases.models import Case
 from apps.platform.operations.audit import emit as audit_emit
 from apps.platform.operations.storage import ensure_case_dirs, tenant_case_root, ops_dir as storage_ops_dir
+from apps.platform.operations.llm import get_org_llm_overrides
 from apps.platform.operations.utils import update_job_meta, append_job_log
 
 # Backwards compatibility for tests importing _update_job_meta
@@ -1020,6 +1021,15 @@ def summarize_job(
 
     summarize_agent = SummarizeAgent(SummarizeConfig.from_env())
     intake_payload = _case_intake_payload(job.case)
+    org_overrides = get_org_llm_overrides(str(org_id) if org_id else None)
+    merged_overrides: Dict[str, Dict[str, Any]] = {}
+    merged_overrides.update(org_overrides)
+    if stage_overrides:
+        for key, value in stage_overrides.items():
+            if not isinstance(value, dict):
+                continue
+            merged_overrides[key] = value
+
     result = summarize_agent.summarize(
         input=transcript,
         case_id=case_id,
@@ -1028,7 +1038,7 @@ def summarize_job(
         intake=intake_payload or None,
         allow_offline_fallback=allow_offline_fallback,
         provider_chain=provider_chain,
-        stage_overrides=stage_overrides,
+        stage_overrides=merged_overrides,
     )
 
     checksum = _sha256_file(result.summary_file)

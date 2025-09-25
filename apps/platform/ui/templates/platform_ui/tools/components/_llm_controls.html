@@ -1,0 +1,129 @@
+{% with ctx=llm_context %}
+<details class="group rounded-xl border border-white/10 bg-slate-900/60" data-llm-advanced data-llm-target="{{ ctx.target }}">
+  <summary class="flex cursor-pointer items-center justify-between px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-300">
+    Advanced settings
+    <svg class="h-4 w-4 transition-transform group-open:rotate-180" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.094l3.71-3.86a.75.75 0 111.08 1.04l-4.247 4.41a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z" clip-rule="evenodd" /></svg>
+  </summary>
+  <div class="space-y-4 border-t border-white/10 px-3 py-4 text-sm text-slate-200">
+    <div class="space-y-2">
+      <label class="text-xs uppercase tracking-wide text-slate-400">Primary provider</label>
+      <select class="w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none"
+              data-summary-provider-primary="{{ ctx.target == 'summary'|yesno:'true,false' }}"
+              data-llm-provider-primary
+              {% if ctx.defaults.force_offline %}disabled{% endif %}>
+        {% for option in ctx.provider_options %}
+          <option value="{{ option.value }}"
+                  {% if not option.available %}disabled data-disabled="true"{% endif %}
+                  {% if option.value == ctx.defaults.primary %}selected{% endif %}>
+            {{ option.label }}{% if not option.available %} · Configure credentials{% endif %}
+          </option>
+        {% endfor %}
+      </select>
+      {% if ctx.defaults.force_offline %}
+        <p class="text-[11px] text-amber-400">Force offline mode enabled via environment configuration.</p>
+      {% endif %}
+    </div>
+    <div class="space-y-2">
+      <label class="text-xs uppercase tracking-wide text-slate-400">Fallback providers</label>
+      <select multiple size="{{ ctx.provider_options|length }}"
+              class="w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none"
+              data-llm-provider-fallback
+              {% if ctx.defaults.force_offline %}disabled{% endif %}>
+        {% for option in ctx.provider_options %}
+          <option value="{{ option.value }}"
+                  {% if not option.available %}data-disabled="true" disabled{% endif %}
+                  {% if option.value == ctx.defaults.primary %}disabled{% endif %}
+                  {% if option.value in ctx.defaults.fallbacks %}selected{% endif %}>
+            {{ option.label }}
+          </option>
+        {% endfor %}
+      </select>
+      <p class="text-[11px] text-slate-500">Selection order sets fallback priority.</p>
+    </div>
+    <label class="inline-flex items-center gap-2 text-sm text-slate-200">
+      <input type="checkbox"
+             class="h-4 w-4 rounded border-white/20 bg-slate-900/70 text-primary-500 focus:ring-primary-400"
+             data-summary-allow-offline="{{ ctx.target == 'summary'|yesno:'true,false' }}"
+             data-llm-allow-offline
+             {% if ctx.defaults.allow_offline %}checked{% endif %}
+             {% if ctx.defaults.force_offline %}disabled{% endif %}>
+      Allow local fallback when available
+    </label>
+    <div class="flex justify-end">
+      <button type="button"
+              class="inline-flex items-center gap-2 rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-100 transition hover:border-primary-400 hover:text-white"
+              data-llm-open-modal>
+        LLM tuning
+      </button>
+    </div>
+  </div>
+</details>
+
+<div class="hidden" data-llm-modal-template>
+  <div data-modal class="w-full max-w-3xl rounded-2xl border border-white/10 bg-slate-900/90 shadow-xl">
+    <div class="flex items-center justify-between border-b border-white/10 px-5 py-4">
+      <div>
+        <p class="text-sm font-semibold text-white">LLM tuning</p>
+        <p class="text-xs text-slate-400">Select provider and model for each stage.</p>
+      </div>
+      <button type="button" class="text-slate-400 transition hover:text-white" data-modal-close aria-label="Close">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 8.586l4.95-4.95 1.414 1.414L11.414 10l4.95 4.95-1.414 1.414L10 11.414l-4.95 4.95-1.414-1.414L8.586 10l-4.95-4.95L5.05 3.636 10 8.586z" clip-rule="evenodd" /></svg>
+      </button>
+    </div>
+    <form class="max-h-[70vh] overflow-y-auto px-5 py-4 space-y-4" data-llm-form>
+      {% for stage in ctx.stage_configs %}
+        <div class="rounded-lg border border-white/10 bg-slate-900/70 p-4 space-y-3" data-llm-stage data-stage-key="{{ stage.key }}">
+          <div class="flex items-center justify-between">
+            <p class="text-sm font-semibold text-white">{{ stage.label }}</p>
+            <p class="text-xs text-slate-400">{{ stage.key }}</p>
+          </div>
+          <div class="grid gap-3 md:grid-cols-3">
+            <label class="block text-xs uppercase tracking-wide text-slate-400">
+              Provider
+              <select class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none"
+                      data-llm-provider>
+                {% for provider in stage.providers %}
+                  <option value="{{ provider.value }}" {% if not provider.available %}disabled{% endif %} {% if provider.value == stage.selected_provider %}selected{% endif %}>
+                    {{ provider.label }}{% if not provider.available %} · Configure credentials{% endif %}
+                  </option>
+                {% endfor %}
+              </select>
+            </label>
+            <label class="block text-xs uppercase tracking-wide text-slate-400">
+              Model
+              <select class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none"
+                      data-llm-model>
+                {% for provider in stage.providers %}
+                  {% for model in provider.models %}
+                    <option value="{{ model.value }}" data-provider="{{ provider.value }}" {% if provider.value != stage.selected_provider %}hidden{% endif %} {% if model.value == stage.selected_model %}selected{% endif %}>
+                      {{ model.label }} ({{ model.cost_tier }})
+                    </option>
+                  {% endfor %}
+                {% endfor %}
+              </select>
+            </label>
+            <label class="block text-xs uppercase tracking-wide text-slate-400">
+              Fallback providers
+              <select multiple size="4" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" data-llm-fallback>
+                {% for provider in stage.providers %}
+                  <option value="{{ provider.value }}" {% if provider.value == stage.selected_provider %}disabled{% endif %} {% if provider.value in stage.selected_fallbacks %}selected{% endif %}>
+                    {{ provider.label }}
+                  </option>
+                {% endfor %}
+              </select>
+            </label>
+          </div>
+          <label class="inline-flex items-center gap-2 text-xs text-slate-300">
+            <input type="checkbox" class="h-4 w-4 rounded border-white/20 bg-slate-900/70 text-primary-500 focus:ring-primary-400" data-llm-allow-offline {% if stage.allow_offline_default %}checked{% endif %}>
+            Allow local fallback for this stage
+          </label>
+        </div>
+      {% endfor %}
+      <div class="flex items-center justify-end gap-2 pt-2">
+        <button type="button" class="rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-200 hover:border-primary-400 hover:text-white" data-modal-close>Cancel</button>
+        <button type="submit" class="inline-flex items-center gap-2 rounded-lg bg-primary-500 px-3 py-2 text-xs font-semibold text-white shadow-lg shadow-primary-500/30 transition hover:bg-primary-400" data-llm-save>Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endwith %}

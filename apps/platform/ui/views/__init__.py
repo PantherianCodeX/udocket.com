@@ -9,6 +9,7 @@ from .cases import (
     case_assign_reviewer,
     case_detail,
     case_details_update,
+    case_llm_settings,
     case_tool_panel,
     case_update_title,
 )
@@ -54,6 +55,7 @@ __all__ = [
     "case_assign_reviewer",
     "case_detail",
     "case_details_update",
+    "case_llm_settings",
     "case_job_create_artifact",
     "case_job_detail_panel",
     "case_job_logs_modal",

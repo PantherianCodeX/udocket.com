@@ -80,17 +80,104 @@
     return sequence;
   }
 
+  function setupLLMControls(container) {
+    if (!container) return;
+    const advanced = container.querySelector('[data-llm-advanced]');
+    if (!advanced) return;
+    const primarySelect = advanced.querySelector('[data-llm-provider-primary]');
+    const fallbackSelect = advanced.querySelector('[data-llm-provider-fallback]');
+    const allowOfflineCheckbox = advanced.querySelector('[data-llm-allow-offline]');
+
+    const syncAdvancedControls = () => {
+      const primaryValue = primarySelect?.value || null;
+      if (fallbackSelect) {
+        Array.from(fallbackSelect.options).forEach((option) => {
+          if (!option.value) return;
+          const permanent = option.hasAttribute('data-disabled');
+          if (option.value === primaryValue) {
+            option.disabled = true;
+            option.selected = false;
+          } else if (!permanent) {
+            option.disabled = false;
+          }
+        });
+      }
+      if (allowOfflineCheckbox) {
+        const chain = [];
+        if (primaryValue) {
+          chain.push(primaryValue);
+        }
+        if (fallbackSelect) {
+          Array.from(fallbackSelect.options).forEach((option) => {
+            if (option.selected && option.value && option.value !== primaryValue) {
+              chain.push(option.value);
+            }
+          });
+        }
+        const hasLocal = chain.includes('local');
+        allowOfflineCheckbox.disabled = !hasLocal;
+        if (!hasLocal) {
+          allowOfflineCheckbox.checked = false;
+        }
+      }
+    };
+
+    if (primarySelect) {
+      primarySelect.addEventListener('change', syncAdvancedControls);
+    }
+    if (fallbackSelect) {
+      fallbackSelect.addEventListener('change', syncAdvancedControls);
+    }
+    syncAdvancedControls();
+
+    const llmButton = advanced.querySelector('[data-llm-open-modal]') || container.querySelector('[data-llm-open-modal]');
+    if (llmButton) {
+      llmButton.addEventListener('click', (evt) => {
+        evt.preventDefault();
+        openLLMModal(container);
+      });
+    }
+  }
+
+  async function persistLLMOverrides(target, overrides, chain) {
+    if (!ctx?.caseId) {
+      return null;
+    }
+    try {
+      const resp = await fetch(`/cases/${ctx.caseId}/llm/settings/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': helpers.getCSRFToken(),
+          Accept: 'application/json',
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify({ target, overrides, provider_chain: chain }),
+      });
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(text || `HTTP ${resp.status}`);
+      }
+      return await resp.json();
+    } catch (error) {
+      console.warn('Persist LLM overrides failed', error);
+      return null;
+    }
+  }
+
   function openLLMModal(container) {
     if (!caseDetail.modals || typeof caseDetail.modals.openFromHTML !== 'function') {
       return;
     }
-    const template = container.querySelector('[data-summary-llm-modal-template]');
+    const template = container.querySelector('[data-llm-modal-template]');
     if (!template) return;
     const modal = caseDetail.modals.openFromHTML(template.innerHTML, { container: ctx?.modalRoot || undefined });
     if (!modal) return;
-    const form = modal.querySelector('[data-summary-llm-form]');
+    const form = modal.querySelector('[data-llm-form]');
     if (!form) return;
+    const saveButton = form.querySelector('[data-llm-save]');
     const stageRows = Array.from(form.querySelectorAll('[data-llm-stage]'));
+    const target = container.dataset.llmTarget || 'summary';
     let existingOverrides = {};
     if (container.dataset.llmOverrides) {
       try {
@@ -134,8 +221,12 @@
       updateModelOptions(row);
     });
 
-    form.addEventListener('submit', (evt) => {
+    form.addEventListener('submit', async (evt) => {
       evt.preventDefault();
+      if (saveButton) {
+        saveButton.disabled = true;
+        saveButton.textContent = 'Saving…';
+      }
       const overrides = {};
       stageRows.forEach((row) => {
         const key = row.getAttribute('data-stage-key');
@@ -164,12 +255,25 @@
       } else {
         delete container.dataset.llmProviderChain;
       }
+      const persisted = await persistLLMOverrides(target, overrides, chain);
+      if (persisted && typeof persisted === 'object') {
+        if (persisted.overrides && typeof persisted.overrides === 'object') {
+          container.dataset.llmOverrides = JSON.stringify(persisted.overrides);
+        }
+        if (Array.isArray(persisted.provider_chain)) {
+          container.dataset.llmProviderChain = JSON.stringify(persisted.provider_chain);
+        }
+      }
       if (caseDetail.modals && typeof caseDetail.modals.message === 'function') {
         caseDetail.modals.message({
           heading: 'LLM tuning',
-          body: 'Settings applied for this job run.',
+          body: persisted ? 'Organization defaults updated.' : 'Settings applied for this job run.',
           container: ctx?.modalRoot || undefined,
         });
+      }
+      if (saveButton) {
+        saveButton.disabled = false;
+        saveButton.textContent = 'Save';
       }
       const closeButton = modal.querySelector('[data-modal-close]');
       if (closeButton) {
@@ -696,46 +800,9 @@
     if (!root) return;
     const summaryContainer = root.querySelector('[data-summary]');
     if (summaryContainer) {
+      setupLLMControls(summaryContainer);
       const select = summaryContainer.querySelector('[data-summary-source]');
       const button = summaryContainer.querySelector('[data-analysis-action="summary"]');
-      const advanced = summaryContainer.querySelector('[data-summary-advanced]');
-      const primarySelect = advanced?.querySelector('[data-summary-provider-primary]');
-      const fallbackSelect = advanced?.querySelector('[data-summary-provider-fallback]');
-      const allowOfflineCheckbox = advanced?.querySelector('[data-summary-allow-offline]');
-
-      const syncAdvancedControls = () => {
-        if (!advanced) return;
-        const primaryValue = primarySelect?.value || null;
-        if (fallbackSelect) {
-          Array.from(fallbackSelect.options).forEach((option) => {
-            if (!option.value) return;
-            const isPrimary = primaryValue && option.value === primaryValue;
-            const constrained = option.hasAttribute('data-disabled');
-            option.disabled = isPrimary || constrained;
-            if (option.disabled && option.selected) {
-              option.selected = false;
-            }
-          });
-        }
-        if (allowOfflineCheckbox) {
-          const chain = [];
-          if (primaryValue) {
-            chain.push(primaryValue);
-          }
-          if (fallbackSelect) {
-            Array.from(fallbackSelect.options).forEach((option) => {
-              if (option.selected && option.value && option.value !== primaryValue) {
-                chain.push(option.value);
-              }
-            });
-          }
-          const hasLocal = chain.includes('local');
-          allowOfflineCheckbox.disabled = !hasLocal;
-          if (!hasLocal) {
-            allowOfflineCheckbox.checked = false;
-          }
-        }
-      };
 
       const updateDisabled = () => {
         if (!button) return;
@@ -751,25 +818,11 @@
         select.addEventListener('change', updateDisabled);
         updateDisabled();
       }
-      if (primarySelect) {
-        primarySelect.addEventListener('change', syncAdvancedControls);
-      }
-      if (fallbackSelect) {
-        fallbackSelect.addEventListener('change', syncAdvancedControls);
-      }
-      syncAdvancedControls();
-
-      const llmButton = summaryContainer.querySelector('[data-summary-open-llm-modal]');
-      if (llmButton) {
-        llmButton.addEventListener('click', async (evt) => {
-          evt.preventDefault();
-          openLLMModal(summaryContainer);
-        });
-      }
     }
 
     const timelineContainer = root.querySelector('[data-timeline]');
     if (timelineContainer) {
+      setupLLMControls(timelineContainer);
       const transcriptSelect = timelineContainer.querySelector('[data-timeline-transcript]');
       const button = timelineContainer.querySelector('[data-analysis-action="timeline"]');
       const updateDisabled = () => {
@@ -900,7 +953,8 @@
     let jobId;
     const payload = {};
     if (action === 'summary') {
-      const select = button.closest('[data-summary]')?.querySelector('[data-summary-source]');
+      const summaryContainer = button.closest('[data-summary]');
+      const select = summaryContainer?.querySelector('[data-summary-source]');
       if (!select || !select.value) {
         button.disabled = true;
         return;
@@ -914,11 +968,11 @@
       }
       jobId = select.value;
 
-      const advanced = button.closest('[data-summary]')?.querySelector('[data-summary-advanced]');
+      const advanced = summaryContainer?.querySelector('[data-llm-advanced]');
       if (advanced) {
-        const primarySelect = advanced.querySelector('[data-summary-provider-primary]');
-        const fallbackSelect = advanced.querySelector('[data-summary-provider-fallback]');
-        const allowOfflineCheckbox = advanced.querySelector('[data-summary-allow-offline]');
+        const primarySelect = advanced.querySelector('[data-llm-provider-primary]');
+        const fallbackSelect = advanced.querySelector('[data-llm-provider-fallback]');
+        const allowOfflineCheckbox = advanced.querySelector('[data-llm-allow-offline]');
         const chain = [];
         if (primarySelect && primarySelect.value) {
           chain.push(primarySelect.value);
@@ -937,7 +991,7 @@
           payload.allow_offline_fallback = allowOfflineCheckbox.checked;
         }
       }
-      const overridesValue = summaryContainer.dataset.llmOverrides;
+      const overridesValue = summaryContainer?.dataset.llmOverrides;
       if (overridesValue) {
         try {
           const overrides = JSON.parse(overridesValue);
@@ -948,7 +1002,7 @@
           console.warn('Invalid LLM overrides payload', error);
         }
       }
-      const chainOverride = summaryContainer.dataset.llmProviderChain;
+      const chainOverride = summaryContainer?.dataset.llmProviderChain;
       if (chainOverride && !payload.provider_chain) {
         try {
           const chain = JSON.parse(chainOverride);

@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
+import json
 
 from django.http import HttpRequest
 from django.urls import reverse
@@ -28,6 +29,7 @@ from ..presenters.jobs import (
 )
 from packages.udocket_core.agents.summarize_lib import SummarizeConfig
 from packages.udocket_core.llm import load_llm_settings
+from apps.platform.operations.llm import get_org_llm_overrides
 
 
 def _latest_successful_transcription_job(jobs: List[Job]) -> Optional[Job]:
@@ -66,6 +68,84 @@ def _artifact_payload(artifact: CaseArtifact) -> Dict[str, Any]:
         "metadata": metadata,
         "source": source,
     }
+
+
+def _collect_provider_chain(overrides: Dict[str, Dict[str, Any]], default_chain: List[str]) -> List[str]:
+    sequence: List[str] = []
+    if overrides:
+        for payload in overrides.values():
+            if not isinstance(payload, dict):
+                continue
+            primary = payload.get("provider")
+            fallbacks = payload.get("fallbacks") if isinstance(payload.get("fallbacks"), list) else []
+            for name in [primary] + list(fallbacks):
+                if isinstance(name, str):
+                    lower = name.lower()
+                    if lower and lower not in sequence:
+                        sequence.append(lower)
+    for name in default_chain:
+        if name not in sequence:
+            sequence.append(name)
+    return sequence
+
+
+def _build_llm_stage_configs(
+    *,
+    stage_label_map: Dict[str, str],
+    llm_settings,
+    overrides: Dict[str, Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    stage_configs: List[Dict[str, Any]] = []
+    provider_cache: Dict[str, Dict[str, Any]] = {}
+    for provider_name, provider in llm_settings.providers.items():
+        provider_cache[provider_name] = {
+            "value": provider_name,
+            "label": provider.display_name,
+            "available": provider.is_available(),
+            "models": [
+                {
+                    "value": model_name,
+                    "label": model_meta.label,
+                    "cost_tier": model_meta.cost_tier,
+                }
+                for model_name, model_meta in provider.models.items()
+            ],
+        }
+
+    for stage_key, stage_label in stage_label_map.items():
+        assignment = llm_settings.stage(stage_key)
+        provider_configs = list(provider_cache.values())
+        selected_provider = assignment.providers[0] if assignment and assignment.providers else "azure"
+        selected_model = assignment.model or ""
+        selected_fallbacks: List[str] = []
+        allow_offline_default = False
+
+        override_payload = overrides.get(stage_key)
+        if override_payload:
+            selected_provider = override_payload.get("provider", selected_provider)
+            override_fallbacks = override_payload.get("fallbacks")
+            if isinstance(override_fallbacks, list):
+                selected_fallbacks = [str(name) for name in override_fallbacks if isinstance(name, str)]
+            if override_payload.get("model"):
+                selected_model = override_payload.get("model")
+            allow_offline_default = bool(override_payload.get("allow_offline_fallback"))
+        else:
+            if assignment and assignment.providers:
+                selected_fallbacks = [name for name in assignment.providers if name != selected_provider]
+            allow_offline_default = "local" in selected_fallbacks or selected_provider == "local"
+
+        stage_configs.append(
+            {
+                "key": stage_key,
+                "label": stage_label,
+                "providers": provider_configs,
+                "selected_provider": selected_provider,
+                "selected_model": selected_model,
+                "selected_fallbacks": selected_fallbacks,
+                "allow_offline_default": allow_offline_default,
+            }
+        )
+    return stage_configs
 
 
 def analysis_modules_context(
@@ -806,6 +886,7 @@ def build_tool_panels(
         summarize_cfg = SummarizeConfig()
 
     llm_settings = load_llm_settings()
+    org_overrides = get_org_llm_overrides(case.organization_id)
 
     provider_chain = list(summarize_cfg.provider_chain or ["azure", "local"])
     if summarize_cfg.force_offline_mode:
@@ -817,17 +898,12 @@ def build_tool_panels(
 
     provider_options = [
         {
-            "value": "azure",
-            "label": "Azure OpenAI (Canada)",
-            "description": "Requires AZURE_OPENAI_* credentials.",
-            "available": summarize_cfg.azure_enabled,
-        },
-        {
-            "value": "local",
-            "label": "Local (offline summarizer)",
-            "description": "Runs on this worker; consistent output for testing.",
-            "available": True,
-        },
+            "value": name,
+            "label": provider.display_name,
+            "description": None,
+            "available": provider.is_available(),
+        }
+        for name, provider in llm_settings.providers.items()
     ]
 
     stage_label_map = {
@@ -839,53 +915,36 @@ def build_tool_panels(
         "summarize.qa_and_finalize": "QA and finalize",
     }
 
-    llm_stage_configs: List[Dict[str, Any]] = []
-    for stage_key, stage_label in stage_label_map.items():
-        assignment = llm_settings.stage(stage_key)
-        if not assignment:
-            continue
-        stage_providers: List[Dict[str, Any]] = []
-        for provider_name, provider in llm_settings.providers.items():
-            model_options = []
-            for model_name, model_meta in provider.models.items():
-                model_options.append(
-                    {
-                        "value": model_name,
-                        "label": model_meta.label,
-                        "cost_tier": model_meta.cost_tier,
-                    }
-                )
-            stage_providers.append(
-                {
-                    "value": provider_name,
-                    "label": provider.display_name,
-                    "available": provider.is_available(),
-                    "models": model_options,
-                }
-            )
+    summary_overrides = {k: org_overrides[k] for k in stage_label_map if k in org_overrides}
+    summary_stage_configs = _build_llm_stage_configs(
+        stage_label_map=stage_label_map,
+        llm_settings=llm_settings,
+        overrides=summary_overrides,
+    )
+    summary_chain = _collect_provider_chain(summary_overrides, provider_chain)
+    summary_primary = summary_chain[0] if summary_chain else primary_default
+    if summary_primary == "azure" and not summarize_cfg.azure_enabled:
+        summary_primary = "local"
+    summary_fallbacks = [value for value in summary_chain if value != summary_primary]
+    summary_overrides_json = json.dumps(summary_overrides)
+    summary_chain_json = json.dumps(summary_chain)
 
-        selected_providers = assignment.providers or provider_chain
-        selected_providers = [p for p in selected_providers if p in {item["value"] for item in stage_providers}]
-        if not selected_providers:
-            selected_providers = provider_chain
-        selected_provider = selected_providers[0] if selected_providers else primary_default
-        selected_fallbacks = [value for value in selected_providers if value != selected_provider]
-        selected_model = assignment.model or (
-            next((opt["value"] for opt in next((sp["models"] for sp in stage_providers if sp["value"] == selected_provider), []) if opt), "")
-        )
-        allow_offline_default = "local" in selected_fallbacks or selected_provider == "local"
-
-        llm_stage_configs.append(
-            {
-                "key": stage_key,
-                "label": stage_label,
-                "providers": stage_providers,
-                "selected_provider": selected_provider,
-                "selected_fallbacks": selected_fallbacks,
-                "selected_model": selected_model,
-                "allow_offline_default": allow_offline_default,
-            }
-        )
+    timeline_stage_label_map = {
+        "timeline.builder": "Timeline builder",
+    }
+    timeline_overrides = {k: org_overrides[k] for k in timeline_stage_label_map if k in org_overrides}
+    timeline_stage_configs = _build_llm_stage_configs(
+        stage_label_map=timeline_stage_label_map,
+        llm_settings=llm_settings,
+        overrides=timeline_overrides,
+    )
+    timeline_chain = _collect_provider_chain(timeline_overrides, provider_chain)
+    timeline_primary = timeline_chain[0] if timeline_chain else primary_default
+    if timeline_primary == "azure" and not summarize_cfg.azure_enabled:
+        timeline_primary = "local"
+    timeline_fallbacks = [value for value in timeline_chain if value != timeline_primary]
+    timeline_chain_json = json.dumps(timeline_chain)
+    timeline_overrides_json = json.dumps(timeline_overrides)
 
     summary_status = status_payload(progress_lookup, "summary", "Not Started")
     summary_module = analysis_lookup.get("summary") or {}
@@ -913,15 +972,21 @@ def build_tool_panels(
             "module": summary_module,
             "transcripts": transcript_sources,
             "job_endpoint_template": "/api/v1/jobs/{job_id}/analyze/summary/",
-            "provider_options": provider_options,
-            "provider_defaults": {
-                "primary": primary_default,
-                "fallbacks": fallback_defaults,
-                "allow_offline": summarize_cfg.enable_offline_fallback,
-                "force_offline": summarize_cfg.force_offline_mode,
-                "azure_available": summarize_cfg.azure_enabled,
+            "summary_llm": {
+                "target": "summary",
+                "provider_options": provider_options,
+                "defaults": {
+                    "primary": summary_primary,
+                    "fallbacks": summary_fallbacks,
+                    "allow_offline": summarize_cfg.enable_offline_fallback,
+                    "force_offline": summarize_cfg.force_offline_mode,
+                    "azure_available": summarize_cfg.azure_enabled,
+                },
+                "stage_configs": summary_stage_configs,
+                "overrides": summary_overrides,
+                "overrides_json": summary_overrides_json,
+                "provider_chain_json": summary_chain_json,
             },
-            "llm_stage_configs": llm_stage_configs,
         },
         "jobs": summary_jobs,
         "jobs_title": "Summarize Jobs",
@@ -970,6 +1035,21 @@ def build_tool_panels(
             "transcripts": transcript_sources,
             "artifact_options": artifacts_by_type,
             "job_endpoint_template": "/api/v1/jobs/{job_id}/analyze/timeline/",
+            "timeline_llm": {
+                "target": "timeline",
+                "provider_options": provider_options,
+                "defaults": {
+                    "primary": timeline_primary,
+                    "fallbacks": timeline_fallbacks,
+                    "allow_offline": summarize_cfg.enable_offline_fallback,
+                    "force_offline": summarize_cfg.force_offline_mode,
+                    "azure_available": summarize_cfg.azure_enabled,
+                },
+                "stage_configs": timeline_stage_configs,
+                "overrides": timeline_overrides,
+                "overrides_json": timeline_overrides_json,
+                "provider_chain_json": timeline_chain_json,
+            },
         },
         "jobs": timeline_jobs,
         "jobs_title": "Timeline Jobs",
