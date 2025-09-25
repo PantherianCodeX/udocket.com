@@ -25,6 +25,17 @@
     };
   }
 
+  const decodeUnicode = (value) => {
+    if (typeof value !== 'string' || !/\u[0-9a-fA-F]{4}/.test(value)) {
+      return value;
+    }
+    try {
+      return value.replace(/\u([0-9a-fA-F]{4})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+    } catch (_) {
+      return value;
+    }
+  };
+
   const helpers = caseDetail.helpers || {};
 
   let ctx = null;
@@ -109,14 +120,36 @@
     const allowOfflineCheckbox = advanced.querySelector('[data-llm-allow-offline]');
 
     const llmDebug = !!platformUI.llmDebug;
-    let catalog = {};
-    let credentials = {};
+    const readEmbeddedJSON = (key) => {
+      try {
+        const script = container.querySelector(`[data-llm-json="${key}"]`);
+        if (!script) return null;
+        const text = script.textContent || '';
+        if (!text.trim()) return null;
+        const parsed = JSON.parse(text);
+        if (llmDebug) console.debug('[LLM] Parsed embedded JSON', key, parsed);
+        return parsed;
+      } catch (error) {
+        if (llmDebug) console.warn('[LLM] Failed to parse embedded JSON', key, error);
+        return null;
+      }
+    };
+    let catalog = readEmbeddedJSON('catalog') || {};
+    let credentials = readEmbeddedJSON('credentials') || {};
+    const decodeUnicode = (value) => {
+      try {
+        return value.replace(/\u([0-9a-fA-F]{4})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+      } catch (_) {
+        return value;
+      }
+    };
     const safeParse = (raw, label) => {
       if (!raw || typeof raw !== 'string') return {};
       const t = raw.trim();
       if (!t || !/[\[{]/.test(t[0])) return {};
       try {
-        const parsed = JSON.parse(t);
+        const normalized = /\u[0-9a-fA-F]{4}/.test(t) ? decodeUnicode(t) : t;
+        const parsed = JSON.parse(normalized);
         if (llmDebug) console.debug('[LLM] Parsed dataset', label, parsed);
         return parsed;
       } catch (error) {
@@ -124,8 +157,12 @@
         return {};
       }
     };
-    catalog = safeParse(container.dataset.llmCatalog, 'catalog');
-    credentials = safeParse(container.dataset.llmCredentials, 'credentials');
+    if (!Object.keys(catalog).length) {
+      catalog = safeParse(container.dataset.llmCatalog, 'catalog');
+    }
+    if (!Object.keys(credentials).length) {
+      credentials = safeParse(container.dataset.llmCredentials, 'credentials');
+    }
     const providerState = {
       catalog,
       credentials,
@@ -1480,30 +1517,36 @@
       }
       const overridesValue = summaryContainer?.dataset.llmOverrides;
       if (overridesValue) {
-        try {
-          const t = overridesValue.trim();
-          if (t && /[\[{]/.test(t[0])) {
-            const overrides = JSON.parse(t);
+        const trimmed = overridesValue.trim();
+        if (trimmed && /[\[{]/.test(trimmed[0])) {
+          try {
+            const normalized = /\u[0-9a-fA-F]{4}/.test(trimmed) ? decodeUnicode(trimmed) : trimmed;
+            const overrides = JSON.parse(normalized);
             if (overrides && typeof overrides === 'object') {
               payload.stage_overrides = overrides;
+              if (platformUI.llmDebug) console.debug('[LLM] Using stage overrides', overrides);
             }
+          } catch (error) {
+            if (platformUI.llmDebug) console.warn('[LLM] Invalid overrides payload, ignoring', error);
+            summaryContainer.dataset.llmOverrides = '';
           }
-        } catch (error) {
-          console.warn('Invalid LLM overrides payload', error);
         }
       }
       const chainOverride = summaryContainer?.dataset.llmProviderChain;
       if (chainOverride && !payload.provider_chain) {
-        try {
-          const t = chainOverride.trim();
-          if (t && /[\[{\"]/.test(t[0])) {
-            const chain = JSON.parse(t);
+        const trimmed = chainOverride.trim();
+        if (trimmed && /[\[{\"]/.test(trimmed[0])) {
+          try {
+            const normalized = /\u[0-9a-fA-F]{4}/.test(trimmed) ? decodeUnicode(trimmed) : trimmed;
+            const chain = JSON.parse(normalized);
             if (Array.isArray(chain) && chain.length) {
               payload.provider_chain = chain;
+              if (platformUI.llmDebug) console.debug('[LLM] Using stored provider chain', chain);
             }
+          } catch (error) {
+            if (platformUI.llmDebug) console.warn('[LLM] Invalid provider chain override', error);
+            summaryContainer.dataset.llmProviderChain = '';
           }
-        } catch (error) {
-          console.warn('Invalid provider chain override', error);
         }
       }
     } else if (action === 'timeline') {
@@ -1531,6 +1574,14 @@
     const toastY = evt.clientY || global.innerHeight / 2;
     try {
       const url = endpointTemplate.replace('{job_id}', jobId);
+      if (platformUI.llmDebug) {
+        console.debug('[LLM] Queue request', {
+          action,
+          jobId,
+          endpoint: url,
+          payload,
+        });
+      }
       const resp = await fetch(url, {
         method: 'POST',
         headers: {
@@ -1553,6 +1604,9 @@
       }
     } catch (error) {
       console.error('Automation queue failed', action, error);
+      if (platformUI.llmDebug) {
+        console.debug('[LLM] Queue failure details', { action, jobId, error });
+      }
       if (deps.notify) {
         deps.notify(toastX, toastY, 'Unable to queue automation');
       }
