@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+from packages.udocket_core.agents import build_summarize_graph
 from packages.udocket_core.agents.summarize_lib import (
     SummarizeAgent,
     SummarizeConfig,
@@ -60,3 +63,15 @@ def test_summarize_agent_offline_writes_artifacts(tmp_path):
     assert result.audit_jsonl.exists()
     meta_text = result.meta_json.read_text(encoding="utf-8")
     assert "summary_file" in meta_text
+
+
+def test_build_summarize_graph_requires_langgraph():
+    class Dummy:
+        def input_discovery(self, state):
+            return state
+
+        parse_transcript = context_builder = extract_outline = build_timeline_seeds = build_entity_hints = draft_markdown = qa_and_finalize = write_ops_and_artifacts = input_discovery
+
+    dummy = Dummy()
+    with pytest.raises(RuntimeError):
+        build_summarize_graph(dummy)
