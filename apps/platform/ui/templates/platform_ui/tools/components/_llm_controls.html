@@ -8,7 +8,6 @@
     <div class="space-y-2">
       <label class="text-xs uppercase tracking-wide text-slate-400">Primary provider</label>
       <select class="w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none"
-              data-summary-provider-primary="{{ ctx.target == 'summary'|yesno:'true,false' }}"
               data-llm-provider-primary
               {% if ctx.defaults.force_offline %}disabled{% endif %}>
         {% for option in ctx.provider_options %}
@@ -43,7 +42,6 @@
     <label class="inline-flex items-center gap-2 text-sm text-slate-200">
       <input type="checkbox"
              class="h-4 w-4 rounded border-white/20 bg-slate-900/70 text-primary-500 focus:ring-primary-400"
-             data-summary-allow-offline="{{ ctx.target == 'summary'|yesno:'true,false' }}"
              data-llm-allow-offline
              {% if ctx.defaults.allow_offline %}checked{% endif %}
              {% if ctx.defaults.force_offline %}disabled{% endif %}>
