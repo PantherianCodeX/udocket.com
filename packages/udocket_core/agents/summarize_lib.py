@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -18,6 +18,9 @@ from .summarize.utils import FinalizedOutputs, SummarizePipeline
 
 MAX_PROMPT_SEGMENTS = 120
 MAX_PROMPT_CHARS = 8000
+
+SUPPORTED_PROVIDERS = {"azure", "local"}
+DEFAULT_PROVIDER_CHAIN: List[str] = ["azure", "local"]
 
 
 PIPELINE_NODE_ORDER = [
@@ -44,6 +47,7 @@ class SummarizeConfig:
     debug: bool = False
     enable_offline_fallback: bool = False
     force_offline_mode: bool = False
+    provider_chain: List[str] = field(default_factory=lambda: list(DEFAULT_PROVIDER_CHAIN))
 
     @classmethod
     def from_env(cls) -> "SummarizeConfig":
@@ -57,6 +61,29 @@ class SummarizeConfig:
         debug = (os.getenv("DEBUG", "0").strip() == "1")
         allow_offline = (os.getenv("SUMMARY_ALLOW_OFFLINE_FALLBACK", "0").strip() == "1")
         force_offline = (os.getenv("SUMMARY_FORCE_OFFLINE", "0").strip() == "1")
+        primary_provider = (os.getenv("SUMMARY_PRIMARY_PROVIDER") or "azure").strip().lower()
+        fallback_raw = os.getenv("SUMMARY_FALLBACK_PROVIDERS")
+        fallback_values: List[str] = []
+        if fallback_raw is None:
+            if primary_provider == "azure":
+                fallback_values = ["local"]
+        else:
+            fallback_values = [value.strip().lower() for value in fallback_raw.split(",") if value.strip()]
+
+        providers = [primary_provider] + fallback_values
+        filtered_chain: List[str] = []
+        for provider in providers:
+            if not provider:
+                continue
+            if provider not in SUPPORTED_PROVIDERS:
+                raise ValueError(f"Unsupported summarize provider '{provider}'")
+            if provider in filtered_chain:
+                continue
+            filtered_chain.append(provider)
+        if not filtered_chain:
+            filtered_chain = list(DEFAULT_PROVIDER_CHAIN)
+        if force_offline:
+            filtered_chain = ["local"]
 
         if endpoint and not _endpoint_is_canadian(endpoint):
             raise ValueError("AZURE_OPENAI_ENDPOINT must target canadacentral or canadaeast")
@@ -72,10 +99,15 @@ class SummarizeConfig:
             debug=debug,
             enable_offline_fallback=allow_offline,
             force_offline_mode=force_offline,
+            provider_chain=filtered_chain,
         )
 
     @property
     def azure_enabled(self) -> bool:
+        if self.force_offline_mode:
+            return False
+        if "azure" not in self.provider_chain:
+            return False
         return bool(self.azure_openai_endpoint and self.azure_openai_key and self.azure_openai_deployment)
 
     @property
@@ -138,16 +170,20 @@ class SummarizeAgent:
         if input is not None:
             state["input_path"] = Path(input)
 
+        provider_chain = list(self.config.provider_chain) or list(DEFAULT_PROVIDER_CHAIN)
         azure_client = None
         azure_cfg = self.config.azure_client_config()
-        if not self.config.force_offline_mode and azure_cfg is not None:
+        if provider_chain and provider_chain[0] == "azure" and azure_cfg is not None:
             azure_client = AzureChatClient(azure_cfg)
 
-        offline_flag = (
-            allow_offline_fallback
-            if allow_offline_fallback is not None
-            else self.config.enable_offline_fallback
-        )
+        if allow_offline_fallback is None:
+            offline_flag = self.config.enable_offline_fallback
+        else:
+            offline_flag = allow_offline_fallback
+        if "local" not in provider_chain:
+            offline_flag = False
+        offline_flag = bool(offline_flag)
+
         pipeline = SummarizePipeline(
             case_id=case_id,
             job_id=job_id,
@@ -159,6 +195,7 @@ class SummarizeAgent:
             resolve_transcript=self._resolve_transcript,
             build_context=self._build_context,
             allow_offline_fallback=offline_flag,
+            provider_chain=provider_chain,
         )
 
         final_state = self._execute_pipeline(pipeline, state)

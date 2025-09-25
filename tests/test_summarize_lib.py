@@ -76,10 +76,11 @@ def test_summarize_agent_offline_writes_artifacts(tmp_path):
     assert result.case_brief_file and result.case_brief_file.exists()
     assert result.meta_json.exists()
     assert result.audit_jsonl.exists()
-    meta_text = result.meta_json.read_text(encoding="utf-8")
-    assert "summary_file" in meta_text
-    assert "outline_file" in meta_text
-    assert "case_brief_file" in meta_text
+    meta = json.loads(result.meta_json.read_text(encoding="utf-8"))
+    assert "summary_file" in meta
+    assert "outline_file" in meta
+    assert "case_brief_file" in meta
+    assert meta.get("provider_chain")
     summary_text = result.summary_file.read_text(encoding="utf-8")
     assert summary_text.startswith("# Header line")
     required_headings = [
@@ -204,6 +205,7 @@ def test_azure_failure_requires_consent(monkeypatch, tmp_path):
     )
     meta = json.loads(result.meta_json.read_text(encoding="utf-8"))
     assert meta.get("offline_fallback_used") is True
+    assert meta.get("provider_chain")
     assert result.summary_file.exists()
     assert result.case_brief_file and result.case_brief_file.exists()
 
@@ -218,3 +220,14 @@ def test_build_summarize_graph_requires_langgraph():
     dummy = Dummy()
     with pytest.raises(RuntimeError):
         build_summarize_graph(dummy)
+
+
+def test_config_provider_chain_from_env(monkeypatch):
+    monkeypatch.setenv("SUMMARY_PRIMARY_PROVIDER", "local")
+    monkeypatch.setenv("SUMMARY_FALLBACK_PROVIDERS", "azure,local")
+    cfg = SummarizeConfig.from_env()
+    assert cfg.provider_chain[0] == "local"
+    # duplicates should be removed while keeping order
+    assert cfg.provider_chain == ["local", "azure"]
+    monkeypatch.delenv("SUMMARY_PRIMARY_PROVIDER", raising=False)
+    monkeypatch.delenv("SUMMARY_FALLBACK_PROVIDERS", raising=False)

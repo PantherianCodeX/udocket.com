@@ -70,6 +70,7 @@ class SummarizePipeline:
         resolve_transcript,
         build_context,
         allow_offline_fallback: bool,
+        provider_chain: Optional[list[str]],
     ) -> None:
         self.case_id = case_id
         self.job_id = job_id
@@ -83,6 +84,7 @@ class SummarizePipeline:
         self.allow_offline_fallback = allow_offline_fallback
         self.offline_mode = azure_client is None
         self.offline_fallback_used = self.offline_mode
+        self.provider_chain = list(provider_chain or [])
 
     # LangGraph-compatible node implementations -----------------------
 
@@ -121,6 +123,7 @@ class SummarizePipeline:
         state["context_snippet"] = context_snippet
         state["case_brief"] = brief
         state.setdefault("offline_fallback_used", self.offline_fallback_used)
+        state.setdefault("provider_chain", self.provider_chain)
         return state
 
     def extract_outline(self, state: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
@@ -246,6 +249,7 @@ class SummarizePipeline:
             token_usage=token_usage,
             case_brief=case_brief,
             offline_fallback_used=offline_flag,
+            provider_chain=self.provider_chain,
             transcript_hint=self.transcript_hint,
         )
         state["final_outputs"] = finalized
@@ -315,6 +319,7 @@ def finalize_outputs(
     token_usage: Dict[str, Dict[str, int]],
     case_brief: Dict[str, Any],
     offline_fallback_used: bool,
+    provider_chain: Optional[list[str]],
     transcript_hint: Optional[Dict[str, Any]] = None,
 ) -> FinalizedOutputs:
     analysis_dir = case_dir / "analysis"
@@ -384,6 +389,8 @@ def finalize_outputs(
         "entity_count": len(entity_result.hints.get("entities", [])),
         "offline_fallback_used": offline_fallback_used,
     }
+    if provider_chain:
+        meta["provider_chain"] = provider_chain
     if intake_payload:
         meta["intake"] = intake_payload
     if transcript_hint:
@@ -408,6 +415,7 @@ def finalize_outputs(
             "entity_file": str(entity_path),
             "case_brief_file": str(case_brief_path),
             "words": words,
+            "providers": provider_chain or [],
         },
     )
 
