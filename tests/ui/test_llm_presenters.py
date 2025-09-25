@@ -109,6 +109,35 @@ def test_build_provider_cache_marks_supported_and_unsupported(llm_settings):
     assert openai_entry["unavailable_reason"] == "Not supported yet"
 
 
+def test_build_provider_cache_includes_credential_only_provider(llm_settings):
+    credentials = {
+        "custom": {
+            "display_name": "Custom Provider",
+            "endpoint": "https://api.custom.example",
+            "models": [
+                {
+                    "name": "custom-model",
+                    "label": "Custom Model",
+                    "cost_tier": "standard",
+                }
+            ],
+        }
+    }
+
+    cache = presenters._build_provider_cache(
+        llm_settings=llm_settings,
+        provider_catalog={},
+        provider_credentials=credentials,
+    )
+
+    assert "custom" in cache
+    custom_entry = cache["custom"]
+    assert custom_entry["available"] is True
+    assert custom_entry["configured"] is True
+    assert custom_entry["label"] == "Custom Provider"
+    assert custom_entry["models"][0]["value"] == "custom-model"
+
+
 def test_build_llm_stage_configs_uses_defaults_and_overrides(llm_settings):
     provider_cache = presenters._build_provider_cache(
         llm_settings=llm_settings,

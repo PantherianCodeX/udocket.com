@@ -132,6 +132,28 @@ def _build_provider_cache(
                 for model_name, model_meta in provider.models.items()
             ],
         }
+    for provider_name, credential in provider_credentials.items():
+        if provider_name in cache:
+            continue
+        models_payload = credential.get("models") or []
+        cache[provider_name] = {
+            "value": provider_name,
+            "label": credential.get("display_name") or provider_name,
+            "available": True,
+            "configured": True,
+            "default_endpoint": credential.get("endpoint") or credential.get("default_endpoint"),
+            "requires_api_key": True,
+            "unavailable_reason": "",
+            "models": [
+                {
+                    "value": str(model.get("name") or model.get("id") or ""),
+                    "label": model.get("label") or model.get("name") or provider_name,
+                    "cost_tier": model.get("cost_tier") or "standard",
+                }
+                for model in models_payload
+                if isinstance(model, dict) and (model.get("name") or model.get("id"))
+            ],
+        }
     return cache
 
 
