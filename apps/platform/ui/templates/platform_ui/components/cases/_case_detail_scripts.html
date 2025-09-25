@@ -1199,6 +1199,17 @@
         setupAnalysisActions(root);
         const jobsBody = root.querySelector('#jobs-body');
         if (!jobsBody) return;
+        jobsBody.querySelectorAll('[data-job-detail]').forEach((detail) => {
+          const jobId = detail.getAttribute('data-job-detail');
+          const row = jobId ? jobsBody.querySelector(`[data-job="${jobId}"]`) : null;
+          if (row && row.getAttribute('aria-expanded') === 'true') {
+            detail.classList.remove('hidden');
+            detail.style.display = 'table-row';
+          } else {
+            detail.classList.add('hidden');
+            detail.style.display = 'none';
+          }
+        });
         const caseAttr = jobsBody.dataset.caseId;
         if (caseAttr && caseAttr !== JobsState.currentCaseId) {
           JobsState.currentCaseId = caseAttr;

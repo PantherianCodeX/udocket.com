@@ -77,6 +77,18 @@
   }
 
   function bootstrapJobs() {
+    document.querySelectorAll('[data-job-detail]').forEach((detail) => {
+      const jobId = detail.getAttribute('data-job-detail');
+      const row = jobId ? document.querySelector(`[data-job="${jobId}"]`) : null;
+      if (row && row.getAttribute('aria-expanded') === 'true') {
+        detail.classList.remove('hidden');
+        detail.style.display = 'table-row';
+      } else {
+        detail.classList.add('hidden');
+        detail.style.display = 'none';
+      }
+    });
+
     document.querySelectorAll('[data-job]').forEach(row => {
       const jobId = row.dataset.job;
       if (!row.dataset.ws) {

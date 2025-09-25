@@ -1,15 +1,16 @@
 {% load ui_display %}
 {% with columns=table_columns column_ids=table_column_ids job=row.job telemetry=row.telemetry table_meta=row.table %}
 {% if job %}
-{% with sort=table_meta.sort status_value=telemetry.status|default:job.status normalized=status_value|default:''|upper is_child=row.is_child|default:False parent_ref=row.parent_id|default:job.case_id job_title=row.title|default:job.id type_label=table_meta.type_label|default:'' case_title=table_meta.case_label|default:'' case_id=table_meta.case_id|default:job.case_id audio_name=table_meta.audio_name created_dt=table_meta.created_at|default:job.created_at review_status=table_meta.review_status|default:job.review_status|default:'PENDING' progress=telemetry.upload_progress show_identifiers=table_show_identifiers|default:False parent_id=parent_ref|default:job.id filter_value=table_meta.filter|default:'' %}
+{% with sort=table_meta.sort status_value=telemetry.status|default:job.status normalized=status_value|default:''|upper is_child=row.is_child|default:False group_id=row.group_id|default:job.id root_id=row.root_id|default:row.group_id|default:job.id parent_id=row.parent_id|default:'' job_title=row.title|default:job.id type_label=table_meta.type_label|default:'' case_title=table_meta.case_label|default:'' case_id=table_meta.case_id|default:job.case_id audio_name=table_meta.audio_name created_dt=table_meta.created_at|default:job.created_at review_status=table_meta.review_status|default:job.review_status|default:'PENDING' progress=telemetry.upload_progress show_identifiers=table_show_identifiers|default:False filter_value=table_meta.filter|default:'' %}
     <tr data-job="{{ job.id }}"
         data-job-row
         data-job-status="{{ normalized }}"
         data-job-case-id="{{ job.case_id }}"
         data-job-kind="{{ table_meta.job_kind|default:job.mode|default:'' }}"
         data-table-row
-        data-table-row-id="{{ job.id }}"
+        data-table-row-id="{{ group_id }}"
         data-table-parent-id="{{ parent_id }}"
+        data-table-root-id="{{ root_id }}"
         data-table-depth="{% if is_child %}1{% else %}0{% endif %}"
         data-table-filter="{{ filter_value }}"
         data-table-value-title="{{ sort.title|default:'' }}"
@@ -114,7 +115,7 @@
         {% endif %}
       {% endfor %}
     </tr>
-    <tr class="hidden bg-slate-900/50" data-job-detail="{{ job.id }}" data-table-detail-for="{{ job.id }}" data-table-parent-id="{{ parent_id }}" data-table-filter="{{ filter_value }}">
+    <tr class="hidden bg-slate-900/50" data-job-detail="{{ job.id }}" data-table-detail-for="{{ group_id }}" data-table-parent-id="{{ root_id }}" data-table-root-id="{{ root_id }}" data-table-filter="{{ filter_value }}">
       <td colspan="{{ columns|length }}" class="px-6 py-4">
         <div class="rounded-xl border border-white/10 bg-slate-900/80 p-4" data-job-detail-container="{{ job.id }}"></div>
       </td>

@@ -240,6 +240,9 @@ def build_job_rows(
             "title": title,
             "children": [],
             "is_child": False,
+            "group_id": key,
+            "root_id": key,
+            "parent_id": "",
         }
         build_row_table_meta(row)
         flat_rows.append(row)
@@ -259,8 +262,9 @@ def build_job_rows(
         parent = row_lookup.get(str(source_id)) if source_id else None
         if kind.startswith("audio_conversion") and parent:
             row["is_child"] = True
-            if parent.get("job"):
-                row["parent_id"] = str(parent["job"].id)
+            parent_group_id = parent.get("group_id") or str(getattr(parent.get("job"), "id", ""))
+            row["parent_id"] = parent_group_id or ""
+            row["root_id"] = parent.get("root_id") or parent_group_id or row.get("group_id")
 
             def child_sort_key(child_row: Dict[str, Any]) -> datetime:
                 job_obj = child_row.get("job")
