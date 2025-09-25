@@ -69,6 +69,25 @@ def test_summarize_agent_offline_writes_artifacts(tmp_path):
     assert "outline_file" in meta_text
 
 
+def test_summarize_agent_versioned_outputs(tmp_path):
+    case_dir = tmp_path / "cases" / "CASE-2"
+    transcript_dir = case_dir / "transcript"
+    transcript_path = transcript_dir / "JOB-2__transcript.txt"
+    _write_transcript(
+        transcript_path,
+        """Heading\n---------------------------\n[00:01] SPK_1: Statement A\n[00:02] SPK_2: Statement B\n""",
+    )
+
+    agent = SummarizeAgent(SummarizeConfig())
+    first = agent.summarize(case_id="CASE-2", case_dir=case_dir, job_id="JOB-2")
+    second = agent.summarize(case_id="CASE-2", case_dir=case_dir, job_id="JOB-2")
+
+    assert first.summary_file.exists()
+    assert second.summary_file.exists()
+    assert first.summary_file != second.summary_file
+    assert second.summary_file.name.endswith("_v2.md")
+
+
 def test_build_summarize_graph_requires_langgraph():
     class Dummy:
         def input_discovery(self, state):
