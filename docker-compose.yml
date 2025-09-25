@@ -71,7 +71,9 @@ services:
       REDIS_URL: redis://redis:6379/1
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: django-db
-    command: sh -lc "python -c 'import time; time.sleep(2)' && celery -A apps.platform.config.celery worker -l info"
+    command: >-
+      sh -lc "python -c 'import time; time.sleep(2)' &&
+      celery -A apps.platform.config.celery worker -l ${CELERY_LOG_LEVEL:-info} --events"
     volumes:
       - ./storage:/app/storage
       - ./.env:/app/.env:ro
@@ -91,7 +93,7 @@ services:
       REDIS_URL: redis://redis:6379/1
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: django-db
-    command: sh -lc "python -c 'import time; time.sleep(2)' && celery -A apps.platform.config.celery beat -l info"
+    command: sh -lc "python -c 'import time; time.sleep(2)' && celery -A apps.platform.config.celery beat -l ${CELERY_LOG_LEVEL:-info}"
     volumes:
       - ./storage:/app/storage
       - ./.env:/app/.env:ro

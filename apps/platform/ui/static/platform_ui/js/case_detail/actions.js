@@ -57,6 +57,9 @@
   };
 
   const helpers = caseDetail.helpers || {};
+  helpers.decodeUnicode = decodeUnicode;
+  helpers.getEmbeddedJSON = getEmbeddedJSON;
+  caseDetail.helpers = helpers;
 
   let ctx = null;
   let deps = {};
@@ -1535,7 +1538,8 @@
           payload.allow_offline_fallback = allowOfflineCheckbox.checked;
         }
       }
-      const embeddedOverrides = getEmbeddedJSON(summaryContainer, 'overrides');
+      const embeddedOverridesFn = helpers.getEmbeddedJSON || getEmbeddedJSON;
+      const embeddedOverrides = embeddedOverridesFn(summaryContainer, 'overrides');
       if (embeddedOverrides && typeof embeddedOverrides === 'object') {
         payload.stage_overrides = embeddedOverrides;
         if (platformUI.llmDebug) console.debug('[LLM] Using embedded overrides', embeddedOverrides);
@@ -1559,7 +1563,7 @@
         }
       }
       if (!payload.provider_chain) {
-        const embeddedChain = getEmbeddedJSON(summaryContainer, 'provider-chain');
+        const embeddedChain = embeddedOverridesFn(summaryContainer, 'provider-chain');
         if (Array.isArray(embeddedChain) && embeddedChain.length) {
           payload.provider_chain = embeddedChain;
           if (platformUI.llmDebug) console.debug('[LLM] Using embedded provider chain', embeddedChain);

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Sequence, cast
 
 from .common import (
     AzureChatClient,
@@ -11,7 +12,7 @@ from .common import (
     parse_transcript,
     TranscriptParse,
 )
-from .common.azure_client import _endpoint_is_canadian
+from .common.azure_client import CANADIAN_REGIONS
 from .common.io import TranscriptSegment  # re-export for legacy imports
 from .langgraph_orchestrator import build_summarize_graph
 from .summarize.utils import FinalizedOutputs, SummarizePipeline
@@ -30,14 +31,22 @@ LLM_STAGE_KEYS = {
     "draft_markdown": "summarize.draft_markdown",
     "qa_and_finalize": "summarize.qa_and_finalize",
 }
-LLM_SETTINGS: Optional[LLMSettings] = None
+_llm_settings_cache: Optional[LLMSettings] = None
+
+
+logger = logging.getLogger("udocket.summarize.agent")
+
+
+def _endpoint_is_canadian(endpoint: str) -> bool:
+    endpoint_lower = endpoint.lower()
+    return any(region in endpoint_lower for region in CANADIAN_REGIONS)
 
 
 def _load_llm_settings() -> LLMSettings:
-    global LLM_SETTINGS
-    if LLM_SETTINGS is None:
-        LLM_SETTINGS = load_llm_settings()
-    return LLM_SETTINGS
+    global _llm_settings_cache
+    if _llm_settings_cache is None:
+        _llm_settings_cache = load_llm_settings()
+    return _llm_settings_cache
 
 
 @dataclass
@@ -214,6 +223,20 @@ class SummarizeResult:
 class SummarizeAgent:
     def __init__(self, config: Optional[SummarizeConfig] = None) -> None:
         self.config = config or SummarizeConfig.from_env()
+        self.logger = logger
+        self._log_enabled = False
+        self._log_level = logging.INFO
+
+    def _log(self, level: int, message: str, **meta: Any) -> None:
+        if not self._log_enabled:
+            return
+        details = " ".join(
+            f"{key}={value}"
+            for key, value in meta.items()
+            if value is not None
+        )
+        full_message = message if not details else f"{message} | {details}"
+        self.logger.log(level, full_message)
 
     def summarize(
         self,
@@ -227,6 +250,9 @@ class SummarizeAgent:
         allow_offline_fallback: Optional[bool] = None,
         provider_chain: Optional[List[str]] = None,
         stage_overrides: Optional[Dict[str, Dict[str, Any]]] = None,
+        progress_callback: Optional[
+            Callable[[str, str, Dict[str, Any]], None]
+        ] = None,
     ) -> SummarizeResult:
         case_dir = Path(case_dir)
         state: Dict[str, Any] = {
@@ -236,6 +262,17 @@ class SummarizeAgent:
         }
         if input is not None:
             state["input_path"] = Path(input)
+
+        self._log_enabled = (
+            self.config.debug or self.logger.isEnabledFor(logging.DEBUG)
+        )
+        self._log_level = logging.INFO if self.config.debug else logging.DEBUG
+        self._log(
+            self._log_level,
+            "summarize.start",
+            case_id=case_id,
+            job_id=job_id,
+        )
 
         settings = _load_llm_settings()
         stage_overrides = stage_overrides or {}
@@ -280,29 +317,43 @@ class SummarizeAgent:
                 stage_attr
             )
             if override:
-                override_providers = override.get("providers")
-                if isinstance(override_providers, list) and override_providers:
+                raw_override_providers = override.get("providers")
+                override_providers: List[str] = []
+                if isinstance(raw_override_providers, list):
+                    for provider_value_raw in cast(
+                        Sequence[Any], raw_override_providers
+                    ):
+                        if isinstance(provider_value_raw, str):
+                            override_providers.append(provider_value_raw)
+                if override_providers:
                     providers = [
-                        p
-                        for p in override_providers
-                        if p in SUPPORTED_PROVIDERS
+                        provider
+                        for provider in override_providers
+                        if provider in SUPPORTED_PROVIDERS
                     ]
                 else:
-                    primary_override = override.get("provider")
-                    fallbacks_override = (
-                        override.get("fallbacks")
-                        if isinstance(override.get("fallbacks"), list)
-                        else []
+                    primary_override = (
+                        str(override.get("provider"))
+                        if isinstance(override.get("provider"), str)
+                        else None
                     )
+                    raw_fallbacks = override.get("fallbacks")
+                    fallbacks_override: List[str] = []
+                    if isinstance(raw_fallbacks, list):
+                        for fallback_value_raw in cast(
+                            Sequence[Any], raw_fallbacks
+                        ):
+                            if isinstance(fallback_value_raw, str):
+                                fallbacks_override.append(fallback_value_raw)
                     chain_override: List[str] = []
                     if primary_override:
                         chain_override.append(primary_override)
                     chain_override.extend(fallbacks_override)
                     if chain_override:
                         providers = [
-                            p
-                            for p in chain_override
-                            if p in SUPPORTED_PROVIDERS
+                            provider
+                            for provider in chain_override
+                            if provider in SUPPORTED_PROVIDERS
                         ]
                 if override.get("model"):
                     model = str(override["model"])
@@ -375,6 +426,16 @@ class SummarizeAgent:
                 if provider not in provider_sequence:
                     provider_sequence.append(provider)
 
+            self._log(
+                self._log_level,
+                "stage.configured",
+                stage=stage_key,
+                providers=providers,
+                model=model,
+                azure_client=bool(azure_client),
+                allow_local=runtime.allow_local_fallback,
+            )
+
         pipeline = SummarizePipeline(
             case_id=case_id,
             job_id=job_id,
@@ -388,8 +449,13 @@ class SummarizeAgent:
             stage_runtimes=stage_runtimes,
             default_temperature=self.config.temperature,
             global_allow_offline=global_allow_offline,
+            logger=self.logger,
+            progress_callback=self._build_progress_dispatch(
+                progress_callback, case_id, job_id
+            ),
         )
 
+        pipeline.emit_pipeline_event("start", provider_chain=provider_sequence)
         final_state = self._execute_pipeline(pipeline, state)
         final_outputs = final_state.get("final_outputs")
         if not isinstance(final_outputs, FinalizedOutputs):
@@ -401,6 +467,19 @@ class SummarizeAgent:
                 state.get("input_path"), case_dir
             )
 
+        pipeline.emit_pipeline_event(
+            "complete",
+            status=final_state.get("status", "ok"),
+            offline=final_outputs.offline_fallback_used,
+        )
+        self._log(
+            self._log_level,
+            "summarize.completed",
+            status=final_state.get("status", "ok"),
+            summary=str(final_outputs.summary_path),
+            outline=str(final_outputs.outline_path),
+            offline=final_outputs.offline_fallback_used,
+        )
         return SummarizeResult(
             status=final_state.get("status", "ok"),
             summary_file=final_outputs.summary_path,
@@ -426,11 +505,39 @@ class SummarizeAgent:
         except RuntimeError:
             graph = None
         if graph is not None:
-            return graph.invoke(current_state)
+            graph_result = graph.invoke(current_state)
+            return dict(graph_result)
         for node_name in PIPELINE_NODE_ORDER:
             node = getattr(pipeline, node_name)
             current_state = node(current_state)
-        return current_state
+        return dict(current_state)
+
+    def _build_progress_dispatch(
+        self,
+        external_callback: Optional[
+            Callable[[str, str, Dict[str, Any]], None]
+        ],
+        case_id: str,
+        job_id: str,
+    ) -> Callable[[str, str, Dict[str, Any]], None]:
+        def dispatch(stage: str, event: str, payload: Dict[str, Any]) -> None:
+            log_level = logging.INFO if self.config.debug else logging.DEBUG
+            self._log(log_level, f"stage.{stage}.{event}", **payload)
+            if external_callback is not None:
+                try:
+                    external_callback(stage, event, dict(payload))
+                except Exception:
+                    self.logger.exception(
+                        "External progress callback failed",
+                        extra={
+                            "stage": stage,
+                            "event": event,
+                            "job_id": job_id,
+                            "case_id": case_id,
+                        },
+                    )
+
+        return dispatch
 
     def _resolve_transcript(
         self, input_path: Optional[Path], case_dir: Path

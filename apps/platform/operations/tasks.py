@@ -1020,6 +1020,27 @@ def summarize_job(
         raise RuntimeError("No transcript found to summarize")
 
     summarize_agent = SummarizeAgent(SummarizeConfig.from_env())
+    log.info(
+        "summarize job started",
+        extra={"job_id": job_id, "case_id": case_id, "org_id": str(org_id)},
+    )
+    try:
+        append_job_log(
+            case_id,
+            org_id,
+            job_id,
+            "Worker started summarize pipeline",
+        )
+    except Exception:
+        pass
+    try:
+        send_job_update(
+            job_id,
+            event="summary.started",
+            case_id=case_id,
+        )
+    except Exception:
+        pass
     intake_payload = _case_intake_payload(job.case)
     org_overrides = get_org_llm_overrides(str(org_id) if org_id else None)
     merged_overrides: Dict[str, Dict[str, Any]] = {}
@@ -1030,6 +1051,34 @@ def summarize_job(
                 continue
             merged_overrides[key] = value
 
+    def _progress(stage: str, event: str, payload: Dict[str, Any]) -> None:
+        progress_payload: Dict[str, Any] = {
+            "case_id": case_id,
+            "stage": stage,
+            "state": event,
+        }
+        if payload:
+            progress_payload["details"] = payload
+        try:
+            send_job_update(
+                job_id,
+                event="summary.progress",
+                **progress_payload,
+            )
+        except Exception:
+            pass
+        if summarize_agent.config.debug:
+            log.info(
+                "summarize stage",
+                extra={
+                    "job_id": job_id,
+                    "case_id": case_id,
+                    "stage": stage,
+                    "event": event,
+                    "details": payload,
+                },
+            )
+
     result = summarize_agent.summarize(
         input=transcript,
         case_id=case_id,
@@ -1039,7 +1088,18 @@ def summarize_job(
         allow_offline_fallback=allow_offline_fallback,
         provider_chain=provider_chain,
         stage_overrides=merged_overrides,
+        progress_callback=_progress,
     )
+
+    try:
+        send_job_update(
+            job_id,
+            event="summary.completed",
+            case_id=case_id,
+            summary=str(result.summary_file),
+        )
+    except Exception:
+        pass
 
     checksum = _sha256_file(result.summary_file)
     meta_updates: Dict[str, Any] = {
@@ -1078,6 +1138,16 @@ def summarize_job(
 
     try:
         send_case_update(case_id, event="artifact.created", kind="summary", job_id=job_id)
+    except Exception:
+        pass
+
+    try:
+        append_job_log(
+            case_id,
+            org_id,
+            job_id,
+            "Summarize pipeline completed",
+        )
     except Exception:
         pass
 

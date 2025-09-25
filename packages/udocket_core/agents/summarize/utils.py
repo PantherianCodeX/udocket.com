@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, MutableMapping, Optional
+from typing import Any, Callable, Dict, List, MutableMapping, Optional, cast
 
 from ..common import (
     AnalysisArtifact,
@@ -16,7 +17,6 @@ from ..common import (
     sha256_file,
     TranscriptParse,
 )
-from ..common.azure_client import AzureChatClient
 from .exceptions import AzureStageFailure, AzureUnavailableError
 from .stages import (
     DraftStageResult,
@@ -28,6 +28,9 @@ from .stages import (
     generate_summary_markdown,
     generate_timeline,
 )
+
+logger = logging.getLogger("udocket.summarize.pipeline")
+
 
 REQUIRED_HEADINGS = {
     "Case metadata summary": "- Pending case metadata.",
@@ -68,12 +71,16 @@ class SummarizePipeline:
         intake: Optional[Dict[str, Any]],
         transcript_hint: Optional[Dict[str, Any]],
         config: Any,
-        resolve_transcript,
-        build_context,
+        resolve_transcript: Callable[[Optional[Path], Path], Path],
+        build_context: Callable[[TranscriptParse, Dict[str, Any]], str],
         provider_chain: Optional[List[str]],
         stage_runtimes: Dict[str, Any],
         default_temperature: float,
         global_allow_offline: bool,
+        logger: Optional[logging.Logger] = None,
+        progress_callback: Optional[
+            Callable[[str, str, Dict[str, Any]], None]
+        ] = None,
     ) -> None:
         self.case_id = case_id
         self.job_id = job_id
@@ -81,13 +88,26 @@ class SummarizePipeline:
         self.intake = intake or {}
         self.transcript_hint = transcript_hint
         self.config = config
-        self._resolve_transcript = resolve_transcript
-        self._build_context = build_context
+        self._resolve_transcript: Callable[[Optional[Path], Path], Path] = (
+            resolve_transcript
+        )
+        self._build_context: Callable[[TranscriptParse, Dict[str, Any]], str] = (
+            build_context
+        )
         self.stage_runtimes = stage_runtimes
         self.default_temperature = default_temperature
         self.global_allow_offline = global_allow_offline
         self.offline_fallback_used = False
         self.provider_chain = list(provider_chain or [])
+        self.logger = logger or logging.getLogger("udocket.summarize.pipeline")
+        self.progress_callback = progress_callback
+        self._log_level = (
+            logging.INFO if getattr(config, "debug", False) else logging.DEBUG
+        )
+        self._log_enabled = (
+            getattr(config, "debug", False)
+            or self.logger.isEnabledFor(logging.DEBUG)
+        )
         if not self.provider_chain:
             self.provider_chain = ["local"]
         # mark offline usage if any stage configured as local
@@ -96,23 +116,74 @@ class SummarizePipeline:
                 self.offline_fallback_used = True
                 break
 
+    def emit_pipeline_event(self, event: str, **meta: Any) -> None:
+        self._notify_stage("pipeline", event, **meta)
+
+    # Internal logging helpers ----------------------------------------
+
+    def _notify_stage(self, stage: str, event: str, **meta: Any) -> None:
+        cleaned: Dict[str, Any] = {}
+        for key, value in meta.items():
+            if value is None:
+                continue
+            if isinstance(value, Path):
+                cleaned[key] = str(value)
+            else:
+                cleaned[key] = value
+        if self.progress_callback is None:
+            self._log_stage(stage, event, cleaned)
+        if self.progress_callback is not None:
+            try:
+                self.progress_callback(stage, event, dict(cleaned))
+            except Exception:
+                if self._log_enabled:
+                    self.logger.exception(
+                        "Progress callback failed",
+                        extra={"stage": stage, "event": event},
+                    )
+
+    def _log_stage(self, stage: str, event: str, details: Dict[str, Any]) -> None:
+        if not self._log_enabled:
+            return
+        suffix = " ".join(f"{key}={value}" for key, value in details.items())
+        message = f"{stage}.{event}" if not suffix else f"{stage}.{event} | {suffix}"
+        self.logger.log(self._log_level, message)
+
     # LangGraph-compatible node implementations -----------------------
 
     def input_discovery(self, state: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
         input_path = state.get("input_path")
+        self._notify_stage(
+            "input_discovery",
+            "start",
+            input_hint=str(input_path) if input_path else None,
+        )
         transcript_path = self._resolve_transcript(input_path, self.case_dir)
         state["transcript_path"] = transcript_path
         state["case_dir"] = self.case_dir
+        self._notify_stage(
+            "input_discovery",
+            "complete",
+            transcript=str(transcript_path),
+        )
         return state
 
     def parse_transcript(self, state: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
+        self._notify_stage("parse_transcript", "start")
         transcript_path: Path = state["transcript_path"]
         parsed = parse_transcript(transcript_path)
         state["parse"] = parsed
         state.setdefault("token_usage", {})
+        self._notify_stage(
+            "parse_transcript",
+            "complete",
+            segments=len(parsed.segments),
+            diarized=parsed.diarized,
+        )
         return state
 
     def context_builder(self, state: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
+        self._notify_stage("context_builder", "start")
         parse: TranscriptParse = state["parse"]
         context_snippet = self._build_context(parse, self.intake)
         speakers = sorted({seg.speaker for seg in parse.segments if seg.speaker})
@@ -134,6 +205,13 @@ class SummarizePipeline:
         state["case_brief"] = brief
         state.setdefault("offline_fallback_used", self.offline_fallback_used)
         state.setdefault("provider_chain", self.provider_chain)
+        self._notify_stage(
+            "context_builder",
+            "complete",
+            snippet_chars=len(context_snippet),
+            speakers=len(speakers),
+            duration_seconds=duration,
+        )
         return state
 
     def extract_outline(self, state: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
@@ -144,6 +222,12 @@ class SummarizePipeline:
         azure_client = runtime.azure_client if runtime else None
         max_tokens = runtime.max_output_tokens if runtime and runtime.max_output_tokens else self.config.max_output_tokens
         temperature = runtime.temperature if runtime else self.default_temperature
+        self._notify_stage(
+            "extract_outline",
+            "start",
+            provider=runtime.primary_provider if runtime else None,
+            azure_client=bool(azure_client),
+        )
         try:
             outline_result = generate_outline(
                 parse=parse,
@@ -165,6 +249,27 @@ class SummarizePipeline:
             elif runtime.primary_provider == "azure" and runtime.allow_local_fallback and runtime.azure_client is None:
                 self.offline_fallback_used = True
                 state["offline_fallback_used"] = True
+        outline_map: Dict[str, Any] = outline_result.outline
+        issues_list = outline_map.get("issues")
+        facts_list = outline_map.get("facts")
+        issue_count = (
+            len(cast(List[Any], issues_list))
+            if isinstance(issues_list, list)
+            else None
+        )
+        fact_count = (
+            len(cast(List[Any], facts_list))
+            if isinstance(facts_list, list)
+            else None
+        )
+        self._notify_stage(
+            "extract_outline",
+            "complete",
+            issues=issue_count,
+            facts=fact_count,
+            prompt_tokens=outline_result.usage.get("prompt_tokens"),
+            completion_tokens=outline_result.usage.get("completion_tokens"),
+        )
         return state
 
     def build_timeline_seeds(self, state: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
@@ -176,6 +281,12 @@ class SummarizePipeline:
         azure_client = runtime.azure_client if runtime else None
         max_tokens = runtime.max_output_tokens if runtime and runtime.max_output_tokens else self.config.max_output_tokens
         temperature = runtime.temperature if runtime else self.default_temperature
+        self._notify_stage(
+            "build_timeline_seeds",
+            "start",
+            provider=runtime.primary_provider if runtime else None,
+            azure_client=bool(azure_client),
+        )
         try:
             timeline_result = generate_timeline(
                 parse=parse,
@@ -194,6 +305,14 @@ class SummarizePipeline:
             if runtime.primary_provider == "local" or (runtime.primary_provider == "azure" and runtime.allow_local_fallback and runtime.azure_client is None):
                 self.offline_fallback_used = True
                 state["offline_fallback_used"] = True
+        events_count = len(timeline_result.events)
+        self._notify_stage(
+            "build_timeline_seeds",
+            "complete",
+            events=events_count,
+            prompt_tokens=timeline_result.usage.get("prompt_tokens"),
+            completion_tokens=timeline_result.usage.get("completion_tokens"),
+        )
         return state
 
     def build_entity_hints(self, state: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
@@ -205,6 +324,12 @@ class SummarizePipeline:
         azure_client = runtime.azure_client if runtime else None
         max_tokens = runtime.max_output_tokens if runtime and runtime.max_output_tokens else self.config.max_output_tokens
         temperature = runtime.temperature if runtime else self.default_temperature
+        self._notify_stage(
+            "build_entity_hints",
+            "start",
+            provider=runtime.primary_provider if runtime else None,
+            azure_client=bool(azure_client),
+        )
         try:
             entity_result = generate_entities(
                 parse=parse,
@@ -223,6 +348,27 @@ class SummarizePipeline:
             if runtime.primary_provider == "local" or (runtime.primary_provider == "azure" and runtime.allow_local_fallback and runtime.azure_client is None):
                 self.offline_fallback_used = True
                 state["offline_fallback_used"] = True
+        entity_map: Dict[str, Any] = entity_result.hints
+        entities_value = entity_map.get("entities")
+        relations_value = entity_map.get("relations")
+        entities_count = (
+            len(cast(List[Any], entities_value))
+            if isinstance(entities_value, list)
+            else None
+        )
+        relations_count = (
+            len(cast(List[Any], relations_value))
+            if isinstance(relations_value, list)
+            else None
+        )
+        self._notify_stage(
+            "build_entity_hints",
+            "complete",
+            entities=entities_count,
+            relations=relations_count,
+            prompt_tokens=entity_result.usage.get("prompt_tokens"),
+            completion_tokens=entity_result.usage.get("completion_tokens"),
+        )
         return state
 
     def draft_markdown(self, state: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
@@ -236,6 +382,12 @@ class SummarizePipeline:
         azure_client = runtime.azure_client if runtime else None
         max_tokens = runtime.max_output_tokens if runtime and runtime.max_output_tokens else self.config.max_output_tokens
         temperature = runtime.temperature if runtime else self.default_temperature
+        self._notify_stage(
+            "draft_markdown",
+            "start",
+            provider=runtime.primary_provider if runtime else None,
+            azure_client=bool(azure_client),
+        )
         try:
             summary_result = generate_summary_markdown(
                 parse=parse,
@@ -257,9 +409,18 @@ class SummarizePipeline:
             if runtime.primary_provider == "local" or (runtime.primary_provider == "azure" and runtime.allow_local_fallback and runtime.azure_client is None):
                 self.offline_fallback_used = True
                 state["offline_fallback_used"] = True
+        words = len(summary_result.markdown.split()) if summary_result.markdown else 0
+        self._notify_stage(
+            "draft_markdown",
+            "complete",
+            words=words,
+            prompt_tokens=summary_result.usage.get("prompt_tokens"),
+            completion_tokens=summary_result.usage.get("completion_tokens"),
+        )
         return state
 
     def qa_and_finalize(self, state: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
+        self._notify_stage("qa_and_finalize", "start")
         parse: TranscriptParse = state["parse"]
         runtime = self.stage_runtimes.get("summarize.qa_and_finalize")
         if runtime and runtime.primary_provider == "local":
@@ -269,9 +430,15 @@ class SummarizePipeline:
         markdown = self._ensure_header(markdown, parse)
         markdown = self._ensure_sections(markdown)
         state["summary_result"] = DraftStageResult(markdown=markdown, usage=summary_result.usage)
+        self._notify_stage(
+            "qa_and_finalize",
+            "complete",
+            length=len(markdown),
+        )
         return state
 
     def write_ops_and_artifacts(self, state: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
+        self._notify_stage("write_ops_and_artifacts", "start")
         parse: TranscriptParse = state["parse"]
         outline_result: OutlineStageResult = state["outline_result"]
         timeline_result: TimelineStageResult = state["timeline_result"]
@@ -302,6 +469,15 @@ class SummarizePipeline:
         )
         state["final_outputs"] = finalized
         state["status"] = "ok"
+        self._notify_stage(
+            "write_ops_and_artifacts",
+            "complete",
+            summary=str(finalized.summary_path),
+            outline=str(finalized.outline_path),
+            timeline=str(finalized.timeline_seed_path),
+            entities=str(finalized.entity_hint_path),
+            offline=offline_flag,
+        )
         return state
 
     # Internal helpers -------------------------------------------------
@@ -323,9 +499,16 @@ class SummarizePipeline:
             allow = True
         elif runtime and runtime.allow_local_fallback and self.global_allow_offline:
             allow = True
+        self._notify_stage(
+            exc.stage,
+            "failure",
+            error=str(exc.error),
+            fallback_allowed=allow,
+        )
         if allow:
             state["offline_fallback_used"] = True
             self.offline_fallback_used = True
+            self._notify_stage(exc.stage, "fallback", provider="local")
             return exc.fallback
         raise AzureUnavailableError(exc.stage, exc.error) from exc
 
@@ -417,6 +600,12 @@ def finalize_outputs(
 
     words = len(summary_result.markdown.split())
 
+    timestamp_utc = (
+        datetime.now(timezone.utc)
+        .isoformat(timespec="seconds")
+        .replace("+00:00", "Z")
+    )
+
     meta: Dict[str, Any] = {
         "case_id": case_id,
         "job_id": job_id,
@@ -434,7 +623,7 @@ def finalize_outputs(
         "language": getattr(config, "language", "en-CA"),
         "azure_enabled": getattr(config, "azure_enabled", False),
         "azure_region": getattr(config, "azure_region", None),
-        "timestamp_utc": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+        "timestamp_utc": timestamp_utc,
         "status": "ok",
         "words": words,
         "diarized": parse_diarized,
