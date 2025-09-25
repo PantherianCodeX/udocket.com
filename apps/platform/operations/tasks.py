@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 import hashlib
 import uuid
 import json
@@ -893,6 +893,68 @@ def _load_job_meta(case_id: str, organization_id: str | None, job_id: str) -> Di
         return {}
 
 
+def _resolve_case_relative(path_str: str, case_dir: Path) -> Optional[Path]:
+    candidate = Path(path_str)
+    if candidate.exists():
+        return candidate
+    candidate = case_dir / path_str
+    if candidate.exists():
+        return candidate
+    return None
+
+
+def _load_summary_timeline_events(
+    meta: Dict[str, Any], case_dir: Path
+) -> Tuple[List[Dict[str, Any]], Optional[Path]]:
+    file_str = meta.get("summary_timeline_file") if isinstance(meta, dict) else None
+    if not file_str:
+        return [], None
+    seeds_path = _resolve_case_relative(str(file_str), case_dir)
+    if not seeds_path:
+        return [], None
+    try:
+        payload = json.loads(seeds_path.read_text(encoding="utf-8"))
+    except Exception:
+        return [], None
+    if isinstance(payload, dict) and "events" in payload:
+        payload = payload.get("events")
+    events: List[Dict[str, Any]] = []
+    if isinstance(payload, list):
+        for item in payload:
+            if not isinstance(item, dict):
+                continue
+            events.append(
+                {
+                    "ts_start": item.get("ts_start"),
+                    "ts_end": item.get("ts_end"),
+                    "speaker": item.get("speaker"),
+                    "text": item.get("text", ""),
+                    "labels": list(item.get("labels") or []),
+                }
+            )
+    if not events:
+        return [], None
+    return events, seeds_path
+
+
+def _load_summary_entity_hints(
+    meta: Dict[str, Any], case_dir: Path
+) -> Tuple[Optional[Dict[str, Any]], Optional[Path]]:
+    file_str = meta.get("summary_entity_file") if isinstance(meta, dict) else None
+    if not file_str:
+        return None, None
+    hints_path = _resolve_case_relative(str(file_str), case_dir)
+    if not hints_path:
+        return None, None
+    try:
+        payload = json.loads(hints_path.read_text(encoding="utf-8"))
+    except Exception:
+        return None, None
+    if not isinstance(payload, dict):
+        return None, None
+    return payload, hints_path
+
+
 def _latest_transcript(case_id: str, organization_id: str | None = None) -> Path | None:
     _, tdir, _ = _case_paths(case_id, organization_id)
     if not tdir.exists():
@@ -1021,35 +1083,7 @@ def timeline_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
     if not src or not src.exists():
         raise RuntimeError("No transcript found to build timeline")
     meta = _load_job_meta(case_id, org_id, job_id)
-    events: List[Dict[str, Any]] = []
-    seeds_path: Optional[Path] = None
-
-    timeline_seed_str = meta.get("summary_timeline_file") if isinstance(meta, dict) else None
-    if timeline_seed_str:
-        candidate = Path(timeline_seed_str)
-        if not candidate.exists():
-            candidate = case_dir / timeline_seed_str
-        if candidate.exists():
-            try:
-                loaded = json.loads(candidate.read_text(encoding="utf-8"))
-                if isinstance(loaded, dict) and "events" in loaded:
-                    loaded = loaded["events"]
-                if isinstance(loaded, list):
-                    for item in loaded:
-                        if not isinstance(item, dict):
-                            continue
-                        events.append(
-                            {
-                                "ts_start": item.get("ts_start"),
-                                "ts_end": item.get("ts_end"),
-                                "speaker": item.get("speaker"),
-                                "text": item.get("text", ""),
-                                "labels": list(item.get("labels") or []),
-                            }
-                        )
-                    seeds_path = candidate
-            except Exception:
-                events = []
+    events, seeds_path = _load_summary_timeline_events(meta, case_dir)
 
     if not events:
         rx = re.compile(r"^\[(\d{2}):(\d{2})\]\s+(?:SPK_(\d+):\s+)?(.*)$")
@@ -1133,22 +1167,7 @@ def graph_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
         raise RuntimeError("No transcript found to extract entities/graph")
     text = src.read_text(encoding="utf-8", errors="ignore")
     meta = _load_job_meta(case_id, org_id, job_id)
-
-    hints_path: Optional[Path] = None
-    hints_data: Optional[Dict[str, Any]] = None
-    hints_str = meta.get("summary_entity_file") if isinstance(meta, dict) else None
-    if hints_str:
-        candidate = Path(hints_str)
-        if not candidate.exists():
-            candidate = case_dir / hints_str
-        if candidate.exists():
-            try:
-                data = json.loads(candidate.read_text(encoding="utf-8"))
-                if isinstance(data, dict):
-                    hints_data = data
-                    hints_path = candidate
-            except Exception:
-                hints_data = None
+    hints_data, hints_path = _load_summary_entity_hints(meta, case_dir)
 
     entities: List[Dict[str, Any]] = []
     graph: Dict[str, Any]
