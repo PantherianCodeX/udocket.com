@@ -7,7 +7,6 @@ from typing import Iterable, Optional, cast
 from django.core.exceptions import PermissionDenied
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
-from django.template.loader import render_to_string
 from django.views.decorators.http import require_http_methods
 
 from apps.platform.accounts.models import Organization
@@ -22,6 +21,7 @@ from apps.platform.operations.utils import update_job_meta
 from ..auth import ensure_authenticated
 from ..common import JobRow
 from ..contexts import compute_case_tool_state, user_can_review_case
+from ..cases.helpers import render_case_panel_with_refresh
 from ..constants import CASE_JOB_TABLE_COLUMNS
 from ..presenters.job_actions import build_job_action_entries
 from ..presenters.jobs import build_job_rows
@@ -136,32 +136,21 @@ def create_job(request: HttpRequest, case_id: str) -> HttpResponse:
         state = compute_case_tool_state(request, case)
         panel = state["tool_panels"].get("transcribe")
         if panel:
-            response = render(request, "platform_ui/tools/_panel.html", {"panel": panel})
-            trigger_payload = {
-                "job-enqueued": {
-                    "job_id": str(job.id),
-                    "status": job.status,
-                    "force_wav": force_wav_conversion,
+            return render_case_panel_with_refresh(
+                request,
+                panel,
+                case=case,
+                state=state,
+                active_tool="transcribe",
+                tools=["transcribe"],
+                extra_triggers={
+                    "job-enqueued": {
+                        "job_id": str(job.id),
+                        "status": job.status,
+                        "force_wav": force_wav_conversion,
+                    }
                 },
-                "case-view-refreshed": {
-                    "tools": ["transcribe"],
-                    "active_tool": "transcribe",
-                    "header_html": render_to_string(
-                        "platform_ui/tools/_case_header.html",
-                        {"case": case, "case_header": state["case_header"]},
-                    ),
-                    "cards_html": render_to_string(
-                        "platform_ui/tools/_developer_cards.html",
-                        {
-                            "case": case,
-                            "cards": state["developer_cards"],
-                            "active_tool": "transcribe",
-                        },
-                    ),
-                },
-            }
-            response["HX-Trigger"] = json.dumps(trigger_payload)
-            return response
+            )
 
     telemetry_map = {str(job.id): telemetry_dict}
     _, flat_rows = build_job_rows([job], telemetry_map)

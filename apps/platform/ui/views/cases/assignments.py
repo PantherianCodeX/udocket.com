@@ -5,17 +5,15 @@ from __future__ import annotations
 import uuid
 from typing import Optional
 
-from django.conf import settings
 from django.http import HttpRequest, HttpResponse
 from django.views.decorators.http import require_http_methods
 
 from apps.platform.accounts.models import OrganizationMembership, User
-from apps.platform.authorization.capabilities import has_capability
 from apps.platform.cases.models import CaseMembership
 
 from ..auth import ensure_authenticated
 from ..contexts import get_case_and_org
-from .helpers import case_progress_response
+from .helpers import case_progress_response, check_case_update_permission
 
 
 @require_http_methods(["POST"])
@@ -26,11 +24,9 @@ def case_assign_reviewer(request: HttpRequest, case_id: str) -> HttpResponse:
 
     case, _ = get_case_and_org(request, case_id)
 
-    dev_open = getattr(settings, "PLATFORM_DEV_OPEN", False)
-    user = getattr(request, "user", None)
-    if not dev_open:
-        if not user or not getattr(user, "is_authenticated", False) or not has_capability(user, str(case.id), "case.update"):
-            return HttpResponse("Forbidden", status=403)
+    permission_denied = check_case_update_permission(request, case)
+    if permission_denied:
+        return permission_denied
 
     reviewer_id = (request.POST.get("reviewer_id") or "").strip()
     if reviewer_id:
@@ -69,11 +65,9 @@ def case_assign_client(request: HttpRequest, case_id: str) -> HttpResponse:
 
     case, _ = get_case_and_org(request, case_id)
 
-    dev_open = getattr(settings, "PLATFORM_DEV_OPEN", False)
-    user = getattr(request, "user", None)
-    if not dev_open:
-        if not user or not getattr(user, "is_authenticated", False) or not has_capability(user, str(case.id), "case.update"):
-            return HttpResponse("Forbidden", status=403)
+    permission_denied = check_case_update_permission(request, case)
+    if permission_denied:
+        return permission_denied
 
     client_id = (request.POST.get("client_id") or "").strip()
     email = (request.POST.get("client_email") or "").strip()

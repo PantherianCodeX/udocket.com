@@ -2,24 +2,21 @@ from __future__ import annotations
 
 # pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false, reportAttributeAccessIssue=false
 
-import json
 from datetime import datetime
 from typing import Any, Dict, List
 
-from django.conf import settings
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import render
-from django.template.loader import render_to_string
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from apps.platform.accounts.models import OrganizationMembership, User
-from apps.platform.authorization.capabilities import has_capability
 from apps.platform.cases.models import CaseMembership
 
 from ..auth import ensure_authenticated
 from ..contexts import compute_case_tool_state, get_case_and_org
 from ..presenters.cases import case_field_specs
+from .helpers import check_case_update_permission, render_case_panel_with_refresh
 
 
 @require_http_methods(["POST"])
@@ -46,11 +43,9 @@ def case_details_update(request: HttpRequest, case_id: str) -> HttpResponse:
 
     case, _ = get_case_and_org(request, case_id)
 
-    dev_open = getattr(settings, "PLATFORM_DEV_OPEN", False)
-    user = getattr(request, "user", None)
-    if not dev_open:
-        if not user or not getattr(user, "is_authenticated", False) or not has_capability(user, str(case.id), "case.update"):
-            return HttpResponse("Forbidden", status=403)
+    permission_denied = check_case_update_permission(request, case)
+    if permission_denied:
+        return permission_denied
 
     form_errors: Dict[str, str] = {}
     case_updates: Dict[str, Any] = {}
@@ -238,20 +233,13 @@ def case_details_update(request: HttpRequest, case_id: str) -> HttpResponse:
 
     state = compute_case_tool_state(request, case)
     panel = state["tool_panels"].get("case-details")
-    response = render(request, "platform_ui/tools/_panel.html", {"panel": panel})
-    trigger_payload = {
-        "case-view-refreshed": {
-            "tools": ["case-details"],
-            "header_html": render_to_string(
-                "platform_ui/tools/_case_header.html",
-                {"case": case, "case_header": state["case_header"]},
-            ),
-            "cards_html": render_to_string(
-                "platform_ui/tools/_developer_cards.html",
-                {"case": case, "cards": state["developer_cards"], "active_tool": "case-details"},
-            ),
-            "active_tool": "case-details",
-        }
-    }
-    response["HX-Trigger"] = json.dumps(trigger_payload)
-    return response
+    if panel is None:
+        return render(request, "platform_ui/tools/_panel.html", {"panel": panel})
+    return render_case_panel_with_refresh(
+        request,
+        panel,
+        case=case,
+        state=state,
+        active_tool="case-details",
+        tools=["case-details"],
+    )
