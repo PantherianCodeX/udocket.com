@@ -16,6 +16,7 @@ from apps.platform.cases.models import Case
 from ..auth import ensure_authenticated
 from ..contexts import compute_case_tool_state, get_case_and_org
 from ..jobs import create_job
+from .helpers import resolve_panel, resolve_tool_key
 
 
 @require_http_methods(["GET", "POST"])
@@ -47,24 +48,8 @@ def case_detail(request: HttpRequest, case_id: str) -> HttpResponse:
     job_summary = state["job_summary"]
     latest_activity_ts = state["latest_activity_ts"]
 
-    raw_tool = (request.GET.get("tool") or request.GET.get("module") or "").strip().lower()
-    tool_aliases = {
-        "": "case-details",
-        "case": "case-details",
-        "details": "case-details",
-        "case-details": "case-details",
-        "setup": "case-details",
-        "intake": "case-details",
-        "intake-form": "case-details",
-        "transcribe": "transcribe",
-        "transcription": "transcribe",
-        "summary": "summary",
-        "summaries": "summary",
-        "timeline": "timeline",
-    }
-    initial_tool_key = tool_aliases.get(raw_tool, raw_tool if raw_tool in tool_panels else None)
-    if not initial_tool_key or initial_tool_key not in tool_panels:
-        initial_tool_key = "case-details"
+    raw_tool = (request.GET.get("tool") or request.GET.get("module") or "")
+    initial_tool_key = resolve_tool_key(raw_tool, tool_panels.keys(), default="case-details")
     initial_panel = tool_panels.get(initial_tool_key)
 
     context = {
@@ -89,20 +74,8 @@ def case_tool_panel(request: HttpRequest, case_id: str, tool_key: str) -> HttpRe
     state = compute_case_tool_state(request, case)
     panels = state["tool_panels"]
 
-    aliases = {
-        "case": "case-details",
-        "details": "case-details",
-        "case-details": "case-details",
-        "intake": "case-details",
-        "intake-form": "case-details",
-        "transcription": "transcribe",
-        "transcribe": "transcribe",
-        "summary": "summary",
-        "timeline": "timeline",
-    }
-    resolved_key = aliases.get(tool_key.strip().lower(), tool_key.strip().lower())
-    panel = panels.get(resolved_key)
-    if not panel:
+    resolved_key, panel = resolve_panel(tool_key, panels, allow_fallback=False)
+    if not resolved_key or not panel:
         raise Http404
 
     response = render(request, "platform_ui/tools/_panel.html", {"panel": panel})
