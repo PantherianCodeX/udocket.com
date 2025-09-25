@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import io
 
-from unittest.mock import patch
+from importlib import import_module
+from unittest import mock
 
 import pytest
 from django.test import override_settings
@@ -12,6 +13,7 @@ from django.test import Client
 from apps.platform.accounts.models import Organization, User
 from apps.platform.cases.models import Case, CaseMembership
 from apps.platform.jobs.models import Job
+jobs_module = import_module("apps.platform.ui.views.jobs")
 
 
 def _wav_bytes() -> bytes:
@@ -44,7 +46,7 @@ def test_ui_job_creation_forces_batch_when_diarization(settings):
     client.force_login(user)
 
     upload = SimpleUploadedFile("sample.wav", _wav_bytes(), content_type="audio/wav")
-    with patch("apps.platform.ui.views.transcribe_job.delay") as mocked_delay:
+    with mock.patch.object(jobs_module.transcribe_job_task, "delay") as mocked_delay:
         resp = client.post(
             f"/cases/{case.id}/jobs/new",
             {
