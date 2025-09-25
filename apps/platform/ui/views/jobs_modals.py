@@ -161,12 +161,38 @@ def case_job_metadata_modal(request: HttpRequest, case_id: str, job_id: UUID) ->
             }
         )
     meta_summary.append({"label": "Job ID", "display": str(job.id), "copy_text": str(job.id)})
+    metadata_sections: List[Dict[str, Any]] = []
+    if metadata_items:
+        metadata_sections.append({"title": "Metadata", "items": metadata_items})
+
+    notes_entries = detail_context.get("notes_entries") or []
+    if notes_entries:
+        note_items: List[Dict[str, Any]] = []
+        for idx, note in enumerate(notes_entries, start=1):
+            if not isinstance(note, dict):
+                continue
+            raw_label = note.get("created_by_label") or note.get("created_by") or f"Note {idx}"
+            timestamp = note.get("created_at")
+            label = f"{raw_label} — {timestamp}" if timestamp else raw_label
+            value = str(note.get("text") or "")
+            note_items.append(
+                {
+                    "key": note.get("id") or f"note_{idx}",
+                    "label": label,
+                    "value": value,
+                    "is_multiline": True,
+                }
+            )
+        if note_items:
+            metadata_sections.append({"title": "Team notes", "items": note_items})
+
     context = {
         "title": friendly_title,
         "job_id": str(job.id),
         "created_at": modal_created,
         "modal_title_text": friendly_title,
         "metadata_items": metadata_items,
+        "metadata_sections": metadata_sections,
         "metadata_empty_text": "Metadata not recorded for this job.",
         "modal_meta_items": meta_summary,
     }

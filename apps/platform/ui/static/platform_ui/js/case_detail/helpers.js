@@ -147,6 +147,76 @@
     });
   }
 
+  function updateNotes(container, notesPayload, options = {}) {
+    if (!container || typeof notesPayload !== 'object' || notesPayload === null) return;
+    const entries = Array.isArray(notesPayload.entries) ? notesPayload.entries : [];
+    const listEl = container.querySelector('[data-job-notes-list]');
+    if (listEl) {
+      listEl.innerHTML = '';
+      if (entries.length) {
+        entries.forEach((entry, index) => {
+          if (!entry || typeof entry !== 'object') return;
+          const article = global.document.createElement('article');
+          article.className = 'rounded border border-white/10 bg-slate-950/40 p-3';
+          article.dataset.jobNote = entry.id || `note-${index}`;
+
+          const header = global.document.createElement('div');
+          header.className = 'flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400';
+
+          const author = global.document.createElement('span');
+          author.className = 'font-semibold text-slate-200';
+          author.textContent = entry.created_by_label || entry.created_by || 'User';
+          header.appendChild(author);
+
+          if (entry.created_at) {
+            const timeEl = global.document.createElement('time');
+            timeEl.setAttribute('data-ts', entry.created_at);
+            timeEl.setAttribute('data-ts-format', 'datetime');
+            timeEl.textContent = entry.created_at;
+            header.appendChild(timeEl);
+          }
+
+          article.appendChild(header);
+
+          const body = global.document.createElement('p');
+          body.className = 'mt-2 whitespace-pre-wrap text-sm text-slate-100';
+          body.textContent = entry.text || '';
+          article.appendChild(body);
+
+          listEl.appendChild(article);
+        });
+      } else {
+        const placeholder = global.document.createElement('p');
+        placeholder.dataset.jobNotesEmpty = '1';
+        placeholder.className = 'rounded border border-dashed border-white/10 bg-slate-950/20 px-3 py-2 text-sm text-slate-500';
+        placeholder.textContent = 'No notes yet. Add the first note for your team.';
+        listEl.appendChild(placeholder);
+      }
+    }
+
+    const metaEl = container.querySelector('[data-job-notes-meta]');
+    const updatedAt = notesPayload.updated_at || (entries[0] && entries[0].created_at) || '';
+    const updatedBy = notesPayload.updated_by_label || notesPayload.updated_by || (entries[0] && (entries[0].created_by_label || entries[0].created_by)) || '';
+    if (metaEl) {
+      if (updatedAt) {
+        metaEl.innerHTML = `Updated <time data-ts="${updatedAt}" data-ts-format="datetime">${updatedAt}</time>${updatedBy ? ` · <span class="font-semibold text-slate-200">${updatedBy}</span>` : ''}`;
+      } else if (updatedBy) {
+        metaEl.textContent = `Updated by ${updatedBy}`;
+      } else {
+        metaEl.textContent = entries.length ? 'Updated just now' : 'No notes yet.';
+      }
+    }
+
+    const textarea = container.querySelector('[data-job-notes-input]');
+    if (textarea && !options.preserveInput) {
+      textarea.value = '';
+    }
+
+    if (typeof global.renderLocalTimes === 'function') {
+      global.renderLocalTimes();
+    }
+  }
+
   caseDetail.helpers = {
     formatDuration,
     formatFileSize,
@@ -154,5 +224,6 @@
     ensureElementVisible,
     getCSRFToken,
     updateAudioPanel,
+    updateNotes,
   };
 })(window);

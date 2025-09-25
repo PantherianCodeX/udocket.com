@@ -8,11 +8,12 @@ from django.core.exceptions import PermissionDenied
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import render
 from django.views.decorators.http import require_http_methods
+from django.db.models import Count
 
 from apps.platform.accounts.utils import resolve_request_organization
 from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.cases.models import Case
-from apps.platform.jobs.models import Job
+from apps.platform.jobs.models import Job, JobNote
 from apps.platform.tenancy import scope_jobs
 
 from .auth import ensure_authenticated
@@ -67,7 +68,21 @@ def jobs(request: HttpRequest) -> HttpResponse:
             if job_id_value and job_id_value not in transcript_artifacts:
                 transcript_artifacts[job_id_value] = art
 
-    display_rows, flat_rows = build_job_rows(jobs_list, telemetry_map, transcript_artifacts)
+    note_counts: Dict[str, int] = {}
+    if jobs_list:
+        note_count_rows = (
+            JobNote.objects.filter(job__in=jobs_list)
+            .values("job_id")
+            .annotate(count=Count("id"))
+        )
+        note_counts = {str(row["job_id"]): int(row["count"]) for row in note_count_rows}
+
+    display_rows, flat_rows = build_job_rows(
+        jobs_list,
+        telemetry_map,
+        transcript_artifacts,
+        note_counts=note_counts,
+    )
 
     user = getattr(request, "user", None)
     for row in flat_rows:

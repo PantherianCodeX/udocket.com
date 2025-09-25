@@ -5,7 +5,7 @@ import hashlib
 import logging
 import os
 import uuid
-from typing import Any, Dict, Iterable, Optional, Set
+from typing import Any, Dict, Iterable, List, Optional, Set
 
 from django.utils import timezone
 from rest_framework import status, viewsets
@@ -23,7 +23,8 @@ from pathlib import Path
 from apps.platform.authorization.capabilities import has_capability
 from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.cases.models import Case
-from apps.platform.jobs.models import Job
+from apps.platform.jobs.models import Job, JobNote
+from apps.platform.jobs.notes import serialize_notes
 from apps.platform.jobs.serializers import (
     JobCreateSerializer,
     JobSerializer,
@@ -183,35 +184,32 @@ class JobViewSet(viewsets.ModelViewSet):
         # Normalise newlines but keep intentional spacing inside the message.
         text_value = notes_value.replace("\r\n", "\n")
         text_value = text_value.strip()
+        if not text_value:
+            return Response({"detail": "Notes text must not be empty."}, status=status.HTTP_400_BAD_REQUEST)
 
         user = getattr(request, "user", None)
-        timestamp = timezone.now()
-        try:
-            iso_timestamp = timestamp.isoformat(timespec="seconds")
-        except TypeError:  # pragma: no cover - Python < 3.11 safety
-            iso_timestamp = timestamp.isoformat()
-
-        notes_payload: Dict[str, Any] = {
-            "text": text_value,
-            "updated_at": iso_timestamp,
-        }
-        if user and getattr(user, "is_authenticated", False):
-            user_id = getattr(user, "id", None)
-            if user_id is not None:
-                notes_payload["updated_by"] = str(user_id)
-            label = self._user_label(user)
-            if label:
-                notes_payload["updated_by_label"] = label
-
-        ensure_case_dirs(str(job.case_id), job.organization_id)
-        update_job_meta(
-            str(job.case_id),
-            job.organization_id,
-            str(job.id),
-            {"ui_notes": notes_payload},
+        user_obj = user if user and getattr(user, "is_authenticated", False) else None
+        created_by_name = self._user_label(user_obj) if user_obj else ""
+        note = JobNote.objects.create(
+            job=job,
+            text=text_value,
+            created_by=user_obj,
+            created_by_name=created_by_name or "",
         )
 
-        snippet = text_value.splitlines()[0] if text_value else ""
+        notes_qs = JobNote.objects.filter(job=job).order_by("-created_at")
+        note_entries = serialize_notes(notes_qs)
+        latest_entry = note_entries[0] if note_entries else None
+        notes_payload: Dict[str, Any] = {
+            "entries": note_entries,
+            "count": len(note_entries),
+        }
+        if latest_entry:
+            notes_payload["updated_at"] = latest_entry["created_at"]
+            notes_payload["updated_by"] = latest_entry.get("created_by")
+            notes_payload["updated_by_label"] = latest_entry.get("created_by_label")
+
+        snippet = text_value.splitlines()[0]
         if len(snippet) > 80:
             snippet = f"{snippet[:77]}…"
         try:
@@ -219,7 +217,7 @@ class JobViewSet(viewsets.ModelViewSet):
                 str(job.case_id),
                 job.organization_id,
                 str(job.id),
-                f"UI notes updated by {notes_payload.get('updated_by_label') or notes_payload.get('updated_by', 'unknown')}: {snippet or '[cleared]'}",
+                f"UI note added by {latest_entry.get('created_by_label') if latest_entry else created_by_name or 'unknown'}: {snippet}",
             )
         except Exception:
             pass

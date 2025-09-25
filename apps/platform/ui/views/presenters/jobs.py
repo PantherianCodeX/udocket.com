@@ -170,8 +170,18 @@ def build_row_table_meta(row: Dict[str, Any]) -> None:
         )
 
     metadata_source = ""
+    notes_count = 0
     if isinstance(meta, dict):
         metadata_source = str(meta.get("source_name") or meta.get("source_label") or "")
+        ui_notes = meta.get("ui_notes")
+        if isinstance(ui_notes, dict):
+            raw_entries = ui_notes.get("entries")
+            if isinstance(raw_entries, list):
+                notes_count = sum(1 for entry in raw_entries if isinstance(entry, dict) and entry.get("text"))
+            elif ui_notes.get("text"):
+                notes_count = 1
+        elif isinstance(ui_notes, list):
+            notes_count = sum(1 for entry in ui_notes if isinstance(entry, dict) and entry.get("text"))
 
     job_kind_value = ""
     if isinstance(meta, dict):
@@ -216,6 +226,7 @@ def build_row_table_meta(row: Dict[str, Any]) -> None:
     row_table["job_id"] = str(getattr(job, "id", "") or "")
     row_table["audio_name"] = audio_name
     row_table["metadata_source"] = metadata_source
+    row_table["notes_count"] = notes_count
     row_table["job_kind"] = job_kind_value
     row_table["review_status"] = review_status or "PENDING"
     row_table["created_iso"] = created_at.isoformat() if isinstance(created_at, datetime) else ""
@@ -226,6 +237,8 @@ def build_job_rows(
     jobs_list: List[Job],
     telemetry_map: Dict[str, JobTelemetryPayload],
     transcript_artifacts: Optional[Dict[str, CaseArtifact]] = None,
+    *,
+    note_counts: Optional[Dict[str, int]] = None,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """Return hierarchical job rows ready for rendering with shared table components."""
     transcript_artifacts = transcript_artifacts or {}
@@ -245,6 +258,8 @@ def build_job_rows(
             "parent_id": "",
         }
         build_row_table_meta(row)
+        if note_counts is not None:
+            row.setdefault("table", {})["notes_count"] = note_counts.get(key, 0)
         flat_rows.append(row)
 
     row_lookup: Dict[str, Dict[str, Any]] = {}
@@ -281,6 +296,8 @@ def build_job_rows(
             children_list.append(row)
             children_list.sort(key=child_sort_key)
             continue
+        if note_counts is not None:
+            row.setdefault("table", {})["notes_count"] = note_counts.get(str(getattr(row.get("job"), "id", "")), 0)
         display_rows.append(row)
 
     return display_rows, flat_rows

@@ -7,7 +7,7 @@ from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import render
 from django.views.decorators.http import require_http_methods
 
-from apps.platform.jobs.models import Job
+from apps.platform.jobs.models import Job, JobNote
 
 from ..auth import ensure_authenticated
 from ..common import JobRow
@@ -34,7 +34,8 @@ def case_job_row(request: HttpRequest, case_id: str, job_id: UUID) -> HttpRespon
 
     telemetry_dict = job_telemetry_payload(job, request, ui_mode=True)
     telemetry_map: Dict[str, Any] = {str(job.id): telemetry_dict}
-    _, flat_rows = build_job_rows([job], telemetry_map)
+    note_counts = {str(job.id): JobNote.objects.filter(job=job).count()}
+    _, flat_rows = build_job_rows([job], telemetry_map, note_counts=note_counts)
     if not flat_rows:
         fallback = fallback_job_row(job, telemetry_dict)
         fallback["actions"] = build_job_action_entries(

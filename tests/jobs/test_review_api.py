@@ -8,7 +8,7 @@ from rest_framework.test import APIClient
 
 from apps.platform.accounts.models import Organization, User
 from apps.platform.cases.models import Case, CaseMembership
-from apps.platform.jobs.models import Job
+from apps.platform.jobs.models import Job, JobNote
 from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.operations.storage import ensure_case_dirs, ops_dir
 from apps.platform.operations.tasks import _update_job_meta
@@ -158,16 +158,26 @@ def test_notes_endpoint_updates_metadata(db, settings):
 
     url = reverse('job-notes', args=[job.id])
     resp = client.post(url, {"notes": "Team note"}, format="json")
-    print('DEBUG status', resp.status_code, resp.content)
     assert resp.status_code == 200
     body = resp.json()
     assert body["status"] == "ok"
-    assert body["notes"]["text"] == "Team note"
+    notes_payload = body["notes"]
+    assert notes_payload["count"] == 1
+    entry = notes_payload["entries"][0]
+    assert entry["text"] == "Team note"
 
-    meta_path = ops_dir(str(case.id), case.organization_id) / f"{job.id}_transcription_log.json"
-    assert meta_path.exists()
-    stored = json.loads(meta_path.read_text(encoding="utf-8"))
-    assert stored["ui_notes"]["text"] == "Team note"
+    resp_second = client.post(url, {"notes": "Follow-up"}, format="json")
+    assert resp_second.status_code == 200
+    payload_second = resp_second.json()
+    assert payload_second["notes"]["count"] == 2
+    texts = [item["text"] for item in payload_second["notes"]["entries"]]
+    assert "Team note" in texts and "Follow-up" in texts
+    assert payload_second["notes"]["entries"][0]["text"] == "Follow-up"
+
+    stored_notes = list(JobNote.objects.filter(job=job).order_by("-created_at"))
+    assert len(stored_notes) == 2
+    stored_texts = {note.text for note in stored_notes}
+    assert {"Team note", "Follow-up"}.issubset(stored_texts)
 
 
 def test_notes_endpoint_requires_permission(db, settings):

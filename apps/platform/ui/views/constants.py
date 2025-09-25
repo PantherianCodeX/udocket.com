@@ -71,6 +71,7 @@ CASE_JOB_TABLE_COLUMNS: Tuple[Dict[str, Any], ...] = (
         "align": "right",
         "default_direction": "desc",
     },
+    {"id": "notes", "label": "Notes", "sortable": False, "align": "center", "hide_on_mobile": True},
     {"id": "actions", "label": "Actions", "sortable": False, "align": "right"},
     {"id": "expander", "label": "", "sortable": False, "align": "right"},
 )
@@ -88,6 +89,7 @@ GLOBAL_JOB_TABLE_COLUMNS: Tuple[Dict[str, Any], ...] = (
         "align": "right",
         "default_direction": "desc",
     },
+    {"id": "notes", "label": "Notes", "sortable": False, "align": "center", "hide_on_mobile": True},
     {"id": "actions", "label": "Actions", "sortable": False, "align": "right"},
     {"id": "expander", "label": "", "sortable": False, "align": "right"},
 )

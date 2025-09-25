@@ -9,13 +9,14 @@ from typing import Any, Dict, Optional
 from django.conf import settings
 from django.core.exceptions import PermissionDenied
 from django.http import Http404, HttpRequest
+from django.db.models import Count
 
 from apps.platform.accounts.models import User
 from apps.platform.accounts.utils import resolve_request_organization
 from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.authorization.capabilities import has_capability
 from apps.platform.cases.models import Case
-from apps.platform.jobs.models import Job
+from apps.platform.jobs.models import Job, JobNote
 from apps.platform.jobs.telemetry import summarize_jobs
 from apps.platform.tenancy import scope_jobs
 
@@ -31,6 +32,7 @@ from .presenters.cases import (
     prepare_case_fields,
 )
 from .presenters.jobs import build_job_rows, friendly_job_title
+from apps.platform.jobs.notes import serialize_notes
 from .selectors import job_telemetry_map, job_telemetry_payload
 
 
@@ -85,13 +87,27 @@ def compute_case_tool_state(request: HttpRequest, case: Case) -> Dict[str, Any]:
             if key and key not in transcript_artifacts:
                 transcript_artifacts[key] = art
 
+    note_counts: Dict[str, int] = {}
+    if jobs_list:
+        note_count_rows = (
+            JobNote.objects.filter(job__in=jobs_list)
+            .values("job_id")
+            .annotate(count=Count("id"))
+        )
+        note_counts = {str(row["job_id"]): int(row["count"]) for row in note_count_rows}
+
     job_summary = summarize_jobs(jobs_list)
     job_summary_last_dt = job_summary.get("last_update")
     job_summary["last_update"] = job_summary_last_dt.isoformat() if job_summary_last_dt else None
 
     telemetry_map: Dict[str, JobTelemetryPayload] = job_telemetry_map(jobs_list, request)
 
-    display_rows, flat_rows = build_job_rows(jobs_list, telemetry_map, transcript_artifacts)
+    display_rows, flat_rows = build_job_rows(
+        jobs_list,
+        telemetry_map,
+        transcript_artifacts,
+        note_counts=note_counts,
+    )
 
     latest_job = None
     latest_job_telemetry = None
@@ -214,14 +230,23 @@ def job_detail_context(
         and job_kind != "audio_conversion"
     )
 
-    ui_notes_meta = as_dict(metadata_map.get("ui_notes")) if metadata_map else {}
-    notes_text = str(ui_notes_meta.get("text") or "")
-    notes_updated_at = ui_notes_meta.get("updated_at") or None
-    notes_updated_by = (
-        ui_notes_meta.get("updated_by_label")
-        or ui_notes_meta.get("updated_by")
-        or ""
+    source_job_id_value = str(telemetry_meta.get("source_job_id") or "")
+    conversion_mark_targets = ",".join(filter(None, [str(job.id), source_job_id_value]))
+
+    job_notes = list(
+        JobNote.objects.filter(job=job)
+        .select_related("created_by")
+        .order_by("-created_at")
     )
+    notes_entries = serialize_notes(job_notes)
+    notes_updated_at = notes_entries[0]["created_at"] if notes_entries else None
+    notes_updated_by = (
+        notes_entries[0].get("created_by_label")
+        or notes_entries[0].get("created_by")
+        if notes_entries
+        else ""
+    )
+    notes_count = len(notes_entries)
 
     source_audio_meta: Dict[str, Any] | None = None
     if job_kind == "audio_conversion":
@@ -268,10 +293,12 @@ def job_detail_context(
         "audio_meta": audio_meta,
         "source_audio": source_audio_meta or {},
         "allow_title_edit": allow_title_edit,
-        "notes_text": notes_text,
         "notes_updated_at": notes_updated_at,
         "notes_updated_by": notes_updated_by,
-        "notes_meta": ui_notes_meta,
+        "notes_entries": notes_entries,
+        "notes_count": notes_count,
+        "source_job_id": source_job_id_value,
+        "conversion_mark_targets": conversion_mark_targets,
     }
 
 

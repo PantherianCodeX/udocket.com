@@ -153,7 +153,8 @@ def create_job(request: HttpRequest, case_id: str) -> HttpResponse:
             )
 
     telemetry_map = {str(job.id): telemetry_dict}
-    _, flat_rows = build_job_rows([job], telemetry_map)
+    note_counts = {str(job.id): 0}
+    _, flat_rows = build_job_rows([job], telemetry_map, note_counts=note_counts)
     row: JobRow
     if flat_rows:
         row = flat_rows[0]

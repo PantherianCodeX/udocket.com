@@ -1,70 +1,54 @@
 {% load ui_display %}
-<div class="space-y-5 text-sm text-slate-200">
-  {% with metadata=metadata_map audio=audio_meta source=source_audio %}
-  <div class="flex flex-wrap items-start justify-between gap-4 border-b border-white/10 pb-4">
-    <div class="space-y-3">
+<div class="space-y-6 text-sm text-slate-200">
+  <div class="flex flex-col gap-4 border-b border-white/10 pb-4 md:flex-row md:items-start md:justify-between">
+    <div class="space-y-3 md:max-w-2xl">
       {% include "platform_ui/components/jobs/job_detail_title_form.html" %}
       <div class="flex flex-wrap items-center gap-3 text-xs text-slate-400">
-        <span>Source codec: {% if source.codec %}{{ source.codec|upper }}{% else %}—{% endif %}</span>
-        <span>Converted codec: {{ audio.codec|default:"—" }}</span>
-        <span>Sample rate: {% if audio.sample_rate_hz %}{{ audio.sample_rate_hz }} Hz{% else %}—{% endif %}</span>
-        <span>Channels: {% if audio.channels is not None %}{{ audio.channels }}{% else %}—{% endif %}</span>
+        <span>Mode: {{ telemetry.mode|title }}</span>
+        <span>Language: {{ telemetry.language|default:"—" }}</span>
       </div>
       <div class="grid gap-3 text-xs text-slate-400 sm:grid-cols-3">
         <div>
           <span class="uppercase tracking-wide text-slate-500">Created</span>
-          <div class="mt-1 text-slate-100">{% if job.created_at %}<time data-ts="{{ job.created_at|date:'c' }}" data-ts-format="datetime-seconds">{{ job.created_at|date:'M d, Y h:i:s A' }}</time>{% else %}—{% endif %}</div>
+          <div class="mt-1 text-slate-100">
+            {% if job.created_at %}
+              <time data-ts="{{ job.created_at|date:'c' }}" data-ts-format="datetime-seconds">{{ job.created_at|date:'M d, Y h:i:s A' }}</time>
+            {% else %}—{% endif %}
+          </div>
         </div>
         <div>
           <span class="uppercase tracking-wide text-slate-500">Started</span>
-          <div class="mt-1 text-slate-100">{% if job.started_at %}<time data-ts="{{ job.started_at|date:'c' }}" data-ts-format="datetime-seconds">{{ job.started_at|date:'M d, Y h:i:s A' }}</time>{% else %}—{% endif %}</div>
+          <div class="mt-1 text-slate-100">
+            {% if job.started_at %}
+              <time data-ts="{{ job.started_at|date:'c' }}" data-ts-format="datetime-seconds">{{ job.started_at|date:'M d, Y h:i:s A' }}</time>
+            {% else %}—{% endif %}
+          </div>
         </div>
         <div>
           <span class="uppercase tracking-wide text-slate-500">Finished</span>
-          <div class="mt-1 text-slate-100">{% if job.finished_at %}<time data-ts="{{ job.finished_at|date:'c' }}" data-ts-format="datetime-seconds">{{ job.finished_at|date:'M d, Y h:i:s A' }}</time>{% else %}—{% endif %}</div>
+          <div class="mt-1 text-slate-100">
+            {% if job.finished_at %}
+              <time data-ts="{{ job.finished_at|date:'c' }}" data-ts-format="datetime-seconds">{{ job.finished_at|date:'M d, Y h:i:s A' }}</time>
+            {% else %}—{% endif %}
+          </div>
         </div>
       </div>
     </div>
-    <div class="flex w-full max-w-sm flex-col items-end gap-3 text-right sm:max-w-xs">
-      <div class="flex flex-wrap justify-end gap-2">
+
+    <div class="flex w-full max-w-xs flex-col items-end gap-3">
+      <div class="flex flex-wrap justify-end gap-2 w-full">
         {% if audio_meta.path or metadata_map.converted_audio_job_id or metadata_map.converted_wav_path %}
-          <a class="inline-flex items-center gap-2 rounded-lg border border-primary-400/40 bg-primary-500/10 px-3 py-1.5 text-xs font-semibold text-primary-100 transition hover:bg-primary-500/25"
-             href="{% url 'job-download-audio' job.id %}?converted=1" download>
+          <a class="inline-flex items-center gap-2 rounded-lg border border-primary-400/40 bg-primary-500/10 px-3 py-1.5 text-xs font-semibold text-primary-100 transition hover:bg-primary-500/25" href="{% url 'job-download-audio' job.id %}?converted=1" download>
             Download audio
           </a>
         {% elif source_audio.path %}
-          <a class="inline-flex items-center gap-2 rounded-lg border border-primary-400/40 bg-primary-500/10 px-3 py-1.5 text-xs font-semibold text-primary-100 transition hover:bg-primary-500/25"
-             href="{% url 'job-download-audio' job.id %}" download>
+          <a class="inline-flex items-center gap-2 rounded-lg border border-primary-400/40 bg-primary-500/10 px-3 py-1.5 text-xs font-semibold text-primary-100 transition hover:bg-primary-500/25" href="{% url 'job-download-audio' job.id %}" download>
             Download audio
           </a>
         {% endif %}
       </div>
-      {% if user_can_review and telemetry.status == 'SUCCEEDED' %}
-        <div class="flex flex-wrap justify-end gap-2">
-          <button type="button" class="inline-flex items-center rounded border border-emerald-400/40 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-500/25 disabled:opacity-60" data-job-approve="{{ job.id }}"{% if telemetry.review_status == 'APPROVED' %} disabled{% endif %}>Approve</button>
-          <button type="button" class="inline-flex items-center rounded border border-rose-400/40 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-100 transition hover:bg-rose-500/25 disabled:opacity-60" data-job-reject="{{ job.id }}"{% if telemetry.review_status == 'REJECTED' %} disabled{% endif %}>Reject</button>
-        </div>
-      {% endif %}
-      <div class="w-full space-y-1 text-xs text-slate-300" data-review-summary>
-        <div class="flex items-center justify-between gap-2">
-          <span class="uppercase tracking-wide text-slate-400">Review Notes</span>
-          <span class="inline-flex items-center rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-200" data-review-status-text>
-            {% if telemetry.review_status == 'APPROVED' %}Approved{% elif telemetry.review_status == 'REJECTED' %}Rejected{% else %}Pending{% endif %}
-          </span>
-        </div>
-        <p class="text-sm text-slate-100" data-review-comment>
-          {% if telemetry.review_comment %}{{ telemetry.review_comment }}{% else %}No review notes yet.{% endif %}
-        </p>
-        <p class="text-[11px] text-slate-500" data-review-meta>
-          {% if telemetry.reviewed_by %}
-            Reviewed by <span class="font-semibold text-slate-100">{{ telemetry.reviewed_by.label }}</span>{% if telemetry.reviewed_at %} · <time data-ts="{{ telemetry.reviewed_at|date:'c' }}" data-ts-format="datetime">{{ telemetry.reviewed_at|date:'M d, Y h:i A' }}</time>{% endif %}
-          {% else %}
-            Awaiting reviewer decision.
-          {% endif %}
-        </p>
-      </div>
       <button type="button"
-              class="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-primary-400 hover:text-white"
+              class="mt-auto inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-primary-400 hover:text-white"
               data-job-action
               data-job-action-kind="modal"
               data-job-action="view-metadata"
@@ -75,125 +59,48 @@
     </div>
   </div>
 
-  <div class="rounded-lg border border-white/10 bg-slate-900/60 p-4" data-job-notes data-job-id="{{ job.id }}">
-    <div class="flex flex-wrap items-start justify-between gap-3">
-      <div>
-        <p class="text-xs uppercase tracking-wide text-slate-400">Team Notes</p>
-        <p class="mt-1 text-[11px] text-slate-400" data-job-notes-meta>
-          {% if notes_updated_at %}
-            Updated <time data-ts="{{ notes_updated_at }}" data-ts-format="datetime">{{ notes_updated_at }}</time>
-            {% if notes_updated_by %} · <span class="font-semibold text-slate-200">{{ notes_updated_by }}</span>{% endif %}
-          {% else %}
-            Not saved yet.
-          {% endif %}
-        </p>
-      </div>
-      {% if user_can_review %}
-        <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-primary-400/40 bg-primary-500/10 px-3 py-1.5 text-xs font-semibold text-primary-100 transition hover:bg-primary-500/25" data-job-notes-save data-job-id="{{ job.id }}">
-          Save notes
-        </button>
-      {% endif %}
-    </div>
-    <textarea class="mt-3 w-full rounded-md border border-white/10 bg-slate-950/20 p-3 text-sm text-slate-100 focus:border-primary-400 focus:outline-none focus:ring-0" rows="4" placeholder="Add context for your team…" data-job-notes-input{% if not user_can_review %} readonly{% endif %}>{{ notes_text }}</textarea>
-    {% if not user_can_review %}
-      <p class="mt-2 text-[11px] text-slate-500">Read-only: you do not have permission to update notes.</p>
-    {% endif %}
-  </div>
-
   <div class="grid gap-4 md:grid-cols-2">
-    <div class="rounded-lg border border-white/10 bg-slate-900/60 p-4">
-      <div class="flex items-center justify-between text-xs uppercase tracking-wide text-slate-400">
-        <span>Source audio</span>
-        {% with refresh_id=metadata.source_job_id %}
-          <button type="button" class="inline-flex items-center gap-1 rounded border border-white/20 bg-white/10 px-2 py-0.5 text-[11px] font-semibold text-slate-200 transition hover:border-primary-400 {% if not refresh_id %}cursor-default opacity-60{% endif %}" data-audio-refresh data-panel="source" data-refresh-job="{{ refresh_id|default:'' }}" data-display-job="{{ job.id }}" data-case-id="{{ case.id }}" {% if not refresh_id %}disabled aria-disabled="true"{% endif %}>
-            Refresh
-          </button>
-        {% endwith %}
-      </div>
-      <dl class="mt-3 grid gap-x-4 gap-y-2 text-xs text-slate-300" data-audio-panel="source" data-job-id="{{ job.id }}">
-        <div>
-          <dt class="text-slate-400">Original name</dt>
-          <dd class="mt-1 text-slate-100"><span data-audio-field="original_name">{% if source.original_name %}{{ source.original_name }}{% else %}—{% endif %}</span></dd>
-        </div>
-        <div>
-          <dt class="text-slate-400">Duration</dt>
-          <dd class="mt-1 text-slate-100"><span data-audio-field="duration">{% if source.duration_s %}{{ source.duration_s|floatformat:1 }} s{% else %}—{% endif %}</span></dd>
-        </div>
-        <div>
-          <dt class="text-slate-400">Size</dt>
-          <dd class="mt-1 text-slate-100"><span data-audio-field="size">{% if source.size_bytes_local %}{{ source.size_bytes_local|filesizeformat }}{% elif source.size_bytes_remote %}{{ source.size_bytes_remote|filesizeformat }}{% else %}—{% endif %}</span></dd>
-        </div>
-        <div>
-          <dt class="text-slate-400">SHA-256</dt>
-          <dd class="mt-1 flex items-center justify-between gap-3 text-slate-100">
-            <span>
-              {% if source.sha256 %}
-                <span class="font-mono text-[11px] text-primary-100" data-copy-text="{{ source.sha256 }}" data-audio-field="hash" title="{{ source.sha256 }}">{{ source.sha256|slice:":8" }}…{{ source.sha256|slice:"-4:" }}</span>
-              {% else %}
-                <span data-audio-field="hash" class="text-slate-500">Not recorded</span>
-              {% endif %}
-            </span>
-            {% if source.path %}
-              <button type="button" class="relative inline-flex items-center gap-2 rounded border border-white/20 bg-white/10 px-2 py-0.5 text-[11px] font-semibold text-slate-200 transition hover:border-primary-400" data-verify-hash data-target="audio" data-scope="source" data-source-job="{{ metadata.source_job_id }}" data-job-id="{{ job.id }}" data-mark-corrupted="{{ job.id }}{% if metadata.source_job_id %},{{ metadata.source_job_id }}{% endif %}">
-                Verify
-              </button>
-            {% endif %}
-          </dd>
-        </div>
-      </dl>
-    </div>
+    {% include "platform_ui/components/jobs/_audio_brief.html" with
+       panel_title="Source audio"
+       panel_key="source"
+       job_id=job.id
+       audio=source_audio
+       metadata=metadata_map
+       refresh_enabled=source_job_id
+       refresh_panel="source"
+       refresh_job_id=source_job_id
+       refresh_display_job_id=job.id
+       refresh_case_id=case.id
+       verify_enabled=source_audio.path or source_audio.sha256 or metadata_map.source_audio_file
+       verify_target="audio"
+       verify_scope="source"
+       verify_source_job=source_job_id
+       verify_mark_targets=conversion_mark_targets
+    %}
 
-    <div class="rounded-lg border border-white/10 bg-slate-900/60 p-4">
-      <div class="flex items-center justify-between text-xs uppercase tracking-wide text-slate-400">
-        <span>Converted WAV</span>
-        <button type="button" class="inline-flex items-center gap-1 rounded border border-white/20 bg-white/10 px-2 py-0.5 text-[11px] font-semibold text-slate-200 transition hover:border-primary-400" data-audio-refresh data-panel="converted" data-refresh-job="{{ job.id }}" data-display-job="{{ job.id }}" data-case-id="{{ case.id }}">Refresh</button>
-      </div>
-      <dl class="mt-3 grid gap-x-4 gap-y-2 text-xs text-slate-300" data-audio-panel="converted" data-job-id="{{ job.id }}">
-        <div>
-          <dt class="text-slate-400">Original name</dt>
-          <dd class="mt-1 text-slate-100"><span data-audio-field="original_name">{% if metadata.converted_audio_file %}{{ metadata.converted_audio_file }}{% elif audio.original_name %}{{ audio.original_name }}{% else %}—{% endif %}</span></dd>
-        </div>
-        <div>
-          <dt class="text-slate-400">Duration</dt>
-          <dd class="mt-1 text-slate-100"><span data-audio-field="duration">{% if audio.duration_s %}{{ audio.duration_s|floatformat:1 }} s{% else %}—{% endif %}</span></dd>
-        </div>
-        <div>
-          <dt class="text-slate-400">Size</dt>
-          <dd class="mt-1 text-slate-100">
-            <span data-audio-field="size">
-              {% if audio.size_bytes_local %}
-                {{ audio.size_bytes_local|filesizeformat }}
-              {% elif audio.size_bytes_remote %}
-                {{ audio.size_bytes_remote|filesizeformat }}
-              {% elif metadata.converted_audio_size_bytes %}
-                {{ metadata.converted_audio_size_bytes|filesizeformat }}
-              {% else %}—{% endif %}
-            </span>
-          </dd>
-        </div>
-        <div>
-          <dt class="text-slate-400">SHA-256</dt>
-          <dd class="mt-1 flex items-center justify-between gap-3 text-slate-100">
-            <span>
-              {% with converted_hash=audio.sha256|default:metadata.converted_audio_sha256 %}
-                {% if converted_hash %}
-                  <span class="font-mono text-[11px] text-primary-100" data-copy-text="{{ converted_hash }}" data-audio-field="hash" title="{{ converted_hash }}">{{ converted_hash|slice:":8" }}…{{ converted_hash|slice:"-4:" }}</span>
-                {% else %}
-                  <span data-audio-field="hash" class="text-slate-500">Not recorded</span>
-                {% endif %}
-              {% endwith %}
-            </span>
-            {% if audio.path %}
-              <button type="button" class="relative inline-flex items-center gap-2 rounded border border-white/20 bg-white/10 px-2 py-0.5 text-[11px] font-semibold text-slate-200 transition hover:border-primary-400" data-verify-hash data-target="audio" data-scope="converted" data-job-id="{{ job.id }}" data-mark-corrupted="{{ job.id }}{% if metadata.source_job_id %},{{ metadata.source_job_id }}{% endif %}">
-                Verify
-              </button>
-            {% endif %}
-          </dd>
-        </div>
-      </dl>
-    </div>
+    {% include "platform_ui/components/jobs/_audio_brief.html" with
+       panel_title="Converted WAV"
+       panel_key="converted"
+       job_id=job.id
+       audio=audio_meta
+       metadata=metadata_map
+       refresh_enabled=True
+       refresh_panel="converted"
+       refresh_job_id=job.id
+       refresh_display_job_id=job.id
+       refresh_case_id=case.id
+       verify_enabled=audio_meta.path or audio_meta.sha256 or metadata_map.converted_audio_sha256
+       verify_target="audio"
+       verify_scope="converted"
+       verify_mark_targets=conversion_mark_targets
+    %}
   </div>
 
-  {# Metadata and log excerpt moved to dedicated modal actions. #}
-{% endwith %}
+  {% include "platform_ui/components/notes/team_notes_panel.html" with
+     job_id=job.id
+     notes_entries=notes_entries
+     notes_updated_at=notes_updated_at
+     notes_updated_by=notes_updated_by
+     user_can_add_notes=user_can_review
+  %}
 </div>

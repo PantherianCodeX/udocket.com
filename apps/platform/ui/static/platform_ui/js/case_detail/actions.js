@@ -194,8 +194,6 @@
     if (!jobId) return;
     const textarea = container.querySelector('[data-job-notes-input]');
     if (!textarea) return;
-    const metaEl = container.querySelector('[data-job-notes-meta]');
-
     const originalLabel = button.textContent;
     button.disabled = true;
     button.textContent = 'Saving…';
@@ -217,19 +215,10 @@
       }
       const data = await resp.json();
       const notes = data && data.notes ? data.notes : {};
-      if (metaEl) {
-        const updatedAt = notes.updated_at || '';
-        const updatedBy = notes.updated_by_label || notes.updated_by || '';
-        if (updatedAt) {
-          metaEl.innerHTML = `Updated <time data-ts="${updatedAt}" data-ts-format="datetime">${updatedAt}</time>${updatedBy ? ` · <span class="font-semibold text-slate-200">${updatedBy}</span>` : ''}`;
-          if (typeof global.renderLocalTimes === 'function') {
-            global.renderLocalTimes();
-          }
-        } else if (updatedBy) {
-          metaEl.textContent = `Updated by ${updatedBy}`;
-        } else {
-          metaEl.textContent = 'Updated just now';
-        }
+      helpers.updateNotes(container, notes);
+      if (typeof deps.ui?.updateNotesIndicator === 'function') {
+        const noteCount = typeof notes.count === 'number' ? notes.count : Array.isArray(notes.entries) ? notes.entries.length : 0;
+        deps.ui.updateNotesIndicator(jobId, noteCount);
       }
       button.textContent = 'Saved!';
       if (deps.notify) {
@@ -471,14 +460,31 @@
     const progressBar = root.querySelector('[data-transcribe-progress-bar]');
     const progressLabel = root.querySelector('[data-transcribe-progress-label]');
     const summary = root.querySelector('[data-transcribe-summary]');
+    const filenameLabel = form.querySelector('[data-transcribe-filename]');
+    const defaultFilenameText = filenameLabel ? filenameLabel.textContent || 'Select audio file to continue' : 'Select audio file to continue';
 
     function updateSubmitState() {
       if (!submitBtn) return;
       const hasFile = fileInput && fileInput.files && fileInput.files.length > 0;
       submitBtn.disabled = !hasFile;
+      if (filenameLabel) {
+        if (hasFile) {
+          const file = fileInput.files[0];
+          filenameLabel.textContent = file ? file.name : defaultFilenameText;
+          filenameLabel.classList.remove('text-slate-300');
+          filenameLabel.classList.add('text-primary-200');
+        } else {
+          filenameLabel.textContent = defaultFilenameText;
+          filenameLabel.classList.remove('text-primary-200');
+          filenameLabel.classList.add('text-slate-300');
+        }
+      }
     }
 
     form.addEventListener('change', updateSubmitState);
+    if (fileInput) {
+      fileInput.addEventListener('input', updateSubmitState);
+    }
     updateSubmitState();
     deps.ui?.syncTranscribeSidebar(root);
 

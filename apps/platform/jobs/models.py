@@ -106,3 +106,26 @@ class Job(models.Model):
             except Exception:
                 pass
         super().save(*args, **kwargs)
+
+
+class JobNote(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    job = models.ForeignKey("jobs.Job", on_delete=models.CASCADE, related_name="notes")
+    text = models.TextField()
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="job_notes",
+    )
+    created_by_name = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["job", "-created_at"])]
+
+    def __str__(self) -> str:  # pragma: no cover - simple repr
+        return f"JobNote(job={self.job_id})"

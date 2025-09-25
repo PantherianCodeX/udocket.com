@@ -1,0 +1,86 @@
+{% load ui_display %}
+{% with audio_dict=audio|default:{} meta_dict=metadata|default:{} panel=panel_key|default:'current' job_identifier=job_id|default:refresh_display_job_id %}
+<div class="rounded-lg border border-white/10 bg-slate-900/60 p-4">
+  <div class="flex items-center justify-between text-xs uppercase tracking-wide text-slate-400">
+    <span>{{ panel_title|default:'Audio' }}</span>
+    {% if refresh_enabled %}
+      {% with refresh_panel=refresh_panel|default:panel %}
+        <button type="button"
+                class="inline-flex items-center gap-1 rounded border border-white/20 bg-white/10 px-2 py-0.5 text-[11px] font-semibold text-slate-200 transition hover:border-primary-400 {% if not refresh_job_id %}cursor-default opacity-60{% endif %}"
+                data-audio-refresh
+                data-panel="{{ refresh_panel }}"
+                {% if refresh_job_id %}data-refresh-job="{{ refresh_job_id }}"{% endif %}
+                {% if refresh_display_job_id %}data-display-job="{{ refresh_display_job_id }}"{% else %}data-display-job="{{ job_identifier }}"{% endif %}
+                {% if refresh_case_id %}data-case-id="{{ refresh_case_id }}"{% elif case_id %}data-case-id="{{ case_id }}"{% else %}data-case-id="{{ job.case_id|default:job_id }}"{% endif %}
+                {% if not refresh_job_id %}disabled aria-disabled="true"{% endif %}>
+          Refresh
+        </button>
+      {% endwith %}
+    {% endif %}
+  </div>
+  <dl class="mt-3 grid gap-x-4 gap-y-2 text-xs text-slate-300" data-audio-panel="{{ panel }}" data-job-id="{{ refresh_display_job_id|default:job_identifier }}">
+    <div>
+      <dt class="text-slate-400">Original name</dt>
+      <dd class="mt-1 text-slate-100">
+        {% with name=audio_dict.original_name|default:meta_dict.converted_audio_file|default:meta_dict.original_name|default:meta_dict.audio_file|default:'' %}
+          <span data-audio-field="original_name">{% if name %}{{ name }}{% else %}—{% endif %}</span>
+        {% endwith %}
+      </dd>
+    </div>
+    <div>
+      <dt class="text-slate-400">Duration</dt>
+      <dd class="mt-1 text-slate-100">
+        {% with duration=audio_dict.duration_s|default:meta_dict.audio_duration_s %}
+          <span data-audio-field="duration">
+            {% if duration %}
+              {{ duration|floatformat:1 }} s
+            {% else %}
+              —
+            {% endif %}
+          </span>
+        {% endwith %}
+      </dd>
+    </div>
+    <div>
+      <dt class="text-slate-400">Size</dt>
+      <dd class="mt-1 text-slate-100">
+        {% with size_value=audio_dict.size_bytes_local|default:audio_dict.size_bytes_remote|default:meta_dict.converted_audio_size_bytes|default:meta_dict.audio_size_bytes %}
+          <span data-audio-field="size">
+            {% if size_value %}
+              {{ size_value|filesizeformat }}
+            {% else %}
+              —
+            {% endif %}
+          </span>
+        {% endwith %}
+      </dd>
+    </div>
+    <div>
+      <dt class="text-slate-400">SHA-256</dt>
+      <dd class="mt-1 flex items-center justify-between gap-3 text-slate-100">
+        {% with hash_value=audio_dict.sha256|default:meta_dict.converted_audio_sha256|default:meta_dict.audio_sha256 %}
+          <span>
+            {% if hash_value %}
+              <span class="font-mono text-[11px] text-primary-100" data-copy-text="{{ hash_value }}" data-audio-field="hash" title="{{ hash_value }}">{{ hash_value|slice:":8" }}…{{ hash_value|slice:"-4:" }}</span>
+            {% else %}
+              <span data-audio-field="hash" class="text-slate-500">Not recorded</span>
+            {% endif %}
+          </span>
+          {% if verify_enabled and hash_value %}
+            <button type="button"
+                    class="relative inline-flex items-center gap-2 rounded border border-white/20 bg-white/10 px-2 py-0.5 text-[11px] font-semibold text-slate-200 transition hover:border-primary-400"
+                    data-verify-hash
+                    data-target="{{ verify_target|default:'audio' }}"
+                    {% if verify_scope %}data-scope="{{ verify_scope }}"{% endif %}
+                    {% if verify_source_job %}data-source-job="{{ verify_source_job }}"{% endif %}
+                    data-job-id="{{ job_id }}"
+                    {% if verify_mark_targets %}data-mark-corrupted="{{ verify_mark_targets }}"{% else %}data-mark-corrupted="{{ job_id }}"{% endif %}>
+              Verify
+            </button>
+          {% endif %}
+        {% endwith %}
+      </dd>
+    </div>
+  </dl>
+</div>
+{% endwith %}

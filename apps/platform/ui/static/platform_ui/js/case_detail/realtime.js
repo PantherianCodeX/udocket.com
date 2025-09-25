@@ -4,6 +4,7 @@
   if (caseDetail.realtime) {
     return;
   }
+  const helpers = caseDetail.helpers || {};
 
   const DEFAULT_TERMINAL = ['SUCCEEDED', 'FAILED', 'CANCELLED', 'ERROR', 'CORRUPTED'];
   const FALLBACK_INTERVAL_MS = 5000;
@@ -228,26 +229,17 @@
       const notesContainer = global.document.querySelector(
         `[data-job-notes][data-job-id="${jobId}"]`,
       );
-      if (notesContainer) {
-        const textarea = notesContainer.querySelector('[data-job-notes-input]');
-        if (textarea && typeof payload.notes.text === 'string') {
-          textarea.value = payload.notes.text;
-        }
-        const metaEl = notesContainer.querySelector('[data-job-notes-meta]');
-        if (metaEl) {
-          const updatedAt = payload.notes.updated_at || '';
-          const updatedBy = payload.notes.updated_by_label || payload.notes.updated_by || '';
-          if (updatedAt) {
-            metaEl.innerHTML = `Updated <time data-ts="${updatedAt}" data-ts-format="datetime">${updatedAt}</time>${updatedBy ? ` · <span class="font-semibold text-slate-200">${updatedBy}</span>` : ''}`;
-            if (typeof global.renderLocalTimes === 'function') {
-              global.renderLocalTimes();
-            }
-          } else if (updatedBy) {
-            metaEl.textContent = `Updated by ${updatedBy}`;
-          } else {
-            metaEl.textContent = 'Updated just now';
-          }
-        }
+      if (notesContainer && typeof helpers.updateNotes === 'function') {
+        helpers.updateNotes(notesContainer, payload.notes, { preserveInput: true });
+      }
+      if (typeof deps.ui?.updateNotesIndicator === 'function') {
+        const noteCount =
+          typeof payload.notes.count === 'number'
+            ? payload.notes.count
+            : Array.isArray(payload.notes.entries)
+              ? payload.notes.entries.length
+              : 0;
+        deps.ui.updateNotesIndicator(jobId, noteCount);
       }
     }
 

@@ -259,6 +259,30 @@
     return tableController;
   }
 
+  function updateNotesIndicator(jobId, count) {
+    if (!ctx) return;
+    const row = global.document.querySelector(`[data-job="${jobId}"]`);
+    if (!row) return;
+    const cell = row.querySelector('[data-job-notes-cell]');
+    if (!cell) return;
+    const value = Number(count) || 0;
+    if (value <= 0) {
+      cell.innerHTML = '<span class="text-slate-500" data-job-notes-indicator data-count="0">—</span>';
+      return;
+    }
+    const srText = `${value} team note${value === 1 ? '' : 's'}`;
+    const countMarkup = value > 1 ? `<span data-job-notes-count>${value}</span>` : '';
+    cell.innerHTML = `
+      <span class="inline-flex items-center gap-1 rounded-full border border-primary-400/40 bg-primary-500/10 px-2 py-0.5 text-[11px] font-semibold text-primary-100" data-job-notes-indicator data-count="${value}" title="Team notes available">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+          <path d="M4.5 2A2.5 2.5 0 002 4.5v8A2.5 2.5 0 004.5 15H7v2.382a.5.5 0 00.816.387L11.25 15H15.5A2.5 2.5 0 0018 12.5v-8A2.5 2.5 0 0015.5 2h-11z" />
+        </svg>
+        ${countMarkup}
+        <span class="sr-only">${srText}</span>
+      </span>
+    `;
+  }
+
   caseDetail.ui = {
     setContext,
     setDeps,
@@ -266,6 +290,7 @@
     scheduleTranscribeRefresh,
     setActiveCard,
     updateStatusDisplays,
+    updateNotesIndicator,
     syncTranscribeSidebar,
     refreshCaseJobs,
     boost,
