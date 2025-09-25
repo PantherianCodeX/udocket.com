@@ -18,6 +18,7 @@ app.autodiscover_tasks()
 # the worker command is wrapped by docker compose watch tooling.
 app.conf.worker_send_task_events = True
 app.conf.task_send_sent_event = True
+app.conf.worker_hijack_root_logger = False
 
 
 @app.task(bind=True)
