@@ -106,9 +106,13 @@ def test_analysis_tasks_generate_artifacts(db, settings):
     assert entities_path.exists()
     assert graph_path.exists()
 
-    seeds = json.loads(timeline_seed_path.read_text(encoding="utf-8"))
+    seeds_payload = json.loads(timeline_seed_path.read_text(encoding="utf-8"))
     timeline_events = json.loads(timeline_path.read_text(encoding="utf-8"))
-    assert timeline_events == seeds
+    if isinstance(seeds_payload, dict):
+        seeds_events = seeds_payload.get("events", [])
+    else:
+        seeds_events = seeds_payload
+    assert timeline_events == seeds_events
 
     hints = json.loads(entity_hint_path.read_text(encoding="utf-8"))
     entity_payload = json.loads(entities_path.read_text(encoding="utf-8"))
