@@ -86,11 +86,16 @@
         const key = button.getAttribute('data-tool-card');
         ui.setActiveCard(key);
         button.classList.add('ring-1', 'ring-primary-400/60');
+        // Mark busy to avoid double submits while HTMX is in flight
+        button.setAttribute('aria-busy', 'true');
+        button.setAttribute('disabled', 'true');
       },
       toolCardAfter: (evt) => {
         const button = evt.target.closest('[data-tool-card]');
         if (button) {
           button.classList.remove('ring-1', 'ring-primary-400/60');
+          button.removeAttribute('disabled');
+          button.removeAttribute('aria-busy');
           controller.ui.boost(controller.ctx.caseId);
           return;
         }
