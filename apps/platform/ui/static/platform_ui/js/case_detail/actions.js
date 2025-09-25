@@ -1515,37 +1515,51 @@
           payload.allow_offline_fallback = allowOfflineCheckbox.checked;
         }
       }
-      const overridesValue = summaryContainer?.dataset.llmOverrides;
-      if (overridesValue) {
-        const trimmed = overridesValue.trim();
-        if (trimmed && /[\[{]/.test(trimmed[0])) {
-          try {
-            const normalized = /\u[0-9a-fA-F]{4}/.test(trimmed) ? decodeUnicode(trimmed) : trimmed;
-            const overrides = JSON.parse(normalized);
-            if (overrides && typeof overrides === 'object') {
-              payload.stage_overrides = overrides;
-              if (platformUI.llmDebug) console.debug('[LLM] Using stage overrides', overrides);
+      const embeddedOverrides = getEmbeddedJSON(summaryContainer, 'overrides');
+      if (embeddedOverrides && typeof embeddedOverrides === 'object') {
+        payload.stage_overrides = embeddedOverrides;
+        if (platformUI.llmDebug) console.debug('[LLM] Using embedded overrides', embeddedOverrides);
+      } else {
+        const overridesValue = summaryContainer?.dataset.llmOverrides;
+        if (overridesValue) {
+          const trimmed = overridesValue.trim();
+          if (trimmed && /[\[{]/.test(trimmed[0])) {
+            try {
+              const normalized = /\u[0-9a-fA-F]{4}/.test(trimmed) ? decodeUnicode(trimmed) : trimmed;
+              const overrides = JSON.parse(normalized);
+              if (overrides && typeof overrides === 'object') {
+                payload.stage_overrides = overrides;
+                if (platformUI.llmDebug) console.debug('[LLM] Using stage overrides', overrides);
+              }
+            } catch (error) {
+              if (platformUI.llmDebug) console.warn('[LLM] Invalid overrides payload, ignoring', error);
+              summaryContainer.dataset.llmOverrides = '';
             }
-          } catch (error) {
-            if (platformUI.llmDebug) console.warn('[LLM] Invalid overrides payload, ignoring', error);
-            summaryContainer.dataset.llmOverrides = '';
           }
         }
       }
-      const chainOverride = summaryContainer?.dataset.llmProviderChain;
-      if (chainOverride && !payload.provider_chain) {
-        const trimmed = chainOverride.trim();
-        if (trimmed && /[\[{\"]/.test(trimmed[0])) {
-          try {
-            const normalized = /\u[0-9a-fA-F]{4}/.test(trimmed) ? decodeUnicode(trimmed) : trimmed;
-            const chain = JSON.parse(normalized);
-            if (Array.isArray(chain) && chain.length) {
-              payload.provider_chain = chain;
-              if (platformUI.llmDebug) console.debug('[LLM] Using stored provider chain', chain);
+      if (!payload.provider_chain) {
+        const embeddedChain = getEmbeddedJSON(summaryContainer, 'provider-chain');
+        if (Array.isArray(embeddedChain) && embeddedChain.length) {
+          payload.provider_chain = embeddedChain;
+          if (platformUI.llmDebug) console.debug('[LLM] Using embedded provider chain', embeddedChain);
+        } else {
+          const chainOverride = summaryContainer?.dataset.llmProviderChain;
+          if (chainOverride) {
+            const trimmed = chainOverride.trim();
+            if (trimmed && /[\[{\"]/.test(trimmed[0])) {
+              try {
+                const normalized = /\u[0-9a-fA-F]{4}/.test(trimmed) ? decodeUnicode(trimmed) : trimmed;
+                const chain = JSON.parse(normalized);
+                if (Array.isArray(chain) && chain.length) {
+                  payload.provider_chain = chain;
+                  if (platformUI.llmDebug) console.debug('[LLM] Using stored provider chain', chain);
+                }
+              } catch (error) {
+                if (platformUI.llmDebug) console.warn('[LLM] Invalid provider chain override', error);
+                summaryContainer.dataset.llmProviderChain = '';
+              }
             }
-          } catch (error) {
-            if (platformUI.llmDebug) console.warn('[LLM] Invalid provider chain override', error);
-            summaryContainer.dataset.llmProviderChain = '';
           }
         }
       }

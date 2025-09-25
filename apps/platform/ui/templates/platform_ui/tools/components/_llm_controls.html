@@ -4,7 +4,13 @@
     Advanced settings
     <svg class="h-4 w-4 transition-transform group-open:rotate-180" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.094l3.71-3.86a.75.75 0 111.08 1.04l-4.247 4.41a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z" clip-rule="evenodd" /></svg>
   </summary>
-  <div class="space-y-4 border-t border-white/10 px-3 py-4 text-sm text-slate-200">
+{% if ctx.catalog_json %}
+  <script type="application/json" data-llm-json="catalog">{{ ctx.catalog_json|safe }}</script>
+{% endif %}
+{% if ctx.credentials_json %}
+  <script type="application/json" data-llm-json="credentials">{{ ctx.credentials_json|safe }}</script>
+{% endif %}
+<div class="space-y-4 border-t border-white/10 px-3 py-4 text-sm text-slate-200">
     <div class="space-y-2">
       <label class="text-xs uppercase tracking-wide text-slate-400">Primary provider</label>
       <select class="w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none"
