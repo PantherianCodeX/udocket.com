@@ -12,6 +12,22 @@
   const modalsModule = caseDetail.modals || {};
   const actionsModule = caseDetail.actions || {};
 
+  function debugEnabled() {
+    try {
+      if (global.platformUI && global.platformUI.debug) return true;
+      return localStorage.getItem('platformUI.debug') === '1';
+    } catch (_) {
+      return false;
+    }
+  }
+  function dbg(tag, data) {
+    if (!debugEnabled()) return;
+    try {
+      // eslint-disable-next-line no-console
+      console.debug('[caseDetail]', tag, data || '');
+    } catch (_) {}
+  }
+
   function createContext(options = {}) {
     const caseView = options.root || global.document.querySelector('[data-case-view]');
     if (!caseView) {
@@ -91,6 +107,12 @@
         ui.setActiveCard(key);
         button.classList.add('ring-1', 'ring-primary-400/60');
         button.setAttribute('data-tool-card-active', 'true');
+        dbg('toolCardBefore', {
+          key,
+          hxGet: button.getAttribute('hx-get'),
+          hxTarget: button.getAttribute('hx-target'),
+          hxSwap: button.getAttribute('hx-swap'),
+        });
       },
       toolCardAfter: (evt) => {
         const src = (evt.detail && evt.detail.elt) || evt.target;
@@ -98,6 +120,7 @@
         if (button) {
           button.classList.remove('ring-1', 'ring-primary-400/60');
           button.removeAttribute('data-tool-card-active');
+          dbg('toolCardAfter(button)', { key: button.getAttribute('data-tool-card') });
           return;
         }
         if (evt.target === controller.ctx.workspace || (evt.target && evt.target.id === 'tool-workspace')) {
@@ -112,6 +135,7 @@
             table.collapseAll();
           }
           controller.ui.boost(controller.ctx.caseId);
+          dbg('toolCardAfter(workspace)', { targetId: evt.target && evt.target.id });
         }
       },
       toolCardSettle: (evt) => {
@@ -121,6 +145,7 @@
             el.classList.remove('ring-1', 'ring-primary-400/60');
             el.removeAttribute('data-tool-card-active');
           });
+          dbg('toolCardSettle', { targetId: evt.target && evt.target.id });
         }
       },
       toolCardAfterRequest: (evt) => {
@@ -129,6 +154,7 @@
         if (button) {
           button.classList.remove('ring-1', 'ring-primary-400/60');
           button.removeAttribute('data-tool-card-active');
+          dbg('toolCardAfterRequest', { key: button.getAttribute('data-tool-card') });
         }
       },
       toolCardError: (evt) => {
@@ -137,6 +163,7 @@
         if (button) {
           button.classList.remove('ring-1', 'ring-primary-400/60');
           button.removeAttribute('data-tool-card-active');
+          dbg('toolCardError', { key: button.getAttribute('data-tool-card') });
         }
       },
       htmxAfterOnLoad: (evt) => {
@@ -158,6 +185,7 @@
             ui.setActiveCard(refreshed.active_tool);
           }
           controller.ui.boost(controller.ctx.caseId);
+          dbg('htmxAfterOnLoad', { refreshed });
         } catch (error) {
           console.warn('Failed to parse HX-Trigger payload', error);
         }
@@ -178,6 +206,21 @@
     global.document.body.addEventListener('htmx:afterRequest', handlers.toolCardAfterRequest);
     global.document.body.addEventListener('htmx:error', handlers.toolCardError);
     global.document.body.addEventListener('htmx:afterOnLoad', handlers.htmxAfterOnLoad);
+
+    // Instrument clicks on tool cards to observe state
+    try {
+      global.document.body.addEventListener('click', (evt) => {
+        const el = evt.target && evt.target.closest ? evt.target.closest('[data-tool-card]') : null;
+        if (!el) return;
+        dbg('tool-card-click', {
+          key: el.getAttribute('data-tool-card'),
+          hasActive: el.hasAttribute('data-tool-card-active'),
+          hxGet: el.getAttribute('hx-get'),
+          hxTarget: el.getAttribute('hx-target'),
+          hxSwap: el.getAttribute('hx-swap'),
+        });
+      }, true);
+    } catch (_) {}
 
     caseDetail._listenersBound = true;
     caseDetail._handlers = handlers;
