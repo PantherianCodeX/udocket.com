@@ -1,3 +1,5 @@
+{% load static %}
+<script src="{% static 'platform_ui/js/jobs_table.js' %}"></script>
 <script>
     (function() {
       // TODO(layout-refresh): Investigate more reliable template update tooling to reduce manual patch churn during upcoming refactor.
@@ -15,6 +17,39 @@
     lastStatus: {},
     refreshTranscribeScheduled: false,
   };
+
+      const JOB_DETAIL_LOADING = '<div class="flex items-center gap-2 text-xs text-slate-300"><svg class="h-3 w-3 animate-spin text-primary-300" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle class="opacity-30" cx="12" cy="12" r="10" stroke-width="2"></circle><path d="M22 12a10 10 0 00-10-10" stroke-width="2" stroke-linecap="round"></path></svg><span>Loading…</span></div>';
+      const JOB_DETAIL_ERROR = '<div class="text-xs text-rose-300">Unable to load job detail.</div>';
+
+      const jobsTableController = window.udocketJobsTable.init({
+        root: caseView,
+        activeRowClass: 'bg-white/10',
+        detailRowSelector: (jobId) => `[data-job-detail="${jobId}"]`,
+        detailContainerSelector: (jobId) => `[data-job-detail-container="${jobId}"]`,
+        loadingTemplate: JOB_DETAIL_LOADING,
+        errorTemplate: JOB_DETAIL_ERROR,
+        loadDetail: async (jobId, container) => {
+          const resp = await fetch(`/cases/${caseId}/jobs/${jobId}/detail/`, {
+            headers: { 'HX-Request': 'true' },
+            credentials: 'same-origin',
+          });
+          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+          const html = await resp.text();
+          container.innerHTML = html;
+        },
+        onAfterExpand: (row) => {
+          if (!row) return;
+          const chevron = row.querySelector('[data-job-chevron]');
+          if (chevron) chevron.classList.add('rotate-90');
+        },
+        onCollapse: (row) => {
+          if (!row) return;
+          const chevron = row.querySelector('[data-job-chevron]');
+          if (chevron) chevron.classList.remove('rotate-90');
+        },
+      });
+
+      JobsState.table = jobsTableController;
 
       const statusUtils = window.udocketStatus || {};
       const renderStatusLabel = statusUtils.renderStatusLabel || (() => {});
@@ -216,6 +251,9 @@
           return;
         }
         if (evt.target === workspace) {
+          if (JobsState.table && typeof JobsState.table.collapseAll === 'function') {
+            JobsState.table.collapseAll();
+          }
           boostJobs();
         }
       });
@@ -318,66 +356,19 @@
         };
       }
 
-      function toggleJobRow(row) {
-        const detailRow = row ? document.querySelector(`[data-job-detail="${row.dataset.job}"]`) : null;
-        if (!detailRow) return;
-        const isExpanded = !detailRow.classList.contains('hidden');
-        if (isExpanded) {
-          detailRow.classList.add('hidden');
-          detailRow.style.display = 'none';
-          row.setAttribute('aria-expanded', 'false');
-          row.classList.remove('bg-white/10');
-          return;
-        }
-        document.querySelectorAll('[data-job-row]').forEach((other) => {
-          if (other !== row) {
-            const d = document.querySelector(`[data-job-detail="${other.dataset.job}"]`);
-            if (d) {
-              d.classList.add('hidden');
-              d.style.display = 'none';
-            }
-            other.setAttribute('aria-expanded', 'false');
-            other.classList.remove('bg-white/10');
-          }
-        });
-        loadJobDetail(row.dataset.job).then(() => {
-          detailRow.classList.remove('hidden');
-          detailRow.style.display = 'table-row';
-          row.setAttribute('aria-expanded', 'true');
-          row.classList.add('bg-white/10');
-        });
-      }
-
-      async function loadJobDetail(jobId) {
-        const container = document.querySelector(`[data-job-detail-container="${jobId}"]`);
-        if (!container || container.dataset.loading === '1') return;
-        container.dataset.loading = '1';
-        container.innerHTML = '<div class="flex items-center gap-2 text-xs text-slate-300"><svg class="h-3 w-3 animate-spin text-primary-300" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle class="opacity-30" cx="12" cy="12" r="10" stroke-width="2"></circle><path d="M22 12a10 10 0 00-10-10" stroke-width="2" stroke-linecap="round"></path></svg><span>Loading…</span></div>';
-        try {
-          const url = `/cases/${caseId}/jobs/${jobId}/detail/`;
-          const resp = await fetch(url, { headers: { 'HX-Request': 'true' }, credentials: 'same-origin' });
-          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-          const html = await resp.text();
-          container.innerHTML = html;
-          container.dataset.loaded = '1';
-          delete container.dataset.loading;
-        } catch (error) {
-          container.innerHTML = '<div class="text-xs text-rose-300">Unable to load job detail.</div>';
-          delete container.dataset.loading;
-        }
-      }
-
       function handleRowClick(evt) {
         const row = evt.target.closest('[data-job-row]');
         if (!row) return;
+        if (evt.target.closest('a, button, input, textarea, select, [role="button"], [data-job-action-menu], [data-popover]')) return;
         evt.preventDefault();
-        toggleJobRow(row);
+        jobsTableController.toggle(row);
       }
 
       function handleRowKey(evt) {
         if (evt.target.closest('[data-job-row]') && (evt.key === 'Enter' || evt.key === ' ')) {
+          if (evt.target.closest('a, button, input, textarea, select, [role="button"], [data-job-action-menu], [data-popover]')) return;
           evt.preventDefault();
-          toggleJobRow(evt.target.closest('[data-job-row]'));
+          jobsTableController.toggle(evt.target.closest('[data-job-row]'));
         }
       }
 
@@ -1004,30 +995,12 @@
 
       async function expandJobRow(jobId) {
         if (!jobId) return false;
-        const row = document.querySelector(`[data-job="${jobId}"]`);
-        const detailRow = document.querySelector(`[data-job-detail="${jobId}"]`);
-        if (!row || !detailRow) {
-          return false;
-        }
-        if (!detailRow.classList.contains('hidden')) {
-          row.focus({ preventScroll: true });
-          ensureElementVisible(detailRow, 'nearest');
-          return true;
-        }
-        document.querySelectorAll('[data-job-row]').forEach((other) => {
-          if (other !== row) {
-            const otherDetail = document.querySelector(`[data-job-detail="${other.dataset.job}"]`);
-            if (otherDetail) otherDetail.classList.add('hidden');
-            other.setAttribute('aria-expanded', 'false');
-            other.classList.remove('bg-white/10');
-          }
-        });
-        await loadJobDetail(jobId);
-        detailRow.classList.remove('hidden');
-        row.setAttribute('aria-expanded', 'true');
-        row.classList.add('bg-white/10');
+        const row = caseView.querySelector(`[data-job="${jobId}"]`);
+        if (!row) return false;
+        await jobsTableController.expand(row);
         row.focus({ preventScroll: true });
-        requestAnimationFrame(() => ensureElementVisible(detailRow, 'nearest'));
+        const detailRow = caseView.querySelector(`[data-job-detail="${jobId}"]`);
+        requestAnimationFrame(() => ensureElementVisible(detailRow || row, 'nearest'));
         return true;
       }
 
@@ -1113,11 +1086,12 @@
         const card = evt.target.closest('[data-job-row]');
         if (card && evt.target.closest('button, a, input, textarea, select, [data-job-action-menu], [data-action-menu]') == null) {
           evt.preventDefault();
-          toggleJobRow(card);
+          jobsTableController.toggle(card);
         }
       });
 
       document.body.addEventListener('keydown', handleRowKey);
+      document.body.addEventListener('click', handleRowClick);
       document.body.addEventListener('click', handleJobAction);
       document.body.addEventListener('click', handleVerifyHash);
       document.body.addEventListener('click', handleAudioRefresh);

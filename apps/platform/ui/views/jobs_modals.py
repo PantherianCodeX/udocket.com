@@ -52,7 +52,8 @@ def case_job_transcript(request: HttpRequest, case_id: str, job_id: UUID) -> Htt
     download_url: Optional[str] = None
     artifacts = telemetry.get("artifacts") or []
     for art in artifacts:
-        if (art.get("type") or "").upper() == "TRANSCRIPT" and art.get("download_url"):
+        artifact_type = (art.get("type") or "").upper()
+        if artifact_type == "TRANSCRIPT" and art.get("download_url"):
             download_url = art.get("download_url")
             break
 

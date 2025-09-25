@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from uuid import UUID
 from typing import Any, Dict, List, Optional
 
 from django.core.exceptions import PermissionDenied
@@ -103,7 +104,7 @@ def jobs(request: HttpRequest) -> HttpResponse:
 
 
 @require_http_methods(["GET"])
-def job_detail_panel(request: HttpRequest, job_id: str) -> HttpResponse:
+def job_detail_panel(request: HttpRequest, job_id: UUID) -> HttpResponse:
     try:
         auth_response = ensure_authenticated(request)
         if auth_response:
@@ -136,7 +137,7 @@ def job_detail_panel(request: HttpRequest, job_id: str) -> HttpResponse:
 
 
 @require_http_methods(["GET"])
-def case_job_detail_panel(request: HttpRequest, case_id: str, job_id: str) -> HttpResponse:
+def case_job_detail_panel(request: HttpRequest, case_id: str, job_id: UUID) -> HttpResponse:
     try:
         auth_response = ensure_authenticated(request)
         if auth_response:

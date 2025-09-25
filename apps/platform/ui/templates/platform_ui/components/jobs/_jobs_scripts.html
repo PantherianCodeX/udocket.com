@@ -1,6 +1,33 @@
+{% load static %}
+<script src="{% static 'platform_ui/js/jobs_table.js' %}"></script>
 <script>
   window.jobPollers = window.jobPollers || {};
   window.jobSockets = window.jobSockets || {};
+
+  const jobsTableController = window.udocketJobsTable.init({
+    root: document,
+    loadDetail: async (jobId, container) => {
+      const resp = await fetch(`/jobs/${jobId}/detail-panel/`, {
+        headers: { 'HX-Request': 'true' },
+        credentials: 'same-origin',
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const html = await resp.text();
+      container.innerHTML = html;
+    },
+    detailRowSelector: (jobId) => `[data-job-detail="${jobId}"]`,
+    detailContainerSelector: (jobId) => `[data-job-detail-container="${jobId}"]`,
+    onCollapse: (row) => {
+      if (!row) return;
+      const chevron = row.querySelector('[data-job-chevron]');
+      if (chevron) chevron.classList.remove('rotate-90');
+    },
+    onAfterExpand: (row) => {
+      if (!row) return;
+      const chevron = row.querySelector('[data-job-chevron]');
+      if (chevron) chevron.classList.add('rotate-90');
+    },
+  });
 
   const statusUtils = window.udocketStatus || {};
   const renderStatusLabel = statusUtils.renderStatusLabel || (() => {});
@@ -77,18 +104,6 @@
   }
 
   function bootstrapJobs() {
-    document.querySelectorAll('[data-job-detail]').forEach((detail) => {
-      const jobId = detail.getAttribute('data-job-detail');
-      const row = jobId ? document.querySelector(`[data-job="${jobId}"]`) : null;
-      if (row && row.getAttribute('aria-expanded') === 'true') {
-        detail.classList.remove('hidden');
-        detail.style.display = 'table-row';
-      } else {
-        detail.classList.add('hidden');
-        detail.style.display = 'none';
-      }
-    });
-
     document.querySelectorAll('[data-job]').forEach(row => {
       const jobId = row.dataset.job;
       if (!row.dataset.ws) {
@@ -107,7 +122,10 @@
 
   window.addEventListener('DOMContentLoaded', bootstrapJobs);
 
-  document.addEventListener('htmx:afterSwap', bootstrapJobs);
+  document.addEventListener('htmx:afterSwap', () => {
+    jobsTableController.collapseAll();
+    bootstrapJobs();
+  });
 
   const closeJobMenus = () => {
     document.querySelectorAll('[data-job-action-menu][open]').forEach(menu => menu.removeAttribute('open'));
@@ -129,91 +147,6 @@
 
   document.addEventListener('keydown', (evt) => {
     if (evt.key === 'Escape') closeJobMenus();
-  });
-
-  async function loadJobDetail(jobId) {
-    const container = document.querySelector(`[data-job-detail-container="${jobId}"]`);
-    if (!container || container.dataset.loading === '1') return;
-    if (container.dataset.loaded === '1') return;
-    container.dataset.loading = '1';
-    container.innerHTML = '<div class="flex items-center gap-2 text-xs text-slate-300"><svg class="h-3 w-3 animate-spin text-primary-300" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle class="opacity-30" cx="12" cy="12" r="10" stroke-width="2"></circle><path d="M22 12a10 10 0 00-10-10" stroke-width="2" stroke-linecap="round"></path></svg><span>Loading…</span></div>';
-    try {
-      const resp = await fetch(`/jobs/${jobId}/detail-panel/`, { headers: { 'HX-Request': 'true' }, credentials: 'same-origin' });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const html = await resp.text();
-      container.innerHTML = html;
-      container.dataset.loaded = '1';
-    } catch (error) {
-      container.innerHTML = '<div class="text-xs text-rose-300">Unable to load job detail.</div>';
-    } finally {
-      delete container.dataset.loading;
-    }
-  }
-
-  function getDetailRow(jobId) {
-    return document.querySelector(`[data-job-detail="${jobId}"]`);
-  }
-
-  function collapseRow(row) {
-    const jobId = row.dataset.job;
-    const detailRow = getDetailRow(jobId);
-    if (detailRow) {
-      detailRow.classList.add('hidden');
-      detailRow.style.display = 'none';
-    }
-    row.setAttribute('aria-expanded', 'false');
-    const chevron = row.querySelector('[data-job-chevron]');
-    if (chevron) chevron.classList.remove('rotate-90');
-  }
-
-  function collapseAllExcept(activeRow) {
-    document.querySelectorAll('[data-job-row][aria-expanded="true"]').forEach((row) => {
-      if (row !== activeRow) {
-        collapseRow(row);
-      }
-    });
-  }
-
-  function expandRow(row) {
-    const jobId = row.dataset.job;
-    const detailRow = getDetailRow(jobId);
-    if (!detailRow) return;
-    collapseAllExcept(row);
-    loadJobDetail(jobId).then(() => {
-      detailRow.classList.remove('hidden');
-      detailRow.style.display = 'table-row';
-      row.setAttribute('aria-expanded', 'true');
-      const chevron = row.querySelector('[data-job-chevron]');
-      if (chevron) chevron.classList.add('rotate-90');
-    });
-  }
-
-  function toggleRow(row) {
-    if (!row || !row.dataset.job) return;
-    const expanded = row.getAttribute('aria-expanded') === 'true';
-    if (expanded) {
-      collapseRow(row);
-    } else {
-      expandRow(row);
-    }
-  }
-
-  document.addEventListener('click', (evt) => {
-    const row = evt.target.closest('[data-job-row]');
-    if (!row) return;
-    if (evt.target.closest('a, button, [role="button"], [data-job-action-menu]')) return;
-    evt.preventDefault();
-    toggleRow(row);
-  });
-
-  document.addEventListener('keydown', (evt) => {
-    if ((evt.key === 'Enter' || evt.key === ' ') && evt.target.closest('[data-job-row]')) {
-      const row = evt.target.closest('[data-job-row]');
-      if (!row) return;
-      if (evt.target.closest('a, button, [role="button"], [data-job-action-menu]')) return;
-      evt.preventDefault();
-      toggleRow(row);
-    }
   });
 
   // Proactively close the job action popover after any selection
