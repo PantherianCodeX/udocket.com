@@ -24,19 +24,20 @@ def _ensure_ffmpeg() -> None:
 def _require_azure() -> None:
     # Gate on env flag so these don't run in normal suite
     if os.getenv("E2E_TRANSCRIBE") != "1":
-        pytest.skip("Set E2E_TRANSCRIBE=1 to run end-to-end Azure STT tests")
-
-    try:
-        __import__("azure.cognitiveservices.speech")
-    except Exception:
-        pytest.skip("azure-cognitiveservices-speech is not installed in the test environment")
-
+        pytest.skip("Set E2E_TRANSCRIBE=1 to run end-to-end Azure tests")
     key = os.getenv("AZURE_SPEECH_KEY") or os.getenv("SPEECH_KEY")
     if not (key and key.strip()):
         pytest.skip("AZURE_SPEECH_KEY missing; cannot run Azure STT e2e test")
     region = (os.getenv("AZURE_SPEECH_REGION") or os.getenv("SPEECH_REGION") or "canadacentral").strip().lower()
     if region not in {"canadacentral", "canadaeast"}:
         pytest.skip("Azure region must be canadacentral/canadaeast for e2e tests")
+
+
+def _require_on_demand_sdk() -> None:
+    try:
+        __import__("azure.cognitiveservices.speech")
+    except Exception:
+        pytest.skip("azure-cognitiveservices-speech is not installed; skipping on-demand SDK e2e")
 
 
 def _fixtures_dir() -> Path:
@@ -52,6 +53,15 @@ def _make_test_variants() -> dict[str, Path]:
         "ogg_bad": root / "speech_en_hello_48k_mono.ogg",
         "flac_bad": root / "speech_en_hello_16k_mono.flac",
         "wav_bad": root / "speech_en_hello_48k_stereo.wav",
+    }
+
+
+def _dialogue_variants() -> dict[str, Path]:
+    root = _fixtures_dir()
+    return {
+        "wav_ok": root / "dialogue_en_two_speakers_16k_mono.wav",
+        "m4a_bad": root / "dialogue_en_two_speakers_44k1_stereo.m4a",
+        "mp3_bad": root / "dialogue_en_two_speakers_48k_stereo.mp3",
     }
 
 
@@ -93,6 +103,7 @@ def test_audio_normalization_exercises_conversion(tmp_path):
 @pytest.mark.django_db
 def test_transcription_agent_on_demand_e2e(tmp_path):
     _require_azure()
+    _require_on_demand_sdk()
     _ensure_ffmpeg()
     variants = _make_test_variants()
 
@@ -172,3 +183,98 @@ def test_transcribe_task_on_demand_e2e(tmp_path, settings):
     assert job.status == Job.Status.SUCCEEDED
     assert job.transcript_path
     assert Path(job.transcript_path).exists()
+
+
+@pytest.mark.django_db
+def test_transcribe_task_batch_diarization_e2e(tmp_path, settings):
+    _require_azure()
+    # Blob requirements for batch mode
+    try:
+        __import__("azure.storage.blob")
+    except Exception:
+        pytest.skip("azure-storage-blob not installed; skipping batch e2e")
+    from django.conf import settings as dj
+    if not (
+        getattr(dj, "AZURE_BLOB_CONTAINER", None)
+        and (getattr(dj, "AZURE_BLOB_CONNECTION_STRING", None) or (
+            getattr(dj, "AZURE_BLOB_ACCOUNT", None) and getattr(dj, "AZURE_BLOB_KEY", None)
+        ))
+    ):
+        pytest.skip("AZURE_BLOB_* not configured; skipping batch e2e")
+
+    settings.PLATFORM_DEV_OPEN = True
+    settings.STORAGE_ROOT = str(tmp_path / "storage")
+
+    from apps.platform.accounts.models import Organization
+    from apps.platform.cases.models import Case
+    from apps.platform.jobs.models import Job
+    from apps.platform.operations import tasks as op_tasks
+
+    org = Organization.objects.create(id="ORG-E2E-BATCH", name="E2E Org Batch")
+    case = Case.objects.create(id="CASE-E2E-BATCH", title="E2E Batch Diarization", organization=org)
+
+    variants = _dialogue_variants()
+    src_wav = variants["wav_ok"]
+    case_audio_dir = Path(settings.STORAGE_ROOT) / "media" / "cases" / str(case.id) / "audio"
+    case_audio_dir.mkdir(parents=True, exist_ok=True)
+    audio_path = case_audio_dir / f"{'JOB-BATCH-DIAR'}__dialogue.wav"
+    shutil.copy2(src_wav, audio_path)
+
+    job = Job.objects.create(case=case, organization=org, audio_input=str(audio_path), mode=Job.Mode.BATCH, diarization=True, language="en-CA")
+    result = op_tasks.transcribe_job.run(None, case_id=str(case.id), job_id=str(job.id), audio_input=str(audio_path), mode=Job.Mode.BATCH, diarization=True)
+    assert result["status"] == "SUCCEEDED"
+    job.refresh_from_db()
+    assert job.status == Job.Status.SUCCEEDED
+    assert job.transcript_path and Path(job.transcript_path).exists()
+    # Transcript should include diarization speaker tags
+    ttext = Path(job.transcript_path).read_text(encoding="utf-8", errors="ignore")
+    assert "SPK_" in ttext
+
+
+@pytest.mark.django_db
+def test_transcribe_task_batch_convert_and_diarize_e2e(tmp_path, settings):
+    _require_azure()
+    try:
+        __import__("azure.storage.blob")
+    except Exception:
+        pytest.skip("azure-storage-blob not installed; skipping batch e2e")
+    from django.conf import settings as dj
+    if not (
+        getattr(dj, "AZURE_BLOB_CONTAINER", None)
+        and (getattr(dj, "AZURE_BLOB_CONNECTION_STRING", None) or (
+            getattr(dj, "AZURE_BLOB_ACCOUNT", None) and getattr(dj, "AZURE_BLOB_KEY", None)
+        ))
+    ):
+        pytest.skip("AZURE_BLOB_* not configured; skipping batch e2e")
+
+    settings.PLATFORM_DEV_OPEN = True
+    settings.STORAGE_ROOT = str(tmp_path / "storage")
+
+    from apps.platform.accounts.models import Organization
+    from apps.platform.cases.models import Case
+    from apps.platform.jobs.models import Job
+    from apps.platform.operations import tasks as op_tasks
+    from apps.platform.operations.storage import ops_dir
+
+    org = Organization.objects.create(id="ORG-E2E-BATCH2", name="E2E Org Batch 2")
+    case = Case.objects.create(id="CASE-E2E-BATCH2", title="E2E Batch Convert+Diarize", organization=org)
+
+    variants = _dialogue_variants()
+    src_bad = variants["m4a_bad"]
+    case_audio_dir = Path(settings.STORAGE_ROOT) / "media" / "cases" / str(case.id) / "audio"
+    case_audio_dir.mkdir(parents=True, exist_ok=True)
+    audio_path = case_audio_dir / f"{'JOB-BATCH-CONV'}__dialogue.m4a"
+    shutil.copy2(src_bad, audio_path)
+
+    job = Job.objects.create(case=case, organization=org, audio_input=str(audio_path), mode=Job.Mode.BATCH, diarization=True, language="en-CA")
+    result = op_tasks.transcribe_job.run(None, case_id=str(case.id), job_id=str(job.id), audio_input=str(audio_path), mode=Job.Mode.BATCH, diarization=True, force_wav_conversion=False)
+    assert result["status"] == "SUCCEEDED"
+    job.refresh_from_db()
+    assert job.status == Job.Status.SUCCEEDED
+    assert job.transcript_path and Path(job.transcript_path).exists()
+    # Per-job ops meta should record conversion details and diarization
+    meta_path = ops_dir(str(case.id), job.organization_id) / f"{job.id}_transcription_log.json"
+    if meta_path.exists():
+        payload = meta_path.read_text(encoding="utf-8", errors="ignore")
+        assert "converted_audio_file" in payload or "batch_upload_converted\": true" in payload
+        assert "\"diarization_enabled\": true" in payload

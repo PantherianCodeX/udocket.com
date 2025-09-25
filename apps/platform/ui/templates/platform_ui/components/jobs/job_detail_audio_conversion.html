@@ -25,19 +25,79 @@
         </div>
       </div>
     </div>
-    <div class="flex flex-col items-end gap-2 sm:flex-row sm:items-start sm:justify-end">
-      {% if audio_meta.path or metadata_map.converted_audio_job_id or metadata_map.converted_wav_path %}
-        <a class="inline-flex items-center gap-2 rounded-lg border border-primary-400/40 bg-primary-500/10 px-3 py-1.5 text-xs font-semibold text-primary-100 transition hover:bg-primary-500/25"
-           href="{% url 'job-download-audio' job.id %}?converted=1" download>
-          Download audio
-        </a>
-      {% elif source_audio.path %}
-        <a class="inline-flex items-center gap-2 rounded-lg border border-primary-400/40 bg-primary-500/10 px-3 py-1.5 text-xs font-semibold text-primary-100 transition hover:bg-primary-500/25"
-           href="{% url 'job-download-audio' job.id %}" download>
-          Download audio
-        </a>
+    <div class="flex w-full max-w-sm flex-col items-end gap-3 text-right sm:max-w-xs">
+      <div class="flex flex-wrap justify-end gap-2">
+        {% if audio_meta.path or metadata_map.converted_audio_job_id or metadata_map.converted_wav_path %}
+          <a class="inline-flex items-center gap-2 rounded-lg border border-primary-400/40 bg-primary-500/10 px-3 py-1.5 text-xs font-semibold text-primary-100 transition hover:bg-primary-500/25"
+             href="{% url 'job-download-audio' job.id %}?converted=1" download>
+            Download audio
+          </a>
+        {% elif source_audio.path %}
+          <a class="inline-flex items-center gap-2 rounded-lg border border-primary-400/40 bg-primary-500/10 px-3 py-1.5 text-xs font-semibold text-primary-100 transition hover:bg-primary-500/25"
+             href="{% url 'job-download-audio' job.id %}" download>
+            Download audio
+          </a>
+        {% endif %}
+      </div>
+      {% if user_can_review and telemetry.status == 'SUCCEEDED' %}
+        <div class="flex flex-wrap justify-end gap-2">
+          <button type="button" class="inline-flex items-center rounded border border-emerald-400/40 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-500/25 disabled:opacity-60" data-job-approve="{{ job.id }}"{% if telemetry.review_status == 'APPROVED' %} disabled{% endif %}>Approve</button>
+          <button type="button" class="inline-flex items-center rounded border border-rose-400/40 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-100 transition hover:bg-rose-500/25 disabled:opacity-60" data-job-reject="{{ job.id }}"{% if telemetry.review_status == 'REJECTED' %} disabled{% endif %}>Reject</button>
+        </div>
+      {% endif %}
+      <div class="w-full space-y-1 text-xs text-slate-300" data-review-summary>
+        <div class="flex items-center justify-between gap-2">
+          <span class="uppercase tracking-wide text-slate-400">Review Notes</span>
+          <span class="inline-flex items-center rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-200" data-review-status-text>
+            {% if telemetry.review_status == 'APPROVED' %}Approved{% elif telemetry.review_status == 'REJECTED' %}Rejected{% else %}Pending{% endif %}
+          </span>
+        </div>
+        <p class="text-sm text-slate-100" data-review-comment>
+          {% if telemetry.review_comment %}{{ telemetry.review_comment }}{% else %}No review notes yet.{% endif %}
+        </p>
+        <p class="text-[11px] text-slate-500" data-review-meta>
+          {% if telemetry.reviewed_by %}
+            Reviewed by <span class="font-semibold text-slate-100">{{ telemetry.reviewed_by.label }}</span>{% if telemetry.reviewed_at %} · <time data-ts="{{ telemetry.reviewed_at|date:'c' }}" data-ts-format="datetime">{{ telemetry.reviewed_at|date:'M d, Y h:i A' }}</time>{% endif %}
+          {% else %}
+            Awaiting reviewer decision.
+          {% endif %}
+        </p>
+      </div>
+      <button type="button"
+              class="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-primary-400 hover:text-white"
+              data-job-action
+              data-job-action-kind="modal"
+              data-job-action="view-metadata"
+              data-job-id="{{ job.id }}"
+              data-case-id="{{ case.id }}">
+        More details
+      </button>
+    </div>
+  </div>
+
+  <div class="rounded-lg border border-white/10 bg-slate-900/60 p-4" data-job-notes data-job-id="{{ job.id }}">
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <p class="text-xs uppercase tracking-wide text-slate-400">Team Notes</p>
+        <p class="mt-1 text-[11px] text-slate-400" data-job-notes-meta>
+          {% if notes_updated_at %}
+            Updated <time data-ts="{{ notes_updated_at }}" data-ts-format="datetime">{{ notes_updated_at }}</time>
+            {% if notes_updated_by %} · <span class="font-semibold text-slate-200">{{ notes_updated_by }}</span>{% endif %}
+          {% else %}
+            Not saved yet.
+          {% endif %}
+        </p>
+      </div>
+      {% if user_can_review %}
+        <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-primary-400/40 bg-primary-500/10 px-3 py-1.5 text-xs font-semibold text-primary-100 transition hover:bg-primary-500/25" data-job-notes-save data-job-id="{{ job.id }}">
+          Save notes
+        </button>
       {% endif %}
     </div>
+    <textarea class="mt-3 w-full rounded-md border border-white/10 bg-slate-950/20 p-3 text-sm text-slate-100 focus:border-primary-400 focus:outline-none focus:ring-0" rows="4" placeholder="Add context for your team…" data-job-notes-input{% if not user_can_review %} readonly{% endif %}>{{ notes_text }}</textarea>
+    {% if not user_can_review %}
+      <p class="mt-2 text-[11px] text-slate-500">Read-only: you do not have permission to update notes.</p>
+    {% endif %}
   </div>
 
   <div class="grid gap-4 md:grid-cols-2">
@@ -50,48 +110,14 @@
           </button>
         {% endwith %}
       </div>
-      <dl class="mt-3 grid gap-x-4 gap-y-2 text-xs text-slate-300 sm:grid-cols-2" data-audio-panel="source" data-job-id="{{ job.id }}">
+      <dl class="mt-3 grid gap-x-4 gap-y-2 text-xs text-slate-300" data-audio-panel="source" data-job-id="{{ job.id }}">
         <div>
-          <dt class="text-slate-400">File name</dt>
+          <dt class="text-slate-400">Original name</dt>
           <dd class="mt-1 text-slate-100"><span data-audio-field="original_name">{% if source.original_name %}{{ source.original_name }}{% else %}—{% endif %}</span></dd>
         </div>
         <div>
           <dt class="text-slate-400">Duration</dt>
           <dd class="mt-1 text-slate-100"><span data-audio-field="duration">{% if source.duration_s %}{{ source.duration_s|floatformat:1 }} s{% else %}—{% endif %}</span></dd>
-        </div>
-        <div>
-          <dt class="text-slate-400">Channels</dt>
-          <dd class="mt-1 text-slate-100"><span data-audio-field="channels">{% if source.channels is not None %}{{ source.channels }}{% else %}—{% endif %}</span></dd>
-        </div>
-        <div>
-          <dt class="text-slate-400">Sample rate</dt>
-          <dd class="mt-1 text-slate-100"><span data-audio-field="sample_rate">{% if source.sample_rate_hz %}{{ source.sample_rate_hz }} Hz{% else %}—{% endif %}</span></dd>
-        </div>
-        <div>
-          <dt class="text-slate-400">Bitrate</dt>
-          <dd class="mt-1 text-slate-100"><span data-audio-field="bitrate">{% if source.bitrate_kbps %}{{ source.bitrate_kbps }} kbps{% else %}—{% endif %}</span></dd>
-        </div>
-        <div>
-          <dt class="text-slate-400">Codec</dt>
-          <dd class="mt-1 text-slate-100"><span data-audio-field="codec">{% if source.codec %}{{ source.codec }}{% else %}—{% endif %}</span></dd>
-        </div>
-        <div>
-          <dt class="text-slate-400">Layout</dt>
-          <dd class="mt-1 text-slate-100"><span data-audio-field="layout">{% if source.channel_layout %}{{ source.channel_layout }}{% else %}—{% endif %}</span></dd>
-        </div>
-        <div>
-          <dt class="text-slate-400">MIME</dt>
-          <dd class="mt-1 text-slate-100"><span data-audio-field="mime">{% if source.mime %}{{ source.mime }}{% else %}—{% endif %}</span></dd>
-        </div>
-        <div class="sm:col-span-2">
-          <dt class="text-slate-400">Path</dt>
-          <dd class="mt-1">
-            {% if source.path %}
-              <span class="clip-inline font-mono text-[11px] text-primary-100" data-copy-text="{{ source.path }}" data-audio-field="path" title="{{ source.path }}">{{ source.path|truncate_middle:"28,16" }}</span>
-            {% else %}
-              <span data-audio-field="path">—</span>
-            {% endif %}
-          </dd>
         </div>
         <div>
           <dt class="text-slate-400">Size</dt>
