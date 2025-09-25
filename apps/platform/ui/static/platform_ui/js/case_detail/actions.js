@@ -183,6 +183,20 @@
       }
       return;
     }
+    // Nudge modal into view in cases where host disables scroll
+    try {
+      const modalEl = (modal.querySelector && modal.querySelector('[data-modal]')) || modal;
+      if (modalEl && modalEl.scrollIntoView) {
+        // Give the DOM a tick to attach before scrolling
+        setTimeout(() => {
+          try {
+            modalEl.setAttribute && modalEl.setAttribute('tabindex', '-1');
+            modalEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
+            modalEl.focus && modalEl.focus({ preventScroll: true });
+          } catch (_) {}
+        }, 0);
+      }
+    } catch (_) {}
     const form = modal.querySelector('[data-llm-form]');
     if (!form) return;
     const saveButton = form.querySelector('[data-llm-save]');
