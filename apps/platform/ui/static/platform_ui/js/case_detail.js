@@ -18,14 +18,17 @@
     const modalRoot = options.modalRoot || document.getElementById('modal-root');
 
     // Initialize shared jobs state namespace used across handlers in this view
-    global.JobsState = global.JobsState || {
-      currentCaseId: caseId,
-      pollers: {},
-      sockets: {},
-      lastStatus: {},
-      refreshTranscribeScheduled: false,
-    };
-    const JobsState = global.JobsState;
+    const jobsState =
+      (namespace.state =
+        namespace.state ||
+        global.JobsState || {
+          currentCaseId: caseId,
+          pollers: {},
+          sockets: {},
+          lastStatus: {},
+          refreshTranscribeScheduled: false,
+        });
+    global.JobsState = jobsState;
     
       const JOB_DETAIL_LOADING = '<div class="flex items-center gap-2 text-xs text-slate-300"><svg class="h-3 w-3 animate-spin text-primary-300" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle class="opacity-30" cx="12" cy="12" r="10" stroke-width="2"></circle><path d="M22 12a10 10 0 00-10-10" stroke-width="2" stroke-linecap="round"></path></svg><span>Loading…</span></div>';
       const JOB_DETAIL_ERROR = '<div class="text-xs text-rose-300">Unable to load job detail.</div>';
@@ -58,7 +61,7 @@
         },
       });
     
-      JobsState.table = jobsTableController;
+      jobsState.table = jobsTableController;
     
       const statusUtils = window.udocketStatus || {};
       const renderStatusLabel = statusUtils.renderStatusLabel || (() => {});
@@ -157,12 +160,12 @@
     
     
       function scheduleTranscribeRefresh() {
-        if (!JobsState.currentCaseId) return;
-        if (JobsState.refreshTranscribeScheduled) return;
-        JobsState.refreshTranscribeScheduled = true;
+        if (!jobsState.currentCaseId) return;
+        if (jobsState.refreshTranscribeScheduled) return;
+        jobsState.refreshTranscribeScheduled = true;
         setTimeout(() => {
-          JobsState.refreshTranscribeScheduled = false;
-          const url = `/cases/${JobsState.currentCaseId}/tools/transcribe/`;
+          jobsState.refreshTranscribeScheduled = false;
+          const url = `/cases/${jobsState.currentCaseId}/tools/transcribe/`;
           if (typeof window.htmx !== 'undefined' && window.htmx.ajax) {
             window.htmx.ajax('GET', url, '#tool-workspace');
             return;
@@ -260,8 +263,8 @@
           return;
         }
         if (evt.target === workspace) {
-          if (JobsState.table && typeof JobsState.table.collapseAll === 'function') {
-            JobsState.table.collapseAll();
+          if (jobsState.table && typeof jobsState.table.collapseAll === 'function') {
+            jobsState.table.collapseAll();
           }
           boostJobs();
         }
@@ -298,13 +301,13 @@
       });
     
       function ensurePolling(jobId) {
-        if (JobsState.pollers[jobId]) return;
+        if (jobsState.pollers[jobId]) return;
         const statusEl = document.getElementById(`job-status-${jobId}`);
         const normalized = statusEl && statusEl.dataset ? statusEl.dataset.status : '';
         if (TERMINAL_STATUSES.includes(normalizeStatus(normalized))) {
           return;
         }
-        JobsState.pollers[jobId] = setInterval(() => pollJob(jobId), 3000);
+        jobsState.pollers[jobId] = setInterval(() => pollJob(jobId), 3000);
       }
     
       async function pollJob(jobId) {
@@ -314,9 +317,9 @@
           const data = await resp.json();
           handleJobUpdate(jobId, data, 'poll');
           const normalized = normalizeStatus(data.status);
-          if (TERMINAL_STATUSES.includes(normalized) && JobsState.pollers[jobId]) {
-            clearInterval(JobsState.pollers[jobId]);
-            delete JobsState.pollers[jobId];
+          if (TERMINAL_STATUSES.includes(normalized) && jobsState.pollers[jobId]) {
+            clearInterval(jobsState.pollers[jobId]);
+            delete jobsState.pollers[jobId];
           }
         } catch (error) {
           console.warn('Job poll failed', jobId, error);
@@ -327,25 +330,25 @@
         const status = normalizeStatus(payload.status || payload.event || '');
         const progressValue = payload.upload_progress ?? payload.progress_percent ?? (typeof payload.progress === 'number' ? payload.progress * (payload.progress <= 1 ? 100 : 1) : null);
         updateStatusDisplays(jobId, status, progressValue);
-        JobsState.lastStatus[jobId] = status;
+        jobsState.lastStatus[jobId] = status;
         if (payload && (payload.converted_audio_job_id || (payload.event && String(payload.event).toLowerCase() === 'job.created' && (payload.job_kind === 'audio_conversion' || payload.agent_type === 'Audio Conversion')))) {
           scheduleTranscribeRefresh();
         }
-        if (status && TERMINAL_STATUSES.includes(status) && JobsState.pollers[jobId]) {
-          clearInterval(JobsState.pollers[jobId]);
-          delete JobsState.pollers[jobId];
+        if (status && TERMINAL_STATUSES.includes(status) && jobsState.pollers[jobId]) {
+          clearInterval(jobsState.pollers[jobId]);
+          delete jobsState.pollers[jobId];
         }
       }
     
       function connectSocket(jobId) {
-        if (JobsState.sockets[jobId]) return;
+        if (jobsState.sockets[jobId]) return;
         const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + `/ws/jobs/${jobId}/`;
         const ws = new WebSocket(url);
-        JobsState.sockets[jobId] = ws;
+        jobsState.sockets[jobId] = ws;
         ws.onopen = () => {
-          if (JobsState.pollers[jobId]) {
-            clearInterval(JobsState.pollers[jobId]);
-            delete JobsState.pollers[jobId];
+          if (jobsState.pollers[jobId]) {
+            clearInterval(jobsState.pollers[jobId]);
+            delete jobsState.pollers[jobId];
           }
         };
         ws.onmessage = (ev) => {
@@ -360,7 +363,7 @@
           console.warn('Job websocket error', jobId, err);
         };
         ws.onclose = () => {
-          delete JobsState.sockets[jobId];
+          delete jobsState.sockets[jobId];
           ensurePolling(jobId);
         };
       }
@@ -405,14 +408,14 @@
     
         if (kind === 'modal') {
           if (action === 'view-log') {
-            const caseValue = control.getAttribute('data-case-id') || JobsState.currentCaseId;
+            const caseValue = control.getAttribute('data-case-id') || jobsState.currentCaseId;
             if (jobId && caseValue) {
               await openJobLogModal(caseValue, jobId);
             }
           } else if (action === 'view-transcript') {
             if (jobId) await openTranscriptModal(jobId);
           } else if (action === 'view-metadata') {
-            const caseValue = control.getAttribute('data-case-id') || JobsState.currentCaseId;
+            const caseValue = control.getAttribute('data-case-id') || jobsState.currentCaseId;
             if (jobId && caseValue) {
               await openJobMetadataModal(caseValue, jobId);
             }
@@ -1109,7 +1112,7 @@
         if (!trigger) return;
         evt.preventDefault();
         const jobId = trigger.getAttribute('data-job-id');
-        const caseValue = trigger.getAttribute('data-case-id') || JobsState.currentCaseId;
+        const caseValue = trigger.getAttribute('data-case-id') || jobsState.currentCaseId;
         if (jobId && caseValue) {
           await openJobLogModal(caseValue, jobId);
         }
@@ -1189,9 +1192,9 @@
         }
       });
     
-      window.udocketCaseJobs = function(caseIdParam) {
+      const refreshCaseJobs = function (caseIdParam) {
         if (caseIdParam) {
-          JobsState.currentCaseId = caseIdParam;
+          jobsState.currentCaseId = caseIdParam;
         }
         const root = document.querySelector('#tool-workspace');
         if (!root) return;
@@ -1211,8 +1214,8 @@
           }
         });
         const caseAttr = jobsBody.dataset.caseId;
-        if (caseAttr && caseAttr !== JobsState.currentCaseId) {
-          JobsState.currentCaseId = caseAttr;
+        if (caseAttr && caseAttr !== jobsState.currentCaseId) {
+          jobsState.currentCaseId = caseAttr;
         }
         jobsBody.querySelectorAll('[data-job]').forEach((row) => {
           const jobId = row.dataset.job;
@@ -1231,12 +1234,13 @@
         });
       };
 
-      namespace.caseJobs = window.udocketCaseJobs;
+      namespace.refresh = refreshCaseJobs;
+      if (!global.udocketCaseJobs) {
+        global.udocketCaseJobs = refreshCaseJobs;
+      }
 
       function boostJobs() {
-        if (typeof window.udocketCaseJobs === 'function') {
-          window.udocketCaseJobs(caseId);
-        }
+        refreshCaseJobs(caseId);
       }
 
       namespace.boost = boostJobs;

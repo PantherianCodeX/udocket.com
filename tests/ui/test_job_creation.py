@@ -13,7 +13,7 @@ from django.test import Client
 from apps.platform.accounts.models import Organization, User
 from apps.platform.cases.models import Case, CaseMembership
 from apps.platform.jobs.models import Job
-jobs_module = import_module("apps.platform.ui.views.jobs")
+jobs_module = import_module("apps.platform.ui.views.jobs_actions")
 
 
 def _wav_bytes() -> bytes:
