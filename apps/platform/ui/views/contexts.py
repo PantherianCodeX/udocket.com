@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Any, Dict, Iterable, Optional
+from typing import Any, Dict, Optional
 
 from django.conf import settings
 from django.core.exceptions import PermissionDenied
@@ -34,85 +34,26 @@ from .presenters.jobs import build_job_rows, friendly_job_title
 from .selectors import job_telemetry_map, job_telemetry_payload
 
 
-SECTION_PREFIXES: list[tuple[str, str]] = [
-    ("job_", "Job"),
-    ("review_", "Review"),
-    ("audio_", "Audio"),
-    ("source_", "Source Audio"),
-    ("transcript_", "Transcript"),
-    ("converted_", "Converted Audio"),
-    ("agent_", "Agent"),
-    ("azure_", "Azure"),
-    ("batch_", "Batch"),
-]
-
-
-def _format_metadata_value(value: Any) -> tuple[str, bool]:
-    if isinstance(value, (dict, list)):
-        display = json.dumps(value, ensure_ascii=False, indent=2)
-        return display, True
-    if value is None:
-        return "", False
-    if isinstance(value, float):
-        return f"{value}", False
-    return str(value), False
-
-
-def _metadata_section_for_key(key: str) -> tuple[str, str, str]:
-    lower_key = key.lower()
-    for prefix, label in SECTION_PREFIXES:
-        if lower_key.startswith(prefix):
-            trimmed = key[len(prefix) :]
-            return prefix, label, trimmed
-    return "", "Additional Metadata", key
-
-
-def _format_label(raw_key: str) -> str:
-    key = raw_key.replace("__", "_")
-    return key.replace("_", " ").strip().title() or raw_key
-
-
-def format_metadata(metadata: Dict[str, Any] | None, *, exclude: Iterable[str] | None = None) -> list[Dict[str, Any]]:
+def format_metadata(metadata: Dict[str, Any] | None) -> list[Dict[str, Any]]:
     if not metadata:
         return []
-    exclude_set = {key.lower() for key in (exclude or [])}
-    grouped: dict[str, dict[str, Any]] = {}
-    order: list[str] = []
+    items: list[dict[str, Any]] = []
     for key in sorted(metadata.keys()):
-        if key.lower() in exclude_set:
-            continue
-        prefix, section_label, label_key = _metadata_section_for_key(key)
-        section_id = section_label
-        if section_id not in grouped:
-            grouped[section_id] = {"title": section_label, "items": []}
-            order.append(section_id)
-        display, is_multiline = _format_metadata_value(metadata[key])
-        grouped[section_id]["items"].append(
+        value = metadata[key]
+        is_structured = isinstance(value, (dict, list))
+        if is_structured:
+            display = json.dumps(value, ensure_ascii=False, indent=2)
+        else:
+            display = "" if value is None else str(value)
+        items.append(
             {
                 "key": key,
-                "label": _format_label(label_key if prefix else key),
+                "label": key.replace("_", " ").title(),
                 "value": display,
-                "is_multiline": is_multiline or "\n" in display,
-                "copy_text": display,
+                "is_multiline": "\n" in display,
             }
         )
-
-    # Preserve declared prefix order first, then any additional sections alphabetically
-    ordered_sections: list[Dict[str, Any]] = []
-    seen = set()
-    for _, label in SECTION_PREFIXES:
-        if label in grouped:
-            section = grouped[label]
-            section["items"].sort(key=lambda item: item["label"])
-            ordered_sections.append(section)
-            seen.add(label)
-    for section_id in sorted(order):
-        if section_id in seen:
-            continue
-        section = grouped[section_id]
-        section["items"].sort(key=lambda item: item["label"])
-        ordered_sections.append(section)
-    return ordered_sections
+    return items
 
 
 def user_can_review_case(user: Optional[User], case: Case) -> bool:
@@ -245,16 +186,8 @@ def job_detail_context(
         .first()
     )
     job_title = friendly_job_title(job, telemetry, db_artifact)
-    raw_metadata_map = as_dict(telemetry.get("metadata"))
-    metadata_map: Dict[str, Any] = dict(raw_metadata_map)
-    notes_info = as_dict(metadata_map.get("ui_notes")) if isinstance(metadata_map.get("ui_notes"), dict) else {}
-    note_text = notes_info.get("text") if isinstance(notes_info.get("text"), str) else ""
-    note_updated_at = notes_info.get("updated_at") if isinstance(notes_info.get("updated_at"), str) else None
-    note_updated_by = notes_info.get("updated_by_label") or notes_info.get("updated_by")
-    if note_updated_by and not isinstance(note_updated_by, str):
-        note_updated_by = str(note_updated_by)
-    if "ui_notes" in metadata_map:
-        metadata_map.pop("ui_notes", None)
+    metadata_map = as_dict(telemetry.get("metadata"))
+    metadata_items = format_metadata(metadata_map)
     azure_cancel_status = metadata_map.get("azure_cancel_status")
     azure_cancel_body = metadata_map.get("azure_cancel_body")
 
@@ -308,106 +241,13 @@ def job_detail_context(
     is_sub_job = bool(telemetry_meta.get("source_job_id"))
     allow_title_edit = not (job_kind == "audio_conversion" or is_sub_job)
 
-    reviewer = getattr(job, "reviewed_by", None)
-    reviewer_label = None
-    if reviewer:
-        reviewer_label = (
-            getattr(reviewer, "display_name", None)
-            or reviewer.get_full_name()
-            or getattr(reviewer, "email", None)
-            or getattr(reviewer, "username", None)
-            or str(getattr(reviewer, "id", ""))
-        )
-
-    transcript_meta = as_dict(telemetry.get("transcript"))
-    agent_meta = as_dict(telemetry.get("agent"))
-
-    def iso_or_none(value: Optional[datetime]) -> Optional[str]:
-        return value.isoformat() if value else None
-
-    # Enrich metadata for modal presentation without mutating persisted values
-    metadata_enrichment: Dict[str, Any] = {
-        "job_id": str(job.id),
-        "job_case_id": str(job.case_id),
-        "job_status": job.status,
-        "job_mode": job.get_mode_display() if hasattr(job, "get_mode_display") else job.mode,
-        "job_language": telemetry.get("language"),
-        "job_diarization": "Enabled" if telemetry.get("diarization") else "Disabled",
-        "job_created_at": iso_or_none(job.created_at),
-        "job_started_at": iso_or_none(job.started_at),
-        "job_finished_at": iso_or_none(job.finished_at),
-        "review_status": job.review_status,
-        "review_comment": job.review_comment,
-        "reviewed_at": iso_or_none(job.reviewed_at),
-        "reviewed_by": reviewer_label,
-        "audio_original_name": audio_meta.get("original_name"),
-        "audio_path": audio_meta.get("path"),
-        "audio_duration_s": audio_meta.get("duration_s") or audio_meta.get("duration"),
-        "audio_channels": audio_meta.get("channels"),
-        "audio_sample_rate_hz": audio_meta.get("sample_rate_hz") or audio_meta.get("sample_rate"),
-        "audio_bitrate_kbps": audio_meta.get("bitrate_kbps") or audio_meta.get("bitrate"),
-        "audio_codec": audio_meta.get("codec"),
-        "audio_layout": audio_meta.get("channel_layout"),
-        "audio_mime": audio_meta.get("mime"),
-        "audio_sha256": audio_meta.get("sha256") or raw_metadata_map.get("audio_sha256"),
-        "audio_size_bytes": audio_meta.get("size_bytes_local")
-        or audio_meta.get("size_bytes_remote")
-        or raw_metadata_map.get("audio_size_bytes"),
-        "transcript_words": transcript_meta.get("words"),
-        "transcript_bytes": transcript_meta.get("bytes"),
-        "transcript_avg_confidence_pct": transcript_meta.get("avg_confidence_pct"),
-        "transcript_avg_confidence": transcript_meta.get("avg_confidence"),
-        "transcript_segments": transcript_meta.get("segments"),
-        "transcript_sha256": transcript_meta.get("sha256") or raw_metadata_map.get("transcript_sha256"),
-        "transcript_path": transcript_meta.get("path"),
-        "agent_region": agent_meta.get("region"),
-        "agent_attempts_used": agent_meta.get("attempts_used"),
-        "agent_diarization_speakers": agent_meta.get("diarization_speakers"),
-        "agent_timestamp_utc": agent_meta.get("timestamp_utc"),
-        "agent_azure_transcription_url": agent_meta.get("azure_transcription_url"),
-    }
-    for key, value in metadata_enrichment.items():
-        if value is not None and key not in metadata_map:
-            metadata_map[key] = value
-
-    metadata_sections = format_metadata(metadata_map, exclude={"ui_notes"})
-    if note_text or note_updated_at or note_updated_by:
-        updated_display = note_updated_by or ""
-        if note_updated_at:
-            updated_display = f"{(note_updated_by or 'Unknown').strip()} · {note_updated_at}" if updated_display else note_updated_at
-        elif note_updated_by:
-            updated_display = note_updated_by
-        metadata_sections.insert(
-            0,
-            {
-                "title": "Team Notes",
-                "items": [
-                    {
-                        "key": "ui_notes.text",
-                        "label": "Notes",
-                        "value": note_text,
-                        "copy_text": note_text,
-                        "is_multiline": True,
-                    },
-                    {
-                        "key": "ui_notes.updated",
-                        "label": "Updated",
-                        "value": updated_display,
-                        "copy_text": note_updated_at or updated_display,
-                        "is_multiline": False,
-                    },
-                ],
-            },
-        )
-
     return {
         "case": job.case,
         "job": job,
         "telemetry": telemetry,
         "artifact": artifact,
         "job_title": job_title,
-        "metadata_sections": metadata_sections,
-        "metadata_items": metadata_sections,
+        "metadata_items": metadata_items,
         "azure_cancel_status": azure_cancel_status,
         "azure_cancel_body": azure_cancel_body,
         "user_can_review": can_review,
@@ -419,9 +259,6 @@ def job_detail_context(
         "audio_meta": audio_meta,
         "source_audio": source_audio_meta or {},
         "allow_title_edit": allow_title_edit,
-        "notes_text": note_text,
-        "notes_updated_at": note_updated_at,
-        "notes_updated_by": note_updated_by,
     }
 
 

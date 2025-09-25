@@ -374,51 +374,6 @@ class JobViewSet(viewsets.ModelViewSet):
         )
         return Response(response_payload)
 
-    @action(detail=True, methods=["post"], url_path="notes")
-    def notes(self, request, pk=None):
-        job = self.get_object()
-        if not self._can_review(request, job):
-            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
-
-        user = getattr(request, "user", None)
-        raw_body = request.data if isinstance(request.data, dict) else {}
-        raw_notes = (raw_body.get("notes") or raw_body.get("text") or "") if raw_body else ""
-        note_text = str(raw_notes).strip()
-
-        timestamp = timezone.now().isoformat()
-        updated_by = None
-        if user and getattr(user, "is_authenticated", False):
-            updated_by = str(getattr(user, "id", ""))
-
-        note_payload = {
-            "text": note_text,
-            "updated_at": timestamp,
-            "updated_by": updated_by,
-            "updated_by_label": self._user_label(user) if user else "",
-        }
-
-        update_job_meta(
-            str(job.case_id),
-            getattr(job, "organization_id", None),
-            str(job.id),
-            {"ui_notes": note_payload},
-        )
-        append_job_log(
-            str(job.case_id),
-            getattr(job, "organization_id", None),
-            str(job.id),
-            "Team notes updated",
-        )
-
-        send_job_update(
-            str(job.id),
-            event="job.notes",
-            case_id=str(job.case_id),
-            notes=note_payload,
-        )
-
-        return Response({"status": "ok", "notes": note_payload})
-
     @action(detail=True, methods=["get"], url_path="detail", url_name="detail")
     def telemetry(self, request, pk=None):
         """Return enriched job telemetry mixing model fields and ops metadata."""
