@@ -7,19 +7,15 @@ from typing import Optional
 
 from django.conf import settings
 from django.http import HttpRequest, HttpResponse
-from django.shortcuts import render
 from django.views.decorators.http import require_http_methods
 
 from apps.platform.accounts.models import OrganizationMembership, User
 from apps.platform.authorization.capabilities import has_capability
 from apps.platform.cases.models import CaseMembership
-from apps.platform.jobs.models import Job
-from apps.platform.tenancy import scope_jobs
 
 from ..auth import ensure_authenticated
 from ..contexts import get_case_and_org
-from ..presenters.cases import case_progress_context
-from ..selectors import job_telemetry_map
+from .helpers import case_progress_response
 
 
 @require_http_methods(["POST"])
@@ -62,15 +58,7 @@ def case_assign_reviewer(request: HttpRequest, case_id: str) -> HttpResponse:
             case.reviewer = None
             case.save(update_fields=["reviewer", "updated_at"])
 
-    jobs_qs = (
-        Job.objects.select_related("case", "case__organization", "reviewed_by")
-        .filter(case=case)
-        .order_by("-created_at")
-    )
-    jobs_list = list(scope_jobs(jobs_qs, getattr(request, "user", None)))
-    telemetry_map = job_telemetry_map(jobs_list, request)
-    context = {"case": case, **case_progress_context(case, jobs_list, telemetry_map)}
-    return render(request, "platform_ui/partials/case_progress.html", context)
+    return case_progress_response(request, case)
 
 
 @require_http_methods(["POST"])
@@ -143,12 +131,4 @@ def case_assign_client(request: HttpRequest, case_id: str) -> HttpResponse:
     else:
         case.save(update_fields=["client_user", "updated_at"])
 
-    jobs_qs = (
-        Job.objects.select_related("case", "case__organization", "reviewed_by")
-        .filter(case=case)
-        .order_by("-created_at")
-    )
-    jobs_list = list(scope_jobs(jobs_qs, getattr(request, "user", None)))
-    telemetry_map = job_telemetry_map(jobs_list, request)
-    context = {"case": case, **case_progress_context(case, jobs_list, telemetry_map)}
-    return render(request, "platform_ui/partials/case_progress.html", context)
+    return case_progress_response(request, case)
