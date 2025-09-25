@@ -40,6 +40,11 @@
       });
     }
     window.addEventListener('DOMContentLoaded', renderLocalTimes);
+    window.renderLocalTimes = renderLocalTimes;
+    window.addEventListener('DOMContentLoaded', () => {
+      document.body.addEventListener('htmx:afterSwap', renderLocalTimes);
+      document.body.addEventListener('htmx:afterSettle', renderLocalTimes);
+    });
 
     // Global click-to-copy handler and toast utility
     const platformUI = (window.platformUI = window.platformUI || {});
