@@ -53,6 +53,50 @@ def _content_from_tool_calls(tool_calls: Any) -> str:
     return ""
 
 
+def _content_from_annotations(annotations: Any) -> str:
+    if not annotations:
+        return ""
+
+    items: List[Dict[str, Any]]
+    if isinstance(annotations, list):
+        items = [item for item in annotations if isinstance(item, dict)]
+    elif isinstance(annotations, dict):
+        items = [annotations]
+    else:
+        return ""
+
+    json_fragments: List[str] = []
+    text_fragments: List[str] = []
+
+    for annotation in items:
+        for key in ("output_json", "json", "data"):
+            value = annotation.get(key)
+            if isinstance(value, (dict, list)):
+                json_fragments.append(json.dumps(value))
+                break
+            if isinstance(value, str) and value.strip():
+                json_fragments.append(value.strip())
+                break
+        else:
+            for text_key in ("text", "output_text", "content"):
+                text_value = annotation.get(text_key)
+                if isinstance(text_value, str) and text_value.strip():
+                    text_fragments.append(text_value.strip())
+                    break
+
+    if json_fragments:
+        combined_json = "".join(json_fragments).strip()
+        if combined_json:
+            return combined_json
+
+    if text_fragments:
+        combined_text = "".join(text_fragments).strip()
+        if combined_text:
+            return combined_text
+
+    return ""
+
+
 def _content_from_parts(parts: Any) -> str:
     if not parts:
         return ""
@@ -100,6 +144,11 @@ def _content_from_delta(delta_payload: Any) -> str:
         return delta_content
     if isinstance(delta_content, list):
         text = _content_from_parts(delta_content)
+        if text:
+            return text
+    annotations = delta_payload.get("annotations")
+    if annotations:
+        text = _content_from_annotations(annotations)
         if text:
             return text
     tool_calls = delta_payload.get("tool_calls")
@@ -233,6 +282,9 @@ class AzureChatClient:
 
         if not content:
             content = _content_from_tool_calls(message.get("tool_calls"))
+
+        if not content:
+            content = _content_from_annotations(message.get("annotations"))
 
         if not content:
             refusal = message.get("refusal")

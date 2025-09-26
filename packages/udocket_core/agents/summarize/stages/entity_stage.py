@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import json
+import logging
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
-
-import json
 
 from ...common.azure_client import AzureChatClient
 from ...common.io import TranscriptParse
 from ..exceptions import AzureStageFailure
+
+logger = logging.getLogger("udocket.summarize.entity_stage")
 
 ENTITY_SCHEMA = {
     "type": "object",
@@ -135,7 +137,19 @@ def generate_entities(
                 "json_schema": {"name": "entity_v1", "schema": ENTITY_SCHEMA},
             },
         )
-        payload = json.loads(content)
+        content_str = content.strip()
+        if not content_str:
+            logger.warning(
+                "Azure entity stage returned empty content; falling back to heuristic entities",
+            )
+            return EntityStageResult(fallback, _usage_dict(usage))
+        try:
+            payload = json.loads(content_str)
+        except json.JSONDecodeError:
+            logger.warning(
+                "Azure entity stage produced non-JSON payload; falling back to heuristic entities",
+            )
+            return EntityStageResult(fallback, _usage_dict(usage))
         if not isinstance(payload, dict):
             return EntityStageResult(fallback, {})
         entities = payload.get("entities")

@@ -90,3 +90,71 @@ def test_chat_prefers_structured_json_parts(monkeypatch: pytest.MonkeyPatch) -> 
     content, _ = client.chat(messages=[])
 
     assert json.loads(content) == {"facts": ["alpha", "beta"]}
+
+
+def test_chat_reads_annotations_when_content_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = {
+        "choices": [
+            {
+                "index": 0,
+                "finish_reason": "stop",
+                "message": {
+                    "role": "assistant",
+                    "content": [],
+                    "annotations": [
+                        {
+                            "type": "json_schema",
+                            "output_json": {
+                                "entities": [
+                                    {
+                                        "id": "E1",
+                                        "name": "Alice",
+                                        "type": "PERSON",
+                                        "aliases": [],
+                                    }
+                                ],
+                                "relations": [],
+                            },
+                        }
+                    ],
+                },
+            }
+        ],
+        "usage": {"input_tokens": 12, "output_tokens": 18},
+    }
+
+    client = _client(monkeypatch, payload)
+    content, usage = client.chat(messages=[])
+
+    parsed = json.loads(content)
+    assert parsed["entities"][0]["name"] == "Alice"
+    assert usage["output_tokens"] == 18
+
+
+def test_chat_reads_annotations_from_delta(monkeypatch: pytest.MonkeyPatch) -> None:
+    payload = {
+        "choices": [
+            {
+                "index": 0,
+                "finish_reason": "length",
+                "message": {"role": "assistant", "content": ""},
+                "delta": {
+                    "annotations": [
+                        {
+                            "type": "json_schema",
+                            "output_json": {"relations": [{"type": "ally"}]},
+                        }
+                    ]
+                },
+            }
+        ],
+        "usage": {"input_tokens": 7, "output_tokens": 9},
+    }
+
+    client = _client(monkeypatch, payload)
+    content, usage = client.chat(messages=[])
+
+    assert json.loads(content) == {"relations": [{"type": "ally"}]}
+    assert usage["output_tokens"] == 9

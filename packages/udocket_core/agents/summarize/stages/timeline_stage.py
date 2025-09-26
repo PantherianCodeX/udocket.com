@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
-
 import json
+import logging
+from typing import Any, Dict, List, Optional
 
 from ...common.azure_client import AzureChatClient
 from ...common.io import TranscriptParse
 from ..exceptions import AzureStageFailure
+
+logger = logging.getLogger("udocket.summarize.timeline_stage")
 
 TIMELINE_SCHEMA = {
     "type": "object",
@@ -101,7 +103,19 @@ def generate_timeline(
                 "json_schema": {"name": "timeline_v1", "schema": TIMELINE_SCHEMA},
             },
         )
-        payload = json.loads(content)
+        content_str = content.strip()
+        if not content_str:
+            logger.warning(
+                "Azure timeline stage returned empty content; falling back to transcript-derived events",
+            )
+            return TimelineStageResult(fallback, _usage_dict(usage))
+        try:
+            payload = json.loads(content_str)
+        except json.JSONDecodeError:
+            logger.warning(
+                "Azure timeline stage produced non-JSON payload; falling back to transcript-derived events",
+            )
+            return TimelineStageResult(fallback, _usage_dict(usage))
         events = payload.get("events", []) if isinstance(payload, dict) else []
         if not isinstance(events, list):
             return TimelineStageResult(fallback, {})
