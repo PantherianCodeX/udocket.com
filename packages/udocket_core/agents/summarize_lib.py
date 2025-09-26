@@ -141,7 +141,10 @@ class SummarizeConfig:
         if force_offline:
             filtered_chain = ["local"]
 
-        if endpoint and not _endpoint_is_canadian(endpoint):
+        allow_non_ca_endpoint = (
+            os.getenv("SUMMARY_ALLOW_NON_CA_ENDPOINT", "0").strip() == "1"
+        )
+        if endpoint and not allow_non_ca_endpoint and not _endpoint_is_canadian(endpoint):
             raise ValueError(
                 "AZURE_OPENAI_ENDPOINT must target canadacentral or canadaeast"
             )
