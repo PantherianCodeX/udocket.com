@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 import json
+import logging
 import os
 
 try:  # pragma: no cover - optional dependency guard
@@ -13,6 +14,9 @@ except Exception:  # pragma: no cover
 
 
 CANADIAN_REGIONS = {"canadacentral", "canadaeast"}
+
+
+logger = logging.getLogger("udocket.azure.client")
 
 
 def _endpoint_is_canadian(endpoint: str) -> bool:
@@ -86,14 +90,38 @@ class AzureChatClient:
                 json=payload,
                 timeout=self.config.timeout,
             )
+            logger.debug(
+                "azure request",
+                extra={
+                    "endpoint": url,
+                    "deployment": self.config.deployment,
+                    "status_code": response.status_code,
+                },
+            )
             response.raise_for_status()
         except requests.exceptions.HTTPError as exc:  # type: ignore[attr-defined]
             detail = exc.response.text if exc.response is not None else ""
             message = (
                 f"Azure OpenAI request failed: {exc}" + (f"\n{detail}" if detail else "")
             )
+            logger.error(
+                "azure request failed",
+                extra={
+                    "endpoint": url,
+                    "deployment": self.config.deployment,
+                    "status_code": getattr(exc.response, "status_code", None),
+                    "body": detail,
+                },
+            )
             raise RuntimeError(message) from exc
         data = response.json()
+        logger.debug(
+            "azure response usage",
+            extra={
+                "deployment": self.config.deployment,
+                "usage": data.get("usage"),
+            },
+        )
         choices = data.get("choices") or []
         if not choices:
             raise RuntimeError("Azure OpenAI response missing choices")

@@ -273,6 +273,11 @@ LOGGING = {
         "apps.platform": {"handlers": ["console"], "level": env("PLATFORM_LOG_LEVEL", default="DEBUG"), "propagate": False},
         "azure": {"handlers": ["console"], "level": env("AZURE_LOG_LEVEL", default="WARNING"), "propagate": False},
         "udocket": {"handlers": ["console"], "level": env("PLATFORM_LOG_LEVEL", default="DEBUG"), "propagate": False},
+        "udocket.azure.client": {
+            "handlers": ["console"],
+            "level": env("AZURE_LOG_LEVEL", default="INFO"),
+            "propagate": False,
+        },
     },
 }
 
