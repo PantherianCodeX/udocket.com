@@ -1083,6 +1083,14 @@ def summarize_job(
                 continue
             merged_overrides[key] = value
 
+    if disable_offline_env:
+        if provider_chain:
+            provider_chain = [
+                provider for provider in provider_chain if provider != "local"
+            ]
+        if not provider_chain:
+            provider_chain = ["azure"]
+
     def _progress(stage: str, event: str, payload: Dict[str, Any]) -> None:
         progress_payload: Dict[str, Any] = {
             "case_id": case_id,
@@ -1111,19 +1119,45 @@ def summarize_job(
                 },
             )
 
-    result = summarize_agent.summarize(
-        input=transcript,
-        case_id=case_id,
-        case_dir=case_dir,
-        job_id=job_id,
-        intake=intake_payload or None,
-        allow_offline_fallback=(
-            False if disable_offline_env else allow_offline_fallback
-        ),
-        provider_chain=provider_chain,
-        stage_overrides=merged_overrides,
-        progress_callback=_progress,
-    )
+    try:
+        result = summarize_agent.summarize(
+            input=transcript,
+            case_id=case_id,
+            case_dir=case_dir,
+            job_id=job_id,
+            intake=intake_payload or None,
+            allow_offline_fallback=(
+                False if disable_offline_env else allow_offline_fallback
+            ),
+            provider_chain=provider_chain,
+            stage_overrides=merged_overrides,
+            progress_callback=_progress,
+        )
+    except Exception as exc:
+        error_message = str(exc)
+        log.error(
+            "summarize job failed",
+            extra={"job_id": job_id, "case_id": case_id, "error": error_message},
+        )
+        try:
+            append_job_log(
+                case_id,
+                org_id,
+                job_id,
+                f"Summarize failed: {error_message}",
+            )
+        except Exception:
+            pass
+        try:
+            send_job_update(
+                job_id,
+                event="summary.failed",
+                case_id=case_id,
+                error=error_message,
+            )
+        except Exception:
+            pass
+        raise
 
     try:
         send_job_update(
