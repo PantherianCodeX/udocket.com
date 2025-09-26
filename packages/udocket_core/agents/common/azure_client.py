@@ -54,18 +54,41 @@ def _content_from_tool_calls(tool_calls: Any) -> str:
 
 
 def _content_from_parts(parts: Any) -> str:
-    for part in parts or []:
+    if not parts:
+        return ""
+
+    text_fragments: List[str] = []
+    json_fragments: List[str] = []
+
+    for part in parts:
         if not isinstance(part, dict):
             continue
-        text_value = part.get("text") or part.get("content")
-        if isinstance(text_value, str) and text_value.strip():
-            return text_value
-        if part.get("type") and part.get("type", "").startswith("output_json"):
+
+        part_type = part.get("type") or ""
+
+        if part_type and str(part_type).startswith("output_json"):
             raw = part.get("json") or part.get("text") or part.get("data")
             if isinstance(raw, (dict, list)):
-                return json.dumps(raw)
+                json_fragments.append(json.dumps(raw))
+                continue
             if isinstance(raw, str) and raw.strip():
-                return raw
+                json_fragments.append(raw)
+                continue
+
+        text_value = part.get("text") or part.get("content")
+        if isinstance(text_value, str) and text_value.strip():
+            text_fragments.append(text_value)
+
+    if json_fragments:
+        combined_json = "".join(json_fragments).strip()
+        if combined_json:
+            return combined_json
+
+    if text_fragments:
+        combined_text = "".join(text_fragments).strip()
+        if combined_text:
+            return combined_text
+
     return ""
 
 
