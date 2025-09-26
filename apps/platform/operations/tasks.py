@@ -1020,14 +1020,33 @@ def summarize_job(
     if not transcript or not transcript.exists():
         raise RuntimeError("No transcript found to summarize")
 
-    disable_offline_env = os.getenv("SUMMARY_DISABLE_OFFLINE", "0").strip() == "1"
+    force_online_env = (
+        os.getenv("SUMMARY_FORCE_ONLINE", "0").strip() == "1"
+        or os.getenv("SUMMARY_DISABLE_OFFLINE", "0").strip() == "1"
+    )
+    force_offline_env = os.getenv("SUMMARY_FORCE_OFFLINE", "0").strip() == "1"
 
-    if disable_offline_env:
+    if force_online_env and force_offline_env:
+        raise ValueError(
+            "SUMMARY_FORCE_ONLINE and SUMMARY_FORCE_OFFLINE cannot both be enabled"
+        )
+
+    if force_offline_env:
+        summarize_config = SummarizeConfig(
+            azure_openai_endpoint="",
+            azure_openai_key="",
+            azure_openai_deployment="",
+            debug=os.getenv("DEBUG", "0").strip() == "1",
+            enable_offline_fallback=True,
+            force_offline_mode=True,
+            provider_chain=["local"],
+        )
+    elif force_online_env:
         try:
             summarize_config = SummarizeConfig.from_env()
         except ValueError as exc:
             log.error(
-                "summarize config invalid and offline disabled",
+                "summarize config invalid while SUMMARY_FORCE_ONLINE=1",
                 extra={"job_id": job_id, "case_id": case_id, "reason": str(exc)},
             )
             raise
@@ -1083,7 +1102,7 @@ def summarize_job(
                 continue
             merged_overrides[key] = value
 
-    if disable_offline_env:
+    if force_online_env:
         if provider_chain:
             provider_chain = [
                 provider for provider in provider_chain if provider != "local"
@@ -1127,7 +1146,7 @@ def summarize_job(
             job_id=job_id,
             intake=intake_payload or None,
             allow_offline_fallback=(
-                False if disable_offline_env else allow_offline_fallback
+                False if force_online_env else allow_offline_fallback
             ),
             provider_chain=provider_chain,
             stage_overrides=merged_overrides,
