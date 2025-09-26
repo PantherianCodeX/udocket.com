@@ -19,21 +19,21 @@
           "label": "GPT-4o Premium",
           "cost_tier": "premium",
           "max_output_tokens": 8000,
-          "default_temperature": 0.2,
+          "default_temperature": 1.0,
           "deployment_env": "AZURE_OPENAI_DEPLOYMENT_GPT_4O"
         },
         "gpt-4.1": {
           "label": "GPT-4.1",
           "cost_tier": "premium",
           "max_output_tokens": 32000,
-          "default_temperature": 0.2,
+          "default_temperature": 1.0,
           "deployment_env": "AZURE_OPENAI_DEPLOYMENT_GPT_4_1"
         },
         "gpt-5-chat": {
           "label": "GPT-5 Chat",
           "cost_tier": "premium",
           "max_output_tokens": 32000,
-          "default_temperature": 0.2,
+          "default_temperature": 1.0,
           "deployment_env": "AZURE_OPENAI_DEPLOYMENT_GPT_5_CHAT"
         },
         "gpt-5-mini": {
