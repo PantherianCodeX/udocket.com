@@ -9,9 +9,9 @@ import shutil
 import threading
 import time
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple, cast
 
 import requests
 
@@ -25,18 +25,20 @@ TARGET_BITS_PER_SAMPLE = 16
 TARGET_AUDIO_MIME = "audio/wav"
 TARGET_SAMPLE_FMTS = {"s16", "s16p", "s16le"}
 
+JSONDict = Dict[str, Any]
+
 
 @dataclass
 class AudioNormalizationResult:
     path: Path
     converted: bool
-    metadata: Dict[str, Any]
+    metadata: JSONDict
     reasons: list[str]
-    original_metadata: Optional[Dict[str, Any]] = None
+    original_metadata: Optional[JSONDict] = None
 
 
 def _now_utc() -> str:
-    return datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    return datetime.now(tz=UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def _sha256sum(fp: Path) -> str:
@@ -53,11 +55,11 @@ def _have_ffmpeg() -> bool:
 
 def _analyze_audio_conversion(
     input_path: Path,
-    metadata: Optional[Dict[str, Any]] = None,
+    metadata: Optional[JSONDict] = None,
     *,
     diarization: bool = False,
-) -> tuple[list[str], Dict[str, Any]]:
-    meta: Dict[str, Any] = dict(metadata or {})
+) -> tuple[list[str], JSONDict]:
+    meta: JSONDict = dict(metadata or {})
     if not meta:
         try:
             meta = probe_audio_metadata(input_path)
@@ -101,7 +103,7 @@ def normalize_audio(
     out_dir: Path,
     case_id: str,
     *,
-    metadata: Optional[Dict[str, Any]] = None,
+    metadata: Optional[JSONDict] = None,
     diarization: bool = False,
     force: bool = False,
 ) -> AudioNormalizationResult:
@@ -231,7 +233,7 @@ def _insert_timestamps(text: str, interval: int) -> str:
     return "\n".join(parts)
 
 
-def _append_jsonl(p: Path, obj: dict) -> None:
+def _append_jsonl(p: Path, obj: JSONDict) -> None:
     p.parent.mkdir(parents=True, exist_ok=True)
     with p.open("a", encoding="utf-8") as f:
         f.write(json.dumps(obj, ensure_ascii=False) + "\n")
@@ -245,7 +247,7 @@ def _record_batch_location(
     region: str,
     language: str,
 ) -> None:
-    partial = {
+    partial: JSONDict = {
         "case_id": case_id,
         "azure_transcription_url": location,
         "azure_region": region,
@@ -257,12 +259,13 @@ def _record_batch_location(
     for name in (f"{case_id}_transcription_log.json", f"{job_id}_transcription_log.json"):
         path = ops_dir / name
         try:
+            current: JSONDict = {}
             if path.exists():
-                current = json.loads(path.read_text(encoding="utf-8"))
-            else:
-                current = {}
-            if current.get("azure_transcription_url") and current["azure_transcription_url"] != location:
-                current["previous_azure_transcription_url"] = current["azure_transcription_url"]
+                data = json.loads(path.read_text(encoding="utf-8"))
+                if isinstance(data, dict):
+                    current = dict(cast(JSONDict, data))
+            if current.get("azure_transcription_url") and current.get("azure_transcription_url") != location:
+                current["previous_azure_transcription_url"] = current.get("azure_transcription_url")
             current.update(partial)
             path.write_text(json.dumps(current, ensure_ascii=False, indent=2), encoding="utf-8")
         except Exception:
@@ -302,7 +305,7 @@ def _ensure_wav(
     out_dir: Path,
     case_id: str,
     *,
-    metadata: Optional[Dict[str, Any]] = None,
+    metadata: Optional[JSONDict] = None,
     diarization: bool = False,
     force: bool = False,
 ) -> Path:
@@ -326,12 +329,18 @@ def _sdk_version() -> str:
     try:
         import pkgutil
 
-        return pkgutil.get_loader("azure.cognitiveservices.speech").path or "unknown"
+        loader = pkgutil.get_loader("azure.cognitiveservices.speech")
+        if loader is None:
+            return "unknown"
+        path_attr = getattr(loader, "path", None)
+        if isinstance(path_attr, str):
+            return path_attr
+        return "unknown"
     except Exception:
         return "unknown"
 
 
-def _iso8601_to_seconds(val: str) -> float:
+def _iso8601_to_seconds(val: Any) -> float:
     try:
         if not isinstance(val, str) or not val.startswith("PT"):
             return 0.0
@@ -371,18 +380,26 @@ def _to_seconds(val: Any) -> float:
 
 
 def _summarize_batch_error(payload: Any) -> str:
+    payload_any: Any = payload
     try:
         if isinstance(payload, dict):
-            errors = payload.get("errors")
+            payload_dict: JSONDict = cast(JSONDict, payload)
+            errors = payload_dict.get("errors")
             if isinstance(errors, list) and errors:
-                parts = []
-                for err in errors:
+                parts: list[str] = []
+                errors_list = cast(list[Any], errors)
+                for err in errors_list:
                     if not isinstance(err, dict):
                         parts.append(str(err))
                         continue
-                    code = err.get("code")
-                    message = err.get("message") or err.get("description") or err.get("errorMessage")
-                    target = err.get("target")
+                    err_dict: JSONDict = cast(JSONDict, err)
+                    code = err_dict.get("code")
+                    message = (
+                        err_dict.get("message")
+                        or err_dict.get("description")
+                        or err_dict.get("errorMessage")
+                    )
+                    target = err_dict.get("target")
                     segment = " | ".join(
                         p
                         for p in (
@@ -392,26 +409,32 @@ def _summarize_batch_error(payload: Any) -> str:
                         )
                         if p
                     )
-                    parts.append(segment or str(err))
+                    parts.append(segment or str(err_dict))
                 return "; ".join(parts)
             if isinstance(errors, dict) and errors:
-                code = errors.get("code")
-                message = errors.get("message") or errors.get("description")
+                errors_dict: JSONDict = cast(JSONDict, errors)
+                code = errors_dict.get("code")
+                message = errors_dict.get("message") or errors_dict.get("description")
                 return " | ".join(p for p in (f"code={code}" if code else None, message) if p)
-            error_obj = payload.get("error")
+            error_obj = payload_dict.get("error")
             if isinstance(error_obj, dict):
-                code = error_obj.get("code")
-                message = error_obj.get("message") or error_obj.get("description")
-                return " | ".join(p for p in (f"code={code}" if code else None, message) if p) or str(error_obj)
-            details = payload.get("details")
+                error_dict: JSONDict = cast(JSONDict, error_obj)
+                code = error_dict.get("code")
+                message = error_dict.get("message") or error_dict.get("description")
+                return " | ".join(p for p in (f"code={code}" if code else None, message) if p) or str(error_dict)
+            details = payload_dict.get("details")
             if isinstance(details, list) and details:
-                return "; ".join(_summarize_batch_error(item) for item in details)
-            props = payload.get("properties")
-            if isinstance(props, dict) and props.get("error"):
-                return _summarize_batch_error(props.get("error"))
-        return str(payload)
+                details_list = cast(list[Any], details)
+                detail_strings = [_summarize_batch_error(item) for item in details_list]
+                return "; ".join(detail_strings)
+            props = payload_dict.get("properties")
+            if isinstance(props, dict):
+                props_dict: JSONDict = cast(JSONDict, props)
+                if props_dict.get("error"):
+                    return _summarize_batch_error(props_dict.get("error"))
+        return str(payload_any)
     except Exception:
-        return repr(payload)
+        return repr(payload_any)
 
 
 def _rest_batch_transcribe(
@@ -420,12 +443,13 @@ def _rest_batch_transcribe(
     key: str,
     region: str,
     diarization: bool,
+    *,
     on_location: Optional[Callable[[str], None]] = None,
-) -> Tuple[str, Optional[float], Dict[str, Any]]:
+) -> Tuple[str, Optional[float], JSONDict]:
     base = f"https://{region}.api.cognitive.microsoft.com/speechtotext/v3.2"
     create_url = base + "/transcriptions"
     headers = {"Ocp-Apim-Subscription-Key": key, "Content-Type": "application/json"}
-    payload: Dict[str, Any] = {
+    payload: JSONDict = {
         "displayName": f"uDocket transcription {_now_utc()}",
         "locale": lang,
         "contentUrls": [audio_url],
@@ -440,7 +464,12 @@ def _rest_batch_transcribe(
     r = requests.post(create_url, headers=headers, json=payload, timeout=30)
     r.raise_for_status()
 
-    loc = r.headers.get("Location") or r.json().get("self")
+    loc = r.headers.get("Location")
+    if not loc:
+        r_json = r.json()
+        if isinstance(r_json, dict):
+            r_json_dict = cast(JSONDict, r_json)
+            loc = cast(Optional[str], r_json_dict.get("self"))
     if not loc:
         raise RuntimeError("REST create did not return a polling location")
 
@@ -454,8 +483,11 @@ def _rest_batch_transcribe(
     while True:
         pr = requests.get(loc, headers=headers, timeout=30)
         pr.raise_for_status()
-        pdata = pr.json()
-        status = pdata.get("status")
+        pdata_raw = pr.json()
+        if not isinstance(pdata_raw, dict):
+            raise RuntimeError("REST polling payload was not a JSON object")
+        pdata = cast(JSONDict, pdata_raw)
+        status = cast(Optional[str], pdata.get("status"))
         if status in ("Succeeded", "Failed"):
             break
         if time.time() - t0 > 5400:
@@ -471,13 +503,21 @@ def _rest_batch_transcribe(
 
     fr = requests.get(loc + "/files", headers=headers, timeout=30)
     fr.raise_for_status()
-    files_payload = fr.json()
-    files = files_payload.get("values", [])
-    text_url = None
+    files_payload_raw = fr.json()
+    if not isinstance(files_payload_raw, dict):
+        raise RuntimeError("REST files payload was not a JSON object")
+    files_payload = cast(JSONDict, files_payload_raw)
+    files_val = files_payload.get("values")
+    files: list[JSONDict] = []
+    if isinstance(files_val, list):
+        files_list = cast(list[Any], files_val)
+        files = [cast(JSONDict, f) for f in files_list if isinstance(f, dict)]
+    text_url: Optional[str] = None
     for f in files:
         if f.get("kind") == "Transcription":
-            links = f.get("links") or {}
-            text_url = links.get("contentUrl") or links.get("content")
+            links_val = f.get("links")
+            links: JSONDict = cast(JSONDict, links_val) if isinstance(links_val, dict) else {}
+            text_url = cast(Optional[str], links.get("contentUrl") or links.get("content"))
             if text_url:
                 break
     if not text_url:
@@ -486,11 +526,20 @@ def _rest_batch_transcribe(
     tresp.raise_for_status()
 
     try:
-        jd = tresp.json()
-        meta: Dict[str, Any] = {"diarization": diarization, "azure_transcription_url": loc}
+        jd_raw = tresp.json()
+        if not isinstance(jd_raw, dict):
+            raise RuntimeError("Transcription JSON payload was not a JSON object")
+        jd = cast(JSONDict, jd_raw)
+        meta: JSONDict = {"diarization": diarization, "azure_transcription_url": loc}
         dur_s: Optional[float] = None
+        rp: list[JSONDict] = []
         try:
-            rp = jd.get("recognizedPhrases") or []
+            rp_val = jd.get("recognizedPhrases")
+            if isinstance(rp_val, list):
+                rp_list = cast(list[Any], rp_val)
+                rp = [cast(JSONDict, p) for p in rp_list if isinstance(p, dict)]
+            else:
+                rp = []
             max_end = 0.0
             seg_count = 0
             for p in rp:
@@ -498,7 +547,18 @@ def _rest_batch_transcribe(
                 dur = _to_seconds(p.get("duration") or p.get("durationInTicks"))
                 max_end = max(max_end, off + dur)
                 seg_count += 1
-                words = p.get("nBest", [{}])[0].get("words") or []
+                nbest_val = p.get("nBest")
+                if isinstance(nbest_val, list):
+                    nbest_list = cast(list[Any], nbest_val)
+                    nbest: list[JSONDict] = [cast(JSONDict, nb) for nb in nbest_list if isinstance(nb, dict)]
+                else:
+                    nbest = []
+                words_val = nbest[0].get("words") if nbest else None
+                if isinstance(words_val, list):
+                    words_list = cast(list[Any], words_val)
+                    words: list[JSONDict] = [cast(JSONDict, w) for w in words_list if isinstance(w, dict)]
+                else:
+                    words = []
                 for w in words:
                     woff = _to_seconds(w.get("offset") or w.get("offsetInTicks"))
                     wdur = _to_seconds(w.get("duration") or w.get("durationInTicks"))
@@ -510,17 +570,22 @@ def _rest_batch_transcribe(
             dur_s = None
 
         lines: list[str] = []
-        avg_conf = None
+        avg_conf: Optional[float] = None
         conf_sum = 0.0
         conf_n = 0
         if diarization:
-            rp = jd.get("recognizedPhrases") or []
             rp_sorted = sorted(rp, key=lambda p: _to_seconds(p.get("offset") or p.get("offsetInTicks")))
-            spk_ids = set()
+            spk_ids: set[Any] = set()
             for p in rp_sorted:
-                nbest = p.get("nBest") or []
+                nbest_val = p.get("nBest")
+                if isinstance(nbest_val, list):
+                    nbest_list = cast(list[Any], nbest_val)
+                    nbest = [cast(JSONDict, nb) for nb in nbest_list if isinstance(nb, dict)]
+                else:
+                    nbest = []
                 best = nbest[0] if nbest else {}
-                text = (best.get("display") or best.get("lexical") or "").strip()
+                text_raw = best.get("display") or best.get("lexical") or ""
+                text = text_raw.strip() if isinstance(text_raw, str) else ""
                 if not text:
                     continue
                 c = best.get("confidence")
@@ -539,17 +604,28 @@ def _rest_batch_transcribe(
                     lines.append(f"[{mm:02d}:{ss:02d}] {text}")
             meta["num_speakers"] = len(spk_ids) if spk_ids else None
         if not lines:
-            crp = jd.get("combinedRecognizedPhrases") or []
+            crp_val = jd.get("combinedRecognizedPhrases")
+            if isinstance(crp_val, list):
+                crp_list = cast(list[Any], crp_val)
+                crp = [cast(JSONDict, p) for p in crp_list if isinstance(p, dict)]
+            else:
+                crp = []
             for p in crp:
-                t = (p.get("display") or p.get("lexical") or "").strip()
+                t_raw = p.get("display") or p.get("lexical") or ""
+                t = t_raw.strip() if isinstance(t_raw, str) else ""
                 if t:
                     lines.append(t)
-            rp = jd.get("recognizedPhrases") or []
             if not lines and rp:
                 for p in rp:
-                    nb = p.get("nBest") or []
+                    nb_val = p.get("nBest")
+                    if isinstance(nb_val, list):
+                        nb_list = cast(list[Any], nb_val)
+                        nb = [cast(JSONDict, item) for item in nb_list if isinstance(item, dict)]
+                    else:
+                        nb = []
                     if nb:
-                        t = (nb[0].get("display") or nb[0].get("lexical") or "").strip()
+                        t_raw = nb[0].get("display") or nb[0].get("lexical") or ""
+                        t = t_raw.strip() if isinstance(t_raw, str) else ""
                         if t:
                             lines.append(t)
         if conf_n > 0:
@@ -632,10 +708,13 @@ class _OnDemandTranscriber:
         except Exception:
             pass
 
-        self._speechsdk = speechsdk
-        self.recognizer = speechsdk.SpeechRecognizer(
-            speech_config=speech_config,
-            audio_config=speechsdk.audio.AudioConfig(filename=str(audio)),
+        self._speechsdk: Any = speechsdk
+        self.recognizer = cast(
+            Any,
+            speechsdk.SpeechRecognizer(
+                speech_config=speech_config,
+                audio_config=speechsdk.audio.AudioConfig(filename=str(audio)),
+            ),
         )
         self.chunks: list[str] = []
         self.done = threading.Event()
@@ -647,14 +726,14 @@ class _OnDemandTranscriber:
         self.recognizer.cancelled.connect(self._on_cancelled)
         self.recognizer.session_stopped.connect(self._on_stopped)
 
-    def _on_recognizing(self, evt) -> None:  # noqa: D401 - quiet
+    def _on_recognizing(self, evt: Any) -> None:  # noqa: D401 - quiet
         return None
 
-    def _on_recognized(self, evt) -> None:
+    def _on_recognized(self, evt: Any) -> None:
         if evt.result.reason == self._speechsdk.ResultReason.RecognizedSpeech and evt.result.text.strip():
             self.chunks.append(evt.result.text)
 
-    def _on_cancelled(self, evt) -> None:
+    def _on_cancelled(self, evt: Any) -> None:
         self.cancelled_reason = str(evt.reason)
         try:
             self.cancelled_details = getattr(evt, "error_details", None)
@@ -662,7 +741,7 @@ class _OnDemandTranscriber:
             self.cancelled_details = None
         self.done.set()
 
-    def _on_stopped(self, evt) -> None:
+    def _on_stopped(self, evt: Any) -> None:
         self.done.set()
 
     def run(self, timeout: int) -> Optional[str]:
@@ -757,7 +836,7 @@ class TranscriptionAgent:
         audio_sha = None
         wav: Optional[Path] = None
         converted = False
-        audio_meta: Dict[str, Any] = {}
+        audio_meta: JSONDict = {}
         conversion_reasons: list[str] = []
         if not is_url:
             assert audio_in is not None
@@ -813,10 +892,12 @@ class TranscriptionAgent:
         if not is_url:
             assert audio_in is not None
             dur = _get_duration_seconds(wav or audio_in) or _get_duration_seconds(audio_in)
-            if not dur and audio_meta.get("audio_duration_s"):
+            if not dur:
+                duration_meta = audio_meta.get("audio_duration_s")
                 try:
-                    dur = float(audio_meta.get("audio_duration_s"))
-                except Exception:
+                    if duration_meta is not None:
+                        dur = float(duration_meta)
+                except (TypeError, ValueError):
                     pass
             if dur and dur / 60.0 > cfg.max_minutes:
                 raise RuntimeError(
@@ -827,7 +908,7 @@ class TranscriptionAgent:
         attempts = 0
         text_raw: Optional[str] = None
         last_error: Optional[str] = None
-        rest_meta: Dict[str, Any] = {}
+        rest_meta: JSONDict = {}
         for attempt in range(cfg.retry_max):
             attempts = attempt + 1
             try:
@@ -853,7 +934,9 @@ class TranscriptionAgent:
                         dur = remote_dur
                 else:
                     assert wav is not None or audio_in is not None
-                    source = wav or audio_in  # prefer converted wav
+                    source = wav if wav is not None else audio_in
+                    if source is None:
+                        raise RuntimeError("Audio source could not be determined")
                     tr = _OnDemandTranscriber(
                         audio=source, lang=lang, key=cfg.azure_speech_key, region=cfg.azure_speech_region, case_dir=case_dir, case_id=case_id, debug=cfg.debug
                     )
