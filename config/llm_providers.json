@@ -47,7 +47,7 @@
           "label": "GPT-5 Nano",
           "cost_tier": "economy",
           "max_output_tokens": 8000,
-          "default_temperature": 0.2,
+          "default_temperature": 1.0,
           "deployment_env": "AZURE_OPENAI_DEPLOYMENT_GPT_5_NANO"
         }
       }
