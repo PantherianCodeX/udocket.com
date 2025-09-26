@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 import json
+import os
 
 try:  # pragma: no cover - optional dependency guard
     import requests
@@ -26,11 +27,14 @@ class AzureClientConfig:
     deployment: str
     api_version: str = "2024-08-01-preview"
     timeout: int = 60
+    allow_non_ca_region: bool = False
 
     def validate(self) -> None:
         if not self.endpoint:
             raise ValueError("Missing Azure OpenAI endpoint")
-        if not _endpoint_is_canadian(self.endpoint):
+        if not self.allow_non_ca_region and not _endpoint_is_canadian(
+            self.endpoint
+        ):
             raise ValueError("Azure OpenAI endpoint must target canadacentral or canadaeast")
         if not self.key:
             raise ValueError("Missing Azure OpenAI API key")
@@ -74,14 +78,21 @@ class AzureChatClient:
             "Content-Type": "application/json",
         }
 
-        response = requests.post(  # type: ignore[attr-defined]
-            url,
-            params=params,
-            headers=headers,
-            json=payload,
-            timeout=self.config.timeout,
-        )
-        response.raise_for_status()
+        try:
+            response = requests.post(  # type: ignore[attr-defined]
+                url,
+                params=params,
+                headers=headers,
+                json=payload,
+                timeout=self.config.timeout,
+            )
+            response.raise_for_status()
+        except requests.exceptions.HTTPError as exc:  # type: ignore[attr-defined]
+            detail = exc.response.text if exc.response is not None else ""
+            message = (
+                f"Azure OpenAI request failed: {exc}" + (f"\n{detail}" if detail else "")
+            )
+            raise RuntimeError(message) from exc
         data = response.json()
         choices = data.get("choices") or []
         if not choices:

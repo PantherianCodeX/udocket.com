@@ -189,11 +189,15 @@ class SummarizeConfig:
     def azure_client_config(self) -> Optional[AzureClientConfig]:
         if not self.azure_enabled:
             return None
+        allow_non_ca_endpoint = (
+            os.getenv("SUMMARY_ALLOW_NON_CA_ENDPOINT", "0").strip() == "1"
+        )
         return AzureClientConfig(
             endpoint=self.azure_openai_endpoint,
             key=self.azure_openai_key,
             deployment=self.azure_openai_deployment,
             api_version=self.azure_openai_api_version,
+            allow_non_ca_region=allow_non_ca_endpoint,
         )
 
     def azure_client_config_for(
