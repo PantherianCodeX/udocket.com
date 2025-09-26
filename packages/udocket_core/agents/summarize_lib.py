@@ -84,7 +84,7 @@ class SummarizeConfig:
     azure_openai_deployment: str = ""
     azure_openai_api_version: str = "2024-08-01-preview"
     language: str = "en-CA"
-    temperature: float = 0.2
+    temperature: float = 1.0 #0.2
     max_output_tokens: int = 24000
     debug: bool = False
     enable_offline_fallback: bool = False
@@ -102,7 +102,7 @@ class SummarizeConfig:
             os.getenv("AZURE_OPENAI_API_VERSION") or "2024-08-01-preview"
         ).strip()
         language = (os.getenv("LANGUAGE") or "en-CA").strip() or "en-CA"
-        temperature = float(os.getenv("SUMMARY_TEMPERATURE", "0.2") or 0.2)
+        temperature = float(os.getenv("SUMMARY_TEMPERATURE", "1.0") or 1.0)
         max_tokens = int(os.getenv("SUMMARY_MAX_TOKENS", "24000") or 24000)
         debug = os.getenv("DEBUG", "0").strip() == "1"
         allow_offline = (
@@ -540,7 +540,9 @@ class SummarizeAgent:
         except RuntimeError:
             graph = None
         if graph is not None:
+            self._log(logging.DEBUG, "langgraph.invoke.start", entry=graph.entry)
             graph_result = graph.invoke(current_state)
+            self._log(logging.DEBUG, "langgraph.invoke.complete", state_keys=list(graph_result.keys()))
             return dict(graph_result)
         for node_name in PIPELINE_NODE_ORDER:
             node = getattr(pipeline, node_name)

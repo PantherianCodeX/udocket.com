@@ -13,7 +13,7 @@
           "label": "GPT-4o Mini",
           "cost_tier": "standard",
           "max_output_tokens": 4000,
-          "default_temperature": 0.2
+          "default_temperature": 1.0
         },
         "gpt-4o": {
           "label": "GPT-4o Premium",
@@ -40,7 +40,7 @@
           "label": "GPT-5 Mini",
           "cost_tier": "standard",
           "max_output_tokens": 16000,
-          "default_temperature": 0.2,
+          "default_temperature": 1.0,
           "deployment_env": "AZURE_OPENAI_DEPLOYMENT_GPT_5_MINI"
         },
         "gpt-5-nano": {

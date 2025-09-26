@@ -161,8 +161,9 @@ class KeycloakJWTAuthentication(BaseAuthentication):
                 issuer=issuer,
                 options={"verify_aud": bool(audience), "verify_signature": True, "verify_iss": bool(issuer)},
             )
-        except Exception as e:
-            raise exceptions.AuthenticationFailed(f"Invalid token: {e}")
+        except Exception as exc:
+            log.warning("JWT authentication failed", extra={"reason": str(exc), "issuer": issuer, "audience": audience})
+            raise exceptions.AuthenticationFailed(f"Invalid token: {exc}")
 
         sub = claims.get("sub")
         if not sub:
@@ -195,4 +196,13 @@ class KeycloakJWTAuthentication(BaseAuthentication):
                 KeycloakOIDCBackend().update_user(user, claims)
             except Exception:
                 pass
+        log.info(
+            "JWT authentication succeeded",
+            extra={
+                "user_id": getattr(user, "id", None),
+                "username": getattr(user, "username", None),
+                "sub": sub,
+                "created": created,
+            },
+        )
         return (user, None)

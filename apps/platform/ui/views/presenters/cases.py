@@ -30,15 +30,11 @@ from ..presenters.jobs import (
 from packages.udocket_core.agents.summarize_lib import SummarizeConfig
 from packages.udocket_core.llm import load_llm_settings
 from apps.platform.operations.llm import (
+    build_provider_registry,
     get_org_llm_overrides,
     get_org_provider_credentials,
     load_provider_catalog,
 )
-
-
-# Providers the current summarization pipeline can execute end-to-end.
-# Keep this set in sync with packages.udocket_core.agents.summarize_lib.SUPPORTED_PROVIDERS.
-SUMMARIZE_SUPPORTED_PROVIDERS = {"azure", "local"}
 
 
 def _latest_successful_transcription_job(jobs: List[Job]) -> Optional[Job]:
@@ -98,71 +94,12 @@ def _collect_provider_chain(overrides: Dict[str, Dict[str, Any]], default_chain:
     return sequence
 
 
-def _build_provider_cache(
-    *,
-    llm_settings,
-    provider_catalog: Dict[str, Dict[str, Any]],
-    provider_credentials: Dict[str, Dict[str, Any]],
-) -> Dict[str, Dict[str, Any]]:
-    cache: Dict[str, Dict[str, Any]] = {}
-    for provider_name, provider in llm_settings.providers.items():
-        catalog_entry = provider_catalog.get(provider_name, {})
-        configured = provider_name in provider_credentials
-        runtime_supported = provider_name in SUMMARIZE_SUPPORTED_PROVIDERS
-        available = runtime_supported and (provider.is_available() or configured)
-        reason = ""
-        if not runtime_supported:
-            reason = "Not supported yet"
-        elif not available and not configured:
-            reason = "Configure credentials"
-        cache[provider_name] = {
-            "value": provider_name,
-            "label": provider.display_name,
-            "available": available,
-            "configured": configured,
-            "default_endpoint": catalog_entry.get("default_endpoint"),
-            "requires_api_key": bool(catalog_entry.get("requires_api_key", True)),
-            "unavailable_reason": reason,
-            "models": [
-                {
-                    "value": model_name,
-                    "label": model_meta.label,
-                    "cost_tier": model_meta.cost_tier,
-                }
-                for model_name, model_meta in provider.models.items()
-            ],
-        }
-    for provider_name, credential in provider_credentials.items():
-        if provider_name in cache:
-            continue
-        models_payload = credential.get("models") or []
-        cache[provider_name] = {
-            "value": provider_name,
-            "label": credential.get("display_name") or provider_name,
-            "available": True,
-            "configured": True,
-            "default_endpoint": credential.get("endpoint") or credential.get("default_endpoint"),
-            "requires_api_key": True,
-            "unavailable_reason": "",
-            "models": [
-                {
-                    "value": str(model.get("name") or model.get("id") or ""),
-                    "label": model.get("label") or model.get("name") or provider_name,
-                    "cost_tier": model.get("cost_tier") or "standard",
-                }
-                for model in models_payload
-                if isinstance(model, dict) and (model.get("name") or model.get("id"))
-            ],
-        }
-    return cache
-
-
 def _build_llm_stage_configs(
     *,
     stage_defs: List[Dict[str, str]],
     llm_settings,
     overrides: Dict[str, Dict[str, Any]],
-    provider_cache: Dict[str, Dict[str, Any]],
+    provider_registry: Dict[str, Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
     stage_configs: List[Dict[str, Any]] = []
 
@@ -171,7 +108,7 @@ def _build_llm_stage_configs(
         stage_label = stage.get("label", stage_key)
         stage_description = stage.get("description", "")
         assignment = llm_settings.stage(stage_key)
-        provider_configs = list(provider_cache.values())
+        provider_configs = list(provider_registry.values())
         selected_provider = assignment.providers[0] if assignment and assignment.providers else "azure"
         selected_model = assignment.model or ""
         selected_fallbacks: List[str] = []
@@ -947,7 +884,8 @@ def build_tool_panels(
     org_overrides = get_org_llm_overrides(case.organization_id)
     provider_catalog = load_provider_catalog()
     provider_credentials = get_org_provider_credentials(case.organization_id)
-    provider_cache = _build_provider_cache(
+    provider_registry = build_provider_registry(
+        organization_id=case.organization_id,
         llm_settings=llm_settings,
         provider_catalog=provider_catalog,
         provider_credentials=provider_credentials,
@@ -962,45 +900,23 @@ def build_tool_panels(
     fallback_defaults = [value for value in provider_chain if value != primary_default]
 
     provider_options: List[Dict[str, Any]] = []
-    seen_providers: set[str] = set()
-    for name, provider in llm_settings.providers.items():
+    for name, entry in provider_registry.items():
         catalog_entry = provider_catalog.get(name, {})
         credential_entry = provider_credentials.get(name, {})
-        configured = bool(credential_entry)
-        available = provider_cache[name]["available"]
-        option = {
-            "value": name,
-            "label": provider.display_name,
-            "description": catalog_entry.get("description"),
-            "available": available,
-            "configured": configured,
-            "default_endpoint": catalog_entry.get("default_endpoint"),
-            "requires_api_key": bool(catalog_entry.get("requires_api_key", True)),
-            "endpoint": credential_entry.get("endpoint"),
-            "models": credential_entry.get("models") or catalog_entry.get("models"),
-            "reason": provider_cache[name].get("unavailable_reason"),
-        }
-        provider_options.append(option)
-        seen_providers.add(name)
-
-    for name, credential in provider_credentials.items():
-        if name in seen_providers:
-            continue
         provider_options.append(
             {
                 "value": name,
-                "label": credential.get("display_name") or name,
-                "description": None,
-                "available": True,
-                "configured": True,
-                "default_endpoint": credential.get("endpoint"),
-                "requires_api_key": True,
-                "endpoint": credential.get("endpoint"),
-                "models": credential.get("models"),
-                "reason": "",
+                "label": entry.get("label", name),
+                "description": catalog_entry.get("description"),
+                "available": entry.get("available", False),
+                "configured": entry.get("configured", False),
+                "default_endpoint": entry.get("default_endpoint"),
+                "requires_api_key": entry.get("requires_api_key", True),
+                "endpoint": entry.get("endpoint") or credential_entry.get("endpoint"),
+                "models": entry.get("models"),
+                "reason": entry.get("unavailable_reason", ""),
             }
         )
-        seen_providers.add(name)
 
     summary_stage_defs = [
         {
@@ -1041,7 +957,7 @@ def build_tool_panels(
         stage_defs=summary_stage_defs,
         llm_settings=llm_settings,
         overrides=summary_overrides,
-        provider_cache=provider_cache,
+        provider_registry=provider_registry,
     )
     summary_chain = _collect_provider_chain(summary_overrides, provider_chain)
     summary_primary = summary_chain[0] if summary_chain else primary_default
@@ -1064,7 +980,7 @@ def build_tool_panels(
         stage_defs=timeline_stage_defs,
         llm_settings=llm_settings,
         overrides=timeline_overrides,
-        provider_cache=provider_cache,
+        provider_registry=provider_registry,
     )
     timeline_chain = _collect_provider_chain(timeline_overrides, provider_chain)
     timeline_primary = timeline_chain[0] if timeline_chain else primary_default

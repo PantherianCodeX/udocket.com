@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
-
 import json
 import logging
 import os
+import re
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Tuple
 
 try:  # pragma: no cover - optional dependency guard
     import requests
@@ -24,6 +24,69 @@ def _endpoint_is_canadian(endpoint: str) -> bool:
     return any(region in endpoint_lower for region in CANADIAN_REGIONS)
 
 
+def _extract_json_candidate(text: str) -> str:
+    stripped = text.strip()
+    if not stripped:
+        return stripped
+    fence = re.search(r"```(?:json)?\s*(.*?)```", stripped, flags=re.DOTALL | re.IGNORECASE)
+    if fence:
+        inner = fence.group(1).strip()
+        if inner:
+            return inner
+    match = re.search(r"([\[{].*[\]}])", stripped, flags=re.DOTALL)
+    if match:
+        return match.group(1).strip()
+    return stripped
+
+
+def _content_from_tool_calls(tool_calls: Any) -> str:
+    items = tool_calls or []
+    for call in items:
+        if not isinstance(call, dict):
+            continue
+        fn = call.get("function") or {}
+        args = fn.get("arguments")
+        if isinstance(args, (dict, list)):
+            return json.dumps(args)
+        if isinstance(args, str) and args.strip():
+            return args
+    return ""
+
+
+def _content_from_parts(parts: Any) -> str:
+    for part in parts or []:
+        if not isinstance(part, dict):
+            continue
+        text_value = part.get("text") or part.get("content")
+        if isinstance(text_value, str) and text_value.strip():
+            return text_value
+        if part.get("type") and part.get("type", "").startswith("output_json"):
+            raw = part.get("json") or part.get("text") or part.get("data")
+            if isinstance(raw, (dict, list)):
+                return json.dumps(raw)
+            if isinstance(raw, str) and raw.strip():
+                return raw
+    return ""
+
+
+def _content_from_delta(delta_payload: Any) -> str:
+    if not isinstance(delta_payload, dict):
+        return ""
+    delta_content = delta_payload.get("content")
+    if isinstance(delta_content, str) and delta_content.strip():
+        return delta_content
+    if isinstance(delta_content, list):
+        text = _content_from_parts(delta_content)
+        if text:
+            return text
+    tool_calls = delta_payload.get("tool_calls")
+    if tool_calls:
+        text = _content_from_tool_calls(tool_calls)
+        if text:
+            return text
+    return ""
+
+
 @dataclass
 class AzureClientConfig:
     endpoint: str
@@ -36,9 +99,7 @@ class AzureClientConfig:
     def validate(self) -> None:
         if not self.endpoint:
             raise ValueError("Missing Azure OpenAI endpoint")
-        if not self.allow_non_ca_region and not _endpoint_is_canadian(
-            self.endpoint
-        ):
+        if not self.allow_non_ca_region and not _endpoint_is_canadian(self.endpoint):
             raise ValueError("Azure OpenAI endpoint must target canadacentral or canadaeast")
         if not self.key:
             raise ValueError("Missing Azure OpenAI API key")
@@ -59,7 +120,7 @@ class AzureChatClient:
         self,
         *,
         messages: List[Dict[str, str]],
-        temperature: float = 0.2,
+        temperature: float = 1.0,
         max_tokens: Optional[int] = None,
         response_format: Optional[Dict[str, Any]] = None,
     ) -> Tuple[str, Dict[str, Any]]:
@@ -73,7 +134,7 @@ class AzureChatClient:
             "temperature": temperature,
         }
         if max_tokens is not None:
-            payload["max_tokens"] = max_tokens
+            payload["max_completion_tokens"] = max_tokens
         if response_format:
             payload["response_format"] = response_format
 
@@ -114,6 +175,16 @@ class AzureChatClient:
                 },
             )
             raise RuntimeError(message) from exc
+
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                "azure response body",
+                extra={
+                    "deployment": self.config.deployment,
+                    "preview": response.text[:2000],
+                },
+            )
+
         data = response.json()
         logger.debug(
             "azure response usage",
@@ -122,11 +193,51 @@ class AzureChatClient:
                 "usage": data.get("usage"),
             },
         )
+
         choices = data.get("choices") or []
         if not choices:
             raise RuntimeError("Azure OpenAI response missing choices")
-        message = choices[0].get("message") or {}
-        content = message.get("content") or ""
+
+        choice0 = choices[0]
+        message = choice0.get("message") or {}
+
+        content = ""
+        content_obj = message.get("content")
+        if isinstance(content_obj, str) and content_obj.strip():
+            content = content_obj
+        elif isinstance(content_obj, list):
+            content = _content_from_parts(content_obj)
+
+        if not content:
+            content = _content_from_tool_calls(message.get("tool_calls"))
+
+        if not content:
+            refusal = message.get("refusal")
+            if isinstance(refusal, str) and refusal.strip():
+                content = refusal
+
+        if not content:
+            content = _content_from_delta(choice0.get("delta"))
+
+        if content:
+            content = _extract_json_candidate(content)
+
+        if not isinstance(content, str):
+            try:
+                content = json.dumps(content)
+            except Exception:
+                content = ""
+
+        if not content and logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                "azure empty content: finish=%s message_keys=%s",
+                choice0.get("finish_reason"),
+                list(message.keys()),
+            )
+            delta_dbg = choice0.get("delta")
+            if delta_dbg:
+                logger.debug("azure delta snapshot %s", repr(delta_dbg)[:1200])
+
         usage = data.get("usage") or {}
         return content, usage
 

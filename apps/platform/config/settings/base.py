@@ -258,7 +258,27 @@ except Exception:
     pass
 CELERY_BEAT_SCHEDULE_FILENAME = str(celery_runtime_dir / "celerybeat-schedule")
 
-# Logging to stdout
+# Logging configuration: rely on propagation so modules inherit handler wiring
+_LOGGER_LEVEL_DEFAULTS = {
+    "apps.platform": ("PLATFORM_LOG_LEVEL", "DEBUG"),
+    "apps.platform.accounts": ("PLATFORM_LOG_LEVEL", "DEBUG"),
+    "apps.platform.accounts.auth": ("AUTH_LOG_LEVEL", "INFO"),
+    "apps.platform.operations": ("PLATFORM_LOG_LEVEL", "DEBUG"),
+    "apps.platform.operations.llm": ("PLATFORM_LOG_LEVEL", "DEBUG"),
+    "apps.platform.jobs": ("PLATFORM_LOG_LEVEL", "DEBUG"),
+    "apps.platform.ui": ("PLATFORM_LOG_LEVEL", "DEBUG"),
+    "udocket": ("PLATFORM_LOG_LEVEL", "DEBUG"),
+    "udocket.azure.client": ("AZURE_LOG_LEVEL", "INFO"),
+    "azure": ("AZURE_LOG_LEVEL", "WARNING"),
+    "langchain": ("LANGCHAIN_LOG_LEVEL", "INFO"),
+    "langchain_core": ("LANGCHAIN_LOG_LEVEL", "INFO"),
+    "langgraph": ("LANGCHAIN_LOG_LEVEL", "INFO"),
+    "django.contrib.auth": ("DJANGO_AUTH_LOG_LEVEL", "INFO"),
+    "mozilla_django_oidc": ("DJANGO_AUTH_LOG_LEVEL", "INFO"),
+    "oauthlib": ("DJANGO_AUTH_LOG_LEVEL", "WARNING"),
+    "django.request": ("DJANGO_REQUEST_LOG_LEVEL", "WARNING"),
+}
+
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -270,29 +290,8 @@ LOGGING = {
     },
     "root": {"handlers": ["console"], "level": env("DJANGO_LOG_LEVEL", default="INFO")},
     "loggers": {
-        "apps.platform": {"handlers": ["console"], "level": env("PLATFORM_LOG_LEVEL", default="DEBUG"), "propagate": False},
-        "azure": {"handlers": ["console"], "level": env("AZURE_LOG_LEVEL", default="WARNING"), "propagate": False},
-        "udocket": {"handlers": ["console"], "level": env("PLATFORM_LOG_LEVEL", default="DEBUG"), "propagate": False},
-        "udocket.azure.client": {
-            "handlers": ["console"],
-            "level": env("AZURE_LOG_LEVEL", default="INFO"),
-            "propagate": False,
-        },
-        "langchain": {
-            "handlers": ["console"],
-            "level": env("LANGCHAIN_LOG_LEVEL", default="INFO"),
-            "propagate": True,
-        },
-        "langchain_core": {
-            "handlers": ["console"],
-            "level": env("LANGCHAIN_LOG_LEVEL", default="INFO"),
-            "propagate": True,
-        },
-        "langgraph": {
-            "handlers": ["console"],
-            "level": env("LANGCHAIN_LOG_LEVEL", default="INFO"),
-            "propagate": True,
-        },
+        name: {"level": env(env_key, default=default), "propagate": True}
+        for name, (env_key, default) in _LOGGER_LEVEL_DEFAULTS.items()
     },
 }
 

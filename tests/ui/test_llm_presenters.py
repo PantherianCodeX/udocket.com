@@ -10,6 +10,7 @@ from packages.udocket_core.llm.config import (
 )
 
 from apps.platform.ui.views.presenters import cases as presenters
+from apps.platform.operations.llm import build_provider_registry
 
 
 def _build_settings() -> LLMSettings:
@@ -88,28 +89,30 @@ def llm_settings(monkeypatch) -> LLMSettings:
     return settings
 
 
-def test_build_provider_cache_marks_supported_and_unsupported(llm_settings):
-    cache = presenters._build_provider_cache(
+def test_build_provider_registry_marks_supported_and_unsupported(llm_settings):
+    registry = build_provider_registry(
+        organization_id=None,
         llm_settings=llm_settings,
         provider_catalog={},
         provider_credentials={},
+        supported_providers=["azure", "local"],
     )
 
-    assert set(cache.keys()) == {"azure", "local", "openai"}
+    assert set(registry.keys()) == {"azure", "local", "openai"}
 
-    azure_entry = cache["azure"]
+    azure_entry = registry["azure"]
     assert azure_entry["available"] is True
     assert azure_entry["unavailable_reason"] == ""
 
-    local_entry = cache["local"]
+    local_entry = registry["local"]
     assert local_entry["available"] is True
 
-    openai_entry = cache["openai"]
+    openai_entry = registry["openai"]
     assert openai_entry["available"] is False
     assert openai_entry["unavailable_reason"] == "Not supported yet"
 
 
-def test_build_provider_cache_includes_credential_only_provider(llm_settings):
+def test_build_provider_registry_includes_credential_only_provider(llm_settings):
     credentials = {
         "custom": {
             "display_name": "Custom Provider",
@@ -124,14 +127,16 @@ def test_build_provider_cache_includes_credential_only_provider(llm_settings):
         }
     }
 
-    cache = presenters._build_provider_cache(
+    registry = build_provider_registry(
+        organization_id=None,
         llm_settings=llm_settings,
         provider_catalog={},
         provider_credentials=credentials,
+        supported_providers=["azure", "local"],
     )
 
-    assert "custom" in cache
-    custom_entry = cache["custom"]
+    assert "custom" in registry
+    custom_entry = registry["custom"]
     assert custom_entry["available"] is True
     assert custom_entry["configured"] is True
     assert custom_entry["label"] == "Custom Provider"
@@ -139,10 +144,12 @@ def test_build_provider_cache_includes_credential_only_provider(llm_settings):
 
 
 def test_build_llm_stage_configs_uses_defaults_and_overrides(llm_settings):
-    provider_cache = presenters._build_provider_cache(
+    provider_registry = build_provider_registry(
+        organization_id=None,
         llm_settings=llm_settings,
         provider_catalog={},
         provider_credentials={},
+        supported_providers=["azure", "local", "openai"],
     )
 
     # No overrides: should use assignment defaults and enable local fallback
@@ -155,7 +162,7 @@ def test_build_llm_stage_configs_uses_defaults_and_overrides(llm_settings):
         stage_defs=stage_defs,
         llm_settings=llm_settings,
         overrides={},
-        provider_cache=provider_cache,
+        provider_registry=provider_registry,
     )
 
     assert len(configs) == 2
@@ -181,7 +188,7 @@ def test_build_llm_stage_configs_uses_defaults_and_overrides(llm_settings):
         stage_defs=stage_defs,
         llm_settings=llm_settings,
         overrides=overrides,
-        provider_cache=provider_cache,
+        provider_registry=provider_registry,
     )
 
     override_entry = configs_with_override[0]
