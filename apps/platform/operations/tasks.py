@@ -1020,22 +1020,36 @@ def summarize_job(
     if not transcript or not transcript.exists():
         raise RuntimeError("No transcript found to summarize")
 
-    try:
-        summarize_config = SummarizeConfig.from_env()
-    except ValueError as exc:
-        log.warning(
-            "summarize config invalid; falling back to offline mode",
-            extra={"job_id": job_id, "case_id": case_id, "reason": str(exc)},
-        )
-        summarize_config = SummarizeConfig(
-            azure_openai_endpoint="",
-            azure_openai_key="",
-            azure_openai_deployment="",
-            debug=os.getenv("DEBUG", "0").strip() == "1",
-            enable_offline_fallback=True,
-            force_offline_mode=True,
-            provider_chain=["local"],
-        )
+    disable_offline_env = os.getenv("SUMMARY_DISABLE_OFFLINE", "0").strip() == "1"
+
+    if disable_offline_env:
+        try:
+            summarize_config = SummarizeConfig.from_env()
+        except ValueError as exc:
+            log.error(
+                "summarize config invalid and offline disabled",
+                extra={"job_id": job_id, "case_id": case_id, "reason": str(exc)},
+            )
+            raise
+        summarize_config.enable_offline_fallback = False
+        summarize_config.force_offline_mode = False
+    else:
+        try:
+            summarize_config = SummarizeConfig.from_env()
+        except ValueError as exc:
+            log.warning(
+                "summarize config invalid; falling back to offline mode",
+                extra={"job_id": job_id, "case_id": case_id, "reason": str(exc)},
+            )
+            summarize_config = SummarizeConfig(
+                azure_openai_endpoint="",
+                azure_openai_key="",
+                azure_openai_deployment="",
+                debug=os.getenv("DEBUG", "0").strip() == "1",
+                enable_offline_fallback=True,
+                force_offline_mode=True,
+                provider_chain=["local"],
+            )
 
     summarize_agent = SummarizeAgent(summarize_config)
     log.info(
@@ -1103,7 +1117,9 @@ def summarize_job(
         case_dir=case_dir,
         job_id=job_id,
         intake=intake_payload or None,
-        allow_offline_fallback=allow_offline_fallback,
+        allow_offline_fallback=(
+            False if disable_offline_env else allow_offline_fallback
+        ),
         provider_chain=provider_chain,
         stage_overrides=merged_overrides,
         progress_callback=_progress,

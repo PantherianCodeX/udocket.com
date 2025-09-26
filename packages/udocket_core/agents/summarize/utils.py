@@ -499,6 +499,16 @@ class SummarizePipeline:
             allow = True
         elif runtime and runtime.allow_local_fallback and self.global_allow_offline:
             allow = True
+        if self._log_enabled:
+            self.logger.warning(
+                "stage failure",
+                extra={
+                    "stage": exc.stage,
+                    "error": str(exc.error),
+                    "job_id": getattr(self, "job_id", None),
+                    "case_id": getattr(self, "case_id", None),
+                },
+            )
         self._notify_stage(
             exc.stage,
             "failure",
