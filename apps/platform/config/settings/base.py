@@ -261,7 +261,7 @@ CELERY_BEAT_SCHEDULE_FILENAME = str(celery_runtime_dir / "celerybeat-schedule")
 # Logging to stdout
 LOGGING = {
     "version": 1,
-    "disable_existing_loggers": True,
+    "disable_existing_loggers": False,
     "formatters": {
         "simple": {"format": "%(asctime)s %(levelname)s %(name)s: %(message)s"},
     },
@@ -277,6 +277,21 @@ LOGGING = {
             "handlers": ["console"],
             "level": env("AZURE_LOG_LEVEL", default="INFO"),
             "propagate": False,
+        },
+        "langchain": {
+            "handlers": ["console"],
+            "level": env("LANGCHAIN_LOG_LEVEL", default="INFO"),
+            "propagate": True,
+        },
+        "langchain_core": {
+            "handlers": ["console"],
+            "level": env("LANGCHAIN_LOG_LEVEL", default="INFO"),
+            "propagate": True,
+        },
+        "langgraph": {
+            "handlers": ["console"],
+            "level": env("LANGCHAIN_LOG_LEVEL", default="INFO"),
+            "propagate": True,
         },
     },
 }
