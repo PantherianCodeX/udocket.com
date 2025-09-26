@@ -4,7 +4,17 @@ import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Sequence, cast
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Mapping,
+    MutableMapping,
+    Optional,
+    Sequence,
+    cast,
+)
 
 from .common import (
     AzureChatClient,
@@ -32,6 +42,8 @@ LLM_STAGE_KEYS = {
     "qa_and_finalize": "summarize.qa_and_finalize",
 }
 _llm_settings_cache: Optional[LLMSettings] = None
+
+ProgressCallback = Callable[[str, str, Dict[str, Any]], None]
 
 
 logger = logging.getLogger("udocket.summarize.agent")
@@ -84,7 +96,7 @@ class SummarizeConfig:
     azure_openai_deployment: str = ""
     azure_openai_api_version: str = "2024-08-01-preview"
     language: str = "en-CA"
-    temperature: float = 1.0 #0.2
+    temperature: float = 1.0  # 0.2
     max_output_tokens: int = 24000
     debug: bool = False
     enable_offline_fallback: bool = False
@@ -265,7 +277,7 @@ class SummarizeAgent:
         ] = None,
     ) -> SummarizeResult:
         case_dir = Path(case_dir)
-        state: Dict[str, Any] = {
+        state: MutableMapping[str, Any] = {
             "case_id": case_id,
             "job_id": job_id,
             "case_dir": case_dir,
@@ -531,9 +543,9 @@ class SummarizeAgent:
         )
 
     def _execute_pipeline(
-        self, pipeline: SummarizePipeline, state: Dict[str, Any]
+        self, pipeline: SummarizePipeline, state: Mapping[str, Any]
     ) -> Dict[str, Any]:
-        current_state: Dict[str, Any] = dict(state)
+        current_state: MutableMapping[str, Any] = dict(state)
         graph = None
         try:
             graph = build_summarize_graph(pipeline)
@@ -551,13 +563,11 @@ class SummarizeAgent:
 
     def _build_progress_dispatch(
         self,
-        external_callback: Optional[
-            Callable[[str, str, Dict[str, Any]], None]
-        ],
+        external_callback: Optional[ProgressCallback],
         case_id: str,
         job_id: str,
-    ) -> Callable[[str, str, Dict[str, Any]], None]:
-        def dispatch(stage: str, event: str, payload: Dict[str, Any]) -> None:
+    ) -> ProgressCallback:
+        def dispatch(stage: str, event: str, payload: Mapping[str, Any]) -> None:
             log_level = logging.INFO if self.config.debug else logging.DEBUG
             self._log(log_level, f"stage.{stage}.{event}", **payload)
             if external_callback is not None:
@@ -603,7 +613,7 @@ class SummarizeAgent:
         return candidates[0]
 
     def _build_context(
-        self, parse: TranscriptParse, intake: Dict[str, Any]
+        self, parse: TranscriptParse, intake: Mapping[str, Any]
     ) -> str:
         snippets: List[str] = []
         chars = 0

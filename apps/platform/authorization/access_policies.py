@@ -1,83 +1,151 @@
 from __future__ import annotations
 
-try:
-    from drf_access_policy import AccessPolicy  # type: ignore
-except Exception:  # Fallback when dependency unavailable (dev bootstrap)
-    from rest_framework.permissions import BasePermission
+import importlib
+import importlib.util
+from types import SimpleNamespace
+from typing import Any, Mapping, MutableMapping, Protocol, Sequence, TypedDict, cast
 
-    class AccessPolicy(BasePermission):  # type: ignore
-        statements: list = []
-
-        def _is_open(self, request) -> bool:
-            from django.conf import settings
-
-            return bool(getattr(settings, "PLATFORM_DEV_OPEN", True))
-
-        def _resolve_action(self, request, view) -> str:
-            action = getattr(view, "action", None)
-            if action:
-                return str(action)
-            return request.method.lower()
-
-        def _actions_match(self, action: str, statement_actions) -> bool:
-            if statement_actions == "*":
-                return True
-            if isinstance(statement_actions, (list, tuple, set)):
-                return action in statement_actions
-            return action == statement_actions
-
-        def _check_condition(self, condition, request, view, action) -> bool:
-            if not condition:
-                return True
-            method = getattr(self, condition, None)
-            if not callable(method):
-                return False
-            return bool(method(request, view, action))
-
-        def _evaluate(self, request, view, action: str) -> bool:
-            decision: bool | None = None
-            for stmt in self.statements or []:
-                stmt_actions = stmt.get("action")
-                if stmt_actions is None:
-                    continue
-                if not self._actions_match(action, stmt_actions):
-                    continue
-                if not self._check_condition(stmt.get("condition"), request, view, action):
-                    continue
-                effect = (stmt.get("effect") or "").lower()
-                if effect == "deny":
-                    return False
-                if effect == "allow":
-                    decision = True
-            return bool(decision)
-
-        def has_permission(self, request, view):
-            if self._is_open(request):
-                return True
-            action = self._resolve_action(request, view)
-            return self._evaluate(request, view, action)
-
-        def has_object_permission(self, request, view, obj):
-            if self._is_open(request):
-                return True
-            action = self._resolve_action(request, view)
-            setattr(request, "_access_policy_obj", obj)
-            try:
-                return self._evaluate(request, view, action)
-            finally:
-                if hasattr(request, "_access_policy_obj"):
-                    delattr(request, "_access_policy_obj")
-
-from django.conf import settings
+django_conf_spec = importlib.util.find_spec("django.conf")
+if django_conf_spec is not None:
+    settings = importlib.import_module("django.conf").settings  # type: ignore[attr-defined]
+else:  # pragma: no cover - lightweight typing stub when Django is unavailable
+    settings = SimpleNamespace(PLATFORM_DEV_OPEN=True)
 from apps.platform.cases.models import Case, CaseMembership
 from apps.platform.authorization.capabilities import has_capability
+
+
+def _case_membership_manager() -> Any:
+    case_membership_model = cast(Any, CaseMembership)
+    return case_membership_model.objects
+
+
+def _case_manager() -> Any:
+    case_model = cast(Any, Case)
+    return case_model.objects
+
+
+class RequestLike(Protocol):
+    method: str
+    user: Any
+    data: Mapping[str, Any] | MutableMapping[str, Any] | None
+    query_params: Mapping[str, Any] | MutableMapping[str, Any] | None
+
+
+class ViewLike(Protocol):
+    action: str | None
+    kwargs: Mapping[str, Any]
+
+
+class PolicyStatement(TypedDict, total=False):
+    action: str | Sequence[str]
+    principal: str | Sequence[str]
+    effect: str
+    condition: str
+
+
+class _BasePermission(Protocol):
+    def has_permission(self, request: Any, view: Any) -> bool:
+        ...
+
+    def has_object_permission(self, request: Any, view: Any, obj: Any) -> bool:
+        ...
+
+
+def _load_base_permission() -> type[_BasePermission]:
+    permissions_spec = importlib.util.find_spec("rest_framework.permissions")
+    if permissions_spec is None:
+        class _FallbackBasePermission:  # pragma: no cover - simple runtime shim
+            def has_permission(self, request: Any, view: Any) -> bool:
+                return True
+
+            def has_object_permission(self, request: Any, view: Any, obj: Any) -> bool:
+                return True
+
+        return _FallbackBasePermission
+
+    module = importlib.import_module("rest_framework.permissions")
+    base = getattr(module, "BasePermission")
+    return cast("type[_BasePermission]", base)
+
+
+BasePermission = _load_base_permission()
+
+
+class AccessPolicy(BasePermission):
+    statements: Sequence[PolicyStatement] = ()
+
+    def _is_open(self, request: RequestLike) -> bool:
+        return bool(getattr(settings, "PLATFORM_DEV_OPEN", True))
+
+    def _resolve_action(self, request: RequestLike, view: ViewLike) -> str:
+        action = getattr(view, "action", None)
+        if action:
+            return str(action)
+        return request.method.lower()
+
+    def _actions_match(self, action: str, statement_actions: str | Sequence[str]) -> bool:
+        if statement_actions == "*":
+            return True
+        if isinstance(statement_actions, str):
+            return action == statement_actions
+        if isinstance(statement_actions, (list, tuple, set)):
+            return action in statement_actions
+        return action == statement_actions
+
+    def _check_condition(
+        self,
+        condition: str | None,
+        request: RequestLike,
+        view: ViewLike,
+        action: str,
+    ) -> bool:
+        if not condition:
+            return True
+        method = getattr(self, condition, None)
+        if not callable(method):
+            return False
+        return bool(method(request, view, action))
+
+    def _evaluate(self, request: RequestLike, view: ViewLike, action: str) -> bool:
+        decision: bool | None = None
+        for stmt in self.statements or ():
+            stmt_actions = stmt.get("action")
+            if stmt_actions is None:
+                continue
+            if not self._actions_match(action, stmt_actions):
+                continue
+            if not self._check_condition(stmt.get("condition"), request, view, action):
+                continue
+            effect = (stmt.get("effect") or "").lower()
+            if effect == "deny":
+                return False
+            if effect == "allow":
+                decision = True
+        return bool(decision)
+
+    def has_permission(self, request: RequestLike, view: ViewLike) -> bool:
+        if self._is_open(request):
+            return True
+        action = self._resolve_action(request, view)
+        return self._evaluate(request, view, action)
+
+    def has_object_permission(self, request: RequestLike, view: ViewLike, obj: Any) -> bool:
+        if self._is_open(request):
+            return True
+        action = self._resolve_action(request, view)
+        setattr(request, "_access_policy_obj", obj)
+        try:
+            return self._evaluate(request, view, action)
+        finally:
+            if hasattr(request, "_access_policy_obj"):
+                delattr(request, "_access_policy_obj")
 
 
 class _MembershipMixin:
     def _is_dev_open(self) -> bool:
         return bool(getattr(settings, "PLATFORM_DEV_OPEN", True))
 
-    def _resolve_case_id(self, request, view) -> str | None:
+    def _resolve_case_id(self, request: RequestLike, view: ViewLike) -> str | None:
         obj = getattr(request, "_access_policy_obj", None)
         if obj is not None:
             case_id = getattr(obj, "case_id", None)
@@ -95,20 +163,27 @@ class _MembershipMixin:
 
         # Fall back to request payload
         data = getattr(request, "data", None)
-        if data:
-            case_id = data.get("case") or data.get("case_id")
+        if isinstance(data, Mapping):
+            data_mapping = cast(Mapping[str, Any], data)
+            case_id = data_mapping.get("case") or data_mapping.get("case_id")
             if case_id:
                 return str(case_id)
 
         # Query params (e.g., list filtering)
         params = getattr(request, "query_params", None)
-        if params:
-            case_id = params.get("case") or params.get("case_id")
+        if isinstance(params, Mapping):
+            params_mapping = cast(Mapping[str, Any], params)
+            case_id = params_mapping.get("case") or params_mapping.get("case_id")
             if case_id:
                 return str(case_id)
 
         # URL kwargs (nested routes)
-        kwargs = getattr(view, "kwargs", {}) or {}
+        kwargs_obj = getattr(view, "kwargs", None)
+        kwargs: Mapping[str, Any]
+        if isinstance(kwargs_obj, Mapping):
+            kwargs = cast(Mapping[str, Any], kwargs_obj)
+        else:
+            kwargs = cast(Mapping[str, Any], {})
         for key in ("case_pk", "case_id"):
             case_id = kwargs.get(key)
             if case_id:
@@ -119,16 +194,22 @@ class _MembershipMixin:
 
         return None
 
-    def _membership_role(self, user, case_id: str | None) -> str | None:
+    def _membership_role(self, user: Any, case_id: str | None) -> str | None:
         if not case_id:
             return None
         try:
-            membership = CaseMembership.objects.filter(case_id=case_id, user=user).first()
-            return membership.role if membership else None
+            membership = cast(
+                CaseMembership | None,
+                _case_membership_manager().filter(case_id=case_id, user=user).first(),
+            )
+            if membership is None:
+                return None
+            membership_role = cast(Any, membership).role
+            return cast(str, membership_role)
         except Exception:
             return None
 
-    def _has_cap(self, request, view, capability: str) -> bool:
+    def _has_cap(self, request: RequestLike, view: ViewLike, capability: str) -> bool:
         user = getattr(request, "user", None)
         if not user or not getattr(user, "is_authenticated", False):
             return self._is_dev_open()
@@ -140,16 +221,17 @@ class _MembershipMixin:
         except Exception:
             return False
 
-    def is_case_member(self, request, view, action) -> bool:
+    def is_case_member(self, request: RequestLike, view: ViewLike, action: str) -> bool:
         user = getattr(request, "user", None)
         if not user or not getattr(user, "is_authenticated", False):
             return self._is_dev_open()
         case_id = self._resolve_case_id(request, view)
         if case_id is None:
             return True
-        return CaseMembership.objects.filter(case_id=case_id, user=user).exists()
+        memberships = _case_membership_manager()
+        return bool(memberships.filter(case_id=case_id, user=user).exists())
 
-    def can_manage_case(self, request, view, action) -> bool:
+    def can_manage_case(self, request: RequestLike, view: ViewLike, action: str) -> bool:
         user = getattr(request, "user", None)
         if not user or not getattr(user, "is_authenticated", False):
             return self._is_dev_open()
@@ -158,14 +240,13 @@ class _MembershipMixin:
             return False
         if self._has_cap(request, view, "case.update"):
             return True
-        role = self._membership_role(user, case_id)
-        return role in {
-            CaseMembership.Role.OWNER,
-            CaseMembership.Role.ADMIN,
-            CaseMembership.Role.SUPERUSER,
-        }
+        role: str | None = self._membership_role(user, case_id)
+        owner_role = cast(str, CaseMembership.Role.OWNER)
+        admin_role = cast(str, CaseMembership.Role.ADMIN)
+        superuser_role = cast(str, CaseMembership.Role.SUPERUSER)
+        return role in {owner_role, admin_role, superuser_role}
 
-    def can_manage_jobs(self, request, view, action) -> bool:
+    def can_manage_jobs(self, request: RequestLike, view: ViewLike, action: str) -> bool:
         user = getattr(request, "user", None)
         if not user or not getattr(user, "is_authenticated", False):
             return self._is_dev_open()
@@ -174,15 +255,14 @@ class _MembershipMixin:
             return True
         if self._has_cap(request, view, "job.create"):
             return True
-        role = self._membership_role(user, case_id)
-        return role in {
-            CaseMembership.Role.OWNER,
-            CaseMembership.Role.CONTRIBUTOR,
-            CaseMembership.Role.ADMIN,
-            CaseMembership.Role.SUPERUSER,
-        }
+        role: str | None = self._membership_role(user, case_id)
+        owner_role = cast(str, CaseMembership.Role.OWNER)
+        contributor_role = cast(str, CaseMembership.Role.CONTRIBUTOR)
+        admin_role = cast(str, CaseMembership.Role.ADMIN)
+        superuser_role = cast(str, CaseMembership.Role.SUPERUSER)
+        return role in {owner_role, contributor_role, admin_role, superuser_role}
 
-    def can_review_job(self, request, view, action) -> bool:
+    def can_review_job(self, request: RequestLike, view: ViewLike, action: str) -> bool:
         user = getattr(request, "user", None)
         if not user or not getattr(user, "is_authenticated", False):
             return self._is_dev_open()
@@ -192,17 +272,20 @@ class _MembershipMixin:
             return True
         if self._has_cap(request, view, "case.update"):
             return True
-        if CaseMembership.objects.filter(case_id=case_id, user=user, role=CaseMembership.Role.REVIEWER).exists():
+        memberships = _case_membership_manager()
+        reviewer_role = cast(str, CaseMembership.Role.REVIEWER)
+        if memberships.filter(case_id=case_id, user=user, role=reviewer_role).exists():
             return True
+        case_manager = _case_manager()
         try:
-            case = Case.objects.get(pk=case_id)
+            case = cast(Case, case_manager.get(pk=case_id))
             if case.reviewer_id and str(case.reviewer_id) == str(user.id):
                 return True
-        except Case.DoesNotExist:
+        except case_manager.model.DoesNotExist:  # type: ignore[attr-defined]
             return False
         return False
 
-    def can_download_artifacts(self, request, view, action) -> bool:
+    def can_download_artifacts(self, request: RequestLike, view: ViewLike, action: str) -> bool:
         user = getattr(request, "user", None)
         if not user or not getattr(user, "is_authenticated", False):
             return self._is_dev_open()
@@ -211,13 +294,13 @@ class _MembershipMixin:
             return True
         return self._has_cap(request, view, "artifact.download")
 
-    def can_view_artifacts(self, request, view, action) -> bool:
+    def can_view_artifacts(self, request: RequestLike, view: ViewLike, action: str) -> bool:
         case_id = self._resolve_case_id(request, view)
         if case_id is None:
             return self.is_case_member(request, view, action)
         return self._has_cap(request, view, "artifact.view")
 
-    def can_create_case(self, request, view, action) -> bool:
+    def can_create_case(self, request: RequestLike, view: ViewLike, action: str) -> bool:
         user = getattr(request, "user", None)
         if not user or not getattr(user, "is_authenticated", False):
             return self._is_dev_open()

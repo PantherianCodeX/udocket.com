@@ -6,7 +6,18 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, List, MutableMapping, Optional, cast
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    List,
+    Mapping,
+    MutableMapping,
+    Optional,
+    Sequence,
+    cast,
+)
 
 from ..common import (
     AnalysisArtifact,
@@ -28,6 +39,13 @@ from .stages import (
     generate_summary_markdown,
     generate_timeline,
 )
+
+if TYPE_CHECKING:
+    from ..summarize_lib import ProgressCallback, StageRuntime, SummarizeConfig
+else:
+    ProgressCallback = Callable[[str, str, Dict[str, Any]], None]
+    StageRuntime = Any
+    SummarizeConfig = Any
 
 logger = logging.getLogger("udocket.summarize.pipeline")
 
@@ -68,33 +86,27 @@ class SummarizePipeline:
         case_id: str,
         job_id: str,
         case_dir: Path,
-        intake: Optional[Dict[str, Any]],
-        transcript_hint: Optional[Dict[str, Any]],
-        config: Any,
+        intake: Optional[Mapping[str, Any]],
+        transcript_hint: Optional[Mapping[str, Any]],
+        config: SummarizeConfig,
         resolve_transcript: Callable[[Optional[Path], Path], Path],
-        build_context: Callable[[TranscriptParse, Dict[str, Any]], str],
-        provider_chain: Optional[List[str]],
-        stage_runtimes: Dict[str, Any],
+        build_context: Callable[[TranscriptParse, Mapping[str, Any]], str],
+        provider_chain: Optional[Sequence[str]],
+        stage_runtimes: Mapping[str, StageRuntime],
         default_temperature: float,
         global_allow_offline: bool,
         logger: Optional[logging.Logger] = None,
-        progress_callback: Optional[
-            Callable[[str, str, Dict[str, Any]], None]
-        ] = None,
+        progress_callback: Optional[ProgressCallback] = None,
     ) -> None:
         self.case_id = case_id
         self.job_id = job_id
         self.case_dir = case_dir
-        self.intake = intake or {}
-        self.transcript_hint = transcript_hint
+        self.intake: Dict[str, Any] = dict(intake or {})
+        self.transcript_hint = dict(transcript_hint or {}) if transcript_hint else None
         self.config = config
-        self._resolve_transcript: Callable[[Optional[Path], Path], Path] = (
-            resolve_transcript
-        )
-        self._build_context: Callable[[TranscriptParse, Dict[str, Any]], str] = (
-            build_context
-        )
-        self.stage_runtimes = stage_runtimes
+        self._resolve_transcript = resolve_transcript
+        self._build_context = build_context
+        self.stage_runtimes = dict(stage_runtimes)
         self.default_temperature = default_temperature
         self.global_allow_offline = global_allow_offline
         self.offline_fallback_used = False

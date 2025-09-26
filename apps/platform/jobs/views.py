@@ -15,6 +15,7 @@ from apps.platform.authorization.access_policies import JobAccessPolicy
 from django.conf import settings
 from rest_framework.response import Response
 from django.http import FileResponse, Http404
+from django.shortcuts import render
 import requests
 
 log = logging.getLogger("apps.platform.jobs.views")
@@ -42,6 +43,8 @@ from apps.platform.operations.storage import ensure_case_dirs, ops_dir as storag
 from apps.platform.operations.utils import update_job_meta, append_job_log
 from apps.platform.operations.models import TaskRun
 from packages.udocket_core.audio import probe_audio_metadata
+
+ReviewerUser = Any
 
 
 def _derive_audio_filename(path_obj: Path | None, meta: Dict[str, Any], fallback: str) -> str:
@@ -292,7 +295,7 @@ class JobViewSet(viewsets.ModelViewSet):
         return has_capability(user, str(job.case_id), "case.update")
 
     @staticmethod
-    def _user_label(user) -> str:
+    def _user_label(user: ReviewerUser) -> str:
         if not user:
             return ""
         return (
@@ -303,7 +306,13 @@ class JobViewSet(viewsets.ModelViewSet):
             or str(user.pk)
         )
 
-    def _artifact_defaults(self, job: Job, checksum: str, activity_id: uuid.UUID, reviewer) -> dict:
+    def _artifact_defaults(
+        self,
+        job: Job,
+        checksum: str,
+        activity_id: uuid.UUID,
+        reviewer: ReviewerUser,
+    ) -> dict[str, Any]:
         return {
             "case_fk": job.case,
             "organization": job.organization,
@@ -318,7 +327,7 @@ class JobViewSet(viewsets.ModelViewSet):
             },
         }
 
-    def _ensure_approval_artifact(self, job: Job, reviewer) -> None:
+    def _ensure_approval_artifact(self, job: Job, reviewer: ReviewerUser) -> None:
         if not job.transcript_path:
             return
         base_artifact = (
