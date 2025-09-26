@@ -130,9 +130,11 @@ class SummarizeConfig:
             if not provider:
                 continue
             if provider not in SUPPORTED_PROVIDERS:
-                raise ValueError(
-                    "Unsupported summarize provider " f"'{provider}'"
+                logger.warning(
+                    "summarize provider ignored",
+                    extra={"provider": provider},
                 )
+                continue
             if provider in filtered_chain:
                 continue
             filtered_chain.append(provider)
