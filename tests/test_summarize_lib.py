@@ -132,6 +132,37 @@ def test_summarize_agent_versioned_outputs(tmp_path):
     assert first.provider_chain
 
 
+def test_summarize_agent_warns_when_azure_missing(monkeypatch, tmp_path, caplog):
+    monkeypatch.setenv(
+        "AZURE_OPENAI_ENDPOINT",
+        "https://example-canadacentral.openai.azure.com",
+    )
+    monkeypatch.setenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o-mini-test")
+    monkeypatch.delenv("AZURE_OPENAI_API_KEY", raising=False)
+    caplog.set_level("WARNING", "udocket.summarize.agent")
+
+    case_dir = tmp_path / "cases" / "CASE-WARN"
+    transcript_dir = case_dir / "transcript"
+    transcript_path = transcript_dir / "JOB-WARN__transcript.txt"
+    _write_transcript(
+        transcript_path,
+        """Heading\n---------------------------\n[00:01] SPK_1: Missing key test\n""",
+    )
+
+    config = SummarizeConfig.from_env()
+    agent = SummarizeAgent(config)
+    result = agent.summarize(
+        case_id="CASE-WARN",
+        case_dir=case_dir,
+        job_id="JOB-WARN",
+        allow_offline_fallback=True,
+    )
+
+    assert result.offline_fallback_used is True
+    warning_messages = [record.message for record in caplog.records]
+    assert any("Azure provider disabled" in message for message in warning_messages)
+
+
 def test_summarize_agent_adds_default_header(tmp_path):
     case_dir = tmp_path / "cases" / "CASE-3"
     transcript_dir = case_dir / "transcript"

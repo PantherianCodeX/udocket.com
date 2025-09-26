@@ -14,7 +14,7 @@ from .common import (
 )
 from .common.azure_client import CANADIAN_REGIONS
 from .common.io import TranscriptSegment  # re-export for legacy imports
-from .langgraph_orchestrator import build_summarize_graph
+from .langgraph_orchestrator import build_summarize_graph, enable_langgraph_debug_logging
 from .summarize.utils import FinalizedOutputs, SummarizePipeline
 from ..llm import LLMSettings, load_llm_settings
 
@@ -235,6 +235,7 @@ class SummarizeAgent:
         self.logger = logger
         self._log_enabled = False
         self._log_level = logging.INFO
+        enable_langgraph_debug_logging(force=self.config.debug)
 
     def _log(self, level: int, message: str, **meta: Any) -> None:
         if not self._log_enabled:
@@ -305,6 +306,31 @@ class SummarizeAgent:
             provider_chain = ["local"]
 
         azure_enabled = self.config.azure_enabled
+        if (
+            not azure_enabled
+            and not self.config.force_offline_mode
+            and "azure" in provider_chain
+        ):
+            missing_env: List[str] = []
+            if not self.config.azure_openai_endpoint:
+                missing_env.append("AZURE_OPENAI_ENDPOINT")
+            if not self.config.azure_openai_key:
+                missing_env.append("AZURE_OPENAI_API_KEY")
+            if not self.config.azure_openai_deployment:
+                missing_env.append("AZURE_OPENAI_DEPLOYMENT")
+            if missing_env:
+                self.logger.warning(
+                    "Azure provider disabled; missing configuration",
+                    extra={
+                        "missing_env": missing_env,
+                        "provider_chain": provider_chain,
+                    },
+                )
+            else:
+                self.logger.warning(
+                    "Azure provider disabled; configuration unavailable",
+                    extra={"provider_chain": provider_chain},
+                )
         stage_runtimes: Dict[str, StageRuntime] = {}
         provider_sequence: List[str] = []
 

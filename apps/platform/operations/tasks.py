@@ -32,7 +32,10 @@ from apps.platform.operations.models import TaskRun
 from apps.platform.cases.models import Case
 from apps.platform.operations.audit import emit as audit_emit
 from apps.platform.operations.storage import ensure_case_dirs, tenant_case_root, ops_dir as storage_ops_dir
-from apps.platform.operations.llm import get_org_llm_overrides
+from apps.platform.operations.llm import (
+    get_org_llm_overrides,
+    get_provider_secret_with_metadata,
+)
 from apps.platform.operations.utils import update_job_meta, append_job_log
 
 # Backwards compatibility for tests importing _update_job_meta
@@ -1004,6 +1007,154 @@ def _case_intake_payload(case: Case | None) -> Dict[str, Any]:
     return payload
 
 
+def _collect_requested_providers(
+    config_chain: List[str],
+    provider_chain: Optional[List[str]],
+    *override_maps: Optional[Dict[str, Dict[str, Any]]],
+) -> List[str]:
+    sequence: List[str] = []
+
+    def _add(value: Any) -> None:
+        if not value:
+            return
+        if not isinstance(value, str):
+            return
+        lowered = value.strip().lower()
+        if lowered and lowered not in sequence:
+            sequence.append(lowered)
+
+    for overrides in override_maps:
+        if not overrides:
+            continue
+        for payload in overrides.values():
+            if not isinstance(payload, dict):
+                continue
+            raw_providers = payload.get("providers")
+            if isinstance(raw_providers, list):
+                for item in raw_providers:
+                    _add(item)
+            _add(payload.get("provider"))
+            fallbacks = payload.get("fallbacks")
+            if isinstance(fallbacks, list):
+                for item in fallbacks:
+                    _add(item)
+
+    if provider_chain:
+        for item in provider_chain:
+            _add(item)
+
+    for item in config_chain:
+        _add(item)
+
+    return sequence
+
+
+def _infer_azure_deployment(
+    secret_payload: Dict[str, Any],
+    *override_maps: Optional[Dict[str, Dict[str, Any]]],
+) -> str:
+    metadata = secret_payload.get("metadata") or {}
+    if isinstance(metadata, dict):
+        for key in ("azure_deployment", "default_deployment", "deployment", "deployment_name"):
+            value = metadata.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+
+    models = secret_payload.get("models") or []
+    if isinstance(models, list):
+        for model in models:
+            if not isinstance(model, dict):
+                continue
+            for key in ("deployment", "name", "id", "value", "label"):
+                value = model.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
+
+    for overrides in override_maps:
+        if not overrides:
+            continue
+        for payload in overrides.values():
+            if not isinstance(payload, dict):
+                continue
+            options = payload.get("options")
+            if isinstance(options, dict):
+                candidate = options.get("azure_deployment")
+                if isinstance(candidate, str) and candidate.strip():
+                    return candidate.strip()
+    return ""
+
+
+def _hydrate_summarize_config_from_org_credentials(
+    *,
+    config: SummarizeConfig,
+    organization_id: Optional[str],
+    provider_chain: Optional[List[str]],
+    org_stage_overrides: Optional[Dict[str, Dict[str, Any]]],
+    job_stage_overrides: Optional[Dict[str, Dict[str, Any]]],
+) -> SummarizeConfig:
+    if not organization_id:
+        return config
+
+    requested = _collect_requested_providers(
+        config.provider_chain,
+        provider_chain,
+        org_stage_overrides,
+        job_stage_overrides,
+    )
+    if "azure" not in requested:
+        return config
+    if config.force_offline_mode or config.azure_enabled:
+        return config
+
+    secret = get_provider_secret_with_metadata(organization_id, "azure")
+    if not secret:
+        log.debug(
+            "No stored Azure credential for organization",
+            extra={"organization_id": organization_id},
+        )
+        return config
+
+    endpoint = str(secret.get("endpoint") or "").strip()
+    api_key = str(secret.get("api_key") or "").strip()
+    if not api_key:
+        log.warning(
+            "Azure credential lacks API key",
+            extra={"organization_id": organization_id},
+        )
+        return config
+
+    if endpoint:
+        config.azure_openai_endpoint = endpoint
+    config.azure_openai_key = api_key
+
+    deployment = _infer_azure_deployment(secret, org_stage_overrides, job_stage_overrides)
+    if deployment:
+        if (
+            config.azure_openai_deployment
+            and config.azure_openai_deployment != deployment
+        ):
+            log.info(
+                "Azure deployment overridden by organization credential",
+                extra={
+                    "organization_id": organization_id,
+                    "old_deployment": config.azure_openai_deployment,
+                    "new_deployment": deployment,
+                },
+            )
+        config.azure_openai_deployment = deployment
+    elif not config.azure_openai_deployment:
+        log.warning(
+            "Azure credential missing deployment; set AZURE_OPENAI_DEPLOYMENT or stage option",
+            extra={"organization_id": organization_id},
+        )
+    if config.azure_enabled:
+        log.info(
+            "Azure credentials loaded from organization store",
+            extra={"organization_id": organization_id},
+        )
+    return config
+
+
 @shared_task(bind=True)
 def summarize_job(
     *_args,
@@ -1019,6 +1170,8 @@ def summarize_job(
     transcript = Path(job.transcript_path) if job.transcript_path else _latest_transcript(case_id, org_id)
     if not transcript or not transcript.exists():
         raise RuntimeError("No transcript found to summarize")
+
+    org_overrides = get_org_llm_overrides(str(org_id) if org_id else None)
 
     force_online_env = (
         os.getenv("SUMMARY_FORCE_ONLINE", "0").strip() == "1"
@@ -1052,6 +1205,11 @@ def summarize_job(
             raise
         summarize_config.enable_offline_fallback = False
         summarize_config.force_offline_mode = False
+        summarize_config.provider_chain = [
+            provider
+            for provider in summarize_config.provider_chain
+            if provider == "azure"
+        ] or ["azure"]
     else:
         try:
             summarize_config = SummarizeConfig.from_env()
@@ -1069,6 +1227,15 @@ def summarize_job(
                 force_offline_mode=True,
                 provider_chain=["local"],
             )
+
+    if not force_offline_env:
+        summarize_config = _hydrate_summarize_config_from_org_credentials(
+            config=summarize_config,
+            organization_id=str(org_id) if org_id else None,
+            provider_chain=provider_chain,
+            org_stage_overrides=org_overrides,
+            job_stage_overrides=stage_overrides,
+        )
 
     summarize_agent = SummarizeAgent(summarize_config)
     log.info(
@@ -1093,7 +1260,6 @@ def summarize_job(
     except Exception:
         pass
     intake_payload = _case_intake_payload(job.case)
-    org_overrides = get_org_llm_overrides(str(org_id) if org_id else None)
     merged_overrides: Dict[str, Dict[str, Any]] = {}
     merged_overrides.update(org_overrides)
     if stage_overrides:
