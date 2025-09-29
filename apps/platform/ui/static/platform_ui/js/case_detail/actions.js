@@ -63,6 +63,7 @@
 
   let ctx = null;
   let deps = {};
+  let summaryPendingSelection = null;
 
   function setContext(value) {
     ctx = value;
@@ -1337,6 +1338,217 @@
     });
   }
 
+  function setSummaryPendingSelection(jobId) {
+    if (!jobId) return;
+    summaryPendingSelection = jobId;
+  }
+
+  function resolveSummaryPendingSelection() {
+    const value = summaryPendingSelection;
+    summaryPendingSelection = null;
+    return value;
+  }
+
+  async function openSummaryTextUpload(select) {
+    if (!ctx || !ctx.caseId || !deps.modals || typeof deps.modals.openFromHTML !== 'function') {
+      return;
+    }
+    try {
+      const resp = await fetch(`/cases/${ctx.caseId}/summary/upload-transcript-text/`, {
+        headers: { 'HX-Request': 'true' },
+        credentials: 'same-origin',
+      });
+      if (!resp.ok) {
+        throw new Error(`HTTP ${resp.status}`);
+      }
+      const html = await resp.text();
+      const modal = deps.modals.openFromHTML(html, { container: ctx.modalRoot || undefined });
+      if (!modal) {
+        if (deps.notify) {
+          deps.notify(global.innerWidth / 2, global.innerHeight / 2, 'Unable to open transcript text uploader');
+        }
+        return;
+      }
+      attachSummaryTextModal(modal, select);
+    } catch (error) {
+      console.error('Summary text upload modal failed', error);
+      if (deps.notify) {
+        deps.notify(global.innerWidth / 2, global.innerHeight / 2, 'Unable to load transcript text helper');
+      }
+    }
+  }
+
+  function attachSummaryTextModal(modal, select) {
+    const container = modal.querySelector('[data-summary-text-modal]');
+    if (!container) return;
+    const endpoint = container.getAttribute('data-summary-text-endpoint');
+    if (!endpoint) return;
+    const statusEl = container.querySelector('[data-summary-text-status]');
+    const uploadButton = container.querySelector('[data-summary-text-upload-button]');
+    const uploadForm = container.querySelector('[data-summary-text-upload-form]');
+    const fileInput = container.querySelector('[data-summary-text-file]');
+
+    const setStatus = (message, variant = 'info') => {
+      if (!statusEl) return;
+      if (!message) {
+        statusEl.classList.add('hidden');
+        statusEl.textContent = '';
+        return;
+      }
+      statusEl.textContent = message;
+      statusEl.classList.remove('hidden');
+      statusEl.classList.toggle('text-rose-300', variant === 'error');
+      statusEl.classList.toggle('text-slate-400', variant !== 'error');
+    };
+
+    const resetUploadButton = () => {
+      if (uploadButton) {
+        uploadButton.disabled = true;
+        uploadButton.textContent = 'Upload transcript';
+      }
+      setStatus('');
+      if (fileInput) {
+        fileInput.value = '';
+      }
+    };
+
+    const handleSuccess = (data) => {
+      if (!data || !data.job_id) {
+        setStatus('Unexpected response from server.', 'error');
+        return;
+      }
+      setSummaryPendingSelection(data.job_id);
+      if (deps.modals && typeof deps.modals.close === 'function') {
+        deps.modals.close(modal);
+      }
+      if (deps.notify) {
+        const rect = select && select.getBoundingClientRect ? select.getBoundingClientRect() : null;
+        const toastX = rect ? rect.left + rect.width / 2 : global.innerWidth / 2;
+        const toastY = rect ? rect.top + rect.height / 2 : global.innerHeight / 2;
+        deps.notify(toastX, toastY, 'Transcript text registered');
+      }
+      if (deps.ui && typeof deps.ui.setActiveCard === 'function') {
+        deps.ui.setActiveCard('summary');
+      }
+      const summaryUrl = `/cases/${ctx.caseId}/tools/summary/`;
+      if (global.htmx && typeof global.htmx.ajax === 'function') {
+        global.htmx.ajax('GET', summaryUrl, '#tool-workspace');
+      } else {
+        fetch(summaryUrl, { headers: { 'HX-Request': 'true' }, credentials: 'same-origin' })
+          .then((resp) => (resp.ok ? resp.text() : null))
+          .then((html) => {
+            if (!html) return;
+            const workspace = global.document.getElementById('tool-workspace');
+            if (workspace) {
+              workspace.innerHTML = html;
+              deps.ui?.refreshCaseJobs?.(ctx.caseId);
+            }
+          })
+          .catch(() => {});
+      }
+    };
+
+    const handleError = (errorMessage) => {
+      const message = errorMessage || 'Transcript upload failed.';
+      setStatus(message, 'error');
+      if (deps.notify) {
+        deps.notify(global.innerWidth / 2, global.innerHeight / 2, message);
+      }
+    };
+
+    const submitFixture = async (button) => {
+      const name = button.getAttribute('data-summary-text-fixture');
+      if (!name) return;
+      button.disabled = true;
+      const originalText = button.textContent;
+      button.textContent = 'Importing…';
+      setStatus('');
+      try {
+        const resp = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            'X-CSRFToken': helpers.getCSRFToken(),
+          },
+          credentials: 'same-origin',
+          body: JSON.stringify({ fixture_name: name }),
+        });
+        const data = await resp.json().catch(() => null);
+        if (!resp.ok || !data || data.status !== 'ok') {
+          const detail = data && data.detail ? data.detail : `HTTP ${resp.status}`;
+          handleError(detail);
+          return;
+        }
+        handleSuccess(data);
+      } catch (error) {
+        console.error('Fixture transcript import failed', error);
+        handleError('Unable to copy fixture transcript.');
+      } finally {
+        button.disabled = false;
+        button.textContent = originalText;
+      }
+    };
+
+    const submitFile = async (file) => {
+      if (!file) {
+        handleError('Select a .txt transcript file.');
+        return;
+      }
+      const formData = new global.FormData();
+      formData.append('transcript_text', file);
+      if (uploadButton) {
+        uploadButton.disabled = true;
+        uploadButton.textContent = 'Uploading…';
+      }
+      setStatus('Uploading…');
+      try {
+        const resp = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            Accept: 'application/json',
+            'X-CSRFToken': helpers.getCSRFToken(),
+          },
+          credentials: 'same-origin',
+          body: formData,
+        });
+        const data = await resp.json().catch(() => null);
+        if (!resp.ok || !data || data.status !== 'ok') {
+          const detail = data && data.detail ? data.detail : `HTTP ${resp.status}`;
+          handleError(detail);
+          return;
+        }
+        handleSuccess(data);
+      } catch (error) {
+        console.error('Transcript text upload failed', error);
+        handleError('Upload failed.');
+      } finally {
+        resetUploadButton();
+      }
+    };
+
+    container.querySelectorAll('[data-summary-text-fixture]').forEach((button) => {
+      button.addEventListener('click', () => submitFixture(button));
+    });
+
+    if (uploadForm && fileInput) {
+      fileInput.addEventListener('change', () => {
+        if (fileInput.files && fileInput.files.length) {
+          if (uploadButton) {
+            uploadButton.disabled = false;
+          }
+        } else {
+          resetUploadButton();
+        }
+      });
+      uploadForm.addEventListener('submit', (evt) => {
+        evt.preventDefault();
+        const file = fileInput.files && fileInput.files.length ? fileInput.files[0] : null;
+        submitFile(file);
+      });
+    }
+  }
+
   function setupAnalysisActions(root) {
     if (!root) return;
     if (platformUI.llmDebug) {
@@ -1352,15 +1564,21 @@
       const button = summaryContainer.querySelector('[data-analysis-action="summary"]');
 
       const uploadAttr = 'data-summary-upload-option';
+      const uploadTextAttr = 'data-summary-upload-text-option';
+      const specialAttrs = [uploadAttr, uploadTextAttr];
       const findFirstRunnableOption = () => {
         if (!select) return null;
-        return Array.from(select.options).find((option) => !option.disabled && !option.hasAttribute(uploadAttr)) || null;
+        return (
+          Array.from(select.options).find(
+            (option) => !option.disabled && !specialAttrs.some((attr) => option.hasAttribute(attr)),
+          ) || null
+        );
       };
 
       let lastValidValue = null;
       if (select) {
         const current = select.selectedOptions[0];
-        if (current && !current.disabled && !current.hasAttribute(uploadAttr)) {
+        if (current && !current.disabled && !specialAttrs.some((attr) => current.hasAttribute(attr))) {
           lastValidValue = current.value;
         } else {
           const fallback = findFirstRunnableOption();
@@ -1414,9 +1632,9 @@
           return;
         }
         const selected = select.selectedOptions[0];
-        const isUpload = selected.hasAttribute(uploadAttr);
+        const isSpecial = specialAttrs.some((attr) => selected.hasAttribute(attr));
         const isDisabled = selected.disabled || selected.hasAttribute('disabled');
-        button.disabled = isUpload || isDisabled;
+        button.disabled = isSpecial || isDisabled;
       };
 
       if (select) {
@@ -1427,17 +1645,24 @@
             return;
           }
           const isUpload = selected.hasAttribute(uploadAttr);
-          if (isUpload) {
+          const isUploadText = selected.hasAttribute(uploadTextAttr);
+          if (isUpload || isUploadText) {
             evt.preventDefault();
-            openTranscriptUpload();
+            if (isUpload) {
+              openTranscriptUpload();
+            } else {
+              openSummaryTextUpload(select);
+            }
             if (lastValidValue) {
               select.value = lastValidValue;
             } else {
               const fallback = findFirstRunnableOption()
-                || Array.from(select.options).find((option) => !option.hasAttribute(uploadAttr));
+                || Array.from(select.options).find(
+                  (option) => !specialAttrs.some((attr) => option.hasAttribute(attr)),
+                );
               if (fallback) {
                 select.value = fallback.value;
-                if (!fallback.disabled && !fallback.hasAttribute(uploadAttr)) {
+                if (!fallback.disabled && !specialAttrs.some((attr) => fallback.hasAttribute(attr))) {
                   lastValidValue = fallback.value;
                 }
               } else {
@@ -1447,11 +1672,25 @@
             updateDisabled();
             return;
           }
-          if (!selected.disabled) {
+          const isSpecial = specialAttrs.some((attr) => selected.hasAttribute(attr));
+          if (!selected.disabled && !isSpecial) {
             lastValidValue = selected.value;
+          }
+          const pending = resolveSummaryPendingSelection();
+          if (pending) {
+            select.value = pending;
+            lastValidValue = pending;
           }
           updateDisabled();
         });
+        const pending = resolveSummaryPendingSelection();
+        if (pending) {
+          const option = Array.from(select.options).find((opt) => opt.value === pending);
+          if (option && !option.disabled) {
+            select.value = pending;
+            lastValidValue = pending;
+          }
+        }
         updateDisabled();
       }
     }

@@ -118,6 +118,15 @@
     }
   }
 
+  function close(modal) {
+    if (!ctx || !modal) return;
+    if (ctx.modalApi && typeof ctx.modalApi.close === 'function') {
+      ctx.modalApi.close(modal);
+    } else if (modal.parentNode) {
+      modal.parentNode.removeChild(modal);
+    }
+  }
+
   async function openTranscriptModal(caseId, jobId) {
     if (!ctx || !caseId || !jobId) return;
     try {
@@ -153,5 +162,6 @@
     openJobLogModal,
     openJobMetadataModal,
     openTranscriptModal,
+    close,
   };
 })(window);

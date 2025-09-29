@@ -18,6 +18,11 @@ urlpatterns = [
         name="ui-case-job-transcript",
     ),
     path(
+        "cases/<str:case_id>/summary/upload-transcript-text/",
+        views.summary_upload_transcript_text,
+        name="ui-summary-upload-transcript-text",
+    ),
+    path(
         "cases/<str:case_id>/jobs/<uuid:job_id>/logs/modal/",
         views.case_job_logs_modal,
         name="ui-case-job-logs-modal",

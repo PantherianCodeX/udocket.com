@@ -34,6 +34,7 @@ from .jobs_actions import (
     case_job_title_form,
     case_job_update_title,
     create_job,
+    summary_upload_transcript_text,
 )
 from .jobs_modals import (
     case_job_logs_modal,
@@ -71,6 +72,7 @@ __all__ = [
     "case_tool_panel",
     "case_update_title",
     "create_job",
+    "summary_upload_transcript_text",
     "favicon",
     "index",
     "job_detail_panel",
