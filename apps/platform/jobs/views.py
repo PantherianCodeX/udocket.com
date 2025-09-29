@@ -5,17 +5,17 @@ import hashlib
 import logging
 import os
 import uuid
-from typing import Any, Dict, Iterable, List, Optional, Set
+from typing import Any, Dict, Iterable, List, Optional, Protocol, Set, cast
 
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.permissions import AllowAny
+from rest_framework.request import Request
 from apps.platform.authorization.access_policies import JobAccessPolicy
 from django.conf import settings
 from rest_framework.response import Response
-from django.http import FileResponse, Http404
-from django.shortcuts import render
+from django.http import FileResponse, Http404, HttpResponse
+from django.shortcuts import get_object_or_404, render
 import requests
 
 log = logging.getLogger("apps.platform.jobs.views")
@@ -45,6 +45,11 @@ from apps.platform.operations.models import TaskRun
 from packages.udocket_core.audio import probe_audio_metadata
 
 ReviewerUser = Any
+
+
+class SupportsDelay(Protocol):
+    def delay(self, *args: Any, **kwargs: Any) -> Any:
+        ...
 
 
 def _derive_audio_filename(path_obj: Path | None, meta: Dict[str, Any], fallback: str) -> str:
@@ -118,7 +123,7 @@ class JobViewSet(viewsets.ModelViewSet):
         user = getattr(self.request, "user", None)
         return scope_jobs(qs, user)
 
-    def create(self, request, *args, **kwargs):  # type: ignore[override]
+    def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:  # type: ignore[override]
         """Create a job and immediately enqueue transcription."""
         ser = JobCreateSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
@@ -129,7 +134,7 @@ class JobViewSet(viewsets.ModelViewSet):
         audio_input_value = job.audio_input or ""
         force_wav_conversion = str(request.data.get("force_wav") or "").lower() in {"1", "true", "yes", "on"}
         # Enqueue task
-        transcribe_job.delay(
+        cast(SupportsDelay, transcribe_job).delay(
             case_id=str(job.case_id),
             job_id=str(job.id),
             audio_input=job.audio_input,
@@ -149,7 +154,7 @@ class JobViewSet(viewsets.ModelViewSet):
         return Response(out.data, status=status.HTTP_201_CREATED, headers=headers)
 
     @action(detail=True, methods=["get"], url_path="status")
-    def status(self, request, pk=None):
+    def status(self, request: Request, pk: Optional[str] = None) -> Response:
         """Lightweight status endpoint used by UI polling.
 
         Returns only fields required for live update to avoid heavy serialization
@@ -172,7 +177,7 @@ class JobViewSet(viewsets.ModelViewSet):
         return Response(payload)
 
     @action(detail=True, methods=["post"], url_path="notes", url_name="notes")
-    def notes(self, request, pk=None):
+    def notes(self, request: Request, pk: Optional[str] = None) -> Response:
         job = self.get_object()
         if not self._can_review(request, job):
             return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
@@ -193,7 +198,7 @@ class JobViewSet(viewsets.ModelViewSet):
         user = getattr(request, "user", None)
         user_obj = user if user and getattr(user, "is_authenticated", False) else None
         created_by_name = self._user_label(user_obj) if user_obj else ""
-        note = JobNote.objects.create(
+        JobNote.objects.create(
             job=job,
             text=text_value,
             created_by=user_obj,
@@ -236,7 +241,7 @@ class JobViewSet(viewsets.ModelViewSet):
         return Response({"status": "ok", "notes": notes_payload})
 
     @action(detail=False, methods=["get"], url_path="status/bulk")
-    def bulk_status(self, request):
+    def bulk_status(self, request: Request) -> Response:
         """Return status payloads for multiple jobs in a single response.
 
         Expects a comma-delimited ``ids`` query parameter and respects tenancy
@@ -284,7 +289,7 @@ class JobViewSet(viewsets.ModelViewSet):
 
         return Response(payloads)
 
-    def _can_review(self, request, job: Job) -> bool:
+    def _can_review(self, request: Request, job: Job) -> bool:
         user = getattr(request, "user", None)
         if getattr(settings, "PLATFORM_DEV_OPEN", False):
             return True
@@ -356,7 +361,7 @@ class JobViewSet(viewsets.ModelViewSet):
         )
 
     @action(detail=True, methods=["post"], url_path="approve")
-    def approve(self, request, pk=None):
+    def approve(self, request: Request, pk: Optional[str] = None) -> Response:
         job = self.get_object()
         if not self._can_review(request, job):
             return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
@@ -404,7 +409,7 @@ class JobViewSet(viewsets.ModelViewSet):
         return Response(response_payload)
 
     @action(detail=True, methods=["post"], url_path="reject")
-    def reject(self, request, pk=None):
+    def reject(self, request: Request, pk: Optional[str] = None) -> Response:
         job = self.get_object()
         if not self._can_review(request, job):
             return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
@@ -449,7 +454,7 @@ class JobViewSet(viewsets.ModelViewSet):
         return Response(response_payload)
 
     @action(detail=True, methods=["get"], url_path="detail", url_name="detail")
-    def telemetry(self, request, pk=None):
+    def telemetry(self, request: Request, pk: Optional[str] = None) -> Response:
         """Return enriched job telemetry mixing model fields and ops metadata."""
 
         job = self.get_object()
@@ -457,7 +462,7 @@ class JobViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
     @action(detail=True, methods=["get"], url_path="download")
-    def download(self, request, pk=None):
+    def download(self, request: Request, pk: Optional[str] = None) -> FileResponse:
         job = self.get_object()
         if not job.transcript_path:
             raise Http404
@@ -465,7 +470,7 @@ class JobViewSet(viewsets.ModelViewSet):
         return FileResponse(open(job.transcript_path, "rb"), filename=f"{job.id}__transcript.txt", content_type="text/plain", as_attachment=True)
 
     @action(detail=True, methods=["get"], url_path="download-audio")
-    def download_audio(self, request, pk=None):
+    def download_audio(self, request: Request, pk: Optional[str] = None) -> FileResponse:
         job = self.get_object()
         converted = str(request.query_params.get("converted", "")).lower() in {"1", "true", "yes"}
         org_id = getattr(getattr(job, "case", None), "organization_id", None) or getattr(job, "organization_id", None)
@@ -543,7 +548,7 @@ class JobViewSet(viewsets.ModelViewSet):
         return FileResponse(path_obj.open("rb"), filename=filename, as_attachment=True)
 
     @action(detail=True, methods=["post"], url_path="verify-hash")
-    def verify_hash(self, request, pk=None):
+    def verify_hash(self, request: Request, pk: Optional[str] = None) -> Response:
         job = self.get_object()
 
         target = str(request.data.get("target") or "").strip().lower()
@@ -632,7 +637,7 @@ class JobViewSet(viewsets.ModelViewSet):
         return Response(payload)
 
     @action(detail=True, methods=["post"], url_path="refresh-audio")
-    def refresh_audio(self, request, pk=None):
+    def refresh_audio(self, request: Request, pk: Optional[str] = None) -> Response:
         job = self.get_object()
         audio_input = getattr(job, "audio_input", None)
         if not audio_input:
@@ -704,7 +709,7 @@ class JobViewSet(viewsets.ModelViewSet):
         return Response({"audio": refreshed_payload})
 
     @action(detail=True, methods=["post"], url_path="mark-corrupted")
-    def mark_corrupted(self, request, pk=None):
+    def mark_corrupted(self, request: Request, pk: Optional[str] = None) -> Response:
         job = self.get_object()
         now = timezone.now()
         if job.status != Job.Status.CORRUPTED:
@@ -733,7 +738,7 @@ class JobViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
     @action(detail=True, methods=["post"], url_path="cancel")
-    def cancel(self, request, pk=None):
+    def cancel(self, request: Request, pk: Optional[str] = None) -> Response:
         job = self.get_object()
         if job.status not in {Job.Status.PENDING, Job.Status.RUNNING, Job.Status.CANCELLING, Job.Status.UPLOADING}:
             return Response({"detail": "Job is not cancellable."}, status=status.HTTP_400_BAD_REQUEST)
@@ -817,7 +822,7 @@ class JobViewSet(viewsets.ModelViewSet):
         return Response({"status": Job.Status.CANCELLING, "upload_progress": job.upload_progress})
 
     @action(detail=True, methods=["post"], url_path="restart")
-    def restart(self, request, pk=None):
+    def restart(self, request: Request, pk: Optional[str] = None) -> Response:
         job = self.get_object()
         if job.status == Job.Status.RUNNING:
             return Response({"detail": "Job is currently running."}, status=status.HTTP_400_BAD_REQUEST)
@@ -833,7 +838,7 @@ class JobViewSet(viewsets.ModelViewSet):
                 language=job.language,
             )
 
-        transcribe_job.delay(
+        cast(SupportsDelay, transcribe_job).delay(
             case_id=str(new_job.case_id),
             job_id=str(new_job.id),
             audio_input=new_job.audio_input,
@@ -889,7 +894,7 @@ class JobViewSet(viewsets.ModelViewSet):
         return active
 
     @action(detail=True, methods=["get"], url_path="logs")
-    def logs(self, request, pk=None):
+    def logs(self, request: Request, pk: Optional[str] = None) -> FileResponse:
         job = self.get_object()
         case_id = str(job.case_id)
         ops = storage_ops_dir(case_id, job.case.organization_id) / f"{job.id}_transcription.log"
@@ -950,7 +955,7 @@ class JobViewSet(viewsets.ModelViewSet):
                 pass
 
     @action(detail=True, methods=["post"], url_path="analyze/summary")
-    def analyze_summary(self, request, pk=None):
+    def analyze_summary(self, request: Request, pk: Optional[str] = None) -> Response:
         job = self.get_object()
         payload = request.data if hasattr(request, "data") else {}
         provider_chain = payload.get("provider_chain") if isinstance(payload, dict) else None
@@ -976,7 +981,7 @@ class JobViewSet(viewsets.ModelViewSet):
         if not isinstance(stage_overrides, dict):
             stage_overrides = None
 
-        summarize_job.delay(
+        cast(SupportsDelay, summarize_job).delay(
             case_id=str(job.case_id),
             job_id=str(job.id),
             provider_chain=provider_chain,
@@ -997,21 +1002,21 @@ class JobViewSet(viewsets.ModelViewSet):
         return Response({"status": "queued"}, status=status.HTTP_202_ACCEPTED)
 
     @action(detail=True, methods=["post"], url_path="analyze/timeline")
-    def analyze_timeline(self, request, pk=None):
+    def analyze_timeline(self, request: Request, pk: Optional[str] = None) -> Response:
         job = self.get_object()
-        timeline_job.delay(case_id=str(job.case_id), job_id=str(job.id))
+        cast(SupportsDelay, timeline_job).delay(case_id=str(job.case_id), job_id=str(job.id))
         audit_emit(request, case_id=str(job.case_id), event="analysis.timeline.requested", data={"job_id": str(job.id)})
         return Response({"status": "queued"}, status=status.HTTP_202_ACCEPTED)
 
     @action(detail=True, methods=["post"], url_path="analyze/graph")
-    def analyze_graph(self, request, pk=None):
+    def analyze_graph(self, request: Request, pk: Optional[str] = None) -> Response:
         job = self.get_object()
-        graph_job.delay(case_id=str(job.case_id), job_id=str(job.id))
+        cast(SupportsDelay, graph_job).delay(case_id=str(job.case_id), job_id=str(job.id))
         audit_emit(request, case_id=str(job.case_id), event="analysis.graph.requested", data={"job_id": str(job.id)})
         return Response({"status": "queued"}, status=status.HTTP_202_ACCEPTED)
 
     @action(detail=True, methods=["post"], url_path="title")
-    def update_title(self, request, pk=None):
+    def update_title(self, request: Request, pk: Optional[str] = None) -> HttpResponse:
         job = self.get_object()
         artifact = (
             CaseArtifact.objects.filter(case_id=str(job.case_id), job_id=str(job.id), type="TRANSCRIPT")
@@ -1062,7 +1067,7 @@ class JobViewSet(viewsets.ModelViewSet):
         return render(request, "platform_ui/components/jobs/job_detail.html", context, headers=headers)
 
     @action(detail=False, methods=["post"], url_path="upload")
-    def upload(self, request):
+    def upload(self, request: Request) -> Response:
         """Upload an audio file and create a job.
 
         Accepts multipart/form-data with fields:
@@ -1073,11 +1078,6 @@ class JobViewSet(viewsets.ModelViewSet):
           - diarization: boolean (batch only)
           - language: e.g., "en-CA"
         """
-        from django.core.exceptions import ValidationError
-        from django.utils.datastructures import MultiValueDictKeyError
-        from django.shortcuts import get_object_or_404
-        from apps.platform.cases.models import Case
-
         case_id = request.data.get("case")
         if not case_id:
             return Response({"detail": "Missing case"}, status=status.HTTP_400_BAD_REQUEST)
@@ -1112,7 +1112,7 @@ class JobViewSet(viewsets.ModelViewSet):
         force_wav_requested = str(request.data.get("force_wav") or "").lower() in {"1", "true", "yes", "on"}
 
         # Enqueue task
-        transcribe_job.delay(
+        cast(SupportsDelay, transcribe_job).delay(
             case_id=str(job.case_id),
             job_id=str(job.id),
             audio_input=job.audio_input,

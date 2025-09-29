@@ -1,0 +1,29 @@
+import json
+from pathlib import Path
+from collections import defaultdict
+
+# Load the Pyright output
+with open("pyright_output.json", "r") as f:
+    data = json.load(f)
+
+# Dictionary to group errors by folder
+errors_by_folder = defaultdict(list)
+
+# Extract diagnostics
+for diag in data.get("generalDiagnostics", []):
+    file_path = Path(diag["file"])
+    folder = str(file_path.parent)
+    message = diag["message"]
+    range_info = diag.get("range", {})
+    line = range_info.get("start", {}).get("line", '?')
+    character = range_info.get("start", {}).get("character", '?')
+
+    errors_by_folder[folder].append(
+        f"{file_path.name}:{line}:{character} - {message}"
+    )
+
+# Print the grouped errors
+for folder, errors in errors_by_folder.items():
+    print(f"\n📂 {folder}")
+    for error in errors:
+        print(f"  🔸 {error}")

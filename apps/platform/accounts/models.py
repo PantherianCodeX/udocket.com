@@ -55,6 +55,16 @@ class User(AbstractUser):
     def __str__(self) -> str:  # pragma: no cover - trivial
         return self.username or self.email or f"user:{self.pk}"
 
+    if typing.TYPE_CHECKING:  # pragma: no cover - typing aids
+        from django.db import models as dj_models
+
+        kc_sub: str | None
+        display_name: str | None
+        is_superuser: bool
+        is_authenticated: bool
+        org_memberships: dj_models.Manager["OrganizationMembership"]
+        case_memberships: dj_models.Manager[typing.Any]
+
 
 class OrganizationMembership(models.Model):
     class Role(models.TextChoices):
@@ -83,3 +93,4 @@ class OrganizationMembership(models.Model):
         organization_id: str
         user: User
         user_id: int
+        role: str
