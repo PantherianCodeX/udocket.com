@@ -1351,18 +1351,107 @@
       const select = summaryContainer.querySelector('[data-summary-source]');
       const button = summaryContainer.querySelector('[data-analysis-action="summary"]');
 
+      const uploadAttr = 'data-summary-upload-option';
+      const findFirstRunnableOption = () => {
+        if (!select) return null;
+        return Array.from(select.options).find((option) => !option.disabled && !option.hasAttribute(uploadAttr)) || null;
+      };
+
+      let lastValidValue = null;
+      if (select) {
+        const current = select.selectedOptions[0];
+        if (current && !current.disabled && !current.hasAttribute(uploadAttr)) {
+          lastValidValue = current.value;
+        } else {
+          const fallback = findFirstRunnableOption();
+          if (fallback) {
+            lastValidValue = fallback.value;
+          }
+        }
+      }
+
+      const openTranscriptUpload = () => {
+        if (!ctx || !ctx.caseId) return;
+        if (deps.ui?.setActiveCard) {
+          deps.ui.setActiveCard('transcribe');
+        }
+        const url = `/cases/${ctx.caseId}/tools/transcribe/`;
+        if (global.htmx && typeof global.htmx.ajax === 'function') {
+          global.htmx.ajax('GET', url, '#tool-workspace');
+        } else {
+          fetch(url, { headers: { 'HX-Request': 'true' }, credentials: 'same-origin' })
+            .then((resp) => (resp.ok ? resp.text() : null))
+            .then((html) => {
+              if (!html) return;
+              const workspace = global.document.getElementById('tool-workspace');
+              if (workspace) {
+                workspace.innerHTML = html;
+                deps.ui?.refreshCaseJobs?.(ctx.caseId);
+              }
+            })
+            .catch(() => {});
+        }
+        const rect = select?.getBoundingClientRect();
+        const toastX = rect ? rect.left + rect.width / 2 : global.innerWidth / 2;
+        const toastY = rect ? rect.top + rect.height / 2 : global.innerHeight / 2;
+        if (deps.notify) {
+          deps.notify(toastX, toastY, 'Switching to transcription upload');
+        }
+        global.setTimeout(() => {
+          try {
+            const audioInput = global.document.getElementById('transcribe-audio');
+            if (audioInput && typeof audioInput.focus === 'function') {
+              audioInput.focus({ preventScroll: false });
+            }
+          } catch (_) {}
+        }, 400);
+      };
+
       const updateDisabled = () => {
         if (!button) return;
-        if (select && select.selectedOptions.length) {
-          const selected = select.selectedOptions[0];
-          button.disabled = selected.hasAttribute('disabled');
-        } else {
+        if (!select || !select.selectedOptions.length) {
           button.disabled = true;
+          return;
         }
+        const selected = select.selectedOptions[0];
+        const isUpload = selected.hasAttribute(uploadAttr);
+        const isDisabled = selected.disabled || selected.hasAttribute('disabled');
+        button.disabled = isUpload || isDisabled;
       };
 
       if (select) {
-        select.addEventListener('change', updateDisabled);
+        select.addEventListener('change', (evt) => {
+          const selected = select.selectedOptions[0];
+          if (!selected) {
+            updateDisabled();
+            return;
+          }
+          const isUpload = selected.hasAttribute(uploadAttr);
+          if (isUpload) {
+            evt.preventDefault();
+            openTranscriptUpload();
+            if (lastValidValue) {
+              select.value = lastValidValue;
+            } else {
+              const fallback = findFirstRunnableOption()
+                || Array.from(select.options).find((option) => !option.hasAttribute(uploadAttr));
+              if (fallback) {
+                select.value = fallback.value;
+                if (!fallback.disabled && !fallback.hasAttribute(uploadAttr)) {
+                  lastValidValue = fallback.value;
+                }
+              } else {
+                select.selectedIndex = -1;
+              }
+            }
+            updateDisabled();
+            return;
+          }
+          if (!selected.disabled) {
+            lastValidValue = selected.value;
+          }
+          updateDisabled();
+        });
         updateDisabled();
       }
     }

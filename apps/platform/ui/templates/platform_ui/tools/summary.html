@@ -20,6 +20,7 @@
                 {{ transcript.label }}{% if not transcript.approved %} · Pending approval{% endif %}
               </option>
             {% endfor %}
+            <option value="__upload__" data-summary-upload-option>Upload Transcript...</option>
           </select>
           <p class="text-[11px] text-slate-500">Only approved transcripts can be summarized. Pending jobs appear greyed out.</p>
         {% else %}
