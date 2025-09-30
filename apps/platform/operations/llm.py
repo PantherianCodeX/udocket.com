@@ -825,11 +825,21 @@ def run_live_model_probe(
                 test_temperature = float(default_temp)
     except Exception:
         test_temperature = 1.0
+    # Pick a reasonable token budget for the probe
+    max_out = 0
+    try:
+        mo = prepared.get("max_output_tokens")
+        if isinstance(mo, (int, float)):
+            max_out = int(mo)
+    except Exception:
+        max_out = 0
+    safe_max_tokens = max(16, min(256, max_out or 128))
+
     try:
         content, usage = client.chat(
-            messages=[{"role": "user", "content": "Respond with OK"}],
+            messages=[{"role": "user", "content": "Say OK"}],
             temperature=test_temperature,
-            max_tokens=16,
+            max_tokens=safe_max_tokens,
         )
     except ChatClientError:
         raise
