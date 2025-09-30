@@ -942,7 +942,7 @@ class JobViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="analyze/summary")
     def analyze_summary(self, request, pk=None):
-        job = self.get_object()
+        source_job = self.get_object()
         payload = request.data if hasattr(request, "data") else {}
         llm_config_id = None
         if isinstance(payload, dict):
@@ -950,21 +950,95 @@ class JobViewSet(viewsets.ModelViewSet):
             if isinstance(config_value, str) and config_value.strip():
                 llm_config_id = config_value.strip()
 
+        transcript_path = source_job.transcript_path or ""
+        source_artifact = (
+            CaseArtifact.objects.filter(
+                case_id=str(source_job.case_id),
+                job_id=str(source_job.id),
+                type="TRANSCRIPT",
+            )
+            .order_by("-created_at")
+            .first()
+        )
+        source_label = source_artifact.title if source_artifact else str(source_job.id)
+        summary_title = f"Summary · {source_label}" if source_label else "Summary"
+
+        organization_obj = source_job.organization or getattr(source_job.case, "organization", None)
+        if organization_obj is None:
+            try:
+                organization_obj = source_job.case.organization
+            except Exception:
+                organization_obj = None
+        if organization_obj is None:
+            return Response(
+                {"detail": "Organization context unavailable for summary job."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        with transaction.atomic():
+            summary_job = Job.objects.create(
+                case=source_job.case,
+                organization=organization_obj,
+                audio_input=source_job.audio_input,
+                mode=source_job.mode,
+                diarization=False,
+                language=source_job.language,
+                transcript_path=transcript_path,
+                duration_s=source_job.duration_s,
+            )
+
+        ensure_case_dirs(str(source_job.case_id), source_job.organization_id)
+        meta_seed: Dict[str, Any] = {
+            "job_kind": "summary",
+            "job_title": summary_title,
+            "agent_type": "summary",
+            "agent_label": "Summarize",
+            "source_job_id": str(source_job.id),
+            "source_job_title": source_label,
+            "source_transcript_path": transcript_path,
+        }
+        if llm_config_id:
+            meta_seed["requested_llm_config_id"] = llm_config_id
+
+        update_job_meta(
+            str(source_job.case_id),
+            source_job.organization_id,
+            str(summary_job.id),
+            meta_seed,
+        )
+        append_job_log(
+            str(source_job.case_id),
+            source_job.organization_id,
+            str(summary_job.id),
+            f"Queued summarize job from transcription {source_job.id}",
+        )
+
+        send_job_update(
+            str(summary_job.id),
+            event="job.created",
+            status=Job.Status.PENDING,
+            case_id=str(summary_job.case_id),
+        )
+
         summarize_job.delay(
-            case_id=str(job.case_id),
-            job_id=str(job.id),
+            case_id=str(summary_job.case_id),
+            job_id=str(summary_job.id),
             llm_config_id=llm_config_id,
+            source_job_id=str(source_job.id),
         )
         audit_emit(
             request,
-            case_id=str(job.case_id),
+            case_id=str(source_job.case_id),
             event="analysis.summary.requested",
             data={
-                "job_id": str(job.id),
+                "job_id": str(summary_job.id),
+                "source_job_id": str(source_job.id),
                 "llm_config_id": llm_config_id,
             },
         )
-        return Response({"status": "queued"}, status=status.HTTP_202_ACCEPTED)
+        return Response(
+            {"status": "queued", "job_id": str(summary_job.id)},
+            status=status.HTTP_202_ACCEPTED,
+        )
 
     @action(detail=True, methods=["post"], url_path="analyze/timeline")
     def analyze_timeline(self, request, pk=None):

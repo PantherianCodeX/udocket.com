@@ -55,6 +55,15 @@
       {% if timeline_llm %}
         {% include "platform_ui/tools/components/_llm_controls.html" with llm_context=timeline_llm %}
       {% endif %}
+      {% if module.notes and module.notes.job_id %}
+        {% include "platform_ui/components/notes/team_notes_panel.html" with
+          job_id=module.notes.job_id
+          notes_entries=module.notes.entries
+          notes_updated_at=module.notes.updated_at
+          notes_updated_by=module.notes.updated_by
+          user_can_add_notes=module.notes.user_can_add
+        %}
+      {% endif %}
       <div class="flex items-center justify-end gap-3">
         <button type="button"
                 class="inline-flex items-center gap-2 rounded-lg bg-primary-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-primary-500/30 transition hover:bg-primary-400 disabled:cursor-not-allowed disabled:opacity-60"

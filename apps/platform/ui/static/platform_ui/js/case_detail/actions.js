@@ -100,893 +100,227 @@
     }
   }
 
+
   function setupLLMControls(container) {
     if (!container) return;
-    const advanced = container.querySelector('[data-llm-advanced]');
-    if (!advanced) return;
-
-    const target = container.dataset.llmTarget || 'summary';
-    const llmDebug = !!platformUI.llmDebug;
 
     const readEmbeddedJSON = (key) => {
+      const el = container.querySelector(`[data-llm-json="${key}"]`);
+      if (!el) return null;
       try {
-        const script = container.querySelector(`[data-llm-json="${key}"]`);
-        if (!script) return null;
-        const textContent = script.textContent || '';
-        if (!textContent.trim()) return null;
-        const parsed = JSON.parse(textContent);
-        if (llmDebug) console.debug('[LLM] Parsed embedded JSON', key, parsed);
-        return parsed;
+        return JSON.parse(el.textContent || '');
       } catch (error) {
-        if (llmDebug) console.warn('[LLM] Failed to parse embedded JSON', key, error);
+        if (platformUI.llmDebug) {
+          console.warn('[LLM] Failed to parse embedded JSON', key, error);
+        }
         return null;
       }
     };
 
-    let catalog = readEmbeddedJSON('catalog') || {};
-    let credentials = readEmbeddedJSON('credentials') || {};
-    const providerState = {
-      catalog,
-      credentials,
-      debug: llmDebug,
-    };
+    const rawConfigs = readEmbeddedJSON('configurations') || [];
+    const activeFromJSON = readEmbeddedJSON('active-configuration');
+    const stageDefinitions = readEmbeddedJSON('stage-configs') || [];
+    const stageLabelMap = {};
+    stageDefinitions.forEach((stage) => {
+      if (stage && stage.key) {
+        stageLabelMap[stage.key] = stage.label || stage.key;
+      }
+    });
+
+    const configurations = rawConfigs.map((cfg, index) => ({
+      ...cfg,
+      _index: index,
+      _key: cfg && cfg.id ? `id:${cfg.id}` : `idx:${index}`,
+    }));
+
+    if (!configurations.length && activeFromJSON) {
+      configurations.push({
+        ...activeFromJSON,
+        _index: 0,
+        _key: activeFromJSON.id ? `id:${activeFromJSON.id}` : 'idx:0',
+      });
+    }
+
+    if (container.querySelector('[data-llm-config-select]')) {
+      const options = container.querySelectorAll('[data-llm-config-select] option');
+      options.forEach((option) => {
+        const idx = Number(option.dataset.configIndex);
+        if (Number.isInteger(idx) && configurations[idx]) {
+          configurations[idx]._key = option.value;
+        }
+      });
+    }
+
+    let activeConfig = null;
+    if (activeFromJSON && activeFromJSON.id) {
+      activeConfig = configurations.find((cfg) => cfg.id && cfg.id === activeFromJSON.id) || null;
+    }
+    if (!activeConfig) {
+      activeConfig = configurations[0] || null;
+    }
 
     const configSelect = container.querySelector('[data-llm-config-select]');
-    const configNameInput = container.querySelector('[data-llm-config-name]');
-    const configDescriptionInput = container.querySelector('[data-llm-config-description]');
-    const configDefaultInput = container.querySelector('[data-llm-config-default]');
-    const configCreateBtn = container.querySelector('[data-llm-config-create]');
-    const configDuplicateBtn = container.querySelector('[data-llm-config-duplicate]');
-    const configDeleteBtn = container.querySelector('[data-llm-config-delete]');
-    const primarySelect = advanced.querySelector('[data-llm-provider-primary]');
+    const nameDisplay = container.querySelector('[data-llm-config-name-display]');
+    const descriptionDisplay = container.querySelector('[data-llm-config-description-display]');
+    const providerDisplay = container.querySelector('[data-llm-config-provider-chain-display]');
+    const stageListEl = container.querySelector('[data-llm-stage-list]');
+    const stageEmptyEl = container.querySelector('[data-llm-stage-empty]');
+    const editLink = container.querySelector('[data-llm-link="edit"]');
+    const settingsBase = container.dataset.llmSettingsBase || '';
+    const returnUrl = container.dataset.llmReturnUrl || '';
 
-    const deepClone = (value) => JSON.parse(JSON.stringify(value || {}));
-    let tempIdCounter = 0;
-    const assignClientId = (cfg) => {
-      if (!cfg) return null;
-      if (!cfg._client_id) {
-        cfg._client_id = cfg.id || `temp-${Date.now()}-${tempIdCounter++}`;
-      }
-      return cfg._client_id;
-    };
+    const encode = (value) => encodeURIComponent(value || '');
 
-    let configurations = (readEmbeddedJSON('configurations') || []).map((cfg) => ({ ...cfg }));
-    configurations.forEach(assignClientId);
-
-    let activeConfiguration = readEmbeddedJSON('active-configuration');
-    if (activeConfiguration) {
-      const existing = configurations.find((cfg) => cfg.id && cfg.id === activeConfiguration.id);
-      if (existing) {
-        activeConfiguration = existing;
+    const updateEditLink = (config) => {
+      if (!editLink || !settingsBase) return;
+      if (config && config.id) {
+        const nextParam = returnUrl ? `&next=${encode(returnUrl)}` : '';
+        editLink.href = `${settingsBase}?config=${encode(config.id)}${nextParam}`;
+        editLink.classList.remove('pointer-events-none', 'opacity-50');
       } else {
-        activeConfiguration = { ...activeConfiguration };
-        assignClientId(activeConfiguration);
-        configurations.push(activeConfiguration);
+        const nextParam = returnUrl ? `?next=${encode(returnUrl)}` : '';
+        editLink.href = `${settingsBase}${nextParam}`;
+        editLink.classList.add('pointer-events-none', 'opacity-50');
       }
-    }
-    if (!activeConfiguration) {
-      activeConfiguration = configurations.find((cfg) => cfg.is_default) || configurations[0] || null;
-    }
-    if (!activeConfiguration) {
-      activeConfiguration = {
-        id: null,
-        name: `${target.charAt(0).toUpperCase()}${target.slice(1)} configuration`,
-        description: '',
-        provider_chain: [],
-        stage_map: {},
-        is_default: configurations.length === 0,
-      };
-      assignClientId(activeConfiguration);
-      configurations.push(activeConfiguration);
-    }
-    assignClientId(activeConfiguration);
-
-    let stageMap = deepClone(readEmbeddedJSON('stage-map') || activeConfiguration.stage_map);
-    let providerChain = Array.isArray(activeConfiguration.provider_chain)
-      ? [...activeConfiguration.provider_chain]
-      : [];
-
-    const state = {
-      get configs() {
-        return configurations;
-      },
-      set configs(next) {
-        configurations = next;
-      },
-      get activeConfig() {
-        return activeConfiguration;
-      },
-      set activeConfig(next) {
-        activeConfiguration = next;
-        assignClientId(activeConfiguration);
-      },
-      get stageMap() {
-        return stageMap;
-      },
-      set stageMap(next) {
-        stageMap = next;
-      },
-      get providerChain() {
-        return providerChain;
-      },
-      set providerChain(next) {
-        providerChain = next;
-      },
-      target,
-      providerState,
     };
 
-    const stageMapDataset = () => {
-      if (stageMap && Object.keys(stageMap).length) {
-        container.dataset.llmStageMap = JSON.stringify(stageMap);
+    const setDatasetJSON = (prop, value) => {
+      const hasValue =
+        value &&
+        ((Array.isArray(value) && value.length > 0) ||
+          (typeof value === 'object' && Object.keys(value).length > 0));
+      if (hasValue) {
+        container.dataset[prop] = JSON.stringify(value);
       } else {
-        delete container.dataset.llmStageMap;
+        delete container.dataset[prop];
       }
     };
 
-    const providerChainDataset = () => {
-      if (providerChain.length) {
-        container.dataset.llmProviderChain = JSON.stringify(providerChain);
-      } else {
-        delete container.dataset.llmProviderChain;
+    const renderStageOverrides = (stageMap) => {
+      if (!stageListEl) return;
+      stageListEl.innerHTML = '';
+      const entries = Object.entries(stageMap || {}).filter(([, override]) => override && typeof override === 'object');
+      if (!entries.length) {
+        stageListEl.classList.add('hidden');
+        if (stageEmptyEl) stageEmptyEl.classList.remove('hidden');
+        return;
       }
+      stageListEl.classList.remove('hidden');
+      if (stageEmptyEl) stageEmptyEl.classList.add('hidden');
+      entries.forEach(([stageKey, override]) => {
+        const row = global.document.createElement('div');
+        row.className = 'rounded border border-white/10 bg-slate-900/60 p-3';
+
+        const title = global.document.createElement('p');
+        title.className = 'text-sm font-semibold text-white';
+        title.textContent = stageLabelMap[stageKey] || stageKey;
+        row.appendChild(title);
+
+        const details = global.document.createElement('dl');
+        details.className = 'mt-1 space-y-1 text-xs text-slate-400';
+
+        const provider = override.provider || (Array.isArray(override.providers) ? override.providers[0] : null);
+        if (provider) {
+          const wrapper = global.document.createElement('div');
+          wrapper.innerHTML = '<dt class="inline font-semibold text-slate-300">Provider:</dt> <dd class="inline"></dd>';
+          wrapper.querySelector('dd').textContent = provider;
+          details.appendChild(wrapper);
+        }
+
+        if (override.model) {
+          const wrapper = global.document.createElement('div');
+          wrapper.innerHTML = '<dt class="inline font-semibold text-slate-300">Model:</dt> <dd class="inline"></dd>';
+          wrapper.querySelector('dd').textContent = override.model;
+          details.appendChild(wrapper);
+        }
+
+        if (override.max_tokens) {
+          const wrapper = global.document.createElement('div');
+          wrapper.innerHTML = '<dt class="inline font-semibold text-slate-300">Max tokens:</dt> <dd class="inline"></dd>';
+          wrapper.querySelector('dd').textContent = override.max_tokens;
+          details.appendChild(wrapper);
+        }
+
+        if (override.options && typeof override.options === 'object') {
+          const optionWrapper = global.document.createElement('div');
+          const dt = global.document.createElement('dt');
+          dt.className = 'font-semibold text-slate-300';
+          dt.textContent = 'Options:';
+          const dd = global.document.createElement('dd');
+          const list = global.document.createElement('ul');
+          list.className = 'ml-4 list-disc space-y-0.5';
+          Object.entries(override.options).forEach(([key, value]) => {
+            const item = global.document.createElement('li');
+            item.innerHTML = `<span class="font-semibold text-slate-300">${key.replace(/_/g, ' ')}:</span> ${value}`;
+            list.appendChild(item);
+          });
+          dd.appendChild(list);
+          optionWrapper.appendChild(dt);
+          optionWrapper.appendChild(dd);
+          details.appendChild(optionWrapper);
+        }
+
+        row.appendChild(details);
+        stageListEl.appendChild(row);
+      });
     };
 
-    const configIdDataset = () => {
-      if (activeConfiguration && activeConfiguration.id) {
-        container.dataset.llmConfigId = activeConfiguration.id;
+    const renderConfigDetails = (config) => {
+      if (!config) return;
+      if (nameDisplay) nameDisplay.textContent = config.name || '(Untitled configuration)';
+      if (descriptionDisplay) {
+        descriptionDisplay.textContent = config.description || 'No notes added.';
+      }
+      const providerChain = Array.isArray(config.provider_chain) ? config.provider_chain.filter(Boolean) : [];
+      if (providerDisplay) {
+        if (providerChain.length) {
+          providerDisplay.textContent = `Providers: ${providerChain.join(', ')}`;
+        } else {
+          providerDisplay.textContent = 'Providers will be selected automatically.';
+        }
+      }
+      renderStageOverrides(config.stage_map || {});
+      setDatasetJSON('llmStageMap', config.stage_map || {});
+      setDatasetJSON('llmProviderChain', providerChain);
+      if (config.id) {
+        container.dataset.llmConfigId = config.id;
       } else {
         delete container.dataset.llmConfigId;
       }
     };
 
-    const refreshDatasets = () => {
-      stageMapDataset();
-      providerChainDataset();
-      configIdDataset();
-    };
-
-    const refreshPrimarySelect = () => {
-      if (!primarySelect) return;
-      const currentPrimary = providerChain.length ? providerChain[0] : '';
-      let matched = false;
-      Array.from(primarySelect.options).forEach((option) => {
-        if (option.value === currentPrimary) {
-          option.selected = true;
-          matched = true;
-        }
-      });
-      if (!matched) {
-        const firstEnabled = Array.from(primarySelect.options).find((option) => !option.disabled);
-        if (firstEnabled) {
-          firstEnabled.selected = true;
-        }
-      }
-      const selected = primarySelect.value;
-      if (selected) {
-        providerChain = providerChain.filter((value) => value !== selected);
-        providerChain.unshift(selected);
-      }
-      providerChainDataset();
-    };
-
-    const refreshConfigInputs = () => {
-      if (configNameInput) configNameInput.value = activeConfiguration.name || '';
-      if (configDescriptionInput) configDescriptionInput.value = activeConfiguration.description || '';
-      if (configDefaultInput) configDefaultInput.checked = !!activeConfiguration.is_default;
-    };
-
-    const renderConfigSelect = () => {
-      if (!configSelect) return;
-      configSelect.innerHTML = '';
-      configurations.forEach((cfg) => {
-        const option = global.document.createElement('option');
-        option.value = assignClientId(cfg);
-        option.textContent = cfg.name || '(Untitled configuration)';
-        if (cfg.is_default) option.textContent += ' · Default';
-        if (cfg._client_id === activeConfiguration._client_id) option.selected = true;
-        configSelect.appendChild(option);
-      });
-      if (configSelect.options.length && configSelect.selectedIndex === -1) {
-        configSelect.selectedIndex = 0;
-      }
-    };
-
-    const syncButtons = () => {
-      if (configDuplicateBtn) configDuplicateBtn.disabled = configurations.length === 0;
-      if (configDeleteBtn) configDeleteBtn.disabled = !activeConfiguration.id;
-    };
-
     const applyActiveConfiguration = (config) => {
-      state.activeConfig = config;
-      stageMap = deepClone(config.stage_map);
-      providerChain = Array.isArray(config.provider_chain) ? [...config.provider_chain] : [];
-      refreshConfigInputs();
-      refreshPrimarySelect();
-      renderConfigSelect();
-      refreshDatasets();
-      syncButtons();
-      if (llmDebug) {
+      activeConfig = config || configurations[0] || null;
+      if (!activeConfig) return;
+      renderConfigDetails(activeConfig);
+      updateEditLink(activeConfig);
+      if (configSelect) {
+        configSelect.value = activeConfig._key;
+      }
+      if (platformUI.llmDebug) {
         console.debug('[LLM] Active LLM configuration', {
-          target,
-          id: config.id,
-          name: config.name,
-          provider_chain: providerChain,
+          target: container.dataset.llmTarget,
+          id: activeConfig.id,
+          name: activeConfig.name,
         });
       }
     };
 
-    renderConfigSelect();
-    refreshConfigInputs();
-    refreshPrimarySelect();
-    refreshDatasets();
-    syncButtons();
+    applyActiveConfiguration(activeConfig);
 
     if (configSelect) {
       configSelect.addEventListener('change', () => {
-        const selectedId = configSelect.value;
-        const next = configurations.find((cfg) => cfg._client_id === selectedId);
-        if (next) {
-          applyActiveConfiguration(next);
-        }
+        const value = configSelect.value;
+        const next = configurations.find((cfg) => cfg._key === value);
+        applyActiveConfiguration(next || configurations[0] || null);
       });
     }
+  }
 
-    if (configNameInput) {
-      configNameInput.addEventListener('input', () => {
-        activeConfiguration.name = configNameInput.value.trim();
-        renderConfigSelect();
-      });
-    }
 
-    if (configDescriptionInput) {
-      configDescriptionInput.addEventListener('input', () => {
-        activeConfiguration.description = configDescriptionInput.value;
-      });
-    }
-
-    if (configDefaultInput) {
-      configDefaultInput.addEventListener('change', () => {
-        activeConfiguration.is_default = configDefaultInput.checked;
-      });
-    }
-
-    if (primarySelect) {
-      primarySelect.addEventListener('change', () => {
-        const value = primarySelect.value;
-        providerChain = providerChain.filter((item) => item !== value);
-        if (value) {
-          providerChain.unshift(value);
-        }
-        providerChainDataset();
-      });
-    }
-
-    const createEmptyConfiguration = (label) => {
-      const cfg = {
-        id: null,
-        name: label || `New ${target} configuration`,
-        description: '',
-        provider_chain: [],
-        stage_map: {},
-        is_default: configurations.length === 0,
-      };
-      assignClientId(cfg);
-      return cfg;
-    };
-
-    if (configCreateBtn) {
-      configCreateBtn.addEventListener('click', () => {
-        const cfg = createEmptyConfiguration();
-        configurations = [...configurations, cfg];
-        applyActiveConfiguration(cfg);
-        if (configNameInput) {
-          configNameInput.focus();
-          configNameInput.select();
-        }
-      });
-    }
-
-    if (configDuplicateBtn) {
-      configDuplicateBtn.addEventListener('click', () => {
-        const clone = {
-          id: null,
-          name: `${activeConfiguration.name || 'Untitled'} copy`,
-          description: activeConfiguration.description || '',
-          provider_chain: [...providerChain],
-          stage_map: deepClone(stageMap),
-          is_default: false,
-        };
-        assignClientId(clone);
-        configurations = [...configurations, clone];
-        applyActiveConfiguration(clone);
-        if (configNameInput) {
-          configNameInput.focus();
-          configNameInput.select();
-        }
-      });
-    }
-
-    const updateStateFromResponse = (payload) => {
-      configurations = (payload.configurations || []).map((cfg) => ({ ...cfg }));
-      configurations.forEach(assignClientId);
-      let nextActive = null;
-      if (payload.active) {
-        nextActive = configurations.find((cfg) => cfg.id === payload.active.id);
-        if (!nextActive) {
-          nextActive = { ...payload.active };
-          assignClientId(nextActive);
-          configurations.push(nextActive);
-        }
-      }
-      if (!nextActive) {
-        nextActive = configurations.find((cfg) => cfg.is_default) || configurations[0] || createEmptyConfiguration();
-      }
-      applyActiveConfiguration(nextActive);
-    };
-
-    const persistConfiguration = async (request) => {
-      if (!ctx?.caseId) return null;
-      const payload = {
-        target,
-        action: request.action || 'upsert',
-      };
-      if (payload.action === 'delete') {
-        payload.config_id = request.configId;
-      } else {
-        payload.configuration = request.configuration;
-      }
-      try {
-        const resp = await fetch(`/cases/${ctx.caseId}/llm/settings/`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': helpers.getCSRFToken(),
-            Accept: 'application/json',
-          },
-          credentials: 'same-origin',
-          body: JSON.stringify(payload),
-        });
-        if (!resp.ok) {
-          const text = await resp.text();
-          throw new Error(text || `HTTP ${resp.status}`);
-        }
-        const data = await resp.json();
-        updateStateFromResponse(data);
-        return data;
-      } catch (error) {
-        console.warn('[LLM] Persist configuration failed', error);
-        caseDetail.modals?.message?.({
-          heading: 'Save failed',
-          body: error.message || 'Unable to update configuration.',
-          container: ctx?.modalRoot || undefined,
-        });
-        return null;
-      }
-    };
-
-    if (configDeleteBtn) {
-      configDeleteBtn.addEventListener('click', async () => {
-        if (!activeConfiguration.id) {
-          configurations = configurations.filter((cfg) => cfg !== activeConfiguration);
-          const replacement = configurations[0] || createEmptyConfiguration();
-          if (!configurations.length) {
-            configurations = [replacement];
-          }
-          applyActiveConfiguration(replacement);
-          renderConfigSelect();
-          syncButtons();
-          return;
-        }
-        const confirmed = await deps.modals?.confirm?.({
-          heading: 'Delete LLM configuration',
-          body: 'This configuration will be removed for the organization. Continue?',
-          confirmLabel: 'Delete',
-          cancelLabel: 'Cancel',
-          destructive: true,
-          container: ctx?.modalRoot || undefined,
-        });
-        if (confirmed === false) return;
-        await persistConfiguration({ action: 'delete', configId: activeConfiguration.id });
-        renderConfigSelect();
-        syncButtons();
-        caseDetail.modals?.message?.({
-          heading: 'Configuration deleted',
-          body: 'The LLM configuration was removed.',
-          container: ctx?.modalRoot || undefined,
-        });
-      });
-    }
-
-    const ensureModelRow = (modalEl) => {
-      const modelContainer = modalEl.querySelector('[data-llm-models]');
-      const templateModel = modalEl.querySelector('[data-llm-model-row-template]');
-      if (!modelContainer || !templateModel) return;
-      if (!modelContainer.children.length) {
-        modelContainer.appendChild(renderModelRow(templateModel));
-      }
-    };
-
-    function renderModelRow(template, model = {}) {
-      const clone = template.content.firstElementChild.cloneNode(true);
-      const nameInput = clone.querySelector('[data-llm-model-name]');
-      const labelInput = clone.querySelector('[data-llm-model-label]');
-      const costInput = clone.querySelector('[data-llm-model-cost]');
-      const maxInput = clone.querySelector('[data-llm-model-max]');
-      if (nameInput) nameInput.value = model.name || '';
-      if (labelInput) labelInput.value = model.label || '';
-      if (costInput) costInput.value = model.cost_tier || '';
-      if (maxInput) maxInput.value = model.max_output_tokens != null ? model.max_output_tokens : '';
-      const removeBtn = clone.querySelector('[data-llm-model-remove]');
-      if (removeBtn) {
-        removeBtn.addEventListener('click', (evt) => {
-          evt.preventDefault();
-          clone.remove();
-        });
-      }
-      return clone;
-    }
-
-    function renderProviderList(modalEl, stateRef) {
-      const list = modalEl.querySelector('[data-llm-provider-list]');
-      const empty = modalEl.querySelector('[data-llm-provider-empty]');
-      if (!list) return;
-      list.innerHTML = '';
-      const template = modalEl.querySelector('[data-llm-provider-card-template]');
-      const entries = new Map();
-      Object.entries(stateRef.catalog || {}).forEach(([key, info]) => {
-        entries.set(key, { key, catalog: info, credential: stateRef.credentials[key] || null });
-      });
-      Object.entries(stateRef.credentials || {}).forEach(([key, credential]) => {
-        if (!entries.has(key)) {
-          entries.set(key, { key, catalog: null, credential });
-        }
-      });
-      if (stateRef.debug) {
-        console.debug('[LLM] Render provider list', { entries: Array.from(entries.keys()) });
-      }
-      if (!entries.size) {
-        if (empty) empty.classList.remove('hidden');
-        return;
-      }
-      if (empty) empty.classList.add('hidden');
-      entries.forEach((entry) => {
-        if (!template) return;
-        const card = template.content.firstElementChild.cloneNode(true);
-        card.setAttribute('data-llm-provider-card', entry.key);
-        const titleEl = card.querySelector('[data-llm-provider-card-title]');
-        const descEl = card.querySelector('[data-llm-provider-card-description]');
-        const endpointEl = card.querySelector('[data-llm-provider-card-endpoint]');
-        const statusEl = card.querySelector('[data-llm-provider-card-status]');
-        const catalogInfo = entry.catalog || {};
-        const credentialInfo = entry.credential || {};
-        if (titleEl) titleEl.textContent = catalogInfo.display_name || credentialInfo.display_name || entry.key;
-        if (descEl) descEl.textContent = catalogInfo.description || credentialInfo.description || '';
-        if (endpointEl) endpointEl.textContent = credentialInfo.endpoint || catalogInfo.default_endpoint || '';
-        if (statusEl) {
-          statusEl.textContent = credentialInfo.endpoint || credentialInfo.models ? 'Configured' : 'Not configured';
-        }
-        card.addEventListener('click', () => openProviderForm(modalEl, stateRef, entry.key));
-        list.appendChild(card);
-      });
-    }
-
-    function openProviderForm(modalEl, stateRef, providerKey) {
-      const wrapper = modalEl.querySelector('[data-llm-provider-form-wrapper]');
-      const form = modalEl.querySelector('[data-llm-provider-form]');
-      if (!wrapper || !form) return;
-      const catalogInfo = stateRef.catalog[providerKey] || {};
-      const credentialInfo = stateRef.credentials[providerKey] || {};
-      wrapper.classList.remove('hidden');
-      wrapper.dataset.activeProvider = providerKey;
-      const titleEl = wrapper.querySelector('[data-llm-provider-form-title]');
-      const subtitleEl = wrapper.querySelector('[data-llm-provider-form-subtitle]');
-      const keyInput = wrapper.querySelector('[data-llm-provider-key]');
-      const hiddenInput = wrapper.querySelector('[data-llm-provider-input]');
-      const nameInput = wrapper.querySelector('[data-llm-provider-name]');
-      const endpointInput = wrapper.querySelector('[data-llm-provider-endpoint]');
-      const apiKeyInput = wrapper.querySelector('[data-llm-provider-apikey]');
-      const deleteBtn = wrapper.querySelector('[data-llm-provider-delete]');
-      const modelsContainer = wrapper.querySelector('[data-llm-models]');
-      const templateModel = wrapper.querySelector('[data-llm-model-row-template]');
-      if (titleEl) titleEl.textContent = `Configure ${catalogInfo.display_name || credentialInfo.display_name || providerKey}`;
-      if (subtitleEl) {
-        const requiresKey = catalogInfo.requires_api_key !== false;
-        subtitleEl.textContent = requiresKey ? 'Enter API credentials and adjust models.' : 'No API key required for this provider.';
-      }
-      if (keyInput) keyInput.value = providerKey;
-      if (hiddenInput) hiddenInput.value = providerKey;
-      if (nameInput) nameInput.value = credentialInfo.display_name || catalogInfo.display_name || catalogInfo.label || providerKey;
-      if (endpointInput) endpointInput.value = credentialInfo.endpoint || catalogInfo.default_endpoint || '';
-      if (apiKeyInput) apiKeyInput.value = '';
-      if (deleteBtn) {
-        if (stateRef.credentials[providerKey]) {
-          deleteBtn.classList.remove('hidden');
-          deleteBtn.disabled = false;
-        } else {
-          deleteBtn.classList.add('hidden');
-        }
-      }
-      if (modelsContainer && templateModel) {
-        modelsContainer.innerHTML = '';
-        const models = (credentialInfo.models && credentialInfo.models.length ? credentialInfo.models : catalogInfo.models) || [];
-        if (models.length) {
-          models.forEach((model) => {
-            modelsContainer.appendChild(renderModelRow(templateModel, model));
-          });
-        }
-      }
-      if (stateRef.debug) {
-        console.debug('[LLM] Open provider form', { provider: providerKey, configured: Boolean(stateRef.credentials[providerKey]) });
-      }
-      ensureModelRow(modalEl);
-    }
-
-    function closeProviderForm(modalEl) {
-      const wrapper = modalEl.querySelector('[data-llm-provider-form-wrapper]');
-      if (wrapper) {
-        wrapper.classList.add('hidden');
-        wrapper.dataset.activeProvider = '';
-      }
-    }
-
-    function addCustomProvider(modalEl, stateRef) {
-      const key = global.prompt('Enter a provider key (letters, numbers, hyphen, underscore):', 'custom');
-      if (!key) return;
-      const normalized = key.trim().toLowerCase();
-      if (!/^[a-z0-9_-]+$/.test(normalized)) {
-        global.alert('Provider key must contain only letters, numbers, hyphen, or underscore.');
-        return;
-      }
-      if (!stateRef.catalog[normalized]) {
-        stateRef.catalog[normalized] = {
-          display_name: normalized,
-          description: 'Custom provider',
-          requires_api_key: true,
-        };
-      }
-      if (!stateRef.credentials[normalized]) {
-        stateRef.credentials[normalized] = {};
-      }
-      renderProviderList(modalEl, stateRef);
-      openProviderForm(modalEl, stateRef, normalized);
-    }
-
-    const buildStageMapFromForm = (stageRows, existingMap) => {
-      const map = {};
-      stageRows.forEach((row) => {
-        const key = row.getAttribute('data-stage-key');
-        if (!key) return;
-        const providerSelectEl = row.querySelector('[data-llm-provider]');
-        const modelSelectEl = row.querySelector('[data-llm-model]');
-        if (!providerSelectEl) return;
-
-        const entry = {};
-        if (providerSelectEl.value) {
-          entry.provider = providerSelectEl.value.toString().trim().toLowerCase();
-        }
-        if (modelSelectEl && modelSelectEl.value) {
-          entry.model = modelSelectEl.value.toString().trim();
-        }
-
-        const previous = existingMap[key] || {};
-        const previousOptions =
-          previous && previous.options && typeof previous.options === 'object'
-            ? deepClone(previous.options)
-            : {};
-
-        const maxInput = row.querySelector('[data-llm-max-tokens]');
-        if (maxInput) {
-          const raw = maxInput.value != null ? maxInput.value.toString().trim() : '';
-          if (raw !== '') {
-            const parsed = Number(raw);
-            if (Number.isFinite(parsed) && parsed > 0) {
-              entry.max_tokens = Math.floor(parsed);
-            }
-          }
-        }
-
-        const temperatureInput = row.querySelector('[data-llm-temperature]');
-        if (temperatureInput) {
-          const rawTemp = temperatureInput.value != null ? temperatureInput.value.toString().trim() : '';
-          if (rawTemp === '') {
-            delete previousOptions.temperature;
-          } else {
-            const tempValue = Number(rawTemp);
-            if (Number.isFinite(tempValue)) {
-              previousOptions.temperature = tempValue;
-            }
-          }
-        }
-
-        const deploymentInput = row.querySelector('[data-llm-deployment]');
-        if (deploymentInput) {
-          const deploymentValue = deploymentInput.value ? deploymentInput.value.trim() : '';
-          if (deploymentValue) {
-            previousOptions.azure_deployment = deploymentValue;
-          } else {
-            delete previousOptions.azure_deployment;
-          }
-        }
-
-        if (Object.keys(previousOptions).length) {
-          entry.options = previousOptions;
-        }
-
-        if (Object.keys(entry).length === 0) {
-          return;
-        }
-
-        map[key] = entry;
-      });
-      return map;
-    };
-    function attachProviderModalHandlers(modalEl) {
-      if (!modalEl) return;
-      const panelButtons = Array.from(modalEl.querySelectorAll('[data-llm-panel-toggle]'));
-      const panels = panelButtons.reduce((acc, btn) => {
-        const key = btn.getAttribute('data-llm-panel-toggle');
-        if (key) {
-          acc[key] = modalEl.querySelector(`[data-llm-panel="${key}"]`);
-        }
-        return acc;
-      }, {});
-
-      function activatePanel(name) {
-        panelButtons.forEach((btn) => {
-          const isActive = btn.getAttribute('data-llm-panel-toggle') === name;
-          btn.classList.toggle('bg-primary-500/80', isActive);
-          btn.classList.toggle('shadow-primary-500/40', isActive);
-          btn.classList.toggle('border-white/15', !isActive);
-          btn.classList.toggle('text-white', isActive);
-        });
-        Object.entries(panels).forEach(([key, panel]) => {
-          if (!panel) return;
-          const show = key === name;
-          panel.classList.toggle('hidden', !show);
-          panel.hidden = !show;
-          if (show) {
-            panel.removeAttribute('aria-hidden');
-          } else {
-            panel.setAttribute('aria-hidden', 'true');
-          }
-        });
-      }
-
-      panelButtons.forEach((btn) => {
-        btn.addEventListener('click', () => {
-          const key = btn.getAttribute('data-llm-panel-toggle');
-          if (key) activatePanel(key);
-        });
-      });
-      activatePanel('stages');
-
-      const providerListContainer = modalEl.querySelector('[data-llm-provider-list]');
-      const addProviderBtn = modalEl.querySelector('[data-llm-provider-add]');
-      const refreshBtn = modalEl.querySelector('[data-llm-provider-refresh]');
-      const cancelButtons = modalEl.querySelectorAll('[data-llm-provider-cancel]');
-      const deleteBtn = modalEl.querySelector('[data-llm-provider-delete]');
-      const providerForm = modalEl.querySelector('[data-llm-provider-form]');
-
-      renderProviderList(modalEl, providerState);
-
-      if (addProviderBtn) {
-        addProviderBtn.addEventListener('click', (evt) => {
-          evt.preventDefault();
-          addCustomProvider(modalEl, providerState);
-        });
-      }
-
-      if (refreshBtn) {
-        refreshBtn.addEventListener('click', (evt) => {
-          evt.preventDefault();
-          renderProviderList(modalEl, providerState);
-        });
-      }
-
-      cancelButtons.forEach((btn) => {
-        btn.addEventListener('click', (evt) => {
-          evt.preventDefault();
-          closeProviderForm(modalEl);
-        });
-      });
-
-      if (deleteBtn) {
-        deleteBtn.addEventListener('click', async (evt) => {
-          evt.preventDefault();
-          const providerKey = modalEl.querySelector('[data-llm-provider-key]')?.value;
-          if (!providerKey) return;
-          const confirmed = await deps.modals?.confirm?.({
-            heading: 'Remove provider credentials',
-            body: 'This will remove saved credentials for the provider. Continue?',
-            confirmLabel: 'Remove',
-            cancelLabel: 'Cancel',
-            destructive: true,
-            container: ctx?.modalRoot || undefined,
-          });
-          if (confirmed === false) return;
-          try {
-            const resp = await fetch(`/cases/${ctx.caseId}/llm/providers/${providerKey}/`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': helpers.getCSRFToken(),
-                Accept: 'application/json',
-              },
-              credentials: 'same-origin',
-            });
-            if (!resp.ok) {
-              const text = await resp.text();
-              throw new Error(text || `HTTP ${resp.status}`);
-            }
-            const data = await resp.json();
-            providerState.credentials = data.credentials || providerState.credentials;
-            renderProviderList(modalEl, providerState);
-            closeProviderForm(modalEl);
-          } catch (error) {
-            console.warn('Unable to delete provider credential', providerKey, error);
-          }
-        });
-      }
-
-      if (providerForm) {
-        providerForm.addEventListener('submit', async (evt) => {
-          evt.preventDefault();
-          const formData = new global.FormData(providerForm);
-          const providerKey = formData.get('provider');
-          if (!providerKey) return;
-          const payload = {
-            provider: providerKey,
-            display_name: formData.get('display_name') || providerKey,
-            endpoint: formData.get('endpoint') || '',
-            models: [],
-          };
-          const apiKeyValue = formData.get('api_key');
-          if (typeof apiKeyValue === 'string') {
-            payload.api_key = apiKeyValue;
-          }
-          const modelsContainer = providerForm.querySelector('[data-llm-models]');
-          if (modelsContainer) {
-            Array.from(modelsContainer.querySelectorAll('[data-llm-model-row]')).forEach((row) => {
-              const nameInput = row.querySelector('[data-llm-model-name]');
-              const labelInput = row.querySelector('[data-llm-model-label]');
-              const costInput = row.querySelector('[data-llm-model-cost]');
-              const maxInput = row.querySelector('[data-llm-model-max]');
-              const entry = {};
-              if (nameInput?.value) entry.name = nameInput.value.trim();
-              if (labelInput?.value) entry.label = labelInput.value.trim();
-              if (costInput?.value) entry.cost_tier = costInput.value.trim();
-              if (maxInput?.value) {
-                const parsed = Number(maxInput.value.trim());
-                if (!Number.isNaN(parsed)) entry.max_output_tokens = parsed;
-              }
-              if (entry.name) payload.models.push(entry);
-            });
-          }
-          try {
-            const resp = await fetch(`/cases/${ctx.caseId}/llm/providers/`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': helpers.getCSRFToken(),
-                Accept: 'application/json',
-              },
-              credentials: 'same-origin',
-              body: JSON.stringify(payload),
-            });
-            if (!resp.ok) {
-              const text = await resp.text();
-              throw new Error(text || `HTTP ${resp.status}`);
-            }
-            const data = await resp.json();
-            providerState.credentials = data.credentials || providerState.credentials;
-            renderProviderList(modalEl, providerState);
-            openProviderForm(modalEl, providerState, providerKey);
-            caseDetail.modals?.message?.({
-              heading: 'Provider saved',
-              body: payload.display_name,
-              container: ctx?.modalRoot || undefined,
-            });
-          } catch (error) {
-            console.warn('Unable to save provider', providerKey, error);
-          }
-        });
-      }
-
-      const stageForm = modalEl.querySelector('[data-llm-form]');
-      if (!stageForm) return;
-      const saveButton = stageForm.querySelector('[data-llm-save]');
-      const stageRows = Array.from(stageForm.querySelectorAll('[data-llm-stage]'));
-      const activeStageMap = deepClone(stageMap);
-      stageRows.forEach((row) => {
-        const stageKey = row.getAttribute('data-stage-key');
-        const entry = activeStageMap[stageKey] || {};
-        const providerSelectEl = row.querySelector('[data-llm-provider]');
-        const modelSelectEl = row.querySelector('[data-llm-model]');
-        const maxInput = row.querySelector('[data-llm-max-tokens]');
-        const temperatureInput = row.querySelector('[data-llm-temperature]');
-        const deploymentInput = row.querySelector('[data-llm-deployment]');
-        if (providerSelectEl && entry.provider) {
-          providerSelectEl.value = entry.provider;
-        }
-        updateModelOptions(row);
-        if (modelSelectEl && entry.model) {
-          modelSelectEl.value = entry.model;
-        }
-        if (maxInput) {
-          const maxValue = Number(entry.max_tokens);
-          if (Number.isFinite(maxValue) && maxValue > 0) {
-            maxInput.value = maxValue;
-          } else {
-            maxInput.value = '';
-          }
-        }
-        const entryOptions = entry && typeof entry.options === 'object' ? entry.options : {};
-        if (temperatureInput) {
-          const optionValue = entryOptions?.temperature;
-          temperatureInput.value =
-            optionValue !== undefined && optionValue !== null ? optionValue : '';
-        }
-        if (deploymentInput) {
-          const optionValue = entryOptions?.azure_deployment;
-          deploymentInput.value = optionValue || '';
-        }
-        if (providerSelectEl) {
-          providerSelectEl.addEventListener('change', () => updateModelOptions(row));
-        }
-        updateModelOptions(row);
-      });
-
-      stageForm.addEventListener('submit', async (evt) => {
-        evt.preventDefault();
-        if (saveButton) {
-          saveButton.disabled = true;
-          saveButton.textContent = 'Saving…';
-        }
-        const updatedStageMap = buildStageMapFromForm(stageRows, stageMap);
-        stageMap = updatedStageMap;
-        const chainSet = new Set();
-        if (primarySelect?.value) chainSet.add(primarySelect.value);
-        Object.values(stageMap).forEach((entry) => {
-          if (entry && entry.provider) chainSet.add(entry.provider);
-        });
-        providerChain = Array.from(chainSet);
-        refreshDatasets();
-
-        const configurationPayload = {
-          id: activeConfiguration.id || null,
-          name: configNameInput?.value.trim() || activeConfiguration.name || `${target} configuration`,
-          description: configDescriptionInput?.value || '',
-          provider_chain: providerChain,
-          stage_map: stageMap,
-          set_default: configDefaultInput?.checked || false,
-        };
-
-        activeConfiguration.name = configurationPayload.name;
-        activeConfiguration.description = configurationPayload.description;
-        activeConfiguration.provider_chain = [...providerChain];
-        activeConfiguration.stage_map = deepClone(stageMap);
-        activeConfiguration.is_default = configurationPayload.set_default;
-
-        const result = await persistConfiguration({ action: 'upsert', configuration: configurationPayload });
-        if (result && saveButton) {
-          caseDetail.modals?.message?.({
-            heading: 'Configuration saved',
-            body: 'LLM configuration updated successfully.',
-            container: ctx?.modalRoot || undefined,
-          });
-        }
-        if (saveButton) {
-          saveButton.disabled = false;
-          saveButton.textContent = 'Save';
-        }
-        const closeButton = modalEl.querySelector('[data-modal-close]');
-        if (closeButton) closeButton.click();
-      });
-    }
-
-    container.llmProviderState = providerState;
-    container.llmInitModal = (modalEl) => attachProviderModalHandlers(modalEl);
+  function attachProviderModalHandlers(modal) {
+    if (!modal) return;
+    // Legacy hook: modal editing disabled in read-only view, so nothing to wire.
   }
 
   function openLLMModal(container) {

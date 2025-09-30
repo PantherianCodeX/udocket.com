@@ -124,21 +124,23 @@ def select_agent(latest: Dict[str, JobRow], keywords: tuple[str, ...]) -> Option
 
 def map_job_status(job: Optional[Job]) -> str:
     if not job:
-        return 'Created'
-    status = str(getattr(job, 'status', '') or '').upper()
-    if status == getattr(Job.Status, 'CONVERTING', 'CONVERTING'):
-        return 'Converting'
-    if status == Job.Status.UPLOADING:
-        return 'Uploading'
-    if status in {Job.Status.RUNNING, Job.Status.PENDING}:
-        return 'Running'
-    if status == Job.Status.SUCCEEDED:
-        return 'Created'
-    if status == getattr(Job.Status, 'CANCELLING', 'CANCELLING'):
-        return 'Cancelling'
-    if status in {Job.Status.FAILED, getattr(Job.Status, 'CANCELLED', 'CANCELLED')}:
-        return 'Rejected'
-    return 'Created'
+        return "Created"
+    status = str(getattr(job, "status", "") or "").upper()
+    converting = getattr(Job.Status, "CONVERTING", "CONVERTING")
+    cancelling = getattr(Job.Status, "CANCELLING", "CANCELLING")
+    display_map = {
+        Job.Status.PENDING: "Pending",
+        Job.Status.RUNNING: "Running",
+        Job.Status.SUCCEEDED: "Completed",
+        Job.Status.FAILED: "Failed",
+        Job.Status.UPLOADING: "Uploading",
+        converting: "Converting",
+        cancelling: "Cancelling",
+        getattr(Job.Status, "CANCELLED", "CANCELLED"): "Cancelled",
+    }
+    if status in display_map:
+        return display_map[status]
+    return humanize_label(status) or "Created"
 
 def build_row_table_meta(row: Dict[str, Any]) -> None:
     """Populate a job row dict with deterministic sort/filter metadata for UI tables."""
@@ -189,12 +191,13 @@ def build_row_table_meta(row: Dict[str, Any]) -> None:
     if not job_kind_value and job and getattr(job, "mode", None):
         job_kind_value = str(job.mode)
 
-    status_display = status_raw.title() if status_raw else ""
+    status_display = map_job_status(job)
     status_style = STATUS_PILL_STYLES.get(status_raw, "border-white/20 bg-white/5 text-slate-300")
 
     filter_parts = [
         title,
         status_raw,
+        status_display,
         review_status,
         agent_label,
         job_type_label_text,

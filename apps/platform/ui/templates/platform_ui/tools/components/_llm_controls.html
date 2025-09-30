@@ -1,288 +1,98 @@
 {% with ctx=llm_context %}
-<details class="group rounded-xl border border-white/10 bg-slate-900/60" data-llm-advanced data-llm-target="{{ ctx.target }}">
+<details class="group rounded-xl border border-white/10 bg-slate-900/60" data-llm-advanced data-llm-target="{{ ctx.target }}" data-llm-settings-base="{{ ctx.urls.base }}" data-llm-return-url="{{ ctx.return_url }}">
   <summary class="flex cursor-pointer items-center justify-between px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-300">
     Advanced settings
     <svg class="h-4 w-4 transition-transform group-open:rotate-180" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.094l3.71-3.86a.75.75 0 111.08 1.04l-4.247 4.41a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z" clip-rule="evenodd" /></svg>
   </summary>
-{% if ctx.catalog_json %}
-  <script type="application/json" data-llm-json="catalog">{{ ctx.catalog_json|safe }}</script>
-{% endif %}
-{% if ctx.credentials_json %}
-  <script type="application/json" data-llm-json="credentials">{{ ctx.credentials_json|safe }}</script>
-{% endif %}
-{% if ctx.stage_map_json %}
-  <script type="application/json" data-llm-json="stage-map">{{ ctx.stage_map_json|safe }}</script>
-{% endif %}
-{% if ctx.configurations_json %}
-  <script type="application/json" data-llm-json="configurations">{{ ctx.configurations_json|safe }}</script>
-{% endif %}
-{% if ctx.active_configuration_json %}
-  <script type="application/json" data-llm-json="active-configuration">{{ ctx.active_configuration_json|safe }}</script>
-{% endif %}
-<div class="space-y-4 border-t border-white/10 px-3 py-4 text-sm text-slate-200">
-    <div class="space-y-2" data-llm-config-select-wrapper>
-      <label class="text-xs uppercase tracking-wide text-slate-400" for="llm-config-select-{{ ctx.target }}">LLM configuration</label>
-      <select id="llm-config-select-{{ ctx.target }}"
-              class="w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none"
-              data-llm-config-select>
-      </select>
-      <div class="flex items-center gap-2 text-[11px] text-slate-400" data-llm-config-actions>
-        <button type="button" class="inline-flex items-center gap-1 rounded border border-white/15 bg-white/5 px-2 py-1 text-[11px] font-semibold text-slate-100 transition hover:border-primary-400 hover:text-white" data-llm-config-create>New configuration</button>
-        <button type="button" class="inline-flex items-center gap-1 rounded border border-white/15 bg-white/5 px-2 py-1 text-[11px] font-semibold text-slate-100 transition hover:border-primary-400 hover:text-white" data-llm-config-duplicate>Duplicate</button>
-        <button type="button" class="text-[11px] text-rose-400 hover:text-rose-300" data-llm-config-delete>Delete</button>
+  {% if ctx.configurations_json %}
+    <script type="application/json" data-llm-json="configurations">{{ ctx.configurations_json|safe }}</script>
+  {% endif %}
+  {% if ctx.active_configuration_json %}
+    <script type="application/json" data-llm-json="active-configuration">{{ ctx.active_configuration_json|safe }}</script>
+  {% endif %}
+  {% if ctx.stage_map_json %}
+    <script type="application/json" data-llm-json="stage-map">{{ ctx.stage_map_json|safe }}</script>
+  {% endif %}
+  {% if ctx.provider_chain_json %}
+    <script type="application/json" data-llm-json="provider-chain">{{ ctx.provider_chain_json|safe }}</script>
+  {% endif %}
+  {% if ctx.stage_configs_json %}
+    <script type="application/json" data-llm-json="stage-configs">{{ ctx.stage_configs_json|safe }}</script>
+  {% endif %}
+  <div class="space-y-4 border-t border-white/10 px-3 py-4 text-sm text-slate-200">
+    <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+      <div class="w-full lg:max-w-sm">
+        <label class="text-xs uppercase tracking-wide text-slate-400" for="llm-config-select-{{ ctx.target }}">Configuration</label>
+        <select id="llm-config-select-{{ ctx.target }}"
+                class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none"
+                data-llm-config-select>
+          {% for cfg in ctx.configurations %}
+            {% if cfg.id %}
+              <option value="id:{{ cfg.id }}" data-config-index="{{ forloop.counter0 }}" {% if ctx.active_configuration and cfg.id == ctx.active_configuration.id %}selected{% endif %}>
+            {% else %}
+              <option value="idx:{{ forloop.counter0 }}" data-config-index="{{ forloop.counter0 }}" {% if not ctx.active_configuration or not ctx.active_configuration.id and forloop.first %}selected{% endif %}>
+            {% endif %}
+              {{ cfg.name|default:"(Untitled configuration)" }}{% if cfg.is_default %} · Default{% endif %}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="flex flex-wrap gap-2 text-xs">
+        <a href="{{ ctx.urls.edit }}" data-llm-link="edit" class="inline-flex items-center gap-2 rounded-lg border border-white/15 bg-white/10 px-3 py-1.5 font-semibold text-white transition hover:border-primary-400 hover:text-white">Edit configuration</a>
+        <a href="{{ ctx.urls.new }}" class="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 font-semibold text-slate-200 transition hover:border-primary-400 hover:text-white">New configuration</a>
+        <a href="{{ ctx.urls.tuning }}" data-llm-link="tuning" class="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 font-semibold text-slate-200 transition hover:border-primary-400 hover:text-white">LLM tuning</a>
       </div>
     </div>
-    <div class="space-y-2">
-      <label class="block text-xs uppercase tracking-wide text-slate-400">
-        Configuration name
-        <input type="text"
-               class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none"
-               placeholder="Untitled configuration"
-               data-llm-config-name>
-      </label>
-      <label class="block text-xs uppercase tracking-wide text-slate-400">
-        Notes
-        <textarea class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none"
-                  rows="2"
-                  placeholder="Optional description"
-                  data-llm-config-description></textarea>
-      </label>
-      <label class="inline-flex items-center gap-2 text-[11px] uppercase tracking-wide text-slate-400">
-        <input type="checkbox" class="rounded border-white/20 bg-slate-900 text-primary-500 focus:ring-primary-400" data-llm-config-default>
-        Set as default for this target
-      </label>
+
+    <div class="rounded-lg border border-white/10 bg-slate-900/40 p-3">
+      <p class="text-xs uppercase tracking-wide text-slate-400">Configuration details</p>
+      <p class="mt-2 text-sm font-semibold text-white" data-llm-config-name-display>
+        {{ ctx.active_configuration.name|default:"(Untitled configuration)" }}
+      </p>
+      <p class="mt-1 text-xs text-slate-400" data-llm-config-description-display>
+        {% if ctx.active_configuration.description %}
+          {{ ctx.active_configuration.description }}
+        {% else %}
+          No notes added.
+        {% endif %}
+      </p>
+      <p class="mt-2 text-xs text-slate-400" data-llm-config-provider-chain-display>
+        {% if ctx.provider_chain %}
+          Providers: {{ ctx.provider_chain|join:", " }}
+        {% else %}
+          Providers will be selected automatically.
+        {% endif %}
+      </p>
     </div>
-    <div class="space-y-2">
-      <label class="text-xs uppercase tracking-wide text-slate-400">Primary provider</label>
-      <select class="w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none"
-              data-llm-provider-primary>
-        {% for option in ctx.provider_options %}
-          <option value="{{ option.value }}"
-                  {% if not option.available %}disabled data-disabled="true"{% endif %}
-                  {% if option.value == ctx.defaults.primary %}selected{% endif %}>
-            {{ option.label }}{% if option.configured %} · Configured{% elif option.reason %} · {{ option.reason }}{% elif not option.available %} · Configure credentials{% endif %}
-          </option>
+
+    <div class="rounded-lg border border-white/10 bg-slate-900/40 p-3" data-llm-config-stages>
+      <p class="text-xs uppercase tracking-wide text-slate-400">Stage overrides</p>
+      <div class="mt-2 space-y-3{% if not ctx.configured_stages %} hidden{% endif %}" data-llm-stage-list>
+        {% for stage in ctx.configured_stages %}
+          <div class="rounded border border-white/10 bg-slate-900/60 p-3" data-llm-stage-row>
+            <p class="text-sm font-semibold text-white">{{ stage.label }}</p>
+            <dl class="mt-1 space-y-1 text-xs text-slate-400">
+              {% if stage.provider %}<div><dt class="inline font-semibold text-slate-300">Provider:</dt> <dd class="inline">{{ stage.provider }}</dd></div>{% endif %}
+              {% if stage.model %}<div><dt class="inline font-semibold text-slate-300">Model:</dt> <dd class="inline">{{ stage.model }}</dd></div>{% endif %}
+              {% if stage.max_tokens %}<div><dt class="inline font-semibold text-slate-300">Max tokens:</dt> <dd class="inline">{{ stage.max_tokens }}</dd></div>{% endif %}
+              {% if stage.options %}
+                <div>
+                  <dt class="font-semibold text-slate-300">Options:</dt>
+                  <dd>
+                    <ul class="ml-4 list-disc space-y-0.5">
+                      {% for key, value in stage.options.items %}
+                        <li><span class="font-semibold text-slate-300">{{ key|capfirst }}:</span> {{ value }}</li>
+                      {% endfor %}
+                    </ul>
+                  </dd>
+                </div>
+              {% endif %}
+            </dl>
+          </div>
         {% endfor %}
-      </select>
-    </div>
-    <div class="flex justify-end">
-      <button type="button"
-              class="inline-flex items-center gap-2 rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-100 transition hover:border-primary-400 hover:text-white"
-              data-llm-open-modal>
-        LLM tuning
-      </button>
+      </div>
+      <p class="mt-2 text-xs text-slate-400{% if ctx.configured_stages %} hidden{% endif %}" data-llm-stage-empty>Using default stage assignments.</p>
     </div>
   </div>
 </details>
-
-<div class="hidden" data-llm-modal-template>
-  <div data-modal role="dialog" aria-modal="true" data-modal-allow-scroll="true" class="fixed inset-0 z-50 grid min-h-full place-items-center overflow-y-auto p-6 sm:p-8">
-    <!-- Backdrop -->
-    <div class="fixed inset-0 bg-black/60"></div>
-    <!-- Dialog -->
-    <div class="relative w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl border border-white/10 bg-slate-900/90 shadow-xl">
-      <div class="flex items-center justify-between border-b border-white/10 px-5 py-4">
-        <div>
-          <p class="text-sm font-semibold text-white">LLM tuning</p>
-          <p class="text-xs text-slate-400">Select providers, enter credentials, and assign them to pipeline stages.</p>
-        </div>
-        <button type="button" class="text-slate-400 transition hover:text-white" data-modal-close aria-label="Close">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 8.586l4.95-4.95 1.414 1.414L11.414 10l4.95 4.95-1.414 1.414L10 11.414l-4.95 4.95-1.414-1.414L8.586 10l-4.95-4.95L5.05 3.636 10 8.586z" clip-rule="evenodd" /></svg>
-        </button>
-      </div>
-      <div class="border-b border-white/10 px-5 py-3">
-        <div class="flex gap-2 text-xs font-semibold uppercase tracking-wide text-slate-300">
-          <button type="button" class="rounded-lg bg-primary-500/80 px-3 py-1.5 text-white shadow-sm shadow-primary-500/40 transition hover:bg-primary-500" data-llm-panel-toggle="stages">Stage assignments</button>
-          <button type="button" class="rounded-lg border border-white/15 px-3 py-1.5 text-slate-200 transition hover:border-primary-400 hover:text-white" data-llm-panel-toggle="providers">Providers</button>
-        </div>
-      </div>
-      <div data-llm-panel="stages" class="max-h-[70vh] overflow-y-auto px-5 py-4">
-        <form data-llm-form class="space-y-4">
-          {% for stage in ctx.stage_configs %}
-            <div class="space-y-3 rounded-lg border border-white/10 bg-slate-900/70 p-4" data-llm-stage data-stage-key="{{ stage.key }}">
-              <div class="flex flex-wrap items-start justify-between gap-2">
-                <div>
-                  <p class="text-sm font-semibold text-white">{{ stage.label }}</p>
-                  {% if stage.description %}
-                    <p class="text-[11px] text-slate-400">{{ stage.description }}</p>
-                  {% endif %}
-                </div>
-              </div>
-              <div class="grid gap-3 md:grid-cols-2">
-                <label class="block text-xs uppercase tracking-wide text-slate-400">
-                  Provider
-                  <select class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none"
-                          data-llm-provider>
-                    {% for provider in stage.providers %}
-                      <option value="{{ provider.value }}" {% if not provider.available %}disabled{% endif %} {% if provider.value == stage.selected_provider %}selected{% endif %}>
-                        {{ provider.label }}{% if provider.configured %} · Configured{% elif provider.unavailable_reason %} · {{ provider.unavailable_reason }}{% elif not provider.available %} · Configure credentials{% endif %}
-                      </option>
-                    {% endfor %}
-                  </select>
-                </label>
-                <label class="block text-xs uppercase tracking-wide text-slate-400">
-                  Model
-                  <select class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none"
-                          data-llm-model>
-                    {% for provider in stage.providers %}
-                      {% for model in provider.models %}
-                        <option value="{{ model.value }}" data-provider="{{ provider.value }}" {% if provider.value != stage.selected_provider %}hidden{% endif %} {% if model.value == stage.selected_model %}selected{% endif %}>
-                          {{ model.label }} ({{ model.cost_tier }})
-                        </option>
-                      {% endfor %}
-                    {% endfor %}
-                  </select>
-                </label>
-              </div>
-              <div class="grid gap-3 md:grid-cols-3">
-                <label class="block text-xs uppercase tracking-wide text-slate-400">
-                  Max tokens
-                  <input type="number"
-                         min="0"
-                         class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none"
-                         placeholder="Model default"
-                         value="{{ stage.selected_max_tokens|default_if_none:'' }}"
-                         data-llm-max-tokens>
-                  <span class="mt-1 block text-[10px] text-slate-500">Set to reserve output budget per completion.</span>
-                </label>
-                <label class="block text-xs uppercase tracking-wide text-slate-400">
-                  Temperature
-                  <input type="number"
-                         step="0.1"
-                         class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none"
-                         placeholder="Use model default"
-                         value="{{ stage.selected_options.temperature|default_if_none:'' }}"
-                         data-llm-temperature>
-                </label>
-                <label class="block text-xs uppercase tracking-wide text-slate-400">
-                  Azure deployment
-                  <input type="text"
-                         class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none"
-                         placeholder="Override deployment name"
-                         value="{{ stage.selected_options.azure_deployment|default:'' }}"
-                         data-llm-deployment>
-                </label>
-              </div>
-              {% if stage.profile %}
-                <div class="rounded-lg border border-white/5 bg-slate-900/40 p-3 text-[11px] text-slate-400">
-                  <p class="font-semibold text-slate-200">Model guidance</p>
-                  <div class="mt-1 grid gap-2 sm:grid-cols-2">
-                    <div>Min context tokens: {{ stage.profile.min_context_tokens }}</div>
-                    <div>Recommended context: {{ stage.profile.recommended_context_tokens }}</div>
-                    <div>Target chunk tokens: {{ stage.profile.target_chunk_tokens }}</div>
-                    <div>Reserve for output: {{ stage.profile.output_reserve_tokens }}</div>
-                  </div>
-                  {% if stage.profile.resource_notes %}
-                    <p class="mt-2 text-slate-300">{{ stage.profile.resource_notes }}</p>
-                  {% endif %}
-                </div>
-              {% endif %}
-            </div>
-          {% endfor %}
-          <div class="flex items-center justify-end gap-2 pt-2">
-            <button type="button" class="rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-200 hover:border-primary-400 hover:text-white" data-modal-close>Cancel</button>
-            <button type="submit" class="inline-flex items-center gap-2 rounded-lg bg-primary-500 px-3 py-2 text-xs font-semibold text-white shadow-lg shadow-primary-500/30 transition hover:bg-primary-400" data-llm-save>Save</button>
-          </div>
-        </form>
-      </div>
-      <div data-llm-panel="providers" class="hidden max-h-[70vh] overflow-y-auto px-5 py-4 space-y-4">
-        <div class="flex flex-col gap-1">
-          <p class="text-sm font-semibold text-white">Provider configurations</p>
-          <p class="text-xs text-slate-400">Add API credentials, override endpoints, and manage available models for each provider.</p>
-        </div>
-        <div class="flex flex-wrap items-center gap-2">
-          <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white transition hover:border-primary-400 hover:text-white" data-llm-provider-add>New custom provider</button>
-          <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-primary-400 hover:text-white" data-llm-provider-refresh>Refresh</button>
-        </div>
-        <div data-llm-provider-empty class="hidden rounded-lg border border-dashed border-white/15 bg-white/5 px-4 py-6 text-center text-sm text-slate-300">No providers configured yet. Select a provider to begin.</div>
-        <div data-llm-provider-list class="grid gap-3 sm:grid-cols-2"></div>
-        <div data-llm-provider-form-wrapper class="hidden rounded-lg border border-white/10 bg-slate-900/70 p-4 space-y-4">
-          <div class="flex items-center justify-between">
-            <div>
-              <p class="text-sm font-semibold text-white" data-llm-provider-form-title>Configure provider</p>
-              <p class="text-xs text-slate-400" data-llm-provider-form-subtitle>Update endpoint, credentials, and model catalog.</p>
-            </div>
-            <button type="button" class="text-xs uppercase tracking-wide text-slate-400 hover:text-white" data-llm-provider-cancel>Done</button>
-          </div>
-          <form data-llm-provider-form class="space-y-4">
-            <input type="hidden" name="provider" data-llm-provider-input>
-            <div class="grid gap-3 md:grid-cols-2">
-              <label class="block text-xs uppercase tracking-wide text-slate-400">
-                Provider key
-                <input type="text" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" data-llm-provider-key readonly>
-              </label>
-              <label class="block text-xs uppercase tracking-wide text-slate-400">
-                Display name
-                <input type="text" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" data-llm-provider-name>
-              </label>
-            </div>
-            <label class="block text-xs uppercase tracking-wide text-slate-400">
-              Endpoint
-              <input type="text" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" placeholder="https://api.example.com" data-llm-provider-endpoint>
-            </label>
-            <label class="block text-xs uppercase tracking-wide text-slate-400">
-              API key
-              <input type="password" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" placeholder="Enter new key to replace" data-llm-provider-apikey autocomplete="off">
-              <span class="mt-1 block text-[11px] text-slate-400">Leave blank to keep the existing key.</span>
-            </label>
-            <div class="space-y-2" data-llm-models-wrapper>
-              <div class="flex items-center justify-between">
-                <p class="text-xs uppercase tracking-wide text-slate-400">Models</p>
-                <button type="button" class="inline-flex items-center gap-1 rounded border border-white/15 bg-white/10 px-2 py-1 text-[11px] font-semibold text-slate-100 transition hover:border-primary-400 hover:text-white" data-llm-model-add>+ Model</button>
-              </div>
-              <div class="space-y-2" data-llm-models></div>
-              <p class="text-[11px] text-slate-500">Each model entry requires an identifier; labels and limits are optional.</p>
-            </div>
-            <div class="flex items-center justify-between border-t border-white/10 pt-3">
-              <button type="button" class="text-xs text-rose-400 hover:text-rose-300" data-llm-provider-delete>Remove provider</button>
-              <div class="flex items-center gap-2">
-                <button type="button" class="rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-200 hover:border-primary-400 hover:text-white" data-llm-provider-cancel>Cancel</button>
-                <button type="submit" class="inline-flex items-center gap-2 rounded-lg bg-primary-500 px-3 py-2 text-xs font-semibold text-white shadow-lg shadow-primary-500/30 transition hover:bg-primary-400" data-llm-provider-save>Save provider</button>
-              </div>
-            </div>
-          </form>
-        </div>
-        <template data-llm-provider-card-template>
-          <button type="button" class="flex h-full w-full flex-col justify-between rounded-lg border border-white/10 bg-slate-900/60 px-4 py-3 text-left transition hover:border-primary-400 hover:text-white" data-llm-provider-card>
-            <div class="space-y-1">
-              <p class="text-sm font-semibold text-white" data-llm-provider-card-title></p>
-              <p class="text-[11px] text-slate-400" data-llm-provider-card-description></p>
-            </div>
-            <div class="flex items-center justify-between text-[11px]">
-              <span class="text-slate-400" data-llm-provider-card-endpoint></span>
-              <span class="font-semibold" data-llm-provider-card-status></span>
-            </div>
-          </button>
-        </template>
-        <template data-llm-model-row-template>
-          <div class="rounded-lg border border-white/10 bg-slate-900/60 p-3 space-y-2" data-llm-model-row>
-            <div class="grid gap-2 md:grid-cols-2">
-              <label class="block text-[11px] uppercase tracking-wide text-slate-400">
-                Model ID
-                <input type="text" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" data-llm-model-name>
-              </label>
-              <label class="block text-[11px] uppercase tracking-wide text-slate-400">
-                Label
-                <input type="text" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" data-llm-model-label>
-              </label>
-            </div>
-            <div class="grid gap-2 md:grid-cols-2">
-              <label class="block text-[11px] uppercase tracking-wide text-slate-400">
-                Cost tier
-                <input type="text" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" placeholder="standard" data-llm-model-cost>
-              </label>
-              <label class="block text-[11px] uppercase tracking-wide text-slate-400">
-                Max output tokens
-                <input type="number" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" placeholder="optional" data-llm-model-max>
-              </label>
-            </div>
-            <div class="flex justify-end">
-              <button type="button" class="text-[11px] text-rose-400 hover:text-rose-300" data-llm-model-remove>Remove</button>
-            </div>
-          </div>
-        </template>
-      </div>
-    </div>
-  </div>
-</div>
 {% endwith %}

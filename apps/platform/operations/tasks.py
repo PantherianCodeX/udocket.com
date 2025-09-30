@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -47,6 +48,311 @@ import re
 from apps.platform.jobs.utils import unique_title
 
 log = logging.getLogger("apps.platform.operations.tasks")
+
+
+# ---------------------------------------------------------------------------
+# Shared job lifecycle helpers
+# ---------------------------------------------------------------------------
+
+
+def _safe_job_meta(case_id: str, organization_id: Optional[str], job_id: str, updates: Optional[Dict[str, Any]]) -> None:
+    if not updates:
+        return
+    try:
+        update_job_meta(case_id, organization_id, job_id, updates)
+    except Exception:
+        pass
+
+
+def _safe_job_log(case_id: str, organization_id: Optional[str], job_id: str, message: str, level: str = "INFO") -> None:
+    if not message:
+        return
+    try:
+        append_job_log(case_id, organization_id, job_id, message, level=level)
+    except Exception:
+        pass
+
+
+def _emit_job_update(job_id: str, *, case_id: str, event: str, status: Optional[str] = None, **payload: Any) -> None:
+    try:
+        send_job_update(job_id, event=event, case_id=case_id, status=status, **payload)
+    except Exception:
+        pass
+
+
+@dataclass
+class JobRuntimeContext:
+    """Mutable context for running background jobs with consistent lifecycle hooks."""
+
+    job: Job
+    case_id: str
+    org_id: Optional[str]
+    task_name: Optional[str] = None
+    task_id: Optional[str] = None
+    task_meta: Dict[str, Any] = field(default_factory=dict)
+    task_run: Optional[TaskRun] = None
+
+    @property
+    def job_id(self) -> str:
+        return str(self.job.id)
+
+    def start(
+        self,
+        *,
+        status: str,
+        log_message: Optional[str] = None,
+        event: Optional[str] = None,
+        meta_updates: Optional[Dict[str, Any]] = None,
+        job_updates: Optional[Dict[str, Any]] = None,
+        started_at: Optional[datetime] = None,
+        job_event_payload: Optional[Dict[str, Any]] = None,
+    ) -> datetime:
+        started = started_at or timezone.now()
+        update_fields: List[str] = ["status", "started_at", "finished_at", "error_message"]
+        self.job.status = status
+        self.job.started_at = started
+        self.job.finished_at = None
+        self.job.error_message = None
+        if job_updates:
+            for field, value in job_updates.items():
+                setattr(self.job, field, value)
+                if field not in update_fields:
+                    update_fields.append(field)
+        try:
+            self.job.save(update_fields=update_fields)
+        except Exception:
+            pass
+
+        _safe_job_log(self.case_id, self.org_id, self.job_id, log_message or "")
+        _safe_job_meta(self.case_id, self.org_id, self.job_id, meta_updates)
+        if event:
+            payload = job_event_payload or {}
+            _emit_job_update(self.job_id, case_id=self.case_id, event=event, status=status, **payload)
+
+        self._ensure_task_run(status="RUNNING")
+        return started
+
+    def succeed(
+        self,
+        *,
+        status: str = Job.Status.SUCCEEDED,
+        log_message: Optional[str] = None,
+        meta_updates: Optional[Dict[str, Any]] = None,
+        events: Optional[List[Tuple[str, Dict[str, Any]]]] = None,
+        job_updates: Optional[Dict[str, Any]] = None,
+        task_meta_updates: Optional[Dict[str, Any]] = None,
+        job_event_payload: Optional[Dict[str, Any]] = None,
+    ) -> datetime:
+        finished = timezone.now()
+        update_fields: List[str] = ["status", "finished_at", "error_message"]
+        self.job.status = status
+        self.job.finished_at = finished
+        self.job.error_message = None
+        if job_updates:
+            for field, value in job_updates.items():
+                setattr(self.job, field, value)
+                if field not in update_fields:
+                    update_fields.append(field)
+        try:
+            self.job.save(update_fields=update_fields)
+        except Exception:
+            pass
+
+        _safe_job_log(self.case_id, self.org_id, self.job_id, log_message or "")
+        _safe_job_meta(self.case_id, self.org_id, self.job_id, meta_updates)
+
+        payload = job_event_payload or {}
+        _emit_job_update(self.job_id, case_id=self.case_id, event="job.succeeded", status=status, **payload)
+        for event_name, payload in events or []:
+            _emit_job_update(self.job_id, case_id=self.case_id, event=event_name, status=status, **payload)
+
+        self._complete_task_run(status="SUCCEEDED", finished=finished, meta_updates=task_meta_updates)
+
+        return finished
+
+    def fail(
+        self,
+        *,
+        error: str,
+        status: str = Job.Status.FAILED,
+        log_message: Optional[str] = None,
+        meta_updates: Optional[Dict[str, Any]] = None,
+        events: Optional[List[Tuple[str, Dict[str, Any]]]] = None,
+        job_updates: Optional[Dict[str, Any]] = None,
+        task_meta_updates: Optional[Dict[str, Any]] = None,
+        job_event_payload: Optional[Dict[str, Any]] = None,
+    ) -> datetime:
+        finished = timezone.now()
+        update_fields: List[str] = ["status", "finished_at", "error_message"]
+        self.job.status = status
+        self.job.finished_at = finished
+        self.job.error_message = error
+        if job_updates:
+            for field, value in job_updates.items():
+                setattr(self.job, field, value)
+                if field not in update_fields:
+                    update_fields.append(field)
+        try:
+            self.job.save(update_fields=update_fields)
+        except Exception:
+            pass
+
+        log_line = log_message or f"Job failed: {error}"
+        _safe_job_log(self.case_id, self.org_id, self.job_id, log_line, level="ERROR")
+        _safe_job_meta(self.case_id, self.org_id, self.job_id, meta_updates)
+
+        payload = job_event_payload or {}
+        payload.setdefault("error", error)
+        _emit_job_update(self.job_id, case_id=self.case_id, event="job.failed", status=status, **payload)
+        for event_name, payload in events or []:
+            payload_with_error = dict(payload)
+            payload_with_error.setdefault("error", error)
+            _emit_job_update(self.job_id, case_id=self.case_id, event=event_name, status=status, **payload_with_error)
+
+        additional_meta = task_meta_updates or {}
+        additional_meta.setdefault("error", error)
+        self._complete_task_run(status="FAILED", finished=finished, meta_updates=additional_meta)
+
+        return finished
+
+    def cancel(
+        self,
+        *,
+        reason: Optional[str] = None,
+        log_message: Optional[str] = None,
+        meta_updates: Optional[Dict[str, Any]] = None,
+        events: Optional[List[Tuple[str, Dict[str, Any]]]] = None,
+        job_updates: Optional[Dict[str, Any]] = None,
+        job_event_payload: Optional[Dict[str, Any]] = None,
+    ) -> datetime:
+        finished = timezone.now()
+        update_fields: List[str] = ["status", "finished_at", "error_message"]
+        self.job.status = Job.Status.CANCELLED
+        self.job.finished_at = finished
+        self.job.error_message = reason or "Cancelled"
+        if job_updates:
+            for field, value in job_updates.items():
+                setattr(self.job, field, value)
+                if field not in update_fields:
+                    update_fields.append(field)
+        try:
+            self.job.save(update_fields=update_fields)
+        except Exception:
+            pass
+
+        _safe_job_log(self.case_id, self.org_id, self.job_id, log_message or "Job cancelled", level="WARNING")
+        _safe_job_meta(self.case_id, self.org_id, self.job_id, meta_updates)
+
+        payload = job_event_payload or {}
+        payload.setdefault("error", reason or "Cancelled")
+        _emit_job_update(
+            self.job_id,
+            case_id=self.case_id,
+            event="job.cancelled",
+            status=Job.Status.CANCELLED,
+            **payload,
+        )
+        for event_name, payload in events or []:
+            _emit_job_update(
+                self.job_id,
+                case_id=self.case_id,
+                event=event_name,
+                status=Job.Status.CANCELLED,
+                **payload,
+            )
+
+        self._complete_task_run(status="CANCELLED", finished=finished, meta_updates={"reason": reason or "cancelled"})
+        return finished
+
+    def transition(
+        self,
+        *,
+        status: Optional[str] = None,
+        log_message: Optional[str] = None,
+        meta_updates: Optional[Dict[str, Any]] = None,
+        job_updates: Optional[Dict[str, Any]] = None,
+        event: Optional[str] = None,
+        job_event_payload: Optional[Dict[str, Any]] = None,
+        task_meta_updates: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        update_fields: List[str] = []
+        if status:
+            self.job.status = status
+            update_fields.append("status")
+        if job_updates:
+            for field, value in job_updates.items():
+                setattr(self.job, field, value)
+                if field not in update_fields:
+                    update_fields.append(field)
+        if update_fields:
+            try:
+                self.job.save(update_fields=update_fields)
+            except Exception:
+                pass
+
+        if log_message:
+            _safe_job_log(self.case_id, self.org_id, self.job_id, log_message)
+        _safe_job_meta(self.case_id, self.org_id, self.job_id, meta_updates)
+
+        if event:
+            payload = dict(job_event_payload or {})
+            event_status = payload.pop("status", status)
+            _emit_job_update(self.job_id, case_id=self.case_id, event=event, status=event_status, **payload)
+
+        if task_meta_updates and self.task_run:
+            try:
+                meta_payload = dict(self.task_run.meta or {})
+                meta_payload.update(task_meta_updates)
+                self.task_run.meta = meta_payload
+                self.task_run.save(update_fields=["meta"])
+            except Exception:
+                pass
+
+    def emit(self, event: str, *, status: Optional[str] = None, **payload: Any) -> None:
+        _emit_job_update(self.job_id, case_id=self.case_id, event=event, status=status, **payload)
+
+    def _ensure_task_run(self, *, status: str) -> None:
+        if not self.task_name:
+            return
+        if self.task_run:
+            return
+        task_run = TaskRun(
+            task_name=self.task_name,
+            task_id=self.task_id or "",
+            status=status,
+            job_id=self.job_id,
+            case_id=self.case_id,
+            meta=dict(self.task_meta),
+        )
+        try:
+            task_run.save()
+            self.task_run = task_run
+        except Exception:
+            self.task_run = None
+
+    def _complete_task_run(
+        self,
+        *,
+        status: str,
+        finished: datetime,
+        meta_updates: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        if not self.task_name:
+            return
+        if not self.task_run:
+            self._ensure_task_run(status=status)
+        if not self.task_run:
+            return
+        try:
+            self.task_run.status = status
+            self.task_run.finished_at = finished
+            if meta_updates:
+                payload = dict(self.task_run.meta or {})
+                payload.update(meta_updates)
+                self.task_run.meta = payload
+            self.task_run.save(update_fields=["status", "finished_at", "meta"])
+        except Exception:
+            pass
 
 
 def _sha256_file(path: Path) -> Optional[str]:
@@ -103,6 +409,8 @@ def transcribe_job(
         and not audio_input.lower().startswith(("http://", "https://"))
     )
 
+    converting_status = getattr(Job.Status, "CONVERTING", "CONVERTING")
+
     org_id: Optional[str] = None
     case_obj: Optional[Case] = None
     try:
@@ -110,10 +418,6 @@ def transcribe_job(
         if job_obj.status == Job.Status.CANCELLED:
             log.info("job already cancelled before execution", extra={"job_id": job_id})
             return {"status": Job.Status.CANCELLED, "job_id": job_id, "case_id": case_id}
-        job_obj.status = Job.Status.UPLOADING if upload_required else Job.Status.RUNNING
-        job_obj.started_at = timezone.now()
-        job_obj.upload_progress = 0.0 if upload_required else None
-        job_obj.save(update_fields=["status", "started_at", "upload_progress"])
         org_id = job_obj.organization_id or getattr(job_obj.case, "organization_id", None)
         case_obj = getattr(job_obj, "case", None)
     except Exception:
@@ -129,6 +433,32 @@ def transcribe_job(
     case_dir = ensure_case_dirs(case_id, org_id)
     cfg = TranscriptionConfig.from_env()
     agent = TranscriptionAgent(cfg)
+
+    if job_obj is None:
+        job_obj = Job.objects.select_related("case").get(pk=job_id)
+
+    base_meta: Dict[str, Any] = {
+        "job_kind": "transcription",
+        "agent_type": "transcription",
+        "agent_label": "Transcribe",
+        "transcription_mode": mode,
+        "requested_language": language or getattr(job_obj, "language", None),
+        "transcription_status": str(getattr(job_obj, "status", "") or Job.Status.PENDING),
+    }
+    _safe_job_meta(case_id, org_id, job_id, base_meta)
+
+    runtime = JobRuntimeContext(
+        job=job_obj,
+        case_id=case_id,
+        org_id=org_id,
+        task_name="transcribe_job",
+        task_id=getattr(self.request, "id", None) or "",
+        task_meta={
+            "mode": mode,
+            "diarization": diarization,
+            "language": language,
+        },
+    )
 
     audio_meta_updates: Dict[str, Any] = {}
     try:
@@ -177,40 +507,44 @@ def transcribe_job(
             pass
 
     # Update DB status and notify; record TaskRun
-    log.info("job claimed", extra={"job_id": job_id, "case_id": case_id, "mode": mode, "diarization": diarization})
-    try:
-        append_job_log(
-            case_id,
-            org_id,
-            job_id,
-            f"Worker started transcription (mode={mode}, diarization={'on' if diarization else 'off'}, language={language or cfg.default_language if hasattr(cfg, 'default_language') else (language or 'auto')})",
-        )
-    except Exception:
-        pass
+    log.info(
+        "job claimed",
+        extra={"job_id": job_id, "case_id": case_id, "mode": mode, "diarization": diarization},
+    )
+
+    initial_status = Job.Status.RUNNING
+    initial_event = "job.started"
+    initial_meta_status = "running"
+    initial_job_updates: Dict[str, Any] = {"upload_progress": None}
+    initial_payload: Dict[str, Any] = {}
+
     if upload_required:
         if bool(force_wav_conversion):
-            send_job_update(
-                job_id,
-                event="job.converting",
-                status=Job.Status.CONVERTING,
-                case_id=case_id,
-            )
-    else:
-        send_job_update(job_id, event="job.started", status=Job.Status.RUNNING, case_id=case_id)
+            initial_status = converting_status
+            initial_event = "job.converting"
+            initial_meta_status = "converting"
+            initial_job_updates["upload_progress"] = 0.0
+        else:
+            initial_status = Job.Status.UPLOADING
+            initial_event = "job.uploading"
+            initial_meta_status = "uploading"
+            initial_job_updates["upload_progress"] = 0.0
+            initial_payload = {"progress_percent": 0.0, "upload_progress": 0.0}
 
-    # Create a TaskRun row for reproducibility
-    tr = TaskRun(
-        task_name="transcribe_job",
-        task_id=getattr(self.request, "id", None) or "",
-        status="RUNNING",
-        job_id=job_id,
-        case_id=case_id,
-        meta={"mode": mode, "diarization": diarization, "language": language},
+    start_log_message = (
+        "Worker started transcription "
+        f"(mode={mode}, diarization={'on' if diarization else 'off'}, "
+        f"language={language or cfg.default_language if hasattr(cfg, 'default_language') else (language or 'auto')})"
     )
-    try:
-        tr.save()
-    except Exception:
-        tr = None
+
+    runtime.start(
+        status=initial_status,
+        log_message=start_log_message,
+        event=initial_event,
+        meta_updates={**base_meta, "transcription_status": initial_meta_status},
+        job_updates=initial_job_updates,
+        job_event_payload=initial_payload,
+    )
 
     # Run the agent; only this block determines success vs. failure
     batch_upload_meta: Dict[str, Any] = {}
@@ -233,25 +567,14 @@ def transcribe_job(
 
             if normalization.converted:
                 try:
-                    try:
-                        Job.objects.filter(pk=job_id).update(status=Job.Status.CONVERTING)
-                    except Exception:
-                        pass
-                    try:
-                        send_job_update(
-                            job_id,
-                            event="job.converting",
-                            status=Job.Status.CONVERTING,
-                            case_id=case_id,
-                        )
-                    except Exception:
-                        pass
                     reasons_txt = ", ".join(normalization.reasons) or "format normalization"
-                    append_job_log(
-                        case_id,
-                        org_id,
-                        job_id,
-                        f"Normalized source audio via ffmpeg ({reasons_txt})",
+                    runtime.transition(
+                        status=converting_status,
+                        log_message=f"Normalized source audio via ffmpeg ({reasons_txt})",
+                        meta_updates={"transcription_status": "converting"},
+                        job_updates={"upload_progress": 0.0},
+                        event="job.converting",
+                        job_event_payload={"upload_progress": 0.0},
                     )
                 except Exception:
                     pass
@@ -530,28 +853,13 @@ def transcribe_job(
                 if pct == last_progress["value"]:
                     return
                 last_progress["value"] = pct
-                try:
-                    Job.objects.filter(
-                        pk=job_id,
-                        status__in=[
-                            Job.Status.PENDING,
-                            getattr(Job.Status, "CONVERTING", "CONVERTING"),
-                            Job.Status.UPLOADING,
-                        ],
-                    ).update(status=Job.Status.UPLOADING, upload_progress=pct)
-                except Exception:
-                    pass
-                try:
-                    send_job_update(
-                        job_id,
-                        event="job.uploading",
-                        status=Job.Status.UPLOADING,
-                        case_id=case_id,
-                        progress_percent=pct,
-                        upload_progress=pct,
-                    )
-                except Exception:
-                    pass
+                runtime.transition(
+                    status=Job.Status.UPLOADING,
+                    job_updates={"upload_progress": pct},
+                    event="job.uploading",
+                    job_event_payload={"progress_percent": pct, "upload_progress": pct},
+                    task_meta_updates={"upload_progress": pct},
+                )
 
             def _cancel_check() -> bool:
                 return Job.objects.filter(
@@ -595,22 +903,19 @@ def transcribe_job(
             current_status = Job.objects.filter(pk=job_id).values_list("status", flat=True).first()
             if current_status in (Job.Status.CANCELLING, Job.Status.CANCELLED):
                 raise UploadCancelled("Cancelled before transcription start")
-            Job.objects.filter(pk=job_id).update(status=Job.Status.RUNNING, upload_progress=None)
             if batch_upload_meta:
                 batch_upload_meta.setdefault("batch_upload_blob_name", original_name)
                 update_job_meta(case_id, org_id, job_id, batch_upload_meta)
-            if job_obj is not None:
-                job_obj.status = Job.Status.RUNNING
-                job_obj.upload_progress = None
-            send_job_update(
-                job_id,
-                event="job.started",
+            runtime.transition(
                 status=Job.Status.RUNNING,
-                case_id=case_id,
-                upload_progress=None,
+                log_message=f"Upload complete: {original_name}",
+                meta_updates={"transcription_status": "running"},
+                job_updates={"upload_progress": None},
+                event="job.started",
+                job_event_payload={"upload_progress": None},
+                task_meta_updates={"upload_progress": None},
             )
             log.info("uploaded source to blob", extra={"job_id": job_id})
-            append_job_log(case_id, org_id, job_id, f"Upload complete: {original_name}")
 
         append_job_log(
             case_id,
@@ -653,90 +958,70 @@ def transcribe_job(
                     update_job_meta(case_id, org_id, job_id, {"azure_transcription_url": azure_url})
         except Exception as exc:
             log.debug("unable to parse transcription meta", extra={"job_id": job_id, "error": str(exc)})
-    except Exception as e:
-        if isinstance(e, UploadCancelled):
-            log.info("job cancelled during preparation", extra={"job_id": job_id})
-            append_job_log(case_id, org_id, job_id, "Job cancelled during preparation", level="warning")
-            try:
-                now = timezone.now()
-                Job.objects.filter(pk=job_id).update(
-                    status=Job.Status.CANCELLED,
-                    finished_at=now,
-                    error_message="Cancelled by user",
-                    upload_progress=None,
-                )
-                if job_obj is not None:
-                    job_obj.status = Job.Status.CANCELLED
-                    job_obj.finished_at = now
-                    job_obj.error_message = "Cancelled by user"
-            except Exception:
-                pass
-            try:
-                if tr is not None:
-                    tr.status = "CANCELLED"
-                    tr.finished_at = timezone.now()
-                    tr.save(update_fields=["status", "finished_at"])
-            except Exception:
-                pass
-        try:
-            send_job_update(
-                job_id,
-                event="job.cancelled",
-                status=Job.Status.CANCELLED,
-                case_id=case_id,
-                progress_percent=None,
-                upload_progress=None,
-            )
-        except Exception:
-            log.exception(
-                "job cancel update emit failed",
-                extra={"job_id": job_id, "event": "job.cancelled"},
-            )
-        return {"status": Job.Status.CANCELLED, "job_id": job_id, "case_id": case_id}
-
-        log.exception("job failed", extra={"job_id": job_id, "error": str(e)})
-        append_job_log(case_id, org_id, job_id, f"Job failed: {e}", level="error")
-        payload = {
-            "status": "FAILED",
+    except UploadCancelled:
+        cancel_meta = {**base_meta, "transcription_status": "cancelled"}
+        cancel_meta.update(audio_meta_updates)
+        cancel_meta.update(batch_upload_meta)
+        cancel_payload = {
+            "status": Job.Status.CANCELLED,
             "job_id": job_id,
             "case_id": case_id,
-            "error": str(e)[:1000],
             "progress_percent": None,
             "upload_progress": None,
         }
+        cancel_ts = runtime.cancel(
+            reason="Cancelled by user",
+            log_message="Job cancelled during preparation",
+            meta_updates=cancel_meta,
+            job_updates={"upload_progress": None, "error_message": "Cancelled by user"},
+            job_event_payload={
+                "progress_percent": None,
+                "upload_progress": None,
+                "error": "Cancelled by user",
+            },
+        )
+        _safe_job_meta(
+            case_id,
+            org_id,
+            job_id,
+            {"transcription_completed_at": cancel_ts.isoformat() if cancel_ts else None},
+        )
         try:
-            if job_obj is None:
-                job_obj = Job.objects.get(pk=job_id)
-            if job_obj.status != Job.Status.CANCELLED:
-                job_obj.status = Job.Status.FAILED
-                job_obj.finished_at = timezone.now()
-                job_obj.error_message = payload["error"]
-                job_obj.upload_progress = None
-                job_obj.save(update_fields=["status", "finished_at", "error_message", "upload_progress"])
+            if isinstance(ai, str) and ai.startswith("/"):
+                local_audio = Path(ai)
+                if local_audio.exists():
+                    local_audio.unlink(missing_ok=True)
         except Exception:
             pass
-        try:
-            if tr is not None:
-                tr.status = "FAILED"
-                tr.finished_at = timezone.now()
-                tr.save(update_fields=["status", "finished_at"])
-        except Exception:
-            pass
-        emit_payload = {k: v for k, v in payload.items() if k != "job_id"}
-        try:
-            send_job_update(job_id, event="job.failed", **emit_payload)
-        except Exception:
-            log.exception(
-                "job failure update emit failed",
-                extra={"job_id": job_id, "event": "job.failed"},
-            )
-        meta_updates = dict(audio_meta_updates)
-        if batch_upload_meta:
-            meta_updates.update(batch_upload_meta)
-        try:
-            update_job_meta(case_id, org_id, job_id, meta_updates)
-        except Exception:
-            pass
+        return cancel_payload
+
+    except Exception as exc:
+        error_message = str(exc)
+        log.exception("job failed", extra={"job_id": job_id, "error": error_message})
+        failure_payload = {
+            "status": "FAILED",
+            "job_id": job_id,
+            "case_id": case_id,
+            "error": error_message[:1000],
+            "progress_percent": None,
+            "upload_progress": None,
+        }
+        failure_meta = {**base_meta, "transcription_status": "failed"}
+        failure_meta.update(audio_meta_updates)
+        failure_meta.update(batch_upload_meta)
+        fail_ts = runtime.fail(
+            error=error_message,
+            log_message=f"Job failed: {error_message}",
+            meta_updates=failure_meta,
+            job_updates={"upload_progress": None},
+            job_event_payload={k: v for k, v in failure_payload.items() if k != "job_id"},
+        )
+        _safe_job_meta(
+            case_id,
+            org_id,
+            job_id,
+            {"transcription_completed_at": fail_ts.isoformat() if fail_ts else None},
+        )
         raise
 
     # If agent succeeded, persist results; notification errors won't flip status
@@ -752,121 +1037,115 @@ def transcribe_job(
         "upload_progress": None,
     }
     try:
-        if job_obj is None:
-            job_obj = Job.objects.get(pk=job_id)
-        else:
-            try:
-                job_obj.refresh_from_db()
-            except Exception:
-                job_obj = Job.objects.get(pk=job_id)
-        if job_obj.status == Job.Status.CANCELLED:
-            log.info("job cancelled during execution; ignoring transcription output", extra={"job_id": job_id})
-            try:
-                if transcript_path_obj.exists():
-                    transcript_path_obj.unlink()
-            except Exception:
-                pass
-            try:
-                if isinstance(ai, str) and ai.startswith("/"):
-                    local_audio = Path(ai)
-                    if local_audio.exists():
-                        local_audio.unlink()
-            except Exception:
-                pass
-            return {"status": Job.Status.CANCELLED, "job_id": job_id, "case_id": case_id}
-        job_obj.status = Job.Status.SUCCEEDED
-        job_obj.finished_at = timezone.now()
-        job_obj.transcript_path = str(result.transcript_file)
-        job_obj.duration_s = result.duration_s
-        job_obj.upload_progress = None
-        job_obj.save(update_fields=["status", "finished_at", "transcript_path", "duration_s", "upload_progress"])
-        transcript_checksum: Optional[str] = None
-        transcript_bytes: Optional[int] = None
-        transcript_path_obj = Path(result.transcript_file)
-        if transcript_path_obj.exists():
-            try:
-                transcript_bytes = transcript_path_obj.stat().st_size
-            except Exception:
-                transcript_bytes = None
-            transcript_checksum = _sha256_file(transcript_path_obj)
-        # Register artifact with checksum
-        artifact_title = None
+        job_obj.refresh_from_db()
+    except Exception:
+        job_obj = Job.objects.select_related("case").get(pk=job_id)
+    if job_obj.status == Job.Status.CANCELLED:
+        log.info("job cancelled during execution; ignoring transcription output", extra={"job_id": job_id})
         try:
-            existing_titles = CaseArtifact.objects.filter(
-                case_id=str(case_id),
-                type="TRANSCRIPT",
-            ).values_list("title", flat=True)
-            job_meta_title = None
+            transcript_path_obj = Path(result.transcript_file)
+            if transcript_path_obj.exists():
+                transcript_path_obj.unlink(missing_ok=True)
+        except Exception:
+            pass
+        try:
+            if isinstance(ai, str) and ai.startswith("/"):
+                local_audio = Path(ai)
+                if local_audio.exists():
+                    local_audio.unlink(missing_ok=True)
+        except Exception:
+            pass
+        return {"status": Job.Status.CANCELLED, "job_id": job_id, "case_id": case_id}
+
+    transcript_path_obj = Path(result.transcript_file)
+    transcript_checksum: Optional[str] = None
+    transcript_bytes: Optional[int] = None
+    if transcript_path_obj.exists():
+        try:
+            transcript_bytes = transcript_path_obj.stat().st_size
+        except Exception:
+            transcript_bytes = None
+        transcript_checksum = _sha256_file(transcript_path_obj)
+
+    artifact_title: Optional[str] = None
+    job_meta_title: Optional[str] = None
+    try:
+        existing_titles = CaseArtifact.objects.filter(
+            case_id=str(case_id),
+            type="TRANSCRIPT",
+        ).values_list("title", flat=True)
+        job_meta_path = storage_ops_dir(case_id, org_id) / f"{job_id}_transcription_log.json"
+        if job_meta_path.exists():
             try:
-                job_meta_path = storage_ops_dir(case_id, org_id) / f"{job_id}_transcription_log.json"
-                if job_meta_path.exists():
-                    job_meta_payload = json.loads(job_meta_path.read_text(encoding="utf-8"))
-                    title_candidate = job_meta_payload.get("job_title")
-                    if isinstance(title_candidate, str) and title_candidate.strip():
-                        job_meta_title = title_candidate.strip()
+                job_meta_payload = json.loads(job_meta_path.read_text(encoding="utf-8"))
+                title_candidate = job_meta_payload.get("job_title")
+                if isinstance(title_candidate, str) and title_candidate.strip():
+                    job_meta_title = title_candidate.strip()
             except Exception:
                 job_meta_title = None
-            artifact_title = job_meta_title or unique_title("Transcript", existing_titles)
-            CaseArtifact.objects.create(
-                case_id=str(case_id),
-                case_fk=Job.objects.filter(pk=job_id).values_list('case', flat=True).first(),
-                job_id=str(job_id),
-                type="TRANSCRIPT",
-                title=artifact_title,
-                path=str(result.transcript_file),
-                checksum=transcript_checksum or "",
-                schema_version="v1",
-                metadata={
-                    "language": result.language,
-                    "region": result.region,
-                    "duration_s": result.duration_s,
-                },
-            )
-        except Exception:
-            pass
-        meta_updates = dict(audio_meta_updates)
-        meta_updates.update(
-            {
-                "transcript_sha256": transcript_checksum,
-                "transcript_bytes": transcript_bytes,
-                "transcript_title": artifact_title,
-            }
+        artifact_title = job_meta_title or unique_title("Transcript", existing_titles)
+        CaseArtifact.objects.create(
+            case_id=str(case_id),
+            case_fk=case_obj or job_obj.case,
+            job_id=str(job_id),
+            type="TRANSCRIPT",
+            title=artifact_title,
+            path=str(result.transcript_file),
+            checksum=transcript_checksum or "",
+            schema_version="v1",
+            metadata={
+                "language": result.language,
+                "region": result.region,
+                "duration_s": result.duration_s,
+            },
         )
-        if job_meta_title:
-            meta_updates.setdefault("job_title", job_meta_title)
-        if batch_upload_meta:
-            meta_updates.update(batch_upload_meta)
-        try:
-            update_job_meta(case_id, org_id, job_id, meta_updates)
-        except Exception:
-            pass
     except Exception:
         pass
-    log.info("job succeeded", extra={"job_id": job_id, "transcript": str(result.transcript_file)})
-    append_job_log(
+
+    meta_updates = {**base_meta, "transcription_status": "completed"}
+    meta_updates.update(audio_meta_updates)
+    meta_updates.update(batch_upload_meta)
+    meta_updates.update(
+        {
+            "transcript_file": str(result.transcript_file),
+            "transcript_sha256": transcript_checksum,
+            "transcript_bytes": transcript_bytes,
+            "transcript_title": artifact_title,
+            "transcription_language": result.language,
+            "transcription_region": result.region,
+            "transcription_duration_s": result.duration_s,
+        }
+    )
+    if job_meta_title:
+        meta_updates.setdefault("job_title", job_meta_title)
+
+    emit_payload = {k: v for k, v in payload.items() if k != "job_id"}
+    if artifact_title:
+        payload["title"] = artifact_title
+        emit_payload["title"] = artifact_title
+
+    job_updates = {
+        "transcript_path": str(result.transcript_file),
+        "duration_s": result.duration_s,
+        "upload_progress": None,
+    }
+
+    log_message = f"Job succeeded: transcript={transcript_path_obj.name} duration={payload.get('duration_s')}s"
+    finished_ts = runtime.succeed(
+        log_message=log_message,
+        meta_updates=meta_updates,
+        job_updates=job_updates,
+        job_event_payload=emit_payload,
+    )
+    _safe_job_meta(
         case_id,
         org_id,
         job_id,
-        f"Job succeeded: transcript={Path(result.transcript_file).name} duration={payload.get('duration_s')}s",
+        {"transcription_completed_at": finished_ts.isoformat() if finished_ts else None},
     )
-    try:
-        if tr is not None:
-            tr.status = "SUCCEEDED"
-            tr.finished_at = timezone.now()
-            tr.save(update_fields=["status", "finished_at"])
-    except Exception:
-        pass
-    emit_payload = {k: v for k, v in payload.items() if k != "job_id"}
-    try:
-        if artifact_title:
-            payload["title"] = artifact_title
-            emit_payload["title"] = artifact_title
-        send_job_update(job_id, event="job.succeeded", **emit_payload)
-    except Exception:
-        log.exception(
-            "job success update emit failed",
-            extra={"job_id": job_id, "event": "job.succeeded"},
-        )
+
+    log.info("job succeeded", extra={"job_id": job_id, "transcript": str(result.transcript_file)})
+
     try:
         send_case_update(case_id, event="artifact.created", kind="transcript", job_id=job_id)
     except Exception:
@@ -1051,12 +1330,62 @@ def summarize_job(
     case_id: str,
     job_id: str,
     llm_config_id: Optional[str] = None,
+    source_job_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    job = Job.objects.select_related("case").get(pk=job_id)
+    job = Job.objects.select_related("case", "case__organization").get(pk=job_id)
+    source_job = job
+    if source_job_id and str(source_job_id) != str(job_id):
+        try:
+            source_job = Job.objects.select_related("case", "case__organization").get(pk=source_job_id)
+        except Job.DoesNotExist:
+            source_job = job
     org_id = job.organization_id or job.case.organization_id
     case_dir, _, _ = _case_paths(case_id, org_id)
-    transcript = Path(job.transcript_path) if job.transcript_path else _latest_transcript(case_id, org_id)
+    existing_meta = _load_job_meta(case_id, org_id, job_id)
+    summary_title = str(existing_meta.get("job_title") or f"Summary {job_id}")
+    transcript = (
+        Path(source_job.transcript_path)
+        if source_job.transcript_path
+        else _latest_transcript(case_id, org_id)
+    )
+    transcript_path_str = str(transcript) if transcript else None
+
+    base_meta: Dict[str, Any] = {
+        "job_kind": "summary",
+        "agent_type": "summary",
+        "job_title": summary_title,
+        "source_job_id": str(source_job.id),
+        "source_transcript_path": transcript_path_str,
+    }
+
+    runtime = JobRuntimeContext(
+        job=job,
+        case_id=case_id,
+        org_id=org_id,
+        task_name="summarize_job",
+        task_id=getattr(self.request, "id", None) or "",
+        task_meta={
+            "requested_llm_config_id": llm_config_id,
+            "source_job_id": str(source_job.id),
+        },
+    )
+
+    runtime.start(
+        status=Job.Status.RUNNING,
+        log_message="Worker started summarize pipeline",
+        event="job.started",
+        meta_updates={**base_meta, "summary_status": "running"},
+    )
+
     if not transcript or not transcript.exists():
+        failure_ts = runtime.fail(
+            error="No transcript found to summarize",
+            log_message="Summarize failed: transcript missing",
+            meta_updates={**base_meta, "summary_status": "failed", "summary_error": "transcript_missing"},
+            events=[("summary.failed", {})],
+            task_meta_updates={"stage": "preflight", "reason": "missing_transcript"},
+        )
+        _safe_job_meta(case_id, org_id, job_id, {"summary_completed_at": failure_ts.isoformat()})
         raise RuntimeError("No transcript found to summarize")
 
     try:
@@ -1066,6 +1395,14 @@ def summarize_job(
             "summarize config invalid",
             extra={"job_id": job_id, "case_id": case_id, "reason": str(exc)},
         )
+        failure_ts = runtime.fail(
+            error=str(exc),
+            log_message="Summarize configuration invalid",
+            meta_updates={**base_meta, "summary_status": "failed", "summary_error": str(exc)},
+            events=[("summary.failed", {"llm_config_id": llm_config_id})],
+            task_meta_updates={"stage": "config", "reason": str(exc)},
+        )
+        _safe_job_meta(case_id, org_id, job_id, {"summary_completed_at": failure_ts.isoformat()})
         raise
 
     org_id_str = str(org_id) if org_id else None
@@ -1082,7 +1419,16 @@ def summarize_job(
             llm_settings=llm_settings,
         )
     if not config_payload:
-        raise RuntimeError("No LLM configuration available for summarization")
+        error_message = "No LLM configuration available for summarization"
+        failure_ts = runtime.fail(
+            error=error_message,
+            log_message=error_message,
+            meta_updates={**base_meta, "summary_status": "failed", "summary_error": error_message},
+            events=[("summary.failed", {"llm_config_id": llm_config_id})],
+            task_meta_updates={"stage": "config", "reason": "missing_configuration"},
+        )
+        _safe_job_meta(case_id, org_id, job_id, {"summary_completed_at": failure_ts.isoformat()})
+        raise RuntimeError(error_message)
 
     config_stage_map = config_payload.get("stage_map") or {}
     config_provider_chain_raw = config_payload.get("provider_chain") or []
@@ -1097,6 +1443,25 @@ def summarize_job(
     active_config_id = config_payload.get("id")
     active_config_name = config_payload.get("name")
 
+    _safe_job_meta(
+        case_id,
+        org_id,
+        job_id,
+        {
+            "summary_llm_config_id": active_config_id,
+            "summary_llm_config_name": active_config_name,
+        },
+    )
+    runtime.emit("summary.started", llm_config_id=active_config_id)
+    if runtime.task_run:
+        try:
+            meta_payload = dict(runtime.task_run.meta or {})
+            meta_payload["active_llm_config_id"] = active_config_id
+            runtime.task_run.meta = meta_payload
+            runtime.task_run.save(update_fields=["meta"])
+        except Exception:
+            pass
+
     summarize_agent = SummarizeAgent(summarize_config)
     log.info(
         "summarize job started",
@@ -1108,24 +1473,6 @@ def summarize_job(
             "llm_config_name": active_config_name,
         },
     )
-    try:
-        append_job_log(
-            case_id,
-            org_id,
-            job_id,
-            "Worker started summarize pipeline",
-        )
-    except Exception:
-        pass
-    try:
-        send_job_update(
-            job_id,
-            event="summary.started",
-            case_id=case_id,
-            llm_config_id=active_config_id,
-        )
-    except Exception:
-        pass
     intake_payload = _case_intake_payload(job.case)
 
     def _progress(stage: str, event: str, payload: Dict[str, Any]) -> None:
@@ -1138,14 +1485,7 @@ def summarize_job(
             progress_payload["llm_config_id"] = active_config_id
         if payload:
             progress_payload["details"] = payload
-        try:
-            send_job_update(
-                job_id,
-                event="summary.progress",
-                **progress_payload,
-            )
-        except Exception:
-            pass
+        runtime.emit("summary.progress", **progress_payload)
         if summarize_agent.config.debug:
             log.info(
                 "summarize stage",
@@ -1199,39 +1539,20 @@ def summarize_job(
             "summarize job failed",
             extra={"job_id": job_id, "case_id": case_id, "error": error_message},
         )
-        try:
-            append_job_log(
-                case_id,
-                org_id,
-                job_id,
-                f"Summarize failed: {error_message}",
-            )
-        except Exception:
-            pass
-        try:
-            send_job_update(
-                job_id,
-                event="summary.failed",
-                case_id=case_id,
-                error=error_message,
-            )
-        except Exception:
-            pass
-        raise
-
-    try:
-        send_job_update(
-            job_id,
-            event="summary.completed",
-            case_id=case_id,
-            summary=str(result.summary_file),
-            llm_config_id=active_config_id,
+        failure_ts = runtime.fail(
+            error=error_message,
+            log_message=f"Summarize failed: {error_message}",
+            meta_updates={**base_meta, "summary_status": "failed", "summary_error": error_message},
+            events=[("summary.failed", {"llm_config_id": active_config_id, "details": {"stage": "runtime"}})],
+            task_meta_updates={"error": error_message, "stage": "runtime"},
         )
-    except Exception:
-        pass
+        _safe_job_meta(case_id, org_id, job_id, {"summary_completed_at": failure_ts.isoformat()})
+        raise
 
     checksum = _sha256_file(result.summary_file)
     meta_updates: Dict[str, Any] = {
+        **base_meta,
+        "summary_status": "completed",
         "summary_file": str(result.summary_file),
         "summary_outline_file": str(result.outline_file) if result.outline_file else None,
         "summary_timeline_file": str(result.timeline_seeds_file) if result.timeline_seeds_file else None,
@@ -1243,26 +1564,60 @@ def summarize_job(
         "summary_llm_config_id": active_config_id,
         "summary_llm_config_name": active_config_name,
     }
+
+    finished_ts = runtime.succeed(
+        log_message="Summarize pipeline completed",
+        meta_updates=meta_updates,
+        events=[
+            (
+                "summary.completed",
+                {
+                    "summary": str(result.summary_file),
+                    "llm_config_id": active_config_id,
+                },
+            )
+        ],
+        job_updates={"transcript_path": str(result.summary_file)},
+        task_meta_updates={
+            "summary_file": str(result.summary_file),
+            "outline_file": str(result.outline_file) if result.outline_file else None,
+            "timeline_file": str(result.timeline_seeds_file) if result.timeline_seeds_file else None,
+            "entity_file": str(result.entity_hints_file) if result.entity_hints_file else None,
+            "words": result.words,
+        },
+    )
+    _safe_job_meta(case_id, org_id, job_id, {"summary_completed_at": finished_ts.isoformat()})
+
+    summary_artifact_id: Optional[str] = None
     try:
-        CaseArtifact.objects.create(
+        artifact = CaseArtifact.objects.create(
             case_id=case_id,
             case_fk=job.case,
             job_id=str(job_id),
             type="SUMMARY",
-            title=f"Summarize {job_id}",
+            title=summary_title,
             path=str(result.summary_file),
             checksum=checksum or "",
             schema_version="v1",
-            metadata={"source_transcript": str(result.source_transcript)},
+            metadata={
+                "source_transcript": str(result.source_transcript),
+                "source_job_id": str(source_job.id),
+                "provider_chain": result.provider_chain,
+            },
         )
+        summary_artifact_id = str(artifact.id)
     except Exception:
-        pass
+        summary_artifact_id = None
 
     audit_emit(
         None,
         case_id=case_id,
         event="analysis.summary.created",
-        data={"job_id": job_id, "file": str(result.summary_file)},
+        data={
+            "job_id": job_id,
+            "source_job_id": str(source_job.id),
+            "file": str(result.summary_file),
+        },
     )
 
     try:
@@ -1270,18 +1625,13 @@ def summarize_job(
     except Exception:
         pass
 
-    try:
-        append_job_log(
-            case_id,
-            org_id,
-            job_id,
-            "Summarize pipeline completed",
-        )
-    except Exception:
-        pass
+    if summary_artifact_id:
+        meta_updates["summary_artifact_id"] = summary_artifact_id
 
     payload: Dict[str, Any] = {
         "status": "ok",
+        "job_id": job_id,
+        "source_job_id": str(source_job.id),
         "summary_file": str(result.summary_file),
         "outline_file": str(result.outline_file) if result.outline_file else None,
         "timeline_file": str(result.timeline_seeds_file) if result.timeline_seeds_file else None,
@@ -1289,14 +1639,10 @@ def summarize_job(
         "words": result.words,
         "llm_config_id": active_config_id,
     }
-
-    try:
-        update_job_meta(case_id, org_id, job_id, {k: v for k, v in meta_updates.items() if v})
-    except Exception:
-        pass
+    if summary_artifact_id:
+        payload["artifact_id"] = summary_artifact_id
 
     return payload
-
 
 @shared_task(bind=True)
 def timeline_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:

@@ -37,6 +37,7 @@ def build_job_action_entries(
     job_kind = str(meta.get("job_kind") or "").lower()
     converted_available = bool(meta.get("converted_wav_available"))
     source_job_id = meta.get("source_job_id")
+    is_summary = job_kind == "summary"
 
     sections: List[Dict[str, Any]] = []
 
@@ -58,7 +59,7 @@ def build_job_action_entries(
             }
         )
 
-    if status in RESTARTABLE_STATUSES:
+    if not is_summary and status in RESTARTABLE_STATUSES:
         workflow_items.append(
             {
                 "label": "Restart transcription",
@@ -74,7 +75,7 @@ def build_job_action_entries(
         _add_section("Workflow").extend(workflow_items)
 
     review_items: List[Dict[str, Any]] = []
-    if can_review and status == Job.Status.SUCCEEDED:
+    if not is_summary and can_review and status == Job.Status.SUCCEEDED:
         review_items.append(
             {
                 "label": "Approve transcript",
@@ -99,36 +100,50 @@ def build_job_action_entries(
         _add_section("Review").extend(review_items)
 
     files_items: List[Dict[str, Any]] = []
-    if artifact_entry and artifact_entry.get("download_url"):
-        files_items.append(
-            {
-                "label": "Download transcript",
-                "href": artifact_entry.get("download_url"),
-                "kind": "link",
-            }
-        )
-    if transcript_payload.get("path"):
-        files_items.append(
-            {
-                "label": "View transcript",
-                "action": "view-transcript",
-                "job_id": job_id,
-                "kind": "modal",
-            }
-        )
-    audio_download_url = None
-    if audio_payload.get("path"):
-        audio_download_url = f"/api/v1/jobs/{job_id}/download-audio/"
-    elif job_kind != "audio_conversion" and converted_available:
-        audio_download_url = f"/api/v1/jobs/{job_id}/download-audio/?converted=1"
-    if audio_download_url:
-        files_items.append(
-            {
-                "label": "Download audio",
-                "href": audio_download_url,
-                "kind": "link",
-            }
-        )
+    if is_summary:
+        summary_artifact_id = meta.get("summary_artifact_id")
+        if not summary_artifact_id and artifact_entry and artifact_entry.get("type") == "SUMMARY":
+            summary_artifact_id = artifact_entry.get("id")
+        if summary_artifact_id:
+            summary_href = f"/api/v1/artifacts/{summary_artifact_id}/download/"
+            files_items.append(
+                {
+                    "label": "Download summary",
+                    "href": summary_href,
+                    "kind": "link",
+                }
+            )
+    else:
+        if artifact_entry and artifact_entry.get("download_url"):
+            files_items.append(
+                {
+                    "label": "Download transcript",
+                    "href": artifact_entry.get("download_url"),
+                    "kind": "link",
+                }
+            )
+        if transcript_payload.get("path"):
+            files_items.append(
+                {
+                    "label": "View transcript",
+                    "action": "view-transcript",
+                    "job_id": job_id,
+                    "kind": "modal",
+                }
+            )
+        audio_download_url = None
+        if audio_payload.get("path"):
+            audio_download_url = f"/api/v1/jobs/{job_id}/download-audio/"
+        elif job_kind != "audio_conversion" and converted_available:
+            audio_download_url = f"/api/v1/jobs/{job_id}/download-audio/?converted=1"
+        if audio_download_url:
+            files_items.append(
+                {
+                    "label": "Download audio",
+                    "href": audio_download_url,
+                    "kind": "link",
+                }
+            )
     files_items.append(
         {
             "label": "View logs",

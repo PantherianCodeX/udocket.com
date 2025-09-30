@@ -6,7 +6,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 import json
+from urllib.parse import quote
 
+from django.conf import settings
 from django.http import HttpRequest
 from django.urls import reverse
 from django.utils import timezone
@@ -14,7 +16,7 @@ from django.utils import timezone
 from apps.platform.accounts.models import OrganizationMembership
 from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.cases.models import Case, CaseMembership
-from apps.platform.jobs.models import Job
+from apps.platform.jobs.models import Job, JobNote
 
 from ..constants import CASE_JOB_TABLE_COLUMNS, DEFAULT_TABLE_FILTERS, GLOBAL_JOB_TABLE_COLUMNS
 from ..presenters.utils import status_class, user_label
@@ -37,6 +39,24 @@ from apps.platform.operations.llm import (
     get_org_provider_credentials,
     load_provider_catalog,
 )
+from apps.platform.authorization.capabilities import has_capability
+from apps.platform.jobs.notes import serialize_notes
+
+
+def _user_can_add_notes(user, case: Case) -> bool:
+    if getattr(settings, "PLATFORM_DEV_OPEN", False):
+        return True
+    if not user or not getattr(user, "is_authenticated", False):
+        return False
+    try:
+        if case.reviewer_id and str(user.id) == str(case.reviewer_id):
+            return True
+    except Exception:
+        pass
+    try:
+        return has_capability(user, str(case.id), "case.update")
+    except Exception:
+        return False
 
 
 def _latest_successful_transcription_job(jobs: List[Job]) -> Optional[Job]:
@@ -213,6 +233,7 @@ def analysis_modules_context(
     transcript_artifacts: Optional[Dict[str, CaseArtifact]] = None,
 ) -> List[Dict[str, Any]]:
     user = getattr(request, "user", None)
+    return_url = request.get_full_path()
     artifacts_qs = (
         CaseArtifact.objects.for_user(user)
         .filter(case_id=str(case.id), type__in=["SUMMARY", "TIMELINE"])
@@ -273,6 +294,32 @@ def analysis_modules_context(
             action_disabled = False
             disabled_reason = None
 
+        notes_context: Dict[str, Any] = {}
+        latest_job_id = None
+        if latest:
+            latest_job_id = latest.get("job_id") or latest.get("id")
+        if latest_job_id:
+            notes_qs = (
+                JobNote.objects.filter(job_id=latest_job_id)
+                .select_related("created_by")
+                .order_by("-created_at")
+            )
+            notes_entries = serialize_notes(notes_qs)
+            notes_updated_at = notes_entries[0]["created_at"] if notes_entries else None
+            notes_updated_by = (
+                notes_entries[0].get("created_by_label")
+                or notes_entries[0].get("created_by")
+                if notes_entries
+                else None
+            )
+            notes_context = {
+                "job_id": str(latest_job_id),
+                "entries": notes_entries,
+                "updated_at": notes_updated_at,
+                "updated_by": notes_updated_by,
+                "user_can_add": _user_can_add_notes(user, case),
+            }
+
         return {
             "key": key,
             "label": label,
@@ -294,6 +341,7 @@ def analysis_modules_context(
                 "disabled": action_disabled,
                 "disabled_reason": disabled_reason,
             },
+            "notes": notes_context,
         }
 
     return [
@@ -1000,12 +1048,38 @@ def build_tool_panels(
         provider_registry=provider_registry,
     )
     summary_chain = _collect_provider_chain(summary_provider_chain, provider_chain)
-    summary_primary = summary_chain[0] if summary_chain else primary_default
+    summary_configured_stages: List[Dict[str, Any]] = []
+    for stage in summary_stage_configs:
+        override = summary_stage_map.get(stage["key"])
+        if not override:
+            continue
+        summary_configured_stages.append(
+            {
+                "key": stage["key"],
+                "label": stage["label"],
+                "provider": override.get("provider") or stage.get("selected_provider"),
+                "model": override.get("model") or stage.get("selected_model"),
+                "max_tokens": override.get("max_tokens"),
+                "options": override.get("options") or {},
+            }
+        )
 
+    summary_stage_configs_json = json.dumps(summary_stage_configs)
     summary_configs_json = json.dumps(summary_config_list)
     summary_active_config_json = json.dumps(summary_active_config or {})
     summary_chain_json = json.dumps(summary_chain)
     summary_stage_map_json = json.dumps(summary_stage_map)
+    summary_settings_base = reverse("ui-organization-settings-section", args=["summary"])
+    summary_urls = {
+        "base": summary_settings_base,
+        "edit": (
+            f"{summary_settings_base}?config={summary_active_config.get('id')}&next={quote(return_url)}"
+            if summary_active_config and summary_active_config.get("id")
+            else f"{summary_settings_base}?next={quote(return_url)}"
+        ),
+        "new": f"{summary_settings_base}?new=1&next={quote(return_url)}",
+        "tuning": f"{reverse('ui-organization-settings-section', args=['providers'])}?next={quote(return_url)}",
+    }
 
     timeline_config_list = get_org_llm_configurations(str(case.organization_id), target="timeline")
     timeline_active_config = get_llm_configuration(
@@ -1032,12 +1106,38 @@ def build_tool_panels(
         provider_registry=provider_registry,
     )
     timeline_chain = _collect_provider_chain(timeline_provider_chain, provider_chain)
-    timeline_primary = timeline_chain[0] if timeline_chain else primary_default
+    timeline_configured_stages: List[Dict[str, Any]] = []
+    for stage in timeline_stage_configs:
+        override = timeline_stage_map.get(stage["key"])
+        if not override:
+            continue
+        timeline_configured_stages.append(
+            {
+                "key": stage["key"],
+                "label": stage["label"],
+                "provider": override.get("provider") or stage.get("selected_provider"),
+                "model": override.get("model") or stage.get("selected_model"),
+                "max_tokens": override.get("max_tokens"),
+                "options": override.get("options") or {},
+            }
+        )
 
+    timeline_stage_configs_json = json.dumps(timeline_stage_configs)
     timeline_configs_json = json.dumps(timeline_config_list)
     timeline_active_config_json = json.dumps(timeline_active_config or {})
     timeline_chain_json = json.dumps(timeline_chain)
     timeline_stage_map_json = json.dumps(timeline_stage_map)
+    timeline_settings_base = reverse("ui-organization-settings-section", args=["timeline"])
+    timeline_urls = {
+        "base": timeline_settings_base,
+        "edit": (
+            f"{timeline_settings_base}?config={timeline_active_config.get('id')}&next={quote(return_url)}"
+            if timeline_active_config and timeline_active_config.get("id")
+            else f"{timeline_settings_base}?next={quote(return_url)}"
+        ),
+        "new": f"{timeline_settings_base}?new=1&next={quote(return_url)}",
+        "tuning": f"{reverse('ui-organization-settings-section', args=['providers'])}?next={quote(return_url)}",
+    }
     summary_status = status_payload(progress_lookup, "summary", "Not Started")
     summary_module = analysis_lookup.get("summary") or {}
     summary_latest = summary_module.get("latest") or {}
@@ -1066,23 +1166,19 @@ def build_tool_panels(
             "job_endpoint_template": "/api/v1/jobs/{job_id}/analyze/summary/",
                 "summary_llm": {
                     "target": "summary",
-                    "provider_options": provider_options,
-                    "defaults": {
-                        "primary": summary_primary,
-                        "azure_available": provider_registry.get("azure", {}).get("available", False),
-                    },
-                "stage_configs": summary_stage_configs,
-                "stage_map_json": summary_stage_map_json,
-                "configurations": summary_config_list,
-                "configurations_json": summary_configs_json,
-                "active_configuration": summary_active_config,
-                "active_configuration_json": summary_active_config_json,
-                "provider_chain_json": summary_chain_json,
-                "catalog": provider_catalog,
-                "catalog_json": json.dumps(provider_catalog),
-                "credentials": provider_credentials,
-                "credentials_json": json.dumps(provider_credentials),
-            },
+                    "configurations": summary_config_list,
+                    "configurations_json": summary_configs_json,
+                    "active_configuration": summary_active_config,
+                    "active_configuration_json": summary_active_config_json,
+                    "configured_stages": summary_configured_stages,
+                    "stage_configs": summary_stage_configs,
+                    "stage_configs_json": summary_stage_configs_json,
+                    "stage_map_json": summary_stage_map_json,
+                    "provider_chain": summary_chain,
+                    "provider_chain_json": summary_chain_json,
+                    "urls": summary_urls,
+                    "return_url": return_url,
+                },
         },
         "jobs": summary_jobs,
         "jobs_title": "Summarize Jobs",
@@ -1133,23 +1229,19 @@ def build_tool_panels(
             "job_endpoint_template": "/api/v1/jobs/{job_id}/analyze/timeline/",
                 "timeline_llm": {
                     "target": "timeline",
-                    "provider_options": provider_options,
-                    "defaults": {
-                        "primary": timeline_primary,
-                        "azure_available": provider_registry.get("azure", {}).get("available", False),
-                    },
-                "stage_configs": timeline_stage_configs,
-                "stage_map_json": timeline_stage_map_json,
-                "configurations": timeline_config_list,
-                "configurations_json": timeline_configs_json,
-                "active_configuration": timeline_active_config,
-                "active_configuration_json": timeline_active_config_json,
-                "provider_chain_json": timeline_chain_json,
-                "catalog": provider_catalog,
-                "catalog_json": json.dumps(provider_catalog),
-                "credentials": provider_credentials,
-                "credentials_json": json.dumps(provider_credentials),
-            },
+                    "configurations": timeline_config_list,
+                    "configurations_json": timeline_configs_json,
+                    "active_configuration": timeline_active_config,
+                    "active_configuration_json": timeline_active_config_json,
+                    "configured_stages": timeline_configured_stages,
+                    "stage_configs": timeline_stage_configs,
+                    "stage_configs_json": timeline_stage_configs_json,
+                    "stage_map_json": timeline_stage_map_json,
+                    "provider_chain": timeline_chain,
+                    "provider_chain_json": timeline_chain_json,
+                    "urls": timeline_urls,
+                    "return_url": return_url,
+                },
         },
         "jobs": timeline_jobs,
         "jobs_title": "Timeline Jobs",

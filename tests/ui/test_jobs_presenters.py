@@ -42,3 +42,30 @@ def test_jobs_by_agent_matches_summary_metadata():
 
     timeline_rows = presenters.jobs_by_agent(display_rows, keywords=("timeline", "event"))
     assert timeline_rows == []
+
+
+@pytest.mark.django_db()
+def test_build_job_rows_includes_running_summary_job_status():
+    case, job = _make_case_with_job()
+    job.status = Job.Status.RUNNING
+    job.mode = Job.Mode.ON_DEMAND
+    job.save(update_fields=["status", "mode"])
+
+    telemetry_map = {
+        str(job.id): {
+            "status": Job.Status.RUNNING,
+            "metadata": {
+                "job_kind": "summary",
+                "summary_file": "/tmp/summary.md",
+            },
+        }
+    }
+
+    display_rows, _ = presenters.build_job_rows([job], telemetry_map)
+    assert len(display_rows) == 1
+
+    row = display_rows[0]
+    table_meta = row["table"]
+    assert table_meta["status_display"] == "Running"
+    assert "running" in table_meta["filter"]
+    assert table_meta["job_kind"] == "summary"
