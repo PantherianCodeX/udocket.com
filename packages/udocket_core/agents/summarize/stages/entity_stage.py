@@ -14,7 +14,6 @@ from ...common.chunking import (
     should_retry_for_length,
     split_for_retry,
 )
-from ..exceptions import AzureStageFailure
 
 logger = logging.getLogger("udocket.summarize.entity_stage")
 
@@ -92,21 +91,6 @@ def _usage_dict(usage: Dict[str, Any]) -> Dict[str, int]:
             collector[key] = value
     return collector
 
-
-def _fallback_entities(parse: TranscriptParse) -> Dict[str, Any]:
-    speakers = {seg.speaker for seg in parse.segments if seg.speaker}
-    entities = []
-    for idx, speaker in enumerate(sorted(speakers or {"SPK"}), start=1):
-        entities.append(
-            {
-                "id": f"E{idx}",
-                "name": speaker,
-                "type": "PERSON",
-                "aliases": [],
-                "mentions": [],
-            }
-        )
-    return {"entities": entities, "relations": []}
 
 def _ensure_chunks(context: Any) -> List[str]:
     if isinstance(context, str):
@@ -197,9 +181,8 @@ def generate_entities(
     temperature: float,
     max_tokens: int,
 ) -> EntityStageResult:
-    fallback = _fallback_entities(parse)
     if azure_client is None:
-        return EntityStageResult(fallback, {})
+        raise RuntimeError("Azure client is required for entity stage")
 
     try:
         chunk_queue: Deque[str] = deque(_ensure_chunks(context_snippet))
@@ -270,10 +253,10 @@ def generate_entities(
                 _merge_entity_payload(aggregate, payload)
             _merge_usage(usage_totals, usage)
         if aggregate is None:
-            return EntityStageResult(fallback, usage_totals)
+            raise RuntimeError("Azure entity stage returned no entities")
         return EntityStageResult(aggregate, usage_totals)
     except Exception as exc:
-        raise AzureStageFailure("entities", exc, EntityStageResult(fallback, {})) from exc
+        raise RuntimeError(f"Azure entity stage failed: {exc}") from exc
 
 
 __all__ = ["EntityStageResult", "generate_entities"]

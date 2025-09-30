@@ -3,15 +3,12 @@
      data-timeline
      data-llm-target="timeline"
      {% if timeline_llm and timeline_llm.provider_chain_json %}data-llm-provider-chain="{{ timeline_llm.provider_chain_json|escapejs }}"{% endif %}
-     {% if timeline_llm and timeline_llm.overrides_json %}data-llm-overrides="{{ timeline_llm.overrides_json|escapejs }}"{% endif %}>
+     {% if timeline_llm and timeline_llm.active_configuration %}data-llm-config-id="{{ timeline_llm.active_configuration.id }}"{% endif %}>
   {% if timeline_llm and timeline_llm.catalog_json %}
     <script type="application/json" data-llm-json="catalog">{{ timeline_llm.catalog_json|safe }}</script>
   {% endif %}
   {% if timeline_llm and timeline_llm.credentials_json %}
     <script type="application/json" data-llm-json="credentials">{{ timeline_llm.credentials_json|safe }}</script>
-  {% endif %}
-  {% if timeline_llm and timeline_llm.overrides_json %}
-    <script type="application/json" data-llm-json="overrides">{{ timeline_llm.overrides_json|safe }}</script>
   {% endif %}
   <div class="grid gap-4 md:grid-cols-3">
     <div class="md:col-span-2 space-y-4 rounded-2xl border border-white/10 bg-slate-900/70 p-5">

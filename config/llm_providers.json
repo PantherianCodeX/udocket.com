@@ -58,19 +58,6 @@
         }
       }
     },
-    "local": {
-      "display_name": "Local Summarizer",
-      "description": "Deterministic offline summarizer used for development and fallback.",
-      "requires_api_key": false,
-      "models": {
-        "offline_v1": {
-          "label": "Offline Deterministic",
-          "cost_tier": "free",
-          "max_output_tokens": 2000,
-          "default_temperature": 0.0
-        }
-      }
-    },
     "openai": {
       "display_name": "OpenAI",
       "description": "OpenAI platform models such as GPT-4o.",

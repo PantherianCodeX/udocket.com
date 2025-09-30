@@ -77,7 +77,6 @@
     if (!row) return;
     const providerSelect = row.querySelector('[data-llm-provider]');
     const modelSelect = row.querySelector('[data-llm-model]');
-    const fallbackSelect = row.querySelector('[data-llm-fallback]');
     if (!providerSelect || !modelSelect) return;
     const provider = providerSelect.value;
     Array.from(modelSelect.options).forEach((option) => {
@@ -99,58 +98,23 @@
         firstVisible.selected = true;
       }
     }
-    if (fallbackSelect) {
-      Array.from(fallbackSelect.options).forEach((option) => {
-        if (option.value === provider) {
-          option.disabled = true;
-          option.selected = false;
-        } else if (!option.hasAttribute('data-disabled')) {
-          option.disabled = false;
-        }
-      });
-    }
-    const allowCheckbox = row.querySelector('[data-llm-allow-offline]');
-    if (allowCheckbox) {
-      const hasLocalFallback = provider === 'local'
-        || (fallbackSelect && Array.from(fallbackSelect.options).some((opt) => opt.selected && opt.value === 'local'));
-      allowCheckbox.disabled = !hasLocalFallback;
-      if (!hasLocalFallback) {
-        allowCheckbox.checked = false;
-      }
-    }
-  }
-
-  function collectProviderChain(overrides) {
-    const sequence = [];
-    Object.values(overrides || {}).forEach((config) => {
-      if (!config) return;
-      const primary = config.provider;
-      const fallbacks = config.fallbacks || [];
-      [primary].concat(fallbacks).forEach((name) => {
-        if (name && !sequence.includes(name)) {
-          sequence.push(name);
-        }
-      });
-    });
-    return sequence;
   }
 
   function setupLLMControls(container) {
     if (!container) return;
     const advanced = container.querySelector('[data-llm-advanced]');
     if (!advanced) return;
-    const primarySelect = advanced.querySelector('[data-llm-provider-primary]');
-    const fallbackSelect = advanced.querySelector('[data-llm-provider-fallback]');
-    const allowOfflineCheckbox = advanced.querySelector('[data-llm-allow-offline]');
 
+    const target = container.dataset.llmTarget || 'summary';
     const llmDebug = !!platformUI.llmDebug;
+
     const readEmbeddedJSON = (key) => {
       try {
         const script = container.querySelector(`[data-llm-json="${key}"]`);
         if (!script) return null;
-        const text = script.textContent || '';
-        if (!text.trim()) return null;
-        const parsed = JSON.parse(text);
+        const textContent = script.textContent || '';
+        if (!textContent.trim()) return null;
+        const parsed = JSON.parse(textContent);
         if (llmDebug) console.debug('[LLM] Parsed embedded JSON', key, parsed);
         return parsed;
       } catch (error) {
@@ -158,99 +122,390 @@
         return null;
       }
     };
+
     let catalog = readEmbeddedJSON('catalog') || {};
     let credentials = readEmbeddedJSON('credentials') || {};
-    const decodeUnicode = (value) => {
-      try {
-        return value.replace(/\u([0-9a-fA-F]{4})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
-      } catch (_) {
-        return value;
-      }
-    };
-    const safeParse = (raw, label) => {
-      if (!raw || typeof raw !== 'string') return {};
-      const t = raw.trim();
-      if (!t || !/[\[{]/.test(t[0])) return {};
-      try {
-        const normalized = /\u[0-9a-fA-F]{4}/.test(t) ? decodeUnicode(t) : t;
-        const parsed = JSON.parse(normalized);
-        if (llmDebug) console.debug('[LLM] Parsed dataset', label, parsed);
-        return parsed;
-      } catch (error) {
-        if (llmDebug) console.warn('[LLM] Failed to parse dataset', label, error);
-        return {};
-      }
-    };
-    if (!Object.keys(catalog).length) {
-      catalog = safeParse(container.dataset.llmCatalog, 'catalog');
-    }
-    if (!Object.keys(credentials).length) {
-      credentials = safeParse(container.dataset.llmCredentials, 'credentials');
-    }
     const providerState = {
       catalog,
       credentials,
       debug: llmDebug,
     };
-    if (llmDebug) {
-      console.debug('[LLM] Setup controls', {
-        target: container.dataset.llmTarget,
-        overrides: container.dataset.llmOverrides,
-        providerChain: container.dataset.llmProviderChain,
-        providerOptions: (container.dataset.llmCatalog || '').length,
-      });
-    }
 
-    const syncAdvancedControls = () => {
-      const primaryValue = primarySelect?.value || null;
-      if (fallbackSelect) {
-        Array.from(fallbackSelect.options).forEach((option) => {
-          if (!option.value) return;
-          const permanent = option.hasAttribute('data-disabled');
-          if (option.value === primaryValue) {
-            option.disabled = true;
-            option.selected = false;
-          } else if (!permanent) {
-            option.disabled = false;
-          }
-        });
+    const configSelect = container.querySelector('[data-llm-config-select]');
+    const configNameInput = container.querySelector('[data-llm-config-name]');
+    const configDescriptionInput = container.querySelector('[data-llm-config-description]');
+    const configDefaultInput = container.querySelector('[data-llm-config-default]');
+    const configCreateBtn = container.querySelector('[data-llm-config-create]');
+    const configDuplicateBtn = container.querySelector('[data-llm-config-duplicate]');
+    const configDeleteBtn = container.querySelector('[data-llm-config-delete]');
+    const primarySelect = advanced.querySelector('[data-llm-provider-primary]');
+
+    const deepClone = (value) => JSON.parse(JSON.stringify(value || {}));
+    let tempIdCounter = 0;
+    const assignClientId = (cfg) => {
+      if (!cfg) return null;
+      if (!cfg._client_id) {
+        cfg._client_id = cfg.id || `temp-${Date.now()}-${tempIdCounter++}`;
       }
-      if (allowOfflineCheckbox) {
-        const chain = [];
-        if (primaryValue) {
-          chain.push(primaryValue);
-        }
-        if (fallbackSelect) {
-          Array.from(fallbackSelect.options).forEach((option) => {
-            if (option.selected && option.value && option.value !== primaryValue) {
-              chain.push(option.value);
-            }
-          });
-        }
-        const hasLocal = chain.includes('local');
-        allowOfflineCheckbox.disabled = !hasLocal;
-        if (!hasLocal) {
-          allowOfflineCheckbox.checked = false;
-        }
+      return cfg._client_id;
+    };
+
+    let configurations = (readEmbeddedJSON('configurations') || []).map((cfg) => ({ ...cfg }));
+    configurations.forEach(assignClientId);
+
+    let activeConfiguration = readEmbeddedJSON('active-configuration');
+    if (activeConfiguration) {
+      const existing = configurations.find((cfg) => cfg.id && cfg.id === activeConfiguration.id);
+      if (existing) {
+        activeConfiguration = existing;
+      } else {
+        activeConfiguration = { ...activeConfiguration };
+        assignClientId(activeConfiguration);
+        configurations.push(activeConfiguration);
+      }
+    }
+    if (!activeConfiguration) {
+      activeConfiguration = configurations.find((cfg) => cfg.is_default) || configurations[0] || null;
+    }
+    if (!activeConfiguration) {
+      activeConfiguration = {
+        id: null,
+        name: `${target.charAt(0).toUpperCase()}${target.slice(1)} configuration`,
+        description: '',
+        provider_chain: [],
+        stage_map: {},
+        is_default: configurations.length === 0,
+      };
+      assignClientId(activeConfiguration);
+      configurations.push(activeConfiguration);
+    }
+    assignClientId(activeConfiguration);
+
+    let stageMap = deepClone(readEmbeddedJSON('stage-map') || activeConfiguration.stage_map);
+    let providerChain = Array.isArray(activeConfiguration.provider_chain)
+      ? [...activeConfiguration.provider_chain]
+      : [];
+
+    const state = {
+      get configs() {
+        return configurations;
+      },
+      set configs(next) {
+        configurations = next;
+      },
+      get activeConfig() {
+        return activeConfiguration;
+      },
+      set activeConfig(next) {
+        activeConfiguration = next;
+        assignClientId(activeConfiguration);
+      },
+      get stageMap() {
+        return stageMap;
+      },
+      set stageMap(next) {
+        stageMap = next;
+      },
+      get providerChain() {
+        return providerChain;
+      },
+      set providerChain(next) {
+        providerChain = next;
+      },
+      target,
+      providerState,
+    };
+
+    const stageMapDataset = () => {
+      if (stageMap && Object.keys(stageMap).length) {
+        container.dataset.llmStageMap = JSON.stringify(stageMap);
+      } else {
+        delete container.dataset.llmStageMap;
       }
     };
 
-    if (primarySelect) {
-      primarySelect.addEventListener('change', syncAdvancedControls);
-    }
-    if (fallbackSelect) {
-      fallbackSelect.addEventListener('change', syncAdvancedControls);
-    }
-    syncAdvancedControls();
+    const providerChainDataset = () => {
+      if (providerChain.length) {
+        container.dataset.llmProviderChain = JSON.stringify(providerChain);
+      } else {
+        delete container.dataset.llmProviderChain;
+      }
+    };
 
-    const modalHost = advanced.closest('[data-modal]');
-    const llmButton = advanced.querySelector('[data-llm-open-modal]') || container.querySelector('[data-llm-open-modal]');
-    if (llmButton) {
-      llmButton.addEventListener('click', (evt) => {
-        evt.preventDefault();
-        openLLMModal(container);
+    const configIdDataset = () => {
+      if (activeConfiguration && activeConfiguration.id) {
+        container.dataset.llmConfigId = activeConfiguration.id;
+      } else {
+        delete container.dataset.llmConfigId;
+      }
+    };
+
+    const refreshDatasets = () => {
+      stageMapDataset();
+      providerChainDataset();
+      configIdDataset();
+    };
+
+    const refreshPrimarySelect = () => {
+      if (!primarySelect) return;
+      const currentPrimary = providerChain.length ? providerChain[0] : '';
+      let matched = false;
+      Array.from(primarySelect.options).forEach((option) => {
+        if (option.value === currentPrimary) {
+          option.selected = true;
+          matched = true;
+        }
+      });
+      if (!matched) {
+        const firstEnabled = Array.from(primarySelect.options).find((option) => !option.disabled);
+        if (firstEnabled) {
+          firstEnabled.selected = true;
+        }
+      }
+      const selected = primarySelect.value;
+      if (selected) {
+        providerChain = providerChain.filter((value) => value !== selected);
+        providerChain.unshift(selected);
+      }
+      providerChainDataset();
+    };
+
+    const refreshConfigInputs = () => {
+      if (configNameInput) configNameInput.value = activeConfiguration.name || '';
+      if (configDescriptionInput) configDescriptionInput.value = activeConfiguration.description || '';
+      if (configDefaultInput) configDefaultInput.checked = !!activeConfiguration.is_default;
+    };
+
+    const renderConfigSelect = () => {
+      if (!configSelect) return;
+      configSelect.innerHTML = '';
+      configurations.forEach((cfg) => {
+        const option = global.document.createElement('option');
+        option.value = assignClientId(cfg);
+        option.textContent = cfg.name || '(Untitled configuration)';
+        if (cfg.is_default) option.textContent += ' · Default';
+        if (cfg._client_id === activeConfiguration._client_id) option.selected = true;
+        configSelect.appendChild(option);
+      });
+      if (configSelect.options.length && configSelect.selectedIndex === -1) {
+        configSelect.selectedIndex = 0;
+      }
+    };
+
+    const syncButtons = () => {
+      if (configDuplicateBtn) configDuplicateBtn.disabled = configurations.length === 0;
+      if (configDeleteBtn) configDeleteBtn.disabled = !activeConfiguration.id;
+    };
+
+    const applyActiveConfiguration = (config) => {
+      state.activeConfig = config;
+      stageMap = deepClone(config.stage_map);
+      providerChain = Array.isArray(config.provider_chain) ? [...config.provider_chain] : [];
+      refreshConfigInputs();
+      refreshPrimarySelect();
+      renderConfigSelect();
+      refreshDatasets();
+      syncButtons();
+      if (llmDebug) {
+        console.debug('[LLM] Active LLM configuration', {
+          target,
+          id: config.id,
+          name: config.name,
+          provider_chain: providerChain,
+        });
+      }
+    };
+
+    renderConfigSelect();
+    refreshConfigInputs();
+    refreshPrimarySelect();
+    refreshDatasets();
+    syncButtons();
+
+    if (configSelect) {
+      configSelect.addEventListener('change', () => {
+        const selectedId = configSelect.value;
+        const next = configurations.find((cfg) => cfg._client_id === selectedId);
+        if (next) {
+          applyActiveConfiguration(next);
+        }
       });
     }
+
+    if (configNameInput) {
+      configNameInput.addEventListener('input', () => {
+        activeConfiguration.name = configNameInput.value.trim();
+        renderConfigSelect();
+      });
+    }
+
+    if (configDescriptionInput) {
+      configDescriptionInput.addEventListener('input', () => {
+        activeConfiguration.description = configDescriptionInput.value;
+      });
+    }
+
+    if (configDefaultInput) {
+      configDefaultInput.addEventListener('change', () => {
+        activeConfiguration.is_default = configDefaultInput.checked;
+      });
+    }
+
+    if (primarySelect) {
+      primarySelect.addEventListener('change', () => {
+        const value = primarySelect.value;
+        providerChain = providerChain.filter((item) => item !== value);
+        if (value) {
+          providerChain.unshift(value);
+        }
+        providerChainDataset();
+      });
+    }
+
+    const createEmptyConfiguration = (label) => {
+      const cfg = {
+        id: null,
+        name: label || `New ${target} configuration`,
+        description: '',
+        provider_chain: [],
+        stage_map: {},
+        is_default: configurations.length === 0,
+      };
+      assignClientId(cfg);
+      return cfg;
+    };
+
+    if (configCreateBtn) {
+      configCreateBtn.addEventListener('click', () => {
+        const cfg = createEmptyConfiguration();
+        configurations = [...configurations, cfg];
+        applyActiveConfiguration(cfg);
+        if (configNameInput) {
+          configNameInput.focus();
+          configNameInput.select();
+        }
+      });
+    }
+
+    if (configDuplicateBtn) {
+      configDuplicateBtn.addEventListener('click', () => {
+        const clone = {
+          id: null,
+          name: `${activeConfiguration.name || 'Untitled'} copy`,
+          description: activeConfiguration.description || '',
+          provider_chain: [...providerChain],
+          stage_map: deepClone(stageMap),
+          is_default: false,
+        };
+        assignClientId(clone);
+        configurations = [...configurations, clone];
+        applyActiveConfiguration(clone);
+        if (configNameInput) {
+          configNameInput.focus();
+          configNameInput.select();
+        }
+      });
+    }
+
+    const updateStateFromResponse = (payload) => {
+      configurations = (payload.configurations || []).map((cfg) => ({ ...cfg }));
+      configurations.forEach(assignClientId);
+      let nextActive = null;
+      if (payload.active) {
+        nextActive = configurations.find((cfg) => cfg.id === payload.active.id);
+        if (!nextActive) {
+          nextActive = { ...payload.active };
+          assignClientId(nextActive);
+          configurations.push(nextActive);
+        }
+      }
+      if (!nextActive) {
+        nextActive = configurations.find((cfg) => cfg.is_default) || configurations[0] || createEmptyConfiguration();
+      }
+      applyActiveConfiguration(nextActive);
+    };
+
+    const persistConfiguration = async (request) => {
+      if (!ctx?.caseId) return null;
+      const payload = {
+        target,
+        action: request.action || 'upsert',
+      };
+      if (payload.action === 'delete') {
+        payload.config_id = request.configId;
+      } else {
+        payload.configuration = request.configuration;
+      }
+      try {
+        const resp = await fetch(`/cases/${ctx.caseId}/llm/settings/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': helpers.getCSRFToken(),
+            Accept: 'application/json',
+          },
+          credentials: 'same-origin',
+          body: JSON.stringify(payload),
+        });
+        if (!resp.ok) {
+          const text = await resp.text();
+          throw new Error(text || `HTTP ${resp.status}`);
+        }
+        const data = await resp.json();
+        updateStateFromResponse(data);
+        return data;
+      } catch (error) {
+        console.warn('[LLM] Persist configuration failed', error);
+        caseDetail.modals?.message?.({
+          heading: 'Save failed',
+          body: error.message || 'Unable to update configuration.',
+          container: ctx?.modalRoot || undefined,
+        });
+        return null;
+      }
+    };
+
+    if (configDeleteBtn) {
+      configDeleteBtn.addEventListener('click', async () => {
+        if (!activeConfiguration.id) {
+          configurations = configurations.filter((cfg) => cfg !== activeConfiguration);
+          const replacement = configurations[0] || createEmptyConfiguration();
+          if (!configurations.length) {
+            configurations = [replacement];
+          }
+          applyActiveConfiguration(replacement);
+          renderConfigSelect();
+          syncButtons();
+          return;
+        }
+        const confirmed = await deps.modals?.confirm?.({
+          heading: 'Delete LLM configuration',
+          body: 'This configuration will be removed for the organization. Continue?',
+          confirmLabel: 'Delete',
+          cancelLabel: 'Cancel',
+          destructive: true,
+          container: ctx?.modalRoot || undefined,
+        });
+        if (confirmed === false) return;
+        await persistConfiguration({ action: 'delete', configId: activeConfiguration.id });
+        renderConfigSelect();
+        syncButtons();
+        caseDetail.modals?.message?.({
+          heading: 'Configuration deleted',
+          body: 'The LLM configuration was removed.',
+          container: ctx?.modalRoot || undefined,
+        });
+      });
+    }
+
+    const ensureModelRow = (modalEl) => {
+      const modelContainer = modalEl.querySelector('[data-llm-models]');
+      const templateModel = modalEl.querySelector('[data-llm-model-row-template]');
+      if (!modelContainer || !templateModel) return;
+      if (!modelContainer.children.length) {
+        modelContainer.appendChild(renderModelRow(templateModel));
+      }
+    };
 
     function renderModelRow(template, model = {}) {
       const clone = template.content.firstElementChild.cloneNode(true);
@@ -261,9 +516,7 @@
       if (nameInput) nameInput.value = model.name || '';
       if (labelInput) labelInput.value = model.label || '';
       if (costInput) costInput.value = model.cost_tier || '';
-      if (maxInput) {
-        maxInput.value = model.max_output_tokens != null ? model.max_output_tokens : '';
-      }
+      if (maxInput) maxInput.value = model.max_output_tokens != null ? model.max_output_tokens : '';
       const removeBtn = clone.querySelector('[data-llm-model-remove]');
       if (removeBtn) {
         removeBtn.addEventListener('click', (evt) => {
@@ -274,83 +527,56 @@
       return clone;
     }
 
-    function renderProviderList(modalEl, state) {
+    function renderProviderList(modalEl, stateRef) {
       const list = modalEl.querySelector('[data-llm-provider-list]');
       const empty = modalEl.querySelector('[data-llm-provider-empty]');
       if (!list) return;
       list.innerHTML = '';
       const template = modalEl.querySelector('[data-llm-provider-card-template]');
       const entries = new Map();
-      Object.entries(state.catalog || {}).forEach(([key, info]) => {
-        entries.set(key, { key, catalog: info, credential: state.credentials[key] || null });
+      Object.entries(stateRef.catalog || {}).forEach(([key, info]) => {
+        entries.set(key, { key, catalog: info, credential: stateRef.credentials[key] || null });
       });
-      Object.entries(state.credentials || {}).forEach(([key, credential]) => {
+      Object.entries(stateRef.credentials || {}).forEach(([key, credential]) => {
         if (!entries.has(key)) {
           entries.set(key, { key, catalog: null, credential });
         }
       });
-
-      if (state.debug) {
-        console.debug('[LLM] Render provider list', {
-          entries: Array.from(entries.keys()),
-        });
+      if (stateRef.debug) {
+        console.debug('[LLM] Render provider list', { entries: Array.from(entries.keys()) });
       }
-
       if (!entries.size) {
         if (empty) empty.classList.remove('hidden');
         return;
       }
       if (empty) empty.classList.add('hidden');
-
       entries.forEach((entry) => {
-        const card = template ? template.content.firstElementChild.cloneNode(true) : document.createElement('button');
-        card.setAttribute('type', 'button');
-        card.dataset.provider = entry.key;
+        if (!template) return;
+        const card = template.content.firstElementChild.cloneNode(true);
+        card.setAttribute('data-llm-provider-card', entry.key);
         const titleEl = card.querySelector('[data-llm-provider-card-title]');
         const descEl = card.querySelector('[data-llm-provider-card-description]');
         const endpointEl = card.querySelector('[data-llm-provider-card-endpoint]');
         const statusEl = card.querySelector('[data-llm-provider-card-status]');
         const catalogInfo = entry.catalog || {};
         const credentialInfo = entry.credential || {};
-        const configured = Boolean(credentialInfo && (credentialInfo.has_api_key || credentialInfo.endpoint || (credentialInfo.models || []).length));
-        const label = credentialInfo.display_name || catalogInfo.display_name || catalogInfo.label || entry.key;
-        if (titleEl) titleEl.textContent = label;
-        if (descEl) {
-          descEl.textContent = catalogInfo.description || (catalogInfo.requires_api_key === false ? 'No credential required' : 'Credential required');
-        }
+        if (titleEl) titleEl.textContent = catalogInfo.display_name || credentialInfo.display_name || entry.key;
+        if (descEl) descEl.textContent = catalogInfo.description || credentialInfo.description || '';
         if (endpointEl) endpointEl.textContent = credentialInfo.endpoint || catalogInfo.default_endpoint || '';
         if (statusEl) {
-          statusEl.classList.toggle('text-emerald-300', configured);
-          statusEl.classList.toggle('text-slate-400', !configured);
-          statusEl.textContent = configured ? 'Configured' : 'Not configured';
+          statusEl.textContent = credentialInfo.endpoint || credentialInfo.models ? 'Configured' : 'Not configured';
         }
-        if (state.debug) {
-          console.debug('[LLM] Provider card', {
-            provider: entry.key,
-            configured,
-            endpoint: credentialInfo.endpoint || catalogInfo.default_endpoint,
-          });
-        }
-        card.addEventListener('click', () => openProviderForm(modalEl, state, entry.key));
+        card.addEventListener('click', () => openProviderForm(modalEl, stateRef, entry.key));
         list.appendChild(card);
       });
     }
 
-    function ensureModelRow(modalEl) {
-      const containerModels = modalEl.querySelector('[data-llm-models]');
-      const templateModel = modalEl.querySelector('[data-llm-model-row-template]');
-      if (!containerModels || !templateModel) return;
-      if (!containerModels.children.length) {
-        containerModels.appendChild(renderModelRow(templateModel));
-      }
-    }
-
-    function openProviderForm(modalEl, state, providerKey) {
+    function openProviderForm(modalEl, stateRef, providerKey) {
       const wrapper = modalEl.querySelector('[data-llm-provider-form-wrapper]');
       const form = modalEl.querySelector('[data-llm-provider-form]');
       if (!wrapper || !form) return;
-      const catalogInfo = state.catalog[providerKey] || {};
-      const credentialInfo = state.credentials[providerKey] || {};
+      const catalogInfo = stateRef.catalog[providerKey] || {};
+      const credentialInfo = stateRef.credentials[providerKey] || {};
       wrapper.classList.remove('hidden');
       wrapper.dataset.activeProvider = providerKey;
       const titleEl = wrapper.querySelector('[data-llm-provider-form-title]');
@@ -374,7 +600,7 @@
       if (endpointInput) endpointInput.value = credentialInfo.endpoint || catalogInfo.default_endpoint || '';
       if (apiKeyInput) apiKeyInput.value = '';
       if (deleteBtn) {
-        if (state.credentials[providerKey]) {
+        if (stateRef.credentials[providerKey]) {
           deleteBtn.classList.remove('hidden');
           deleteBtn.disabled = false;
         } else {
@@ -390,11 +616,8 @@
           });
         }
       }
-      if (state.debug) {
-        console.debug('[LLM] Open provider form', {
-          provider: providerKey,
-          configured: Boolean(state.credentials[providerKey]),
-        });
+      if (stateRef.debug) {
+        console.debug('[LLM] Open provider form', { provider: providerKey, configured: Boolean(stateRef.credentials[providerKey]) });
       }
       ensureModelRow(modalEl);
     }
@@ -407,7 +630,7 @@
       }
     }
 
-    function addCustomProvider(modalEl, state) {
+    function addCustomProvider(modalEl, stateRef) {
       const key = global.prompt('Enter a provider key (letters, numbers, hyphen, underscore):', 'custom');
       if (!key) return;
       const normalized = key.trim().toLowerCase();
@@ -415,19 +638,40 @@
         global.alert('Provider key must contain only letters, numbers, hyphen, or underscore.');
         return;
       }
-      if (!state.catalog[normalized]) {
-        state.catalog[normalized] = {
+      if (!stateRef.catalog[normalized]) {
+        stateRef.catalog[normalized] = {
           display_name: normalized,
           description: 'Custom provider',
           requires_api_key: true,
         };
       }
-      if (!state.credentials[normalized]) {
-        state.credentials[normalized] = {};
+      if (!stateRef.credentials[normalized]) {
+        stateRef.credentials[normalized] = {};
       }
-      renderProviderList(modalEl, state);
-      openProviderForm(modalEl, state, normalized);
+      renderProviderList(modalEl, stateRef);
+      openProviderForm(modalEl, stateRef, normalized);
     }
+
+    const buildStageMapFromForm = (stageRows, existingMap) => {
+      const map = {};
+      stageRows.forEach((row) => {
+        const key = row.getAttribute('data-stage-key');
+        if (!key) return;
+        const providerSelectEl = row.querySelector('[data-llm-provider]');
+        const modelSelectEl = row.querySelector('[data-llm-model]');
+        if (!providerSelectEl) return;
+        const entry = {};
+        if (providerSelectEl.value) entry.provider = providerSelectEl.value;
+        if (modelSelectEl && modelSelectEl.value) entry.model = modelSelectEl.value;
+        const previous = existingMap[key];
+        if (previous && previous.options && typeof previous.options === 'object') {
+          entry.options = previous.options;
+        }
+        map[key] = entry;
+      });
+      return map;
+    };
+
     function attachProviderModalHandlers(modalEl) {
       if (!modalEl) return;
       const panelButtons = Array.from(modalEl.querySelectorAll('[data-llm-panel-toggle]'));
@@ -461,141 +705,114 @@
       }
 
       panelButtons.forEach((btn) => {
-        btn.addEventListener('click', (evt) => {
-          evt.preventDefault();
+        btn.addEventListener('click', () => {
           const key = btn.getAttribute('data-llm-panel-toggle');
-          if (providerState.debug) console.debug('[LLM] Panel switch', key);
           if (key) activatePanel(key);
         });
       });
       activatePanel('stages');
 
       const providerListContainer = modalEl.querySelector('[data-llm-provider-list]');
-      if (providerListContainer) {
-        renderProviderList(modalEl, providerState);
-        ensureModelRow(modalEl);
-      }
       const addProviderBtn = modalEl.querySelector('[data-llm-provider-add]');
+      const refreshBtn = modalEl.querySelector('[data-llm-provider-refresh]');
+      const cancelButtons = modalEl.querySelectorAll('[data-llm-provider-cancel]');
+      const deleteBtn = modalEl.querySelector('[data-llm-provider-delete]');
+      const providerForm = modalEl.querySelector('[data-llm-provider-form]');
+
+      renderProviderList(modalEl, providerState);
+
       if (addProviderBtn) {
         addProviderBtn.addEventListener('click', (evt) => {
           evt.preventDefault();
           addCustomProvider(modalEl, providerState);
         });
       }
-      const refreshBtn = modalEl.querySelector('[data-llm-provider-refresh]');
+
       if (refreshBtn) {
-        refreshBtn.addEventListener('click', async (evt) => {
+        refreshBtn.addEventListener('click', (evt) => {
           evt.preventDefault();
-          try {
-            const resp = await fetch(`/cases/${ctx.caseId}/llm/providers/`, { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
-            if (resp.ok) {
-              const data = await resp.json();
-              providerState.catalog = data.catalog || providerState.catalog;
-              providerState.credentials = data.credentials || providerState.credentials;
-              renderProviderList(modalEl, providerState);
-            }
-          } catch (error) {
-            console.warn('Failed to refresh providers', error);
-          }
+          renderProviderList(modalEl, providerState);
         });
       }
-      const cancelButtons = modalEl.querySelectorAll('[data-llm-provider-cancel]');
+
       cancelButtons.forEach((btn) => {
         btn.addEventListener('click', (evt) => {
           evt.preventDefault();
           closeProviderForm(modalEl);
         });
       });
-      const addModelBtn = modalEl.querySelector('[data-llm-model-add]');
-      if (addModelBtn) {
-        addModelBtn.addEventListener('click', (evt) => {
-          evt.preventDefault();
-          const templateModel = modalEl.querySelector('[data-llm-model-row-template]');
-          const modelsContainer = modalEl.querySelector('[data-llm-models]');
-          if (templateModel && modelsContainer) {
-            modelsContainer.appendChild(renderModelRow(templateModel));
-          }
-        });
-      }
-      const deleteBtn = modalEl.querySelector('[data-llm-provider-delete]');
+
       if (deleteBtn) {
         deleteBtn.addEventListener('click', async (evt) => {
           evt.preventDefault();
-          const wrapper = modalEl.querySelector('[data-llm-provider-form-wrapper]');
-          const providerKey = wrapper?.dataset.activeProvider;
+          const providerKey = modalEl.querySelector('[data-llm-provider-key]')?.value;
           if (!providerKey) return;
-          const confirmed = await caseDetail.modals?.confirm({
-            heading: 'Remove provider',
-            body: 'Remove credentials for this provider?',
+          const confirmed = await deps.modals?.confirm?.({
+            heading: 'Remove provider credentials',
+            body: 'This will remove saved credentials for the provider. Continue?',
+            confirmLabel: 'Remove',
+            cancelLabel: 'Cancel',
+            destructive: true,
+            container: ctx?.modalRoot || undefined,
           });
-          if (!confirmed) return;
+          if (confirmed === false) return;
           try {
-            const resp = await fetch(`/cases/${ctx.caseId}/llm/providers/${providerKey}/delete/`, {
+            const resp = await fetch(`/cases/${ctx.caseId}/llm/providers/${providerKey}/`, {
               method: 'POST',
               headers: {
+                'Content-Type': 'application/json',
                 'X-CSRFToken': helpers.getCSRFToken(),
                 Accept: 'application/json',
               },
               credentials: 'same-origin',
             });
-            if (resp.ok) {
-              const data = await resp.json();
-              providerState.credentials = data.credentials || {};
-              closeProviderForm(modalEl);
-              renderProviderList(modalEl, providerState);
-              caseDetail.modals?.message({ heading: 'Provider removed', body: providerKey.toUpperCase(), container: ctx?.modalRoot || undefined });
+            if (!resp.ok) {
+              const text = await resp.text();
+              throw new Error(text || `HTTP ${resp.status}`);
             }
+            const data = await resp.json();
+            providerState.credentials = data.credentials || providerState.credentials;
+            renderProviderList(modalEl, providerState);
+            closeProviderForm(modalEl);
           } catch (error) {
-            console.warn('Unable to delete provider', providerKey, error);
+            console.warn('Unable to delete provider credential', providerKey, error);
           }
         });
       }
-      const providerForm = modalEl.querySelector('[data-llm-provider-form]');
+
       if (providerForm) {
         providerForm.addEventListener('submit', async (evt) => {
           evt.preventDefault();
-          const wrapper = modalEl.querySelector('[data-llm-provider-form-wrapper]');
-          const providerKey = wrapper?.dataset.activeProvider;
+          const formData = new global.FormData(providerForm);
+          const providerKey = formData.get('provider');
           if (!providerKey) return;
-          const nameInput = providerForm.querySelector('[data-llm-provider-name]');
-          const endpointInput = providerForm.querySelector('[data-llm-provider-endpoint]');
-          const apiKeyInput = providerForm.querySelector('[data-llm-provider-apikey]');
-          const modelsContainer = providerForm.querySelector('[data-llm-models]');
-          const models = [];
-          if (modelsContainer) {
-            Array.from(modelsContainer.querySelectorAll('[data-llm-model-row]')).forEach((row) => {
-              const modelName = row.querySelector('[data-llm-model-name]')?.value.trim();
-              if (!modelName) return;
-              const modelLabel = row.querySelector('[data-llm-model-label]')?.value.trim();
-              const modelCost = row.querySelector('[data-llm-model-cost]')?.value.trim();
-              const modelMaxRaw = row.querySelector('[data-llm-model-max]')?.value.trim();
-              const modelEntry = {
-                name: modelName,
-                label: modelLabel || modelName,
-              };
-              if (modelCost) modelEntry.cost_tier = modelCost;
-              if (modelMaxRaw) {
-                const parsed = Number(modelMaxRaw);
-                if (!Number.isNaN(parsed)) {
-                  modelEntry.max_output_tokens = parsed;
-                }
-              }
-              models.push(modelEntry);
-            });
-          }
           const payload = {
             provider: providerKey,
-            display_name: nameInput?.value.trim() || providerKey,
-            endpoint: endpointInput?.value.trim() || '',
-            models,
+            display_name: formData.get('display_name') || providerKey,
+            endpoint: formData.get('endpoint') || '',
+            models: [],
           };
-          if (apiKeyInput) {
-            const apiKeyValue = apiKeyInput.value.trim();
-            if (apiKeyValue !== '') {
-              payload.api_key = apiKeyValue;
-            } else {
-              payload.api_key = '';
-            }
+          const apiKeyValue = formData.get('api_key');
+          if (typeof apiKeyValue === 'string') {
+            payload.api_key = apiKeyValue;
+          }
+          const modelsContainer = providerForm.querySelector('[data-llm-models]');
+          if (modelsContainer) {
+            Array.from(modelsContainer.querySelectorAll('[data-llm-model-row]')).forEach((row) => {
+              const nameInput = row.querySelector('[data-llm-model-name]');
+              const labelInput = row.querySelector('[data-llm-model-label]');
+              const costInput = row.querySelector('[data-llm-model-cost]');
+              const maxInput = row.querySelector('[data-llm-model-max]');
+              const entry = {};
+              if (nameInput?.value) entry.name = nameInput.value.trim();
+              if (labelInput?.value) entry.label = labelInput.value.trim();
+              if (costInput?.value) entry.cost_tier = costInput.value.trim();
+              if (maxInput?.value) {
+                const parsed = Number(maxInput.value.trim());
+                if (!Number.isNaN(parsed)) entry.max_output_tokens = parsed;
+              }
+              if (entry.name) payload.models.push(entry);
+            });
           }
           try {
             const resp = await fetch(`/cases/${ctx.caseId}/llm/providers/`, {
@@ -616,53 +833,90 @@
             providerState.credentials = data.credentials || providerState.credentials;
             renderProviderList(modalEl, providerState);
             openProviderForm(modalEl, providerState, providerKey);
-            if (providerState.debug) {
-              console.debug('[LLM] Provider saved', {
-                provider: providerKey,
-                credentialKeys: Object.keys(providerState.credentials || {}),
-              });
-            }
-            caseDetail.modals?.message({ heading: 'Provider saved', body: payload.display_name, container: ctx?.modalRoot || undefined });
-            apiKeyInput.value = '';
+            caseDetail.modals?.message?.({
+              heading: 'Provider saved',
+              body: payload.display_name,
+              container: ctx?.modalRoot || undefined,
+            });
           } catch (error) {
             console.warn('Unable to save provider', providerKey, error);
-            if (providerState.debug) {
-              console.debug('[LLM] Provider save failed', { provider: providerKey, error });
-            }
-            caseDetail.modals?.message({ heading: 'Save failed', body: error.message || 'Unable to persist provider.', container: ctx?.modalRoot || undefined });
           }
         });
       }
+
+      const stageForm = modalEl.querySelector('[data-llm-form]');
+      if (!stageForm) return;
+      const saveButton = stageForm.querySelector('[data-llm-save]');
+      const stageRows = Array.from(stageForm.querySelectorAll('[data-llm-stage]'));
+      const activeStageMap = deepClone(stageMap);
+      stageRows.forEach((row) => {
+        const stageKey = row.getAttribute('data-stage-key');
+        const entry = activeStageMap[stageKey] || {};
+        const providerSelectEl = row.querySelector('[data-llm-provider]');
+        const modelSelectEl = row.querySelector('[data-llm-model]');
+        if (providerSelectEl && entry.provider) {
+          providerSelectEl.value = entry.provider;
+        }
+        updateModelOptions(row);
+        if (modelSelectEl && entry.model) {
+          modelSelectEl.value = entry.model;
+        }
+        if (providerSelectEl) {
+          providerSelectEl.addEventListener('change', () => updateModelOptions(row));
+        }
+        updateModelOptions(row);
+      });
+
+      stageForm.addEventListener('submit', async (evt) => {
+        evt.preventDefault();
+        if (saveButton) {
+          saveButton.disabled = true;
+          saveButton.textContent = 'Saving…';
+        }
+        const updatedStageMap = buildStageMapFromForm(stageRows, stageMap);
+        stageMap = updatedStageMap;
+        const chainSet = new Set();
+        if (primarySelect?.value) chainSet.add(primarySelect.value);
+        Object.values(stageMap).forEach((entry) => {
+          if (entry && entry.provider) chainSet.add(entry.provider);
+        });
+        providerChain = Array.from(chainSet);
+        refreshDatasets();
+
+        const configurationPayload = {
+          id: activeConfiguration.id || null,
+          name: configNameInput?.value.trim() || activeConfiguration.name || `${target} configuration`,
+          description: configDescriptionInput?.value || '',
+          provider_chain: providerChain,
+          stage_map: stageMap,
+          set_default: configDefaultInput?.checked || false,
+        };
+
+        activeConfiguration.name = configurationPayload.name;
+        activeConfiguration.description = configurationPayload.description;
+        activeConfiguration.provider_chain = [...providerChain];
+        activeConfiguration.stage_map = deepClone(stageMap);
+        activeConfiguration.is_default = configurationPayload.set_default;
+
+        const result = await persistConfiguration({ action: 'upsert', configuration: configurationPayload });
+        if (result && saveButton) {
+          caseDetail.modals?.message?.({
+            heading: 'Configuration saved',
+            body: 'LLM configuration updated successfully.',
+            container: ctx?.modalRoot || undefined,
+          });
+        }
+        if (saveButton) {
+          saveButton.disabled = false;
+          saveButton.textContent = 'Save';
+        }
+        const closeButton = modalEl.querySelector('[data-modal-close]');
+        if (closeButton) closeButton.click();
+      });
     }
 
     container.llmProviderState = providerState;
     container.llmInitModal = (modalEl) => attachProviderModalHandlers(modalEl);
-  }
-
-  async function persistLLMOverrides(target, overrides, chain) {
-    if (!ctx?.caseId) {
-      return null;
-    }
-    try {
-      const resp = await fetch(`/cases/${ctx.caseId}/llm/settings/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRFToken': helpers.getCSRFToken(),
-          Accept: 'application/json',
-        },
-        credentials: 'same-origin',
-        body: JSON.stringify({ target, overrides, provider_chain: chain }),
-      });
-      if (!resp.ok) {
-        const text = await resp.text();
-        throw new Error(text || `HTTP ${resp.status}`);
-      }
-      return await resp.json();
-    } catch (error) {
-      console.warn('Persist LLM overrides failed', error);
-      return null;
-    }
   }
 
   function openLLMModal(container) {
@@ -710,118 +964,6 @@
     } catch (error) {
       console.warn('[LLM] Unable to initialise modal handlers', error);
     }
-    const form = modal.querySelector('[data-llm-form]');
-    if (!form) return;
-    const saveButton = form.querySelector('[data-llm-save]');
-    const stageRows = Array.from(form.querySelectorAll('[data-llm-stage]'));
-    const target = container.dataset.llmTarget || 'summary';
-    let existingOverrides = {};
-    if (container.dataset.llmOverrides) {
-      const rawOverrides = container.dataset.llmOverrides.trim();
-      if (rawOverrides && /[\[{]/.test(rawOverrides[0])) {
-        try {
-          existingOverrides = JSON.parse(rawOverrides);
-          if (platformUI.llmDebug) console.debug('[LLM] Existing overrides', existingOverrides);
-        } catch (error) {
-          if (platformUI.llmDebug) console.warn('[LLM] Unable to parse overrides in modal', error);
-          existingOverrides = {};
-        }
-      }
-    }
-
-    stageRows.forEach((row) => {
-      const stageKey = row.getAttribute('data-stage-key');
-      const override = stageKey ? existingOverrides[stageKey] : null;
-      const providerSelect = row.querySelector('[data-llm-provider]');
-      const fallbackSelect = row.querySelector('[data-llm-fallback]');
-      const modelSelect = row.querySelector('[data-llm-model]');
-      const allowCheckbox = row.querySelector('[data-llm-allow-offline]');
-      if (override && providerSelect) {
-        if (override.provider) {
-          providerSelect.value = override.provider;
-        }
-        updateModelOptions(row);
-        if (fallbackSelect && Array.isArray(override.fallbacks)) {
-          const set = new Set(override.fallbacks.map(String));
-          Array.from(fallbackSelect.options).forEach((option) => {
-            option.selected = set.has(option.value) && !option.disabled;
-          });
-        }
-        if (modelSelect && override.model) {
-          modelSelect.value = override.model;
-        }
-        if (allowCheckbox && typeof override.allow_offline_fallback === 'boolean') {
-          allowCheckbox.checked = override.allow_offline_fallback;
-        }
-      }
-      if (providerSelect) {
-        providerSelect.addEventListener('change', () => updateModelOptions(row));
-      }
-      if (fallbackSelect) {
-        fallbackSelect.addEventListener('change', () => updateModelOptions(row));
-      }
-      updateModelOptions(row);
-    });
-
-    form.addEventListener('submit', async (evt) => {
-      evt.preventDefault();
-      if (saveButton) {
-        saveButton.disabled = true;
-        saveButton.textContent = 'Saving…';
-      }
-      const overrides = {};
-      stageRows.forEach((row) => {
-        const key = row.getAttribute('data-stage-key');
-        if (!key) return;
-        const providerSelect = row.querySelector('[data-llm-provider]');
-        const modelSelect = row.querySelector('[data-llm-model]');
-        const fallbackSelect = row.querySelector('[data-llm-fallback]');
-        const allowCheckbox = row.querySelector('[data-llm-allow-offline]');
-        if (!providerSelect) return;
-        const fallbacks = fallbackSelect
-          ? Array.from(fallbackSelect.options)
-              .filter((opt) => opt.selected && opt.value && opt.value !== providerSelect.value)
-              .map((opt) => opt.value)
-          : [];
-        overrides[key] = {
-          provider: providerSelect.value,
-          fallbacks,
-          model: modelSelect ? modelSelect.value : '',
-          allow_offline_fallback: allowCheckbox ? allowCheckbox.checked : false,
-        };
-      });
-      container.dataset.llmOverrides = JSON.stringify(overrides);
-      const chain = collectProviderChain(overrides);
-      if (chain.length) {
-        container.dataset.llmProviderChain = JSON.stringify(chain);
-      } else {
-        delete container.dataset.llmProviderChain;
-      }
-      const persisted = await persistLLMOverrides(target, overrides, chain);
-      if (persisted && typeof persisted === 'object') {
-        if (persisted.overrides && typeof persisted.overrides === 'object') {
-          container.dataset.llmOverrides = JSON.stringify(persisted.overrides);
-        }
-        if (Array.isArray(persisted.provider_chain)) {
-          container.dataset.llmProviderChain = JSON.stringify(persisted.provider_chain);
-        }
-      }
-      if (caseDetail.modals && typeof caseDetail.modals.message === 'function') {
-        caseDetail.modals.message({
-          heading: 'LLM tuning',
-          body: persisted ? 'Organization defaults updated.' : 'Settings applied for this job run.',
-          container: ctx?.modalRoot || undefined,
-        });
-      }
-      if (saveButton) {
-        saveButton.disabled = false;
-        saveButton.textContent = 'Save';
-      }
-      const closeButton = modal.querySelector('[data-modal-close]');
-      if (closeButton) {
-        closeButton.click();
-      }
-    });
   }
 
   function closeActionMenu(menu) {
@@ -1581,9 +1723,9 @@
         if (current && !current.disabled && !specialAttrs.some((attr) => current.hasAttribute(attr))) {
           lastValidValue = current.value;
         } else {
-          const fallback = findFirstRunnableOption();
-          if (fallback) {
-            lastValidValue = fallback.value;
+          const firstRunnable = findFirstRunnableOption();
+          if (firstRunnable) {
+            lastValidValue = firstRunnable.value;
           }
         }
       }
@@ -1656,14 +1798,14 @@
             if (lastValidValue) {
               select.value = lastValidValue;
             } else {
-              const fallback = findFirstRunnableOption()
+              const firstRunnable = findFirstRunnableOption()
                 || Array.from(select.options).find(
                   (option) => !specialAttrs.some((attr) => option.hasAttribute(attr)),
                 );
-              if (fallback) {
-                select.value = fallback.value;
-                if (!fallback.disabled && !specialAttrs.some((attr) => fallback.hasAttribute(attr))) {
-                  lastValidValue = fallback.value;
+              if (firstRunnable) {
+                select.value = firstRunnable.value;
+                if (!firstRunnable.disabled && !specialAttrs.some((attr) => firstRunnable.hasAttribute(attr))) {
+                  lastValidValue = firstRunnable.value;
                 }
               } else {
                 select.selectedIndex = -1;
@@ -1843,77 +1985,10 @@
       }
       jobId = select.value;
 
-      const advanced = summaryContainer?.querySelector('[data-llm-advanced]');
-      if (advanced) {
-        const primarySelect = advanced.querySelector('[data-llm-provider-primary]');
-        const fallbackSelect = advanced.querySelector('[data-llm-provider-fallback]');
-        const allowOfflineCheckbox = advanced.querySelector('[data-llm-allow-offline]');
-        const chain = [];
-        if (primarySelect && primarySelect.value) {
-          chain.push(primarySelect.value);
-        }
-        if (fallbackSelect) {
-          Array.from(fallbackSelect.options).forEach((option) => {
-            if (option.selected && option.value && (!primarySelect || option.value !== primarySelect.value)) {
-              chain.push(option.value);
-            }
-          });
-        }
-        if (chain.length) {
-          payload.provider_chain = chain;
-        }
-        if (allowOfflineCheckbox && !allowOfflineCheckbox.disabled) {
-          payload.allow_offline_fallback = allowOfflineCheckbox.checked;
-        }
-      }
-      const embeddedOverridesFn = helpers.getEmbeddedJSON || getEmbeddedJSON;
-      const embeddedOverrides = embeddedOverridesFn(summaryContainer, 'overrides');
-      if (embeddedOverrides && typeof embeddedOverrides === 'object') {
-        payload.stage_overrides = embeddedOverrides;
-        if (platformUI.llmDebug) console.debug('[LLM] Using embedded overrides', embeddedOverrides);
-      } else {
-        const overridesValue = summaryContainer?.dataset.llmOverrides;
-        if (overridesValue) {
-          const trimmed = overridesValue.trim();
-          if (trimmed && /[\[{]/.test(trimmed[0])) {
-            try {
-              const normalized = /\u[0-9a-fA-F]{4}/.test(trimmed) ? decodeUnicode(trimmed) : trimmed;
-              const overrides = JSON.parse(normalized);
-              if (overrides && typeof overrides === 'object') {
-                payload.stage_overrides = overrides;
-                if (platformUI.llmDebug) console.debug('[LLM] Using stage overrides', overrides);
-              }
-            } catch (error) {
-              if (platformUI.llmDebug) console.warn('[LLM] Invalid overrides payload, ignoring', error);
-              summaryContainer.dataset.llmOverrides = '';
-            }
-          }
-        }
-      }
-      if (!payload.provider_chain) {
-        const embeddedChain = embeddedOverridesFn(summaryContainer, 'provider-chain');
-        if (Array.isArray(embeddedChain) && embeddedChain.length) {
-          payload.provider_chain = embeddedChain;
-          if (platformUI.llmDebug) console.debug('[LLM] Using embedded provider chain', embeddedChain);
-        } else {
-          const chainOverride = summaryContainer?.dataset.llmProviderChain;
-          if (chainOverride) {
-            const trimmed = chainOverride.trim();
-            if (trimmed && /[\[{\"]/.test(trimmed[0])) {
-              try {
-                const normalized = /\u[0-9a-fA-F]{4}/.test(trimmed) ? decodeUnicode(trimmed) : trimmed;
-                const chain = JSON.parse(normalized);
-                if (Array.isArray(chain) && chain.length) {
-                  payload.provider_chain = chain;
-                  if (platformUI.llmDebug) console.debug('[LLM] Using stored provider chain', chain);
-                }
-              } catch (error) {
-                if (platformUI.llmDebug) console.warn('[LLM] Invalid provider chain override', error);
-                summaryContainer.dataset.llmProviderChain = '';
-              }
-            }
-          }
-        }
+      const configId = summaryContainer?.dataset.llmConfigId || null;
+      if (configId) {
+        payload.llm_config_id = configId;
+        if (platformUI.llmDebug) console.debug('[LLM] Queueing with config', configId);
       }
     } else if (action === 'timeline') {
       const container = button.closest('[data-timeline]');
@@ -1931,6 +2006,11 @@
         payload.artifact_ids = Array.from(artifactSelect.selectedOptions)
           .map((opt) => opt.value)
           .filter(Boolean);
+      }
+      const timelineConfigId = container?.dataset.llmConfigId || null;
+      if (timelineConfigId) {
+        payload.llm_config_id = timelineConfigId;
+        if (platformUI.llmDebug) console.debug('[LLM] Queueing timeline with config', timelineConfigId);
       }
     }
     if (!jobId) return;

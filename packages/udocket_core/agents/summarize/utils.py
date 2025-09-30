@@ -17,7 +17,6 @@ from ..common import (
     sha256_file,
     TranscriptParse,
 )
-from .exceptions import AzureStageFailure, AzureUnavailableError
 from .stages import (
     DraftStageResult,
     EntityStageResult,
@@ -57,7 +56,6 @@ class FinalizedOutputs:
     words: int
     sha_map: Dict[str, str]
     artifacts: Dict[str, AnalysisArtifact]
-    offline_fallback_used: bool
     provider_chain: List[str]
 
 
@@ -78,7 +76,6 @@ class SummarizePipeline:
         provider_chain: Optional[List[str]],
         stage_runtimes: Dict[str, Any],
         default_temperature: float,
-        global_allow_offline: bool,
         logger: Optional[logging.Logger] = None,
         progress_callback: Optional[
             Callable[[str, str, Dict[str, Any]], None]
@@ -98,8 +95,6 @@ class SummarizePipeline:
         )
         self.stage_runtimes = stage_runtimes
         self.default_temperature = default_temperature
-        self.global_allow_offline = global_allow_offline
-        self.offline_fallback_used = False
         self.provider_chain = list(provider_chain or [])
         self.logger = logger or logging.getLogger("udocket.summarize.pipeline")
         self.progress_callback = progress_callback
@@ -116,12 +111,7 @@ class SummarizePipeline:
             or self.logger.isEnabledFor(logging.DEBUG)
         )
         if not self.provider_chain:
-            self.provider_chain = ["local"]
-        # mark offline usage if any stage configured as local
-        for runtime in stage_runtimes.values():
-            if runtime.primary_provider == "local":
-                self.offline_fallback_used = True
-                break
+            self.provider_chain = ["azure"]
 
     def emit_pipeline_event(self, event: str, **meta: Any) -> None:
         self._notify_stage("pipeline", event, **meta)
@@ -229,7 +219,6 @@ class SummarizePipeline:
         }
         state["context_snippet"] = context_snippet
         state["case_brief"] = brief
-        state.setdefault("offline_fallback_used", self.offline_fallback_used)
         state.setdefault("provider_chain", self.provider_chain)
         self._notify_stage(
             "context_builder",
@@ -266,17 +255,15 @@ class SummarizePipeline:
                 temperature=temperature,
                 max_tokens=max_tokens,
             )
-        except AzureStageFailure as exc:
-            outline_result = self._handle_stage_failure(state, exc, runtime)
+        except Exception as exc:
+            self._notify_stage(
+                "extract_outline",
+                "failure",
+                error=str(exc),
+            )
+            raise
         state["outline_result"] = outline_result
         self._record_usage(state, "outline", outline_result.usage)
-        if runtime:
-            if runtime.primary_provider == "local":
-                self.offline_fallback_used = True
-                state["offline_fallback_used"] = True
-            elif runtime.primary_provider == "azure" and runtime.allow_local_fallback and runtime.azure_client is None:
-                self.offline_fallback_used = True
-                state["offline_fallback_used"] = True
         outline_map: Dict[str, Any] = outline_result.outline
         issues_list = outline_map.get("issues")
         facts_list = outline_map.get("facts")
@@ -327,14 +314,15 @@ class SummarizePipeline:
                 temperature=temperature,
                 max_tokens=max_tokens,
             )
-        except AzureStageFailure as exc:
-            timeline_result = self._handle_stage_failure(state, exc, runtime)
+        except Exception as exc:
+            self._notify_stage(
+                "build_timeline_seeds",
+                "failure",
+                error=str(exc),
+            )
+            raise
         state["timeline_result"] = timeline_result
         self._record_usage(state, "timeline", timeline_result.usage)
-        if runtime:
-            if runtime.primary_provider == "local" or (runtime.primary_provider == "azure" and runtime.allow_local_fallback and runtime.azure_client is None):
-                self.offline_fallback_used = True
-                state["offline_fallback_used"] = True
         events_count = len(timeline_result.events)
         self._notify_stage(
             "build_timeline_seeds",
@@ -372,14 +360,15 @@ class SummarizePipeline:
                 temperature=temperature,
                 max_tokens=max_tokens,
             )
-        except AzureStageFailure as exc:
-            entity_result = self._handle_stage_failure(state, exc, runtime)
+        except Exception as exc:
+            self._notify_stage(
+                "build_entity_hints",
+                "failure",
+                error=str(exc),
+            )
+            raise
         state["entity_result"] = entity_result
         self._record_usage(state, "entities", entity_result.usage)
-        if runtime:
-            if runtime.primary_provider == "local" or (runtime.primary_provider == "azure" and runtime.allow_local_fallback and runtime.azure_client is None):
-                self.offline_fallback_used = True
-                state["offline_fallback_used"] = True
         entity_map: Dict[str, Any] = entity_result.hints
         entities_value = entity_map.get("entities")
         relations_value = entity_map.get("relations")
@@ -435,14 +424,15 @@ class SummarizePipeline:
                 temperature=temperature,
                 max_tokens=max_tokens,
             )
-        except AzureStageFailure as exc:
-            summary_result = self._handle_stage_failure(state, exc, runtime)
+        except Exception as exc:
+            self._notify_stage(
+                "draft_markdown",
+                "failure",
+                error=str(exc),
+            )
+            raise
         state["summary_result"] = summary_result
         self._record_usage(state, "summary", summary_result.usage)
-        if runtime:
-            if runtime.primary_provider == "local" or (runtime.primary_provider == "azure" and runtime.allow_local_fallback and runtime.azure_client is None):
-                self.offline_fallback_used = True
-                state["offline_fallback_used"] = True
         words = len(summary_result.markdown.split()) if summary_result.markdown else 0
         self._notify_stage(
             "draft_markdown",
@@ -456,9 +446,6 @@ class SummarizePipeline:
     def qa_and_finalize(self, state: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
         self._notify_stage("qa_and_finalize", "start")
         parse: TranscriptParse = state["parse"]
-        runtime = self.stage_runtimes.get("summarize.qa_and_finalize")
-        if runtime and runtime.primary_provider == "local":
-            self.offline_fallback_used = True
         summary_result: DraftStageResult = state["summary_result"]
         markdown = summary_result.markdown.strip()
         markdown = self._ensure_header(markdown, parse)
@@ -481,8 +468,6 @@ class SummarizePipeline:
         transcript_path: Path = state["transcript_path"]
         token_usage: Dict[str, Dict[str, int]] = state.get("token_usage", {})
         case_brief: Dict[str, Any] = state.get("case_brief", {})
-        offline_flag = state.get("offline_fallback_used", self.offline_fallback_used)
-
         finalized = finalize_outputs(
             case_id=self.case_id,
             job_id=self.job_id,
@@ -497,7 +482,6 @@ class SummarizePipeline:
             config=self.config,
             token_usage=token_usage,
             case_brief=case_brief,
-            offline_fallback_used=offline_flag,
             provider_chain=self.provider_chain,
             transcript_hint=self.transcript_hint,
         )
@@ -510,7 +494,6 @@ class SummarizePipeline:
             outline=str(finalized.outline_path),
             timeline=str(finalized.timeline_seed_path),
             entities=str(finalized.entity_hint_path),
-            offline=offline_flag,
         )
         return state
 
@@ -617,40 +600,6 @@ class SummarizePipeline:
         token_usage: Dict[str, Dict[str, int]] = state.setdefault("token_usage", {})
         token_usage[stage] = usage
 
-    def _handle_stage_failure(
-        self,
-        state: MutableMapping[str, Any],
-        exc: AzureStageFailure,
-        runtime: Optional[Any],
-    ) -> Any:
-        allow = False
-        if runtime and runtime.primary_provider == "local":
-            allow = True
-        elif runtime and runtime.allow_local_fallback and self.global_allow_offline:
-            allow = True
-        if self._log_enabled:
-            self.logger.warning(
-                "stage failure",
-                extra={
-                    "stage": exc.stage,
-                    "error": str(exc.error),
-                    "job_id": getattr(self, "job_id", None),
-                    "case_id": getattr(self, "case_id", None),
-                },
-            )
-        self._notify_stage(
-            exc.stage,
-            "failure",
-            error=str(exc.error),
-            fallback_allowed=allow,
-        )
-        if allow:
-            state["offline_fallback_used"] = True
-            self.offline_fallback_used = True
-            self._notify_stage(exc.stage, "fallback", provider="local")
-            return exc.fallback
-        raise AzureUnavailableError(exc.stage, exc.error) from exc
-
     def _ensure_header(self, markdown: str, parse: TranscriptParse) -> str:
         stripped = markdown.lstrip()
         if stripped.startswith("# "):
@@ -694,7 +643,6 @@ def finalize_outputs(
     config: Any,
     token_usage: Dict[str, Dict[str, int]],
     case_brief: Dict[str, Any],
-    offline_fallback_used: bool,
     provider_chain: Optional[list[str]],
     transcript_hint: Optional[Dict[str, Any]] = None,
 ) -> FinalizedOutputs:
@@ -769,7 +717,6 @@ def finalize_outputs(
         "facts": len(outline_result.outline.get("facts", [])),
         "timeline_events": len(timeline_result.events),
         "entity_count": len(entity_result.hints.get("entities", [])),
-        "offline_fallback_used": offline_fallback_used,
     }
     if provider_chain:
         meta["provider_chain"] = list(provider_chain)
@@ -820,7 +767,6 @@ def finalize_outputs(
         words=words,
         sha_map=sha_map,
         artifacts=artifacts,
-        offline_fallback_used=offline_fallback_used,
         provider_chain=list(provider_chain or []),
     )
 

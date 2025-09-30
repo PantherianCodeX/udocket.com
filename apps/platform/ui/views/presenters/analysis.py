@@ -41,10 +41,6 @@ def enrich_summary_artifacts(
             provider_chain = [provider_chain]
         elif not isinstance(provider_chain, list):
             provider_chain = []
-        offline_used = bool(
-            meta_payload.get("summary_offline_fallback_used")
-            or meta_payload.get("offline_fallback_used")
-        )
         details: Dict[str, Any] = {
             "summary_path": summary_path,
             "summary_name": Path(summary_path).name if summary_path else None,
@@ -60,7 +56,6 @@ def enrich_summary_artifacts(
             "case_brief_path": case_brief_path,
             "case_brief_name": Path(case_brief_path).name if case_brief_path else None,
             "provider_chain": provider_chain,
-            "offline_fallback_used": offline_used,
         }
         meta_by_job[str(job_id)] = details
 

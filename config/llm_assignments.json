@@ -1,35 +1,51 @@
 {
   "stages": {
     "summarize.context_builder": {
-      "providers": ["local"],
-      "model": "offline_v1"
+      "providers": [
+        "azure"
+      ],
+      "model": "gpt-4o-mini"
     },
     "summarize.extract_outline": {
-      "providers": ["azure", "local"],
+      "providers": [
+        "azure"
+      ],
       "model": "gpt-4o-mini"
     },
     "summarize.build_timeline_seeds": {
-      "providers": ["azure", "local"],
+      "providers": [
+        "azure"
+      ],
       "model": "gpt-4o-mini"
     },
     "summarize.build_entity_hints": {
-      "providers": ["azure", "local"],
+      "providers": [
+        "azure"
+      ],
       "model": "gpt-4o-mini"
     },
     "summarize.draft_markdown": {
-      "providers": ["azure", "local"],
+      "providers": [
+        "azure"
+      ],
       "model": "gpt-4o"
     },
     "summarize.qa_and_finalize": {
-      "providers": ["azure", "local"],
+      "providers": [
+        "azure"
+      ],
       "model": "gpt-4o-mini"
     },
     "timeline.builder": {
-      "providers": ["azure", "local"],
+      "providers": [
+        "azure"
+      ],
       "model": "gpt-4o-mini"
     },
     "graph.extractor": {
-      "providers": ["azure", "local"],
+      "providers": [
+        "azure"
+      ],
       "model": "gpt-4o-mini"
     }
   }

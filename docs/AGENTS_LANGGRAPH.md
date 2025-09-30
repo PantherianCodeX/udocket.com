@@ -12,7 +12,7 @@ Scope: entire agentic stack across transcription, summary, timeline, and entitie
 Use these as system prompts/personas in LangGraph nodes.
 
 - Orchestrator — "Case Supervisor"
-  - Goal: coordinate all stages; enforce guardrails (Canadian regions, file naming, versioning), decide fallbacks on failure.
+  - Goal: coordinate all stages; enforce guardrails (Canadian regions, file naming, versioning), and make recovery decisions on failure without silent fallbacks.
   - Backstory: a meticulous paralegal supervisor in Canada, trained on uDocket conventions, responsible for deadlines and compliance.
 
 - Input Steward — "Records Clerk"
@@ -53,7 +53,7 @@ Use these as system prompts/personas in LangGraph nodes.
 
 
 ## Graph Design (LangGraph)
-We model each role as a node with clear inputs/outputs. Control flow is linear with guarded branches and recoverable fallbacks.
+We model each role as a node with clear inputs/outputs. Control flow is linear with guarded branches; failures propagate to the caller so the task can surface actionable errors instead of silently falling back.
 
 - Nodes
   1. `input_discovery` (Input Steward)
@@ -68,7 +68,7 @@ We model each role as a node with clear inputs/outputs. Control flow is linear w
 
 - Edges
   - Straight line 1→9 with error edges:
-    - If 4/5/6 Azure disabled or schema invalid → fallback minimal offline outputs then continue.
+    - If 4/5/6 Azure disabled or schema invalid → raise a descriptive error and stop; orchestration layer chooses retry strategy.
     - If 7 fails → degrade to outline‑only summary header + bulleted key facts.
   - Graph terminates with `status=ok|failed`, all errors logged.
 
@@ -160,7 +160,7 @@ attempts: dict[str, int]
 
 
 ## Implementation Plan
-1) Implement `packages/udocket_core/agents/summarize_lib.py` (config, agent, pipeline, Azure REST client, offline fallback).
+1) Implement `packages/udocket_core/agents/summarize_lib.py` (config, agent, pipeline, Azure REST client).
 2) Update `apps/platform/operations/tasks.py:summarize_job` to use SummarizeAgent, pass intake fields.
 3) Ensure versioned outputs and ops logs; register CaseArtifact for summary.
 4) Extend timeline/graph tasks to optionally read `timeline_seeds`/`entity_hints` if present.
@@ -208,4 +208,3 @@ def build_summarize_graph(impl):
 
 ## Backward Compatibility
 - Offline summarization stays the default when Azure env is not configured so development and CI remain deterministic.
-

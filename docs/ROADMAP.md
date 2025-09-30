@@ -131,9 +131,10 @@ Progress To Date
 - Case insights: Django UI now consumes DRF telemetry endpoints (`/api/v1/jobs/<id>/detail/`, `/api/v1/cases/<id>/jobs/summary|detail/`) to surface per-job diagnostics, transcript artifacts, and modal drill-downs sourced from ops metadata.
 - Next slices under consideration:
   - Create and apply migrations for `simple_history` changes; admin filters for user/date/action.
-  - Expand tests for capability resolution, policies, field‑level redaction, and TaskRun lifecycle.
+  - Expand tests for capability resolution, policies, field-level redaction, and TaskRun lifecycle.
   - IAM wiring (Keycloak OIDC + API JWT validation) and role mapping on login.
-  - Admin guardrails: allow‑listed capability choices; read‑only API for effective capabilities.
+  - Admin guardrails: allow-listed capability choices; read-only API for effective capabilities.
+  - Agents/LLM: untangle Azure-only dependencies in summarization so stage providers can invoke configured non-Azure chat adapters (TODO — requires shared client abstraction).
 
 Cross‑References
 - Agents contract and analysis roadmap: see `AGENTS.md`.

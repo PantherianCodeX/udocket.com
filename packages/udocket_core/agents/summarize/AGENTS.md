@@ -7,8 +7,9 @@ Purpose: generate layered, legally‑useful summaries from approved transcripts,
 
 ## Design Goals
 - Deterministic, reproducible outputs with per‑run metadata and audit logging.
-- Privacy and locality: process only transcripts and metadata; never upload audio; Azure endpoints restricted to Canada regions.
+- Privacy and locality: process only transcripts and metadata; never upload audio; ensure Canadian residency when Azure is used.
 - Composable pipeline: multiple “sub‑agents” produce structured JSON at each stage and a cohesive Markdown summary assembled last.
+- Provider-agnostic orchestration: provider/model selection flows from the active `LLMConfiguration`. (Implementation note: Azure chat completion remains the only wired runtime today; see TODO in `docs/ROADMAP.md` to generalize stage clients.)
 - First‑class integration with Celery tasks and UI panels; no overwrites (versioned filenames).
 - Long-context friendly: allow entire interviews to flow through by tuning prompt limits and stage model/token overrides instead of truncating aggressively.
 
@@ -77,7 +78,7 @@ Add `packages/udocket_core/agents/summarize_lib.py` implementing a pure‑Python
     - `def summarize(self, *, input: Path | None, case_id: str, case_dir: Path, job_id: str, intake: dict | None = None, transcript_hint: dict | None = None) -> SummarizeResult`
       - Input discovery: if `input` is None, use the most recent transcript under `transcript/`.
       - Writes artifacts and ops logs under `analysis/` and `ops/` with versioned names (`_v2` etc.).
-      - Network usage: if Azure env missing/invalid region, run offline fallback summarization (short extract) so tests pass without credentials.
+- Network usage: the active LLM configuration supplies provider and model details. When Azure is selected, credentials must target canadacentral or canadaeast; the agent fails fast when required credentials are missing or point to an unsupported region.
 
 - Helpers
   - Transcript parsing: split header/body; detect diarized lines like `"[MM:SS] SPK_<id>: text"`; build normalized segments.
@@ -158,19 +159,19 @@ Audit line in `ops/ops_summary.jsonl` mirrors the above in a single JSON object 
 
 
 ## Configuration & Environment
-- Required for Azure OpenAI (when enabled):
+- Primary control plane: `LLMConfiguration` rows (scoped per organization) capture the provider chain and stage map the worker must honour. Each configuration is surfaced in the UI for selection when queueing jobs.
+- Required when Azure is the selected provider:
   - `AZURE_OPENAI_ENDPOINT=https://<resource>.openai.azure.com` (must contain `canadacentral` or `canadaeast` in the resource region)
   - `AZURE_OPENAI_API_KEY`
   - `AZURE_OPENAI_DEPLOYMENT` (e.g., `gpt-4o-mini`)
   - `AZURE_OPENAI_API_VERSION=2024-10-21`
-- Optional:
+- Optional `.env` knobs remain for global defaults:
   - `SUMMARY_TEMPERATURE=1.0`, `SUMMARY_MAX_TOKENS=24000`
   - `SUMMARY_MAX_PROMPT_SEGMENTS`, `SUMMARY_MAX_PROMPT_CHARS`, `SUMMARY_CHARS_PER_TOKEN`
   - `SUMMARY_MODEL` — global Azure stage model override
   - `SUMMARY_STAGE_MODELS` — comma-separated or JSON map of stage identifiers to models (`summarize.extract_outline=gpt-5-mini`)
   - `SUMMARY_STAGE_MAX_TOKENS` — per-stage completion budgets (`summarize.draft_markdown=9000,*=8000`)
-  - `SUMMARY_ALLOW_OFFLINE_FALLBACK`, `SUMMARY_FORCE_OFFLINE`
-- If Azure env is missing or invalid, agent automatically uses the offline fallback (short extract) and still emits all files and ops logs.
+- If the active LLM configuration references a provider without credentials, the worker must exit with a descriptive error. No offline or pseudo-local fallback is permitted.
 
 
 ## Stage Capabilities API
@@ -186,7 +187,7 @@ Audit line in `ops/ops_summary.jsonl` mirrors the above in a single JSON object 
   - Replace internal logic to invoke `SummarizeAgent.summarize(...)`.
   - Pass `intake` from `Case` model fields (if present): `client_position`, `court_level`, `court_division`, `court_location`, `court_case_number`, `court_date`, `filing_deadline`, `client_name`, `opposing_party`.
   - Register artifact (`CaseArtifact` type = `SUMMARY`) with checksum; emit `send_case_update(..., event="artifact.created", kind="summary")`.
-  - Preserve current behavior as a fallback when Azure is not configured (to keep tests green).
+  - Fail fast when no configured LLM provider is available. The worker must surface a descriptive error and record the ops JSON/JSONL entry rather than attempting a degraded offline path.
 
 
 ## Error Handling & Retries
@@ -218,7 +219,7 @@ Stdout (success): `{ "status":"ok", "summary_file":"<abs_path>", "words":1234, "
 
 ## Testing
 - Unit: transcript parsing (diarized vs. plain), versioning behavior, schema shape validity.
-- Integration (platform): keep `tests/test_platform_flow.py` passing with offline fallback; add a gated E2E that runs with Azure env set (skipped by default).
+- Integration (platform): ensure platform flows surface configuration errors when Azure credentials are absent; add a gated E2E that runs with Azure env set (skipped by default).
 
 
 ## Roadmap

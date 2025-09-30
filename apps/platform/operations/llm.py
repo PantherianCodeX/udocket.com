@@ -8,66 +8,224 @@ from django.db import transaction
 from packages.udocket_core.llm.config import PROVIDERS_PATH, load_llm_settings
 
 try:
-    from packages.udocket_core.agents.summarize_lib import SUPPORTED_PROVIDERS as _SUMMARIZE_SUPPORTED_PROVIDERS
+    from packages.udocket_core.agents.summarize_lib import DISALLOWED_PROVIDERS as _SUMMARIZE_DISALLOWED_PROVIDERS
 except Exception:  # pragma: no cover - fallback when summarizer unavailable
-    _SUMMARIZE_SUPPORTED_PROVIDERS = {"azure", "local"}
+    _SUMMARIZE_DISALLOWED_PROVIDERS = set()
 
 from .crypto import decrypt_secret, encrypt_secret
-from .models import LLMProviderSetting, LLMProviderCredential
+from .models import LLMProviderCredential, LLMConfiguration
 
 
-def get_org_llm_overrides(organization_id: str | None) -> Dict[str, Dict[str, object]]:
-    if not organization_id:
+def _clean_stage_map(payload: Dict[str, Dict[str, object]] | None) -> Dict[str, Dict[str, object]]:
+    if not isinstance(payload, dict):
         return {}
-    overrides: Dict[str, Dict[str, object]] = {}
-    qs = LLMProviderSetting.objects.filter(organization_id=organization_id)
-    for setting in qs.iterator():
-        overrides[setting.stage_key] = {
-            "provider": setting.provider,
-            "model": setting.model,
-            "fallbacks": list(setting.fallbacks or []),
-            "allow_offline_fallback": bool(setting.allow_local_fallback),
-        }
-    return overrides
+    cleaned: Dict[str, Dict[str, object]] = {}
+    for stage_key, cfg in payload.items():
+        if not isinstance(cfg, dict):
+            continue
+        provider = str(cfg.get("provider") or "").strip().lower()
+        model = str(cfg.get("model") or "").strip()
+        options = cfg.get("options") if isinstance(cfg.get("options"), dict) else {}
+        entry: Dict[str, object] = {}
+        if provider:
+            entry["provider"] = provider
+        if model:
+            entry["model"] = model
+        if options:
+            entry["options"] = {str(key): value for key, value in options.items()}
+        if entry:
+            cleaned[stage_key] = entry
+    return cleaned
 
 
-@transaction.atomic
-def set_org_llm_overrides(
+def _normalize_provider_chain(provider_chain: Iterable[str] | None) -> List[str]:
+    chain: List[str] = []
+    if not provider_chain:
+        return chain
+    for value in provider_chain:
+        name = str(value or "").strip().lower()
+        if not name or name in chain:
+            continue
+        chain.append(name)
+    return chain
+
+
+def serialize_llm_configuration(config: LLMConfiguration) -> Dict[str, object]:
+    return {
+        "id": str(config.id),
+        "name": config.name,
+        "description": config.description,
+        "target": config.target,
+        "stage_map": dict(config.stage_map or {}),
+        "provider_chain": list(config.provider_chain or []),
+        "is_default": bool(config.is_default),
+        "updated_at": config.updated_at.isoformat() if config.updated_at else None,
+    }
+
+
+def get_org_llm_configurations(
+    organization_id: str | None,
+    *,
+    target: str | None = None,
+) -> List[Dict[str, object]]:
+    if not organization_id:
+        return []
+    queryset = LLMConfiguration.objects.filter(organization_id=organization_id)
+    if target:
+        queryset = queryset.filter(target=target)
+    queryset = queryset.order_by("-is_default", "name")
+    return [serialize_llm_configuration(config) for config in queryset.iterator()]
+
+
+def get_llm_configuration(
+    *,
+    organization_id: str | None,
+    config_id: str | None,
+    target: str | None = None,
+) -> Dict[str, object] | None:
+    if not organization_id:
+        return None
+    if not config_id:
+        qs = LLMConfiguration.objects.filter(organization_id=organization_id)
+        if target:
+            qs = qs.filter(target=target)
+        config = qs.order_by("-is_default", "name").first()
+        return serialize_llm_configuration(config) if config else None
+    try:
+        config = LLMConfiguration.objects.get(
+            organization_id=organization_id, id=config_id
+        )
+    except LLMConfiguration.DoesNotExist:
+        return None
+    if target and config.target != target:
+        return None
+    return serialize_llm_configuration(config)
+
+
+def upsert_llm_configuration(
     *,
     organization_id: str,
-    overrides: Dict[str, Dict[str, object]],
-) -> None:
-    stage_keys = set(overrides.keys())
-    existing: Dict[str, LLMProviderSetting] = {
-        obj.stage_key: obj for obj in LLMProviderSetting.objects.filter(organization_id=organization_id)
-    }
-    to_delete = [obj for key, obj in existing.items() if key not in stage_keys]
-    if to_delete:
-        LLMProviderSetting.objects.filter(id__in=[obj.id for obj in to_delete]).delete()
+    name: str,
+    target: str,
+    stage_map: Dict[str, Dict[str, object]] | None,
+    provider_chain: Iterable[str] | None,
+    description: str | None = None,
+    config_id: str | None = None,
+    set_default: bool = False,
+) -> Dict[str, object]:
+    cleaned_map = _clean_stage_map(stage_map)
+    chain = _normalize_provider_chain(provider_chain)
 
-    for stage_key, payload in overrides.items():
-        provider = str(payload.get("provider") or "").lower()
-        model = str(payload.get("model") or "")
-        fallbacks = payload.get("fallbacks") or []
-        allow_offline = bool(payload.get("allow_offline_fallback"))
-        if not provider:
-            continue
-        if stage_key in existing:
-            setting = existing[stage_key]
-            setting.provider = provider
-            setting.model = model
-            setting.fallbacks = list(fallbacks)
-            setting.allow_local_fallback = allow_offline
-            setting.save(update_fields=["provider", "model", "fallbacks", "allow_local_fallback", "updated_at"])
-        else:
-            LLMProviderSetting.objects.create(
-                organization_id=organization_id,
-                stage_key=stage_key,
-                provider=provider,
-                model=model,
-                fallbacks=list(fallbacks),
-                allow_local_fallback=allow_offline,
+    if config_id:
+        try:
+            config = LLMConfiguration.objects.get(
+                organization_id=organization_id, id=config_id
             )
+        except LLMConfiguration.DoesNotExist:
+            config = None
+        if config:
+            config.name = name
+            config.description = description or ""
+            config.target = target
+            config.stage_map = cleaned_map
+            config.provider_chain = chain
+            if set_default:
+                LLMConfiguration.objects.filter(
+                    organization_id=organization_id,
+                    target=target,
+                ).update(is_default=False)
+                config.is_default = True
+            config.save(update_fields=[
+                "name",
+                "description",
+                "target",
+                "stage_map",
+                "provider_chain",
+                "is_default",
+                "updated_at",
+            ])
+            return serialize_llm_configuration(config)
+
+    if set_default:
+        LLMConfiguration.objects.filter(
+            organization_id=organization_id,
+            target=target,
+        ).update(is_default=False)
+
+    config = LLMConfiguration.objects.create(
+        organization_id=organization_id,
+        name=name,
+        description=description or "",
+        target=target,
+        stage_map=cleaned_map,
+        provider_chain=chain,
+        is_default=set_default,
+    )
+    return serialize_llm_configuration(config)
+
+
+def delete_llm_configuration(*, organization_id: str, config_id: str) -> None:
+    LLMConfiguration.objects.filter(
+        organization_id=organization_id, id=config_id
+    ).delete()
+
+
+def ensure_default_llm_configuration(
+    *,
+    organization_id: str,
+    target: str,
+    stage_map: Dict[str, Dict[str, object]] | None = None,
+    provider_chain: Iterable[str] | None = None,
+    llm_settings=None,
+) -> Dict[str, object] | None:
+    existing = LLMConfiguration.objects.filter(
+        organization_id=organization_id,
+        target=target,
+        is_default=True,
+    ).first()
+    if existing:
+        return serialize_llm_configuration(existing)
+
+    candidate = LLMConfiguration.objects.filter(
+        organization_id=organization_id,
+        target=target,
+    ).order_by("name").first()
+    if candidate:
+        candidate.is_default = True
+        candidate.save(update_fields=["is_default", "updated_at"])
+        return serialize_llm_configuration(candidate)
+
+    if stage_map is None and llm_settings is not None:
+        generated: Dict[str, Dict[str, object]] = {}
+        for assignment in llm_settings.assignments.values():
+            primary = assignment.providers[0] if assignment.providers else ""
+            generated[assignment.stage_key] = {
+                "provider": primary,
+                "model": assignment.model or "",
+            }
+        stage_map = generated
+
+    cleaned_map = _clean_stage_map(stage_map)
+    chain = _normalize_provider_chain(provider_chain)
+    if not chain and llm_settings is not None:
+        for assignment in llm_settings.assignments.values():
+            primary = assignment.providers[0] if assignment.providers else ""
+            if primary:
+                chain.append(primary)
+
+    if not cleaned_map and not chain:
+        return None
+
+    config = LLMConfiguration.objects.create(
+        organization_id=organization_id,
+        name=f"{target.title()} default",
+        description="Automatically generated default LLM configuration",
+        target=target,
+        stage_map=cleaned_map,
+        provider_chain=chain,
+        is_default=True,
+    )
+    return serialize_llm_configuration(config)
 
 
 def _provider_catalog() -> Dict[str, dict]:
@@ -162,7 +320,18 @@ def build_provider_registry(
     llm_settings = llm_settings or load_llm_settings()
     provider_catalog = provider_catalog or load_provider_catalog()
     provider_credentials = provider_credentials or get_org_provider_credentials(organization_id)
-    supported_set = set(supported_providers or _SUMMARIZE_SUPPORTED_PROVIDERS)
+    if supported_providers is None:
+        supported_set = {
+            name
+            for name in llm_settings.providers.keys()
+            if name not in _SUMMARIZE_DISALLOWED_PROVIDERS
+        }
+    else:
+        supported_set = {
+            name
+            for name in supported_providers
+            if name not in _SUMMARIZE_DISALLOWED_PROVIDERS
+        }
 
     registry: Dict[str, Dict[str, object]] = {}
 

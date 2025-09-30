@@ -34,19 +34,6 @@ def _build_settings() -> LLMSettings:
                 ),
             },
         ),
-        "local": LLMProvider(
-            name="local",
-            display_name="Local",
-            env_requirements=[],
-            models={
-                "offline_v1": LLMProviderModel(
-                    name="offline_v1",
-                    label="Offline",
-                    cost_tier="free",
-                    max_output_tokens=2000,
-                )
-            },
-        ),
         "openai": LLMProvider(
             name="openai",
             display_name="OpenAI",
@@ -65,12 +52,12 @@ def _build_settings() -> LLMSettings:
     assignments = {
         "summarize.context_builder": LLMStageAssignment(
             stage_key="summarize.context_builder",
-            providers=["azure", "local"],
+            providers=["azure"],
             model="gpt-4o-mini",
         ),
         "summarize.qa_and_finalize": LLMStageAssignment(
             stage_key="summarize.qa_and_finalize",
-            providers=["azure", "local"],
+            providers=["azure"],
             model="gpt-4o-mini",
         ),
     }
@@ -95,17 +82,14 @@ def test_build_provider_registry_marks_supported_and_unsupported(llm_settings):
         llm_settings=llm_settings,
         provider_catalog={},
         provider_credentials={},
-        supported_providers=["azure", "local"],
+        supported_providers=["azure"],
     )
 
-    assert set(registry.keys()) == {"azure", "local", "openai"}
+    assert set(registry.keys()) == {"azure", "openai"}
 
     azure_entry = registry["azure"]
     assert azure_entry["available"] is True
     assert azure_entry["unavailable_reason"] == ""
-
-    local_entry = registry["local"]
-    assert local_entry["available"] is True
 
     openai_entry = registry["openai"]
     assert openai_entry["available"] is False
@@ -132,10 +116,10 @@ def test_build_provider_registry_includes_credential_only_provider(llm_settings)
         llm_settings=llm_settings,
         provider_catalog={},
         provider_credentials=credentials,
-        supported_providers=["azure", "local"],
+        supported_providers=["azure"],
     )
 
-    assert "custom" in registry
+    assert set(registry.keys()) == {"azure", "openai", "custom"}
     custom_entry = registry["custom"]
     assert custom_entry["available"] is True
     assert custom_entry["configured"] is True
@@ -149,10 +133,10 @@ def test_build_llm_stage_configs_uses_defaults_and_overrides(llm_settings):
         llm_settings=llm_settings,
         provider_catalog={},
         provider_credentials={},
-        supported_providers=["azure", "local", "openai"],
+        supported_providers=["azure", "openai"],
     )
 
-    # No overrides: should use assignment defaults and enable local fallback
+    # No overrides: should use assignment defaults
     stage_defs = [
         {"key": "summarize.context_builder", "label": "Context", "description": "Context stage"},
         {"key": "summarize.qa_and_finalize", "label": "QA", "description": "QA stage"},
@@ -161,38 +145,33 @@ def test_build_llm_stage_configs_uses_defaults_and_overrides(llm_settings):
     configs = presenters._build_llm_stage_configs(
         stage_defs=stage_defs,
         llm_settings=llm_settings,
-        overrides={},
+        stage_map={},
         provider_registry=provider_registry,
     )
 
     assert len(configs) == 2
     first = configs[0]
     assert first["selected_provider"] == "azure"
-    assert first["selected_fallbacks"] == ["local"]
-    assert first["allow_offline_default"] is True
+    assert "allow_offline_default" not in first
     assert first["description"] == "Context stage"
     # Providers should include every cache entry so the UI can surface unsupported options.
-    assert [entry["value"] for entry in first["providers"]] == ["azure", "local", "openai"]
+    assert [entry["value"] for entry in first["providers"]] == ["azure", "openai"]
 
     # Apply overrides and ensure they take precedence.
-    overrides = {
+    stage_map = {
         "summarize.context_builder": {
-            "provider": "local",
-            "fallbacks": ["azure"],
-            "model": "offline_v1",
-            "allow_offline_fallback": True,
+            "provider": "azure",
+            "model": "gpt-4o",
         }
     }
 
     configs_with_override = presenters._build_llm_stage_configs(
         stage_defs=stage_defs,
         llm_settings=llm_settings,
-        overrides=overrides,
+        stage_map=stage_map,
         provider_registry=provider_registry,
     )
 
     override_entry = configs_with_override[0]
-    assert override_entry["selected_provider"] == "local"
-    assert override_entry["selected_fallbacks"] == ["azure"]
-    assert override_entry["selected_model"] == "offline_v1"
-    assert override_entry["allow_offline_default"] is True
+    assert override_entry["selected_provider"] == "azure"
+    assert override_entry["selected_model"] == "gpt-4o"

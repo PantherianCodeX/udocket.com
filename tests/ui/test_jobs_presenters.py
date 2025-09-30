@@ -26,7 +26,6 @@ def test_jobs_by_agent_matches_summary_metadata():
         str(job.id): {
             "metadata": {
                 "summary_file": "/tmp/summary.md",
-                "summary_offline_fallback_used": False,
             }
         }
     }

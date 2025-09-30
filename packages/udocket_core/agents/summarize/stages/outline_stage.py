@@ -15,7 +15,6 @@ from ...common.chunking import (
     should_retry_for_length,
     split_for_retry,
 )
-from ..exceptions import AzureStageFailure
 
 OUTLINE_SCHEMA = {
     "type": "object",
@@ -182,7 +181,7 @@ def _usage_dict(usage: Dict[str, Any]) -> Dict[str, int]:
     return collector
 
 
-def _fallback_outline(parse: TranscriptParse, intake: Dict[str, Any]) -> Dict[str, Any]:
+def _outline_template(parse: TranscriptParse, intake: Dict[str, Any]) -> Dict[str, Any]:
     client_name = intake.get("client_name")
     opposing = intake.get("opposing_party")
     client_role = intake.get("client_position")
@@ -224,8 +223,8 @@ def _fallback_outline(parse: TranscriptParse, intake: Dict[str, Any]) -> Dict[st
     }
 
 
-def _coerce_outline(payload: Dict[str, Any], fallback: Dict[str, Any]) -> Dict[str, Any]:
-    merged: Dict[str, Any] = {key: fallback.get(key) for key in fallback}
+def _coerce_outline(payload: Dict[str, Any], template: Dict[str, Any]) -> Dict[str, Any]:
+    merged: Dict[str, Any] = {key: template.get(key) for key in template}
     if not isinstance(payload, dict):
         return merged
     for key in merged:
@@ -312,11 +311,11 @@ def generate_outline(
     temperature: float,
     max_tokens: int,
 ) -> OutlineStageResult:
-    fallback = _fallback_outline(parse, intake)
     if azure_client is None:
-        return OutlineStageResult(fallback, {})
+        raise RuntimeError("Azure client is required for outline stage")
 
     try:
+        template = _outline_template(parse, intake)
         chunks: Deque[str] = deque(_ensure_chunks(context_snippet))
         aggregate_outline: Optional[Dict[str, Any]] = None
         usage_totals: Dict[str, int] = {}
@@ -368,22 +367,21 @@ def generate_outline(
                         chunks.appendleft(halves[0])
                         continue
                 preview = content.strip()[:200].replace("\n", " ")
-                error = RuntimeError(
+                raise RuntimeError(
                     "Invalid JSON payload returned from Azure outline stage: "
                     f"{exc}. Content preview: {preview!r}"
-                )
-                raise AzureStageFailure("outline", error, OutlineStageResult(fallback, {})) from exc
-            outline_chunk = _coerce_outline(outline_payload, fallback)
+                ) from exc
+            outline_chunk = _coerce_outline(outline_payload, template)
             if aggregate_outline is None:
                 aggregate_outline = copy.deepcopy(outline_chunk)
             else:
                 _merge_outline_sections(aggregate_outline, outline_chunk)
             _merge_usage(usage_totals, usage)
         if aggregate_outline is None:
-            aggregate_outline = fallback
+            raise RuntimeError("Azure outline stage returned no data")
         return OutlineStageResult(aggregate_outline, usage_totals)
     except Exception as exc:
-        raise AzureStageFailure("outline", exc, OutlineStageResult(fallback, {})) from exc
+        raise RuntimeError(f"Azure outline stage failed: {exc}") from exc
 
 
 __all__ = ["OutlineStageResult", "generate_outline"]

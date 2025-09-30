@@ -23,6 +23,7 @@ from packages.udocket_core.agents import (
     TranscriptionConfig,
     normalize_audio,
 )
+from packages.udocket_core.llm.config import load_llm_settings
 from packages.udocket_core.audio import probe_audio_metadata
 from apps.platform.operations.channels import send_job_update, send_case_update
 from apps.platform.jobs.models import Job
@@ -33,7 +34,8 @@ from apps.platform.cases.models import Case
 from apps.platform.operations.audit import emit as audit_emit
 from apps.platform.operations.storage import ensure_case_dirs, tenant_case_root, ops_dir as storage_ops_dir
 from apps.platform.operations.llm import (
-    get_org_llm_overrides,
+    ensure_default_llm_configuration,
+    get_llm_configuration,
     get_provider_secret_with_metadata,
 )
 from apps.platform.operations.utils import update_job_meta, append_job_log
@@ -1010,7 +1012,7 @@ def _case_intake_payload(case: Case | None) -> Dict[str, Any]:
 def _collect_requested_providers(
     config_chain: List[str],
     provider_chain: Optional[List[str]],
-    *override_maps: Optional[Dict[str, Dict[str, Any]]],
+    stage_map: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> List[str]:
     sequence: List[str] = []
 
@@ -1023,10 +1025,8 @@ def _collect_requested_providers(
         if lowered and lowered not in sequence:
             sequence.append(lowered)
 
-    for overrides in override_maps:
-        if not overrides:
-            continue
-        for payload in overrides.values():
+    if stage_map:
+        for payload in stage_map.values():
             if not isinstance(payload, dict):
                 continue
             raw_providers = payload.get("providers")
@@ -1034,10 +1034,6 @@ def _collect_requested_providers(
                 for item in raw_providers:
                     _add(item)
             _add(payload.get("provider"))
-            fallbacks = payload.get("fallbacks")
-            if isinstance(fallbacks, list):
-                for item in fallbacks:
-                    _add(item)
 
     if provider_chain:
         for item in provider_chain:
@@ -1089,8 +1085,7 @@ def _hydrate_summarize_config_from_org_credentials(
     config: SummarizeConfig,
     organization_id: Optional[str],
     provider_chain: Optional[List[str]],
-    org_stage_overrides: Optional[Dict[str, Dict[str, Any]]],
-    job_stage_overrides: Optional[Dict[str, Dict[str, Any]]],
+    stage_map: Optional[Dict[str, Dict[str, Any]]],
 ) -> SummarizeConfig:
     if not organization_id:
         return config
@@ -1098,12 +1093,11 @@ def _hydrate_summarize_config_from_org_credentials(
     requested = _collect_requested_providers(
         config.provider_chain,
         provider_chain,
-        org_stage_overrides,
-        job_stage_overrides,
+        stage_map,
     )
     if "azure" not in requested:
         return config
-    if config.force_offline_mode or config.azure_enabled:
+    if config.azure_enabled:
         return config
 
     secret = get_provider_secret_with_metadata(organization_id, "azure")
@@ -1127,7 +1121,7 @@ def _hydrate_summarize_config_from_org_credentials(
         config.azure_openai_endpoint = endpoint
     config.azure_openai_key = api_key
 
-    deployment = _infer_azure_deployment(secret, org_stage_overrides, job_stage_overrides)
+    deployment = _infer_azure_deployment(secret, stage_map, None)
     if deployment:
         if (
             config.azure_openai_deployment
@@ -1160,9 +1154,7 @@ def summarize_job(
     *_args,
     case_id: str,
     job_id: str,
-    provider_chain: Optional[List[str]] = None,
-    allow_offline_fallback: Optional[bool] = None,
-    stage_overrides: Optional[Dict[str, Dict[str, Any]]] = None,
+    llm_config_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     job = Job.objects.select_related("case").get(pk=job_id)
     org_id = job.organization_id or job.case.organization_id
@@ -1171,76 +1163,61 @@ def summarize_job(
     if not transcript or not transcript.exists():
         raise RuntimeError("No transcript found to summarize")
 
-    org_overrides = get_org_llm_overrides(str(org_id) if org_id else None)
+    try:
+        summarize_config = SummarizeConfig.from_env()
+    except ValueError as exc:
+        log.error(
+            "summarize config invalid",
+            extra={"job_id": job_id, "case_id": case_id, "reason": str(exc)},
+        )
+        raise
 
-    force_online_env = (
-        os.getenv("SUMMARY_FORCE_ONLINE", "0").strip() == "1"
-        or os.getenv("SUMMARY_DISABLE_OFFLINE", "0").strip() == "1"
+    org_id_str = str(org_id) if org_id else None
+    llm_settings = load_llm_settings()
+    config_payload = get_llm_configuration(
+        organization_id=org_id_str,
+        config_id=llm_config_id,
+        target="summary",
     )
-    force_offline_env = os.getenv("SUMMARY_FORCE_OFFLINE", "0").strip() == "1"
-
-    if force_online_env and force_offline_env:
-        raise ValueError(
-            "SUMMARY_FORCE_ONLINE and SUMMARY_FORCE_OFFLINE cannot both be enabled"
+    if not config_payload:
+        config_payload = ensure_default_llm_configuration(
+            organization_id=org_id_str,
+            target="summary",
+            llm_settings=llm_settings,
         )
+    if not config_payload:
+        raise RuntimeError("No LLM configuration available for summarization")
 
-    if force_offline_env:
-        summarize_config = SummarizeConfig(
-            azure_openai_endpoint="",
-            azure_openai_key="",
-            azure_openai_deployment="",
-            debug=os.getenv("DEBUG", "0").strip() == "1",
-            enable_offline_fallback=True,
-            force_offline_mode=True,
-            provider_chain=["local"],
-        )
-    elif force_online_env:
-        try:
-            summarize_config = SummarizeConfig.from_env()
-        except ValueError as exc:
-            log.error(
-                "summarize config invalid while SUMMARY_FORCE_ONLINE=1",
-                extra={"job_id": job_id, "case_id": case_id, "reason": str(exc)},
-            )
-            raise
-        summarize_config.enable_offline_fallback = False
-        summarize_config.force_offline_mode = False
-        summarize_config.provider_chain = [
-            provider
-            for provider in summarize_config.provider_chain
-            if provider == "azure"
-        ] or ["azure"]
-    else:
-        try:
-            summarize_config = SummarizeConfig.from_env()
-        except ValueError as exc:
-            log.warning(
-                "summarize config invalid; falling back to offline mode",
-                extra={"job_id": job_id, "case_id": case_id, "reason": str(exc)},
-            )
-            summarize_config = SummarizeConfig(
-                azure_openai_endpoint="",
-                azure_openai_key="",
-                azure_openai_deployment="",
-                debug=os.getenv("DEBUG", "0").strip() == "1",
-                enable_offline_fallback=True,
-                force_offline_mode=True,
-                provider_chain=["local"],
-            )
+    config_stage_map = config_payload.get("stage_map") or {}
+    config_provider_chain_raw = config_payload.get("provider_chain") or []
+    normalized_chain: List[str] = []
+    for entry in config_provider_chain_raw:
+        if not isinstance(entry, str):
+            continue
+        value = entry.strip().lower()
+        if value and value not in normalized_chain:
+            normalized_chain.append(value)
+    config_provider_chain = normalized_chain
+    active_config_id = config_payload.get("id")
+    active_config_name = config_payload.get("name")
 
-    if not force_offline_env:
-        summarize_config = _hydrate_summarize_config_from_org_credentials(
-            config=summarize_config,
-            organization_id=str(org_id) if org_id else None,
-            provider_chain=provider_chain,
-            org_stage_overrides=org_overrides,
-            job_stage_overrides=stage_overrides,
-        )
+    summarize_config = _hydrate_summarize_config_from_org_credentials(
+        config=summarize_config,
+        organization_id=org_id_str,
+        provider_chain=config_provider_chain,
+        stage_map=config_stage_map,
+    )
 
     summarize_agent = SummarizeAgent(summarize_config)
     log.info(
         "summarize job started",
-        extra={"job_id": job_id, "case_id": case_id, "org_id": str(org_id)},
+        extra={
+            "job_id": job_id,
+            "case_id": case_id,
+            "org_id": org_id_str,
+            "llm_config_id": active_config_id,
+            "llm_config_name": active_config_name,
+        },
     )
     try:
         append_job_log(
@@ -1256,25 +1233,11 @@ def summarize_job(
             job_id,
             event="summary.started",
             case_id=case_id,
+            llm_config_id=active_config_id,
         )
     except Exception:
         pass
     intake_payload = _case_intake_payload(job.case)
-    merged_overrides: Dict[str, Dict[str, Any]] = {}
-    merged_overrides.update(org_overrides)
-    if stage_overrides:
-        for key, value in stage_overrides.items():
-            if not isinstance(value, dict):
-                continue
-            merged_overrides[key] = value
-
-    if force_online_env:
-        if provider_chain:
-            provider_chain = [
-                provider for provider in provider_chain if provider != "local"
-            ]
-        if not provider_chain:
-            provider_chain = ["azure"]
 
     def _progress(stage: str, event: str, payload: Dict[str, Any]) -> None:
         progress_payload: Dict[str, Any] = {
@@ -1282,6 +1245,8 @@ def summarize_job(
             "stage": stage,
             "state": event,
         }
+        if active_config_id:
+            progress_payload["llm_config_id"] = active_config_id
         if payload:
             progress_payload["details"] = payload
         try:
@@ -1311,11 +1276,8 @@ def summarize_job(
             case_dir=case_dir,
             job_id=job_id,
             intake=intake_payload or None,
-            allow_offline_fallback=(
-                False if force_online_env else allow_offline_fallback
-            ),
-            provider_chain=provider_chain,
-            stage_overrides=merged_overrides,
+            provider_chain=config_provider_chain,
+            stage_map=config_stage_map,
             progress_callback=_progress,
         )
     except Exception as exc:
@@ -1350,6 +1312,7 @@ def summarize_job(
             event="summary.completed",
             case_id=case_id,
             summary=str(result.summary_file),
+            llm_config_id=active_config_id,
         )
     except Exception:
         pass
@@ -1364,8 +1327,8 @@ def summarize_job(
         "summary_words": result.words,
         "summary_sha256": checksum,
         "summary_provider_chain": result.provider_chain,
-        "summary_offline_fallback_used": result.offline_fallback_used,
-        "summary_stage_overrides": stage_overrides,
+        "summary_llm_config_id": active_config_id,
+        "summary_llm_config_name": active_config_name,
     }
     try:
         CaseArtifact.objects.create(
@@ -1411,6 +1374,7 @@ def summarize_job(
         "timeline_file": str(result.timeline_seeds_file) if result.timeline_seeds_file else None,
         "entity_file": str(result.entity_hints_file) if result.entity_hints_file else None,
         "words": result.words,
+        "llm_config_id": active_config_id,
     }
 
     try:

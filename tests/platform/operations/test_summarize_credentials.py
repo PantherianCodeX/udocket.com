@@ -26,16 +26,14 @@ def test_hydrate_summarize_config_uses_org_credentials():
         azure_openai_endpoint="",
         azure_openai_key="",
         azure_openai_deployment="placeholder",
-        provider_chain=["azure", "local"],
-        enable_offline_fallback=False,
+        provider_chain=["azure"],
     )
 
     hydrated = _hydrate_summarize_config_from_org_credentials(
         config=base_config,
         organization_id=org.id,
         provider_chain=["azure"],
-        org_stage_overrides={"summarize.extract_outline": {"provider": "azure"}},
-        job_stage_overrides=None,
+        stage_map={"summarize.extract_outline": {"provider": "azure"}},
     )
 
     assert hydrated.azure_enabled is True

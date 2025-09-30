@@ -14,7 +14,6 @@ from ...common.chunking import (
     should_retry_for_length,
     split_for_retry,
 )
-from ..exceptions import AzureStageFailure
 
 logger = logging.getLogger("udocket.summarize.timeline_stage")
 
@@ -60,21 +59,6 @@ def _usage_dict(usage: Dict[str, Any]) -> Dict[str, int]:
     return collector
 
 
-def _fallback_timeline(parse: TranscriptParse) -> List[Dict[str, Any]]:
-    events: List[Dict[str, Any]] = []
-    for seg in parse.segments[:50]:
-        events.append(
-            {
-                "ts_start": seg.ts,
-                "ts_end": None,
-                "speaker": seg.speaker,
-                "text": seg.text,
-                "labels": ["transcript"],
-            }
-        )
-    return events
-
-
 def _ensure_chunks(context: Any) -> List[str]:
     if isinstance(context, str):
         return [context]
@@ -106,9 +90,8 @@ def generate_timeline(
     temperature: float,
     max_tokens: int,
 ) -> TimelineStageResult:
-    fallback = _fallback_timeline(parse)
     if azure_client is None:
-        return TimelineStageResult(fallback, {})
+        raise RuntimeError("Azure client is required for timeline stage")
 
     try:
         chunk_queue: Deque[str] = deque(_ensure_chunks(context_snippet))
@@ -193,10 +176,10 @@ def generate_timeline(
                     signatures.add(signature)
             _merge_usage(usage_totals, usage)
         if not aggregated:
-            return TimelineStageResult(fallback, usage_totals)
+            raise RuntimeError("Azure timeline stage returned no events")
         return TimelineStageResult(aggregated, usage_totals)
     except Exception as exc:
-        raise AzureStageFailure("timeline", exc, TimelineStageResult(fallback, {})) from exc
+        raise RuntimeError(f"Azure timeline stage failed: {exc}") from exc
 
 
 __all__ = ["TimelineStageResult", "generate_timeline"]

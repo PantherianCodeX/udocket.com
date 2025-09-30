@@ -2,10 +2,8 @@
 <div class="space-y-6"
      data-summary
      data-llm-target="summary"
-     {% if summary_llm and summary_llm.provider_chain_json %}data-llm-provider-chain="{{ summary_llm.provider_chain_json|escapejs }}"{% endif %}>
-  {% if summary_llm and summary_llm.overrides_json %}
-    <script type="application/json" data-llm-json="overrides">{{ summary_llm.overrides_json|safe }}</script>
-  {% endif %}
+     {% if summary_llm and summary_llm.provider_chain_json %}data-llm-provider-chain="{{ summary_llm.provider_chain_json|escapejs }}"{% endif %}
+     {% if summary_llm and summary_llm.active_configuration %}data-llm-config-id="{{ summary_llm.active_configuration.id }}"{% endif %}>
   {% if summary_llm and summary_llm.provider_chain_json %}
     <script type="application/json" data-llm-json="provider-chain">{{ summary_llm.provider_chain_json|safe }}</script>
   {% endif %}
@@ -72,9 +70,6 @@
             {% if module.latest.details.provider_chain %}
               <p><span class="font-semibold text-slate-300">Providers:</span> {{ module.latest.details.provider_chain|join:", " }}</p>
             {% endif %}
-            {% if module.latest.details.offline_fallback_used %}
-              <p><span class="font-semibold text-slate-300">Fallback used:</span> Local</p>
-            {% endif %}
           </div>
         {% endif %}
       {% else %}
@@ -116,9 +111,6 @@
                   {% endif %}
                   {% if item.details.provider_chain %}
                     <p>Providers: {{ item.details.provider_chain|join:", " }}</p>
-                  {% endif %}
-                  {% if item.details.offline_fallback_used %}
-                    <p>Fallback used: Local</p>
                   {% endif %}
                 </div>
               {% endif %}

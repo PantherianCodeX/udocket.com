@@ -1,22 +1,6 @@
+import uuid
+
 from django.db import models
-
-
-class LLMProviderSetting(models.Model):
-    id = models.BigAutoField(primary_key=True)
-    organization = models.ForeignKey(
-        "accounts.Organization",
-        on_delete=models.CASCADE,
-        related_name="llm_provider_settings",
-    )
-    stage_key = models.CharField(max_length=128)
-    provider = models.CharField(max_length=64)
-    model = models.CharField(max_length=128, blank=True)
-    fallbacks = models.JSONField(default=list, blank=True)
-    allow_local_fallback = models.BooleanField(default=False)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        unique_together = ("organization", "stage_key")
 
 
 class LLMProviderCredential(models.Model):
@@ -37,6 +21,26 @@ class LLMProviderCredential(models.Model):
 
     class Meta:
         unique_together = ("organization", "provider")
+
+
+class LLMConfiguration(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        "accounts.Organization",
+        on_delete=models.CASCADE,
+        related_name="llm_configurations",
+    )
+    name = models.CharField(max_length=128)
+    description = models.TextField(blank=True)
+    target = models.CharField(max_length=64, default="summary")
+    provider_chain = models.JSONField(default=list, blank=True)
+    stage_map = models.JSONField(default=dict, blank=True)
+    is_default = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ("organization", "name", "target")
 
 
 class AuditEvent(models.Model):

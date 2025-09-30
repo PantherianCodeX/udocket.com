@@ -15,13 +15,17 @@ from ..auth import ensure_authenticated
 from ..contexts import compute_case_tool_state, get_case_and_org
 from ..presenters.cases import case_field_specs
 from .helpers import check_case_update_permission, render_case_panel_with_refresh
+from packages.udocket_core.llm import load_llm_settings
 from .membership import reconcile_case_memberships
 from apps.platform.operations.llm import (
+    delete_llm_configuration,
     delete_org_provider_credential,
-    get_org_llm_overrides,
+    ensure_default_llm_configuration,
+    get_llm_configuration,
+    get_org_llm_configurations,
     get_org_provider_credentials,
     load_provider_catalog,
-    set_org_llm_overrides,
+    upsert_llm_configuration,
     upsert_org_provider_credential,
 )
 
@@ -209,65 +213,58 @@ def case_llm_settings(request: HttpRequest, case_id: str) -> HttpResponse:
     if target not in LLM_STAGE_GROUPS:
         return HttpResponseBadRequest("Unknown LLM target.")
 
-    incoming_overrides = payload.get("overrides")
-    if not isinstance(incoming_overrides, dict):
-        incoming_overrides = {}
+    action = (payload.get("action") or "upsert").strip().lower()
+    config_id = None
+    config_payload = payload.get("configuration")
+    if isinstance(config_payload, dict):
+        config_id = str(config_payload.get("id") or "").strip() or None
+    if action == "delete":
+        cfg_id = str(payload.get("config_id") or config_id or "").strip()
+        if not cfg_id:
+            return HttpResponseBadRequest("config_id is required for delete.")
+        delete_llm_configuration(organization_id=str(organization_id), config_id=cfg_id)
+    else:
+        if not isinstance(config_payload, dict):
+            return HttpResponseBadRequest("configuration payload is required")
+        name = str(config_payload.get("name") or "").strip()
+        if not name:
+            name = f"{target.title()} configuration"
+        description = str(config_payload.get("description") or "").strip()
+        stage_map = config_payload.get("stage_map") if isinstance(config_payload.get("stage_map"), dict) else None
+        provider_chain = config_payload.get("provider_chain") if isinstance(config_payload.get("provider_chain"), list) else None
+        set_default = bool(config_payload.get("set_default"))
+        updated_config = upsert_llm_configuration(
+            organization_id=str(organization_id),
+            name=name,
+            description=description,
+            target=target,
+            stage_map=stage_map,
+            provider_chain=provider_chain,
+            config_id=config_id,
+            set_default=set_default,
+        )
+        if updated_config and updated_config.get("is_default"):
+            config_id = updated_config["id"]
 
-    cleaned_overrides: Dict[str, Dict[str, Any]] = {}
-    stage_keys = LLM_STAGE_GROUPS[target]
-    for stage_key in stage_keys:
-        stage_payload = incoming_overrides.get(stage_key)
-        if not isinstance(stage_payload, dict):
-            continue
-        provider_str = stage_payload.get("provider")
-        provider = str(provider_str or "").strip().lower()
-        if not provider:
-            continue
-        fallbacks_raw = stage_payload.get("fallbacks")
-        fallbacks: List[str] = []
-        if isinstance(fallbacks_raw, list):
-            for item in fallbacks_raw:
-                if isinstance(item, str):
-                    value = item.strip().lower()
-                    if value and value not in fallbacks:
-                        fallbacks.append(value)
-        model_value = stage_payload.get("model")
-        model = str(model_value or "").strip()
-        allow_offline = bool(stage_payload.get("allow_offline_fallback"))
-        cleaned_overrides[stage_key] = {
-            "provider": provider,
-            "model": model,
-            "fallbacks": fallbacks,
-            "allow_offline_fallback": allow_offline,
-        }
-
-    existing = get_org_llm_overrides(str(organization_id))
-    updated: Dict[str, Dict[str, Any]] = dict(existing)
-    for stage_key in stage_keys:
-        if stage_key in cleaned_overrides:
-            updated[stage_key] = cleaned_overrides[stage_key]
-        else:
-            updated.pop(stage_key, None)
-
-    set_org_llm_overrides(organization_id=str(organization_id), overrides=updated)
-
-    response_overrides = {key: updated[key] for key in stage_keys if key in updated}
-
-    raw_chain = payload.get("provider_chain")
-    provider_chain: List[str] = []
-    if isinstance(raw_chain, list):
-        for item in raw_chain:
-            if isinstance(item, str):
-                name = item.strip().lower()
-                if name and name not in provider_chain:
-                    provider_chain.append(name)
+    active_config = get_llm_configuration(
+        organization_id=str(organization_id),
+        config_id=None,
+        target=target,
+    )
+    if not active_config:
+        active_config = ensure_default_llm_configuration(
+            organization_id=str(organization_id),
+            target=target,
+            llm_settings=load_llm_settings(),
+        )
+    configs = get_org_llm_configurations(str(organization_id), target=target)
 
     return JsonResponse(
         {
             "status": "ok",
             "target": target,
-            "overrides": response_overrides,
-            "provider_chain": provider_chain,
+            "configurations": configs,
+            "active": active_config,
         }
     )
 

@@ -31,8 +31,7 @@ DEFAULT_STAGE_TOKEN_LIMITS: Dict[str, int] = {
     "summarize.qa_and_finalize": 6000,
 }
 
-SUPPORTED_PROVIDERS = {"azure", "local"}
-DEFAULT_PROVIDER_CHAIN: List[str] = ["azure", "local"]
+DEFAULT_PROVIDER_CHAIN: List[str] = ["azure"]
 LLM_STAGE_KEYS = {
     "context_builder": "summarize.context_builder",
     "extract_outline": "summarize.extract_outline",
@@ -49,6 +48,27 @@ for _attr, _stage_key in LLM_STAGE_KEYS.items():
     _STAGE_ALIAS_LOOKUP[_stage_key.lower()] = _stage_key
     if _stage_key.startswith("summarize."):
         _STAGE_ALIAS_LOOKUP[_stage_key.split(".", 1)[1].lower()] = _stage_key
+
+
+DISALLOWED_PROVIDERS: set[str] = set()
+
+
+def _normalize_stage_map(
+    stage_map: Optional[Dict[str, Dict[str, Any]]],
+) -> Dict[str, Dict[str, Any]]:
+    if not stage_map:
+        return {}
+    normalized: Dict[str, Dict[str, Any]] = {}
+    for key, value in stage_map.items():
+        canonical = _normalize_stage_identifier(str(key))
+        if not canonical:
+            canonical = key if key in LLM_STAGE_KEYS.values() else None
+        if not canonical:
+            continue
+        if not isinstance(value, dict):
+            continue
+        normalized[canonical] = {str(k): v for k, v in value.items()}
+    return normalized
 
 
 def _normalize_stage_identifier(value: str) -> Optional[str]:
@@ -125,6 +145,18 @@ def _parse_positive_int(value: str) -> Optional[int]:
 def _parse_non_empty_str(value: str) -> Optional[str]:
     string_value = str(value).strip()
     return string_value or None
+
+
+def _normalize_providers(values: Sequence[str]) -> List[str]:
+    seen: set[str] = set()
+    normalized: List[str] = []
+    for raw in values:
+        name = (raw or "").strip().lower()
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        normalized.append(name)
+    return normalized
 
 
 @dataclass(frozen=True)
@@ -243,12 +275,11 @@ class StageRuntime:
     max_output_tokens: int
     context_window_tokens: Optional[int]
     profile: StageProfile
-    allow_local_fallback: bool
     temperature: float
 
     @property
     def primary_provider(self) -> str:
-        return self.providers[0] if self.providers else "local"
+        return self.providers[0] if self.providers else "azure"
 
 
 PIPELINE_NODE_ORDER = [
@@ -274,8 +305,6 @@ class SummarizeConfig:
     temperature: float = 1.0 #0.2
     max_output_tokens: int = 24000
     debug: bool = False
-    enable_offline_fallback: bool = False
-    force_offline_mode: bool = False
     provider_chain: List[str] = field(
         default_factory=lambda: list(DEFAULT_PROVIDER_CHAIN)
     )
@@ -300,43 +329,20 @@ class SummarizeConfig:
         temperature = float(os.getenv("SUMMARY_TEMPERATURE", "1.0") or 1.0)
         max_tokens = int(os.getenv("SUMMARY_MAX_TOKENS", "24000") or 24000)
         debug = os.getenv("DEBUG", "0").strip() == "1"
-        allow_offline = (
-            os.getenv("SUMMARY_ALLOW_OFFLINE_FALLBACK", "0").strip() == "1"
-        )
-        force_offline = os.getenv("SUMMARY_FORCE_OFFLINE", "0").strip() == "1"
         primary_provider = (
             (os.getenv("SUMMARY_PRIMARY_PROVIDER") or "azure").strip().lower()
         )
-        fallback_raw = os.getenv("SUMMARY_FALLBACK_PROVIDERS")
-        fallback_values: List[str] = []
-        if fallback_raw is None:
-            if primary_provider == "azure":
-                fallback_values = ["local"]
-        else:
-            fallback_values = [
-                value.strip().lower()
-                for value in fallback_raw.split(",")
-                if value.strip()
-            ]
-
-        providers = [primary_provider] + fallback_values
-        filtered_chain: List[str] = []
-        for provider in providers:
-            if not provider:
-                continue
-            if provider not in SUPPORTED_PROVIDERS:
-                logger.warning(
-                    "summarize provider ignored",
-                    extra={"provider": provider},
-                )
-                continue
-            if provider in filtered_chain:
-                continue
-            filtered_chain.append(provider)
-        if not filtered_chain:
+        providers = _normalize_providers([primary_provider])
+        if "azure" not in providers:
+            logger.warning(
+                "Azure provider is currently required for summarize; prepending azure to provider chain",
+                extra={"providers": providers},
+            )
+            providers = ["azure"] + [name for name in providers if name != "azure"]
+        if not providers:
             filtered_chain = list(DEFAULT_PROVIDER_CHAIN)
-        if force_offline:
-            filtered_chain = ["local"]
+        else:
+            filtered_chain = providers
 
         allow_non_ca_endpoint = (
             os.getenv("SUMMARY_ALLOW_NON_CA_ENDPOINT", "0").strip() == "1"
@@ -411,8 +417,6 @@ class SummarizeConfig:
             temperature=temperature,
             max_output_tokens=max_tokens,
             debug=debug,
-            enable_offline_fallback=allow_offline,
-            force_offline_mode=force_offline,
             provider_chain=filtered_chain,
             max_prompt_segments=max_prompt_segments,
             max_prompt_chars=max_prompt_chars,
@@ -426,8 +430,6 @@ class SummarizeConfig:
 
     @property
     def azure_enabled(self) -> bool:
-        if self.force_offline_mode:
-            return False
         if "azure" not in self.provider_chain:
             return False
         return bool(
@@ -511,7 +513,6 @@ class SummarizeResult:
     meta_json: Path
     audit_jsonl: Path
     provider_chain: List[str]
-    offline_fallback_used: bool
 
 
 class SummarizeAgent:
@@ -580,9 +581,8 @@ class SummarizeAgent:
         job_id: str,
         intake: Optional[Dict[str, Any]] = None,
         transcript_hint: Optional[Dict[str, Any]] = None,
-        allow_offline_fallback: Optional[bool] = None,
         provider_chain: Optional[List[str]] = None,
-        stage_overrides: Optional[Dict[str, Dict[str, Any]]] = None,
+        stage_map: Optional[Dict[str, Dict[str, Any]]] = None,
         progress_callback: Optional[
             Callable[[str, str, Dict[str, Any]], None]
         ] = None,
@@ -608,32 +608,36 @@ class SummarizeAgent:
         )
 
         settings = _load_llm_settings()
-        stage_overrides = stage_overrides or {}
-
-        if allow_offline_fallback is None:
-            global_allow_offline = self.config.enable_offline_fallback
-        else:
-            global_allow_offline = bool(allow_offline_fallback)
+        stage_map = _normalize_stage_map(stage_map)
+        intake = dict(intake or {})
 
         if provider_chain is None:
-            provider_chain = list(self.config.provider_chain)
-        else:
-            provider_chain = [
-                value
-                for value in provider_chain
-                if value in SUPPORTED_PROVIDERS
-            ]
+            derived_chain: List[str] = []
+            for config in stage_map.values():
+                provider_value = config.get("provider")
+                providers_value = config.get("providers")
+                if isinstance(providers_value, list):
+                    for entry in providers_value:
+                        name = str(entry or "").strip().lower()
+                        if name and name not in derived_chain:
+                            derived_chain.append(name)
+                elif isinstance(provider_value, str):
+                    name = provider_value.strip().lower()
+                    if name and name not in derived_chain:
+                        derived_chain.append(name)
+            provider_chain = derived_chain or list(self.config.provider_chain)
+        provider_chain = _normalize_providers(provider_chain)
+        if "azure" not in provider_chain:
+            logger.warning(
+                "Summarize currently requires Azure; prepending azure to provider chain",
+                extra={"provider_chain": provider_chain},
+            )
+            provider_chain = ["azure"] + [value for value in provider_chain if value != "azure"]
         if not provider_chain:
             provider_chain = list(DEFAULT_PROVIDER_CHAIN)
-        if self.config.force_offline_mode:
-            provider_chain = ["local"]
 
         azure_enabled = self.config.azure_enabled
-        if (
-            not azure_enabled
-            and not self.config.force_offline_mode
-            and "azure" in provider_chain
-        ):
+        if not azure_enabled:
             missing_env: List[str] = []
             if not self.config.azure_openai_endpoint:
                 missing_env.append("AZURE_OPENAI_ENDPOINT")
@@ -641,19 +645,11 @@ class SummarizeAgent:
                 missing_env.append("AZURE_OPENAI_API_KEY")
             if not self.config.azure_openai_deployment:
                 missing_env.append("AZURE_OPENAI_DEPLOYMENT")
-            if missing_env:
-                self.logger.warning(
-                    "Azure provider disabled; missing configuration",
-                    extra={
-                        "missing_env": missing_env,
-                        "provider_chain": provider_chain,
-                    },
-                )
-            else:
-                self.logger.warning(
-                    "Azure provider disabled; configuration unavailable",
-                    extra={"provider_chain": provider_chain},
-                )
+            details = ", ".join(missing_env) if missing_env else "unknown"
+            # TODO(multi-provider): allow non-Azure providers when chat abstractions land.
+            raise RuntimeError(
+                f"Azure OpenAI configuration is required for summarization (missing: {details})"
+            )
         stage_runtimes: Dict[str, StageRuntime] = {}
         provider_sequence: List[str] = []
 
@@ -662,114 +658,65 @@ class SummarizeAgent:
         for stage_attr, stage_key in LLM_STAGE_KEYS.items():
             stage_profile = _stage_profile(stage_key)
             assignment = settings.stage(stage_key)
-            providers = list(
-                assignment.providers
-                if assignment and assignment.providers
-                else provider_chain
+            providers = _normalize_providers(
+                assignment.providers if assignment and assignment.providers else provider_chain
             )
+            if "azure" not in providers:
+                self.logger.debug(
+                    "azure provider inserted for stage",
+                    extra={"stage": stage_key, "providers": providers},
+                )
+                providers = ["azure"] + [value for value in providers if value != "azure"]
+            if not providers:
+                providers = list(DEFAULT_PROVIDER_CHAIN)
+
             model = (
                 assignment.model
                 if assignment and assignment.model
-                else (providers[0] if providers else "local")
+                else (providers[0] if providers else "azure")
             )
             options = dict(assignment.options) if assignment else {}
-
-            override = stage_overrides.get(stage_key) or stage_overrides.get(
-                stage_attr
-            )
-            override_set_model = False
+            stage_config = stage_map.get(stage_key) or stage_map.get(stage_attr)
             override_max_tokens = None
-            if override:
-                raw_override_providers = override.get("providers")
-                override_providers: List[str] = []
-                if isinstance(raw_override_providers, list):
-                    for provider_value_raw in cast(
-                        Sequence[Any], raw_override_providers
-                    ):
-                        if isinstance(provider_value_raw, str):
-                            override_providers.append(provider_value_raw)
-                if override_providers:
-                    providers = [
-                        provider
-                        for provider in override_providers
-                        if provider in SUPPORTED_PROVIDERS
-                    ]
-                else:
-                    primary_override = (
-                        str(override.get("provider"))
-                        if isinstance(override.get("provider"), str)
-                        else None
-                    )
-                    raw_fallbacks = override.get("fallbacks")
-                    fallbacks_override: List[str] = []
-                    if isinstance(raw_fallbacks, list):
-                        for fallback_value_raw in cast(
-                            Sequence[Any], raw_fallbacks
-                        ):
-                            if isinstance(fallback_value_raw, str):
-                                fallbacks_override.append(fallback_value_raw)
-                    chain_override: List[str] = []
-                    if primary_override:
-                        chain_override.append(primary_override)
-                    chain_override.extend(fallbacks_override)
-                    if chain_override:
-                        providers = [
-                            provider
-                            for provider in chain_override
-                            if provider in SUPPORTED_PROVIDERS
-                        ]
-                if override.get("model"):
-                    model = str(override["model"])
-                    override_set_model = True
-                if isinstance(override.get("options"), dict):
-                    options.update(
-                        {
-                            str(key): str(value)
-                            for key, value in override["options"].items()
-                        }
-                    )
-                if isinstance(override.get("max_tokens"), int):
-                    override_max_tokens = max(1, int(override["max_tokens"]))
+            if stage_config:
+                override_providers: Optional[List[str]] = None
+                if isinstance(stage_config.get("providers"), list):
+                    override_providers = [str(value) for value in stage_config["providers"]]
+                elif stage_config.get("provider"):
+                    override_providers = [str(stage_config["provider"])]
+                if override_providers is not None:
+                    override_normalized = _normalize_providers(override_providers)
+                    if "azure" not in override_normalized:
+                        override_normalized = ["azure"] + [p for p in override_normalized if p != "azure"]
+                    if override_normalized:
+                        providers = override_normalized
+                if stage_config.get("model"):
+                    model = str(stage_config["model"])
+                stage_options = stage_config.get("options")
+                if isinstance(stage_options, dict):
+                    options.update({str(key): str(value) for key, value in stage_options.items()})
+                if isinstance(stage_config.get("max_tokens"), int):
+                    override_max_tokens = max(1, int(stage_config["max_tokens"]))
 
-            providers = [p for p in providers if p in SUPPORTED_PROVIDERS]
-            if not providers:
-                providers = list(DEFAULT_PROVIDER_CHAIN)
-            if self.config.force_offline_mode:
-                providers = ["local"]
+            config_model_override = self.config.stage_model_for(stage_key)
+            if config_model_override:
+                model = config_model_override
 
-            model = model or providers[0]
-
-            provider_meta = settings.provider(providers[0])
+            provider_meta = settings.provider(providers[0]) if providers else None
+            if provider_meta is None and "azure" in providers and azure_provider_meta:
+                provider_meta = azure_provider_meta
             model_meta = (
                 provider_meta.models.get(model)
                 if provider_meta and model in provider_meta.models
                 else None
             )
 
-            if not override_set_model:
-                config_model_override = self.config.stage_model_for(stage_key)
-                if config_model_override:
-                    model = config_model_override
-                    if (
-                        azure_enabled
-                        and azure_provider_meta
-                        and config_model_override in azure_provider_meta.models
-                        and "azure" not in providers
-                    ):
-                        providers = ["azure"] + [p for p in providers if p != "azure"]
-                        provider_meta = azure_provider_meta
-                        model_meta = (
-                            azure_provider_meta.models.get(model)
-                            if config_model_override in azure_provider_meta.models
-                            else model_meta
-                        )
-
             deployment = options.get("azure_deployment") if options else None
             if not deployment and model_meta and model_meta.deployment_env:
                 deployment = os.getenv(model_meta.deployment_env)
 
             azure_client: Optional[AzureChatClient] = None
-            if providers[0] == "azure" and azure_enabled:
+            if "azure" in providers:
                 cfg = self.config.azure_client_config_for(deployment)
                 if cfg:
                     azure_client = AzureChatClient(cfg)
@@ -795,20 +742,6 @@ class SummarizeAgent:
             context_window_tokens = None
             if model_meta and model_meta.context_window_tokens:
                 context_window_tokens = model_meta.context_window_tokens
-            elif providers[0] == "local":
-                context_window_tokens = max(
-                    stage_profile.recommended_context_tokens,
-                    stage_profile.min_context_tokens,
-                )
-
-            allow_override = (
-                override.get("allow_offline_fallback") if override else None
-            )
-            allow_local = providers[0] == "local" or ("local" in providers[1:])
-            if allow_override is not None:
-                allow_local = bool(allow_override)
-            if not global_allow_offline and providers[0] != "local":
-                allow_local = False
 
             runtime = StageRuntime(
                 stage_key=stage_key,
@@ -819,7 +752,6 @@ class SummarizeAgent:
                 or self.config.max_output_tokens,
                 context_window_tokens=context_window_tokens,
                 profile=stage_profile,
-                allow_local_fallback=allow_local,
                 temperature=stage_temperature,
             )
             stage_runtimes[stage_key] = runtime
@@ -835,7 +767,6 @@ class SummarizeAgent:
                 providers=providers,
                 model=model,
                 azure_client=bool(azure_client),
-                allow_local=runtime.allow_local_fallback,
             )
 
         pipeline = SummarizePipeline(
@@ -850,7 +781,6 @@ class SummarizeAgent:
             provider_chain=provider_sequence,
             stage_runtimes=stage_runtimes,
             default_temperature=self.config.temperature,
-            global_allow_offline=global_allow_offline,
             logger=self.logger,
             progress_callback=self._build_progress_dispatch(
                 progress_callback, case_id, job_id
@@ -872,7 +802,6 @@ class SummarizeAgent:
         pipeline.emit_pipeline_event(
             "complete",
             status=final_state.get("status", "ok"),
-            offline=final_outputs.offline_fallback_used,
         )
         self._log(
             self._log_level,
@@ -880,7 +809,6 @@ class SummarizeAgent:
             status=final_state.get("status", "ok"),
             summary=str(final_outputs.summary_path),
             outline=str(final_outputs.outline_path),
-            offline=final_outputs.offline_fallback_used,
         )
         return SummarizeResult(
             status=final_state.get("status", "ok"),
@@ -894,7 +822,6 @@ class SummarizeAgent:
             meta_json=final_outputs.meta_path,
             audit_jsonl=final_outputs.audit_path,
             provider_chain=list(final_outputs.provider_chain),
-            offline_fallback_used=final_outputs.offline_fallback_used,
         )
 
     def _execute_pipeline(
@@ -1009,4 +936,5 @@ __all__ = [
     "parse_transcript",
     "TranscriptParse",
     "TranscriptSegment",
+    "DISALLOWED_PROVIDERS",
 ]

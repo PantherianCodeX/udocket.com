@@ -31,7 +31,9 @@ from packages.udocket_core.agents.summarize_lib import SummarizeConfig
 from packages.udocket_core.llm import load_llm_settings
 from apps.platform.operations.llm import (
     build_provider_registry,
-    get_org_llm_overrides,
+    ensure_default_llm_configuration,
+    get_llm_configuration,
+    get_org_llm_configurations,
     get_org_provider_credentials,
     load_provider_catalog,
 )
@@ -75,19 +77,15 @@ def _artifact_payload(artifact: CaseArtifact) -> Dict[str, Any]:
     }
 
 
-def _collect_provider_chain(overrides: Dict[str, Dict[str, Any]], default_chain: List[str]) -> List[str]:
+def _collect_provider_chain(
+    provider_chain: Sequence[str],
+    default_chain: List[str],
+) -> List[str]:
     sequence: List[str] = []
-    if overrides:
-        for payload in overrides.values():
-            if not isinstance(payload, dict):
-                continue
-            primary = payload.get("provider")
-            fallbacks = payload.get("fallbacks") if isinstance(payload.get("fallbacks"), list) else []
-            for name in [primary] + list(fallbacks):
-                if isinstance(name, str):
-                    lower = name.lower()
-                    if lower and lower not in sequence:
-                        sequence.append(lower)
+    for name in provider_chain:
+        value = str(name or "").strip().lower()
+        if value and value not in sequence:
+            sequence.append(value)
     for name in default_chain:
         if name not in sequence:
             sequence.append(name)
@@ -98,7 +96,7 @@ def _build_llm_stage_configs(
     *,
     stage_defs: List[Dict[str, str]],
     llm_settings,
-    overrides: Dict[str, Dict[str, Any]],
+    stage_map: Dict[str, Dict[str, Any]],
     provider_registry: Dict[str, Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
     stage_configs: List[Dict[str, Any]] = []
@@ -111,22 +109,19 @@ def _build_llm_stage_configs(
         provider_configs = list(provider_registry.values())
         selected_provider = assignment.providers[0] if assignment and assignment.providers else "azure"
         selected_model = assignment.model or ""
-        selected_fallbacks: List[str] = []
-        allow_offline_default = False
+        selected_options: Dict[str, Any] = {}
 
-        override_payload = overrides.get(stage_key)
+        override_payload = stage_map.get(stage_key)
         if override_payload:
-            selected_provider = override_payload.get("provider", selected_provider)
-            override_fallbacks = override_payload.get("fallbacks")
-            if isinstance(override_fallbacks, list):
-                selected_fallbacks = [str(name) for name in override_fallbacks if isinstance(name, str)]
-            if override_payload.get("model"):
-                selected_model = override_payload.get("model")
-            allow_offline_default = bool(override_payload.get("allow_offline_fallback"))
-        else:
-            if assignment and assignment.providers:
-                selected_fallbacks = [name for name in assignment.providers if name != selected_provider]
-            allow_offline_default = "local" in selected_fallbacks or selected_provider == "local"
+            provider_override = override_payload.get("provider")
+            if isinstance(provider_override, str) and provider_override.strip():
+                selected_provider = provider_override.strip().lower()
+            model_override = override_payload.get("model")
+            if isinstance(model_override, str) and model_override.strip():
+                selected_model = model_override.strip()
+            options_override = override_payload.get("options")
+            if isinstance(options_override, dict):
+                selected_options = options_override
 
         stage_configs.append(
             {
@@ -136,8 +131,7 @@ def _build_llm_stage_configs(
                 "providers": provider_configs,
                 "selected_provider": selected_provider,
                 "selected_model": selected_model,
-                "selected_fallbacks": selected_fallbacks,
-                "allow_offline_default": allow_offline_default,
+                "selected_options": selected_options,
             }
         )
     return stage_configs
@@ -881,7 +875,6 @@ def build_tool_panels(
         summarize_cfg = SummarizeConfig()
 
     llm_settings = load_llm_settings()
-    org_overrides = get_org_llm_overrides(case.organization_id)
     provider_catalog = load_provider_catalog()
     provider_credentials = get_org_provider_credentials(case.organization_id)
     provider_registry = build_provider_registry(
@@ -891,13 +884,8 @@ def build_tool_panels(
         provider_credentials=provider_credentials,
     )
 
-    provider_chain = list(summarize_cfg.provider_chain or ["azure", "local"])
-    if summarize_cfg.force_offline_mode:
-        provider_chain = ["local"]
+    provider_chain = list(summarize_cfg.provider_chain or ["azure"])
     primary_default = provider_chain[0] if provider_chain else "azure"
-    if primary_default == "azure" and not summarize_cfg.azure_enabled:
-        primary_default = "local"
-    fallback_defaults = [value for value in provider_chain if value != primary_default]
 
     provider_options: List[Dict[str, Any]] = []
     for name, entry in provider_registry.items():
@@ -951,21 +939,36 @@ def build_tool_panels(
         },
     ]
 
-    summary_stage_keys = [stage["key"] for stage in summary_stage_defs]
-    summary_overrides = {k: org_overrides[k] for k in summary_stage_keys if k in org_overrides}
+    summary_config_list = get_org_llm_configurations(str(case.organization_id), target="summary")
+    summary_active_config = get_llm_configuration(
+        organization_id=str(case.organization_id),
+        config_id=None,
+        target="summary",
+    )
+    if not summary_active_config:
+        summary_active_config = ensure_default_llm_configuration(
+            organization_id=str(case.organization_id),
+            target="summary",
+            llm_settings=llm_settings,
+        )
+        if summary_active_config:
+            summary_config_list = get_org_llm_configurations(str(case.organization_id), target="summary")
+
+    summary_stage_map = summary_active_config.get("stage_map", {}) if summary_active_config else {}
+    summary_provider_chain = summary_active_config.get("provider_chain", []) if summary_active_config else []
     summary_stage_configs = _build_llm_stage_configs(
         stage_defs=summary_stage_defs,
         llm_settings=llm_settings,
-        overrides=summary_overrides,
+        stage_map=summary_stage_map,
         provider_registry=provider_registry,
     )
-    summary_chain = _collect_provider_chain(summary_overrides, provider_chain)
+    summary_chain = _collect_provider_chain(summary_provider_chain, provider_chain)
     summary_primary = summary_chain[0] if summary_chain else primary_default
-    if summary_primary == "azure" and not summarize_cfg.azure_enabled:
-        summary_primary = "local"
-    summary_fallbacks = [value for value in summary_chain if value != summary_primary]
-    summary_overrides_json = json.dumps(summary_overrides)
+
+    summary_configs_json = json.dumps(summary_config_list)
+    summary_active_config_json = json.dumps(summary_active_config or {})
     summary_chain_json = json.dumps(summary_chain)
+    summary_stage_map_json = json.dumps(summary_stage_map)
 
     timeline_stage_defs = [
         {
@@ -974,22 +977,36 @@ def build_tool_panels(
             "description": "Generates a normalized timeline from transcripts and timeline seeds.",
         }
     ]
-    timeline_stage_keys = [stage["key"] for stage in timeline_stage_defs]
-    timeline_overrides = {k: org_overrides[k] for k in timeline_stage_keys if k in org_overrides}
+    timeline_config_list = get_org_llm_configurations(str(case.organization_id), target="timeline")
+    timeline_active_config = get_llm_configuration(
+        organization_id=str(case.organization_id),
+        config_id=None,
+        target="timeline",
+    )
+    if not timeline_active_config:
+        timeline_active_config = ensure_default_llm_configuration(
+            organization_id=str(case.organization_id),
+            target="timeline",
+            llm_settings=llm_settings,
+        )
+        if timeline_active_config:
+            timeline_config_list = get_org_llm_configurations(str(case.organization_id), target="timeline")
+
+    timeline_stage_map = timeline_active_config.get("stage_map", {}) if timeline_active_config else {}
+    timeline_provider_chain = timeline_active_config.get("provider_chain", []) if timeline_active_config else []
     timeline_stage_configs = _build_llm_stage_configs(
         stage_defs=timeline_stage_defs,
         llm_settings=llm_settings,
-        overrides=timeline_overrides,
+        stage_map=timeline_stage_map,
         provider_registry=provider_registry,
     )
-    timeline_chain = _collect_provider_chain(timeline_overrides, provider_chain)
+    timeline_chain = _collect_provider_chain(timeline_provider_chain, provider_chain)
     timeline_primary = timeline_chain[0] if timeline_chain else primary_default
-    if timeline_primary == "azure" and not summarize_cfg.azure_enabled:
-        timeline_primary = "local"
-    timeline_fallbacks = [value for value in timeline_chain if value != timeline_primary]
-    timeline_chain_json = json.dumps(timeline_chain)
-    timeline_overrides_json = json.dumps(timeline_overrides)
 
+    timeline_configs_json = json.dumps(timeline_config_list)
+    timeline_active_config_json = json.dumps(timeline_active_config or {})
+    timeline_chain_json = json.dumps(timeline_chain)
+    timeline_stage_map_json = json.dumps(timeline_stage_map)
     summary_status = status_payload(progress_lookup, "summary", "Not Started")
     summary_module = analysis_lookup.get("summary") or {}
     summary_latest = summary_module.get("latest") or {}
@@ -1021,14 +1038,14 @@ def build_tool_panels(
                 "provider_options": provider_options,
                 "defaults": {
                     "primary": summary_primary,
-                    "fallbacks": summary_fallbacks,
-                    "allow_offline": summarize_cfg.enable_offline_fallback,
-                    "force_offline": summarize_cfg.force_offline_mode,
                     "azure_available": summarize_cfg.azure_enabled,
                 },
                 "stage_configs": summary_stage_configs,
-                "overrides": summary_overrides,
-                "overrides_json": summary_overrides_json,
+                "stage_map_json": summary_stage_map_json,
+                "configurations": summary_config_list,
+                "configurations_json": summary_configs_json,
+                "active_configuration": summary_active_config,
+                "active_configuration_json": summary_active_config_json,
                 "provider_chain_json": summary_chain_json,
                 "catalog": provider_catalog,
                 "catalog_json": json.dumps(provider_catalog),
@@ -1088,14 +1105,14 @@ def build_tool_panels(
                 "provider_options": provider_options,
                 "defaults": {
                     "primary": timeline_primary,
-                    "fallbacks": timeline_fallbacks,
-                    "allow_offline": summarize_cfg.enable_offline_fallback,
-                    "force_offline": summarize_cfg.force_offline_mode,
                     "azure_available": summarize_cfg.azure_enabled,
                 },
                 "stage_configs": timeline_stage_configs,
-                "overrides": timeline_overrides,
-                "overrides_json": timeline_overrides_json,
+                "stage_map_json": timeline_stage_map_json,
+                "configurations": timeline_config_list,
+                "configurations_json": timeline_configs_json,
+                "active_configuration": timeline_active_config,
+                "active_configuration_json": timeline_active_config_json,
                 "provider_chain_json": timeline_chain_json,
                 "catalog": provider_catalog,
                 "catalog_json": json.dumps(provider_catalog),

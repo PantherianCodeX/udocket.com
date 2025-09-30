@@ -944,35 +944,16 @@ class JobViewSet(viewsets.ModelViewSet):
     def analyze_summary(self, request, pk=None):
         job = self.get_object()
         payload = request.data if hasattr(request, "data") else {}
-        provider_chain = payload.get("provider_chain") if isinstance(payload, dict) else None
-        if isinstance(provider_chain, list):
-            provider_chain = [str(value).lower() for value in provider_chain if isinstance(value, str) and value]
-        else:
-            provider_chain = None
-        allow_offline_raw = payload.get("allow_offline_fallback") if isinstance(payload, dict) else None
-        allow_offline: Optional[bool]
-        if isinstance(allow_offline_raw, bool):
-            allow_offline = allow_offline_raw
-        elif isinstance(allow_offline_raw, str):
-            allow_offline = allow_offline_raw.strip().lower() in {"1", "true", "yes"}
-        else:
-            allow_offline = None
-
-        stage_overrides = payload.get("stage_overrides") if isinstance(payload, dict) else None
-        if isinstance(stage_overrides, str):
-            try:
-                stage_overrides = json.loads(stage_overrides)
-            except Exception:  # noqa: BLE001
-                stage_overrides = None
-        if not isinstance(stage_overrides, dict):
-            stage_overrides = None
+        llm_config_id = None
+        if isinstance(payload, dict):
+            config_value = payload.get("llm_config_id")
+            if isinstance(config_value, str) and config_value.strip():
+                llm_config_id = config_value.strip()
 
         summarize_job.delay(
             case_id=str(job.case_id),
             job_id=str(job.id),
-            provider_chain=provider_chain,
-            allow_offline_fallback=allow_offline,
-            stage_overrides=stage_overrides,
+            llm_config_id=llm_config_id,
         )
         audit_emit(
             request,
@@ -980,9 +961,7 @@ class JobViewSet(viewsets.ModelViewSet):
             event="analysis.summary.requested",
             data={
                 "job_id": str(job.id),
-                "provider_chain": provider_chain,
-                "allow_offline_fallback": allow_offline,
-                "stage_overrides": stage_overrides,
+                "llm_config_id": llm_config_id,
             },
         )
         return Response({"status": "queued"}, status=status.HTTP_202_ACCEPTED)

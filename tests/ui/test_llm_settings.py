@@ -7,7 +7,7 @@ from django.test import Client
 
 from apps.platform.accounts.models import Organization, User
 from apps.platform.cases.models import Case, CaseMembership
-from apps.platform.operations.models import LLMProviderSetting
+from apps.platform.operations.models import LLMConfiguration
 
 
 @pytest.mark.django_db
@@ -23,21 +23,21 @@ def test_case_llm_settings_updates_summary_defaults(settings):
 
     payload = {
         "target": "summary",
-        "overrides": {
-            "summarize.context_builder": {
-                "provider": "local",
-                "model": "offline_v1",
-                "fallbacks": [],
-                "allow_offline_fallback": True,
+        "configuration": {
+            "name": "Primary summary",
+            "provider_chain": ["azure"],
+            "stage_map": {
+                "summarize.context_builder": {
+                    "provider": "azure",
+                    "model": "gpt-4o-mini",
+                },
+                "summarize.extract_outline": {
+                    "provider": "azure",
+                    "model": "gpt-4o-mini",
+                },
             },
-            "summarize.extract_outline": {
-                "provider": "azure",
-                "model": "gpt-4o-mini",
-                "fallbacks": ["local", "azure"],
-                "allow_offline_fallback": False,
-            },
+            "set_default": True,
         },
-        "provider_chain": ["azure", "local", "azure"],
     }
 
     resp = client.post(
@@ -49,23 +49,16 @@ def test_case_llm_settings_updates_summary_defaults(settings):
     assert resp.status_code == 200
     data = resp.json()
     assert data["status"] == "ok"
-    overrides = data["overrides"]
-    assert overrides["summarize.context_builder"]["provider"] == "local"
-    assert overrides["summarize.extract_outline"]["fallbacks"] == ["local", "azure"]
-    # provider_chain should be deduplicated and lower-cased
-    assert data["provider_chain"] == ["azure", "local"]
+    assert data["target"] == "summary"
+    assert isinstance(data.get("configurations"), list)
+    assert data.get("active")
 
-    stored = {
-        setting.stage_key: setting
-        for setting in LLMProviderSetting.objects.filter(organization=org)
-    }
-    assert "summarize.context_builder" in stored
-    assert stored["summarize.context_builder"].provider == "local"
-    assert stored["summarize.context_builder"].fallbacks == []
-    assert stored["summarize.context_builder"].allow_local_fallback is True
-
-    assert "summarize.extract_outline" in stored
-    assert stored["summarize.extract_outline"].provider == "azure"
-    assert stored["summarize.extract_outline"].model == "gpt-4o-mini"
-    assert stored["summarize.extract_outline"].fallbacks == ["local", "azure"]
-
+    stored_configs = list(LLMConfiguration.objects.filter(organization=org, target="summary"))
+    assert len(stored_configs) == 1
+    stored = stored_configs[0]
+    assert stored.name == "Primary summary"
+    assert stored.is_default is True
+    assert stored.provider_chain == ["azure"]
+    stage_map = stored.stage_map or {}
+    assert stage_map["summarize.context_builder"]["provider"] == "azure"
+    assert stage_map["summarize.context_builder"]["model"] == "gpt-4o-mini"
