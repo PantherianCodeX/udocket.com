@@ -33,8 +33,9 @@ def test_organization_settings_renders_and_manages_providers(settings):
             "display_name": "Azure Canada",
             "endpoint": "https://example.canadacentral.azure.com",
             "api_key": "secret",
-            "models_json": "",
+            "models_payload": "",
             "metadata_json": "{\"azure_deployment\": \"gpt-4o\"}",
+            "is_enabled": "on",
         },
         follow=True,
     )
@@ -64,6 +65,8 @@ def test_organization_settings_saves_configuration(settings):
             "display_name": "Azure",
             "endpoint": "https://example.canadacentral.azure.com",
             "api_key": "secret",
+            "metadata_json": "{\"azure_deployment\": \"gpt-4o\"}",
+            "is_enabled": "on",
         },
     )
 
@@ -92,3 +95,69 @@ def test_organization_settings_saves_configuration(settings):
     assert stored.stage_map["summarize.context_builder"]["model"] == "gpt-4o-mini"
     assert stored.stage_map["summarize.context_builder"]["max_tokens"] == 6000
     assert stored.stage_map["summarize.context_builder"]["options"]["temperature"] == 0.35
+
+
+@pytest.mark.django_db
+def test_provider_test_action_reports_status(settings):
+    settings.PLATFORM_DEV_OPEN = True
+    org = Organization.objects.create(id="org-test", name="Test Org")
+    user = User.objects.create_user(username="tester", password="password")
+    OrganizationMembership.objects.create(organization=org, user=user, role=OrganizationMembership.Role.ADMIN)
+
+    client = Client()
+    client.force_login(user)
+    session = client.session
+    session["admin_active_org_id"] = org.id
+    session.save()
+
+    client.post(
+        "/settings/organization/",
+        data={
+            "action": "provider-upsert",
+            "provider": "azure",
+            "display_name": "Azure",
+            "endpoint": "https://example.canadacentral.azure.com",
+            "api_key": "secret",
+            "metadata_json": "{\"azure_deployment\": \"gpt-4o\"}",
+            "is_enabled": "on",
+        },
+    )
+
+    resp = client.post(
+        "/settings/organization/",
+        data={
+            "action": "provider-test",
+            "provider": "azure",
+        },
+        follow=True,
+    )
+    assert resp.status_code == 200
+    assert b"passed validation" in resp.content
+
+
+@pytest.mark.django_db
+def test_provider_enable_blocked_when_not_configured(settings):
+    settings.PLATFORM_DEV_OPEN = True
+    org = Organization.objects.create(id="org-block", name="Block Org")
+    user = User.objects.create_user(username="block-user", password="password")
+    OrganizationMembership.objects.create(organization=org, user=user, role=OrganizationMembership.Role.ADMIN)
+
+    client = Client()
+    client.force_login(user)
+    session = client.session
+    session["admin_active_org_id"] = org.id
+    session.save()
+
+    client.get("/settings/organization/")
+
+    resp = client.post(
+        "/settings/organization/",
+        data={
+            "action": "provider-toggle",
+            "provider": "azure",
+            "enabled": "1",
+        },
+        follow=True,
+    )
+    assert resp.status_code == 200
+    assert b"Complete required settings before enabling" in resp.content

@@ -1,0 +1,40 @@
+{% extends "platform_ui/layouts/base.html" %}
+{% load static %}
+
+{% block content %}
+<section class="space-y-6">
+  <header class="rounded-2xl border border-white/10 bg-white/10 p-6 shadow-lg shadow-black/30">
+    <h1 class="text-3xl font-semibold text-white">Organization settings</h1>
+    <p class="mt-2 text-sm text-slate-300">
+      Configure shared LLM providers and analysis defaults for
+      <span class="font-semibold text-slate-100">{{ organization.name }}</span>.
+    </p>
+  </header>
+
+  {% if messages %}
+  <div class="space-y-2">
+    {% for message in messages %}
+      <div class="rounded-xl border border-white/10 px-4 py-3 text-sm {% if message.tags == 'error' %}bg-rose-500/20 text-rose-100{% elif message.tags == 'success' %}bg-emerald-500/10 text-emerald-100 border-emerald-400/40{% else %}bg-white/10 text-slate-100{% endif %}">
+        {{ message }}
+      </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <nav class="flex flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-white/5 p-3 shadow-lg shadow-black/25">
+    {% for item in nav_items %}
+      <a href="{{ item.url }}"
+         class="inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm transition {% if active_section == item.key %}bg-primary-500/20 text-primary-100 border border-primary-400/40{% else %}bg-slate-900/60 text-slate-200 border border-white/10 hover:border-primary-400 hover:text-white{% endif %}">
+        {{ item.label }}
+      </a>
+    {% endfor %}
+  </nav>
+
+  {% block organization_body %}{% endblock %}
+</section>
+{% endblock %}
+
+{% block body_scripts %}
+  {{ block.super }}
+  <script src="{% static 'platform_ui/js/settings/organization_llm.js' %}"></script>
+{% endblock %}

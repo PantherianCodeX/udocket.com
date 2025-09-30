@@ -273,6 +273,7 @@ def get_org_provider_credentials(organization_id: str | None) -> Dict[str, Dict[
             "models": list(record.models_payload or []),
             "has_api_key": bool(record.api_key_encrypted),
             "metadata": record.metadata or {},
+            "is_enabled": record.is_enabled,
         }
     return creds
 
@@ -295,6 +296,9 @@ def _catalog_models_to_options(models) -> List[Dict[str, object]]:
                 "label": label or model_name,
                 "cost_tier": cost_tier or "standard",
                 "max_output_tokens": max_output,
+                "context_window_tokens": getattr(model_meta, "context_window_tokens", None)
+                if hasattr(model_meta, "context_window_tokens")
+                else (model_meta.get("context_window_tokens") if isinstance(model_meta, dict) else None),
             }
         )
     return options
@@ -314,9 +318,96 @@ def _credential_models_to_options(models: Sequence[dict]) -> List[Dict[str, obje
                 "label": item.get("label") or name,
                 "cost_tier": item.get("cost_tier") or "standard",
                 "max_output_tokens": item.get("max_output_tokens"),
+                "context_window_tokens": item.get("context_window_tokens"),
             }
         )
     return options
+
+
+def default_models_payload(provider) -> List[dict]:
+    payload: List[dict] = []
+    models = getattr(provider, "models", {}) or {}
+    for model_name, model_meta in models.items():
+        label = getattr(model_meta, "label", None) or (
+            model_meta.get("label") if isinstance(model_meta, dict) else None
+        )
+        cost_tier = getattr(model_meta, "cost_tier", None) or (
+            model_meta.get("cost_tier") if isinstance(model_meta, dict) else None
+        )
+        max_output = getattr(model_meta, "max_output_tokens", None) or (
+            model_meta.get("max_output_tokens") if isinstance(model_meta, dict) else None
+        )
+        context_window = getattr(model_meta, "context_window_tokens", None) or (
+            model_meta.get("context_window_tokens") if isinstance(model_meta, dict) else None
+        )
+        payload.append(
+            {
+                "name": model_name,
+                "label": label or model_name,
+                "cost_tier": cost_tier or "standard",
+                "max_output_tokens": max_output,
+                "context_window_tokens": context_window,
+            }
+        )
+    return payload
+
+
+def ensure_provider_templates(
+    *,
+    organization_id: str | None,
+    llm_settings=None,
+) -> None:
+    if not organization_id:
+        return
+    llm_settings = llm_settings or load_llm_settings()
+    for provider_name, provider in llm_settings.providers.items():
+        LLMProviderCredential.objects.get_or_create(
+            organization_id=organization_id,
+            provider=provider_name,
+            defaults={
+                "display_name": provider.display_name,
+                "endpoint": provider.default_endpoint or "",
+                "models_payload": default_models_payload(provider),
+                "metadata": {},
+                "is_enabled": False,
+            },
+        )
+
+
+def evaluate_provider_setup(
+    *,
+    provider,
+    endpoint: str | None,
+    has_api_key: bool,
+    metadata: Optional[dict],
+    models: Optional[Iterable[dict]],
+) -> Dict[str, object]:
+    issues: List[str] = []
+    metadata_dict: Dict[str, object] = {}
+    if isinstance(metadata, dict):
+        metadata_dict = {str(k): v for k, v in metadata.items()}
+    endpoint_value = (endpoint or "").strip()
+    if not endpoint_value:
+        endpoint_value = (provider.default_endpoint or "").strip()
+    if provider.api_kind == "azure_openai":
+        if not endpoint_value:
+            issues.append("Azure endpoint is required")
+        elif "<" in endpoint_value or ">" in endpoint_value:
+            issues.append("Replace the placeholder resource name in the Azure endpoint")
+        deployment = metadata_dict.get("azure_deployment") or metadata_dict.get("default_deployment")
+        if not deployment:
+            issues.append("Add an Azure deployment name in provider metadata or stage options")
+    if provider.requires_api_key and not has_api_key:
+        issues.append("API key is required")
+
+    sanitized_models = _normalize_models(models)
+    return {
+        "ready": not issues,
+        "issues": issues,
+        "endpoint": endpoint_value,
+        "metadata": metadata_dict,
+        "models": sanitized_models,
+    }
 
 
 def build_provider_registry(
@@ -354,21 +445,45 @@ def build_provider_registry(
     for provider_name, provider in llm_settings.providers.items():
         catalog_entry = provider_catalog.get(provider_name, {})
         credential_entry = provider_credentials.get(provider_name, {})
-        configured = provider_name in provider_credentials
-        runtime_supported = provider_name in supported_set or provider_name in provider_credentials
-        available = runtime_supported and (provider.is_available() or configured)
+        analysis = evaluate_provider_setup(
+            provider=provider,
+            endpoint=credential_entry.get("endpoint"),
+            has_api_key=bool(credential_entry.get("has_api_key")),
+            metadata=credential_entry.get("metadata"),
+            models=credential_entry.get("models"),
+        )
+        is_ready = bool(analysis.get("ready"))
+        stored_enabled = bool(credential_entry.get("is_enabled"))
+        enabled = stored_enabled and is_ready
+        runtime_supported = provider_name in supported_set or bool(credential_entry)
+        base_available = provider.is_available() or bool(credential_entry)
+        available = runtime_supported and base_available and enabled
+        if not is_ready:
+            status = "not_configured"
+        elif enabled:
+            status = "enabled"
+        else:
+            status = "disabled"
         reason = ""
         if not runtime_supported:
             reason = "Not supported yet"
-        elif not available and not configured:
-            reason = "Configure credentials"
+        elif not base_available:
+            reason = "Configure runtime credentials"
+        elif status == "not_configured":
+            reason = "; ".join(str(msg) for msg in analysis.get("issues") or [])
+        elif status == "disabled":
+            reason = "Disabled"
+        if available:
+            reason = ""
 
         registry[provider_name] = {
             "value": provider_name,
             "label": provider.display_name,
             "available": available,
             "supported": runtime_supported,
-            "configured": configured,
+            "configured": is_ready,
+            "enabled": enabled,
+            "status": status,
             "default_endpoint": provider.default_endpoint or catalog_entry.get("default_endpoint"),
             "requires_api_key": bool(
                 catalog_entry.get("requires_api_key")
@@ -381,6 +496,8 @@ def build_provider_registry(
             "source": "catalog",
             "api_kind": provider.api_kind,
             "description": provider.description or catalog_entry.get("description", ""),
+            "can_enable": is_ready,
+            "issues": analysis.get("issues") or [],
         }
 
     for provider_name, credential in provider_credentials.items():
@@ -400,8 +517,17 @@ def build_provider_registry(
                 existing["models"] = list(merged_models.values())
             if credential.get("endpoint"):
                 existing["endpoint"] = credential.get("endpoint")
-            existing["configured"] = True
-            existing["available"] = existing.get("available", False) or bool(credential)
+            existing["enabled"] = bool(credential.get("is_enabled")) and existing.get("configured", False)
+            if not existing.get("configured"):
+                existing["status"] = "not_configured"
+            else:
+                existing["status"] = "enabled" if existing["enabled"] else "disabled"
+            existing["available"] = (
+                existing.get("available", False)
+                or (existing["enabled"] and existing.get("supported", False))
+            )
+            if existing["status"] == "disabled":
+                existing["unavailable_reason"] = "Disabled"
             continue
 
         registry[provider_name] = {
@@ -409,7 +535,9 @@ def build_provider_registry(
             "label": credential.get("display_name") or provider_name,
             "available": True,
             "supported": True,
-            "configured": True,
+            "configured": bool(credential.get("is_enabled")),
+            "enabled": bool(credential.get("is_enabled")),
+            "status": "enabled" if credential.get("is_enabled") else "disabled",
             "default_endpoint": credential.get("endpoint") or credential.get("default_endpoint"),
             "requires_api_key": True,
             "unavailable_reason": "",
@@ -418,6 +546,8 @@ def build_provider_registry(
             "source": "credential",
             "api_kind": credential.get("api_kind") or "custom",
             "description": credential.get("description") or "",
+            "can_enable": bool(credential.get("has_api_key")),
+            "issues": [],
         }
 
     return registry
@@ -458,12 +588,27 @@ def _normalize_models(models: Optional[Iterable[dict]]) -> List[dict]:
         name = str(item.get("name") or item.get("id") or "").strip()
         if not name:
             continue
+        max_tokens_raw = item.get("max_output_tokens")
+        max_tokens: int | None = None
+        if max_tokens_raw is not None:
+            try:
+                max_tokens = int(max_tokens_raw)
+            except (TypeError, ValueError):
+                max_tokens = None
+        ctx_tokens_raw = item.get("context_window_tokens")
+        ctx_tokens: int | None = None
+        if ctx_tokens_raw is not None:
+            try:
+                ctx_tokens = int(ctx_tokens_raw)
+            except (TypeError, ValueError):
+                ctx_tokens = None
         sanitized.append(
             {
                 "name": name,
                 "label": str(item.get("label") or name),
                 "cost_tier": str(item.get("cost_tier") or "standard"),
-                "max_output_tokens": item.get("max_output_tokens"),
+                "max_output_tokens": max_tokens,
+                "context_window_tokens": ctx_tokens,
             }
         )
     return sanitized
@@ -479,6 +624,7 @@ def upsert_org_provider_credential(
     api_key: Optional[str],
     models: Optional[Iterable[dict]] = None,
     metadata: Optional[dict] = None,
+    enabled: Optional[bool] = None,
 ) -> Dict[str, object]:
     provider = provider.strip().lower()
     if not provider:
@@ -486,6 +632,7 @@ def upsert_org_provider_credential(
 
     models_payload = _normalize_models(models)
     encrypted_key = encrypt_secret(api_key)
+    enabled_value = bool(enabled) if enabled is not None else True
 
     record, _created = LLMProviderCredential.objects.get_or_create(
         organization_id=organization_id,
@@ -496,6 +643,7 @@ def upsert_org_provider_credential(
             "api_key_encrypted": encrypted_key,
             "models_payload": models_payload,
             "metadata": metadata or {},
+            "is_enabled": enabled_value,
         },
     )
 
@@ -506,9 +654,13 @@ def upsert_org_provider_credential(
             record.api_key_encrypted = encrypted_key
         record.models_payload = models_payload
         record.metadata = metadata or {}
+        if enabled is not None:
+            record.is_enabled = enabled_value
         update_fields = ["display_name", "endpoint", "models_payload", "metadata", "updated_at"]
         if api_key is not None:
             update_fields.append("api_key_encrypted")
+        if enabled is not None:
+            update_fields.append("is_enabled")
         record.save(update_fields=update_fields)
 
     return {
@@ -518,6 +670,7 @@ def upsert_org_provider_credential(
         "models": record.models_payload,
         "has_api_key": bool(record.api_key_encrypted),
         "metadata": record.metadata,
+        "is_enabled": record.is_enabled,
     }
 
 

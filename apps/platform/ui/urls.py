@@ -80,6 +80,11 @@ urlpatterns = [
     path("cases/<str:case_id>/assign-client/", views.case_assign_client, name="ui-case-assign-client"),
     path("jobs/", views.jobs, name="ui-jobs"),
     path("settings/organization/", views.organization_settings, name="ui-organization-settings"),
+    path(
+        "settings/organization/<str:section>/",
+        views.organization_settings,
+        name="ui-organization-settings-section",
+    ),
     path("org/select/", views.select_organization, name="ui-select-organization"),
     path("jobs/<uuid:job_id>/detail-panel/", views.job_detail_panel, name="ui-job-detail-panel"),
     path("permissions/", views.permissions_overview, name="ui-permissions"),

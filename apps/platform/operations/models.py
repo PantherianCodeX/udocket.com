@@ -16,6 +16,7 @@ class LLMProviderCredential(models.Model):
     api_key_encrypted = models.TextField(blank=True)
     models_payload = models.JSONField(default=list, blank=True)
     metadata = models.JSONField(default=dict, blank=True)
+    is_enabled = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
