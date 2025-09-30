@@ -709,9 +709,7 @@
         }
       });
 
-      group.addEventListener('mouseleave', () => {
-        close();
-      });
+      // Do not auto-close on minor pointer gaps; rely on outside clicks below.
     });
 
     doc.addEventListener('click', (event) => {

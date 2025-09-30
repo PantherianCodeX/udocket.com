@@ -43,7 +43,7 @@
         {{ group.label }}
         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.094l3.71-3.86a.75.75 0 111.08 1.04l-4.247 4.41a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z" clip-rule="evenodd" /></svg>
       </button>
-      <div class="invisible absolute right-0 z-10 mt-2 min-w-[14rem] origin-top-right scale-95 transform rounded-2xl border border-white/10 bg-slate-900/95 p-2 text-sm text-slate-100 opacity-0 shadow-xl shadow-black/40 transition data-[open=true]:visible data-[open=true]:scale-100 data-[open=true]:opacity-100" data-nav-group-panel>
+      <div class="invisible absolute right-0 z-10 mt-1 min-w-[14rem] origin-top-right scale-95 transform rounded-2xl border border-white/10 bg-slate-900/95 p-2 text-sm text-slate-100 opacity-0 shadow-xl shadow-black/40 transition data-[open=true]:visible data-[open=true]:scale-100 data-[open=true]:opacity-100" data-nav-group-panel>
         {% for item in group.items %}
         <a href="{{ item.url }}" class="flex items-center justify-between rounded-lg px-3 py-2 text-sm transition hover:bg-white/10 {% if active_section == item.key %}bg-primary-500/10 text-primary-100{% endif %}">
           <span>{{ item.label }}</span>
