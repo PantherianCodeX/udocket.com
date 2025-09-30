@@ -94,8 +94,9 @@ def test_build_provider_registry_marks_supported_and_unsupported(llm_settings):
     assert set(registry.keys()) == {"azure", "openai"}
 
     azure_entry = registry["azure"]
-    assert azure_entry["available"] is True
-    assert azure_entry["unavailable_reason"] == ""
+    assert azure_entry["supported"] is True
+    assert azure_entry["status"] == "not_configured"
+    assert azure_entry["enabled"] is False
 
     openai_entry = registry["openai"]
     assert openai_entry["available"] is False
@@ -128,7 +129,7 @@ def test_build_provider_registry_includes_credential_only_provider(llm_settings)
     assert set(registry.keys()) == {"azure", "openai", "custom"}
     custom_entry = registry["custom"]
     assert custom_entry["available"] is True
-    assert custom_entry["configured"] is True
+    assert custom_entry["configured"] is False
     assert custom_entry["label"] == "Custom Provider"
     assert custom_entry["models"][0]["value"] == "custom-model"
 

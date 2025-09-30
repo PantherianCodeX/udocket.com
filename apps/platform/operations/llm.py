@@ -290,15 +290,33 @@ def _catalog_models_to_options(models) -> List[Dict[str, object]]:
         max_output = getattr(model_meta, "max_output_tokens", None) or (
             model_meta.get("max_output_tokens") if isinstance(model_meta, dict) else None
         )
+        context_window = getattr(model_meta, "context_window_tokens", None) or (
+            model_meta.get("context_window_tokens") if isinstance(model_meta, dict) else None
+        )
+        default_temp = getattr(model_meta, "default_temperature", None) or (
+            model_meta.get("default_temperature") if isinstance(model_meta, dict) else None
+        )
+        origin = getattr(model_meta, "origin", None) or (
+            model_meta.get("origin") if isinstance(model_meta, dict) else None
+        )
+        default_enabled = getattr(model_meta, "default_enabled", None)
+        if default_enabled is None and isinstance(model_meta, dict):
+            default_enabled = model_meta.get("default_enabled")
+        options_payload = getattr(model_meta, "options", None) or (
+            model_meta.get("options") if isinstance(model_meta, dict) else None
+        )
         options.append(
             {
+                "name": model_name,
                 "value": model_name,
                 "label": label or model_name,
                 "cost_tier": cost_tier or "standard",
                 "max_output_tokens": max_output,
-                "context_window_tokens": getattr(model_meta, "context_window_tokens", None)
-                if hasattr(model_meta, "context_window_tokens")
-                else (model_meta.get("context_window_tokens") if isinstance(model_meta, dict) else None),
+                "context_window_tokens": context_window,
+                "default_temperature": default_temp,
+                "origin": origin,
+                "enabled": bool(default_enabled) if default_enabled is not None else True,
+                "options": options_payload if isinstance(options_payload, dict) else {},
             }
         )
     return options
@@ -314,11 +332,22 @@ def _credential_models_to_options(models: Sequence[dict]) -> List[Dict[str, obje
             continue
         options.append(
             {
+                "name": name,
                 "value": name,
                 "label": item.get("label") or name,
                 "cost_tier": item.get("cost_tier") or "standard",
                 "max_output_tokens": item.get("max_output_tokens"),
                 "context_window_tokens": item.get("context_window_tokens"),
+                "max_input_tokens": item.get("max_input_tokens"),
+                "max_chunk_chars": item.get("max_chunk_chars"),
+                "chunk_overlap_tokens": item.get("chunk_overlap_tokens"),
+                "max_prompt_chars": item.get("max_prompt_chars"),
+                "max_prompt_segments": item.get("max_prompt_segments"),
+                "default_temperature": item.get("default_temperature"),
+                "origin": item.get("origin"),
+                "enabled": item.get("enabled", True),
+                "deployment_env": item.get("deployment_env"),
+                "options": item.get("options") or {},
             }
         )
     return options
@@ -340,6 +369,18 @@ def default_models_payload(provider) -> List[dict]:
         context_window = getattr(model_meta, "context_window_tokens", None) or (
             model_meta.get("context_window_tokens") if isinstance(model_meta, dict) else None
         )
+        default_temp = getattr(model_meta, "default_temperature", None) or (
+            model_meta.get("default_temperature") if isinstance(model_meta, dict) else None
+        )
+        origin = getattr(model_meta, "origin", None) or (
+            model_meta.get("origin") if isinstance(model_meta, dict) else None
+        )
+        default_enabled = getattr(model_meta, "default_enabled", None)
+        if default_enabled is None and isinstance(model_meta, dict):
+            default_enabled = model_meta.get("default_enabled")
+        options_payload = getattr(model_meta, "options", None) or (
+            model_meta.get("options") if isinstance(model_meta, dict) else None
+        )
         payload.append(
             {
                 "name": model_name,
@@ -347,6 +388,10 @@ def default_models_payload(provider) -> List[dict]:
                 "cost_tier": cost_tier or "standard",
                 "max_output_tokens": max_output,
                 "context_window_tokens": context_window,
+                "default_temperature": default_temp,
+                "origin": origin,
+                "enabled": bool(default_enabled) if default_enabled is not None else True,
+                "options": options_payload if isinstance(options_payload, dict) else {},
             }
         )
     return payload
@@ -401,6 +446,16 @@ def evaluate_provider_setup(
         issues.append("API key is required")
 
     sanitized_models = _normalize_models(models)
+    if not sanitized_models:
+        sanitized_models = default_models_payload(provider)
+    if not sanitized_models:
+        issues.append("Add at least one model before enabling this provider")
+    else:
+        any_enabled = any(
+            m.get("enabled", True) for m in sanitized_models if isinstance(m, dict)
+        )
+        if not any_enabled:
+            issues.append("Enable at least one model before enabling this provider")
     return {
         "ready": not issues,
         "issues": issues,
@@ -498,6 +553,8 @@ def build_provider_registry(
             "description": provider.description or catalog_entry.get("description", ""),
             "can_enable": is_ready,
             "issues": analysis.get("issues") or [],
+            "category": getattr(provider, "category", "creator"),
+            "hosted_creators": list(getattr(provider, "hosted_creators", [])),
         }
 
     for provider_name, credential in provider_credentials.items():
@@ -548,6 +605,8 @@ def build_provider_registry(
             "description": credential.get("description") or "",
             "can_enable": bool(credential.get("has_api_key")),
             "issues": [],
+            "category": credential.get("category") or "custom",
+            "hosted_creators": credential.get("hosted_creators") or [],
         }
 
     return registry
@@ -588,29 +647,83 @@ def _normalize_models(models: Optional[Iterable[dict]]) -> List[dict]:
         name = str(item.get("name") or item.get("id") or "").strip()
         if not name:
             continue
-        max_tokens_raw = item.get("max_output_tokens")
-        max_tokens: int | None = None
-        if max_tokens_raw is not None:
+        payload: Dict[str, object] = {
+            "name": name,
+            "label": str(item.get("label") or name),
+            "cost_tier": str(item.get("cost_tier") or "standard"),
+        }
+
+        def _int_field(source_key: str) -> int | None:
+            raw = item.get(source_key)
+            if raw in (None, ""):
+                return None
             try:
-                max_tokens = int(max_tokens_raw)
+                return int(raw)
             except (TypeError, ValueError):
-                max_tokens = None
-        ctx_tokens_raw = item.get("context_window_tokens")
-        ctx_tokens: int | None = None
-        if ctx_tokens_raw is not None:
+                return None
+
+        def _float_field(source_key: str) -> float | None:
+            raw = item.get(source_key)
+            if raw in (None, ""):
+                return None
             try:
-                ctx_tokens = int(ctx_tokens_raw)
+                return float(raw)
             except (TypeError, ValueError):
-                ctx_tokens = None
-        sanitized.append(
-            {
-                "name": name,
-                "label": str(item.get("label") or name),
-                "cost_tier": str(item.get("cost_tier") or "standard"),
-                "max_output_tokens": max_tokens,
-                "context_window_tokens": ctx_tokens,
-            }
-        )
+                return None
+
+        max_tokens = _int_field("max_output_tokens")
+        if max_tokens is not None:
+            payload["max_output_tokens"] = max_tokens
+
+        ctx_tokens = _int_field("context_window_tokens")
+        if ctx_tokens is not None:
+            payload["context_window_tokens"] = ctx_tokens
+
+        input_tokens = _int_field("max_input_tokens")
+        if input_tokens is not None:
+            payload["max_input_tokens"] = input_tokens
+
+        chunk_chars = _int_field("max_chunk_chars")
+        if chunk_chars is not None:
+            payload["max_chunk_chars"] = chunk_chars
+
+        chunk_overlap = _int_field("chunk_overlap_tokens")
+        if chunk_overlap is not None:
+            payload["chunk_overlap_tokens"] = chunk_overlap
+
+        prompt_chars = _int_field("max_prompt_chars")
+        if prompt_chars is not None:
+            payload["max_prompt_chars"] = prompt_chars
+
+        prompt_segments = _int_field("max_prompt_segments")
+        if prompt_segments is not None:
+            payload["max_prompt_segments"] = prompt_segments
+
+        default_temp = _float_field("default_temperature")
+        if default_temp is not None:
+            payload["default_temperature"] = default_temp
+
+        deployment = item.get("deployment_env")
+        if deployment:
+            payload["deployment_env"] = str(deployment)
+
+        origin = item.get("origin")
+        if origin:
+            payload["origin"] = str(origin)
+
+        enabled = item.get("enabled")
+        if isinstance(enabled, bool):
+            payload["enabled"] = enabled
+        elif isinstance(enabled, str):
+            payload["enabled"] = enabled.lower() not in {"false", "0", "no"}
+        else:
+            payload["enabled"] = True
+
+        options = item.get("options")
+        if isinstance(options, dict):
+            payload["options"] = options
+
+        sanitized.append(payload)
     return sanitized
 
 

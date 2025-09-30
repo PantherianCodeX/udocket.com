@@ -4,7 +4,7 @@ import json
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 BASE_DIR = Path(__file__).resolve().parents[3]
 PROVIDERS_PATH = BASE_DIR / "config" / "llm_providers.json"
@@ -20,6 +20,9 @@ class LLMProviderModel:
     context_window_tokens: Optional[int] = None
     default_temperature: Optional[float] = None
     deployment_env: Optional[str] = None
+    origin: Optional[str] = None
+    default_enabled: bool = True
+    options: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -32,6 +35,8 @@ class LLMProvider:
     default_endpoint: str = ""
     requires_api_key: bool = True
     description: str = ""
+    category: str = "creator"
+    hosted_creators: List[str] = field(default_factory=list)
 
     def is_available(self) -> bool:
         return all(os.getenv(key) for key in self.env_requirements)
@@ -107,6 +112,14 @@ def load_llm_settings(
                 context_window_tokens=model_cfg.get("context_window_tokens"),
                 default_temperature=model_cfg.get("default_temperature"),
                 deployment_env=model_cfg.get("deployment_env"),
+                origin=model_cfg.get("origin"),
+                default_enabled=bool(
+                    model_cfg.get("default_enabled", True)
+                ),
+                options={
+                    str(k): v
+                    for k, v in (model_cfg.get("options") or {}).items()
+                },
             )
         provider_map[name] = LLMProvider(
             name=name,
@@ -117,6 +130,8 @@ def load_llm_settings(
             default_endpoint=str(payload.get("default_endpoint") or ""),
             requires_api_key=bool(payload.get("requires_api_key", True)),
             description=str(payload.get("description") or ""),
+            category=str(payload.get("category") or "creator"),
+            hosted_creators=[str(entry) for entry in payload.get("hosted_creators", []) if isinstance(entry, str)],
         )
 
     assignments_payload = _load_json(assignments_path).get("stages", {})

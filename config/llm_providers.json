@@ -1,7 +1,15 @@
 {
   "providers": {
     "azure": {
-      "display_name": "Azure OpenAI (Canada)",
+      "display_name": "Azure",
+      "description": "Azure AI services hosting OpenAI-compatible deployments in Canadian regions.",
+      "category": "platform",
+      "hosted_creators": [
+        "openai",
+        "anthropic",
+        "meta",
+        "mistral"
+      ],
       "env_requirements": [
         "AZURE_OPENAI_ENDPOINT",
         "AZURE_OPENAI_API_KEY"
@@ -14,7 +22,9 @@
           "cost_tier": "standard",
           "max_output_tokens": 16384,
           "context_window_tokens": 128000,
-          "default_temperature": 1.0
+          "default_temperature": 1.0,
+          "origin": "openai",
+          "default_enabled": true
         },
         "gpt-4o": {
           "label": "GPT-4o Premium",
@@ -22,7 +32,9 @@
           "max_output_tokens": 8000,
           "context_window_tokens": 128000,
           "default_temperature": 1.0,
-          "deployment_env": "AZURE_OPENAI_DEPLOYMENT_GPT_4O"
+          "origin": "openai",
+          "deployment_env": "AZURE_OPENAI_DEPLOYMENT_GPT_4O",
+          "default_enabled": true
         },
         "gpt-4.1": {
           "label": "GPT-4.1",
@@ -30,7 +42,9 @@
           "max_output_tokens": 32000,
           "context_window_tokens": 200000,
           "default_temperature": 1.0,
-          "deployment_env": "AZURE_OPENAI_DEPLOYMENT_GPT_4_1"
+          "origin": "openai",
+          "deployment_env": "AZURE_OPENAI_DEPLOYMENT_GPT_4_1",
+          "default_enabled": true
         },
         "gpt-5-chat": {
           "label": "GPT-5 Chat",
@@ -38,7 +52,9 @@
           "max_output_tokens": 32000,
           "context_window_tokens": 220000,
           "default_temperature": 1.0,
-          "deployment_env": "AZURE_OPENAI_DEPLOYMENT_GPT_5_CHAT"
+          "origin": "openai",
+          "deployment_env": "AZURE_OPENAI_DEPLOYMENT_GPT_5_CHAT",
+          "default_enabled": false
         },
         "gpt-5-mini": {
           "label": "GPT-5 Mini",
@@ -46,7 +62,9 @@
           "max_output_tokens": 16000,
           "context_window_tokens": 200000,
           "default_temperature": 1.0,
-          "deployment_env": "AZURE_OPENAI_DEPLOYMENT_GPT_5_MINI"
+          "origin": "openai",
+          "deployment_env": "AZURE_OPENAI_DEPLOYMENT_GPT_5_MINI",
+          "default_enabled": false
         },
         "gpt-5-nano": {
           "label": "GPT-5 Nano",
@@ -54,7 +72,9 @@
           "max_output_tokens": 8000,
           "context_window_tokens": 128000,
           "default_temperature": 1.0,
-          "deployment_env": "AZURE_OPENAI_DEPLOYMENT_GPT_5_NANO"
+          "origin": "openai",
+          "deployment_env": "AZURE_OPENAI_DEPLOYMENT_GPT_5_NANO",
+          "default_enabled": false
         }
       },
       "api_kind": "azure_openai"
@@ -71,17 +91,26 @@
         "gpt-4o-mini": {
           "label": "GPT-4o Mini",
           "cost_tier": "standard",
-          "max_output_tokens": 4000
+          "max_output_tokens": 4000,
+          "context_window_tokens": 128000,
+          "origin": "openai",
+          "default_enabled": true
         },
         "gpt-4o": {
           "label": "GPT-4o",
           "cost_tier": "premium",
-          "max_output_tokens": 8000
+          "max_output_tokens": 8000,
+          "context_window_tokens": 128000,
+          "origin": "openai",
+          "default_enabled": true
         },
         "gpt-4.1": {
           "label": "GPT-4.1",
           "cost_tier": "premium",
-          "max_output_tokens": 32000
+          "max_output_tokens": 32000,
+          "context_window_tokens": 200000,
+          "origin": "openai",
+          "default_enabled": true
         }
       },
       "api_kind": "openai"
@@ -132,7 +161,13 @@
     },
     "ollama": {
       "display_name": "Ollama (Local)",
-      "description": "Self-hosted models served by the local Ollama runtime.",
+      "description": "Self-hosted platform for running open models locally via the Ollama runtime.",
+      "category": "platform",
+      "hosted_creators": [
+        "meta",
+        "mistral",
+        "open_source"
+      ],
       "env_requirements": [
         "OLLAMA_BASE_URL"
       ],
@@ -142,12 +177,18 @@
         "llama3": {
           "label": "LLaMA 3",
           "cost_tier": "local",
-          "max_output_tokens": 4096
+          "max_output_tokens": 4096,
+          "context_window_tokens": 8192,
+          "origin": "meta",
+          "default_enabled": true
         },
         "mistral": {
           "label": "Mistral 7B",
           "cost_tier": "local",
-          "max_output_tokens": 4096
+          "max_output_tokens": 4096,
+          "context_window_tokens": 8192,
+          "origin": "mistral",
+          "default_enabled": true
         }
       },
       "api_kind": "ollama"
@@ -336,6 +377,12 @@
     "bedrock": {
       "display_name": "AWS Bedrock",
       "description": "Amazon Bedrock foundation models using AWS credentials.",
+      "category": "platform",
+      "hosted_creators": [
+        "anthropic",
+        "meta",
+        "amazon"
+      ],
       "env_requirements": [
         "AWS_ACCESS_KEY_ID",
         "AWS_SECRET_ACCESS_KEY",
@@ -347,12 +394,18 @@
         "anthropic.claude-3-sonnet-20240229-v1:0": {
           "label": "Claude 3 Sonnet (Bedrock)",
           "cost_tier": "premium",
-          "max_output_tokens": 8000
+          "max_output_tokens": 8000,
+          "context_window_tokens": 200000,
+          "origin": "anthropic",
+          "default_enabled": true
         },
         "meta.llama3-70b-instruct-v1:0": {
           "label": "LLaMA 3 70B (Bedrock)",
           "cost_tier": "premium",
-          "max_output_tokens": 4000
+          "max_output_tokens": 4000,
+          "context_window_tokens": 8192,
+          "origin": "meta",
+          "default_enabled": true
         }
       },
       "api_kind": "bedrock"

@@ -160,4 +160,4 @@ def test_provider_enable_blocked_when_not_configured(settings):
         follow=True,
     )
     assert resp.status_code == 200
-    assert b"Complete required settings before enabling" in resp.content
+    assert b"API key is required" in resp.content

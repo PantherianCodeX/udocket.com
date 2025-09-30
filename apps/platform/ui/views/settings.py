@@ -67,6 +67,15 @@ def _provider_models_from_post(request: HttpRequest) -> List[dict]:
     tiers = request.POST.getlist("model_cost_tier")
     max_tokens = request.POST.getlist("model_max_output_tokens")
     ctx_tokens = request.POST.getlist("model_context_window_tokens")
+    origins = request.POST.getlist("model_origin")
+    default_temps = request.POST.getlist("model_default_temperature")
+    max_input_tokens = request.POST.getlist("model_max_input_tokens")
+    max_chunk_chars = request.POST.getlist("model_max_chunk_chars")
+    chunk_overlap_tokens = request.POST.getlist("model_chunk_overlap_tokens")
+    max_prompt_chars = request.POST.getlist("model_max_prompt_chars")
+    max_prompt_segments = request.POST.getlist("model_max_prompt_segments")
+    deployment_envs = request.POST.getlist("model_deployment_env")
+    options_json = request.POST.getlist("model_options_json")
     models: List[dict] = []
     for index, raw_name in enumerate(names):
         name = (raw_name or "").strip()
@@ -80,6 +89,7 @@ def _provider_models_from_post(request: HttpRequest) -> List[dict]:
             "name": name,
             "label": (label or name).strip(),
             "cost_tier": (tier or "standard").strip() or "standard",
+            "enabled": True,
         }
         if max_token_raw:
             try:
@@ -91,6 +101,51 @@ def _provider_models_from_post(request: HttpRequest) -> List[dict]:
                 payload["context_window_tokens"] = int(ctx_token_raw)
             except ValueError:
                 pass
+        origin_raw = origins[index] if index < len(origins) else ""
+        if origin_raw:
+            payload["origin"] = origin_raw.strip()
+        temp_raw = default_temps[index] if index < len(default_temps) else ""
+        if temp_raw:
+            try:
+                payload["default_temperature"] = float(temp_raw)
+            except ValueError:
+                pass
+
+        options_payload: Dict[str, Any] = {}
+
+        def _int_field(source: List[str], container_key: str) -> None:
+            raw = source[index] if index < len(source) else ""
+            if not raw:
+                return
+            try:
+                value = int(raw)
+            except ValueError:
+                return
+            payload[container_key] = value
+            options_payload[container_key] = value
+
+        _int_field(max_input_tokens, "max_input_tokens")
+        _int_field(max_chunk_chars, "max_chunk_chars")
+        _int_field(chunk_overlap_tokens, "chunk_overlap_tokens")
+        _int_field(max_prompt_chars, "max_prompt_chars")
+        _int_field(max_prompt_segments, "max_prompt_segments")
+
+        deployment_raw = deployment_envs[index] if index < len(deployment_envs) else ""
+        if deployment_raw:
+            payload["deployment_env"] = deployment_raw.strip()
+            options_payload["azure_deployment"] = deployment_raw.strip()
+
+        options_raw = options_json[index] if index < len(options_json) else ""
+        if options_raw:
+            try:
+                parsed_options = json.loads(options_raw)
+                if isinstance(parsed_options, dict):
+                    options_payload.update(parsed_options)
+            except json.JSONDecodeError:
+                pass
+
+        if options_payload:
+            payload["options"] = options_payload
         models.append(payload)
     return models
 
@@ -219,9 +274,21 @@ def organization_settings(
 
     selected_provider_key = (request.GET.get("provider") or "").strip().lower()
 
+    nav_primary = nav_items[0] if nav_items else None
+    tool_items = [item for item in nav_items if item["key"] != "providers"]
+    nav_groups: List[Dict[str, object]] = []
+    if tool_items:
+        nav_groups.append({
+            "label": "Tool configurations",
+            "items": tool_items,
+        })
+
     base_context = {
         "organization": organization,
         "nav_items": nav_items,
+        "nav_primary": nav_primary,
+        "nav_groups": nav_groups,
+        "nav_pills": [],
         "active_section": active_section,
         "selected_provider": selected_provider_key,
     }
@@ -276,23 +343,42 @@ def organization_settings(
                 cred = provider_credentials.get(provider_key)
                 if not cred:
                     errors.append("Provider credential not found.")
-                elif desired and not (entry and entry.get("can_enable")):
-                    errors.append("Complete required settings before enabling this provider.")
                 else:
-                    upsert_org_provider_credential(
-                        organization_id=str(organization.id),
-                        provider=provider_key,
-                        display_name=cred.get("display_name") or provider_key,
-                        endpoint=cred.get("endpoint") or "",
-                        api_key=None,
-                        models=cred.get("models") or [],
-                        metadata=cred.get("metadata") or {},
-                        enabled=desired,
-                    )
-                    messages.success(
-                        request,
-                        f"Provider '{provider_key}' {'enabled' if desired else 'disabled'}.",
-                    )
+                    provider_obj = llm_settings.provider(provider_key)
+                    if not provider_obj:
+                        errors.append("Unknown provider selected.")
+                    else:
+                        analysis = evaluate_provider_setup(
+                            provider=provider_obj,
+                            endpoint=cred.get("endpoint"),
+                            has_api_key=bool(cred.get("has_api_key")),
+                            metadata=cred.get("metadata"),
+                            models=cred.get("models"),
+                        )
+                        if desired and not analysis.get("ready"):
+                            issues = analysis.get("issues") or [
+                                "Provider validation failed."
+                            ]
+                            errors.extend(str(issue) for issue in issues)
+                        elif desired and not (entry and entry.get("can_enable")):
+                            errors.append(
+                                "Complete required settings before enabling this provider."
+                            )
+                        else:
+                            upsert_org_provider_credential(
+                                organization_id=str(organization.id),
+                                provider=provider_key,
+                                display_name=cred.get("display_name") or provider_key,
+                                endpoint=cred.get("endpoint") or "",
+                                api_key=None,
+                                models=cred.get("models") or [],
+                                metadata=cred.get("metadata") or {},
+                                enabled=desired,
+                            )
+                            messages.success(
+                                request,
+                                f"Provider '{provider_key}' {'enabled' if desired else 'disabled'}.",
+                            )
         elif action == "provider-test":
             provider_obj = llm_settings.provider(provider_key)
             if not provider_key:
@@ -502,20 +588,61 @@ def organization_settings(
         provider_credentials=provider_credentials,
     )
 
+    origin_overrides = {
+        "openai": "OpenAI",
+        "anthropic": "Anthropic",
+        "meta": "Meta",
+        "mistral": "Mistral",
+        "aws": "AWS",
+        "ollama": "Ollama",
+        "cohere": "Cohere",
+        "google": "Google",
+        "open_source": "Open Source",
+        "amazon": "Amazon",
+    }
+    creator_labels: Dict[str, str] = {}
+    for catalog_entry in provider_catalog.values():
+        for model_meta in (catalog_entry.get("models") or {}).values():
+            origin = model_meta.get("origin")
+            if not origin:
+                continue
+            label = (
+                model_meta.get("origin_label")
+                or origin_overrides.get(origin)
+                or origin.replace("_", " ").title()
+            )
+            creator_labels.setdefault(origin, label)
+    creator_options = [
+        {"value": key, "label": creator_labels[key]} for key in sorted(creator_labels.keys())
+    ]
+    if "custom" not in creator_labels:
+        creator_options.append({"value": "custom", "label": "Custom / Other"})
+
     if active_section == "providers":
         provider_list = []
         for name, entry in sorted(provider_registry.items()):
+            models = entry.get("models") or []
+            enabled_count = sum(1 for model in models if model.get("enabled", True))
+            hosted_labels = []
+            for creator in entry.get("hosted_creators") or []:
+                label = origin_overrides.get(creator) or creator_labels.get(creator)
+                if not label:
+                    label = creator.replace("_", " ").title()
+                hosted_labels.append(label)
             provider_list.append(
                 {
                     "key": name,
                     "label": entry.get("label", name),
                     "status": entry.get("status", "not_configured"),
-                    "description": entry.get("description"),
                     "endpoint": entry.get("endpoint"),
                     "configured": entry.get("configured", False),
                     "enabled": entry.get("enabled", False),
                     "available": entry.get("available", False),
-                    "models": entry.get("models") or [],
+                    "models": models,
+                    "models_enabled_count": enabled_count,
+                    "models_total_count": len(models),
+                    "category": entry.get("category") or "creator",
+                    "hosted_creators": hosted_labels,
                     "issues": entry.get("issues") or [],
                     "can_enable": entry.get("can_enable", False),
                     "unavailable_reason": entry.get("unavailable_reason"),
@@ -529,6 +656,7 @@ def organization_settings(
             "provider_credentials": provider_credentials,
             "providers": provider_list,
             "selected_provider": selected_provider_key,
+            "model_creator_options": creator_options,
         }
         return render(
             request,
@@ -620,6 +748,8 @@ def organization_settings(
         if not entry.get("enabled"):
             continue
         for model in entry.get("models") or []:
+            if model.get("enabled") is False:
+                continue
             model_options.append(
                 {
                     "value": model.get("value"),
@@ -628,6 +758,7 @@ def organization_settings(
                     "provider_label": entry.get("label", provider_name),
                     "context_window_tokens": model.get("context_window_tokens"),
                     "max_output_tokens": model.get("max_output_tokens"),
+                    "origin": model.get("origin"),
                 }
             )
 
