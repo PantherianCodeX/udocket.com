@@ -174,7 +174,10 @@ def _extract_provider_form_data(
     models_payload_compiled = (request.POST.get("models_payload_compiled") or "").strip()
     metadata_json = (request.POST.get("metadata_json") or "").strip()
     enabled_flag = request.POST.get("is_enabled")
-    enabled_value = enabled_flag in {"1", "true", "on"}
+    if enabled_flag is None:
+        enabled_value = bool(existing.get("is_enabled")) if existing else False
+    else:
+        enabled_value = enabled_flag in {"1", "true", "on"}
 
     if models_payload_override:
         models_payload = _parse_json_field(
@@ -248,6 +251,10 @@ def organization_settings(
     )
 
     provider_catalog = load_provider_catalog()
+    if not selected_provider_key:
+        for candidate in provider_catalog.keys():
+            selected_provider_key = candidate
+            break
     provider_credentials = get_org_provider_credentials(str(organization.id))
     provider_registry = build_provider_registry(
         organization_id=str(organization.id),
@@ -619,33 +626,74 @@ def organization_settings(
         creator_options.append({"value": "custom", "label": "Custom / Other"})
 
     if active_section == "providers":
-        provider_list = []
-        for name, entry in sorted(provider_registry.items()):
-            models = entry.get("models") or []
-            enabled_count = sum(1 for model in models if model.get("enabled", True))
+        provider_list: List[Dict[str, Any]] = []
+        configured_names = sorted(provider_credentials.keys())
+        for name in configured_names:
+            cred_entry = provider_credentials.get(name, {})
+            registry_entry = provider_registry.get(name, {})
+            models_payload = registry_entry.get("models") or []
+            normalized_models: List[Dict[str, Any]] = []
+            for model_meta in models_payload:
+                if not isinstance(model_meta, dict):
+                    continue
+                options_meta = model_meta.get("options") if isinstance(model_meta.get("options"), dict) else {}
+                combined = {
+                    **model_meta,
+                    "display_max_input_tokens": model_meta.get("max_input_tokens")
+                    or options_meta.get("max_input_tokens"),
+                    "display_max_chunk_chars": model_meta.get("max_chunk_chars")
+                    or options_meta.get("max_chunk_chars"),
+                    "display_chunk_overlap_tokens": model_meta.get("chunk_overlap_tokens")
+                    or options_meta.get("chunk_overlap_tokens"),
+                    "display_max_prompt_chars": model_meta.get("max_prompt_chars")
+                    or options_meta.get("max_prompt_chars"),
+                    "display_max_prompt_segments": model_meta.get("max_prompt_segments")
+                    or options_meta.get("max_prompt_segments"),
+                    "display_deployment_env": model_meta.get("deployment_env")
+                    or options_meta.get("azure_deployment"),
+                }
+                normalized_models.append(combined)
+
             hosted_labels = []
-            for creator in entry.get("hosted_creators") or []:
+            for creator in registry_entry.get("hosted_creators") or []:
                 label = origin_overrides.get(creator) or creator_labels.get(creator)
                 if not label:
                     label = creator.replace("_", " ").title()
                 hosted_labels.append(label)
+
+            configured_flag = bool(registry_entry.get("configured"))
+            enabled_flag = bool(registry_entry.get("enabled")) and configured_flag
+            status_value = registry_entry.get("status")
+            if not status_value:
+                if not configured_flag:
+                    status_value = "not_configured"
+                elif enabled_flag:
+                    status_value = "enabled"
+                else:
+                    status_value = "disabled"
+
             provider_list.append(
                 {
                     "key": name,
-                    "label": entry.get("label", name),
-                    "status": entry.get("status", "not_configured"),
-                    "endpoint": entry.get("endpoint"),
-                    "configured": entry.get("configured", False),
-                    "enabled": entry.get("enabled", False),
-                    "available": entry.get("available", False),
-                    "models": models,
-                    "models_enabled_count": enabled_count,
-                    "models_total_count": len(models),
-                    "category": entry.get("category") or "creator",
+                    "label": cred_entry.get("display_name")
+                    or registry_entry.get("label")
+                    or name,
+                    "status": status_value,
+                    "endpoint": cred_entry.get("endpoint")
+                    or registry_entry.get("endpoint"),
+                    "configured": configured_flag,
+                    "enabled": enabled_flag,
+                    "available": registry_entry.get("available", False),
+                    "models": normalized_models,
+                    "models_enabled_count": sum(
+                        1 for model in normalized_models if model.get("enabled", True)
+                    ),
+                    "models_total_count": len(normalized_models),
+                    "category": registry_entry.get("category") or "creator",
                     "hosted_creators": hosted_labels,
-                    "issues": entry.get("issues") or [],
-                    "can_enable": entry.get("can_enable", False),
-                    "unavailable_reason": entry.get("unavailable_reason"),
+                    "issues": registry_entry.get("issues") or [],
+                    "can_enable": registry_entry.get("can_enable", False),
+                    "unavailable_reason": registry_entry.get("unavailable_reason"),
                 }
             )
 

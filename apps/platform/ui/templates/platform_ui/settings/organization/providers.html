@@ -9,7 +9,7 @@
       {% csrf_token %}
       <input type="hidden" name="models_payload_compiled" value="" data-provider-models-compiled>
       <div class="grid gap-4">
-        <label class="text-sm text-slate-200">Provider
+        <label class="text-sm text-slate-200">Provider template
           <select name="provider" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" data-provider-select>
             <option value="">Select a provider</option>
             {% for key, meta in provider_catalog.items %}
@@ -29,10 +29,6 @@
         <label class="inline-flex items-center gap-2 text-xs text-slate-300">
           <input type="checkbox" name="clear_api_key" class="rounded border-white/20 bg-slate-900/70 text-primary-400 focus:ring-primary-400" data-provider-clear>
           Clear saved API key
-        </label>
-        <label class="inline-flex items-center gap-2 text-xs text-slate-200">
-          <input type="checkbox" name="is_enabled" class="rounded border-white/20 bg-slate-900/70 text-primary-400 focus:ring-primary-400" data-provider-enabled checked>
-          Enable provider for selection
         </label>
       </div>
 
@@ -159,7 +155,7 @@
         </thead>
         <tbody class="divide-y divide-white/5" data-provider-table>
           {% for provider in providers %}
-          <tr class="hover:bg-white/5" data-provider-row data-provider-key="{{ provider.key }}" data-provider-status="{{ provider.status }}" data-provider-can-enable="{{ provider.can_enable|yesno:'true,false' }}">
+          <tr class="hover:bg-white/5 cursor-pointer" data-provider-row data-provider-key="{{ provider.key }}" data-provider-status="{{ provider.status }}" data-provider-can-enable="{{ provider.can_enable|yesno:'true,false' }}">
             <td class="px-4 py-3">
               <div class="font-semibold text-white">{{ provider.label }}</div>
               <div class="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
@@ -212,26 +208,17 @@
                           {{ model.origin|default:"runtime" }}
                         </span>
                       </div>
-                      <div class="mt-2 grid gap-2 text-[10px] text-slate-400 md:grid-cols-2">
+                      <div class="mt-2 grid gap-2 text-[10px] text-slate-400 md:grid-cols-2 break-words whitespace-normal">
                         {% if model.context_window_tokens %}<span>Context: {{ model.context_window_tokens }}</span>{% endif %}
                         {% if model.max_output_tokens %}<span>Max output: {{ model.max_output_tokens }}</span>{% endif %}
                         {% if model.default_temperature %}<span>Temp: {{ model.default_temperature }}</span>{% endif %}
-                        {% with model.max_input_tokens|default:model.options.max_input_tokens as max_input_tokens %}
-                          {% if max_input_tokens %}<span>Input: {{ max_input_tokens }}</span>{% endif %}
-                        {% endwith %}
-                        {% with model.max_chunk_chars|default:model.options.max_chunk_chars as max_chunk_chars %}
-                          {% if max_chunk_chars %}<span>Chunk chars: {{ max_chunk_chars }}</span>{% endif %}
-                        {% endwith %}
-                        {% with model.chunk_overlap_tokens|default:model.options.chunk_overlap_tokens as chunk_overlap %}
-                          {% if chunk_overlap %}<span>Overlap: {{ chunk_overlap }}</span>{% endif %}
-                        {% endwith %}
-                        {% with model.max_prompt_chars|default:model.options.max_prompt_chars as max_prompt_chars %}
-                          {% if max_prompt_chars %}<span>Prompt chars: {{ max_prompt_chars }}</span>{% endif %}
-                        {% endwith %}
-                        {% with model.max_prompt_segments|default:model.options.max_prompt_segments as max_prompt_segments %}
-                          {% if max_prompt_segments %}<span>Prompt segments: {{ max_prompt_segments }}</span>{% endif %}
-                        {% endwith %}
+                        {% if model.display_max_input_tokens %}<span>Input: {{ model.display_max_input_tokens }}</span>{% endif %}
+                        {% if model.display_max_chunk_chars %}<span>Chunk chars: {{ model.display_max_chunk_chars }}</span>{% endif %}
+                        {% if model.display_chunk_overlap_tokens %}<span>Overlap: {{ model.display_chunk_overlap_tokens }}</span>{% endif %}
+                        {% if model.display_max_prompt_chars %}<span>Prompt chars: {{ model.display_max_prompt_chars }}</span>{% endif %}
+                        {% if model.display_max_prompt_segments %}<span>Prompt segments: {{ model.display_max_prompt_segments }}</span>{% endif %}
                         {% if model.deployment_env %}<span>Deployment: {{ model.deployment_env }}</span>{% endif %}
+                        {% if model.display_deployment_env and not model.deployment_env %}<span>Deployment: {{ model.display_deployment_env }}</span>{% endif %}
                       </div>
                     </li>
                   {% endfor %}

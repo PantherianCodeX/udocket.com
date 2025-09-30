@@ -113,8 +113,12 @@
     if (resolvedDeployment && advancedOptions.azure_deployment === resolvedDeployment) {
       delete advancedOptions.azure_deployment;
     }
-    if (optionsJson && Object.keys(advancedOptions).length) {
-      optionsJson.value = JSON.stringify(advancedOptions, null, 2);
+    if (optionsJson) {
+      if (Object.keys(advancedOptions).length) {
+        optionsJson.value = JSON.stringify(advancedOptions, null, 2);
+      } else {
+        optionsJson.value = '';
+      }
     }
     if (enabledCheckbox) enabledCheckbox.checked = data?.enabled !== false;
     populateCreatorSelect(originSelect, creatorOptions, data?.origin);
@@ -218,7 +222,6 @@
     const endpointInput = form?.querySelector('[data-provider-endpoint]');
     const apiKeyInput = form?.querySelector('[data-provider-apikey]');
     const clearCheckbox = form?.querySelector('[data-provider-clear]');
-    const enabledCheckbox = form?.querySelector('[data-provider-enabled]');
     const modelContainer = form?.querySelector('[data-provider-model-rows]');
     const template = form?.querySelector('[data-provider-model-template]');
     const addModelBtn = form?.querySelector('[data-provider-model-add]');
@@ -231,9 +234,7 @@
       acc[item.key] = item;
       return acc;
     }, {});
-    let currentProviderKey = selectedInitial && providerMap[selectedInitial]
-      ? selectedInitial
-      : '';
+    let currentProviderKey = selectedInitial || '';
 
     function clearModels() {
       if (!modelContainer) return;
@@ -273,6 +274,11 @@
           context_window_tokens: meta.context_window_tokens,
           default_temperature: meta.default_temperature,
           origin: meta.origin,
+          max_input_tokens: meta.max_input_tokens,
+          max_chunk_chars: meta.max_chunk_chars,
+          chunk_overlap_tokens: meta.chunk_overlap_tokens,
+          max_prompt_chars: meta.max_prompt_chars,
+          max_prompt_segments: meta.max_prompt_segments,
           enabled: meta.default_enabled !== false,
           options: meta.options || {},
           deployment_env: meta.deployment_env,
@@ -306,14 +312,6 @@
       }
       if (apiKeyInput) apiKeyInput.value = '';
       if (clearCheckbox) clearCheckbox.checked = false;
-      if (enabledCheckbox) {
-        const enabledValue = cred?.is_enabled;
-        if (enabledValue == null) {
-          enabledCheckbox.checked = providerInfo.enabled ?? true;
-        } else {
-          enabledCheckbox.checked = !!enabledValue;
-        }
-      }
       if (modelJsonOverride) modelJsonOverride.value = '';
       if (metadataJson) {
         const meta = cred?.metadata || {};
@@ -331,7 +329,6 @@
       if (endpointInput) endpointInput.value = '';
       if (apiKeyInput) apiKeyInput.value = '';
       if (clearCheckbox) clearCheckbox.checked = false;
-      if (enabledCheckbox) enabledCheckbox.checked = true;
       if (modelJsonOverride) modelJsonOverride.value = '';
       if (metadataJson) metadataJson.value = '';
       clearModels();
@@ -409,7 +406,7 @@
       compiledInput.value = modelsPayload.length ? JSON.stringify(modelsPayload) : '';
     });
 
-    panel.querySelectorAll('[data-provider-edit]').forEach((button) => {
+    doc.querySelectorAll('[data-provider-edit]').forEach((button) => {
       button.addEventListener('click', () => {
         const row = button.closest('[data-provider-row]');
         if (!row) return;
@@ -419,9 +416,17 @@
       });
     });
 
-    panel.querySelectorAll('[data-provider-row]').forEach((row) => {
+    doc.querySelectorAll('[data-provider-row]').forEach((row) => {
       const providerKey = row.getAttribute('data-provider-key');
       if (!providerKey) return;
+
+      row.addEventListener('click', (event) => {
+        const interactive = event.target.closest('button, input, label, a, textarea, select, form');
+        if (interactive) return;
+        fillForm(providerKey);
+        form?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+
       const entry = providerMap[providerKey];
       if (!entry) return;
 
@@ -453,7 +458,7 @@
       updateModelCount(row, entry.models || []);
     });
 
-    panel.querySelectorAll('[data-provider-toggle]').forEach((checkbox) => {
+    doc.querySelectorAll('[data-provider-toggle]').forEach((checkbox) => {
       checkbox.addEventListener('change', (event) => {
         const target = event.currentTarget;
         if (!target) return;
@@ -483,11 +488,11 @@
       });
     });
 
-    if (providers.length) {
-      const initialKey = currentProviderKey && providerMap[currentProviderKey]
-        ? currentProviderKey
-        : providers[0].key;
-      fillForm(initialKey);
+    const initialPreference = currentProviderKey || select?.value || '';
+    if (initialPreference) {
+      fillForm(initialPreference);
+    } else if (providers.length) {
+      fillForm(providers[0].key);
     }
   }
 
