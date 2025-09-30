@@ -9,7 +9,7 @@
       {% csrf_token %}
       <input type="hidden" name="models_payload_compiled" value="" data-provider-models-compiled>
       <div class="grid gap-4">
-        <label class="text-sm text-slate-200">Provider template
+        <label class="text-sm text-slate-200">Provider
           <select name="provider" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" data-provider-select>
             <option value="">Select a provider</option>
             {% for key, meta in provider_catalog.items %}
@@ -17,6 +17,19 @@
             {% endfor %}
           </select>
         </label>
+        <div class="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+          <label class="text-sm text-slate-200">Load template
+            <select class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" data-provider-template>
+              <option value="">Select template</option>
+              {% for option in provider_template_options %}
+                <option value="{{ option.value }}">{{ option.label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <button type="button" class="inline-flex items-center justify-center rounded-lg border border-primary-500/30 bg-primary-500/10 px-3 py-2 text-sm font-semibold text-primary-100 transition hover:bg-primary-500/20" data-provider-template-apply>
+            Load
+          </button>
+        </div>
         <label class="text-sm text-slate-200">Display name
           <input type="text" name="display_name" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" placeholder="Friendly name" data-provider-display>
         </label>
@@ -126,6 +139,7 @@
 
       <div class="flex flex-wrap items-center justify-end gap-2">
         <button type="reset" class="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-200 transition hover:border-primary-400 hover:text-white" data-provider-reset>Clear</button>
+        <button type="submit" name="action" value="provider-delete" class="hidden rounded-lg border border-rose-500/40 bg-rose-500/20 px-4 py-2 text-sm font-semibold text-rose-100 transition hover:bg-rose-500/30" data-provider-delete>Delete provider</button>
         <button type="submit" name="action" value="provider-test" class="inline-flex items-center gap-2 rounded-lg border border-primary-400/40 bg-primary-500/10 px-4 py-2 text-sm font-semibold text-primary-100 transition hover:bg-primary-500/20" data-provider-test>
           Test configuration
         </button>
@@ -147,25 +161,35 @@
           <tr>
             <th class="px-4 py-3 text-left">Provider</th>
             <th class="px-4 py-3 text-left">Status</th>
-            <th class="px-4 py-3 text-left">Endpoint</th>
             <th class="px-4 py-3 text-left">Models</th>
-            <th class="px-4 py-3 text-left">Enabled</th>
             <th class="px-4 py-3 text-right">Actions</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-white/5" data-provider-table>
           {% for provider in providers %}
           <tr class="hover:bg-white/5 cursor-pointer" data-provider-row data-provider-key="{{ provider.key }}" data-provider-status="{{ provider.status }}" data-provider-can-enable="{{ provider.can_enable|yesno:'true,false' }}">
-            <td class="px-4 py-3">
-              <div class="font-semibold text-white">{{ provider.label }}</div>
-              <div class="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
-                <span class="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/10 px-2 py-0.5 uppercase tracking-wide">{{ provider.category|default:"creator" }}</span>
-                {% if provider.hosted_creators %}
-                  <span class="text-slate-500">Hosts: {{ provider.hosted_creators|join:", " }}</span>
-                {% endif %}
+            <td class="px-4 py-4 align-top">
+              <div class="flex flex-col gap-2">
+                <div class="flex flex-wrap items-center gap-3">
+                  <span class="font-semibold text-white">{{ provider.label }}</span>
+                  <label class="inline-flex items-center gap-2 text-xs text-slate-200" data-provider-enable>
+                    <input type="checkbox" class="rounded border-white/20 bg-slate-900/70 text-primary-400 focus:ring-primary-400" data-provider-toggle data-provider-can-enable="{{ provider.can_enable|yesno:'true,false' }}" {% if provider.enabled %}checked{% endif %} {% if not provider.can_enable %}disabled{% endif %}>
+                    <span>Enable</span>
+                  </label>
+                </div>
+                <div class="text-xs text-slate-400 break-words">{{ provider.endpoint|default:"—" }}</div>
+                <div class="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
+                  <span class="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/10 px-2 py-0.5 uppercase tracking-wide">{{ provider.category|default:"creator" }}</span>
+                  {% if provider.hosted_creators %}
+                    <span class="text-slate-500">Hosts: {{ provider.hosted_creators|join:", " }}</span>
+                  {% endif %}
+                  {% if provider.models %}
+                    <span class="text-slate-500" data-provider-model-summary>Models: {{ provider.models_enabled_count }} / {{ provider.models_total_count }}</span>
+                  {% endif %}
+                </div>
               </div>
             </td>
-            <td class="px-4 py-3">
+            <td class="px-4 py-4 align-top text-xs text-slate-200">
               {% if provider.status == 'enabled' %}
                 <span class="inline-flex items-center gap-2 rounded-full border border-emerald-400/50 bg-emerald-500/20 px-3 py-1 text-xs text-emerald-100">Enabled</span>
               {% elif provider.status == 'disabled' %}
@@ -188,14 +212,11 @@
                 <div class="mt-2 text-[11px] text-slate-400">{{ provider.unavailable_reason }}</div>
               {% endif %}
             </td>
-            <td class="px-4 py-3 text-xs text-slate-400">
-              {{ provider.endpoint|default:"—" }}
-            </td>
-            <td class="px-4 py-3 text-xs text-slate-200">
+            <td class="px-4 py-4 align-top text-xs text-slate-200">
               {% if provider.models %}
                 <ul class="space-y-2" data-provider-model-list>
                   {% for model in provider.models %}
-                    <li class="rounded-lg bg-white/5 px-3 py-2" data-provider-model-item data-model-name="{{ model.value }}" data-model-origin="{{ model.origin|default:"" }}" data-model-enabled="{{ model.enabled|yesno:'true,false' }}">
+                    <li class="rounded-2xl border border-white/10 bg-white/5 p-3 space-y-2 break-words" data-provider-model-item data-model-name="{{ model.value }}" data-model-origin="{{ model.origin|default:"" }}" data-model-enabled="{{ model.enabled|yesno:'true,false' }}">
                       <div class="flex items-center justify-between gap-3">
                         <label class="inline-flex items-center gap-2 text-xs text-slate-100">
                           <input type="checkbox" class="rounded border-white/20 bg-slate-900/70 text-primary-400 focus:ring-primary-400" data-provider-model-toggle {% if model.enabled %}checked{% endif %}>
@@ -208,7 +229,7 @@
                           {{ model.origin|default:"runtime" }}
                         </span>
                       </div>
-                      <div class="mt-2 grid gap-2 text-[10px] text-slate-400 md:grid-cols-2 break-words whitespace-normal">
+                      <div class="grid gap-2 text-[10px] text-slate-400 sm:grid-cols-2">
                         {% if model.context_window_tokens %}<span>Context: {{ model.context_window_tokens }}</span>{% endif %}
                         {% if model.max_output_tokens %}<span>Max output: {{ model.max_output_tokens }}</span>{% endif %}
                         {% if model.default_temperature %}<span>Temp: {{ model.default_temperature }}</span>{% endif %}
@@ -227,21 +248,8 @@
                 <span class="text-slate-500">No models</span>
               {% endif %}
             </td>
-            <td class="px-4 py-3 text-xs text-slate-200" data-provider-model-count>
-              {% if provider.models %}
-                <span data-provider-model-enabled-count>{{ provider.models_enabled_count }}</span>
-                <span class="text-slate-500">/</span>
-                <span data-provider-model-total>{{ provider.models_total_count }}</span>
-              {% else %}
-                <span class="text-slate-500">0 / 0</span>
-              {% endif %}
-            </td>
-            <td class="px-4 py-3 text-right">
+            <td class="px-4 py-4 align-top text-right">
               <div class="flex items-center justify-end gap-2">
-                <label class="inline-flex items-center gap-2 text-xs text-slate-200">
-                  <input type="checkbox" class="rounded border-white/20 bg-slate-900/70 text-primary-400 focus:ring-primary-400" data-provider-toggle data-provider-can-enable="{{ provider.can_enable|yesno:'true,false' }}" {% if provider.enabled %}checked{% endif %} {% if not provider.can_enable %}disabled{% endif %}>
-                  Enable
-                </label>
                 <button type="button" class="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-200 transition hover:border-primary-400 hover:text-white" data-provider-edit>
                   Edit
                 </button>

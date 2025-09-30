@@ -1,4 +1,5 @@
 """Runtime helpers for constructing LLM chat clients."""
+# pyright: reportMissingModuleSource=false
 
 from __future__ import annotations
 
@@ -6,12 +7,41 @@ import json
 import logging
 import os
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Protocol, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Protocol, Tuple, cast
+
+
+class _ResponseProtocol(Protocol):
+    status_code: int
+    text: str
+    headers: Mapping[str, str]
+
+    def json(self) -> Any: ...
+
+    def raise_for_status(self) -> None: ...
+
+
+class _RequestsProtocol(Protocol):
+    def post(
+        self,
+        url: str,
+        *,
+        headers: Optional[Mapping[str, str]] = None,
+        json: Optional[Mapping[str, Any]] = None,
+        params: Optional[Mapping[str, Any]] = None,
+        timeout: Optional[int] = None,
+    ) -> _ResponseProtocol: ...
+
 
 try:  # pragma: no cover - optional dependency guard
-    import requests
+    import requests as _requests  # type: ignore[import-not-found]
 except Exception:  # pragma: no cover
-    requests = None  # type: ignore[assignment]
+    _requests = None
+
+requests: Optional[_RequestsProtocol]
+if _requests is not None:
+    requests = cast(_RequestsProtocol, _requests)
+else:
+    requests = None
 
 from packages.udocket_core.agents.common.azure_client import (
     AzureChatClient,
@@ -29,7 +59,7 @@ class ChatClient(Protocol):
     def chat(
         self,
         *,
-        messages: List[Dict[str, str]],
+        messages: List[Dict[str, Any]],
         temperature: float = 1.0,
         max_tokens: Optional[int] = None,
         response_format: Optional[Dict[str, Any]] = None,
@@ -40,9 +70,10 @@ class ChatClientError(RuntimeError):
     """Raised when an LLM invocation cannot be completed."""
 
 
-def _require_requests() -> None:
+def _require_requests() -> _RequestsProtocol:
     if requests is None:  # pragma: no cover - dependency missing
         raise RuntimeError("requests library is required for HTTP LLM providers")
+    return requests
 
 
 def _coerce_base_url(value: Optional[str]) -> str:
@@ -77,7 +108,7 @@ class OpenAIChatClient:
     def chat(
         self,
         *,
-        messages: List[Dict[str, str]],
+        messages: List[Dict[str, Any]],
         temperature: float = 1.0,
         max_tokens: Optional[int] = None,
         response_format: Optional[Dict[str, Any]] = None,
@@ -96,8 +127,9 @@ class OpenAIChatClient:
             payload["max_tokens"] = int(max_tokens)
         if response_format:
             payload["response_format"] = response_format
+        requests_impl = _require_requests()
         try:
-            response = requests.post(url, headers=headers, json=payload, timeout=self.timeout)
+            response = requests_impl.post(url, headers=headers, json=payload, timeout=self.timeout)
         except Exception as exc:  # pragma: no cover - network failure
             raise ChatClientError(f"OpenAI request failed: {exc}") from exc
         if response.status_code >= 400:
@@ -106,18 +138,43 @@ class OpenAIChatClient:
                 f"OpenAI request failed with status {response.status_code}: {text[:512]}"
             )
         try:
-            data = response.json()
+            data_raw = response.json()
         except ValueError as exc:
             raise ChatClientError("OpenAI response was not valid JSON") from exc
-        choices = data.get("choices")
-        if not choices:
+        if not isinstance(data_raw, dict):
+            raise ChatClientError("OpenAI response payload is not a JSON object")
+        data_obj = cast(Dict[str, Any], data_raw)
+        choices_raw = data_obj.get("choices")
+        if not isinstance(choices_raw, list):
             raise ChatClientError("OpenAI response missing choices")
-        first = choices[0] or {}
-        message = first.get("message") or {}
-        content = message.get("content") or ""
-        if not isinstance(content, str):
-            content = str(content)
-        usage = data.get("usage") or {}
+        choices_iter = cast(List[Any], choices_raw)
+        choices_list: List[Dict[str, Any]] = []
+        for entry in choices_iter:
+            if isinstance(entry, dict):
+                choices_list.append(cast(Dict[str, Any], entry))
+        if not choices_list:
+            raise ChatClientError("OpenAI response missing structured choices")
+        first: Dict[str, Any] = choices_list[0]
+        message_value = first.get("message")
+        if not isinstance(message_value, dict):
+            raise ChatClientError("OpenAI response missing message content")
+        message_dict: Dict[str, Any] = message_value
+        content_raw: object = message_dict.get("content")
+        if isinstance(content_raw, str):
+            content = content_raw
+        else:
+            content = str(content_raw or "")
+        usage_raw: object = data_obj.get("usage")
+        usage: Dict[str, Any] = {}
+        if isinstance(usage_raw, dict):
+            usage_dict: Dict[str, Any] = usage_raw
+            usage = {
+                "prompt_tokens": usage_dict.get("prompt_tokens")
+                or usage_dict.get("input_tokens"),
+                "completion_tokens": usage_dict.get("completion_tokens")
+                or usage_dict.get("output_tokens"),
+                "total_tokens": usage_dict.get("total_tokens"),
+            }
         return content, usage
 
 
@@ -143,7 +200,7 @@ class AnthropicChatClient:
     def chat(
         self,
         *,
-        messages: List[Dict[str, str]],
+        messages: List[Dict[str, Any]],
         temperature: float = 1.0,
         max_tokens: Optional[int] = None,
         response_format: Optional[Dict[str, Any]] = None,
@@ -153,12 +210,18 @@ class AnthropicChatClient:
         max_tokens = max(1, int(max_tokens or 1024))
         converted: List[Dict[str, Any]] = []
         for message in messages:
-            role = message.get("role") or "user"
+            role_value = message.get("role") or "user"
+            role = str(role_value)
             content = message.get("content")
+            parts: List[Dict[str, Any]]
             if isinstance(content, str):
                 parts = [{"type": "text", "text": content}]
             elif isinstance(content, list):
-                parts = content
+                parts = []
+                content_items = cast(List[Any], content)
+                for entry in content_items:
+                    if isinstance(entry, dict):
+                        parts.append(cast(Dict[str, Any], entry))
             else:
                 parts = [{"type": "text", "text": json.dumps(content)}]
             converted.append({"role": role, "content": parts})
@@ -176,8 +239,9 @@ class AnthropicChatClient:
         }
         if response_format and response_format.get("type") == "json_object":
             payload["response_format"] = {"type": "json_object"}
+        requests_impl = _require_requests()
         try:
-            response = requests.post(url, headers=headers, json=payload, timeout=self.timeout)
+            response = requests_impl.post(url, headers=headers, json=payload, timeout=self.timeout)
         except Exception as exc:  # pragma: no cover - network failure
             raise ChatClientError(f"Anthropic request failed: {exc}") from exc
         if response.status_code >= 400:
@@ -186,23 +250,32 @@ class AnthropicChatClient:
                 f"Anthropic request failed with status {response.status_code}: {text[:512]}"
             )
         try:
-            data = response.json()
+            data_raw = response.json()
         except ValueError as exc:
             raise ChatClientError("Anthropic response was not valid JSON") from exc
-        content_blocks = data.get("content") or []
+        if not isinstance(data_raw, dict):
+            raise ChatClientError("Anthropic response payload is not a JSON object")
+        data_obj = cast(Dict[str, Any], data_raw)
+        content_blocks = data_obj.get("content")
         text_fragments: List[str] = []
-        for block in content_blocks:
-            if isinstance(block, dict):
-                text = block.get("text")
-                if isinstance(text, str):
-                    text_fragments.append(text)
+        if isinstance(content_blocks, list):
+            content_block_items = cast(List[Any], content_blocks)
+            for block in content_block_items:
+                if isinstance(block, dict):
+                    block_dict = cast(Dict[str, Any], block)
+                    text_value: object = block_dict.get("text")
+                    if isinstance(text_value, str):
+                        text_fragments.append(text_value)
         content = "".join(text_fragments).strip()
-        usage_raw = data.get("usage") or {}
-        usage = {
-            "prompt_tokens": usage_raw.get("input_tokens"),
-            "completion_tokens": usage_raw.get("output_tokens"),
-            "total_tokens": usage_raw.get("total_tokens"),
-        }
+        usage_raw = data_obj.get("usage")
+        usage: Dict[str, Any] = {}
+        if isinstance(usage_raw, dict):
+            usage_dict = cast(Dict[str, Any], usage_raw)
+            usage = {
+                "prompt_tokens": usage_dict.get("input_tokens"),
+                "completion_tokens": usage_dict.get("output_tokens"),
+                "total_tokens": usage_dict.get("total_tokens"),
+            }
         return content, usage
 
 
@@ -301,13 +374,20 @@ def build_chat_client(
         )
 
     if provider.api_kind in {"openai", "ollama", "cohere", "mistral", "deepseek", "fireworks", "groq", "openrouter", "perplexity", "together"}:
-        extra_headers = {}
+        extra_headers: Dict[str, str] = {}
         if metadata:
-            headers = metadata.get("headers")
-            if isinstance(headers, dict):
-                extra_headers = {str(k): str(v) for k, v in headers.items() if k and v}
-        if options.get("headers") and isinstance(options.get("headers"), dict):
-            extra_headers.update({str(k): str(v) for k, v in options["headers"].items() if k and v})
+            headers_meta = metadata.get("headers")
+            if isinstance(headers_meta, Mapping):
+                headers_mapping = cast(Mapping[str, Any], headers_meta)
+                for key, value in headers_mapping.items():
+                    if key:
+                        extra_headers[key] = str(value)
+        option_headers = options.get("headers")
+        if isinstance(option_headers, Mapping):
+            option_mapping = cast(Mapping[str, Any], option_headers)
+            for key, value in option_mapping.items():
+                if key:
+                    extra_headers[key] = str(value)
         timeout = int(options.get("timeout") or 120)
         return OpenAIChatClient(
             base_url=endpoint or provider.default_endpoint or "https://api.openai.com/v1",

@@ -4,7 +4,7 @@ import json
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Mapping, Optional, cast
 
 BASE_DIR = Path(__file__).resolve().parents[3]
 PROVIDERS_PATH = BASE_DIR / "config" / "llm_providers.json"
@@ -99,16 +99,40 @@ def _load_json(path: Path) -> Dict[str, object]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _as_dict(value: object) -> Dict[str, Any]:
+    mapping: Mapping[Any, Any]
+    if isinstance(value, dict):
+        mapping = cast(Mapping[Any, Any], value)
+    elif isinstance(value, Mapping):
+        mapping = value
+    else:
+        return {}
+    normalized: Dict[str, Any] = {}
+    for key, raw in mapping.items():
+        normalized[str(key)] = raw
+    return normalized
+
+
+def _as_list(value: object) -> List[Any]:
+    if isinstance(value, (list, tuple)):
+        iterable = cast(Iterable[Any], value)
+        return [element for element in iterable]
+    return []
+
+
 def load_llm_settings(
     providers_path: Path = PROVIDERS_PATH,
     assignments_path: Path = ASSIGNMENTS_PATH,
 ) -> LLMSettings:
-    providers_payload = _load_json(providers_path).get("providers", {})
+    providers_raw = _load_json(providers_path).get("providers", {})
+    providers_payload = _as_dict(providers_raw)
     provider_map: Dict[str, LLMProvider] = {}
-    for name, payload in providers_payload.items():
-        models_payload = payload.get("models", {})
+    for name, payload_obj in providers_payload.items():
+        payload = _as_dict(payload_obj)
+        models_payload = _as_dict(payload.get("models", {}))
         models: Dict[str, LLMProviderModel] = {}
-        for model_name, model_cfg in models_payload.items():
+        for model_name, model_cfg_obj in models_payload.items():
+            model_cfg = _as_dict(model_cfg_obj)
             models[model_name] = LLMProviderModel(
                 name=model_name,
                 label=model_cfg.get("label", model_name),
@@ -128,36 +152,51 @@ def load_llm_settings(
                 ),
                 options={
                     str(k): v
-                    for k, v in (model_cfg.get("options") or {}).items()
+                    for k, v in _as_dict(model_cfg.get("options")).items()
                 },
             )
+        hosted_creators = [
+            str(entry)
+            for entry in _as_list(payload.get("hosted_creators"))
+            if isinstance(entry, (str, int, float))
+        ]
+        env_requirements = [
+            str(item)
+            for item in _as_list(payload.get("env_requirements"))
+            if isinstance(item, str)
+        ]
         provider_map[name] = LLMProvider(
             name=name,
             display_name=payload.get("display_name", name.title()),
             models=models,
-            env_requirements=list(payload.get("env_requirements", [])),
+            env_requirements=env_requirements,
             api_kind=str(payload.get("api_kind") or "openai"),
             default_endpoint=str(payload.get("default_endpoint") or ""),
             requires_api_key=bool(payload.get("requires_api_key", True)),
             description=str(payload.get("description") or ""),
             category=str(payload.get("category") or "creator"),
-            hosted_creators=[str(entry) for entry in payload.get("hosted_creators", []) if isinstance(entry, str)],
+            hosted_creators=hosted_creators,
         )
 
-    assignments_payload = _load_json(assignments_path).get("stages", {})
+    assignments_raw = _load_json(assignments_path).get("stages", {})
+    assignments_payload = _as_dict(assignments_raw)
     assignment_map: Dict[str, LLMStageAssignment] = {}
-    for stage_key, payload in assignments_payload.items():
-        providers = payload.get("providers") or []
-        model = payload.get("model")
-        options = payload.get("options") or {}
+    for stage_key, payload_obj in assignments_payload.items():
+        payload = _as_dict(payload_obj)
+        providers_raw = _as_list(payload.get("providers"))
+        providers = [str(p) for p in providers_raw if isinstance(p, str)]
+        model_value = payload.get("model")
+        model = str(model_value) if isinstance(model_value, str) else ""
+        options_raw = _as_dict(payload.get("options"))
+        options = {str(k): str(v) for k, v in options_raw.items()}
         target = payload.get("target") or stage_key.split(".", 1)[0]
         label = payload.get("label") or stage_key
         description = payload.get("description") or ""
         assignment_map[stage_key] = LLMStageAssignment(
             stage_key=stage_key,
-            providers=[str(p) for p in providers if isinstance(p, str)],
-            model=str(model) if model else "",
-            options={str(k): str(v) for k, v in options.items()},
+            providers=providers,
+            model=model,
+            options=options,
             target=str(target),
             label=str(label),
             description=str(description),

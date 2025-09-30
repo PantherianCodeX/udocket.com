@@ -250,11 +250,9 @@ def organization_settings(
         llm_settings=llm_settings,
     )
 
+    # Determine selected provider for form defaults
+    selected_provider_key = (request.GET.get("provider") or "").strip().lower()
     provider_catalog = load_provider_catalog()
-    if not selected_provider_key:
-        for candidate in provider_catalog.keys():
-            selected_provider_key = candidate
-            break
     provider_credentials = get_org_provider_credentials(str(organization.id))
     provider_registry = build_provider_registry(
         organization_id=str(organization.id),
@@ -279,7 +277,13 @@ def organization_settings(
             }
         )
 
-    selected_provider_key = (request.GET.get("provider") or "").strip().lower()
+    template_options = [
+        {
+            "value": key,
+            "label": (entry.get("display_name") or key.replace("_", " ").title()),
+        }
+        for key, entry in sorted(provider_catalog.items())
+    ]
 
     nav_primary = nav_items[0] if nav_items else None
     tool_items = [item for item in nav_items if item["key"] != "providers"]
@@ -298,6 +302,7 @@ def organization_settings(
         "nav_pills": [],
         "active_section": active_section,
         "selected_provider": selected_provider_key,
+        "provider_template_options": template_options,
     }
 
     if request.method == "POST" and active_section == "providers":

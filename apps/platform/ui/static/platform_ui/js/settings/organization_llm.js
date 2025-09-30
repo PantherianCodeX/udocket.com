@@ -229,12 +229,20 @@
     const metadataJson = form?.querySelector('[data-provider-metadata-json]');
     const compiledInput = form?.querySelector('[data-provider-models-compiled]');
     const resetBtn = form?.querySelector('[data-provider-reset]');
+    const templateSelect = form?.querySelector('[data-provider-template]');
+    const templateApplyBtn = form?.querySelector('[data-provider-template-apply]');
+    const deleteButton = form?.querySelector('[data-provider-delete]');
 
     const providerMap = providers.reduce((acc, item) => {
       acc[item.key] = item;
       return acc;
     }, {});
     let currentProviderKey = selectedInitial || '';
+
+    function setDeleteVisible(visible) {
+      if (!deleteButton) return;
+      deleteButton.classList.toggle('hidden', !visible);
+    }
 
     function clearModels() {
       if (!modelContainer) return;
@@ -286,64 +294,97 @@
       };
     }
 
+    function applyTemplate(templateKey) {
+      if (!form) return;
+      const templateData = resolveCatalog(templateKey);
+      if (!templateData) return;
+      const providerValue = select?.value || templateKey;
+      applyFormValues({
+        providerKey: providerValue,
+        displayName: templateData.display_name || providerValue,
+        endpoint: templateData.endpoint || '',
+        models: templateData.models || [],
+        metadata: {},
+      });
+      if (templateSelect) templateSelect.value = templateKey;
+      setDeleteVisible(false);
+      currentProviderKey = '';
+    }
+
     function getCredential(key) {
       return credentials[key] || null;
+    }
+
+    function applyFormValues({
+      providerKey,
+      displayName,
+      endpoint,
+      models,
+      metadata,
+    }) {
+      if (!form) return;
+      if (select) select.value = providerKey || '';
+      if (displayInput) displayInput.value = displayName || '';
+      if (endpointInput) endpointInput.value = endpoint || '';
+      if (apiKeyInput) apiKeyInput.value = '';
+      if (clearCheckbox) clearCheckbox.checked = false;
+      if (modelJsonOverride) modelJsonOverride.value = '';
+      if (metadataJson) {
+        metadataJson.value = metadata && Object.keys(metadata).length
+          ? JSON.stringify(metadata, null, 2)
+          : '';
+      }
+      populateModels(models || []);
+      if (compiledInput) compiledInput.value = '';
     }
 
     function fillForm(key) {
       if (!form) return;
       const cred = getCredential(key);
-      const catalogDefaults = resolveCatalog(key);
       const providerInfo = providerMap[key] || {};
-
-      if (select) select.value = key || '';
-      if (displayInput) {
-        displayInput.value = cred?.display_name
-          || catalogDefaults?.display_name
+      const catalogDefaults = resolveCatalog(key);
+      applyFormValues({
+        providerKey: key,
+        displayName: cred?.display_name
           || providerInfo.label
-          || key
-          || '';
-      }
-      if (endpointInput) {
-        endpointInput.value = cred?.endpoint
-          || catalogDefaults?.endpoint
+          || catalogDefaults?.display_name
+          || key,
+        endpoint: cred?.endpoint
           || providerInfo.endpoint
-          || '';
-      }
-      if (apiKeyInput) apiKeyInput.value = '';
-      if (clearCheckbox) clearCheckbox.checked = false;
-      if (modelJsonOverride) modelJsonOverride.value = '';
-      if (metadataJson) {
-        const meta = cred?.metadata || {};
-        metadataJson.value = Object.keys(meta).length ? JSON.stringify(meta, null, 2) : '';
-      }
-      const modelsList = cred?.models?.length ? cred.models : catalogDefaults?.models || [];
-      populateModels(modelsList);
-      if (compiledInput) compiledInput.value = '';
+          || catalogDefaults?.endpoint
+          || '',
+        models: cred?.models?.length ? cred.models : providerInfo.models || catalogDefaults?.models || [],
+        metadata: cred?.metadata || {},
+      });
+      if (templateSelect) templateSelect.value = '';
+      setDeleteVisible(Boolean(cred));
       currentProviderKey = key;
     }
 
     function resetForm() {
-      fillForm(select?.value || '');
-      if (displayInput) displayInput.value = '';
-      if (endpointInput) endpointInput.value = '';
-      if (apiKeyInput) apiKeyInput.value = '';
-      if (clearCheckbox) clearCheckbox.checked = false;
-      if (modelJsonOverride) modelJsonOverride.value = '';
-      if (metadataJson) metadataJson.value = '';
-      clearModels();
-      if (compiledInput) compiledInput.value = '';
+      currentProviderKey = '';
+      applyFormValues({
+        providerKey: '',
+        displayName: '',
+        endpoint: '',
+        models: [],
+        metadata: {},
+      });
+      if (templateSelect) templateSelect.value = '';
+      setDeleteVisible(false);
       select && select.focus();
     }
 
-    function updateModelCount(row, models) {
-      const enabledCountEl = row.querySelector('[data-provider-model-enabled-count]');
-      const totalCountEl = row.querySelector('[data-provider-model-total]');
-      if (!enabledCountEl || !totalCountEl) return;
+    function updateModelCount(row, models, providerKey) {
+      const summaryEl = row.querySelector('[data-provider-model-summary]');
+      if (!summaryEl) return;
       const total = models.length;
       const enabled = models.filter((model) => model.enabled !== false).length;
-      enabledCountEl.textContent = String(enabled);
-      totalCountEl.textContent = String(total);
+      summaryEl.textContent = `Models: ${enabled} / ${total}`;
+      if (providerMap[providerKey]) {
+        providerMap[providerKey].models_enabled_count = enabled;
+        providerMap[providerKey].models_total_count = total;
+      }
     }
 
     function submitProviderUpdate(providerKey, { models, enabled }) {
@@ -383,8 +424,31 @@
     }
 
     select?.addEventListener('change', () => {
-      fillForm(select.value);
+      const key = (select.value || '').trim();
+      if (key) {
+        fillForm(key);
+      } else {
+        resetForm();
+      }
     });
+
+    templateApplyBtn?.addEventListener('click', () => {
+      const key = (templateSelect?.value || '').trim();
+      if (!key) return;
+      if (currentProviderKey) {
+        const confirmed = window.confirm('Loading a template will overwrite the form values. Continue?');
+        if (!confirmed) return;
+      }
+      applyTemplate(key);
+    });
+
+    if (templateSelect && !templateApplyBtn) {
+      templateSelect.addEventListener('change', () => {
+        const key = (templateSelect.value || '').trim();
+        if (!key) return;
+        applyTemplate(key);
+      });
+    }
 
     addModelBtn?.addEventListener('click', () => {
       if (!template || !modelContainer) return;
@@ -394,6 +458,12 @@
     resetBtn?.addEventListener('click', (event) => {
       event.preventDefault();
       resetForm();
+    });
+
+    deleteButton?.addEventListener('click', (event) => {
+      if (!window.confirm('Delete this provider configuration?')) {
+        event.preventDefault();
+      }
     });
 
     form?.addEventListener('submit', () => {
@@ -450,12 +520,12 @@
               models: updatedModels,
             };
           }
-          updateModelCount(row, updatedModels);
+          updateModelCount(row, updatedModels, providerKey);
           submitProviderUpdate(providerKey, { models: updatedModels });
         });
       });
 
-      updateModelCount(row, entry.models || []);
+      updateModelCount(row, entry.models || [], providerKey);
     });
 
     doc.querySelectorAll('[data-provider-toggle]').forEach((checkbox) => {

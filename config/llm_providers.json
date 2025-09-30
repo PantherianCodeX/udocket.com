@@ -315,6 +315,11 @@
     "openrouter": {
       "display_name": "OpenRouter",
       "description": "OpenRouter multi-provider router with unified billing.",
+      "category": "platform",
+      "hosted_creators": [
+        "meta",
+        "anthropic"
+      ],
       "env_requirements": [
         "OPENROUTER_API_KEY"
       ],
@@ -341,6 +346,11 @@
     "together": {
       "display_name": "Together AI",
       "description": "Together AI hosted open-source models with accelerator options.",
+      "category": "platform",
+      "hosted_creators": [
+        "meta",
+        "open_source"
+      ],
       "env_requirements": [
         "TOGETHER_API_KEY"
       ],
@@ -367,6 +377,11 @@
     "fireworks": {
       "display_name": "Fireworks AI",
       "description": "Fireworks AI serving tuned open models with streaming.",
+      "category": "platform",
+      "hosted_creators": [
+        "meta",
+        "mistral"
+      ],
       "env_requirements": [
         "FIREWORKS_API_KEY"
       ],
