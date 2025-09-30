@@ -2,7 +2,7 @@ fastapi
 uvicorn[standard]
 python-dotenv
 pydantic>=2.6,<3
-pydantic-settings>=2.2,<3
+pydantic-settings>=2.4,<3
 sqlalchemy
 python-multipart
 psycopg2-binary
