@@ -18,6 +18,11 @@ class LLMProviderModel:
     cost_tier: str
     max_output_tokens: Optional[int] = None
     context_window_tokens: Optional[int] = None
+    max_input_tokens: Optional[int] = None
+    max_chunk_chars: Optional[int] = None
+    chunk_overlap_tokens: Optional[int] = None
+    max_prompt_chars: Optional[int] = None
+    max_prompt_segments: Optional[int] = None
     default_temperature: Optional[float] = None
     deployment_env: Optional[str] = None
     origin: Optional[str] = None
@@ -110,6 +115,11 @@ def load_llm_settings(
                 cost_tier=model_cfg.get("cost_tier", "standard"),
                 max_output_tokens=model_cfg.get("max_output_tokens"),
                 context_window_tokens=model_cfg.get("context_window_tokens"),
+                max_input_tokens=model_cfg.get("max_input_tokens"),
+                max_chunk_chars=model_cfg.get("max_chunk_chars"),
+                chunk_overlap_tokens=model_cfg.get("chunk_overlap_tokens"),
+                max_prompt_chars=model_cfg.get("max_prompt_chars"),
+                max_prompt_segments=model_cfg.get("max_prompt_segments"),
                 default_temperature=model_cfg.get("default_temperature"),
                 deployment_env=model_cfg.get("deployment_env"),
                 origin=model_cfg.get("origin"),

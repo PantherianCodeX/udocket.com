@@ -293,11 +293,29 @@ def _catalog_models_to_options(models) -> List[Dict[str, object]]:
         context_window = getattr(model_meta, "context_window_tokens", None) or (
             model_meta.get("context_window_tokens") if isinstance(model_meta, dict) else None
         )
+        max_input_tokens = getattr(model_meta, "max_input_tokens", None) or (
+            model_meta.get("max_input_tokens") if isinstance(model_meta, dict) else None
+        )
+        max_chunk_chars = getattr(model_meta, "max_chunk_chars", None) or (
+            model_meta.get("max_chunk_chars") if isinstance(model_meta, dict) else None
+        )
+        chunk_overlap_tokens = getattr(model_meta, "chunk_overlap_tokens", None) or (
+            model_meta.get("chunk_overlap_tokens") if isinstance(model_meta, dict) else None
+        )
+        max_prompt_chars = getattr(model_meta, "max_prompt_chars", None) or (
+            model_meta.get("max_prompt_chars") if isinstance(model_meta, dict) else None
+        )
+        max_prompt_segments = getattr(model_meta, "max_prompt_segments", None) or (
+            model_meta.get("max_prompt_segments") if isinstance(model_meta, dict) else None
+        )
         default_temp = getattr(model_meta, "default_temperature", None) or (
             model_meta.get("default_temperature") if isinstance(model_meta, dict) else None
         )
         origin = getattr(model_meta, "origin", None) or (
             model_meta.get("origin") if isinstance(model_meta, dict) else None
+        )
+        deployment_env = getattr(model_meta, "deployment_env", None) or (
+            model_meta.get("deployment_env") if isinstance(model_meta, dict) else None
         )
         default_enabled = getattr(model_meta, "default_enabled", None)
         if default_enabled is None and isinstance(model_meta, dict):
@@ -305,6 +323,9 @@ def _catalog_models_to_options(models) -> List[Dict[str, object]]:
         options_payload = getattr(model_meta, "options", None) or (
             model_meta.get("options") if isinstance(model_meta, dict) else None
         )
+        options_dict = dict(options_payload) if isinstance(options_payload, dict) else {}
+        if deployment_env and "azure_deployment" not in options_dict:
+            options_dict["azure_deployment"] = deployment_env
         options.append(
             {
                 "name": model_name,
@@ -313,10 +334,16 @@ def _catalog_models_to_options(models) -> List[Dict[str, object]]:
                 "cost_tier": cost_tier or "standard",
                 "max_output_tokens": max_output,
                 "context_window_tokens": context_window,
+                "max_input_tokens": max_input_tokens,
+                "max_chunk_chars": max_chunk_chars,
+                "chunk_overlap_tokens": chunk_overlap_tokens,
+                "max_prompt_chars": max_prompt_chars,
+                "max_prompt_segments": max_prompt_segments,
                 "default_temperature": default_temp,
                 "origin": origin,
+                "deployment_env": deployment_env,
                 "enabled": bool(default_enabled) if default_enabled is not None else True,
-                "options": options_payload if isinstance(options_payload, dict) else {},
+                "options": options_dict,
             }
         )
     return options
@@ -330,6 +357,11 @@ def _credential_models_to_options(models: Sequence[dict]) -> List[Dict[str, obje
         name = str(item.get("name") or item.get("id") or "").strip()
         if not name:
             continue
+        deployment_env = item.get("deployment_env")
+        options_payload = item.get("options") if isinstance(item.get("options"), dict) else {}
+        options_dict = dict(options_payload)
+        if deployment_env and "azure_deployment" not in options_dict:
+            options_dict["azure_deployment"] = deployment_env
         options.append(
             {
                 "name": name,
@@ -346,8 +378,8 @@ def _credential_models_to_options(models: Sequence[dict]) -> List[Dict[str, obje
                 "default_temperature": item.get("default_temperature"),
                 "origin": item.get("origin"),
                 "enabled": item.get("enabled", True),
-                "deployment_env": item.get("deployment_env"),
-                "options": item.get("options") or {},
+                "deployment_env": deployment_env,
+                "options": options_dict,
             }
         )
     return options
@@ -375,12 +407,33 @@ def default_models_payload(provider) -> List[dict]:
         origin = getattr(model_meta, "origin", None) or (
             model_meta.get("origin") if isinstance(model_meta, dict) else None
         )
+        max_input_tokens = getattr(model_meta, "max_input_tokens", None) or (
+            model_meta.get("max_input_tokens") if isinstance(model_meta, dict) else None
+        )
+        max_chunk_chars = getattr(model_meta, "max_chunk_chars", None) or (
+            model_meta.get("max_chunk_chars") if isinstance(model_meta, dict) else None
+        )
+        chunk_overlap_tokens = getattr(model_meta, "chunk_overlap_tokens", None) or (
+            model_meta.get("chunk_overlap_tokens") if isinstance(model_meta, dict) else None
+        )
+        max_prompt_chars = getattr(model_meta, "max_prompt_chars", None) or (
+            model_meta.get("max_prompt_chars") if isinstance(model_meta, dict) else None
+        )
+        max_prompt_segments = getattr(model_meta, "max_prompt_segments", None) or (
+            model_meta.get("max_prompt_segments") if isinstance(model_meta, dict) else None
+        )
         default_enabled = getattr(model_meta, "default_enabled", None)
         if default_enabled is None and isinstance(model_meta, dict):
             default_enabled = model_meta.get("default_enabled")
+        deployment_env = getattr(model_meta, "deployment_env", None) or (
+            model_meta.get("deployment_env") if isinstance(model_meta, dict) else None
+        )
         options_payload = getattr(model_meta, "options", None) or (
             model_meta.get("options") if isinstance(model_meta, dict) else None
         )
+        options_dict = dict(options_payload) if isinstance(options_payload, dict) else {}
+        if deployment_env and "azure_deployment" not in options_dict:
+            options_dict["azure_deployment"] = deployment_env
         payload.append(
             {
                 "name": model_name,
@@ -388,10 +441,16 @@ def default_models_payload(provider) -> List[dict]:
                 "cost_tier": cost_tier or "standard",
                 "max_output_tokens": max_output,
                 "context_window_tokens": context_window,
+                "max_input_tokens": max_input_tokens,
+                "max_chunk_chars": max_chunk_chars,
+                "chunk_overlap_tokens": chunk_overlap_tokens,
+                "max_prompt_chars": max_prompt_chars,
+                "max_prompt_segments": max_prompt_segments,
                 "default_temperature": default_temp,
                 "origin": origin,
+                "deployment_env": deployment_env,
                 "enabled": bool(default_enabled) if default_enabled is not None else True,
-                "options": options_payload if isinstance(options_payload, dict) else {},
+                "options": options_dict,
             }
         )
     return payload

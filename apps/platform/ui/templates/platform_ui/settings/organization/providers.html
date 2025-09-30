@@ -216,9 +216,21 @@
                         {% if model.context_window_tokens %}<span>Context: {{ model.context_window_tokens }}</span>{% endif %}
                         {% if model.max_output_tokens %}<span>Max output: {{ model.max_output_tokens }}</span>{% endif %}
                         {% if model.default_temperature %}<span>Temp: {{ model.default_temperature }}</span>{% endif %}
-                        {% if model.options.max_input_tokens %}<span>Input: {{ model.options.max_input_tokens }}</span>{% endif %}
-                        {% if model.options.max_chunk_chars %}<span>Chunk chars: {{ model.options.max_chunk_chars }}</span>{% endif %}
-                        {% if model.options.chunk_overlap_tokens %}<span>Overlap: {{ model.options.chunk_overlap_tokens }}</span>{% endif %}
+                        {% with model.max_input_tokens|default:model.options.max_input_tokens as max_input_tokens %}
+                          {% if max_input_tokens %}<span>Input: {{ max_input_tokens }}</span>{% endif %}
+                        {% endwith %}
+                        {% with model.max_chunk_chars|default:model.options.max_chunk_chars as max_chunk_chars %}
+                          {% if max_chunk_chars %}<span>Chunk chars: {{ max_chunk_chars }}</span>{% endif %}
+                        {% endwith %}
+                        {% with model.chunk_overlap_tokens|default:model.options.chunk_overlap_tokens as chunk_overlap %}
+                          {% if chunk_overlap %}<span>Overlap: {{ chunk_overlap }}</span>{% endif %}
+                        {% endwith %}
+                        {% with model.max_prompt_chars|default:model.options.max_prompt_chars as max_prompt_chars %}
+                          {% if max_prompt_chars %}<span>Prompt chars: {{ max_prompt_chars }}</span>{% endif %}
+                        {% endwith %}
+                        {% with model.max_prompt_segments|default:model.options.max_prompt_segments as max_prompt_segments %}
+                          {% if max_prompt_segments %}<span>Prompt segments: {{ max_prompt_segments }}</span>{% endif %}
+                        {% endwith %}
                         {% if model.deployment_env %}<span>Deployment: {{ model.deployment_env }}</span>{% endif %}
                       </div>
                     </li>

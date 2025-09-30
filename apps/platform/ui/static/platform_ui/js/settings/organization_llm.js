@@ -60,20 +60,61 @@
     const enabledCheckbox = clone.querySelector('input[name="model_enabled"]');
     const originSelect = clone.querySelector('[data-model-origin]');
 
+    const optionsRaw = (data && typeof data.options === 'object' && data.options)
+      ? { ...data.options }
+      : {};
+
     if (name && data?.name) name.value = data.name;
     if (label && data?.label) label.value = data.label;
     if (tier && data?.cost_tier) tier.value = data.cost_tier;
     if (maxTokens && data?.max_output_tokens != null) maxTokens.value = data.max_output_tokens;
     if (ctxTokens && data?.context_window_tokens != null) ctxTokens.value = data.context_window_tokens;
     if (defaultTemp && data?.default_temperature != null) defaultTemp.value = data.default_temperature;
-    if (maxInputTokens && data?.options?.max_input_tokens != null) maxInputTokens.value = data.options.max_input_tokens;
-    if (maxChunkChars && data?.options?.max_chunk_chars != null) maxChunkChars.value = data.options.max_chunk_chars;
-    if (chunkOverlap && data?.options?.chunk_overlap_tokens != null) chunkOverlap.value = data.options.chunk_overlap_tokens;
-    if (maxPromptChars && data?.options?.max_prompt_chars != null) maxPromptChars.value = data.options.max_prompt_chars;
-    if (maxPromptSegments && data?.options?.max_prompt_segments != null) maxPromptSegments.value = data.options.max_prompt_segments;
-    if (deploymentEnv && data?.deployment_env) deploymentEnv.value = data.deployment_env;
-    if (optionsJson && data?.options && Object.keys(data.options).length) {
-      optionsJson.value = JSON.stringify(data.options, null, 2);
+
+    const resolveNumeric = (primary, fallback) => (
+      primary != null ? primary : (fallback != null ? fallback : null)
+    );
+
+    const resolvedMaxInput = resolveNumeric(data?.max_input_tokens, optionsRaw.max_input_tokens);
+    if (maxInputTokens && resolvedMaxInput != null) maxInputTokens.value = resolvedMaxInput;
+    const resolvedMaxChunk = resolveNumeric(data?.max_chunk_chars, optionsRaw.max_chunk_chars);
+    if (maxChunkChars && resolvedMaxChunk != null) maxChunkChars.value = resolvedMaxChunk;
+    const resolvedChunkOverlap = resolveNumeric(
+      data?.chunk_overlap_tokens,
+      optionsRaw.chunk_overlap_tokens,
+    );
+    if (chunkOverlap && resolvedChunkOverlap != null) chunkOverlap.value = resolvedChunkOverlap;
+    const resolvedMaxPromptChars = resolveNumeric(
+      data?.max_prompt_chars,
+      optionsRaw.max_prompt_chars,
+    );
+    if (maxPromptChars && resolvedMaxPromptChars != null) maxPromptChars.value = resolvedMaxPromptChars;
+    const resolvedMaxPromptSegments = resolveNumeric(
+      data?.max_prompt_segments,
+      optionsRaw.max_prompt_segments,
+    );
+    if (maxPromptSegments && resolvedMaxPromptSegments != null) {
+      maxPromptSegments.value = resolvedMaxPromptSegments;
+    }
+
+    const resolvedDeployment = data?.deployment_env || optionsRaw.azure_deployment;
+    if (deploymentEnv && resolvedDeployment) deploymentEnv.value = resolvedDeployment;
+
+    const advancedOptions = { ...optionsRaw };
+    [
+      'max_input_tokens',
+      'max_chunk_chars',
+      'chunk_overlap_tokens',
+      'max_prompt_chars',
+      'max_prompt_segments',
+    ].forEach((key) => {
+      if (key in advancedOptions) delete advancedOptions[key];
+    });
+    if (resolvedDeployment && advancedOptions.azure_deployment === resolvedDeployment) {
+      delete advancedOptions.azure_deployment;
+    }
+    if (optionsJson && Object.keys(advancedOptions).length) {
+      optionsJson.value = JSON.stringify(advancedOptions, null, 2);
     }
     if (enabledCheckbox) enabledCheckbox.checked = data?.enabled !== false;
     populateCreatorSelect(originSelect, creatorOptions, data?.origin);
