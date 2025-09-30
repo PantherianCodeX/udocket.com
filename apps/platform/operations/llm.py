@@ -813,10 +813,22 @@ def run_live_model_probe(
         options=prepared.get("options") or {},
     )
     client = build_chat_client(provider_runtime=runtime_cfg)
+    # Choose a safe temperature: prefer explicit option, then model default, else 1.0
+    test_temperature = 1.0
+    try:
+        opt_temp = prepared.get("options", {}).get("temperature")
+        if isinstance(opt_temp, (int, float)):
+            test_temperature = float(opt_temp)
+        else:
+            default_temp = prepared.get("default_temperature")
+            if isinstance(default_temp, (int, float)):
+                test_temperature = float(default_temp)
+    except Exception:
+        test_temperature = 1.0
     try:
         content, usage = client.chat(
             messages=[{"role": "user", "content": "Respond with OK"}],
-            temperature=0.0,
+            temperature=test_temperature,
             max_tokens=16,
         )
     except ChatClientError:
