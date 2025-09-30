@@ -303,6 +303,25 @@ def build_job_rows(
     return display_rows, flat_rows
 
 
+SUMMARY_KEYWORDS = {"summary", "summarize", "summarization"}
+
+
+def _metadata_matches_keywords(meta: Dict[str, Any], keywords: Tuple[str, ...]) -> bool:
+    """Return True when job metadata implies it belongs to a keyword bucket."""
+
+    if not meta:
+        return False
+    normalized_keywords = {word.lower() for word in keywords}
+
+    if SUMMARY_KEYWORDS.intersection(normalized_keywords):
+        for key, value in meta.items():
+            key_str = str(key).lower()
+            if key_str.startswith("summary_") and value is not None:
+                return True
+
+    return False
+
+
 def jobs_by_agent(
     job_rows: List[Dict[str, Any]],
     *,
@@ -314,7 +333,7 @@ def jobs_by_agent(
     def _matches(row: Dict[str, Any]) -> bool:
         job = row.get("job")
         telem = row.get("telemetry") or {}
-        meta = telem.get("metadata") or {}
+        meta = as_dict(telem.get("metadata"))
         agent = telem.get("agent") or {}
         agent_type = str(agent.get("type") or "").lower()
         job_kind = str(meta.get("job_kind") or "").lower()
@@ -325,6 +344,8 @@ def jobs_by_agent(
         if any(word in job_kind for word in keywords_lower):
             return True
         if any(word in job_mode for word in keywords_lower):
+            return True
+        if _metadata_matches_keywords(meta, keywords_lower):
             return True
         if include_conversion and job_kind.startswith("audio_conversion"):
             return True
