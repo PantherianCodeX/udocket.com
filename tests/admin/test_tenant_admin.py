@@ -15,8 +15,8 @@ from apps.platform.artifacts.admin import CaseArtifactAdmin
 from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.jobs.admin import JobAdmin
 from apps.platform.jobs.models import Job
-from apps.platform.operations.admin import AuditEventAdmin, TaskRunAdmin
-from apps.platform.operations.models import AuditEvent, TaskRun
+from apps.platform.operations.admin import AuditEventAdmin
+from apps.platform.operations.models import AuditEvent
 from apps.platform.tenancy import scope_cases, scope_jobs
 
 
@@ -240,65 +240,6 @@ def test_audit_event_admin_queryset_matches_scope(settings):
 
 
 @pytest.mark.django_db
-def test_task_run_admin_queryset_matches_scope(settings):
-    settings.PLATFORM_DEV_OPEN = False
-    org_allowed = Organization.objects.create(id="task-alpha", name="Task Alpha")
-    org_blocked = Organization.objects.create(id="task-beta", name="Task Beta")
-
-    case_allowed = Case.objects.create(id="task-case-1", title="Task One", organization=org_allowed)
-    case_blocked = Case.objects.create(id="task-case-2", title="Task Two", organization=org_blocked)
-
-    user = get_user_model().objects.create_user(
-        username="task-staff", password="x"
-    )
-    OrganizationMembership.objects.create(
-        user=user, organization=org_allowed, role=OrganizationMembership.Role.ADMIN
-    )
-    CaseMembership.objects.create(case=case_allowed, user=user)
-
-    job_allowed = Job.objects.create(
-        case=case_allowed,
-        organization=org_allowed,
-        mode=Job.Mode.ON_DEMAND,
-        audio_input="/tmp/audio-task.wav",
-        language="en-CA",
-    )
-    Job.objects.create(
-        case=case_blocked,
-        organization=org_blocked,
-        mode=Job.Mode.ON_DEMAND,
-        audio_input="/tmp/audio-blocked.wav",
-        language="en-CA",
-    )
-
-    allowed_run = TaskRun.objects.create(
-        task_name="jobs.transcribe",
-        status="SUCCEEDED",
-        job_id=str(job_allowed.id),
-        case_id=case_allowed.id,
-    )
-    TaskRun.objects.create(
-        task_name="jobs.transcribe",
-        status="FAILED",
-        job_id="blocked-job",
-        case_id=case_blocked.id,
-    )
-
-    task_admin = TaskRunAdmin(TaskRun, admin.site)
-    request = _admin_request(user, "/admin/operations/taskrun/")
-
-    scoped_qs = task_admin.get_queryset(request)
-    assert list(scoped_qs.values_list("id", flat=True)) == [allowed_run.id]
-    assert task_admin.has_view_permission(request, allowed_run) is True
-    blocked_run = TaskRun.objects.exclude(id=allowed_run.id).first()
-    assert task_admin.has_view_permission(request, blocked_run) is False
-
-    set_active_admin_org_id(request, org_allowed.id)
-    filtered_qs = task_admin.get_queryset(request)
-    assert list(filtered_qs.values_list("id", flat=True)) == [allowed_run.id]
-
-
-@pytest.mark.django_db
 def test_operations_admin_respects_superuser_active_org(settings):
     settings.PLATFORM_DEV_OPEN = False
     org_allowed = Organization.objects.create(id="ops-alpha", name="Ops Alpha")
@@ -307,49 +248,18 @@ def test_operations_admin_respects_superuser_active_org(settings):
     case_allowed = Case.objects.create(id="ops-case-1", title="Ops One", organization=org_allowed)
     case_other = Case.objects.create(id="ops-case-2", title="Ops Two", organization=org_other)
 
-    job_allowed = Job.objects.create(
-        case=case_allowed,
-        organization=org_allowed,
-        mode=Job.Mode.ON_DEMAND,
-        audio_input="/tmp/audio-ops.wav",
-        language="en-CA",
-    )
-    job_other = Job.objects.create(
-        case=case_other,
-        organization=org_other,
-        mode=Job.Mode.ON_DEMAND,
-        audio_input="/tmp/audio-other.wav",
-        language="en-CA",
-    )
-
     event_allowed = AuditEvent.objects.create(case_id=case_allowed.id, event="ALLOWED", actor="root")
     event_other = AuditEvent.objects.create(case_id=case_other.id, event="OTHER", actor="root")
-    run_allowed = TaskRun.objects.create(
-        task_name="jobs.transcribe",
-        status="SUCCEEDED",
-        job_id=str(job_allowed.id),
-        case_id=case_allowed.id,
-    )
-    run_other = TaskRun.objects.create(
-        task_name="jobs.transcribe",
-        status="SUCCEEDED",
-        job_id=str(job_other.id),
-        case_id=case_other.id,
-    )
 
     superuser = get_user_model().objects.create_superuser(username="root", password="x")
     OrganizationMembership.objects.create(
         user=superuser, organization=org_allowed, role=OrganizationMembership.Role.SUPERUSER
     )
     audit_admin = AuditEventAdmin(AuditEvent, admin.site)
-    task_admin = TaskRunAdmin(TaskRun, admin.site)
 
     request = _admin_request(superuser)
     assert set(audit_admin.get_queryset(request).values_list("id", flat=True)) == {event_allowed.id, event_other.id}
-    assert set(task_admin.get_queryset(request).values_list("id", flat=True)) == {run_allowed.id, run_other.id}
 
     set_active_admin_org_id(request, org_allowed.id)
     scoped_events = set(audit_admin.get_queryset(request).values_list("id", flat=True))
-    scoped_runs = set(task_admin.get_queryset(request).values_list("id", flat=True))
     assert scoped_events == {event_allowed.id}
-    assert scoped_runs == {run_allowed.id}

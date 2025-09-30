@@ -37,6 +37,16 @@ def update_job_meta(case_id: str, organization_id: Optional[str], job_id: str, u
             pass
 
 
+def read_job_meta(case_id: str, organization_id: Optional[str], job_id: str) -> Dict[str, Any]:
+    meta_path = storage_ops_dir(case_id, organization_id) / META_FILE_TEMPLATE.format(job_id=job_id)
+    if not meta_path.exists():
+        return {}
+    try:
+        return json.loads(meta_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
 def append_job_log(case_id: str, organization_id: Optional[str], job_id: str, message: str, level: str = "INFO") -> None:
     log_path = storage_ops_dir(case_id, organization_id) / LOG_FILE_TEMPLATE.format(job_id=job_id)
     try:

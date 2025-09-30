@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, Dict, Iterable, Mapping
+
+from django.template.loader import render_to_string
 
 from ..constants import STATUS_SORT_ORDER, STATUS_CLASS_MAP
 
@@ -61,3 +63,27 @@ def user_label(user: Any) -> str:
         return username
     pk = getattr(user, "pk", None)
     return str(pk) if pk is not None else ""
+
+
+def render_notes_panel_html(
+    *,
+    job_id: str | None,
+    entries: Iterable[Mapping[str, Any]] | None,
+    updated_at: str | None,
+    updated_by: str | None,
+    user_can_add: bool,
+) -> str:
+    if not job_id:
+        return ""
+    context: Dict[str, Any] = {
+        "job_id": job_id,
+        "notes_entries": list(entries or []),
+        "notes_updated_at": updated_at,
+        "notes_updated_by": updated_by,
+        "user_can_add_notes": user_can_add,
+    }
+    return render_to_string("platform_ui/components/notes/team_notes_panel.html", context)
+
+
+def render_audio_brief_panel_html(**context: Any) -> str:
+    return render_to_string("platform_ui/components/jobs/_audio_brief.html", context)

@@ -20,7 +20,7 @@ from apps.platform.jobs.models import Job, JobNote
 
 from ..constants import CASE_JOB_TABLE_COLUMNS, DEFAULT_TABLE_FILTERS, GLOBAL_JOB_TABLE_COLUMNS
 from ..common import as_dict
-from ..presenters.utils import status_class, user_label
+from ..presenters.utils import render_notes_panel_html, status_class, user_label
 from .analysis import enrich_summary_artifacts, enrich_timeline_artifacts
 from ..presenters.jobs import (
     friendly_job_title,
@@ -320,6 +320,15 @@ def analysis_modules_context(
                 "updated_by": notes_updated_by,
                 "user_can_add": _user_can_add_notes(user, case),
             }
+        notes_panel_html = ""
+        if notes_context.get("job_id"):
+            notes_panel_html = render_notes_panel_html(
+                job_id=notes_context["job_id"],
+                entries=notes_context.get("entries"),
+                updated_at=notes_context.get("updated_at"),
+                updated_by=notes_context.get("updated_by"),
+                user_can_add=notes_context.get("user_can_add", False),
+            )
 
         latest_details = as_dict(latest.get("details")) if latest else {}
         downloads: List[Dict[str, Any]] = []
@@ -378,6 +387,7 @@ def analysis_modules_context(
                 "disabled_reason": disabled_reason,
             },
             "notes": notes_context,
+            "notes_panel": notes_panel_html,
         }
 
     return [

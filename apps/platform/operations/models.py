@@ -54,18 +54,6 @@ class AuditEvent(models.Model):
     data = models.JSONField(default=dict, blank=True)
 
 
-class TaskRun(models.Model):
-    id = models.BigAutoField(primary_key=True)
-    task_name = models.CharField(max_length=200)
-    task_id = models.CharField(max_length=64, blank=True)
-    started_at = models.DateTimeField(auto_now_add=True)
-    finished_at = models.DateTimeField(null=True, blank=True)
-    status = models.CharField(max_length=32, default="PENDING")
-    job_id = models.CharField(max_length=36, blank=True)
-    case_id = models.CharField(max_length=36, blank=True)
-    meta = models.JSONField(default=dict, blank=True)
-
-
 class GuardianSettings(models.Model):
     id = models.BigAutoField(primary_key=True)
     organization = models.OneToOneField(

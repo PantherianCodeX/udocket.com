@@ -80,21 +80,25 @@
   </div>
 
   <div class="grid gap-4 md:grid-cols-2">
-    {% include "platform_ui/components/jobs/_audio_brief.html" with
-       panel_title="Audio"
-       panel_key="current"
-       job_id=job.id
-       audio=telemetry.audio
-       metadata=metadata_map
-       refresh_enabled=True
-       refresh_panel="current"
-       refresh_job_id=job.id
-       refresh_display_job_id=job.id
-       refresh_case_id=case.id
-       verify_enabled=telemetry.audio.path or telemetry.audio.sha256
-       verify_target="audio"
-       verify_mark_targets=job.id
-    %}
+    {% if audio_panel_current_html %}
+      {{ audio_panel_current_html|safe }}
+    {% else %}
+      {% include "platform_ui/components/jobs/_audio_brief.html" with
+         panel_title="Audio"
+         panel_key="current"
+         job_id=job.id
+         audio=telemetry.audio
+         metadata=metadata_map
+         refresh_enabled=True
+         refresh_panel="current"
+         refresh_job_id=job.id
+         refresh_display_job_id=job.id
+         refresh_case_id=case.id
+         verify_enabled=telemetry.audio.path or telemetry.audio.sha256
+         verify_target="audio"
+         verify_mark_targets=job.id
+      %}
+    {% endif %}
 
     <div class="rounded-lg border border-white/10 bg-slate-900/60 p-4">
       <div class="text-xs uppercase tracking-wide text-slate-400">Transcript</div>
@@ -146,11 +150,15 @@
     </div>
   </div>
 
-  {% include "platform_ui/components/notes/team_notes_panel.html" with
-     job_id=job.id
-     notes_entries=notes_entries
-     notes_updated_at=notes_updated_at
-     notes_updated_by=notes_updated_by
-     user_can_add_notes=user_can_review
-  %}
+  {% if notes_panel_html %}
+    {{ notes_panel_html|safe }}
+  {% else %}
+    {% include "platform_ui/components/notes/team_notes_panel.html" with
+       job_id=job.id
+       notes_entries=notes_entries
+       notes_updated_at=notes_updated_at
+       notes_updated_by=notes_updated_by
+       user_can_add_notes=user_can_review
+    %}
+  {% endif %}
 </div>

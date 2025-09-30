@@ -39,8 +39,7 @@ from django.db import transaction
 from apps.platform.operations.tasks import summarize_job, timeline_job, graph_job
 from apps.platform.tenancy import scope_jobs
 from apps.platform.operations.storage import ensure_case_dirs, ops_dir as storage_ops_dir
-from apps.platform.operations.utils import update_job_meta, append_job_log
-from apps.platform.operations.models import TaskRun
+from apps.platform.operations.utils import append_job_log, read_job_meta, update_job_meta
 from packages.udocket_core.audio import probe_audio_metadata
 
 
@@ -732,11 +731,23 @@ class JobViewSet(viewsets.ModelViewSet):
         org_id = str(job.organization_id) if getattr(job, "organization_id", None) else None
         job_id_str = str(job.id)
 
-        task_runs = list(
-            TaskRun.objects.filter(job_id=job_id_str, task_name="transcribe_job").order_by("-started_at")
-        )
-        task_ids = [tr.task_id for tr in task_runs if tr.task_id]
-        active_task_ids = self._active_celery_task_ids(task_ids)
+        job_meta = read_job_meta(case_id, org_id, job_id_str)
+        candidate_ids: List[str] = []
+        task_meta_id = job_meta.get("celery_task_id")
+        if isinstance(task_meta_id, str) and task_meta_id:
+            candidate_ids.append(task_meta_id)
+        history_ids = job_meta.get("celery_task_history")
+        if isinstance(history_ids, list):
+            for value in history_ids:
+                if isinstance(value, str) and value:
+                    candidate_ids.append(value)
+        deduped_ids: List[str] = []
+        seen: Set[str] = set()
+        for value in candidate_ids:
+            if value not in seen:
+                seen.add(value)
+                deduped_ids.append(value)
+        active_task_ids = self._active_celery_task_ids(deduped_ids)
 
         # If no workers are handling the job, finalize immediately regardless of current status.
         if not active_task_ids:
@@ -746,17 +757,21 @@ class JobViewSet(viewsets.ModelViewSet):
             job.error_message = "Cancelled by user"
             job.upload_progress = None
             job.save(update_fields=["status", "finished_at", "error_message", "upload_progress"])
-            for tr in task_runs:
-                if tr.status != "CANCELLED":
-                    tr.status = "CANCELLED"
-                    tr.finished_at = now
-                    tr.save(update_fields=["status", "finished_at"])
             try:
                 self._cancel_azure_transcription(job)
             except Exception:
                 pass
             append_job_log(case_id, org_id, job_id_str, "Cancellation completed (no active worker)")
-            update_job_meta(case_id, org_id, job_id_str, {"cancelled_at": now.isoformat()})
+            update_job_meta(
+                case_id,
+                org_id,
+                job_id_str,
+                {
+                    "cancelled_at": now.isoformat(),
+                    "celery_task_status": "cancelled",
+                    "celery_task_finished_at": now.isoformat(),
+                },
+            )
             audit_emit(
                 request,
                 case_id=case_id,
@@ -791,6 +806,15 @@ class JobViewSet(viewsets.ModelViewSet):
         except Exception:
             pass
         append_job_log(case_id, org_id, job_id_str, "Cancellation requested; awaiting worker shutdown")
+        update_job_meta(
+            case_id,
+            org_id,
+            job_id_str,
+            {
+                "celery_task_status": "cancelling",
+                "cancellation_requested_at": timezone.now().isoformat(),
+            },
+        )
         audit_emit(
             request,
             case_id=case_id,

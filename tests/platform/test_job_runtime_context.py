@@ -10,7 +10,6 @@ from apps.platform.accounts.models import Organization
 from apps.platform.cases.models import Case
 from apps.platform.jobs.models import Job
 from apps.platform.operations import tasks
-from apps.platform.operations.models import TaskRun
 
 
 @pytest.mark.django_db()
@@ -91,11 +90,13 @@ def test_job_runtime_context_lifecycle(monkeypatch):
     assert job.upload_progress is None
     assert pytest.approx(finished, abs=1e-6) == pytest.approx(job.finished_at, abs=1e-6)
 
-    # TaskRun should have been created/updated
-    task_run = TaskRun.objects.get(job_id=str(job.id), task_name="transcribe_job")
-    assert task_run.status == "SUCCEEDED"
-    assert task_run.meta["mode"] == "batch"
-    assert task_run.meta["duration_s"] == 12.5
+    # Task state tracking should capture metadata
+    task_state = runtime.task_state
+    assert task_state["status"] == Job.Status.SUCCEEDED
+    assert task_state["task_id"] == "task-123"
+    assert task_state["mode"] == "batch"
+    assert task_state["duration_s"] == 12.5
+    assert "started_at" in task_state and "finished_at" in task_state
 
     # Meta/log/event hooks captured expected payloads
     assert any(call[3].get("phase") == "start" for call in meta_calls)

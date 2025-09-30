@@ -45,7 +45,7 @@ from apps.platform.operations.guardian import (
     snapshot_artifact_for_guardian,
     store_guardian_review,
 )
-from apps.platform.operations.utils import update_job_meta, append_job_log
+from apps.platform.operations.utils import append_job_log, read_job_meta, update_job_meta
 
 # Backwards compatibility for tests importing _update_job_meta
 def _update_job_meta(case_id: str, organization_id: Optional[str], job_id: str, updates: Dict[str, Any]) -> None:  # pragma: no cover - shim
@@ -96,11 +96,25 @@ class JobRuntimeContext:
     task_name: Optional[str] = None
     task_id: Optional[str] = None
     task_meta: Dict[str, Any] = field(default_factory=dict)
-    task_run: Optional[TaskRun] = None
+    _task_state: Dict[str, Any] = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        self._task_state = dict(self.task_meta)
 
     @property
     def job_id(self) -> str:
         return str(self.job.id)
+
+    @property
+    def task_state(self) -> Dict[str, Any]:
+        """Read-only view of the runtime task state."""
+
+        return dict(self._task_state)
+
+    def _update_task_state(self, updates: Optional[Dict[str, Any]]) -> None:
+        if not updates:
+            return
+        self._task_state.update(updates)
 
     def start(
         self,
@@ -134,8 +148,13 @@ class JobRuntimeContext:
         if event:
             payload = job_event_payload or {}
             _emit_job_update(self.job_id, case_id=self.case_id, event=event, status=status, **payload)
-
-        self._ensure_task_run(status="RUNNING")
+        self._update_task_state(
+            {
+                "status": status,
+                "started_at": started.isoformat(),
+                "task_id": self.task_id or "",
+            }
+        )
         return started
 
     def succeed(
@@ -171,8 +190,10 @@ class JobRuntimeContext:
         _emit_job_update(self.job_id, case_id=self.case_id, event="job.succeeded", status=status, **payload)
         for event_name, payload in events or []:
             _emit_job_update(self.job_id, case_id=self.case_id, event=event_name, status=status, **payload)
-
-        self._complete_task_run(status="SUCCEEDED", finished=finished, meta_updates=task_meta_updates)
+        meta_payload = {"status": status, "finished_at": finished.isoformat()}
+        if task_meta_updates:
+            meta_payload.update(task_meta_updates)
+        self._update_task_state(meta_payload)
 
         return finished
 
@@ -215,9 +236,10 @@ class JobRuntimeContext:
             payload_with_error.setdefault("error", error)
             _emit_job_update(self.job_id, case_id=self.case_id, event=event_name, status=status, **payload_with_error)
 
-        additional_meta = task_meta_updates or {}
-        additional_meta.setdefault("error", error)
-        self._complete_task_run(status="FAILED", finished=finished, meta_updates=additional_meta)
+        additional_meta = {"status": status, "finished_at": finished.isoformat(), "error": error}
+        if task_meta_updates:
+            additional_meta.update(task_meta_updates)
+        self._update_task_state(additional_meta)
 
         return finished
 
@@ -267,7 +289,13 @@ class JobRuntimeContext:
                 **payload,
             )
 
-        self._complete_task_run(status="CANCELLED", finished=finished, meta_updates={"reason": reason or "cancelled"})
+        self._update_task_state(
+            {
+                "status": Job.Status.CANCELLED,
+                "finished_at": finished.isoformat(),
+                "reason": reason or "cancelled",
+            }
+        )
         return finished
 
     def transition(
@@ -305,60 +333,11 @@ class JobRuntimeContext:
             event_status = payload.pop("status", status)
             _emit_job_update(self.job_id, case_id=self.case_id, event=event, status=event_status, **payload)
 
-        if task_meta_updates and self.task_run:
-            try:
-                meta_payload = dict(self.task_run.meta or {})
-                meta_payload.update(task_meta_updates)
-                self.task_run.meta = meta_payload
-                self.task_run.save(update_fields=["meta"])
-            except Exception:
-                pass
+        self._update_task_state(task_meta_updates)
 
     def emit(self, event: str, *, status: Optional[str] = None, **payload: Any) -> None:
         _emit_job_update(self.job_id, case_id=self.case_id, event=event, status=status, **payload)
 
-    def _ensure_task_run(self, *, status: str) -> None:
-        if not self.task_name:
-            return
-        if self.task_run:
-            return
-        task_run = TaskRun(
-            task_name=self.task_name,
-            task_id=self.task_id or "",
-            status=status,
-            job_id=self.job_id,
-            case_id=self.case_id,
-            meta=dict(self.task_meta),
-        )
-        try:
-            task_run.save()
-            self.task_run = task_run
-        except Exception:
-            self.task_run = None
-
-    def _complete_task_run(
-        self,
-        *,
-        status: str,
-        finished: datetime,
-        meta_updates: Optional[Dict[str, Any]] = None,
-    ) -> None:
-        if not self.task_name:
-            return
-        if not self.task_run:
-            self._ensure_task_run(status=status)
-        if not self.task_run:
-            return
-        try:
-            self.task_run.status = status
-            self.task_run.finished_at = finished
-            if meta_updates:
-                payload = dict(self.task_run.meta or {})
-                payload.update(meta_updates)
-                self.task_run.meta = payload
-            self.task_run.save(update_fields=["status", "finished_at", "meta"])
-        except Exception:
-            pass
 
 
 def _sha256_file(path: Path) -> Optional[str]:
@@ -465,6 +444,7 @@ def transcribe_job(
             "language": language,
         },
     )
+    existing_job_meta = read_job_meta(case_id, org_id, job_id)
 
     audio_meta_updates: Dict[str, Any] = {}
     try:
@@ -512,7 +492,7 @@ def transcribe_job(
         except Exception:
             pass
 
-    # Update DB status and notify; record TaskRun
+    # Update DB status and notify
     log.info(
         "job claimed",
         extra={"job_id": job_id, "case_id": case_id, "mode": mode, "diarization": diarization},
@@ -543,14 +523,41 @@ def transcribe_job(
         f"language={language or cfg.default_language if hasattr(cfg, 'default_language') else (language or 'auto')})"
     )
 
-    runtime.start(
+    start_meta_updates: Dict[str, Any] = {**base_meta, "transcription_status": initial_meta_status}
+    celery_task_id = runtime.task_id or None
+    if celery_task_id:
+        history: List[str] = []
+        history_payload = existing_job_meta.get("celery_task_history")
+        if isinstance(history_payload, list):
+            history = [value for value in history_payload if isinstance(value, str) and value]
+        else:
+            previous_id = existing_job_meta.get("celery_task_id")
+            if isinstance(previous_id, str) and previous_id:
+                history.append(previous_id)
+        if celery_task_id not in history:
+            history.append(celery_task_id)
+        start_meta_updates["celery_task_id"] = celery_task_id
+        if history:
+            start_meta_updates["celery_task_history"] = history
+        if runtime.task_name:
+            start_meta_updates.setdefault("celery_task_name", runtime.task_name)
+
+    started_at = runtime.start(
         status=initial_status,
         log_message=start_log_message,
         event=initial_event,
-        meta_updates={**base_meta, "transcription_status": initial_meta_status},
+        meta_updates=start_meta_updates,
         job_updates=initial_job_updates,
         job_event_payload=initial_payload,
     )
+
+    if celery_task_id and started_at:
+        _safe_job_meta(
+            case_id,
+            org_id,
+            job_id,
+            {"celery_task_started_at": started_at.isoformat()},
+        )
 
     # Run the agent; only this block determines success vs. failure
     batch_upload_meta: Dict[str, Any] = {}
@@ -968,6 +975,9 @@ def transcribe_job(
         cancel_meta = {**base_meta, "transcription_status": "cancelled"}
         cancel_meta.update(audio_meta_updates)
         cancel_meta.update(batch_upload_meta)
+        if celery_task_id:
+            cancel_meta.setdefault("celery_task_id", celery_task_id)
+            cancel_meta["celery_task_status"] = "cancelled"
         cancel_payload = {
             "status": Job.Status.CANCELLED,
             "job_id": job_id,
@@ -990,7 +1000,11 @@ def transcribe_job(
             case_id,
             org_id,
             job_id,
-            {"transcription_completed_at": cancel_ts.isoformat() if cancel_ts else None},
+            {
+                "transcription_completed_at": cancel_ts.isoformat() if cancel_ts else None,
+                "celery_task_finished_at": cancel_ts.isoformat() if cancel_ts else None,
+                "celery_task_status": "cancelled" if celery_task_id else None,
+            },
         )
         try:
             if isinstance(ai, str) and ai.startswith("/"):
@@ -1015,6 +1029,9 @@ def transcribe_job(
         failure_meta = {**base_meta, "transcription_status": "failed"}
         failure_meta.update(audio_meta_updates)
         failure_meta.update(batch_upload_meta)
+        if celery_task_id:
+            failure_meta.setdefault("celery_task_id", celery_task_id)
+            failure_meta["celery_task_status"] = "failed"
         fail_ts = runtime.fail(
             error=error_message,
             log_message=f"Job failed: {error_message}",
@@ -1026,7 +1043,11 @@ def transcribe_job(
             case_id,
             org_id,
             job_id,
-            {"transcription_completed_at": fail_ts.isoformat() if fail_ts else None},
+            {
+                "transcription_completed_at": fail_ts.isoformat() if fail_ts else None,
+                "celery_task_finished_at": fail_ts.isoformat() if fail_ts else None,
+                "celery_task_status": "failed" if celery_task_id else None,
+            },
         )
         raise
 
@@ -1122,6 +1143,9 @@ def transcribe_job(
             "transcription_duration_s": result.duration_s,
         }
     )
+    if celery_task_id:
+        meta_updates.setdefault("celery_task_id", celery_task_id)
+        meta_updates["celery_task_status"] = "succeeded"
     if job_meta_title:
         meta_updates.setdefault("job_title", job_meta_title)
 
@@ -1147,7 +1171,11 @@ def transcribe_job(
         case_id,
         org_id,
         job_id,
-        {"transcription_completed_at": finished_ts.isoformat() if finished_ts else None},
+        {
+            "transcription_completed_at": finished_ts.isoformat() if finished_ts else None,
+            "celery_task_finished_at": finished_ts.isoformat() if finished_ts else None,
+            "celery_task_status": "succeeded" if celery_task_id else None,
+        },
     )
 
     log.info("job succeeded", extra={"job_id": job_id, "transcript": str(result.transcript_file)})
@@ -1173,16 +1201,6 @@ def _case_paths(case_id: str, organization_id: str | None = None) -> tuple[Path,
 
 def _ops_dir(case_id: str, organization_id: str | None = None) -> Path:
     return storage_ops_dir(case_id, organization_id)
-
-
-def _load_job_meta(case_id: str, organization_id: str | None, job_id: str) -> Dict[str, Any]:
-    meta_path = _ops_dir(case_id, organization_id) / f"{job_id}_transcription_log.json"
-    if not meta_path.exists():
-        return {}
-    try:
-        return json.loads(meta_path.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
 
 
 def _resolve_case_relative(path_str: str, case_dir: Path) -> Optional[Path]:
@@ -1347,7 +1365,7 @@ def summarize_job(
             source_job = job
     org_id = job.organization_id or job.case.organization_id
     case_dir, _, _ = _case_paths(case_id, org_id)
-    existing_meta = _load_job_meta(case_id, org_id, job_id)
+    existing_meta = read_job_meta(case_id, org_id, job_id)
     summary_title = str(existing_meta.get("job_title") or f"Summary {job_id}")
     transcript = (
         Path(source_job.transcript_path)
@@ -1375,23 +1393,63 @@ def summarize_job(
             "source_job_id": str(source_job.id),
         },
     )
+    summary_start_meta = {**base_meta, "summary_status": "running"}
+    summary_task_id = runtime.task_id or None
+    if summary_task_id:
+        history: List[str] = []
+        history_payload = existing_meta.get("celery_task_history")
+        if isinstance(history_payload, list):
+            history = [value for value in history_payload if isinstance(value, str) and value]
+        else:
+            previous_id = existing_meta.get("celery_task_id")
+            if isinstance(previous_id, str) and previous_id:
+                history.append(previous_id)
+        if summary_task_id not in history:
+            history.append(summary_task_id)
+        summary_start_meta["celery_task_id"] = summary_task_id
+        summary_start_meta["celery_task_status"] = "running"
+        if history:
+            summary_start_meta["celery_task_history"] = history
+        if runtime.task_name:
+            summary_start_meta.setdefault("celery_task_name", runtime.task_name)
 
-    runtime.start(
+    summary_started_at = runtime.start(
         status=Job.Status.RUNNING,
         log_message="Worker started summarize pipeline",
         event="job.started",
-        meta_updates={**base_meta, "summary_status": "running"},
+        meta_updates=summary_start_meta,
     )
 
+    if summary_task_id and summary_started_at:
+        _safe_job_meta(
+            case_id,
+            org_id,
+            job_id,
+            {"celery_task_started_at": summary_started_at.isoformat()},
+        )
+
     if not transcript or not transcript.exists():
+        failure_meta = {**base_meta, "summary_status": "failed", "summary_error": "transcript_missing"}
+        if summary_task_id:
+            failure_meta.setdefault("celery_task_id", summary_task_id)
+            failure_meta["celery_task_status"] = "failed"
         failure_ts = runtime.fail(
             error="No transcript found to summarize",
             log_message="Summarize failed: transcript missing",
-            meta_updates={**base_meta, "summary_status": "failed", "summary_error": "transcript_missing"},
+            meta_updates=failure_meta,
             events=[("summary.failed", {})],
             task_meta_updates={"stage": "preflight", "reason": "missing_transcript"},
         )
-        _safe_job_meta(case_id, org_id, job_id, {"summary_completed_at": failure_ts.isoformat()})
+        _safe_job_meta(
+            case_id,
+            org_id,
+            job_id,
+            {
+                "summary_completed_at": failure_ts.isoformat(),
+                "celery_task_finished_at": failure_ts.isoformat(),
+                "celery_task_status": "failed" if summary_task_id else None,
+            },
+        )
         raise RuntimeError("No transcript found to summarize")
 
     try:
@@ -1401,14 +1459,27 @@ def summarize_job(
             "summarize config invalid",
             extra={"job_id": job_id, "case_id": case_id, "reason": str(exc)},
         )
+        failure_meta = {**base_meta, "summary_status": "failed", "summary_error": str(exc)}
+        if summary_task_id:
+            failure_meta.setdefault("celery_task_id", summary_task_id)
+            failure_meta["celery_task_status"] = "failed"
         failure_ts = runtime.fail(
             error=str(exc),
             log_message="Summarize configuration invalid",
-            meta_updates={**base_meta, "summary_status": "failed", "summary_error": str(exc)},
+            meta_updates=failure_meta,
             events=[("summary.failed", {"llm_config_id": llm_config_id})],
             task_meta_updates={"stage": "config", "reason": str(exc)},
         )
-        _safe_job_meta(case_id, org_id, job_id, {"summary_completed_at": failure_ts.isoformat()})
+        _safe_job_meta(
+            case_id,
+            org_id,
+            job_id,
+            {
+                "summary_completed_at": failure_ts.isoformat(),
+                "celery_task_finished_at": failure_ts.isoformat(),
+                "celery_task_status": "failed" if summary_task_id else None,
+            },
+        )
         raise
 
     org_id_str = str(org_id) if org_id else None
@@ -1426,14 +1497,27 @@ def summarize_job(
         )
     if not config_payload:
         error_message = "No LLM configuration available for summarization"
+        failure_meta = {**base_meta, "summary_status": "failed", "summary_error": error_message}
+        if summary_task_id:
+            failure_meta.setdefault("celery_task_id", summary_task_id)
+            failure_meta["celery_task_status"] = "failed"
         failure_ts = runtime.fail(
             error=error_message,
             log_message=error_message,
-            meta_updates={**base_meta, "summary_status": "failed", "summary_error": error_message},
+            meta_updates=failure_meta,
             events=[("summary.failed", {"llm_config_id": llm_config_id})],
             task_meta_updates={"stage": "config", "reason": "missing_configuration"},
         )
-        _safe_job_meta(case_id, org_id, job_id, {"summary_completed_at": failure_ts.isoformat()})
+        _safe_job_meta(
+            case_id,
+            org_id,
+            job_id,
+            {
+                "summary_completed_at": failure_ts.isoformat(),
+                "celery_task_finished_at": failure_ts.isoformat(),
+                "celery_task_status": "failed" if summary_task_id else None,
+            },
+        )
         raise RuntimeError(error_message)
 
     config_stage_map = config_payload.get("stage_map") or {}
@@ -1459,14 +1543,7 @@ def summarize_job(
         },
     )
     runtime.emit("summary.started", llm_config_id=active_config_id)
-    if runtime.task_run:
-        try:
-            meta_payload = dict(runtime.task_run.meta or {})
-            meta_payload["active_llm_config_id"] = active_config_id
-            runtime.task_run.meta = meta_payload
-            runtime.task_run.save(update_fields=["meta"])
-        except Exception:
-            pass
+    runtime.transition(task_meta_updates={"active_llm_config_id": active_config_id})
 
     summarize_agent = SummarizeAgent(summarize_config)
     log.info(
@@ -1545,14 +1622,27 @@ def summarize_job(
             "summarize job failed",
             extra={"job_id": job_id, "case_id": case_id, "error": error_message},
         )
+        failure_meta = {**base_meta, "summary_status": "failed", "summary_error": error_message}
+        if summary_task_id:
+            failure_meta.setdefault("celery_task_id", summary_task_id)
+            failure_meta["celery_task_status"] = "failed"
         failure_ts = runtime.fail(
             error=error_message,
             log_message=f"Summarize failed: {error_message}",
-            meta_updates={**base_meta, "summary_status": "failed", "summary_error": error_message},
+            meta_updates=failure_meta,
             events=[("summary.failed", {"llm_config_id": active_config_id, "details": {"stage": "runtime"}})],
             task_meta_updates={"error": error_message, "stage": "runtime"},
         )
-        _safe_job_meta(case_id, org_id, job_id, {"summary_completed_at": failure_ts.isoformat()})
+        _safe_job_meta(
+            case_id,
+            org_id,
+            job_id,
+            {
+                "summary_completed_at": failure_ts.isoformat(),
+                "celery_task_finished_at": failure_ts.isoformat(),
+                "celery_task_status": "failed" if summary_task_id else None,
+            },
+        )
         raise
 
     checksum = _sha256_file(result.summary_file)
@@ -1573,6 +1663,9 @@ def summarize_job(
         "summary_llm_config_id": active_config_id,
         "summary_llm_config_name": active_config_name,
     }
+    if summary_task_id:
+        meta_updates.setdefault("celery_task_id", summary_task_id)
+        meta_updates["celery_task_status"] = "succeeded"
 
     finished_ts = runtime.succeed(
         log_message="Summarize pipeline completed",
@@ -1595,7 +1688,16 @@ def summarize_job(
             "words": result.words,
         },
     )
-    _safe_job_meta(case_id, org_id, job_id, {"summary_completed_at": finished_ts.isoformat()})
+    _safe_job_meta(
+        case_id,
+        org_id,
+        job_id,
+        {
+            "summary_completed_at": finished_ts.isoformat(),
+            "celery_task_finished_at": finished_ts.isoformat(),
+            "celery_task_status": "succeeded" if summary_task_id else None,
+        },
+    )
 
     summary_artifact_id: Optional[str] = None
     try:
@@ -1667,7 +1769,7 @@ def timeline_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
     src = Path(job.transcript_path) if job.transcript_path else _latest_transcript(case_id, org_id)
     if not src or not src.exists():
         raise RuntimeError("No transcript found to build timeline")
-    meta = _load_job_meta(case_id, org_id, job_id)
+    meta = read_job_meta(case_id, org_id, job_id)
     events, seeds_path = _load_summary_timeline_events(meta, case_dir)
 
     if not events:
@@ -1751,7 +1853,7 @@ def graph_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
     if not src or not src.exists():
         raise RuntimeError("No transcript found to extract entities/graph")
     text = src.read_text(encoding="utf-8", errors="ignore")
-    meta = _load_job_meta(case_id, org_id, job_id)
+    meta = read_job_meta(case_id, org_id, job_id)
     hints_data, hints_path = _load_summary_entity_hints(meta, case_dir)
 
     entities: List[Dict[str, Any]] = []
@@ -2030,7 +2132,7 @@ def guardian_review_artifact(self, *, artifact_id: int) -> Dict[str, Any]:
         job_metadata: Dict[str, Any] = {}
         if job_id and org_id_str:
             try:
-                job_metadata = _load_job_meta(case_id, org_id_str, job_id)
+                job_metadata = read_job_meta(case_id, org_id_str, job_id)
             except Exception:
                 job_metadata = {}
 

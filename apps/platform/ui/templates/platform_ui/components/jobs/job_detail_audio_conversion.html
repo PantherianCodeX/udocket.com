@@ -60,47 +60,59 @@
   </div>
 
   <div class="grid gap-4 md:grid-cols-2">
-    {% include "platform_ui/components/jobs/_audio_brief.html" with
-       panel_title="Source audio"
-       panel_key="source"
-       job_id=job.id
-       audio=source_audio
-       metadata=metadata_map
-       refresh_enabled=source_job_id
-       refresh_panel="source"
-       refresh_job_id=source_job_id
-       refresh_display_job_id=job.id
-       refresh_case_id=case.id
-       verify_enabled=source_audio.path or source_audio.sha256 or metadata_map.source_audio_file
-       verify_target="audio"
-       verify_scope="source"
-       verify_source_job=source_job_id
-       verify_mark_targets=conversion_mark_targets
-    %}
+    {% if audio_panel_source_html %}
+      {{ audio_panel_source_html|safe }}
+    {% else %}
+      {% include "platform_ui/components/jobs/_audio_brief.html" with
+         panel_title="Source audio"
+         panel_key="source"
+         job_id=job.id
+         audio=source_audio
+         metadata=metadata_map
+         refresh_enabled=source_job_id
+         refresh_panel="source"
+         refresh_job_id=source_job_id
+         refresh_display_job_id=job.id
+         refresh_case_id=case.id
+         verify_enabled=source_audio.path or source_audio.sha256 or metadata_map.source_audio_file
+         verify_target="audio"
+         verify_scope="source"
+         verify_source_job=source_job_id
+         verify_mark_targets=conversion_mark_targets
+      %}
+    {% endif %}
 
-    {% include "platform_ui/components/jobs/_audio_brief.html" with
-       panel_title="Converted WAV"
-       panel_key="converted"
-       job_id=job.id
-       audio=audio_meta
-       metadata=metadata_map
-       refresh_enabled=True
-       refresh_panel="converted"
-       refresh_job_id=job.id
-       refresh_display_job_id=job.id
-       refresh_case_id=case.id
-       verify_enabled=audio_meta.path or audio_meta.sha256 or metadata_map.converted_audio_sha256
-       verify_target="audio"
-       verify_scope="converted"
-       verify_mark_targets=conversion_mark_targets
-    %}
+    {% if audio_panel_converted_html %}
+      {{ audio_panel_converted_html|safe }}
+    {% else %}
+      {% include "platform_ui/components/jobs/_audio_brief.html" with
+         panel_title="Converted WAV"
+         panel_key="converted"
+         job_id=job.id
+         audio=audio_meta
+         metadata=metadata_map
+         refresh_enabled=True
+         refresh_panel="converted"
+         refresh_job_id=job.id
+         refresh_display_job_id=job.id
+         refresh_case_id=case.id
+         verify_enabled=audio_meta.path or audio_meta.sha256 or metadata_map.converted_audio_sha256
+         verify_target="audio"
+         verify_scope="converted"
+         verify_mark_targets=conversion_mark_targets
+      %}
+    {% endif %}
   </div>
 
-  {% include "platform_ui/components/notes/team_notes_panel.html" with
-     job_id=job.id
-     notes_entries=notes_entries
-     notes_updated_at=notes_updated_at
-     notes_updated_by=notes_updated_by
-     user_can_add_notes=user_can_review
-  %}
+  {% if notes_panel_html %}
+    {{ notes_panel_html|safe }}
+  {% else %}
+    {% include "platform_ui/components/notes/team_notes_panel.html" with
+       job_id=job.id
+       notes_entries=notes_entries
+       notes_updated_at=notes_updated_at
+       notes_updated_by=notes_updated_by
+       user_can_add_notes=user_can_review
+    %}
+  {% endif %}
 </div>

@@ -80,3 +80,4 @@ def test_analysis_modules_include_notes(settings):
     assert notes["user_can_add"] is True
     assert notes["entries"]
     assert notes["entries"][0]["text"] == "Needs factual review"
+    assert "Needs factual review" in summary_module["notes_panel"]

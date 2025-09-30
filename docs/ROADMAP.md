@@ -42,7 +42,6 @@ Implementation Roadmap
      - `jobs.Job`: agent type, status, payload metadata, `storage_key`.
      - `artifacts.CaseArtifact`: generic artifact table with fields (id, case, job, type, title, description, path, checksum, schema_version, created_by, created_at, metadata JSONField). Provide typed proxy models per artifact flavor.
      - `operations.AuditEvent`: captures read/write events, policy evaluations, and agent runs.
-     - `operations.TaskRun`: tracks Celery executions (tie back to jobs).
    - Ensure referential integrity via `on_delete=PROTECT` where necessary; add DB‑level unique constraints and indexes (e.g., `(case, type, title)`).
    - Use Postgres JSONB for flexible artifact metadata while keeping searchable columns normalized.
    - Implement Simple History or Auditlog on critical models (Case, CaseMembership, CaseArtifact) for versioning and tamper detection.
@@ -131,7 +130,7 @@ Progress To Date
 - Case insights: Django UI now consumes DRF telemetry endpoints (`/api/v1/jobs/<id>/detail/`, `/api/v1/cases/<id>/jobs/summary|detail/`) to surface per-job diagnostics, transcript artifacts, and modal drill-downs sourced from ops metadata.
 - Next slices under consideration:
   - Create and apply migrations for `simple_history` changes; admin filters for user/date/action.
-  - Expand tests for capability resolution, policies, field-level redaction, and TaskRun lifecycle.
+  - Expand tests for capability resolution, policies, and field-level redaction.
   - IAM wiring (Keycloak OIDC + API JWT validation) and role mapping on login.
   - Admin guardrails: allow-listed capability choices; read-only API for effective capabilities.
   - Agents/LLM: extend shared chat client runtime as new providers are onboarded (ensure tests cover non-Azure adapters).

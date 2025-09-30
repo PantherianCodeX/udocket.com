@@ -33,7 +33,7 @@ Scope: `apps/platform/operations/` (tasks, storage paths, websocket updates, ops
 
 ## Error Handling
 - Fail fast with clear logs; include actionable metadata in ops JSON (e.g., `error_code`, `error_message`).
-- Avoid raising without logging; ensure task run rows (`TaskRun`) reflect status transitions.
+- Avoid raising without logging; rely on `JobRuntimeContext` to update status and provenance metadata.
 
 ## Patterns
 - If batch mode requires local WAV, normalize via core `normalize_audio` and persist the conversion reasons to ops JSON.

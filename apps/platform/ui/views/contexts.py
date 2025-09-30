@@ -32,6 +32,7 @@ from .presenters.cases import (
     prepare_case_fields,
 )
 from .presenters.jobs import build_job_rows, friendly_job_title
+from .presenters.utils import render_audio_brief_panel_html, render_notes_panel_html
 from apps.platform.jobs.notes import serialize_notes
 from .selectors import job_telemetry_map, job_telemetry_payload
 
@@ -278,6 +279,97 @@ def job_detail_context(
     is_sub_job = bool(telemetry_meta.get("source_job_id"))
     allow_title_edit = not (job_kind == "audio_conversion" or is_sub_job)
 
+    job_id_str = str(job.id)
+    case_id_str = str(job.case_id)
+    notes_panel_html = render_notes_panel_html(
+        job_id=job_id_str,
+        entries=notes_entries,
+        updated_at=notes_updated_at,
+        updated_by=notes_updated_by,
+        user_can_add=can_review,
+    )
+
+    audio_verify_enabled = bool(
+        audio_meta.get("path")
+        or audio_meta.get("sha256")
+        or telemetry_meta.get("converted_audio_sha256")
+        or telemetry_meta.get("audio_sha256")
+    )
+    audio_panel_current_html = render_audio_brief_panel_html(
+        panel_title="Audio",
+        panel_key="current",
+        job_id=job_id_str,
+        audio=audio_meta,
+        metadata=telemetry_meta,
+        refresh_enabled=True,
+        refresh_panel="current",
+        refresh_job_id=job_id_str,
+        refresh_display_job_id=job_id_str,
+        refresh_case_id=case_id_str,
+        verify_enabled=audio_verify_enabled,
+        verify_target="audio",
+        verify_scope=None,
+        verify_mark_targets=job_id_str,
+        case=job.case,
+        job=job,
+        case_id=case_id_str,
+    )
+
+    source_panel_html = ""
+    converted_panel_html = ""
+    if job_kind == "audio_conversion":
+        source_verify_enabled = bool(
+            (source_audio_meta or {}).get("path")
+            or (source_audio_meta or {}).get("sha256")
+            or telemetry_meta.get("source_audio_file")
+            or telemetry_meta.get("source_audio_sha256")
+        )
+        source_panel_html = render_audio_brief_panel_html(
+            panel_title="Source audio",
+            panel_key="source",
+            job_id=job_id_str,
+            audio=source_audio_meta or {},
+            metadata=telemetry_meta,
+            refresh_enabled=bool(source_job_id_value),
+            refresh_panel="source",
+            refresh_job_id=source_job_id_value,
+            refresh_display_job_id=job_id_str,
+            refresh_case_id=case_id_str,
+            verify_enabled=source_verify_enabled,
+            verify_target="audio",
+            verify_scope="source",
+            verify_source_job=source_job_id_value,
+            verify_mark_targets=conversion_mark_targets,
+            case=job.case,
+            job=job,
+            case_id=case_id_str,
+        )
+        converted_verify_enabled = bool(
+            audio_meta.get("path")
+            or audio_meta.get("sha256")
+            or telemetry_meta.get("converted_audio_sha256")
+            or telemetry_meta.get("converted_audio_file")
+        )
+        converted_panel_html = render_audio_brief_panel_html(
+            panel_title="Converted WAV",
+            panel_key="converted",
+            job_id=job_id_str,
+            audio=audio_meta,
+            metadata=telemetry_meta,
+            refresh_enabled=True,
+            refresh_panel="converted",
+            refresh_job_id=job_id_str,
+            refresh_display_job_id=job_id_str,
+            refresh_case_id=case_id_str,
+            verify_enabled=converted_verify_enabled,
+            verify_target="audio",
+            verify_scope="converted",
+            verify_mark_targets=conversion_mark_targets,
+            case=job.case,
+            job=job,
+            case_id=case_id_str,
+        )
+
     return {
         "case": job.case,
         "job": job,
@@ -300,8 +392,12 @@ def job_detail_context(
         "notes_updated_by": notes_updated_by,
         "notes_entries": notes_entries,
         "notes_count": notes_count,
+        "notes_panel_html": notes_panel_html,
         "source_job_id": source_job_id_value,
         "conversion_mark_targets": conversion_mark_targets,
+        "audio_panel_current_html": audio_panel_current_html,
+        "audio_panel_source_html": source_panel_html,
+        "audio_panel_converted_html": converted_panel_html,
     }
 
 
