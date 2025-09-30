@@ -166,12 +166,8 @@ Audit line in `ops/ops_summary.jsonl` mirrors the above in a single JSON object 
   - `AZURE_OPENAI_API_KEY`
   - `AZURE_OPENAI_DEPLOYMENT` (e.g., `gpt-4o-mini`)
   - `AZURE_OPENAI_API_VERSION=2024-10-21`
-- Optional `.env` knobs remain for global defaults:
-  - `SUMMARY_TEMPERATURE=1.0`, `SUMMARY_MAX_TOKENS=24000`
-  - `SUMMARY_MAX_PROMPT_SEGMENTS`, `SUMMARY_MAX_PROMPT_CHARS`, `SUMMARY_CHARS_PER_TOKEN`
-  - `SUMMARY_MODEL` — global Azure stage model override
-  - `SUMMARY_STAGE_MODELS` — comma-separated or JSON map of stage identifiers to models (`summarize.extract_outline=gpt-5-mini`)
-  - `SUMMARY_STAGE_MAX_TOKENS` — per-stage completion budgets (`summarize.draft_markdown=9000,*=8000`)
+- Default runtime parameters (temperature, provider chain, prompt limits, stage token budgets) are defined in `config/summarize_defaults.json`.
+- Optional `.env` override: `SUMMARY_ALLOW_NON_CA_ENDPOINT=1` to allow non-Canadian Azure endpoints during development.
 - If the active LLM configuration references a provider without credentials, the worker must exit with a descriptive error. No offline or pseudo-local fallback is permitted.
 
 

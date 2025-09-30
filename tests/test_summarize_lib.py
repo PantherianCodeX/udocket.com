@@ -17,6 +17,7 @@ from packages.udocket_core.agents.summarize_lib import (
     TranscriptParse,
     TranscriptSegment,
     parse_transcript,
+    summarize_defaults,
 )
 from packages.udocket_core.agents.summarize.stages import (
     DraftStageResult,
@@ -260,34 +261,7 @@ def test_summarize_agent_adds_default_header(monkeypatch, tmp_path):
     assert summary_text.startswith("# Summary for case CASE-3 (job JOB-3)")
 
 
-def test_config_stage_model_override(monkeypatch):
-    monkeypatch.delenv("SUMMARY_STAGE_MODELS", raising=False)
-    monkeypatch.delenv("SUMMARY_STAGE_MAX_TOKENS", raising=False)
-    monkeypatch.delenv("SUMMARY_MODEL", raising=False)
-    monkeypatch.setenv("SUMMARY_STAGE_MODELS", "summarize.extract_outline:gpt-5-mini,qa_and_finalize=gpt-4o")
-
-    cfg = SummarizeConfig.from_env()
-
-    assert cfg.stage_model_for("summarize.extract_outline") == "gpt-5-mini"
-    assert cfg.stage_model_for("summarize.qa_and_finalize") == "gpt-4o"
-    assert cfg.stage_model_for("summarize.draft_markdown") is None
-
-
-def test_config_stage_max_tokens_override(monkeypatch):
-    monkeypatch.delenv("SUMMARY_STAGE_MAX_TOKENS", raising=False)
-    monkeypatch.setenv("SUMMARY_STAGE_MAX_TOKENS", "summarize.extract_outline=12000,*=9000")
-
-    cfg = SummarizeConfig.from_env()
-    outline_tokens = cfg.stage_max_tokens_for("summarize.extract_outline", 16000, None)
-    draft_tokens = cfg.stage_max_tokens_for("summarize.draft_markdown", 16000, None)
-
-    assert outline_tokens == 12000
-    assert draft_tokens == 9000
-
-
-def test_stage_catalog_lists_recommended_models(monkeypatch):
-    monkeypatch.delenv("SUMMARY_STAGE_MODELS", raising=False)
-    monkeypatch.delenv("SUMMARY_MODEL", raising=False)
+def test_stage_catalog_lists_recommended_models():
     agent = SummarizeAgent(SummarizeConfig())
 
     catalog = agent.stage_catalog()
@@ -299,6 +273,18 @@ def test_stage_catalog_lists_recommended_models(monkeypatch):
         tokens = entry.get("context_window_tokens")
         if tokens is not None:
             assert tokens >= outline_info["recommended_context_tokens"]
+
+
+def test_summarize_config_uses_defaults_file():
+    defaults = summarize_defaults()
+    cfg = SummarizeConfig.from_env()
+
+    assert cfg.temperature == defaults["temperature"]
+    assert cfg.max_output_tokens == defaults["max_output_tokens"]
+    assert cfg.max_prompt_segments == defaults["max_prompt_segments"]
+    assert cfg.max_prompt_chars == defaults["max_prompt_chars"]
+    assert cfg.provider_chain == [value.lower() for value in defaults["default_provider_chain"]]
+
 
 
 def test_stage_temperature_and_max_tokens_override(monkeypatch, tmp_path):
@@ -504,10 +490,3 @@ def test_build_summarize_graph_requires_langgraph():
     dummy = Dummy()
     with pytest.raises(RuntimeError):
         build_summarize_graph(dummy)
-
-
-def test_config_provider_chain_from_env(monkeypatch):
-    monkeypatch.setenv("SUMMARY_PRIMARY_PROVIDER", "openai")
-    cfg = SummarizeConfig.from_env()
-    assert cfg.provider_chain == ["azure", "openai"]
-    monkeypatch.delenv("SUMMARY_PRIMARY_PROVIDER", raising=False)

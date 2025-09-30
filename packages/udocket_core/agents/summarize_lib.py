@@ -4,6 +4,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence, cast
 
@@ -19,19 +20,48 @@ from .langgraph_orchestrator import build_summarize_graph, enable_langgraph_debu
 from .summarize.utils import FinalizedOutputs, SummarizePipeline
 from ..llm import LLMSettings, load_llm_settings
 
-MAX_PROMPT_SEGMENTS = 250
-MAX_PROMPT_CHARS = 32000
-DEFAULT_TOKENS_TO_CHAR_RATIO = 4.0
+BASE_DIR = Path(__file__).resolve().parents[3]
+SUMMARIZE_DEFAULTS_PATH = BASE_DIR / "config" / "summarize_defaults.json"
 
+
+@lru_cache(maxsize=1)
+def load_summarize_defaults() -> Dict[str, Any]:
+    try:
+        payload = json.loads(SUMMARIZE_DEFAULTS_PATH.read_text(encoding="utf-8"))
+        return payload if isinstance(payload, dict) else {}
+    except FileNotFoundError:
+        return {}
+    except json.JSONDecodeError:
+        return {}
+
+
+def summarize_defaults() -> Dict[str, Any]:
+    return dict(load_summarize_defaults())
+
+
+_DEFAULTS = load_summarize_defaults()
+
+MAX_PROMPT_SEGMENTS = int(_DEFAULTS.get("max_prompt_segments", 250))
+MAX_PROMPT_CHARS = int(_DEFAULTS.get("max_prompt_chars", 32000))
+DEFAULT_TOKENS_TO_CHAR_RATIO = float(_DEFAULTS.get("chars_per_token", 4.0))
+DEFAULT_TEMPERATURE = float(_DEFAULTS.get("temperature", 1.0))
+DEFAULT_MAX_OUTPUT_TOKENS = int(_DEFAULTS.get("max_output_tokens", 24000))
+
+_DEFAULT_CHAIN = [
+    str(value).strip().lower()
+    for value in _DEFAULTS.get("default_provider_chain", ["azure"])
+    if str(value).strip()
+]
+DEFAULT_PROVIDER_CHAIN: List[str] = _DEFAULT_CHAIN or ["azure"]
+
+_STAGE_LIMITS_DEFAULT = _DEFAULTS.get("stage_token_limits") or {}
 DEFAULT_STAGE_TOKEN_LIMITS: Dict[str, int] = {
-    "summarize.extract_outline": 12000,
-    "summarize.build_timeline_seeds": 8000,
-    "summarize.build_entity_hints": 8000,
-    "summarize.draft_markdown": 12000,
-    "summarize.qa_and_finalize": 6000,
+    "summarize.extract_outline": int(_STAGE_LIMITS_DEFAULT.get("summarize.extract_outline", 12000)),
+    "summarize.build_timeline_seeds": int(_STAGE_LIMITS_DEFAULT.get("summarize.build_timeline_seeds", 8000)),
+    "summarize.build_entity_hints": int(_STAGE_LIMITS_DEFAULT.get("summarize.build_entity_hints", 8000)),
+    "summarize.draft_markdown": int(_STAGE_LIMITS_DEFAULT.get("summarize.draft_markdown", 12000)),
+    "summarize.qa_and_finalize": int(_STAGE_LIMITS_DEFAULT.get("summarize.qa_and_finalize", 6000)),
 }
-
-DEFAULT_PROVIDER_CHAIN: List[str] = ["azure"]
 LLM_STAGE_KEYS = {
     "context_builder": "summarize.context_builder",
     "extract_outline": "summarize.extract_outline",
@@ -302,8 +332,8 @@ class SummarizeConfig:
     azure_openai_deployment: str = ""
     azure_openai_api_version: str = "2024-10-21"
     language: str = "en-CA"
-    temperature: float = 1.0 #0.2
-    max_output_tokens: int = 24000
+    temperature: float = DEFAULT_TEMPERATURE
+    max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS
     debug: bool = False
     provider_chain: List[str] = field(
         default_factory=lambda: list(DEFAULT_PROVIDER_CHAIN)
@@ -326,23 +356,9 @@ class SummarizeConfig:
             os.getenv("AZURE_OPENAI_API_VERSION") or "2024-10-21"
         ).strip()
         language = (os.getenv("LANGUAGE") or "en-CA").strip() or "en-CA"
-        temperature = float(os.getenv("SUMMARY_TEMPERATURE", "1.0") or 1.0)
-        max_tokens = int(os.getenv("SUMMARY_MAX_TOKENS", "24000") or 24000)
+        temperature = DEFAULT_TEMPERATURE
+        max_tokens = DEFAULT_MAX_OUTPUT_TOKENS
         debug = os.getenv("DEBUG", "0").strip() == "1"
-        primary_provider = (
-            (os.getenv("SUMMARY_PRIMARY_PROVIDER") or "azure").strip().lower()
-        )
-        providers = _normalize_providers([primary_provider])
-        if "azure" not in providers:
-            logger.warning(
-                "Azure provider is currently required for summarize; prepending azure to provider chain",
-                extra={"providers": providers},
-            )
-            providers = ["azure"] + [name for name in providers if name != "azure"]
-        if not providers:
-            filtered_chain = list(DEFAULT_PROVIDER_CHAIN)
-        else:
-            filtered_chain = providers
 
         allow_non_ca_endpoint = (
             os.getenv("SUMMARY_ALLOW_NON_CA_ENDPOINT", "0").strip() == "1"
@@ -352,61 +368,26 @@ class SummarizeConfig:
                 "AZURE_OPENAI_ENDPOINT must target canadacentral or canadaeast"
             )
 
-        prompt_segments_env = os.getenv("SUMMARY_MAX_PROMPT_SEGMENTS")
-        prompt_segments_override: Optional[int]
-        if prompt_segments_env is not None:
-            try:
-                prompt_segments_override = max(0, int(prompt_segments_env))
-            except ValueError:
-                prompt_segments_override = None
-            max_prompt_segments = (
-                prompt_segments_override
-                if prompt_segments_override is not None
-                else MAX_PROMPT_SEGMENTS
+        max_prompt_segments = MAX_PROMPT_SEGMENTS
+        prompt_segments_override: Optional[int] = None
+
+        max_prompt_chars = MAX_PROMPT_CHARS
+        prompt_chars_override: Optional[int] = None
+
+        default_stage_model = None
+        stage_model_overrides: Dict[str, str] = {}
+        stage_max_output_tokens: Dict[str, int] = {}
+        chars_per_token = DEFAULT_TOKENS_TO_CHAR_RATIO
+
+        providers = _normalize_providers(DEFAULT_PROVIDER_CHAIN)
+        if "azure" not in providers:
+            logger.warning(
+                "Summarize currently requires Azure; prepending azure to provider chain",
+                extra={"providers": providers},
             )
-        else:
-            max_prompt_segments = MAX_PROMPT_SEGMENTS
-            prompt_segments_override = None
-
-        prompt_chars_env = os.getenv("SUMMARY_MAX_PROMPT_CHARS")
-        prompt_chars_override: Optional[int]
-        if prompt_chars_env is not None:
-            try:
-                prompt_chars_override = max(0, int(prompt_chars_env))
-            except ValueError:
-                prompt_chars_override = None
-            max_prompt_chars = (
-                prompt_chars_override
-                if prompt_chars_override is not None
-                else MAX_PROMPT_CHARS
-            )
-        else:
-            max_prompt_chars = MAX_PROMPT_CHARS
-            prompt_chars_override = None
-
-        default_stage_model = (os.getenv("SUMMARY_MODEL") or "").strip() or None
-
-        stage_models_raw = os.getenv("SUMMARY_STAGE_MODELS")
-        stage_model_overrides = (
-            _parse_stage_mapping(stage_models_raw, _parse_non_empty_str)
-            if stage_models_raw
-            else {}
-        )
-
-        stage_max_tokens_raw = os.getenv("SUMMARY_STAGE_MAX_TOKENS")
-        stage_max_output_tokens = (
-            _parse_stage_mapping(stage_max_tokens_raw, _parse_positive_int)
-            if stage_max_tokens_raw
-            else {}
-        )
-
-        chars_per_token_env = os.getenv("SUMMARY_CHARS_PER_TOKEN")
-        try:
-            chars_per_token = float(chars_per_token_env) if chars_per_token_env else DEFAULT_TOKENS_TO_CHAR_RATIO
-            if chars_per_token <= 0:
-                chars_per_token = DEFAULT_TOKENS_TO_CHAR_RATIO
-        except (TypeError, ValueError):
-            chars_per_token = DEFAULT_TOKENS_TO_CHAR_RATIO
+            providers = ["azure"] + [name for name in providers if name != "azure"]
+        if not providers:
+            providers = ["azure"]
 
         return cls(
             azure_openai_endpoint=endpoint,
@@ -417,16 +398,17 @@ class SummarizeConfig:
             temperature=temperature,
             max_output_tokens=max_tokens,
             debug=debug,
-            provider_chain=filtered_chain,
+            provider_chain=providers,
             max_prompt_segments=max_prompt_segments,
             max_prompt_chars=max_prompt_chars,
+            prompt_segments_override=prompt_segments_override,
+            prompt_chars_override=prompt_chars_override,
             default_stage_model=default_stage_model,
             stage_model_overrides=stage_model_overrides,
             stage_max_output_tokens=stage_max_output_tokens,
-            prompt_segments_override=prompt_segments_override,
-            prompt_chars_override=prompt_chars_override,
             chars_per_token=chars_per_token,
         )
+
 
     @property
     def azure_enabled(self) -> bool:
