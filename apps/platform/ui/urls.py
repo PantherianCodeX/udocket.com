@@ -79,6 +79,7 @@ urlpatterns = [
     path("cases/<str:case_id>/assign-reviewer/", views.case_assign_reviewer, name="ui-case-assign-reviewer"),
     path("cases/<str:case_id>/assign-client/", views.case_assign_client, name="ui-case-assign-client"),
     path("jobs/", views.jobs, name="ui-jobs"),
+    path("settings/organization/", views.organization_settings, name="ui-organization-settings"),
     path("org/select/", views.select_organization, name="ui-select-organization"),
     path("jobs/<uuid:job_id>/detail-panel/", views.job_detail_panel, name="ui-job-detail-panel"),
     path("permissions/", views.permissions_overview, name="ui-permissions"),

@@ -42,6 +42,7 @@ from .jobs_modals import (
     case_job_transcript,
 )
 from .misc import favicon, ui_log
+from .settings import organization_settings
 from .permissions import permissions_overview
 from .presenters.cases import table_config
 
@@ -79,6 +80,7 @@ __all__ = [
     "jobs",
     "transcribe_job",
     "logout_view",
+    "organization_settings",
     "permissions_overview",
     "select_organization",
     "ui_log",

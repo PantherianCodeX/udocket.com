@@ -159,9 +159,10 @@ Audit line in `ops/ops_summary.jsonl` mirrors the above in a single JSON object 
 
 ## Configuration & Environment
 - Primary control plane: `LLMConfiguration` rows (scoped per organization) capture the provider chain and stage map the worker must honour. Each configuration is surfaced in the UI for selection when queueing jobs.
-- Each organization manages credentials via `LLMProviderCredential` records (UI: Case ▸ LLM ▸ Providers). The worker decrypts the API key/endpoint at runtime and merges stage overrides before invoking a provider.
+- Each organization manages credentials via `LLMProviderCredential` records (UI: Profile ▸ Organization settings ▸ LLM providers). The worker decrypts the API key/endpoint at runtime and merges stage overrides before invoking a provider.
 - Default runtime parameters (temperature, provider chain, prompt limits, stage token budgets) are defined in `config/summarize_defaults.json`.
 - If the active LLM configuration references a provider without credentials, the worker must exit with a descriptive error. No offline or pseudo-local fallback is permitted.
+- Default and custom LLM configurations are edited from the Organization settings page; stage selections there flow directly into worker `LLMConfiguration` rows used by every summarization and timeline task.
 
 
 ## Stage Capabilities API
