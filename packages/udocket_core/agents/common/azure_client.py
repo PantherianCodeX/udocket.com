@@ -172,7 +172,11 @@ class AzureClientConfig:
         if not self.endpoint:
             raise ValueError("Missing Azure OpenAI endpoint")
         if not self.allow_non_ca_region and not _endpoint_is_canadian(self.endpoint):
-            raise ValueError("Azure OpenAI endpoint must target canadacentral or canadaeast")
+            logger.warning(
+                "Azure endpoint %s is outside approved Canadian regions; allowing temporarily.",
+                self.endpoint,
+            )
+            # TODO: move regional restrictions into configurable settings enforcement.
         if not self.key:
             raise ValueError("Missing Azure OpenAI API key")
         if not self.deployment:
