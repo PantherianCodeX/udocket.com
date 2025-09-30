@@ -482,7 +482,7 @@ def _rest_batch_transcribe(
                 break
     if not text_url:
         raise RuntimeError("REST files did not include a Transcription contentUrl")
-    tresp = requests.get(text_url, timeout=60)
+    tresp = requests.get(text_url, timeout=120)
     tresp.raise_for_status()
 
     try:

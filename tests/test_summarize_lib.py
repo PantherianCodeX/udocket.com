@@ -15,6 +15,7 @@ from packages.udocket_core.agents.summarize_lib import (
     SummarizeAgent,
     SummarizeConfig,
     SummarizePipeline,
+    TranscriptParse,
     TranscriptSegment,
     parse_transcript,
 )
@@ -23,6 +24,7 @@ from packages.udocket_core.agents.summarize.exceptions import (
     AzureUnavailableError,
 )
 from packages.udocket_core.agents.summarize.stages import OutlineStageResult
+from packages.udocket_core.agents.summarize.stages.outline_stage import generate_outline as outline_generate
 
 
 def _write_transcript(path: Path, text: str) -> Path:
@@ -229,6 +231,74 @@ def test_stage_catalog_lists_recommended_models(monkeypatch):
         tokens = entry.get("context_window_tokens")
         if tokens is not None:
             assert tokens >= outline_info["recommended_context_tokens"]
+
+
+def test_outline_chunk_splitting_on_empty_completion():
+    large_segments = [
+        TranscriptSegment(ts=float(i), speaker=f"SPK_{i%3}", text=f"Sentence {i} " + ("Lorem ipsum " * 10).strip())
+        for i in range(60)
+    ]
+    parse = TranscriptParse(
+        header_lines=[],
+        segments=large_segments,
+        body_text="",
+        diarized=True,
+    )
+
+    class FailingAzureClient:
+        def __init__(self) -> None:
+            self.calls: List[int] = []
+
+        def chat(self, *, messages, temperature, max_tokens, response_format):  # type: ignore[no-untyped-def]
+            prompt = messages[-1]["content"]
+            marker = "):\n"
+            chunk_text = prompt.split(marker, 1)[1]
+            line_count = len([line for line in chunk_text.splitlines() if line.strip()])
+            self.calls.append(line_count)
+            if line_count > 12:
+                raise RuntimeError(
+                    "Azure OpenAI returned an empty completion (deployment='stub', request_id='stub', finish_reason='length')."
+                )
+            payload = {
+                "parties": {
+                    "client": {"name": "Client", "role": "applicant"},
+                    "opposing": {"name": "Other", "role": "respondent"},
+                    "counsel": [],
+                },
+                "issues": [
+                    {
+                        "id": "ISSUE-1",
+                        "title": "Title",
+                        "description": "Desc",
+                        "stance_client": None,
+                        "stance_opposing": None,
+                        "status": "RAISED",
+                    }
+                ],
+                "claims_and_remedies": [],
+                "facts": [],
+                "deadlines": [],
+                "orders_and_directions": [],
+                "exhibits": [],
+                "legal_refs": [],
+            }
+            return json.dumps(payload), {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150}
+
+    azure_stub = FailingAzureClient()
+    context_snippet = "\n".join(seg.text for seg in large_segments)
+    result = outline_generate(
+        parse=parse,
+        intake={},
+        context_snippet=context_snippet,
+        case_brief={},
+        azure_client=azure_stub,
+        temperature=0.0,
+        max_tokens=8000,
+    )
+
+    assert result.outline["issues"]
+    assert any(count > 12 for count in azure_stub.calls)
+    assert any(count <= 12 for count in azure_stub.calls)
 
 
 def test_build_context_respects_config_limits(tmp_path):

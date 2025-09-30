@@ -19,16 +19,16 @@ from .langgraph_orchestrator import build_summarize_graph, enable_langgraph_debu
 from .summarize.utils import FinalizedOutputs, SummarizePipeline
 from ..llm import LLMSettings, load_llm_settings
 
-MAX_PROMPT_SEGMENTS = 120
-MAX_PROMPT_CHARS = 8000
+MAX_PROMPT_SEGMENTS = 250
+MAX_PROMPT_CHARS = 32000
 DEFAULT_TOKENS_TO_CHAR_RATIO = 4.0
 
 DEFAULT_STAGE_TOKEN_LIMITS: Dict[str, int] = {
-    "summarize.extract_outline": 8000,
-    "summarize.build_timeline_seeds": 6000,
-    "summarize.build_entity_hints": 6000,
-    "summarize.draft_markdown": 8000,
-    "summarize.qa_and_finalize": 4000,
+    "summarize.extract_outline": 12000,
+    "summarize.build_timeline_seeds": 8000,
+    "summarize.build_entity_hints": 8000,
+    "summarize.draft_markdown": 12000,
+    "summarize.qa_and_finalize": 6000,
 }
 
 SUPPORTED_PROVIDERS = {"azure", "local"}
@@ -134,6 +134,7 @@ class StageProfile:
     description: str
     min_context_tokens: int
     recommended_context_tokens: int
+    target_chunk_tokens: int
     output_reserve_tokens: int
     resource_notes: str
 
@@ -143,8 +144,9 @@ SUMMARIZE_STAGE_PROFILES: Dict[str, StageProfile] = {
         stage_key="summarize.context_builder",
         label="Context Builder",
         description="Prepares digestible transcript snippets and intake metadata.",
-        min_context_tokens=2000,
-        recommended_context_tokens=4000,
+        min_context_tokens=4000,
+        recommended_context_tokens=8000,
+        target_chunk_tokens=40000,
         output_reserve_tokens=0,
         resource_notes="Runs locally (CPU).",
     ),
@@ -152,45 +154,50 @@ SUMMARIZE_STAGE_PROFILES: Dict[str, StageProfile] = {
         stage_key="summarize.extract_outline",
         label="Outline Extractor",
         description="Finds parties, issues, facts, and orders across the transcript.",
-        min_context_tokens=6000,
-        recommended_context_tokens=100000,
-        output_reserve_tokens=4000,
+        min_context_tokens=8000,
+        recommended_context_tokens=80000,
+        target_chunk_tokens=40000,
+        output_reserve_tokens=12000,
         resource_notes="Prefers 100k+ token context models for full hearings.",
     ),
     "summarize.build_timeline_seeds": StageProfile(
         stage_key="summarize.build_timeline_seeds",
         label="Timeline Seeding",
         description="Generates chronological event scaffolding for timeline view.",
-        min_context_tokens=4000,
-        recommended_context_tokens=80000,
-        output_reserve_tokens=3000,
+        min_context_tokens=6000,
+        recommended_context_tokens=60000,
+        target_chunk_tokens=30000,
+        output_reserve_tokens=6000,
         resource_notes="Heavier prompts; look for models with >=80k token windows.",
     ),
     "summarize.build_entity_hints": StageProfile(
         stage_key="summarize.build_entity_hints",
         label="Entity Mapper",
         description="Extracts people, organizations, and relationships with evidence.",
-        min_context_tokens=4000,
-        recommended_context_tokens=80000,
-        output_reserve_tokens=3000,
+        min_context_tokens=6000,
+        recommended_context_tokens=60000,
+        target_chunk_tokens=30000,
+        output_reserve_tokens=6000,
         resource_notes="Prefers large context for repeated mentions across the record.",
     ),
     "summarize.draft_markdown": StageProfile(
         stage_key="summarize.draft_markdown",
         label="Summary Drafter",
         description="Produces the layered Markdown summary and checklist.",
-        min_context_tokens=6000,
-        recommended_context_tokens=100000,
-        output_reserve_tokens=6000,
+        min_context_tokens=8000,
+        recommended_context_tokens=80000,
+        target_chunk_tokens=50000,
+        output_reserve_tokens=12000,
         resource_notes="Needs room for structured inputs; choose 100k token models when possible.",
     ),
     "summarize.qa_and_finalize": StageProfile(
         stage_key="summarize.qa_and_finalize",
         label="QA & Finalizer",
         description="Ensures required sections, hashes artifacts, and finalizes outputs.",
-        min_context_tokens=2000,
+        min_context_tokens=4000,
         recommended_context_tokens=16000,
-        output_reserve_tokens=2000,
+        target_chunk_tokens=10000,
+        output_reserve_tokens=4000,
         resource_notes="Lightweight; smaller context models are acceptable.",
     ),
 }
@@ -205,6 +212,7 @@ def _stage_profile(stage_key: str) -> StageProfile:
             description="",
             min_context_tokens=2000,
             recommended_context_tokens=4000,
+            target_chunk_tokens=4000,
             output_reserve_tokens=2000,
             resource_notes="",
         ),
@@ -261,7 +269,7 @@ class SummarizeConfig:
     azure_openai_endpoint: str = ""
     azure_openai_key: str = ""
     azure_openai_deployment: str = ""
-    azure_openai_api_version: str = "2024-08-01-preview"
+    azure_openai_api_version: str = "2024-10-21"
     language: str = "en-CA"
     temperature: float = 1.0 #0.2
     max_output_tokens: int = 24000
@@ -286,7 +294,7 @@ class SummarizeConfig:
         key = (os.getenv("AZURE_OPENAI_API_KEY") or "").strip()
         deployment = (os.getenv("AZURE_OPENAI_DEPLOYMENT") or "").strip()
         api_version = (
-            os.getenv("AZURE_OPENAI_API_VERSION") or "2024-08-01-preview"
+            os.getenv("AZURE_OPENAI_API_VERSION") or "2024-10-21"
         ).strip()
         language = (os.getenv("LANGUAGE") or "en-CA").strip() or "en-CA"
         temperature = float(os.getenv("SUMMARY_TEMPERATURE", "1.0") or 1.0)
@@ -544,6 +552,7 @@ class SummarizeAgent:
                 "description": profile.description,
                 "min_context_tokens": profile.min_context_tokens,
                 "recommended_context_tokens": profile.recommended_context_tokens,
+                "target_chunk_tokens": profile.target_chunk_tokens,
                 "output_reserve_tokens": profile.output_reserve_tokens,
                 "resource_notes": profile.resource_notes,
                 "recommended_models": recommended_models,

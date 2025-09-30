@@ -1,0 +1,107 @@
+DRAFT — LEGAL INFORMATION ONLY — CLIENT REVIEW REQUIRED
+Case: CASE-CALGARY-FAM-2025-04
+Audio: intake_interview_2025-02-12.wav
+SHA256: n/a (remote)
+Region: canadacentral
+Language: en-CA
+Duration: 78:45
+Transcribed: 2025-02-12T17:40:22Z
+
+[00:00] SPK_1: Good morning, this is Morgan with uDocket’s Calgary family law pilot, and we’re starting the intake interview for case support.
+[00:32] SPK_2: Morning Morgan, this is Emma Rina Patel, I’m ready and I appreciate the help because things feel overwhelming.
+[01:05] SPK_1: Thanks Emma; to confirm, this matter is filed in Calgary under the Court of King’s Bench family docket, correct?
+[01:48] SPK_2: Yes, it’s the Calgary family law stream, still under the pilot case management program because of the parenting disputes.
+[02:30] SPK_1: Great; I’ll record the case identifier we issued, CASE-CALGARY-FAM-2025-04, and I also need the court file number on your existing proceedings.
+[03:12] SPK_2: The court file is FL01 221587, assigned when I filed in October 2023 at the Calgary Courts Centre.
+[03:58] SPK_1: Noted; let’s capture the primary parties for the relationship graph—please provide your full details first.
+[04:40] SPK_2: I’m Emma Rina Patel, 37, registered nurse at Foothills Medical Centre, pronouns she and her, currently living in a rental townhouse in Auburn Bay.
+[05:25] SPK_1: And the opposing party?
+[06:10] SPK_2: My estranged spouse is Arjun Dev Patel, 39, he’s a project manager with Bow Valley Engineering, and he’s renting a condo downtown since last November.
+[06:55] SPK_1: Do you have children together that the court needs to know about?
+[07:40] SPK_2: Yes, our son Liam Patel is 11 in grade six at Lakeside Academy, and our daughter Maya Patel is 8 in grade three at Auburn Bay School.
+[08:25] SPK_1: Are you represented by counsel or self-represented right now?
+[09:10] SPK_2: I’m self-represented but I meet with Calgary Legal Guidance duty counsel on hearing days, and I’m waiting on a limited-scope retainer quote from a mediator-lawyer.
+[09:55] SPK_1: Is anyone else joining us today?
+[10:40] SPK_3: Hi, this is Jordan Lee, family justice navigator looping in for Calgary Legal Guidance; I’ll keep quiet unless clarification is needed.
+[11:25] SPK_1: Thanks Jordan; Emma, can you give me the top-line summary of the dispute so the summarizer has a working thesis?
+[12:10] SPK_2: It’s a separation with contested parenting time, child support variation, and division of the matrimonial home; there’s also a police-reported incident we’re still addressing safety-wise.
+[12:55] SPK_1: Let’s build the timeline from the start of the relationship; when did you and Arjun meet?
+[13:40] SPK_2: We met in 2010 during our undergrad at the University of Calgary, started dating in late 2011, and moved in together July 2012.
+[14:30] SPK_1: Capture the milestones—cohabitation, marriage, and any moves please.
+[15:20] SPK_2: We married on June 14, 2014 at Calgary City Hall, rented in Bridgeland until 2016, then bought the current house in Mahogany on May 30, 2018.
+[16:10] SPK_1: When were Liam and Maya born?
+[17:00] SPK_2: Liam was born March 5, 2013 at Rockyview General Hospital, and Maya was born September 22, 2016 at South Health Campus.
+[17:50] SPK_1: When did relationship stress begin to affect the family?
+[18:40] SPK_2: Tension ramped up in late 2021 when Arjun started fly-in fly-out work to Fort McMurray; he was exhausted, and by February 2022 arguments were weekly.
+[19:30] SPK_1: I need specific incidents that mark the breakdown.
+[20:20] SPK_2: On February 18, 2022 he punched a hole in our pantry door during an argument about childcare; we patched it but I photographed it, and on May 7, 2022 he left the house for three days after accusing me of hiding bank statements.
+[21:10] SPK_1: What incident led you to seek court intervention?
+[22:00] SPK_2: October 18, 2023 was the tipping point—Arjun threw a ceramic mug that shattered near Maya while yelling, and Liam dialed 911 from the upstairs hallway.
+[22:50] SPK_1: Did police attend and create an occurrence report?
+[23:40] SPK_2: Yes, CPS file number 23-451789; Constable Herrera attended, took statements, and removed Arjun for the night; no charges laid, but they noted risk factors with the children present.
+[24:30] SPK_1: Following that, did you obtain a protection order?
+[25:20] SPK_2: I applied on October 20, 2023 and received an Emergency Protection Order the same day—EPO docket EPO-23-1187—and it was confirmed into a Queen’s Bench order on November 3.
+[26:10] SPK_1: What were the key conditions of that order?
+[27:00] SPK_2: No contact except by OurFamilyWizard, Arjun had to stay 200 metres away from my home and workplace, and exchanges were to happen at the South Calgary YouthLink centre.
+[27:50] SPK_1: After the EPO, how did living arrangements change?
+[28:40] SPK_2: Arjun collected essentials November 5, 2023 under police supervision and moved into his cousin Vikram’s spare room until he leased the downtown condo February 1, 2024.
+[29:30] SPK_1: Let’s cover property details: describe the home and any mortgages.
+[30:20] SPK_2: The Mahogany house is 3-bedroom on Marine Drive, purchased for $585,000; we owe about $438,000 on the RBC mortgage at 2.29% fixed until August 2025, plus a $22,000 joint line of credit.
+[31:10] SPK_1: Has the home been listed or appraised yet?
+[32:00] SPK_2: We ordered an appraisal from Prairie Valuations delivered July 8, 2024 valuing it at $640,000, but we haven’t listed; I want to keep it, he wants sale proceeds split.
+[32:50] SPK_1: Moving to parenting orders, what is currently in place?
+[33:40] SPK_2: Justice Leduc granted an interim parenting order December 15, 2023: week-on/week-off rotation starting Fridays after school, with a right of first refusal for childcare over four hours.
+[34:30] SPK_1: Has that schedule been followed smoothly?
+[35:20] SPK_2: Not entirely; Arjun missed exchanges on January 12 and March 8, 2024 citing work travel, so I kept the kids and logged it; we also had a make-up weekend May 24 after mediation.
+[36:10] SPK_1: Where do exchanges take place now?
+[37:00] SPK_2: Since September 2024 we switched to the Vivo Centre supervised exchange program on Harvest Hills Boulevard because YouthLink closed its family room.
+[37:50] SPK_1: How do you communicate about the children?
+[38:40] SPK_2: Only through OurFamilyWizard, messaging module; I export monthly reports, and I also copy our parenting coordinator, Dr. Leanne Morris, who was appointed June 2024.
+[39:30] SPK_1: How are Liam and Maya coping emotionally and physically?
+[40:20] SPK_2: Liam has anxiety symptoms—night terrors in November and again in August 2024; he sees psychologist Dr. Angela Chen biweekly. Maya started occupational therapy for sensory regulation in January 2024.
+[41:10] SPK_1: Do you have documentation for the professionals involved?
+[42:00] SPK_2: Yes, I have Dr. Chen’s progress letter dated December 5, 2024 and the OT reports from KidsForward Therapy; both uploaded to the court’s digital drop box December 18.
+[42:50] SPK_1: Tell me about school involvement or teacher feedback.
+[43:40] SPK_2: Liam’s homeroom teacher, Ms. Thompson, emailed October 2, 2024 noting he falls asleep in class after transitions with his dad; Maya’s teacher, Mr. Callahan, reports she does better when routines stay consistent.
+[44:30] SPK_1: Who is on your support network for childcare or exchanges?
+[45:20] SPK_2: My brother Daniel Rina drives the kids to soccer on my weeks, and my mom, Priya Rina, stays over every other Tuesday; both are listed as backup caregivers on the interim order.
+[46:10] SPK_1: And Arjun’s support network?
+[47:00] SPK_2: His mother, Sunita Patel, flies in from Edmonton about once a month; his cousin Vikram Singh often supervises when Arjun works late; they sometimes do exchanges, though the order requires prior notice.
+[47:50] SPK_1: Any new partners we should record for the relationship graph?
+[48:40] SPK_2: Arjun has been dating Kelsey Moore since January 2024; she moved into his condo in September, and the kids mention staying with her; I’m concerned because I haven’t met her formally.
+[49:30] SPK_1: Let’s switch to financial support—what payments are ordered?
+[50:20] SPK_2: Interim child support is $1,240 per month starting February 1, 2024 based on Arjun’s 2023 income of $118,400; he pays through direct deposit on the first business day.
+[51:10] SPK_1: Has spousal support been discussed?
+[52:00] SPK_2: We set spousal support aside pending disclosure; duty counsel suggested I could claim indefinite low-range per the Spousal Support Advisory Guidelines because of our 11-year relationship and income gap.
+[52:50] SPK_1: Speaking of income, what are the current numbers?
+[53:40] SPK_2: My 2024 T4 shows $82,600; Arjun’s last confirmed pay stub from November 2024 annualizes to $126,900 after he took a promotion, but I haven’t seen the official T4 yet.
+[54:30] SPK_1: How has financial disclosure gone overall?
+[55:20] SPK_2: We exchanged Form 26 financial statements November 27, 2023, updated June 14, 2024, and again October 28, 2024; Arjun still owes me full bank statements for July through December 2024.
+[56:10] SPK_1: Any outstanding disclosure items on your side?
+[57:00] SPK_2: I need to upload my 2024 Notice of Assessment once CRA releases it—expected late February—and the latest RESP statement; otherwise I’m current.
+[57:50] SPK_1: Detail current debts aside from the mortgage and line of credit.
+[58:40] SPK_2: We have a joint RBC Visa with $3,800 balance we froze October 2023, and there’s a $9,500 RESP for the kids; no vehicle loans because both cars are paid off.
+[59:30] SPK_1: What about assets like pensions or RRSPs?
+[60:20] SPK_2: Arjun has a company RRSP worth about $74,000; I have an Alberta Health Services pension with commuted value roughly $66,000; we agreed to exchange statements every six months to keep numbers current.
+[61:10] SPK_1: Do you have a working household budget we should record?
+[62:00] SPK_2: Yes, my monthly budget is $4,950, including $2,150 rent, $600 daycare/after-school when needed, $480 groceries, and therapy costs; with child support I’m breaking even.
+[62:50] SPK_1: Let’s recap procedural history—what court events have happened?
+[63:40] SPK_2: Case conference on November 3, 2023 confirming the EPO; special chambers December 15 for parenting order; a dispute resolution officer meeting April 12, 2024; and a case management review September 19, 2024 where Justice Wong set timelines for disclosure and ordered a parenting assessment referral, though we opted for coordinator instead.
+[64:30] SPK_1: What’s next on the court calendar?
+[65:20] SPK_2: We have a Judicial Dispute Resolution session booked for March 12, 2025 at 9:30 a.m. with Justice Riley, and a fallback case conference April 28 if JDR fails.
+[66:10] SPK_1: What deadlines precede the JDR?
+[67:00] SPK_2: We must exchange updated Form 26 financials by February 25, 2025, file the JDR brief by March 3, and provide the parenting coordinator’s status letter by March 5.
+[67:50] SPK_1: Any mediation or collaborative sessions outside court?
+[68:40] SPK_2: We attended three sessions with Riverbend Mediation between May 6 and June 10, 2024; partial minutes of settlement cover extracurricular costs but left property unresolved; we plan a follow-up caucus February 21.
+[69:30] SPK_1: Have you completed the Parenting After Separation course?
+[70:20] SPK_2: Yes, I completed the PAS course online November 8, 2023, and I submitted the certificate; Arjun completed the high-conflict version January 4, 2024 after the case manager insisted.
+[71:10] SPK_1: For the summary agent, what are the top issues you want highlighted?
+[72:00] SPK_2: Safety at exchanges, Liam’s anxiety management, ensuring Arjun discloses his promotion income, preserving the kids’ school continuity, and whether I can retain the home via buyout.
+[72:50] SPK_1: What are your desired outcomes from the court?
+[73:40] SPK_2: Primary residence with me, Arjun moving to a 5-2-2-5 schedule once he completes anger management, guideline child support adjusted to actual income, a review of spousal support at mid-range, and transfer of the house title to me upon refinancing.
+[74:30] SPK_1: I want to double-check the key timeline dates for the timeline generator; can you confirm them quickly?
+[75:20] SPK_2: Sure—met 2010, married June 14, 2014, bought Mahogany house May 30, 2018, first major violence February 18, 2022, police call October 18, 2023, EPO granted October 20 and confirmed November 3, interim parenting order December 15, 2023, DRC April 12, 2024, parenting coordinator appointed June 3, 2024, case management review September 19, 2024, JDR scheduled March 12, 2025.
+[76:10] SPK_1: Are there any risk factors or urgent needs we should flag?
+[77:00] SPK_2: Exchange safety—Arjun sometimes brings unapproved people, like his cousin, and there was a verbal blow-up December 6, 2024 captured in Vivo’s incident log; also, I’m awaiting confirmation that he enrolled in the Respectful Communication course ordered September 19.
+[77:50] SPK_1: What immediate assistance do you want from uDocket before the JDR?
+[78:40] SPK_2: Help me organize disclosure tracking, prep a concise parenting chronology for Justice Riley, and map which witnesses—Dr. Chen, Ms. Thompson, and the Vivo coordinator—can provide letters before March 5.

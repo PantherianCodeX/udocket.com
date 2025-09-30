@@ -2,11 +2,18 @@ from __future__ import annotations
 
 import json
 import logging
+from collections import deque
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Deque, Dict, List, Optional, Sequence
 
 from ...common.azure_client import AzureChatClient
 from ...common.io import TranscriptParse
+from ...common.chunking import (
+    ChunkSplitConfig,
+    should_retry_for_json,
+    should_retry_for_length,
+    split_for_retry,
+)
 from ..exceptions import AzureStageFailure
 
 logger = logging.getLogger("udocket.summarize.entity_stage")
@@ -67,6 +74,8 @@ ENTITY_SCHEMA = {
     },
     "required": ["entities", "relations"],
 }
+
+ENTITY_SPLIT_CONFIG = ChunkSplitConfig(min_lines=10, min_chars=2500)
 
 
 @dataclass
@@ -193,12 +202,12 @@ def generate_entities(
         return EntityStageResult(fallback, {})
 
     try:
-        chunks = _ensure_chunks(context_snippet)
+        chunk_queue: Deque[str] = deque(_ensure_chunks(context_snippet))
         aggregate: Optional[Dict[str, Any]] = None
         usage_totals: Dict[str, int] = {}
-        for index, chunk in enumerate(chunks, start=1):
-            chunk_text = chunk or ""
-            if not chunk_text.strip():
+        while chunk_queue:
+            chunk_text = chunk_queue.popleft()
+            if not chunk_text or not chunk_text.strip():
                 continue
             system_prompt = (
                 "You are an entity and relationship analyst for Canadian legal transcripts."
@@ -208,20 +217,29 @@ def generate_entities(
                 "Use the outline and transcript snippets. Provide aliases where obvious."
                 f"\nOutline parties: {json.dumps(outline_parties, ensure_ascii=False)}\n"
                 f"\nCase brief summary: {json.dumps(case_brief, ensure_ascii=False)}\n"
-                f"\nTranscript excerpts (chunk {index}/{len(chunks)}):\n{chunk_text}\n"
+                f"\nTranscript excerpts (remaining chunks: {len(chunk_queue)+1}):\n{chunk_text}\n"
             )
-            content, usage = azure_client.chat(
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                temperature=temperature,
-                max_tokens=max(1, max_tokens),
-                response_format={
-                    "type": "json_schema",
-                    "json_schema": {"name": "entity_v1", "schema": ENTITY_SCHEMA},
-                },
-            )
+            try:
+                content, usage = azure_client.chat(
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    temperature=temperature,
+                    max_tokens=max(1, max_tokens),
+                    response_format={
+                        "type": "json_schema",
+                        "json_schema": {"name": "entity_v1", "schema": ENTITY_SCHEMA},
+                    },
+                )
+            except RuntimeError as exc:
+                if should_retry_for_length(str(exc)):
+                    halves = split_for_retry(chunk_text, config=ENTITY_SPLIT_CONFIG)
+                    if halves:
+                        chunk_queue.appendleft(halves[1])
+                        chunk_queue.appendleft(halves[0])
+                        continue
+                raise
             content_str = content.strip()
             if not content_str:
                 logger.warning(
@@ -230,10 +248,16 @@ def generate_entities(
                 continue
             try:
                 payload = json.loads(content_str)
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as exc:
                 logger.warning(
-                    "Azure entity stage produced non-JSON payload; skipping chunk",
+                    "Azure entity stage produced non-JSON payload; attempting to split chunk",
                 )
+                if should_retry_for_json(str(exc)) or should_retry_for_length(str(exc)):
+                    halves = split_for_retry(chunk_text, config=ENTITY_SPLIT_CONFIG)
+                    if halves:
+                        chunk_queue.appendleft(halves[1])
+                        chunk_queue.appendleft(halves[0])
+                        continue
                 continue
             if not isinstance(payload, dict):
                 continue

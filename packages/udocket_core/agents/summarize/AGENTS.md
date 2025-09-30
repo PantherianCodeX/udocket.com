@@ -49,12 +49,12 @@ Add `packages/udocket_core/agents/summarize_lib.py` implementing a pure‑Python
     - `azure_openai_endpoint: str` — must be a Canadian region hostname (canadacentral/canadaeast) or blank to disable network.
     - `azure_openai_key: str`
     - `azure_openai_deployment: str` — default deployment name; stages can override by model.
-    - `azure_openai_api_version: str = "2024-08-01-preview"`
+    - `azure_openai_api_version: str = "2024-10-21"`
     - `language: str = "en-CA"`
     - `temperature: float = 1.0`
     - `max_output_tokens: int = 24000`
-    - `max_prompt_segments: int = 120` (0 disables the segment cap)
-    - `max_prompt_chars: int = 8000` (0 disables the char cap)
+    - `max_prompt_segments: int = 250` (0 disables the segment cap)
+    - `max_prompt_chars: int = 32000` (0 disables the char cap)
     - `default_stage_model: str | None`
     - `stage_model_overrides: Dict[str, str]`
     - `stage_max_output_tokens: Dict[str, int]`
@@ -162,7 +162,7 @@ Audit line in `ops/ops_summary.jsonl` mirrors the above in a single JSON object 
   - `AZURE_OPENAI_ENDPOINT=https://<resource>.openai.azure.com` (must contain `canadacentral` or `canadaeast` in the resource region)
   - `AZURE_OPENAI_API_KEY`
   - `AZURE_OPENAI_DEPLOYMENT` (e.g., `gpt-4o-mini`)
-  - `AZURE_OPENAI_API_VERSION=2024-08-01-preview`
+  - `AZURE_OPENAI_API_VERSION=2024-10-21`
 - Optional:
   - `SUMMARY_TEMPERATURE=1.0`, `SUMMARY_MAX_TOKENS=24000`
   - `SUMMARY_MAX_PROMPT_SEGMENTS`, `SUMMARY_MAX_PROMPT_CHARS`, `SUMMARY_CHARS_PER_TOKEN`

@@ -599,6 +599,9 @@ class SummarizePipeline:
             context_tokens = max(available, runtime.profile.min_context_tokens)
         else:
             context_tokens = runtime.profile.recommended_context_tokens
+        chunk_target = runtime.profile.target_chunk_tokens
+        if chunk_target:
+            context_tokens = min(context_tokens, chunk_target)
         char_limit = (
             int(context_tokens * self.chars_per_token)
             if context_tokens

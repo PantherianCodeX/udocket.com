@@ -164,8 +164,8 @@ class AzureClientConfig:
     endpoint: str
     key: str
     deployment: str
-    api_version: str = "2024-08-01-preview"
-    timeout: int = 60
+    api_version: str = "2024-10-21"
+    timeout: int = 120
     allow_non_ca_region: bool = False
 
     def validate(self) -> None:

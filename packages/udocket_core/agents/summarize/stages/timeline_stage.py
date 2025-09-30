@@ -1,12 +1,19 @@
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass
 import json
 import logging
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Deque, Dict, List, Optional, Sequence
 
 from ...common.azure_client import AzureChatClient
 from ...common.io import TranscriptParse
+from ...common.chunking import (
+    ChunkSplitConfig,
+    should_retry_for_json,
+    should_retry_for_length,
+    split_for_retry,
+)
 from ..exceptions import AzureStageFailure
 
 logger = logging.getLogger("udocket.summarize.timeline_stage")
@@ -34,6 +41,8 @@ TIMELINE_SCHEMA = {
     },
     "required": ["events"],
 }
+
+TIMELINE_SPLIT_CONFIG = ChunkSplitConfig(min_lines=10, min_chars=2500)
 
 
 @dataclass
@@ -102,13 +111,13 @@ def generate_timeline(
         return TimelineStageResult(fallback, {})
 
     try:
-        chunks = _ensure_chunks(context_snippet)
+        chunk_queue: Deque[str] = deque(_ensure_chunks(context_snippet))
         aggregated: List[Dict[str, Any]] = []
         usage_totals: Dict[str, int] = {}
         signatures = set()
-        for index, chunk in enumerate(chunks, start=1):
-            chunk_text = chunk or ""
-            if not chunk_text.strip():
+        while chunk_queue:
+            chunk_text = chunk_queue.popleft()
+            if not chunk_text or not chunk_text.strip():
                 continue
             system_prompt = (
                 "You are a legal timeline analyst. Produce normalized events with start/end offsets (seconds),"
@@ -118,20 +127,29 @@ def generate_timeline(
                 "Use these transcript excerpts to generate events. Ensure every object includes labels array.\n"
                 f"Outline issues (for context): {json.dumps(outline_issues, ensure_ascii=False)}\n\n"
                 f"Case brief summary: {json.dumps(case_brief, ensure_ascii=False)}\n\n"
-                f"Transcript excerpts (chunk {index}/{len(chunks)}):\n" + chunk_text
+                f"Transcript excerpts (remaining chunks: {len(chunk_queue)+1}):\n" + chunk_text
             )
-            content, usage = azure_client.chat(
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                temperature=temperature,
-                max_tokens=max(1, max_tokens),
-                response_format={
-                    "type": "json_schema",
-                    "json_schema": {"name": "timeline_v1", "schema": TIMELINE_SCHEMA},
-                },
-            )
+            try:
+                content, usage = azure_client.chat(
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    temperature=temperature,
+                    max_tokens=max(1, max_tokens),
+                    response_format={
+                        "type": "json_schema",
+                        "json_schema": {"name": "timeline_v1", "schema": TIMELINE_SCHEMA},
+                    },
+                )
+            except RuntimeError as exc:
+                if should_retry_for_length(str(exc)):
+                    halves = split_for_retry(chunk_text, config=TIMELINE_SPLIT_CONFIG)
+                    if halves:
+                        chunk_queue.appendleft(halves[1])
+                        chunk_queue.appendleft(halves[0])
+                        continue
+                raise
             content_str = content.strip()
             if not content_str:
                 logger.warning(
@@ -140,10 +158,16 @@ def generate_timeline(
                 continue
             try:
                 payload = json.loads(content_str)
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as exc:
                 logger.warning(
-                    "Azure timeline stage produced non-JSON payload; skipping chunk",
+                    "Azure timeline stage produced non-JSON payload; skipping/splitting chunk",
                 )
+                if should_retry_for_json(str(exc)) or should_retry_for_length(str(exc)):
+                    halves = split_for_retry(chunk_text, config=TIMELINE_SPLIT_CONFIG)
+                    if halves:
+                        chunk_queue.appendleft(halves[1])
+                        chunk_queue.appendleft(halves[0])
+                        continue
                 continue
             events = payload.get("events", []) if isinstance(payload, dict) else []
             if not isinstance(events, list):

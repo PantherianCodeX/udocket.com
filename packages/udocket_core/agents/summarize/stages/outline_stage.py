@@ -1,13 +1,20 @@
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Deque, Dict, List, Optional, Sequence
 
 import copy
 import json
 
 from ...common.azure_client import AzureChatClient
 from ...common.io import TranscriptParse
+from ...common.chunking import (
+    ChunkSplitConfig,
+    should_retry_for_json,
+    should_retry_for_length,
+    split_for_retry,
+)
 from ..exceptions import AzureStageFailure
 
 OUTLINE_SCHEMA = {
@@ -156,6 +163,8 @@ OUTLINE_SCHEMA = {
         "legal_refs",
     ],
 }
+
+OUTLINE_SPLIT_CONFIG = ChunkSplitConfig(min_lines=10, min_chars=2500)
 
 
 @dataclass
@@ -308,13 +317,14 @@ def generate_outline(
         return OutlineStageResult(fallback, {})
 
     try:
-        chunks = _ensure_chunks(context_snippet)
+        chunks: Deque[str] = deque(_ensure_chunks(context_snippet))
         aggregate_outline: Optional[Dict[str, Any]] = None
         usage_totals: Dict[str, int] = {}
-        for index, chunk in enumerate(chunks, start=1):
-            chunk_text = chunk or ""
-            if not chunk_text.strip():
+        while chunks:
+            chunk_text = chunks.popleft()
+            if not chunk_text or not chunk_text.strip():
                 continue
+            lines = chunk_text.splitlines()
             system_prompt = (
                 "You are a Canadian paralegal assistant. Extract structured outline data from the provided transcript"
                 " context. Only return JSON that matches the provided schema."
@@ -324,31 +334,45 @@ def generate_outline(
                 f"{json.dumps(intake, ensure_ascii=False, indent=2)}\n\n"
                 "Case brief summary:\n"
                 f"{json.dumps(case_brief, ensure_ascii=False, indent=2)}\n\n"
-                f"Transcript excerpts (chunk {index}/{len(chunks)}):\n" + chunk_text + "\n"
+                f"Transcript excerpts (remaining chunks: {len(chunks)+1}):\n" + chunk_text + "\n"
             )
-            content, usage = azure_client.chat(
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                temperature=temperature,
-                max_tokens=max(1, max_tokens),
-                response_format={
-                    "type": "json_schema",
-                    "json_schema": {"name": "outline_v1", "schema": OUTLINE_SCHEMA},
-                },
-            )
+            try:
+                content, usage = azure_client.chat(
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    temperature=temperature,
+                    max_tokens=max(1, max_tokens),
+                    response_format={
+                        "type": "json_schema",
+                        "json_schema": {"name": "outline_v1", "schema": OUTLINE_SCHEMA},
+                    },
+                )
+            except RuntimeError as exc:
+                message = str(exc)
+                if should_retry_for_length(message):
+                    halves = split_for_retry(chunk_text, config=OUTLINE_SPLIT_CONFIG)
+                    if halves:
+                        chunks.appendleft(halves[1])
+                        chunks.appendleft(halves[0])
+                        continue
+                raise
             try:
                 outline_payload = json.loads(content)
             except json.JSONDecodeError as exc:
+                if should_retry_for_json(str(exc)) or should_retry_for_length(str(exc)):
+                    halves = split_for_retry(chunk_text, config=OUTLINE_SPLIT_CONFIG)
+                    if halves:
+                        chunks.appendleft(halves[1])
+                        chunks.appendleft(halves[0])
+                        continue
                 preview = content.strip()[:200].replace("\n", " ")
                 error = RuntimeError(
                     "Invalid JSON payload returned from Azure outline stage: "
                     f"{exc}. Content preview: {preview!r}"
                 )
-                raise AzureStageFailure(
-                    "outline", error, OutlineStageResult(fallback, {})
-                ) from exc
+                raise AzureStageFailure("outline", error, OutlineStageResult(fallback, {})) from exc
             outline_chunk = _coerce_outline(outline_payload, fallback)
             if aggregate_outline is None:
                 aggregate_outline = copy.deepcopy(outline_chunk)
