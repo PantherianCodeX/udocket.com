@@ -19,14 +19,18 @@ from apps.platform.operations.llm import (
     ensure_default_llm_configuration,
     ensure_provider_templates,
     evaluate_provider_setup,
+    get_provider_secret_with_metadata,
     get_llm_configuration,
     get_org_llm_configurations,
     get_org_provider_credentials,
     load_provider_catalog,
+    run_live_model_probe,
+    run_provider_live_test,
     upsert_llm_configuration,
     upsert_org_provider_credential,
 )
 from packages.udocket_core.llm import LLMSettings, load_llm_settings
+from packages.udocket_core.llm.runtime import ChatClientError
 
 from .auth import ensure_authenticated
 
@@ -399,6 +403,15 @@ def organization_settings(
                 errors.append("Unknown provider selected.")
             elif not errors:
                 cred = existing_cred or {}
+                secret_details = get_provider_secret_with_metadata(
+                    str(organization.id), provider_key
+                )
+                stored_api_key = (
+                    secret_details.get("api_key") if secret_details else ""
+                )
+                stored_metadata = (
+                    secret_details.get("metadata") if secret_details else {}
+                )
                 effective_endpoint = (
                     form_data["endpoint"]
                     or cred.get("endpoint")
@@ -414,37 +427,146 @@ def organization_settings(
                     effective_metadata = metadata_override
                 else:
                     existing_meta = cred.get("metadata")
-                    effective_metadata = (
-                        existing_meta if isinstance(existing_meta, dict) else {}
-                    )
+                    if isinstance(existing_meta, dict) and existing_meta:
+                        effective_metadata = existing_meta
+                    else:
+                        effective_metadata = (
+                            stored_metadata if isinstance(stored_metadata, dict) else {}
+                        )
                 supplied_models = form_data.get("models") or []
-                effective_models = supplied_models if supplied_models else cred.get("models") or []
+                effective_models = (
+                    supplied_models if supplied_models else cred.get("models") or []
+                )
                 if not effective_models:
                     effective_models = default_models_payload(provider_obj)
                 if form_data["api_action"] == "clear":
-                    effective_has_key = False
+                    effective_api_key = ""
                 elif form_data["api_action"] == "update":
-                    effective_has_key = bool(form_data["api_key"].strip())
+                    effective_api_key = form_data["api_key"].strip()
                 else:
-                    effective_has_key = bool(cred.get("has_api_key"))
+                    effective_api_key = stored_api_key
                 analysis = evaluate_provider_setup(
                     provider=provider_obj,
                     endpoint=effective_endpoint,
-                    has_api_key=effective_has_key,
+                    has_api_key=bool(effective_api_key),
                     metadata=effective_metadata,
                     models=effective_models,
                 )
                 if analysis.get("ready"):
-                    messages.success(
-                        request,
-                        f"Provider '{provider_key}' passed validation.",
-                    )
+                    try:
+                        probe = run_provider_live_test(
+                            provider=provider_obj,
+                            endpoint=effective_endpoint,
+                            api_key=effective_api_key,
+                            metadata=effective_metadata,
+                            models=effective_models,
+                        )
+                    except ChatClientError as exc:
+                        errors.append(str(exc))
+                    else:
+                        snippet = probe.get("content") or "OK"
+                        snippet = snippet if len(snippet) <= 60 else f"{snippet[:57]}..."
+                        messages.success(
+                            request,
+                            f"Provider '{provider_key}' live test succeeded with model "
+                            f"{probe.get('model')}: {snippet}",
+                        )
                 else:
-                    issues = analysis.get("issues") or []
-                    if not issues:
-                        issues = ["Configuration test failed."]
-                    for issue in issues:
-                        messages.error(request, str(issue))
+                    issues = analysis.get("issues") or [
+                        "Provider validation failed."
+                    ]
+                    errors.extend(str(issue) for issue in issues)
+        elif action == "provider-model-test":
+            provider_obj = llm_settings.provider(provider_key)
+            if not provider_key:
+                errors.append("Provider key is required for testing.")
+            elif not provider_obj:
+                errors.append("Unknown provider selected.")
+            else:
+                payload_raw = (request.POST.get("model_test_payload") or "").strip()
+                try:
+                    model_payload = json.loads(payload_raw) if payload_raw else {}
+                except json.JSONDecodeError:
+                    errors.append("Invalid model payload provided for testing.")
+                    model_payload = {}
+                if not model_payload.get("name"):
+                    errors.append("Model payload is missing an identifier.")
+                if not errors:
+                    cred = existing_cred or {}
+                    secret_details = get_provider_secret_with_metadata(
+                        str(organization.id), provider_key
+                    )
+                    stored_api_key = (
+                        secret_details.get("api_key") if secret_details else ""
+                    )
+                    stored_metadata = (
+                        secret_details.get("metadata") if secret_details else {}
+                    )
+                    effective_endpoint = (
+                        form_data["endpoint"]
+                        or cred.get("endpoint")
+                        or provider_obj.default_endpoint
+                        or ""
+                    )
+                    metadata_override = (
+                        form_data["metadata"]
+                        if isinstance(form_data["metadata"], dict) and form_data["metadata"]
+                        else None
+                    )
+                    if metadata_override is not None:
+                        effective_metadata = metadata_override
+                    else:
+                        existing_meta = cred.get("metadata")
+                        if isinstance(existing_meta, dict) and existing_meta:
+                            effective_metadata = existing_meta
+                        else:
+                            effective_metadata = (
+                                stored_metadata if isinstance(stored_metadata, dict) else {}
+                            )
+                    supplied_models = form_data.get("models") or []
+                    effective_models = (
+                        supplied_models if supplied_models else cred.get("models") or []
+                    )
+                    if not effective_models:
+                        effective_models = default_models_payload(provider_obj)
+                    if form_data["api_action"] == "clear":
+                        effective_api_key = ""
+                    elif form_data["api_action"] == "update":
+                        effective_api_key = form_data["api_key"].strip()
+                    else:
+                        effective_api_key = stored_api_key
+                    analysis = evaluate_provider_setup(
+                        provider=provider_obj,
+                        endpoint=effective_endpoint,
+                        has_api_key=bool(effective_api_key),
+                        metadata=effective_metadata,
+                        models=effective_models,
+                    )
+                    if analysis.get("ready"):
+                        try:
+                            probe = run_live_model_probe(
+                                provider=provider_obj,
+                                endpoint=effective_endpoint,
+                                api_key=effective_api_key,
+                                metadata=effective_metadata,
+                                model_payload=model_payload,
+                            )
+                        except ChatClientError as exc:
+                            errors.append(str(exc))
+                        else:
+                            snippet = probe.get("content") or "OK"
+                            snippet = (
+                                snippet if len(snippet) <= 60 else f"{snippet[:57]}..."
+                            )
+                            messages.success(
+                                request,
+                                f"Model '{probe.get('model')}' live test succeeded: {snippet}",
+                            )
+                    else:
+                        issues = analysis.get("issues") or [
+                            "Provider validation failed."
+                        ]
+                        errors.extend(str(issue) for issue in issues)
         else:
             errors.append("Unknown action.")
 
@@ -825,6 +947,8 @@ def organization_settings(
         "stage_entries": stage_entries,
         "provider_options": enabled_providers,
         "model_options": model_options,
+        "providers_configured": bool(provider_registry),
+        "provider_warning": not enabled_providers,
     }
     return render(
         request,

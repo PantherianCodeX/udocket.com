@@ -42,7 +42,7 @@
     }
   }
 
-  function createModelRow(template, data, creatorOptions) {
+  function createModelRow(template, data, creatorOptions, handlers = {}) {
     const clone = template.content.firstElementChild.cloneNode(true);
     const name = clone.querySelector('input[name="model_name"]');
     const label = clone.querySelector('input[name="model_label"]');
@@ -59,6 +59,7 @@
     const optionsJson = clone.querySelector('textarea[name="model_options_json"]');
     const enabledCheckbox = clone.querySelector('input[name="model_enabled"]');
     const originSelect = clone.querySelector('[data-model-origin]');
+    const testButton = clone.querySelector('[data-provider-model-test]');
 
     const optionsRaw = (data && typeof data.options === 'object' && data.options)
       ? { ...data.options }
@@ -127,6 +128,14 @@
     if (removeBtn) {
       removeBtn.addEventListener('click', () => {
         clone.remove();
+      });
+    }
+
+    if (testButton && typeof handlers.onTest === 'function') {
+      testButton.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        handlers.onTest({ row: clone, button: testButton });
       });
     }
 
@@ -232,6 +241,7 @@
     const templateSelect = form?.querySelector('[data-provider-template]');
     const templateApplyBtn = form?.querySelector('[data-provider-template-apply]');
     const deleteButton = form?.querySelector('[data-provider-delete]');
+    const modelTestPayloadInput = form?.querySelector('[data-provider-model-test-payload]');
 
     const providerMap = providers.reduce((acc, item) => {
       acc[item.key] = item;
@@ -249,6 +259,18 @@
       modelContainer.innerHTML = '';
     }
 
+    function handleModelTest({ row, button }) {
+      if (!form || !row || !button) return;
+      const payload = serializeModelRow(row);
+      if (!payload) {
+        window.alert('Provide a model ID before testing this model.');
+        return;
+      }
+      if (!modelTestPayloadInput) return;
+      modelTestPayloadInput.value = JSON.stringify(payload);
+      form.requestSubmit(button);
+    }
+
     function populateModels(list) {
       if (!modelContainer || !template) return;
       clearModels();
@@ -257,7 +279,9 @@
           ...model,
           options: model.options || {},
         };
-        modelContainer.appendChild(createModelRow(template, normalized, creators));
+        modelContainer.appendChild(
+          createModelRow(template, normalized, creators, { onTest: handleModelTest }),
+        );
       });
     }
 
@@ -336,6 +360,7 @@
       }
       populateModels(models || []);
       if (compiledInput) compiledInput.value = '';
+      if (modelTestPayloadInput) modelTestPayloadInput.value = '';
     }
 
     function fillForm(key) {
@@ -452,7 +477,9 @@
 
     addModelBtn?.addEventListener('click', () => {
       if (!template || !modelContainer) return;
-      modelContainer.appendChild(createModelRow(template, { enabled: true, options: {} }, creators));
+      modelContainer.appendChild(
+        createModelRow(template, { enabled: true, options: {} }, creators, { onTest: handleModelTest }),
+      );
     });
 
     resetBtn?.addEventListener('click', (event) => {

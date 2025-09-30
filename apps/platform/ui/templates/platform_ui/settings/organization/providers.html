@@ -8,6 +8,7 @@
     <form method="post" class="space-y-4" data-provider-form>
       {% csrf_token %}
       <input type="hidden" name="models_payload_compiled" value="" data-provider-models-compiled>
+      <input type="hidden" name="model_test_payload" data-provider-model-test-payload>
       <div class="grid gap-4">
         <label class="text-sm text-slate-200">Provider
           <select name="provider" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" data-provider-select>
@@ -115,7 +116,8 @@
                 <textarea name="model_options_json" rows="2" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-2 py-2 font-mono text-[11px] text-slate-100 focus:border-primary-400 focus:outline-none" placeholder='{"custom_option": "value"}'></textarea>
               </label>
             </details>
-            <div class="flex items-center justify-end">
+            <div class="flex items-center justify-end gap-2">
+              <button type="submit" name="action" value="provider-model-test" class="inline-flex items-center gap-1 rounded-lg border border-primary-400/40 bg-primary-500/10 px-3 py-1 text-xs font-semibold text-primary-100 transition hover:bg-primary-500/20" data-provider-model-test>Test model</button>
               <button type="button" class="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-200 transition hover:border-rose-400 hover:text-rose-200" data-provider-model-remove>Remove</button>
             </div>
           </div>
@@ -161,31 +163,28 @@
           <tr>
             <th class="px-4 py-3 text-left">Provider</th>
             <th class="px-4 py-3 text-left">Status</th>
+            <th class="px-4 py-3 text-left">Actions</th>
             <th class="px-4 py-3 text-left">Models</th>
-            <th class="px-4 py-3 text-right">Actions</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-white/5" data-provider-table>
           {% for provider in providers %}
           <tr class="hover:bg-white/5 cursor-pointer" data-provider-row data-provider-key="{{ provider.key }}" data-provider-status="{{ provider.status }}" data-provider-can-enable="{{ provider.can_enable|yesno:'true,false' }}">
             <td class="px-4 py-4 align-top">
-              <div class="flex flex-col gap-2">
-                <div class="flex flex-wrap items-center gap-3">
+              <div class="flex items-start gap-3">
+                <input type="checkbox" class="mt-[3px] rounded border-white/20 bg-slate-900/70 text-primary-400 focus:ring-primary-400" data-provider-toggle data-provider-can-enable="{{ provider.can_enable|yesno:'true,false' }}" {% if provider.enabled %}checked{% endif %} {% if not provider.can_enable %}disabled{% endif %} aria-label="Enable provider">
+                <div class="flex flex-col gap-2">
                   <span class="font-semibold text-white">{{ provider.label }}</span>
-                  <label class="inline-flex items-center gap-2 text-xs text-slate-200" data-provider-enable>
-                    <input type="checkbox" class="rounded border-white/20 bg-slate-900/70 text-primary-400 focus:ring-primary-400" data-provider-toggle data-provider-can-enable="{{ provider.can_enable|yesno:'true,false' }}" {% if provider.enabled %}checked{% endif %} {% if not provider.can_enable %}disabled{% endif %}>
-                    <span>Enable</span>
-                  </label>
-                </div>
-                <div class="text-xs text-slate-400 break-words">{{ provider.endpoint|default:"—" }}</div>
-                <div class="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
-                  <span class="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/10 px-2 py-0.5 uppercase tracking-wide">{{ provider.category|default:"creator" }}</span>
-                  {% if provider.hosted_creators %}
-                    <span class="text-slate-500">Hosts: {{ provider.hosted_creators|join:", " }}</span>
-                  {% endif %}
-                  {% if provider.models %}
-                    <span class="text-slate-500" data-provider-model-summary>Models: {{ provider.models_enabled_count }} / {{ provider.models_total_count }}</span>
-                  {% endif %}
+                  <div class="text-xs text-slate-400 break-words">{{ provider.endpoint|default:"—" }}</div>
+                  <div class="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
+                    <span class="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/10 px-2 py-0.5 uppercase tracking-wide">{{ provider.category|default:"creator" }}</span>
+                    {% if provider.hosted_creators %}
+                      <span class="text-slate-500">Hosts: {{ provider.hosted_creators|join:", " }}</span>
+                    {% endif %}
+                    {% if provider.models %}
+                      <span class="text-slate-500" data-provider-model-summary>Models: {{ provider.models_enabled_count }} / {{ provider.models_total_count }}</span>
+                    {% endif %}
+                  </div>
                 </div>
               </div>
             </td>
@@ -213,6 +212,31 @@
               {% endif %}
             </td>
             <td class="px-4 py-4 align-top text-xs text-slate-200">
+              <div class="flex flex-wrap items-center justify-start gap-2" data-provider-actions>
+                <form method="post" class="inline" data-provider-test>
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="provider-test">
+                  <input type="hidden" name="provider" value="{{ provider.key }}">
+                  <button type="submit" class="inline-flex items-center gap-1 rounded-lg border border-primary-400/40 bg-primary-500/10 px-3 py-1 text-xs font-semibold text-primary-100 transition hover:bg-primary-500/20">Test</button>
+                </form>
+                <button type="button" class="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-200 transition hover:border-primary-400 hover:text-white" data-provider-edit>
+                  Edit
+                </button>
+                <form method="post" class="inline" data-provider-delete>
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="provider-delete">
+                  <input type="hidden" name="provider" value="{{ provider.key }}">
+                  <button type="submit" class="rounded-lg border border-rose-500/40 bg-rose-500/20 px-3 py-1 text-xs text-rose-100 transition hover:bg-rose-500/30">Delete</button>
+                </form>
+                <form method="post" class="hidden" data-provider-toggle-form>
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="provider-toggle">
+                  <input type="hidden" name="provider" value="{{ provider.key }}">
+                  <input type="hidden" name="enabled" value="1">
+                </form>
+              </div>
+            </td>
+            <td class="px-4 py-4 align-top text-xs text-slate-200">
               {% if provider.models %}
                 <ul class="space-y-2" data-provider-model-list>
                   {% for model in provider.models %}
@@ -220,16 +244,14 @@
                       <div class="flex items-center justify-between gap-3">
                         <label class="inline-flex items-center gap-2 text-xs text-slate-100">
                           <input type="checkbox" class="rounded border-white/20 bg-slate-900/70 text-primary-400 focus:ring-primary-400" data-provider-model-toggle {% if model.enabled %}checked{% endif %}>
-                          <span>
-                            {{ model.label|default:model.value }}
-                            <span class="text-slate-500">({{ model.value }})</span>
-                          </span>
+                          <span>{{ model.label|default:model.value }}</span>
                         </label>
                         <span class="text-[10px] uppercase tracking-wide text-slate-400">
                           {{ model.origin|default:"runtime" }}
                         </span>
                       </div>
                       <div class="grid gap-2 text-[10px] text-slate-400 sm:grid-cols-2">
+                        <span>Model ID: {{ model.value }}</span>
                         {% if model.context_window_tokens %}<span>Context: {{ model.context_window_tokens }}</span>{% endif %}
                         {% if model.max_output_tokens %}<span>Max output: {{ model.max_output_tokens }}</span>{% endif %}
                         {% if model.default_temperature %}<span>Temp: {{ model.default_temperature }}</span>{% endif %}
@@ -247,25 +269,6 @@
               {% else %}
                 <span class="text-slate-500">No models</span>
               {% endif %}
-            </td>
-            <td class="px-4 py-4 align-top text-right">
-              <div class="flex items-center justify-end gap-2">
-                <button type="button" class="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-200 transition hover:border-primary-400 hover:text-white" data-provider-edit>
-                  Edit
-                </button>
-                <form method="post" class="inline" data-provider-delete>
-                  {% csrf_token %}
-                  <input type="hidden" name="action" value="provider-delete">
-                  <input type="hidden" name="provider" value="{{ provider.key }}">
-                  <button type="submit" class="rounded-lg border border-rose-500/40 bg-rose-500/20 px-3 py-1 text-xs text-rose-100 transition hover:bg-rose-500/30">Delete</button>
-                </form>
-                <form method="post" class="hidden" data-provider-toggle-form>
-                  {% csrf_token %}
-                  <input type="hidden" name="action" value="provider-toggle">
-                  <input type="hidden" name="provider" value="{{ provider.key }}">
-                  <input type="hidden" name="enabled" value="1">
-                </form>
-              </div>
             </td>
           </tr>
           {% endfor %}

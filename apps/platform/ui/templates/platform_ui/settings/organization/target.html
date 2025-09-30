@@ -68,6 +68,12 @@
         Set as default for {{ target_label|lower }} jobs
       </div>
 
+      {% if provider_warning %}
+      <div class="rounded-xl border border-amber-400/40 bg-amber-500/15 px-4 py-3 text-xs text-amber-100">
+        No enabled LLM providers are available. Contact an administrator to configure providers before running {{ target_label|lower }} jobs.
+      </div>
+      {% endif %}
+
       <div class="space-y-4">
         <h3 class="text-lg font-semibold text-white">Stages</h3>
         <div class="space-y-4" data-stage-list>

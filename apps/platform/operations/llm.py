@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import json
-from typing import Dict, Iterable, List, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 from django.db import transaction
 
 from packages.udocket_core.llm.config import PROVIDERS_PATH, load_llm_settings
+from packages.udocket_core.llm.runtime import (
+    ChatClientError,
+    build_chat_client,
+    build_provider_runtime_config,
+)
 
 try:
     from packages.udocket_core.agents.summarize_lib import DISALLOWED_PROVIDERS as _SUMMARIZE_DISALLOWED_PROVIDERS
@@ -461,21 +466,8 @@ def ensure_provider_templates(
     organization_id: str | None,
     llm_settings=None,
 ) -> None:
-    if not organization_id:
-        return
-    llm_settings = llm_settings or load_llm_settings()
-    for provider_name, provider in llm_settings.providers.items():
-        LLMProviderCredential.objects.get_or_create(
-            organization_id=organization_id,
-            provider=provider_name,
-            defaults={
-                "display_name": provider.display_name,
-                "endpoint": provider.default_endpoint or "",
-                "models_payload": default_models_payload(provider),
-                "metadata": {},
-                "is_enabled": False,
-            },
-        )
+    """Previously ensured provider credentials existed; now a no-op."""
+    return
 
 
 def evaluate_provider_setup(
@@ -784,6 +776,94 @@ def _normalize_models(models: Optional[Iterable[dict]]) -> List[dict]:
 
         sanitized.append(payload)
     return sanitized
+
+
+def _prepare_live_model_entry(model: dict) -> dict:
+    entry = dict(model)
+    options = dict(entry.get("options") or {})
+    deployment_env = entry.get("deployment_env")
+    if deployment_env and "azure_deployment" not in options:
+        options["azure_deployment"] = deployment_env
+    entry["options"] = options
+    return entry
+
+
+def run_live_model_probe(
+    *,
+    provider,
+    endpoint: str,
+    api_key: str,
+    metadata: Optional[Dict[str, Any]],
+    model_payload: dict,
+) -> Dict[str, Any]:
+    if not api_key:
+        raise ChatClientError("Configure an API key before running a live test")
+    if not endpoint:
+        endpoint = provider.default_endpoint or ""
+    metadata_dict: Dict[str, Any] = dict(metadata or {})
+    prepared = _prepare_live_model_entry(model_payload)
+    runtime_cfg = build_provider_runtime_config(
+        provider=provider,
+        model_name=prepared.get("name", ""),
+        credential_payload={
+            "endpoint": endpoint,
+            "api_key": api_key,
+            "metadata": metadata_dict,
+        },
+        options=prepared.get("options") or {},
+    )
+    client = build_chat_client(provider_runtime=runtime_cfg)
+    try:
+        content, usage = client.chat(
+            messages=[{"role": "user", "content": "Respond with OK"}],
+            temperature=0.0,
+            max_tokens=16,
+        )
+    except ChatClientError:
+        raise
+    except Exception as exc:  # pragma: no cover - network failures
+        raise ChatClientError(f"Live request failed: {exc}") from exc
+    return {
+        "model": prepared.get("name"),
+        "content": content.strip(),
+        "usage": usage,
+    }
+
+
+def run_provider_live_test(
+    *,
+    provider,
+    endpoint: str,
+    api_key: str,
+    metadata: Optional[Dict[str, Any]],
+    models: Optional[Iterable[dict]],
+    preferred_model: Optional[str] = None,
+) -> Dict[str, Any]:
+    sanitized = _normalize_models(models)
+    if not sanitized:
+        sanitized = _normalize_models(default_models_payload(provider))
+    target = None
+    if preferred_model:
+        for item in sanitized:
+            if item.get("name") == preferred_model:
+                target = item
+                break
+    if not target:
+        for item in sanitized:
+            if item.get("enabled", True):
+                target = item
+                break
+    if not target and sanitized:
+        target = sanitized[0]
+    if not target:
+        raise ChatClientError("Add an enabled model before testing this provider")
+    return run_live_model_probe(
+        provider=provider,
+        endpoint=endpoint,
+        api_key=api_key,
+        metadata=metadata,
+        model_payload=target,
+    )
 
 
 @transaction.atomic
