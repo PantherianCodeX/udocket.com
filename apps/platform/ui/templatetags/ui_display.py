@@ -31,3 +31,19 @@ def truncate_middle(value: str, args: str = "24,8") -> str:
     if len(text) <= front + back + 1:
         return text
     return f"{text[:front]}…{text[-back:]}"
+
+
+@register.filter(name="dict_get")
+def dict_get(mapping: Any, key: str) -> Any:
+    if isinstance(mapping, dict):
+        return mapping.get(key, "")
+    getter = getattr(mapping, "get", None)
+    if callable(getter):
+        try:
+            return getter(key, "")
+        except Exception:
+            return ""
+    try:
+        return getattr(mapping, key)
+    except Exception:
+        return ""
