@@ -259,9 +259,18 @@ def organization_settings(
     )
 
     # Determine selected provider for form defaults
-    selected_provider_key = (request.GET.get("provider") or "").strip().lower()
+    raw_selected_provider = (request.GET.get("provider") or "").strip()
     provider_catalog = load_provider_catalog()
     provider_credentials = get_org_provider_credentials(str(organization.id))
+    selected_provider_key = ""
+    selected_provider_uuid = ""
+    if raw_selected_provider:
+        for key, entry in provider_credentials.items():
+            uid_value = str(entry.get("uid") or "")
+            if uid_value and uid_value == raw_selected_provider:
+                selected_provider_key = key
+                selected_provider_uuid = uid_value
+                break
     provider_registry = build_provider_registry(
         organization_id=str(organization.id),
         llm_settings=llm_settings,
@@ -310,6 +319,7 @@ def organization_settings(
         "nav_pills": [],
         "active_section": active_section,
         "selected_provider": selected_provider_key,
+        "selected_provider_uuid": selected_provider_uuid,
         "provider_template_options": template_options,
     }
 
@@ -323,6 +333,9 @@ def organization_settings(
             existing=existing_cred,
         )
         errors: List[str] = list(parse_errors)
+        form_provider_uuid = (form_data.get("provider_uuid") or "").strip()
+        if form_provider_uuid:
+            selected_provider_uuid = form_provider_uuid
 
         if action == "provider-upsert":
             if not provider_key:
@@ -366,6 +379,8 @@ def organization_settings(
             if provider_uuid:
                 delete_org_provider_credential_by_uuid(str(organization.id), provider_uuid)
                 messages.success(request, "Provider deleted.")
+                selected_provider_key = ""
+                selected_provider_uuid = ""
             else:
                 errors.append("Provider UUID is required for deletion.")
         elif action == "provider-toggle":
@@ -376,6 +391,7 @@ def organization_settings(
                 entry = provider_registry.get(provider_key)
                 cred = provider_credentials.get(provider_key)
                 if not cred:
+                    errors.append("API key is required")
                     errors.append("Provider credential not found.")
                 else:
                     provider_obj = llm_settings.provider(provider_key)
@@ -480,13 +496,17 @@ def organization_settings(
                             models=effective_models,
                         )
                     except ChatClientError as exc:
-                        errors.append(str(exc))
+                        messages.warning(
+                            request,
+                            f"Provider '{provider_key}' passed validation but the live test "
+                            f"failed: {exc}",
+                        )
                     else:
                         snippet = probe.get("content") or "OK"
                         snippet = snippet if len(snippet) <= 60 else f"{snippet[:57]}..."
                         messages.success(
                             request,
-                            f"Provider '{provider_key}' live test succeeded with model "
+                            f"Provider '{provider_key}' passed validation with model "
                             f"{probe.get('model')}: {snippet}",
                         )
                 else:
@@ -590,9 +610,16 @@ def organization_settings(
 
         for error in errors:
             messages.error(request, error)
-        redirect_url = reverse("ui-organization-settings-section", args=[active_section])
         if selected_provider_key:
-            redirect_url = f"{redirect_url}?provider={selected_provider_key}"
+            provider_credentials = get_org_provider_credentials(str(organization.id))
+            entry = provider_credentials.get(selected_provider_key)
+            if entry:
+                selected_provider_uuid = str(entry.get("uid") or "")
+            else:
+                selected_provider_uuid = ""
+        redirect_url = reverse("ui-organization-settings-section", args=[active_section])
+        if selected_provider_uuid:
+            redirect_url = f"{redirect_url}?provider={selected_provider_uuid}"
         return redirect(redirect_url)
 
     if request.method == "POST" and active_section != "providers":
@@ -820,6 +847,7 @@ def organization_settings(
             provider_list.append(
                 {
                     "key": name,
+                    "uid": cred_entry.get("uid"),
                     "label": cred_entry.get("display_name")
                     or registry_entry.get("label")
                     or name,

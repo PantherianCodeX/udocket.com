@@ -40,6 +40,11 @@ def test_organization_settings_renders_and_manages_providers(settings):
         follow=True,
     )
     assert resp.status_code == 200
+    credential = LLMProviderCredential.objects.filter(organization=org, provider="azure").first()
+    assert credential is not None
+    expected_uuid = str(credential.uid)
+    assert any(f"provider={expected_uuid}" in url for url, _status in resp.redirect_chain)
+    assert f"provider={expected_uuid}" in resp.request.get("QUERY_STRING", "")
     assert LLMProviderCredential.objects.filter(organization=org, provider="azure").exists()
 
 

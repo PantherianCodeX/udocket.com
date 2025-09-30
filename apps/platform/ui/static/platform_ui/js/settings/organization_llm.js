@@ -223,7 +223,7 @@
     const catalog = parseJSONScript('organization-provider-catalog', {});
     const credentials = parseJSONScript('organization-provider-credentials', {});
     const creators = parseJSONScript('organization-provider-model-creators', []);
-    const selectedInitial = parseJSONScript('organization-provider-selected', '');
+    const selectedUuid = parseJSONScript('organization-provider-selected-uuid', '');
 
     const form = panel.querySelector('[data-provider-form]');
     const select = form?.querySelector('[data-provider-select]');
@@ -258,7 +258,25 @@
       acc[item.key] = item;
       return acc;
     }, {});
-    let currentProviderKey = selectedInitial || '';
+    const uuidToProviderKey = Object.entries(credentials || {}).reduce((acc, [key, value]) => {
+      if (!value) return acc;
+      const uid = value.uid != null ? String(value.uid) : '';
+      if (uid) acc[uid] = key;
+      return acc;
+    }, {});
+
+    let currentProviderKey = '';
+    let currentProviderUuid = '';
+    if (selectedUuid && uuidToProviderKey[selectedUuid]) {
+      currentProviderKey = uuidToProviderKey[selectedUuid];
+      currentProviderUuid = selectedUuid;
+    } else if (providers.length) {
+      currentProviderKey = providers[0].key || '';
+      const initialCred = credentials[currentProviderKey];
+      if (initialCred?.uid) {
+        currentProviderUuid = String(initialCred.uid);
+      }
+    }
 
     function setDeleteVisible(visible) {
       if (!deleteButton) return;
@@ -336,6 +354,7 @@
       const providerValue = (providerKeyHidden?.value || '').trim() || templateKey;
       applyFormValues({
         providerKey: providerValue,
+        providerUuid: '',
         displayName: templateData.display_name || providerValue,
         endpoint: templateData.endpoint || '',
         models: templateData.models || [],
@@ -344,6 +363,7 @@
       if (templateSelect) templateSelect.value = templateKey;
       setDeleteVisible(false);
       currentProviderKey = '';
+      currentProviderUuid = '';
       if (providerKeyHidden && !providerKeyHidden.value) {
         providerKeyHidden.value = templateKey;
       }
@@ -355,6 +375,7 @@
 
     function applyFormValues({
       providerKey,
+      providerUuid,
       displayName,
       endpoint,
       models,
@@ -376,18 +397,20 @@
       populateModels(models || []);
       if (compiledInput) compiledInput.value = '';
       if (modelTestPayloadInput) modelTestPayloadInput.value = '';
-      const uuidValue = cred?.uid ? String(cred.uid) : '';
       const uuidHidden = form?.querySelector('[data-provider-uuid]');
-      if (uuidHidden) uuidHidden.value = uuidValue;
+      const resolvedUuid = providerUuid ? String(providerUuid) : '';
+      if (uuidHidden) uuidHidden.value = resolvedUuid;
+      currentProviderUuid = resolvedUuid;
     }
 
-    function fillForm(key) {
+    function fillForm(key, uuidOverride) {
       if (!form) return;
       const cred = getCredential(key);
       const providerInfo = providerMap[key] || {};
       const catalogDefaults = resolveCatalog(key);
       applyFormValues({
         providerKey: key,
+        providerUuid: uuidOverride || cred?.uid || providerInfo.uid || '',
         displayName: cred?.display_name
           || providerInfo.label
           || catalogDefaults?.display_name
@@ -402,14 +425,18 @@
       if (templateSelect) templateSelect.value = '';
       setDeleteVisible(Boolean(cred));
       currentProviderKey = key;
+      currentProviderUuid = uuidOverride
+        || (cred?.uid ? String(cred.uid) : (providerInfo.uid ? String(providerInfo.uid) : ''));
       const uuidHidden2 = form?.querySelector('[data-provider-uuid]');
-      if (uuidHidden2) uuidHidden2.value = cred?.uid ? String(cred.uid) : '';
+      if (uuidHidden2) uuidHidden2.value = currentProviderUuid;
     }
 
     function resetForm() {
       currentProviderKey = '';
+      currentProviderUuid = '';
       applyFormValues({
         providerKey: '',
+        providerUuid: '',
         displayName: '',
         endpoint: '',
         models: [],
@@ -466,6 +493,7 @@
       appendHidden('models_payload_compiled', JSON.stringify(models));
       appendHidden('metadata_json', JSON.stringify(cred.metadata || {}));
       appendHidden('is_enabled', (enabled != null ? enabled : (cred.is_enabled ?? providerInfo.enabled ?? false)) ? '1' : '0');
+      appendHidden('provider_uuid', cred.uid ? String(cred.uid) : '');
 
       doc.body.appendChild(tempForm);
       tempForm.submit();
@@ -475,7 +503,10 @@
       select.addEventListener('change', () => {
         const key = (select.value || '').trim();
         if (key) {
-          fillForm(key);
+          const cred = getCredential(key);
+          const info = providerMap[key] || {};
+          const uuid = cred?.uid ? String(cred.uid) : (info.uid ? String(info.uid) : '');
+          fillForm(key, uuid);
         } else {
           resetForm();
         }
@@ -541,12 +572,13 @@
 
     doc.querySelectorAll('[data-provider-row]').forEach((row) => {
       const providerKey = row.getAttribute('data-provider-key');
+      const providerUuid = row.getAttribute('data-provider-uuid') || '';
       if (!providerKey) return;
 
       row.addEventListener('click', (event) => {
         const interactive = event.target.closest('button, input, label, a, textarea, select, form');
         if (interactive) return;
-        fillForm(providerKey);
+        fillForm(providerKey, providerUuid);
         form?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       });
 
@@ -613,9 +645,11 @@
 
     const initialPreference = currentProviderKey || select?.value || '';
     if (initialPreference) {
-      fillForm(initialPreference);
+      fillForm(initialPreference, currentProviderUuid);
     } else if (providers.length) {
-      fillForm(providers[0].key);
+      const first = providers[0];
+      const fallbackUuid = first?.uid ? String(first.uid) : '';
+      fillForm(first.key, fallbackUuid);
     }
   }
 
@@ -715,15 +749,26 @@
       if (!trigger || !panel) return;
 
       const close = () => {
+        group.dataset.open = 'false';
         panel.dataset.open = 'false';
       };
       const open = () => {
+        // Close siblings
+        doc.querySelectorAll('[data-nav-group][data-open="true"]').forEach((g) => {
+          if (g !== group) {
+            g.dataset.open = 'false';
+            const p = g.querySelector('[data-nav-group-panel]');
+            if (p) p.dataset.open = 'false';
+          }
+        });
+        group.dataset.open = 'true';
         panel.dataset.open = 'true';
       };
 
       trigger.addEventListener('click', (event) => {
         event.preventDefault();
-        const isOpen = panel.dataset.open === 'true';
+        event.stopPropagation();
+        const isOpen = group.dataset.open === 'true' || panel.dataset.open === 'true';
         if (isOpen) {
           close();
         } else {
@@ -732,12 +777,31 @@
       });
 
       // Do not auto-close on minor pointer gaps; rely on outside clicks below.
+
+      // Keyboard accessibility
+      trigger.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          const isOpen = group.dataset.open === 'true' || panel.dataset.open === 'true';
+          if (isOpen) {
+            close();
+          } else {
+            open();
+          }
+        }
+        if (event.key === 'Escape') {
+          close();
+        }
+      });
     });
 
     doc.addEventListener('click', (event) => {
       if (event.target.closest('[data-nav-group]')) return;
       doc.querySelectorAll('[data-nav-group-panel]').forEach((panel) => {
         panel.dataset.open = 'false';
+      });
+      doc.querySelectorAll('[data-nav-group]').forEach((g) => {
+        g.dataset.open = 'false';
       });
     });
   }

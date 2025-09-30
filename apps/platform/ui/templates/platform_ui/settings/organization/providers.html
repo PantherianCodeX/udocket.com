@@ -162,7 +162,7 @@
         </thead>
         <tbody class="divide-y divide-white/5" data-provider-table>
           {% for provider in providers %}
-          <tr class="hover:bg-white/5 cursor-pointer" data-provider-row data-provider-key="{{ provider.key }}" data-provider-status="{{ provider.status }}" data-provider-can-enable="{{ provider.can_enable|yesno:'true,false' }}">
+          <tr class="hover:bg-white/5 cursor-pointer" data-provider-row data-provider-key="{{ provider.key }}" data-provider-uuid="{{ provider.uid|default:"" }}" data-provider-status="{{ provider.status }}" data-provider-can-enable="{{ provider.can_enable|yesno:'true,false' }}">
             <td class="px-4 py-4 align-top">
               <div class="flex items-start gap-3">
                 <input type="checkbox" class="mt-[3px] rounded border-white/20 bg-slate-900/70 text-primary-400 focus:ring-primary-400" data-provider-toggle data-provider-can-enable="{{ provider.can_enable|yesno:'true,false' }}" {% if provider.enabled %}checked{% endif %} {% if not provider.can_enable %}disabled{% endif %} aria-label="Enable provider">
@@ -255,6 +255,6 @@
 {{ providers|json_script:"organization-provider-data" }}
 {{ provider_catalog|json_script:"organization-provider-catalog" }}
 {{ provider_credentials|json_script:"organization-provider-credentials" }}
-{{ selected_provider|default:""|json_script:"organization-provider-selected" }}
+{{ selected_provider_uuid|default:""|json_script:"organization-provider-selected-uuid" }}
 {{ model_creator_options|json_script:"organization-provider-model-creators" }}
 {% endblock %}
