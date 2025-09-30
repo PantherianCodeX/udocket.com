@@ -25,14 +25,30 @@ def _clean_stage_map(payload: Dict[str, Dict[str, object]] | None) -> Dict[str, 
             continue
         provider = str(cfg.get("provider") or "").strip().lower()
         model = str(cfg.get("model") or "").strip()
-        options = cfg.get("options") if isinstance(cfg.get("options"), dict) else {}
         entry: Dict[str, object] = {}
+        options_raw = cfg.get("options") if isinstance(cfg.get("options"), dict) else {}
+        options: Dict[str, object] = {}
+        for opt_key, opt_value in (options_raw or {}).items():
+            key_str = str(opt_key or "").strip()
+            if not key_str:
+                continue
+            if opt_value is None or opt_value == "":
+                continue
+            options[key_str] = opt_value
+        max_tokens_value = cfg.get("max_tokens")
+        if isinstance(max_tokens_value, (int, float, str)):
+            try:
+                parsed_max = int(float(str(max_tokens_value).strip()))
+            except (TypeError, ValueError):
+                parsed_max = 0
+            if parsed_max > 0:
+                entry["max_tokens"] = parsed_max
         if provider:
             entry["provider"] = provider
         if model:
             entry["model"] = model
         if options:
-            entry["options"] = {str(key): value for key, value in options.items()}
+            entry["options"] = options
         if entry:
             cleaned[stage_key] = entry
     return cleaned

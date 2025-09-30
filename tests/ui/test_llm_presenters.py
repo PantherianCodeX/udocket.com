@@ -54,11 +54,17 @@ def _build_settings() -> LLMSettings:
             stage_key="summarize.context_builder",
             providers=["azure"],
             model="gpt-4o-mini",
+            target="summary",
+            label="Context Builder",
+            description="Collects intake context",
         ),
         "summarize.qa_and_finalize": LLMStageAssignment(
             stage_key="summarize.qa_and_finalize",
             providers=["azure"],
             model="gpt-4o-mini",
+            target="summary",
+            label="QA",
+            description="QA stage",
         ),
     }
 
@@ -137,41 +143,40 @@ def test_build_llm_stage_configs_uses_defaults_and_overrides(llm_settings):
     )
 
     # No overrides: should use assignment defaults
-    stage_defs = [
-        {"key": "summarize.context_builder", "label": "Context", "description": "Context stage"},
-        {"key": "summarize.qa_and_finalize", "label": "QA", "description": "QA stage"},
-    ]
-
     configs = presenters._build_llm_stage_configs(
-        stage_defs=stage_defs,
+        target="summary",
         llm_settings=llm_settings,
         stage_map={},
         provider_registry=provider_registry,
     )
 
-    assert len(configs) == 2
-    first = configs[0]
-    assert first["selected_provider"] == "azure"
-    assert "allow_offline_default" not in first
-    assert first["description"] == "Context stage"
+    context_entry = next(cfg for cfg in configs if cfg["key"] == "summarize.context_builder")
+    assert context_entry["selected_provider"] == "azure"
+    assert context_entry["profile"] is not None
     # Providers should include every cache entry so the UI can surface unsupported options.
-    assert [entry["value"] for entry in first["providers"]] == ["azure", "openai"]
+    assert [entry["value"] for entry in context_entry["providers"]] == ["azure", "openai"]
+    assert context_entry["selected_max_tokens"] is None
+    assert context_entry["selected_options"] == {}
 
     # Apply overrides and ensure they take precedence.
     stage_map = {
         "summarize.context_builder": {
             "provider": "azure",
             "model": "gpt-4o",
+            "max_tokens": 6400,
+            "options": {"temperature": 0.4},
         }
     }
 
     configs_with_override = presenters._build_llm_stage_configs(
-        stage_defs=stage_defs,
+        target="summary",
         llm_settings=llm_settings,
         stage_map=stage_map,
         provider_registry=provider_registry,
     )
 
-    override_entry = configs_with_override[0]
+    override_entry = next(cfg for cfg in configs_with_override if cfg["key"] == "summarize.context_builder")
     assert override_entry["selected_provider"] == "azure"
     assert override_entry["selected_model"] == "gpt-4o"
+    assert override_entry["selected_max_tokens"] == 6400
+    assert override_entry["selected_options"].get("temperature") == 0.4

@@ -301,6 +301,47 @@ def test_stage_catalog_lists_recommended_models(monkeypatch):
             assert tokens >= outline_info["recommended_context_tokens"]
 
 
+def test_stage_temperature_and_max_tokens_override(monkeypatch, tmp_path):
+    case_dir = tmp_path / "cases" / "CASE-OVR"
+    transcript = case_dir / "transcript" / "JOB-OVR__transcript.txt"
+    _write_transcript(transcript, "[00:00] Speaker: Hello world")
+
+    _install_stage_stubs(monkeypatch)
+
+    recorded_temperatures: list[float] = []
+    recorded_max_tokens: list[int] = []
+
+    def capture_summary(**kwargs: Any) -> DraftStageResult:
+        recorded_temperatures.append(kwargs.get("temperature"))
+        recorded_max_tokens.append(kwargs.get("max_tokens"))
+        return DraftStageResult("Summary", {"prompt_tokens": 5, "completion_tokens": 5, "total_tokens": 10})
+
+    monkeypatch.setattr(
+        "packages.udocket_core.agents.summarize.utils.generate_summary_markdown",
+        capture_summary,
+    )
+
+    agent = SummarizeAgent(_make_config())
+    agent.summarize(
+        case_id="CASE-OVR",
+        case_dir=case_dir,
+        job_id="JOB-OVR",
+        input=transcript,
+        provider_chain=["azure"],
+        stage_map={
+            "summarize.draft_markdown": {
+                "provider": "azure",
+                "model": "gpt-4o",
+                "max_tokens": 5000,
+                "options": {"temperature": 0.3},
+            }
+        },
+    )
+
+    assert recorded_temperatures == [0.3]
+    assert recorded_max_tokens == [5000]
+
+
 def test_outline_chunk_splitting_on_empty_completion():
     large_segments = [
         TranscriptSegment(ts=float(i), speaker=f"SPK_{i%3}", text=f"Sentence {i} " + ("Lorem ipsum " * 10).strip())

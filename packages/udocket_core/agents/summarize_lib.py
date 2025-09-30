@@ -450,14 +450,18 @@ class SummarizeConfig:
         model_limit: Optional[int],
         fallback: Optional[int] = None,
     ) -> int:
-        candidate = fallback if fallback is not None else self.max_output_tokens
+        candidate = self.max_output_tokens
         override = self.stage_max_output_tokens.get(stage_key)
         if override is None:
             override = self.stage_max_output_tokens.get("*")
-        if override is None:
-            override = DEFAULT_STAGE_TOKEN_LIMITS.get(stage_key)
         if override is not None and override > 0:
             candidate = override
+        elif fallback is not None and fallback > 0:
+            candidate = fallback
+        else:
+            default_limit = DEFAULT_STAGE_TOKEN_LIMITS.get(stage_key)
+            if default_limit is not None and default_limit > 0:
+                candidate = default_limit
         if model_limit:
             candidate = min(candidate, model_limit) if candidate else model_limit
         if not candidate or candidate <= 0:
@@ -695,8 +699,12 @@ class SummarizeAgent:
                 stage_options = stage_config.get("options")
                 if isinstance(stage_options, dict):
                     options.update({str(key): str(value) for key, value in stage_options.items()})
-                if isinstance(stage_config.get("max_tokens"), int):
-                    override_max_tokens = max(1, int(stage_config["max_tokens"]))
+                max_tokens_override = stage_config.get("max_tokens")
+                if isinstance(max_tokens_override, (int, float, str)):
+                    try:
+                        override_max_tokens = max(1, int(float(str(max_tokens_override))))
+                    except (TypeError, ValueError):
+                        override_max_tokens = None
 
             config_model_override = self.config.stage_model_for(stage_key)
             if config_model_override:
@@ -738,6 +746,13 @@ class SummarizeAgent:
                 if model_meta and model_meta.default_temperature is not None
                 else self.config.temperature
             )
+            if options:
+                temp_value = options.get("temperature")
+                if temp_value is not None:
+                    try:
+                        stage_temperature = float(temp_value)
+                    except (TypeError, ValueError):
+                        pass
 
             context_window_tokens = None
             if model_meta and model_meta.context_window_tokens:

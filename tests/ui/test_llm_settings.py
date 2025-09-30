@@ -30,6 +30,8 @@ def test_case_llm_settings_updates_summary_defaults(settings):
                 "summarize.context_builder": {
                     "provider": "azure",
                     "model": "gpt-4o-mini",
+                    "max_tokens": 7200,
+                    "options": {"temperature": 0.35},
                 },
                 "summarize.extract_outline": {
                     "provider": "azure",
@@ -62,3 +64,5 @@ def test_case_llm_settings_updates_summary_defaults(settings):
     stage_map = stored.stage_map or {}
     assert stage_map["summarize.context_builder"]["provider"] == "azure"
     assert stage_map["summarize.context_builder"]["model"] == "gpt-4o-mini"
+    assert stage_map["summarize.context_builder"]["max_tokens"] == 7200
+    assert stage_map["summarize.context_builder"]["options"]["temperature"] == 0.35

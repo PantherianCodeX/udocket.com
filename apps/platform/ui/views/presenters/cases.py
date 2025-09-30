@@ -27,7 +27,7 @@ from ..presenters.jobs import (
     map_job_status,
     select_agent,
 )
-from packages.udocket_core.agents.summarize_lib import SummarizeConfig
+from packages.udocket_core.agents.summarize_lib import SUMMARIZE_STAGE_PROFILES, SummarizeConfig
 from packages.udocket_core.llm import load_llm_settings
 from apps.platform.operations.llm import (
     build_provider_registry,
@@ -92,13 +92,63 @@ def _collect_provider_chain(
     return sequence
 
 
+def _stage_profile_hint(stage_key: str) -> Optional[Dict[str, Any]]:
+    profile = SUMMARIZE_STAGE_PROFILES.get(stage_key)
+    if profile is None:
+        return None
+    return {
+        "min_context_tokens": profile.min_context_tokens,
+        "recommended_context_tokens": profile.recommended_context_tokens,
+        "target_chunk_tokens": profile.target_chunk_tokens,
+        "output_reserve_tokens": profile.output_reserve_tokens,
+        "resource_notes": profile.resource_notes,
+    }
+
+
+def _stage_definitions_for_target(
+    *,
+    llm_settings,
+    target: str,
+    stage_map: Dict[str, Dict[str, Any]],
+) -> List[Dict[str, str]]:
+    stage_defs: List[Dict[str, str]] = []
+    seen: set[str] = set()
+
+    for assignment in llm_settings.assignments.values():
+        if assignment.target != target:
+            continue
+        stage_defs.append(
+            {
+                "key": assignment.stage_key,
+                "label": assignment.label or assignment.stage_key,
+                "description": assignment.description,
+            }
+        )
+        seen.add(assignment.stage_key)
+
+    for raw_key in stage_map.keys():
+        stage_key = str(raw_key)
+        if stage_key in seen:
+            continue
+        stage_defs.append({"key": stage_key, "label": stage_key, "description": ""})
+        seen.add(stage_key)
+
+    return stage_defs
+
+
 def _build_llm_stage_configs(
     *,
-    stage_defs: List[Dict[str, str]],
+    target: str,
     llm_settings,
     stage_map: Dict[str, Dict[str, Any]],
     provider_registry: Dict[str, Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
+    stage_map = stage_map or {}
+    stage_defs = _stage_definitions_for_target(
+        llm_settings=llm_settings,
+        target=target,
+        stage_map=stage_map,
+    )
     stage_configs: List[Dict[str, Any]] = []
 
     for stage in stage_defs:
@@ -107,21 +157,37 @@ def _build_llm_stage_configs(
         stage_description = stage.get("description", "")
         assignment = llm_settings.stage(stage_key)
         provider_configs = list(provider_registry.values())
-        selected_provider = assignment.providers[0] if assignment and assignment.providers else "azure"
+        selected_provider = (
+            assignment.providers[0]
+            if assignment and assignment.providers
+            else (provider_configs[0]["value"] if provider_configs else "azure")
+        )
         selected_model = assignment.model or ""
-        selected_options: Dict[str, Any] = {}
+        selected_options: Dict[str, Any] = dict(assignment.options) if assignment else {}
+        selected_max_tokens: Optional[int] = None
 
         override_payload = stage_map.get(stage_key)
         if override_payload:
             provider_override = override_payload.get("provider")
             if isinstance(provider_override, str) and provider_override.strip():
                 selected_provider = provider_override.strip().lower()
+            providers_override = override_payload.get("providers")
+            if isinstance(providers_override, list):
+                for candidate in providers_override:
+                    if isinstance(candidate, str) and candidate.strip():
+                        selected_provider = candidate.strip().lower()
+                        break
             model_override = override_payload.get("model")
             if isinstance(model_override, str) and model_override.strip():
                 selected_model = model_override.strip()
             options_override = override_payload.get("options")
             if isinstance(options_override, dict):
-                selected_options = options_override
+                selected_options.update(options_override)
+            max_override = override_payload.get("max_tokens")
+            if isinstance(max_override, (int, float)):
+                max_value = int(max_override)
+                if max_value > 0:
+                    selected_max_tokens = max_value
 
         stage_configs.append(
             {
@@ -132,6 +198,8 @@ def _build_llm_stage_configs(
                 "selected_provider": selected_provider,
                 "selected_model": selected_model,
                 "selected_options": selected_options,
+                "selected_max_tokens": selected_max_tokens,
+                "profile": _stage_profile_hint(stage_key) if target == "summary" else None,
             }
         )
     return stage_configs
@@ -906,39 +974,6 @@ def build_tool_panels(
             }
         )
 
-    summary_stage_defs = [
-        {
-            "key": "summarize.context_builder",
-            "label": "Context builder",
-            "description": "Collects intake details and transcript metadata for downstream prompts.",
-        },
-        {
-            "key": "summarize.extract_outline",
-            "label": "Outline extraction",
-            "description": "Structures issues, facts, remedies, and legal references as JSON schema.",
-        },
-        {
-            "key": "summarize.build_timeline_seeds",
-            "label": "Timeline seeds",
-            "description": "Proposes timestamped events to seed the timeline automation.",
-        },
-        {
-            "key": "summarize.build_entity_hints",
-            "label": "Entity hints",
-            "description": "Identifies people, organizations, and relationships for the graph agent.",
-        },
-        {
-            "key": "summarize.draft_markdown",
-            "label": "Draft summary",
-            "description": "Drafts the layered legal summary referencing transcript timestamps.",
-        },
-        {
-            "key": "summarize.qa_and_finalize",
-            "label": "QA and finalize",
-            "description": "Ensures required sections exist, computes checksums, and prepares ops logs.",
-        },
-    ]
-
     summary_config_list = get_org_llm_configurations(str(case.organization_id), target="summary")
     summary_active_config = get_llm_configuration(
         organization_id=str(case.organization_id),
@@ -954,10 +989,11 @@ def build_tool_panels(
         if summary_active_config:
             summary_config_list = get_org_llm_configurations(str(case.organization_id), target="summary")
 
-    summary_stage_map = summary_active_config.get("stage_map", {}) if summary_active_config else {}
+    summary_stage_map_raw = summary_active_config.get("stage_map", {}) if summary_active_config else {}
+    summary_stage_map = dict(summary_stage_map_raw or {})
     summary_provider_chain = summary_active_config.get("provider_chain", []) if summary_active_config else []
     summary_stage_configs = _build_llm_stage_configs(
-        stage_defs=summary_stage_defs,
+        target="summary",
         llm_settings=llm_settings,
         stage_map=summary_stage_map,
         provider_registry=provider_registry,
@@ -970,13 +1006,6 @@ def build_tool_panels(
     summary_chain_json = json.dumps(summary_chain)
     summary_stage_map_json = json.dumps(summary_stage_map)
 
-    timeline_stage_defs = [
-        {
-            "key": "timeline.builder",
-            "label": "Timeline builder",
-            "description": "Generates a normalized timeline from transcripts and timeline seeds.",
-        }
-    ]
     timeline_config_list = get_org_llm_configurations(str(case.organization_id), target="timeline")
     timeline_active_config = get_llm_configuration(
         organization_id=str(case.organization_id),
@@ -992,10 +1021,11 @@ def build_tool_panels(
         if timeline_active_config:
             timeline_config_list = get_org_llm_configurations(str(case.organization_id), target="timeline")
 
-    timeline_stage_map = timeline_active_config.get("stage_map", {}) if timeline_active_config else {}
+    timeline_stage_map_raw = timeline_active_config.get("stage_map", {}) if timeline_active_config else {}
+    timeline_stage_map = dict(timeline_stage_map_raw or {})
     timeline_provider_chain = timeline_active_config.get("provider_chain", []) if timeline_active_config else []
     timeline_stage_configs = _build_llm_stage_configs(
-        stage_defs=timeline_stage_defs,
+        target="timeline",
         llm_settings=llm_settings,
         stage_map=timeline_stage_map,
         provider_registry=provider_registry,

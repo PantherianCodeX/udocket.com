@@ -39,6 +39,9 @@ class LLMStageAssignment:
     providers: List[str]
     model: str
     options: Dict[str, str] = field(default_factory=dict)
+    target: str = ""
+    label: str = ""
+    description: str = ""
 
 
 @dataclass
@@ -94,11 +97,17 @@ def load_llm_settings(
         providers = payload.get("providers") or []
         model = payload.get("model")
         options = payload.get("options") or {}
+        target = payload.get("target") or stage_key.split(".", 1)[0]
+        label = payload.get("label") or stage_key
+        description = payload.get("description") or ""
         assignment_map[stage_key] = LLMStageAssignment(
             stage_key=stage_key,
             providers=[str(p) for p in providers if isinstance(p, str)],
             model=str(model) if model else "",
             options={str(k): str(v) for k, v in options.items()},
+            target=str(target),
+            label=str(label),
+            description=str(description),
         )
 
     return LLMSettings(providers=provider_map, assignments=assignment_map)

@@ -660,18 +660,67 @@
         const providerSelectEl = row.querySelector('[data-llm-provider]');
         const modelSelectEl = row.querySelector('[data-llm-model]');
         if (!providerSelectEl) return;
+
         const entry = {};
-        if (providerSelectEl.value) entry.provider = providerSelectEl.value;
-        if (modelSelectEl && modelSelectEl.value) entry.model = modelSelectEl.value;
-        const previous = existingMap[key];
-        if (previous && previous.options && typeof previous.options === 'object') {
-          entry.options = previous.options;
+        if (providerSelectEl.value) {
+          entry.provider = providerSelectEl.value.toString().trim().toLowerCase();
         }
+        if (modelSelectEl && modelSelectEl.value) {
+          entry.model = modelSelectEl.value.toString().trim();
+        }
+
+        const previous = existingMap[key] || {};
+        const previousOptions =
+          previous && previous.options && typeof previous.options === 'object'
+            ? deepClone(previous.options)
+            : {};
+
+        const maxInput = row.querySelector('[data-llm-max-tokens]');
+        if (maxInput) {
+          const raw = maxInput.value != null ? maxInput.value.toString().trim() : '';
+          if (raw !== '') {
+            const parsed = Number(raw);
+            if (Number.isFinite(parsed) && parsed > 0) {
+              entry.max_tokens = Math.floor(parsed);
+            }
+          }
+        }
+
+        const temperatureInput = row.querySelector('[data-llm-temperature]');
+        if (temperatureInput) {
+          const rawTemp = temperatureInput.value != null ? temperatureInput.value.toString().trim() : '';
+          if (rawTemp === '') {
+            delete previousOptions.temperature;
+          } else {
+            const tempValue = Number(rawTemp);
+            if (Number.isFinite(tempValue)) {
+              previousOptions.temperature = tempValue;
+            }
+          }
+        }
+
+        const deploymentInput = row.querySelector('[data-llm-deployment]');
+        if (deploymentInput) {
+          const deploymentValue = deploymentInput.value ? deploymentInput.value.trim() : '';
+          if (deploymentValue) {
+            previousOptions.azure_deployment = deploymentValue;
+          } else {
+            delete previousOptions.azure_deployment;
+          }
+        }
+
+        if (Object.keys(previousOptions).length) {
+          entry.options = previousOptions;
+        }
+
+        if (Object.keys(entry).length === 0) {
+          return;
+        }
+
         map[key] = entry;
       });
       return map;
     };
-
     function attachProviderModalHandlers(modalEl) {
       if (!modalEl) return;
       const panelButtons = Array.from(modalEl.querySelectorAll('[data-llm-panel-toggle]'));
@@ -854,12 +903,33 @@
         const entry = activeStageMap[stageKey] || {};
         const providerSelectEl = row.querySelector('[data-llm-provider]');
         const modelSelectEl = row.querySelector('[data-llm-model]');
+        const maxInput = row.querySelector('[data-llm-max-tokens]');
+        const temperatureInput = row.querySelector('[data-llm-temperature]');
+        const deploymentInput = row.querySelector('[data-llm-deployment]');
         if (providerSelectEl && entry.provider) {
           providerSelectEl.value = entry.provider;
         }
         updateModelOptions(row);
         if (modelSelectEl && entry.model) {
           modelSelectEl.value = entry.model;
+        }
+        if (maxInput) {
+          const maxValue = Number(entry.max_tokens);
+          if (Number.isFinite(maxValue) && maxValue > 0) {
+            maxInput.value = maxValue;
+          } else {
+            maxInput.value = '';
+          }
+        }
+        const entryOptions = entry && typeof entry.options === 'object' ? entry.options : {};
+        if (temperatureInput) {
+          const optionValue = entryOptions?.temperature;
+          temperatureInput.value =
+            optionValue !== undefined && optionValue !== null ? optionValue : '';
+        }
+        if (deploymentInput) {
+          const optionValue = entryOptions?.azure_deployment;
+          deploymentInput.value = optionValue || '';
         }
         if (providerSelectEl) {
           providerSelectEl.addEventListener('change', () => updateModelOptions(row));
