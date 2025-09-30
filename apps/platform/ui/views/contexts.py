@@ -28,8 +28,8 @@ from .presenters.cases import (
     build_tool_panels,
     case_progress_context,
     collect_case_artifacts,
-    prepare_case_fields,
 )
+from .presenters.case_fields import prepare_case_fields
 from .presenters.analysis_modules import analysis_modules_context
 from .presenters.jobs import build_job_rows, friendly_job_title
 from .presenters.utils import render_audio_brief_panel_html, render_notes_panel_html

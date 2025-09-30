@@ -9,7 +9,7 @@ from packages.udocket_core.llm.config import (
     LLMStageAssignment,
 )
 
-from apps.platform.ui.views.presenters import analysis_modules as analysis_presenters
+from apps.platform.ui.views.presenters import analysis_llm
 from apps.platform.operations.llm import build_provider_registry
 
 
@@ -144,7 +144,7 @@ def test_build_llm_stage_configs_uses_defaults_and_overrides(llm_settings):
     )
 
     # No overrides: should use assignment defaults
-    configs = analysis_presenters.build_llm_stage_configs(
+    configs = analysis_llm.build_llm_stage_configs(
         target="summary",
         llm_settings=llm_settings,
         stage_map={},
@@ -169,7 +169,7 @@ def test_build_llm_stage_configs_uses_defaults_and_overrides(llm_settings):
         }
     }
 
-    configs_with_override = analysis_presenters.build_llm_stage_configs(
+    configs_with_override = analysis_llm.build_llm_stage_configs(
         target="summary",
         llm_settings=llm_settings,
         stage_map=stage_map,

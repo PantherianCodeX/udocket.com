@@ -5,13 +5,10 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
-import json
-from urllib.parse import quote
 
 from django.conf import settings
 from django.http import HttpRequest
 from django.urls import reverse
-from django.utils import timezone
 
 from apps.platform.accounts.models import OrganizationMembership
 from apps.platform.artifacts.models import CaseArtifact
@@ -22,13 +19,9 @@ from ..constants import CASE_JOB_TABLE_COLUMNS, DEFAULT_TABLE_FILTERS, GLOBAL_JO
 from ..common import as_dict
 from ..presenters.utils import render_notes_panel_html, status_class, user_label
 from .analysis import enrich_summary_artifacts, enrich_timeline_artifacts
-from .analysis_modules import (
-    analysis_modules_context,
-    artifact_payload,
-    build_llm_stage_configs,
-    collect_provider_chain,
-    latest_successful_transcription_job,
-)
+from .analysis_modules import analysis_modules_context, artifact_payload, latest_successful_transcription_job
+from .analysis_llm import build_analysis_llm_context
+from .case_fields import prepare_case_fields
 from ..presenters.jobs import (
     friendly_job_title,
     job_most_recent_timestamp,
@@ -36,16 +29,6 @@ from ..presenters.jobs import (
     latest_jobs_by_agent,
     map_job_status,
     select_agent,
-)
-from packages.udocket_core.agents.summarize_lib import SummarizeConfig
-from packages.udocket_core.llm import load_llm_settings
-from apps.platform.operations.llm import (
-    build_provider_registry,
-    ensure_default_llm_configuration,
-    get_llm_configuration,
-    get_org_llm_configurations,
-    get_org_provider_credentials,
-    load_provider_catalog,
 )
 def case_owner_memberships(memberships: List[CaseMembership]) -> List[CaseMembership]:
     return [m for m in memberships if m.role == CaseMembership.Role.OWNER and m.user]
@@ -180,97 +163,6 @@ def case_progress_context(
         "current_client_label": user_label(case.client_user) if case.client_user else None,
         "transcription_review_status": transcription_item.get("status") if transcription_item else None,
     }
-
-
-def case_field_specs() -> List[Dict[str, Any]]:
-    return [
-        {"name": "title", "label": "Title", "type": "text"},
-        {"name": "client_name", "label": "Client", "type": "text"},
-        {"name": "opposing_party", "label": "Opposing Party", "type": "text"},
-        {
-            "name": "client_position",
-            "label": "Client Position",
-            "type": "choice",
-            "choices": Case.ClientPosition.choices,
-        },
-        {"name": "court_location", "label": "Court Location", "type": "text"},
-        {
-            "name": "court_level",
-            "label": "Court Level",
-            "type": "choice",
-            "choices": Case.CourtLevel.choices,
-        },
-        {
-            "name": "court_division",
-            "label": "Court Division",
-            "type": "choice",
-            "choices": Case.CourtDivision.choices,
-        },
-        {"name": "court_case_number", "label": "Court Case Number", "type": "text"},
-        {
-            "name": "court_date",
-            "label": "Next Hearing",
-            "type": "datetime",
-        },
-        {"name": "filing_deadline", "label": "Filing Deadline", "type": "date"},
-        {"name": "notes", "label": "Client Notes", "type": "textarea"},
-    ]
-
-
-def _format_case_field_value(case: Case, spec: Dict[str, Any]) -> Dict[str, Any]:
-    name = spec["name"]
-    raw_value = getattr(case, name, None)
-    field_type = spec.get("type", "text")
-    display: str
-    form_value: Any = raw_value
-
-    if field_type == "boolean":
-        display = "Yes" if raw_value else "No"
-        form_value = bool(raw_value)
-    elif field_type == "datetime":
-        if raw_value:
-            local_dt = timezone.localtime(raw_value)
-            display = local_dt.strftime("%b %d, %Y %I:%M %p")
-            form_value = local_dt.strftime("%Y-%m-%dT%H:%M")
-        else:
-            display = "—"
-            form_value = ""
-    elif field_type == "date":
-        if raw_value:
-            display = raw_value.strftime("%b %d, %Y")
-            form_value = raw_value.strftime("%Y-%m-%d")
-        else:
-            display = "—"
-            form_value = ""
-    elif field_type == "choice":
-        getter = getattr(case, f"get_{name}_display", None)
-        if callable(getter):
-            try:
-                display = str(getter())
-            except Exception:
-                display = "—"
-        else:
-            display = str(raw_value) if raw_value is not None else "—"
-        form_value = raw_value or ""
-    elif field_type == "textarea":
-        display = str(raw_value) if raw_value is not None else "—"
-        form_value = raw_value or ""
-    else:
-        display = str(raw_value) if raw_value is not None else "—"
-        form_value = raw_value or ""
-
-    return {
-        "name": name,
-        "label": spec.get("label", name.replace("_", " ").title()),
-        "type": field_type,
-        "choices": spec.get("choices"),
-        "display": display,
-        "value": form_value,
-    }
-
-
-def prepare_case_fields(case: Case) -> List[Dict[str, Any]]:
-    return [_format_case_field_value(case, spec) for spec in case_field_specs()]
 
 
 def _organization_member_options(case: Case) -> List[Dict[str, Any]]:
@@ -688,169 +580,10 @@ def build_tool_panels(
 
     if not return_url:
         return_url = reverse("ui-case-detail", kwargs={"case_id": case.id})
-    encoded_return_url = quote(return_url, safe="")
 
-    def _with_next(url: str) -> str:
-        if not encoded_return_url:
-            return url
-        separator = "&" if "?" in url else "?"
-        return f"{url}{separator}next={encoded_return_url}"
-
-    try:
-        summarize_cfg = SummarizeConfig.from_env()
-    except Exception:  # noqa: BLE001
-        summarize_cfg = SummarizeConfig()
-
-    llm_settings = load_llm_settings()
-    provider_catalog = load_provider_catalog()
-    provider_credentials = get_org_provider_credentials(case.organization_id)
-    provider_registry = build_provider_registry(
-        organization_id=case.organization_id,
-        llm_settings=llm_settings,
-        provider_catalog=provider_catalog,
-        provider_credentials=provider_credentials,
-    )
-
-    provider_chain = list(summarize_cfg.provider_chain or ["azure"])
-    primary_default = provider_chain[0] if provider_chain else "azure"
-
-    provider_options: List[Dict[str, Any]] = []
-    for name, entry in provider_registry.items():
-        catalog_entry = provider_catalog.get(name, {})
-        credential_entry = provider_credentials.get(name, {})
-        provider_options.append(
-            {
-                "value": name,
-                "label": entry.get("label", name),
-                "description": catalog_entry.get("description"),
-                "available": entry.get("available", False),
-                "configured": entry.get("configured", False),
-                "default_endpoint": entry.get("default_endpoint"),
-                "requires_api_key": entry.get("requires_api_key", True),
-                "endpoint": entry.get("endpoint") or credential_entry.get("endpoint"),
-                "models": entry.get("models"),
-                "reason": entry.get("unavailable_reason", ""),
-                "api_kind": entry.get("api_kind"),
-            }
-        )
-
-    summary_config_list = get_org_llm_configurations(str(case.organization_id), target="summary")
-    summary_active_config = get_llm_configuration(
-        organization_id=str(case.organization_id),
-        config_id=None,
-        target="summary",
-    )
-    if not summary_active_config:
-        summary_active_config = ensure_default_llm_configuration(
-            organization_id=str(case.organization_id),
-            target="summary",
-            llm_settings=llm_settings,
-        )
-        if summary_active_config:
-            summary_config_list = get_org_llm_configurations(str(case.organization_id), target="summary")
-
-    summary_stage_map_raw = summary_active_config.get("stage_map", {}) if summary_active_config else {}
-    summary_stage_map = dict(summary_stage_map_raw or {})
-    summary_provider_chain = summary_active_config.get("provider_chain", []) if summary_active_config else []
-    summary_stage_configs = build_llm_stage_configs(
-        target="summary",
-        llm_settings=llm_settings,
-        stage_map=summary_stage_map,
-        provider_registry=provider_registry,
-    )
-    summary_chain = collect_provider_chain(summary_provider_chain, provider_chain)
-    summary_configured_stages: List[Dict[str, Any]] = []
-    for stage in summary_stage_configs:
-        override = summary_stage_map.get(stage["key"])
-        if not override:
-            continue
-        summary_configured_stages.append(
-            {
-                "key": stage["key"],
-                "label": stage["label"],
-                "provider": override.get("provider") or stage.get("selected_provider"),
-                "model": override.get("model") or stage.get("selected_model"),
-                "max_tokens": override.get("max_tokens"),
-                "options": override.get("options") or {},
-            }
-        )
-
-    summary_stage_configs_json = json.dumps(summary_stage_configs)
-    summary_configs_json = json.dumps(summary_config_list)
-    summary_active_config_json = json.dumps(summary_active_config or {})
-    summary_chain_json = json.dumps(summary_chain)
-    summary_stage_map_json = json.dumps(summary_stage_map)
-    summary_settings_base = reverse("ui-organization-settings-section", args=["summary"])
-    summary_edit_base = (
-        f"{summary_settings_base}?config={summary_active_config.get('id')}"
-        if summary_active_config and summary_active_config.get("id")
-        else summary_settings_base
-    )
-    summary_urls = {
-        "base": summary_settings_base,
-        "edit": _with_next(summary_edit_base),
-        "new": _with_next(f"{summary_settings_base}?new=1"),
-        "tuning": _with_next(reverse("ui-organization-settings-section", args=["providers"])),
-    }
-
-    timeline_config_list = get_org_llm_configurations(str(case.organization_id), target="timeline")
-    timeline_active_config = get_llm_configuration(
-        organization_id=str(case.organization_id),
-        config_id=None,
-        target="timeline",
-    )
-    if not timeline_active_config:
-        timeline_active_config = ensure_default_llm_configuration(
-            organization_id=str(case.organization_id),
-            target="timeline",
-            llm_settings=llm_settings,
-        )
-        if timeline_active_config:
-            timeline_config_list = get_org_llm_configurations(str(case.organization_id), target="timeline")
-
-    timeline_stage_map_raw = timeline_active_config.get("stage_map", {}) if timeline_active_config else {}
-    timeline_stage_map = dict(timeline_stage_map_raw or {})
-    timeline_provider_chain = timeline_active_config.get("provider_chain", []) if timeline_active_config else []
-    timeline_stage_configs = build_llm_stage_configs(
-        target="timeline",
-        llm_settings=llm_settings,
-        stage_map=timeline_stage_map,
-        provider_registry=provider_registry,
-    )
-    timeline_chain = collect_provider_chain(timeline_provider_chain, provider_chain)
-    timeline_configured_stages: List[Dict[str, Any]] = []
-    for stage in timeline_stage_configs:
-        override = timeline_stage_map.get(stage["key"])
-        if not override:
-            continue
-        timeline_configured_stages.append(
-            {
-                "key": stage["key"],
-                "label": stage["label"],
-                "provider": override.get("provider") or stage.get("selected_provider"),
-                "model": override.get("model") or stage.get("selected_model"),
-                "max_tokens": override.get("max_tokens"),
-                "options": override.get("options") or {},
-            }
-        )
-
-    timeline_stage_configs_json = json.dumps(timeline_stage_configs)
-    timeline_configs_json = json.dumps(timeline_config_list)
-    timeline_active_config_json = json.dumps(timeline_active_config or {})
-    timeline_chain_json = json.dumps(timeline_chain)
-    timeline_stage_map_json = json.dumps(timeline_stage_map)
-    timeline_settings_base = reverse("ui-organization-settings-section", args=["timeline"])
-    timeline_edit_base = (
-        f"{timeline_settings_base}?config={timeline_active_config.get('id')}"
-        if timeline_active_config and timeline_active_config.get("id")
-        else timeline_settings_base
-    )
-    timeline_urls = {
-        "base": timeline_settings_base,
-        "edit": _with_next(timeline_edit_base),
-        "new": _with_next(f"{timeline_settings_base}?new=1"),
-        "tuning": _with_next(reverse("ui-organization-settings-section", args=["providers"])),
-    }
+    analysis_llm = build_analysis_llm_context(case, return_url=return_url)
+    summary_llm = analysis_llm["summary"]
+    timeline_llm = analysis_llm["timeline"]
     summary_status = status_payload(progress_lookup, "summary", "Not Started")
     summary_module = analysis_lookup.get("summary") or {}
     summary_latest = summary_module.get("latest") or {}
@@ -877,21 +610,7 @@ def build_tool_panels(
             "module": summary_module,
             "transcripts": transcript_sources,
             "job_endpoint_template": "/api/v1/jobs/{job_id}/analyze/summary/",
-                "summary_llm": {
-                    "target": "summary",
-                    "configurations": summary_config_list,
-                    "configurations_json": summary_configs_json,
-                    "active_configuration": summary_active_config,
-                    "active_configuration_json": summary_active_config_json,
-                    "configured_stages": summary_configured_stages,
-                    "stage_configs": summary_stage_configs,
-                    "stage_configs_json": summary_stage_configs_json,
-                    "stage_map_json": summary_stage_map_json,
-                    "provider_chain": summary_chain,
-                    "provider_chain_json": summary_chain_json,
-                    "urls": summary_urls,
-                    "return_url": return_url,
-                },
+            "summary_llm": summary_llm,
         },
         "jobs": summary_jobs,
         "jobs_title": "Summarize Jobs",
@@ -940,21 +659,7 @@ def build_tool_panels(
             "transcripts": transcript_sources,
             "artifact_options": artifacts_by_type,
             "job_endpoint_template": "/api/v1/jobs/{job_id}/analyze/timeline/",
-                "timeline_llm": {
-                    "target": "timeline",
-                    "configurations": timeline_config_list,
-                    "configurations_json": timeline_configs_json,
-                    "active_configuration": timeline_active_config,
-                    "active_configuration_json": timeline_active_config_json,
-                    "configured_stages": timeline_configured_stages,
-                    "stage_configs": timeline_stage_configs,
-                    "stage_configs_json": timeline_stage_configs_json,
-                    "stage_map_json": timeline_stage_map_json,
-                    "provider_chain": timeline_chain,
-                    "provider_chain_json": timeline_chain_json,
-                    "urls": timeline_urls,
-                    "return_url": return_url,
-                },
+            "timeline_llm": timeline_llm,
         },
         "jobs": timeline_jobs,
         "jobs_title": "Timeline Jobs",

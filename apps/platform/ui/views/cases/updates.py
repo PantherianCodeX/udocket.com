@@ -13,7 +13,7 @@ from django.views.decorators.http import require_http_methods
 
 from ..auth import ensure_authenticated
 from ..contexts import compute_case_tool_state, get_case_and_org
-from ..presenters.cases import case_field_specs
+from ..presenters.case_fields import case_field_specs
 from .helpers import check_case_update_permission, render_case_panel_with_refresh
 from packages.udocket_core.llm import load_llm_settings
 from .membership import reconcile_case_memberships
