@@ -365,11 +365,9 @@ def organization_settings(
             provider_uuid = form_data.get("provider_uuid")
             if provider_uuid:
                 delete_org_provider_credential_by_uuid(str(organization.id), provider_uuid)
-            elif provider_key:
-                delete_org_provider_credential(str(organization.id), provider_key)
-            messages.success(request, f"Provider '{provider_key}' deleted.")
+                messages.success(request, "Provider deleted.")
             else:
-                errors.append("Provider key is required for deletion.")
+                errors.append("Provider UUID is required for deletion.")
         elif action == "provider-toggle":
             desired = request.POST.get("enabled") in {"1", "true", "on"}
             if not provider_key:
@@ -884,7 +882,7 @@ def organization_settings(
             )
 
     stage_map = active_config.get("stage_map", {}) if active_config else {}
-    provider_chain = active_config.get("provider_chain", []) if active_config else []
+    provider_chain: List[str] = []
 
     enabled_providers = [
         {
@@ -963,7 +961,7 @@ def organization_settings(
         "target_label": target_key.title(),
         "configurations": configurations,
         "active_config": active_config,
-        "provider_chain": provider_chain,
+        # Provider chain removed from UI; chain is per-stage
         "stage_entries": stage_entries,
         "provider_options": enabled_providers,
         "model_options": model_options,

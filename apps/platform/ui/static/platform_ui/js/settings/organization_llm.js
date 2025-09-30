@@ -537,15 +537,7 @@
       compiledInput.value = modelsPayload.length ? JSON.stringify(modelsPayload) : '';
     });
 
-    doc.querySelectorAll('[data-provider-edit]').forEach((button) => {
-      button.addEventListener('click', () => {
-        const row = button.closest('[data-provider-row]');
-        if (!row) return;
-        const key = row.getAttribute('data-provider-key');
-        fillForm(key || '');
-        form?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      });
-    });
+    // Edit buttons removed with Actions column; row click still loads editor.
 
     doc.querySelectorAll('[data-provider-row]').forEach((row) => {
       const providerKey = row.getAttribute('data-provider-key');
