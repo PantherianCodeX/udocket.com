@@ -141,6 +141,8 @@ def compute_case_tool_state(request: HttpRequest, case: Case) -> Dict[str, Any]:
     )
     artifacts_all = collect_case_artifacts(request, case)
 
+    return_url = request.get_full_path()
+
     tool_panels = build_tool_panels(
         case,
         progress_items=progress_ctx["progress_items"],
@@ -156,6 +158,7 @@ def compute_case_tool_state(request: HttpRequest, case: Case) -> Dict[str, Any]:
         all_job_rows=flat_rows,
         job_summary_last_dt=job_summary_last_dt,
         user_can_review=user_can_review,
+        return_url=return_url,
     )
 
     case_details_panel = tool_panels.get("case-details") or {}

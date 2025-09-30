@@ -769,6 +769,7 @@ def build_tool_panels(
     all_job_rows: Optional[List[Dict[str, Any]]] = None,
     job_summary_last_dt: Optional[datetime] = None,
     user_can_review: bool = False,
+    return_url: str = "",
 ) -> Dict[str, Dict[str, Any]]:
     progress_lookup = {item["key"]: item for item in progress_items}
     analysis_lookup = {module["key"]: module for module in analysis_modules}
@@ -985,6 +986,16 @@ def build_tool_panels(
         ),
     }
 
+    if not return_url:
+        return_url = reverse("ui-case-detail", kwargs={"case_id": case.id})
+    encoded_return_url = quote(return_url, safe="")
+
+    def _with_next(url: str) -> str:
+        if not encoded_return_url:
+            return url
+        separator = "&" if "?" in url else "?"
+        return f"{url}{separator}next={encoded_return_url}"
+
     try:
         summarize_cfg = SummarizeConfig.from_env()
     except Exception:  # noqa: BLE001
@@ -1070,15 +1081,16 @@ def build_tool_panels(
     summary_chain_json = json.dumps(summary_chain)
     summary_stage_map_json = json.dumps(summary_stage_map)
     summary_settings_base = reverse("ui-organization-settings-section", args=["summary"])
+    summary_edit_base = (
+        f"{summary_settings_base}?config={summary_active_config.get('id')}"
+        if summary_active_config and summary_active_config.get("id")
+        else summary_settings_base
+    )
     summary_urls = {
         "base": summary_settings_base,
-        "edit": (
-            f"{summary_settings_base}?config={summary_active_config.get('id')}&next={quote(return_url)}"
-            if summary_active_config and summary_active_config.get("id")
-            else f"{summary_settings_base}?next={quote(return_url)}"
-        ),
-        "new": f"{summary_settings_base}?new=1&next={quote(return_url)}",
-        "tuning": f"{reverse('ui-organization-settings-section', args=['providers'])}?next={quote(return_url)}",
+        "edit": _with_next(summary_edit_base),
+        "new": _with_next(f"{summary_settings_base}?new=1"),
+        "tuning": _with_next(reverse("ui-organization-settings-section", args=["providers"])),
     }
 
     timeline_config_list = get_org_llm_configurations(str(case.organization_id), target="timeline")
@@ -1128,15 +1140,16 @@ def build_tool_panels(
     timeline_chain_json = json.dumps(timeline_chain)
     timeline_stage_map_json = json.dumps(timeline_stage_map)
     timeline_settings_base = reverse("ui-organization-settings-section", args=["timeline"])
+    timeline_edit_base = (
+        f"{timeline_settings_base}?config={timeline_active_config.get('id')}"
+        if timeline_active_config and timeline_active_config.get("id")
+        else timeline_settings_base
+    )
     timeline_urls = {
         "base": timeline_settings_base,
-        "edit": (
-            f"{timeline_settings_base}?config={timeline_active_config.get('id')}&next={quote(return_url)}"
-            if timeline_active_config and timeline_active_config.get("id")
-            else f"{timeline_settings_base}?next={quote(return_url)}"
-        ),
-        "new": f"{timeline_settings_base}?new=1&next={quote(return_url)}",
-        "tuning": f"{reverse('ui-organization-settings-section', args=['providers'])}?next={quote(return_url)}",
+        "edit": _with_next(timeline_edit_base),
+        "new": _with_next(f"{timeline_settings_base}?new=1"),
+        "tuning": _with_next(reverse("ui-organization-settings-section", args=["providers"])),
     }
     summary_status = status_payload(progress_lookup, "summary", "Not Started")
     summary_module = analysis_lookup.get("summary") or {}
