@@ -9,7 +9,7 @@ from django.utils import timezone
 from apps.platform.accounts.models import Organization
 from apps.platform.cases.models import Case
 from apps.platform.jobs.models import Job
-from apps.platform.operations import tasks
+from apps.platform.operations import runtime
 
 
 @pytest.mark.django_db()
@@ -23,12 +23,12 @@ def test_job_runtime_context_lifecycle(monkeypatch):
     event_calls: List[Dict[str, Any]] = []
 
     monkeypatch.setattr(
-        tasks,
+        runtime,
         "update_job_meta",
         lambda case_id, org_id, job_id, updates: meta_calls.append((case_id, org_id, job_id, updates)),
     )
     monkeypatch.setattr(
-        tasks,
+        runtime,
         "append_job_log",
         lambda case_id, org_id, job_id, message, level="INFO": log_calls.append((case_id, org_id, job_id, message)),
     )
@@ -38,9 +38,9 @@ def test_job_runtime_context_lifecycle(monkeypatch):
         payload_copy.update({"job_id": job_id, "event": event, "case_id": case_id, "status": status})
         event_calls.append(payload_copy)
 
-    monkeypatch.setattr(tasks, "send_job_update", _capture_event)
+    monkeypatch.setattr(runtime, "send_job_update", _capture_event)
 
-    runtime = tasks.JobRuntimeContext(
+    runtime_ctx = runtime.JobRuntimeContext(
         job=job,
         case_id=str(case.id),
         org_id=str(org.id),
@@ -49,7 +49,7 @@ def test_job_runtime_context_lifecycle(monkeypatch):
         task_meta={"mode": "batch"},
     )
 
-    started = runtime.start(
+    started = runtime_ctx.start(
         status=Job.Status.RUNNING,
         log_message="Job started",
         event="job.started",
@@ -62,7 +62,7 @@ def test_job_runtime_context_lifecycle(monkeypatch):
     assert pytest.approx(job.started_at) == pytest.approx(started, abs=1e-6)
     assert job.upload_progress == 0.0
 
-    runtime.transition(
+    runtime_ctx.transition(
         status=Job.Status.UPLOADING,
         log_message="Uploading",
         event="job.uploading",
@@ -75,7 +75,7 @@ def test_job_runtime_context_lifecycle(monkeypatch):
     assert job.status == Job.Status.UPLOADING
     assert job.upload_progress == 10.0
 
-    finished = runtime.succeed(
+    finished = runtime_ctx.succeed(
         log_message="Completed",
         meta_updates={"phase": "done"},
         job_updates={"upload_progress": None},
@@ -91,7 +91,7 @@ def test_job_runtime_context_lifecycle(monkeypatch):
     assert pytest.approx(finished, abs=1e-6) == pytest.approx(job.finished_at, abs=1e-6)
 
     # Task state tracking should capture metadata
-    task_state = runtime.task_state
+    task_state = runtime_ctx.task_state
     assert task_state["status"] == Job.Status.SUCCEEDED
     assert task_state["task_id"] == "task-123"
     assert task_state["mode"] == "batch"
@@ -116,27 +116,27 @@ def test_job_runtime_context_fail_and_cancel(monkeypatch):
 
     event_calls: List[Dict[str, Any]] = []
 
-    monkeypatch.setattr(tasks, "update_job_meta", lambda *args, **kwargs: None)
-    monkeypatch.setattr(tasks, "append_job_log", lambda *args, **kwargs: None)
+    monkeypatch.setattr(runtime, "update_job_meta", lambda *args, **kwargs: None)
+    monkeypatch.setattr(runtime, "append_job_log", lambda *args, **kwargs: None)
 
     def _capture_event(job_id: str, *, event: str, case_id: str, status: str | None = None, **payload: Any) -> None:
         payload_copy = dict(payload)
         payload_copy.update({"job_id": job_id, "event": event, "case_id": case_id, "status": status})
         event_calls.append(payload_copy)
 
-    monkeypatch.setattr(tasks, "send_job_update", _capture_event)
+    monkeypatch.setattr(runtime, "send_job_update", _capture_event)
 
-    runtime = tasks.JobRuntimeContext(job=job, case_id=str(case.id), org_id=str(org.id))
-    runtime.start(status=Job.Status.RUNNING)
+    runtime_ctx = runtime.JobRuntimeContext(job=job, case_id=str(case.id), org_id=str(org.id))
+    runtime_ctx.start(status=Job.Status.RUNNING)
 
-    failure_time = runtime.fail(error="boom", log_message="Failed hard", meta_updates={"phase": "fail"})
+    failure_time = runtime_ctx.fail(error="boom", log_message="Failed hard", meta_updates={"phase": "fail"})
 
     job.refresh_from_db()
     assert job.status == Job.Status.FAILED
     assert job.error_message == "boom"
     assert job.finished_at and job.finished_at >= failure_time - timedelta(seconds=1)
 
-    cancel_time = runtime.cancel(reason="user", log_message="Cancelled by user")
+    cancel_time = runtime_ctx.cancel(reason="user", log_message="Cancelled by user")
     job.refresh_from_db()
     assert job.status == Job.Status.CANCELLED
     assert job.error_message == "user"

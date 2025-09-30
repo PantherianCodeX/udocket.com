@@ -8,7 +8,7 @@ from apps.platform.accounts.models import Organization
 from apps.platform.cases.models import Case, CaseMembership
 from apps.platform.jobs.models import Job, JobNote
 from apps.platform.artifacts.models import CaseArtifact
-from apps.platform.ui.views.presenters.cases import analysis_modules_context
+from apps.platform.ui.views.presenters.analysis_modules import analysis_modules_context
 
 
 @pytest.mark.django_db()

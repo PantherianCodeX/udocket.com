@@ -23,7 +23,6 @@ from apps.platform.tenancy import scope_jobs
 from .common import JobTelemetryPayload, as_dict
 from .presenters.job_actions import build_job_action_entries
 from .presenters.cases import (
-    analysis_modules_context,
     build_case_developer_cards,
     build_case_header_context,
     build_tool_panels,
@@ -31,6 +30,7 @@ from .presenters.cases import (
     collect_case_artifacts,
     prepare_case_fields,
 )
+from .presenters.analysis_modules import analysis_modules_context
 from .presenters.jobs import build_job_rows, friendly_job_title
 from .presenters.utils import render_audio_brief_panel_html, render_notes_panel_html
 from apps.platform.jobs.notes import serialize_notes

@@ -16,12 +16,19 @@ from django.utils import timezone
 from apps.platform.accounts.models import OrganizationMembership
 from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.cases.models import Case, CaseMembership
-from apps.platform.jobs.models import Job, JobNote
+from apps.platform.jobs.models import Job
 
 from ..constants import CASE_JOB_TABLE_COLUMNS, DEFAULT_TABLE_FILTERS, GLOBAL_JOB_TABLE_COLUMNS
 from ..common import as_dict
 from ..presenters.utils import render_notes_panel_html, status_class, user_label
 from .analysis import enrich_summary_artifacts, enrich_timeline_artifacts
+from .analysis_modules import (
+    analysis_modules_context,
+    artifact_payload,
+    build_llm_stage_configs,
+    collect_provider_chain,
+    latest_successful_transcription_job,
+)
 from ..presenters.jobs import (
     friendly_job_title,
     job_most_recent_timestamp,
@@ -30,7 +37,7 @@ from ..presenters.jobs import (
     map_job_status,
     select_agent,
 )
-from packages.udocket_core.agents.summarize_lib import SUMMARIZE_STAGE_PROFILES, SummarizeConfig
+from packages.udocket_core.agents.summarize_lib import SummarizeConfig
 from packages.udocket_core.llm import load_llm_settings
 from apps.platform.operations.llm import (
     build_provider_registry,
@@ -40,378 +47,6 @@ from apps.platform.operations.llm import (
     get_org_provider_credentials,
     load_provider_catalog,
 )
-from apps.platform.authorization.capabilities import has_capability
-from apps.platform.jobs.notes import serialize_notes
-
-
-def _user_can_add_notes(user, case: Case) -> bool:
-    if getattr(settings, "PLATFORM_DEV_OPEN", False):
-        return True
-    if not user or not getattr(user, "is_authenticated", False):
-        return False
-    try:
-        if case.reviewer_id and str(user.id) == str(case.reviewer_id):
-            return True
-    except Exception:
-        pass
-    try:
-        return has_capability(user, str(case.id), "case.update")
-    except Exception:
-        return False
-
-
-def _latest_successful_transcription_job(jobs: List[Job]) -> Optional[Job]:
-    ordered = sorted(
-        jobs,
-        key=lambda j: (j.finished_at or j.started_at or j.created_at or datetime.min),
-        reverse=True,
-    )
-    for job in ordered:
-        if job.status == Job.Status.SUCCEEDED and job.transcript_path:
-            return job
-    return None
-
-
-def _artifact_payload(artifact: CaseArtifact) -> Dict[str, Any]:
-    metadata = artifact.metadata or {}
-    path_obj = Path(artifact.path) if artifact.path else None
-    filename = path_obj.name if path_obj else (artifact.path or "")
-    source = metadata.get("source_transcript") or metadata.get("source")
-    if source:
-        try:
-            source = Path(source).name
-        except Exception:
-            source = str(source)
-    try:
-        download_url = reverse("artifact-download", kwargs={"pk": artifact.pk})
-    except Exception:
-        download_url = ""
-    return {
-        "id": artifact.pk,
-        "title": artifact.title or filename,
-        "created_at": artifact.created_at,
-        "download_url": download_url,
-        "job_id": artifact.job_id,
-        "filename": filename,
-        "metadata": metadata,
-        "source": source,
-    }
-
-
-def _collect_provider_chain(
-    provider_chain: Sequence[str],
-    default_chain: List[str],
-) -> List[str]:
-    sequence: List[str] = []
-    for name in provider_chain:
-        value = str(name or "").strip().lower()
-        if value and value not in sequence:
-            sequence.append(value)
-    for name in default_chain:
-        if name not in sequence:
-            sequence.append(name)
-    return sequence
-
-
-def _stage_profile_hint(stage_key: str) -> Optional[Dict[str, Any]]:
-    profile = SUMMARIZE_STAGE_PROFILES.get(stage_key)
-    if profile is None:
-        return None
-    return {
-        "min_context_tokens": profile.min_context_tokens,
-        "recommended_context_tokens": profile.recommended_context_tokens,
-        "target_chunk_tokens": profile.target_chunk_tokens,
-        "output_reserve_tokens": profile.output_reserve_tokens,
-        "resource_notes": profile.resource_notes,
-    }
-
-
-def _stage_definitions_for_target(
-    *,
-    llm_settings,
-    target: str,
-    stage_map: Dict[str, Dict[str, Any]],
-) -> List[Dict[str, str]]:
-    stage_defs: List[Dict[str, str]] = []
-    seen: set[str] = set()
-
-    for assignment in llm_settings.assignments.values():
-        if assignment.target != target:
-            continue
-        stage_defs.append(
-            {
-                "key": assignment.stage_key,
-                "label": assignment.label or assignment.stage_key,
-                "description": assignment.description,
-            }
-        )
-        seen.add(assignment.stage_key)
-
-    for raw_key in stage_map.keys():
-        stage_key = str(raw_key)
-        if stage_key in seen:
-            continue
-        stage_defs.append({"key": stage_key, "label": stage_key, "description": ""})
-        seen.add(stage_key)
-
-    return stage_defs
-
-
-def _build_llm_stage_configs(
-    *,
-    target: str,
-    llm_settings,
-    stage_map: Dict[str, Dict[str, Any]],
-    provider_registry: Dict[str, Dict[str, Any]],
-) -> List[Dict[str, Any]]:
-    stage_map = stage_map or {}
-    stage_defs = _stage_definitions_for_target(
-        llm_settings=llm_settings,
-        target=target,
-        stage_map=stage_map,
-    )
-    stage_configs: List[Dict[str, Any]] = []
-
-    for stage in stage_defs:
-        stage_key = stage.get("key")
-        stage_label = stage.get("label", stage_key)
-        stage_description = stage.get("description", "")
-        assignment = llm_settings.stage(stage_key)
-        provider_configs = list(provider_registry.values())
-        selected_provider = (
-            assignment.providers[0]
-            if assignment and assignment.providers
-            else (provider_configs[0]["value"] if provider_configs else "azure")
-        )
-        selected_model = assignment.model or ""
-        selected_options: Dict[str, Any] = dict(assignment.options) if assignment else {}
-        selected_max_tokens: Optional[int] = None
-
-        override_payload = stage_map.get(stage_key)
-        if override_payload:
-            provider_override = override_payload.get("provider")
-            if isinstance(provider_override, str) and provider_override.strip():
-                selected_provider = provider_override.strip().lower()
-            providers_override = override_payload.get("providers")
-            if isinstance(providers_override, list):
-                for candidate in providers_override:
-                    if isinstance(candidate, str) and candidate.strip():
-                        selected_provider = candidate.strip().lower()
-                        break
-            model_override = override_payload.get("model")
-            if isinstance(model_override, str) and model_override.strip():
-                selected_model = model_override.strip()
-            options_override = override_payload.get("options")
-            if isinstance(options_override, dict):
-                selected_options.update(options_override)
-            max_override = override_payload.get("max_tokens")
-            if isinstance(max_override, (int, float)):
-                max_value = int(max_override)
-                if max_value > 0:
-                    selected_max_tokens = max_value
-
-        stage_configs.append(
-            {
-                "key": stage_key,
-                "label": stage_label,
-                "description": stage_description,
-                "providers": provider_configs,
-                "selected_provider": selected_provider,
-                "selected_model": selected_model,
-                "selected_options": selected_options,
-                "selected_max_tokens": selected_max_tokens,
-                "profile": _stage_profile_hint(stage_key) if target == "summary" else None,
-            }
-        )
-    return stage_configs
-
-
-def analysis_modules_context(
-    request: HttpRequest,
-    case: Case,
-    jobs: List[Job],
-    telemetry_map: Dict[str, Dict[str, Any]],
-    transcript_artifacts: Optional[Dict[str, CaseArtifact]] = None,
-) -> List[Dict[str, Any]]:
-    user = getattr(request, "user", None)
-    return_url = request.get_full_path()
-    artifacts_qs = (
-        CaseArtifact.objects.for_user(user)
-        .filter(case_id=str(case.id), type__in=["SUMMARY", "TIMELINE"])
-        .order_by("-created_at")
-    )
-
-    summary_artifacts: List[Dict[str, Any]] = []
-    timeline_artifacts: List[Dict[str, Any]] = []
-    for artifact in artifacts_qs:
-        payload = _artifact_payload(artifact)
-        if artifact.type == "SUMMARY":
-            summary_artifacts.append(payload)
-        elif artifact.type == "TIMELINE":
-            timeline_artifacts.append(payload)
-
-    summary_artifacts = enrich_summary_artifacts(summary_artifacts, jobs, telemetry_map)
-    timeline_artifacts = enrich_timeline_artifacts(timeline_artifacts)
-
-    latest_transcription = _latest_successful_transcription_job(jobs)
-    target_job: Optional[Dict[str, Any]] = None
-    if latest_transcription:
-        target_job = {
-            "id": str(latest_transcription.id),
-            "title": friendly_job_title(
-                latest_transcription,
-                telemetry_map.get(str(latest_transcription.id)),
-                (transcript_artifacts or {}).get(str(latest_transcription.id)),
-            ),
-            "status": latest_transcription.status,
-            "finished_at": latest_transcription.finished_at,
-        }
-
-    def build_module(
-        *,
-        key: str,
-        label: str,
-        description: str,
-        artifacts: List[Dict[str, Any]],
-        empty_message: str,
-        action_label: str,
-        success_label: str,
-    ) -> Dict[str, Any]:
-        latest = artifacts[0] if artifacts else None
-        history = artifacts[1:5]
-        if not target_job:
-            status = "No Transcript"
-            header_hint = "Upload and run a transcription to enable this automation."
-            action_disabled = True
-            disabled_reason = "Requires a completed transcript."
-        elif latest:
-            status = "Ready"
-            header_hint = "Latest run"
-            action_disabled = False
-            disabled_reason = None
-        else:
-            status = "Not Started"
-            header_hint = "No runs yet"
-            action_disabled = False
-            disabled_reason = None
-
-        notes_context: Dict[str, Any] = {}
-        latest_job_id = None
-        if latest:
-            latest_job_id = latest.get("job_id") or latest.get("id")
-        if latest_job_id:
-            notes_qs = (
-                JobNote.objects.filter(job_id=latest_job_id)
-                .select_related("created_by")
-                .order_by("-created_at")
-            )
-            notes_entries = serialize_notes(notes_qs)
-            notes_updated_at = notes_entries[0]["created_at"] if notes_entries else None
-            notes_updated_by = (
-                notes_entries[0].get("created_by_label")
-                or notes_entries[0].get("created_by")
-                if notes_entries
-                else None
-            )
-            notes_context = {
-                "job_id": str(latest_job_id),
-                "entries": notes_entries,
-                "updated_at": notes_updated_at,
-                "updated_by": notes_updated_by,
-                "user_can_add": _user_can_add_notes(user, case),
-            }
-        notes_panel_html = ""
-        if notes_context.get("job_id"):
-            notes_panel_html = render_notes_panel_html(
-                job_id=notes_context["job_id"],
-                entries=notes_context.get("entries"),
-                updated_at=notes_context.get("updated_at"),
-                updated_by=notes_context.get("updated_by"),
-                user_can_add=notes_context.get("user_can_add", False),
-            )
-
-        latest_details = as_dict(latest.get("details")) if latest else {}
-        downloads: List[Dict[str, Any]] = []
-        job_identifier = latest.get("job_id") if latest else None
-        if job_identifier:
-            def _add_download(kind: str, label: str, meta: Optional[str] = None) -> None:
-                downloads.append(
-                    {
-                        "label": label,
-                        "href": f"/api/v1/jobs/{job_identifier}/download-analysis/?kind={kind}",
-                        "download": True,
-                        "meta": meta,
-                    }
-                )
-
-            if latest_details.get("summary_path") or latest.get("download_url"):
-                downloads.append(
-                    {
-                        "label": "Summary JSON",
-                        "href": latest.get("download_url") or f"/api/v1/jobs/{job_identifier}/download-analysis/?kind=summary_json",
-                        "download": True,
-                    }
-                )
-            if latest_details.get("summary_markdown_path"):
-                _add_download("summary_markdown", "Summary Markdown")
-            if latest_details.get("outline_path"):
-                _add_download("summary_outline", "Outline JSON")
-            if latest_details.get("timeline_seed_path") or latest_details.get("timeline_seed_name"):
-                _add_download("summary_timeline_seeds", "Timeline seeds")
-            if latest_details.get("entity_hint_path"):
-                _add_download("summary_entity_hints", "Entity hints")
-            if latest_details.get("case_brief_path"):
-                _add_download("summary_case_brief", "Case brief")
-
-        return {
-            "key": key,
-            "label": label,
-            "description": description,
-            "panel_id": f"module-{key}",
-            "status": status,
-            "status_class": status_class(status),
-            "header_hint": header_hint,
-            "header_hint_time": latest["created_at"] if latest else None,
-            "latest": latest,
-            "history": history,
-            "downloads": downloads,
-            "latest_details": latest_details,
-            "empty_message": empty_message,
-            "target_job": target_job,
-            "action": {
-                "job_id": target_job["id"] if target_job else None,
-                "label": action_label,
-                "loading_label": "Queuing…",
-                "success_label": success_label,
-                "disabled": action_disabled,
-                "disabled_reason": disabled_reason,
-            },
-            "notes": notes_context,
-            "notes_panel": notes_panel_html,
-        }
-
-    return [
-        build_module(
-            key="summary",
-            label="Summarize",
-            description="Generate layered summaries of transcripts with AI assistance.",
-            artifacts=summary_artifacts,
-            empty_message="No summarize jobs yet. Generate one from the latest transcript.",
-            action_label="Queue summarize job",
-            success_label="Summarize queued",
-        ),
-        build_module(
-            key="timeline",
-            label="Timeline",
-            description="Build an event timeline anchored to transcript timestamps.",
-            artifacts=timeline_artifacts,
-            empty_message="No timeline has been generated yet.",
-            action_label="Generate timeline",
-            success_label="Timeline queued",
-        ),
-    ]
-
-
 def case_owner_memberships(memberships: List[CaseMembership]) -> List[CaseMembership]:
     return [m for m in memberships if m.role == CaseMembership.Role.OWNER and m.user]
 
@@ -668,7 +303,7 @@ def collect_case_artifacts(
         qs = qs.exclude(type__iexact="AUDIO")
     artifacts: List[Dict[str, Any]] = []
     for artifact in qs.order_by("-created_at"):
-        payload = _artifact_payload(artifact)
+        payload = artifact_payload(artifact)
         payload["type"] = artifact.type
         artifacts.append(payload)
     return artifacts
@@ -1117,13 +752,13 @@ def build_tool_panels(
     summary_stage_map_raw = summary_active_config.get("stage_map", {}) if summary_active_config else {}
     summary_stage_map = dict(summary_stage_map_raw or {})
     summary_provider_chain = summary_active_config.get("provider_chain", []) if summary_active_config else []
-    summary_stage_configs = _build_llm_stage_configs(
+    summary_stage_configs = build_llm_stage_configs(
         target="summary",
         llm_settings=llm_settings,
         stage_map=summary_stage_map,
         provider_registry=provider_registry,
     )
-    summary_chain = _collect_provider_chain(summary_provider_chain, provider_chain)
+    summary_chain = collect_provider_chain(summary_provider_chain, provider_chain)
     summary_configured_stages: List[Dict[str, Any]] = []
     for stage in summary_stage_configs:
         override = summary_stage_map.get(stage["key"])
@@ -1176,13 +811,13 @@ def build_tool_panels(
     timeline_stage_map_raw = timeline_active_config.get("stage_map", {}) if timeline_active_config else {}
     timeline_stage_map = dict(timeline_stage_map_raw or {})
     timeline_provider_chain = timeline_active_config.get("provider_chain", []) if timeline_active_config else []
-    timeline_stage_configs = _build_llm_stage_configs(
+    timeline_stage_configs = build_llm_stage_configs(
         target="timeline",
         llm_settings=llm_settings,
         stage_map=timeline_stage_map,
         provider_registry=provider_registry,
     )
-    timeline_chain = _collect_provider_chain(timeline_provider_chain, provider_chain)
+    timeline_chain = collect_provider_chain(timeline_provider_chain, provider_chain)
     timeline_configured_stages: List[Dict[str, Any]] = []
     for stage in timeline_stage_configs:
         override = timeline_stage_map.get(stage["key"])
