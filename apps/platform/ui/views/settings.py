@@ -47,12 +47,7 @@ def _parse_json_field(raw_value: str, default: Any, errors: List[str], label: st
 
 
 def _gather_stage_targets(llm_settings: LLMSettings) -> Dict[str, List[str]]:
-    grouped: Dict[str, List[str]] = {}
-    for assignment in llm_settings.assignments.values():
-        grouped.setdefault(assignment.target, []).append(assignment.stage_key)
-    for target, keys in grouped.items():
-        grouped[target] = sorted(set(keys))
-    return grouped
+    return llm_settings.stage_targets()
 
 
 @require_http_methods(["GET", "POST"])

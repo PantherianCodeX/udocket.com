@@ -62,6 +62,26 @@ class LLMSettings:
     def all_stage_keys(self) -> List[str]:
         return list(self.assignments.keys())
 
+    def stage_targets(self) -> Dict[str, List[str]]:
+        targets: Dict[str, List[str]] = {}
+        for assignment in self.assignments.values():
+            target = (assignment.target or "").strip().lower()
+            if not target:
+                continue
+            bucket = targets.setdefault(target, [])
+            for stage_key in (assignment.stage_key,):
+                if stage_key and stage_key not in bucket:
+                    bucket.append(stage_key)
+        for target, keys in list(targets.items()):
+            targets[target] = sorted(keys)
+        return targets
+
+    def stage_keys_for_target(self, target: str) -> List[str]:
+        normalized = (target or "").strip().lower()
+        if not normalized:
+            return []
+        return list(self.stage_targets().get(normalized, []))
+
 
 def _load_json(path: Path) -> Dict[str, object]:
     if not path.exists():

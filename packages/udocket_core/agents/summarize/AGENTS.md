@@ -51,12 +51,9 @@ Add `packages/udocket_core/agents/summarize_lib.py` implementing a pure‑Python
     - `language: str = "en-CA"`
     - `temperature: float = 1.0`
     - `max_output_tokens: int = 24000`
-    - `provider_chain: List[str]` — default provider preference order when stage configs do not override it.
+    - `provider_chain: List[str]` — default provider preference order when stage configs do not specify providers.
     - `max_prompt_segments: int = 250` (0 disables the segment cap)
     - `max_prompt_chars: int = 32000` (0 disables the char cap)
-    - `default_stage_model: str | None`
-    - `stage_model_overrides: Dict[str, str]`
-    - `stage_max_output_tokens: Dict[str, int]`
     - `chars_per_token: float = 4.0`
     - `debug: bool = False`
     - `@classmethod from_env()` — loads defaults from `config/summarize_defaults.json`; no credentials are pulled from environment variables.
@@ -77,7 +74,7 @@ Add `packages/udocket_core/agents/summarize_lib.py` implementing a pure‑Python
     - `def summarize(self, *, input: Path | None, case_id: str, case_dir: Path, job_id: str, intake: dict | None = None, transcript_hint: dict | None = None) -> SummarizeResult`
       - Input discovery: if `input` is None, use the most recent transcript under `transcript/`.
       - Writes artifacts and ops logs under `analysis/` and `ops/` with versioned names (`_v2` etc.).
-- Network usage: the active LLM configuration supplies provider and model details. Per-provider credentials are sourced from `LLMProviderCredential` rows (decrypted in the worker) and combined with stage overrides before constructing chat clients. Azure endpoints must still target canadacentral or canadaeast unless the credential metadata explicitly allows otherwise.
+- Network usage: the active LLM configuration supplies provider and model details. Per-provider credentials are sourced from `LLMProviderCredential` rows (decrypted in the worker) and merged with the organization’s stage map before constructing chat clients. Azure endpoints must still target canadacentral or canadaeast unless the credential metadata explicitly allows otherwise.
 
 - Helpers
   - Transcript parsing: split header/body; detect diarized lines like `"[MM:SS] SPK_<id>: text"`; build normalized segments.

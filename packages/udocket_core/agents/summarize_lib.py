@@ -341,9 +341,6 @@ class SummarizeConfig:
     max_prompt_chars: int = MAX_PROMPT_CHARS
     prompt_segments_override: Optional[int] = None
     prompt_chars_override: Optional[int] = None
-    default_stage_model: Optional[str] = None
-    stage_model_overrides: Dict[str, str] = field(default_factory=dict)
-    stage_max_output_tokens: Dict[str, int] = field(default_factory=dict)
     chars_per_token: float = DEFAULT_TOKENS_TO_CHAR_RATIO
 
     @classmethod
@@ -359,9 +356,6 @@ class SummarizeConfig:
         max_prompt_chars = MAX_PROMPT_CHARS
         prompt_chars_override: Optional[int] = None
 
-        default_stage_model = None
-        stage_model_overrides: Dict[str, str] = {}
-        stage_max_output_tokens: Dict[str, int] = {}
         chars_per_token = DEFAULT_TOKENS_TO_CHAR_RATIO
 
         providers = _normalize_providers(DEFAULT_PROVIDER_CHAIN)
@@ -378,36 +372,20 @@ class SummarizeConfig:
             max_prompt_chars=max_prompt_chars,
             prompt_segments_override=prompt_segments_override,
             prompt_chars_override=prompt_chars_override,
-            default_stage_model=default_stage_model,
-            stage_model_overrides=stage_model_overrides,
-            stage_max_output_tokens=stage_max_output_tokens,
             chars_per_token=chars_per_token,
         )
-
-    def stage_model_for(self, stage_key: str) -> Optional[str]:
-        override = self.stage_model_overrides.get(stage_key)
-        if override:
-            return override
-        return self.stage_model_overrides.get("*") or self.default_stage_model
 
     def stage_max_tokens_for(
         self,
         stage_key: str,
         model_limit: Optional[int],
-        fallback: Optional[int] = None,
+        default_limit: Optional[int] = None,
     ) -> int:
-        candidate = self.max_output_tokens
-        override = self.stage_max_output_tokens.get(stage_key)
-        if override is None:
-            override = self.stage_max_output_tokens.get("*")
-        if override is not None and override > 0:
-            candidate = override
-        elif fallback is not None and fallback > 0:
-            candidate = fallback
-        else:
-            default_limit = DEFAULT_STAGE_TOKEN_LIMITS.get(stage_key)
-            if default_limit is not None and default_limit > 0:
-                candidate = default_limit
+        candidate = default_limit if default_limit and default_limit > 0 else self.max_output_tokens
+        if not candidate or candidate <= 0:
+            configured_default = DEFAULT_STAGE_TOKEN_LIMITS.get(stage_key)
+            if configured_default is not None and configured_default > 0:
+                candidate = configured_default
         if model_limit:
             candidate = min(candidate, model_limit) if candidate else model_limit
         if not candidate or candidate <= 0:
@@ -599,10 +577,6 @@ class SummarizeAgent:
                     except (TypeError, ValueError):
                         override_max_tokens = None
 
-            config_model_override = self.config.stage_model_for(stage_key)
-            if config_model_override:
-                model = config_model_override
-
             primary_provider = providers[0] if providers else ""
             provider_meta = settings.provider(primary_provider) if primary_provider else None
 
@@ -643,7 +617,7 @@ class SummarizeAgent:
             stage_max_tokens = self.config.stage_max_tokens_for(
                 stage_key,
                 model_meta.max_output_tokens if model_meta else None,
-                stage_max_tokens_base,
+                default_limit=stage_max_tokens_base,
             )
             stage_temperature = (
                 model_meta.default_temperature

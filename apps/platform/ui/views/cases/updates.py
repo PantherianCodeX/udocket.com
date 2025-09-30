@@ -30,20 +30,6 @@ from apps.platform.operations.llm import (
 )
 
 
-LLM_STAGE_GROUPS: Dict[str, List[str]] = {
-    "summary": [
-        "summarize.context_builder",
-        "summarize.extract_outline",
-        "summarize.build_timeline_seeds",
-        "summarize.build_entity_hints",
-        "summarize.draft_markdown",
-        "summarize.qa_and_finalize",
-    ],
-    "timeline": ["timeline.builder"],
-    "graph": ["graph.extractor"],
-}
-
-
 @require_http_methods(["POST"])
 def case_update_title(request: HttpRequest, case_id: str) -> HttpResponse:
     auth_response = ensure_authenticated(request)
@@ -210,8 +196,14 @@ def case_llm_settings(request: HttpRequest, case_id: str) -> HttpResponse:
     if not isinstance(target_raw, str) or not target_raw.strip():
         return HttpResponseBadRequest("Missing LLM target.")
     target = target_raw.strip().lower()
-    if target not in LLM_STAGE_GROUPS:
-        return HttpResponseBadRequest("Unknown LLM target.")
+    llm_settings = load_llm_settings()
+    stage_targets = llm_settings.stage_targets()
+    if target not in stage_targets:
+        existing_configs = get_org_llm_configurations(
+            str(organization_id), target=target
+        )
+        if not existing_configs:
+            return HttpResponseBadRequest("Unknown LLM target.")
 
     action = (payload.get("action") or "upsert").strip().lower()
     config_id = None
@@ -255,7 +247,7 @@ def case_llm_settings(request: HttpRequest, case_id: str) -> HttpResponse:
         active_config = ensure_default_llm_configuration(
             organization_id=str(organization_id),
             target=target,
-            llm_settings=load_llm_settings(),
+            llm_settings=llm_settings,
         )
     configs = get_org_llm_configurations(str(organization_id), target=target)
 
