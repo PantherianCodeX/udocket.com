@@ -272,7 +272,7 @@ def get_org_provider_credentials(organization_id: str | None) -> Dict[str, Dict[
     qs = LLMProviderCredential.objects.filter(organization_id=organization_id)
     for record in qs.iterator():
         creds[record.provider] = {
-            "id": record.id,
+            "uid": str(record.uid),
             "provider": record.provider,
             "display_name": record.display_name,
             "endpoint": record.endpoint,
@@ -958,18 +958,18 @@ def delete_org_provider_credential(organization_id: str, provider: str) -> None:
 
 
 @transaction.atomic
-def delete_org_provider_credential_by_id(organization_id: str, provider_id: int | str) -> None:
+def delete_org_provider_credential_by_uuid(organization_id: str, provider_uid: str) -> None:
     LLMProviderCredential.objects.filter(
         organization_id=organization_id,
-        id=provider_id,
+        uid=provider_uid,
     ).delete()
 
 
 @transaction.atomic
-def upsert_org_provider_credential_by_id(
+def upsert_org_provider_credential_by_uuid(
     *,
     organization_id: str,
-    provider_id: int | str,
+    provider_uid: str,
     provider: str,
     display_name: str,
     endpoint: str,
@@ -984,7 +984,7 @@ def upsert_org_provider_credential_by_id(
     try:
         record = LLMProviderCredential.objects.get(
             organization_id=organization_id,
-            id=provider_id,
+            uid=provider_uid,
         )
     except LLMProviderCredential.DoesNotExist:
         return upsert_org_provider_credential(

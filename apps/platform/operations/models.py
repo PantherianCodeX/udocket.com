@@ -5,6 +5,7 @@ from django.db import models
 
 class LLMProviderCredential(models.Model):
     id = models.BigAutoField(primary_key=True)
+    uid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     organization = models.ForeignKey(
         "accounts.Organization",
         on_delete=models.CASCADE,

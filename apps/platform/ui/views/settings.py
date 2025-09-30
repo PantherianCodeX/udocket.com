@@ -16,6 +16,7 @@ from apps.platform.operations.llm import (
     default_models_payload,
     delete_llm_configuration,
     delete_org_provider_credential,
+    delete_org_provider_credential_by_uuid,
     ensure_default_llm_configuration,
     ensure_provider_templates,
     evaluate_provider_setup,
@@ -28,6 +29,7 @@ from apps.platform.operations.llm import (
     run_provider_live_test,
     upsert_llm_configuration,
     upsert_org_provider_credential,
+    upsert_org_provider_credential_by_uuid,
 )
 from packages.udocket_core.llm import LLMSettings, load_llm_settings
 from packages.udocket_core.llm.runtime import ChatClientError
@@ -161,7 +163,7 @@ def _extract_provider_form_data(
 ) -> tuple[Dict[str, Any], List[str]]:
     errors: List[str] = []
     provider_key = (request.POST.get("provider") or "").strip().lower()
-    provider_id = (request.POST.get("provider_id") or "").strip()
+    provider_uuid = (request.POST.get("provider_uuid") or "").strip()
     display_name = (
         (request.POST.get("display_name") or provider_key).strip() or provider_key
     )
@@ -209,7 +211,7 @@ def _extract_provider_form_data(
     )
 
     data = {
-        "provider_id": provider_id,
+        "provider_uuid": provider_uuid,
         "provider": provider_key,
         "display_name": display_name,
         "endpoint": endpoint,
@@ -333,10 +335,10 @@ def organization_settings(
                         api_key_value = form_data["api_key"]
                     else:
                         api_key_value = None
-                    if form_data.get("provider_id"):
-                        upsert_org_provider_credential_by_id(
+                    if form_data.get("provider_uuid"):
+                        upsert_org_provider_credential_by_uuid(
                             organization_id=str(organization.id),
-                            provider_id=form_data["provider_id"],
+                            provider_uid=form_data["provider_uuid"],
                             provider=provider_key,
                             display_name=form_data["display_name"],
                             endpoint=form_data["endpoint"],
@@ -360,9 +362,9 @@ def organization_settings(
                 except ValueError as exc:
                     errors.append(str(exc))
         elif action == "provider-delete":
-            provider_id = form_data.get("provider_id")
-            if provider_id:
-                delete_org_provider_credential_by_id(str(organization.id), provider_id)
+            provider_uuid = form_data.get("provider_uuid")
+            if provider_uuid:
+                delete_org_provider_credential_by_uuid(str(organization.id), provider_uuid)
             elif provider_key:
                 delete_org_provider_credential(str(organization.id), provider_key)
             messages.success(request, f"Provider '{provider_key}' deleted.")

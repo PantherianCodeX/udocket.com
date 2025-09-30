@@ -228,7 +228,7 @@
     const form = panel.querySelector('[data-provider-form]');
     const select = form?.querySelector('[data-provider-select]');
     const providerKeyHidden = form?.querySelector('[data-provider-key]');
-    const providerIdHidden = form?.querySelector('[data-provider-id]');
+    const providerUuidHidden = form?.querySelector('[data-provider-uuid]');
 
     function slugifyProviderName(name) {
       return String(name || '')
@@ -376,7 +376,9 @@
       populateModels(models || []);
       if (compiledInput) compiledInput.value = '';
       if (modelTestPayloadInput) modelTestPayloadInput.value = '';
-      if (providerIdHidden) providerIdHidden.value = cred?.id ? String(cred.id) : '';
+      const uuidValue = cred?.uid ? String(cred.uid) : '';
+      const uuidHidden = form?.querySelector('[data-provider-uuid]');
+      if (uuidHidden) uuidHidden.value = uuidValue;
     }
 
     function fillForm(key) {
@@ -400,7 +402,8 @@
       if (templateSelect) templateSelect.value = '';
       setDeleteVisible(Boolean(cred));
       currentProviderKey = key;
-      if (providerIdHidden) providerIdHidden.value = cred?.id ? String(cred.id) : '';
+      const uuidHidden2 = form?.querySelector('[data-provider-uuid]');
+      if (uuidHidden2) uuidHidden2.value = cred?.uid ? String(cred.uid) : '';
     }
 
     function resetForm() {
@@ -414,7 +417,8 @@
       });
       if (templateSelect) templateSelect.value = '';
       if (providerKeyHidden) providerKeyHidden.value = '';
-      if (providerIdHidden) providerIdHidden.value = '';
+      const uuidHidden3 = form?.querySelector('[data-provider-uuid]');
+      if (uuidHidden3) uuidHidden3.value = '';
       setDeleteVisible(false);
       (displayInput || endpointInput)?.focus();
     }
