@@ -42,6 +42,8 @@ REQUIRED_HEADINGS = {
     "Next-step checklist": "- Pending next steps.",
 }
 
+DEFAULT_CHARS_PER_TOKEN = 4.0
+
 
 @dataclass
 class FinalizedOutputs:
@@ -101,6 +103,11 @@ class SummarizePipeline:
         self.provider_chain = list(provider_chain or [])
         self.logger = logger or logging.getLogger("udocket.summarize.pipeline")
         self.progress_callback = progress_callback
+        self.chars_per_token = (
+            getattr(config, "chars_per_token", DEFAULT_CHARS_PER_TOKEN) or DEFAULT_CHARS_PER_TOKEN
+        )
+        self.prompt_chars_override = getattr(config, "prompt_chars_override", None)
+        self.prompt_segments_override = getattr(config, "prompt_segments_override", None)
         self._log_level = (
             logging.INFO if getattr(config, "debug", False) else logging.DEBUG
         )
@@ -185,7 +192,21 @@ class SummarizePipeline:
     def context_builder(self, state: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
         self._notify_stage("context_builder", "start")
         parse: TranscriptParse = state["parse"]
-        context_snippet = self._build_context(parse, self.intake)
+        context_lines = self._collect_context_lines(parse)
+        context_chunks: Dict[str, List[str]] = {}
+        largest_snippet = ""
+        for stage_key in self.stage_runtimes:
+            chunks = self._build_context_chunks_for_stage(stage_key, context_lines)
+            context_chunks[stage_key] = chunks
+            if chunks:
+                candidate = chunks[0]
+                if len(candidate) > len(largest_snippet):
+                    largest_snippet = candidate
+        if not context_chunks:
+            default_chunk = ["\n".join(context_lines)] if context_lines else [""]
+            context_chunks["default"] = default_chunk
+            largest_snippet = default_chunk[0]
+        context_snippet = largest_snippet
         speakers = sorted({seg.speaker for seg in parse.segments if seg.speaker})
         timestamps = [seg.ts for seg in parse.segments if seg.ts is not None]
         duration = max(timestamps) if timestamps else None
@@ -200,6 +221,11 @@ class SummarizePipeline:
                 "approx_duration_seconds": duration,
                 "segment_count": len(parse.segments),
             },
+        }
+        state["context_lines"] = context_lines
+        state["context_chunks"] = context_chunks
+        state["context_chunk_counts"] = {
+            key: len(value) for key, value in context_chunks.items()
         }
         state["context_snippet"] = context_snippet
         state["case_brief"] = brief
@@ -216,7 +242,9 @@ class SummarizePipeline:
 
     def extract_outline(self, state: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
         parse: TranscriptParse = state["parse"]
-        context_snippet: str = state["context_snippet"]
+        context_snippet = self._context_input_for_stage(
+            "summarize.extract_outline", state
+        )
         case_brief: Dict[str, Any] = state["case_brief"]
         runtime = self.stage_runtimes.get("summarize.extract_outline")
         azure_client = runtime.azure_client if runtime else None
@@ -274,7 +302,9 @@ class SummarizePipeline:
 
     def build_timeline_seeds(self, state: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
         parse: TranscriptParse = state["parse"]
-        context_snippet: str = state["context_snippet"]
+        context_snippet = self._context_input_for_stage(
+            "summarize.build_timeline_seeds", state
+        )
         outline_result: OutlineStageResult = state["outline_result"]
         case_brief: Dict[str, Any] = state["case_brief"]
         runtime = self.stage_runtimes.get("summarize.build_timeline_seeds")
@@ -317,7 +347,9 @@ class SummarizePipeline:
 
     def build_entity_hints(self, state: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
         parse: TranscriptParse = state["parse"]
-        context_snippet: str = state["context_snippet"]
+        context_snippet = self._context_input_for_stage(
+            "summarize.build_entity_hints", state
+        )
         outline_result: OutlineStageResult = state["outline_result"]
         case_brief: Dict[str, Any] = state["case_brief"]
         runtime = self.stage_runtimes.get("summarize.build_entity_hints")
@@ -373,7 +405,9 @@ class SummarizePipeline:
 
     def draft_markdown(self, state: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
         parse: TranscriptParse = state["parse"]
-        context_snippet: str = state["context_snippet"]
+        context_snippet = self._context_input_for_stage(
+            "summarize.draft_markdown", state
+        )
         outline_result: OutlineStageResult = state["outline_result"]
         timeline_result: TimelineStageResult = state["timeline_result"]
         entity_result: EntityStageResult = state["entity_result"]
@@ -481,6 +515,98 @@ class SummarizePipeline:
         return state
 
     # Internal helpers -------------------------------------------------
+
+    def _context_input_for_stage(
+        self, stage_key: str, state: MutableMapping[str, Any]
+    ) -> Any:
+        context_chunks: Dict[str, List[str]] = state.get("context_chunks", {})
+        chunks = context_chunks.get(stage_key)
+        if not chunks:
+            return state.get("context_snippet", "")
+        if len(chunks) == 1:
+            return chunks[0]
+        if stage_key in {"summarize.draft_markdown", "summarize.qa_and_finalize"}:
+            return chunks[0]
+        return chunks
+
+    def _collect_context_lines(self, parse: TranscriptParse) -> List[str]:
+        lines: List[str] = []
+        case_number = self.intake.get("court_case_number")
+        if case_number:
+            lines.append(f"Case number: {case_number}")
+        for header in parse.header_lines:
+            header_clean = header.strip()
+            if header_clean:
+                lines.append(header_clean)
+        for seg in parse.segments:
+            text = seg.text.strip()
+            if not text:
+                continue
+            prefix = ""
+            if seg.ts is not None:
+                minutes = int(seg.ts // 60)
+                seconds = int(seg.ts % 60)
+                speaker = seg.speaker or "SPK"
+                prefix = f"[{minutes:02d}:{seconds:02d}] {speaker}: "
+            elif seg.speaker:
+                prefix = f"{seg.speaker}: "
+            lines.append(prefix + text)
+        return lines
+
+    def _build_context_chunks_for_stage(
+        self, stage_key: str, lines: List[str]
+    ) -> List[str]:
+        if not lines:
+            return [""]
+        segment_limit = self._segment_limit()
+        usable_lines = lines[:segment_limit] if segment_limit is not None else list(lines)
+        if not usable_lines:
+            usable_lines = lines
+        char_limit = self._char_limit_for_stage(stage_key)
+        if not char_limit or char_limit <= 0:
+            return ["\n".join(usable_lines)]
+        chunks: List[str] = []
+        current: List[str] = []
+        current_chars = 0
+        for line in usable_lines:
+            line_len = len(line) + 1
+            if current and current_chars + line_len > char_limit:
+                chunks.append("\n".join(current))
+                current = []
+                current_chars = 0
+            current.append(line)
+            current_chars += line_len
+        if current:
+            chunks.append("\n".join(current))
+        return chunks or ["\n".join(usable_lines)]
+
+    def _segment_limit(self) -> Optional[int]:
+        override = self.prompt_segments_override
+        if override is None or override <= 0:
+            return None
+        return override
+
+    def _char_limit_for_stage(self, stage_key: str) -> Optional[int]:
+        runtime = self.stage_runtimes.get(stage_key)
+        manual_limit = self.prompt_chars_override
+        if runtime is None:
+            if manual_limit is not None and manual_limit > 0:
+                return manual_limit
+            return None
+        context_tokens = runtime.context_window_tokens
+        if context_tokens is not None:
+            available = context_tokens - runtime.profile.output_reserve_tokens
+            context_tokens = max(available, runtime.profile.min_context_tokens)
+        else:
+            context_tokens = runtime.profile.recommended_context_tokens
+        char_limit = (
+            int(context_tokens * self.chars_per_token)
+            if context_tokens
+            else None
+        )
+        if manual_limit is not None and manual_limit > 0:
+            char_limit = min(char_limit or manual_limit, manual_limit)
+        return char_limit
 
     def _record_usage(self, state: MutableMapping[str, Any], stage: str, usage: Dict[str, int]) -> None:
         if not usage:

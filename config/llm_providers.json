@@ -13,12 +13,14 @@
           "label": "GPT-4o Mini",
           "cost_tier": "standard",
           "max_output_tokens": 4000,
+          "context_window_tokens": 128000,
           "default_temperature": 1.0
         },
         "gpt-4o": {
           "label": "GPT-4o Premium",
           "cost_tier": "premium",
           "max_output_tokens": 8000,
+          "context_window_tokens": 128000,
           "default_temperature": 1.0,
           "deployment_env": "AZURE_OPENAI_DEPLOYMENT_GPT_4O"
         },
@@ -26,6 +28,7 @@
           "label": "GPT-4.1",
           "cost_tier": "premium",
           "max_output_tokens": 32000,
+          "context_window_tokens": 200000,
           "default_temperature": 1.0,
           "deployment_env": "AZURE_OPENAI_DEPLOYMENT_GPT_4_1"
         },
@@ -33,6 +36,7 @@
           "label": "GPT-5 Chat",
           "cost_tier": "premium",
           "max_output_tokens": 32000,
+          "context_window_tokens": 220000,
           "default_temperature": 1.0,
           "deployment_env": "AZURE_OPENAI_DEPLOYMENT_GPT_5_CHAT"
         },
@@ -40,6 +44,7 @@
           "label": "GPT-5 Mini",
           "cost_tier": "standard",
           "max_output_tokens": 16000,
+          "context_window_tokens": 200000,
           "default_temperature": 1.0,
           "deployment_env": "AZURE_OPENAI_DEPLOYMENT_GPT_5_MINI"
         },
@@ -47,6 +52,7 @@
           "label": "GPT-5 Nano",
           "cost_tier": "economy",
           "max_output_tokens": 8000,
+          "context_window_tokens": 128000,
           "default_temperature": 1.0,
           "deployment_env": "AZURE_OPENAI_DEPLOYMENT_GPT_5_NANO"
         }

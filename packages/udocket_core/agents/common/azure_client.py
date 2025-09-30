@@ -196,6 +196,23 @@ class AzureChatClient:
         max_tokens: Optional[int] = None,
         response_format: Optional[Dict[str, Any]] = None,
     ) -> Tuple[str, Dict[str, Any]]:
+        return self._chat(
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            response_format=response_format,
+            include_max_output_tokens=True,
+        )
+
+    def _chat(
+        self,
+        *,
+        messages: List[Dict[str, str]],
+        temperature: float,
+        max_tokens: Optional[int],
+        response_format: Optional[Dict[str, Any]],
+        include_max_output_tokens: bool,
+    ) -> Tuple[str, Dict[str, Any]]:
         url = (
             self.config.endpoint.rstrip("/")
             + f"/openai/deployments/{self.config.deployment}/chat/completions"
@@ -207,6 +224,8 @@ class AzureChatClient:
         }
         if max_tokens is not None:
             payload["max_completion_tokens"] = max_tokens
+            if include_max_output_tokens:
+                payload["max_output_tokens"] = max_tokens
         if response_format:
             payload["response_format"] = response_format
 
@@ -234,6 +253,28 @@ class AzureChatClient:
             response.raise_for_status()
         except requests.exceptions.HTTPError as exc:  # type: ignore[attr-defined]
             detail = exc.response.text if exc.response is not None else ""
+            if (
+                include_max_output_tokens
+                and exc.response is not None
+                and exc.response.status_code == 400
+                and detail
+                and "max_output_tokens" in detail
+            ):
+                logger.info(
+                    "retrying without max_output_tokens parameter",
+                    extra={
+                        "endpoint": url,
+                        "deployment": self.config.deployment,
+                        "status_code": exc.response.status_code,
+                    },
+                )
+                return self._chat(
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    response_format=response_format,
+                    include_max_output_tokens=False,
+                )
             message = (
                 f"Azure OpenAI request failed: {exc}" + (f"\n{detail}" if detail else "")
             )
@@ -248,16 +289,38 @@ class AzureChatClient:
             )
             raise RuntimeError(message) from exc
 
+        response_text = response.text
+        request_id = response.headers.get("x-ms-request-id") or response.headers.get("x-request-id")
+
         if logger.isEnabledFor(logging.DEBUG):
+            preview = (response_text or "")[:2000]
             logger.debug(
-                "azure response body",
+                "azure response body preview=%s",
+                preview if preview else "<empty>",
                 extra={
                     "deployment": self.config.deployment,
-                    "preview": response.text[:2000],
+                    "request_id": request_id,
                 },
             )
 
-        data = response.json()
+        try:
+            data = response.json()
+        except ValueError as exc:
+            preview = (response_text or "")[:500]
+            preview_single_line = preview.replace("\n", "\\n").replace("\r", "\\r")
+            logger.error(
+                "azure response json decode failed (status=%s, deployment=%s, request_id=%s): %s",
+                response.status_code,
+                self.config.deployment,
+                request_id,
+                preview_single_line if preview_single_line else "<empty>",
+            )
+            raise RuntimeError(
+                "Azure OpenAI returned an invalid JSON payload (status="
+                f"{response.status_code}, deployment='{self.config.deployment}', request_id='{request_id}'). "
+                f"Body preview: {preview_single_line if preview_single_line else '<empty>'}"
+            ) from exc
+
         logger.debug(
             "azure response usage",
             extra={
@@ -290,6 +353,11 @@ class AzureChatClient:
             refusal = message.get("refusal")
             if isinstance(refusal, str) and refusal.strip():
                 content = refusal
+            elif isinstance(refusal, (dict, list)) and refusal:
+                try:
+                    content = json.dumps(refusal)
+                except Exception:
+                    content = str(refusal)
 
         if not content:
             content = _content_from_delta(choice0.get("delta"))
@@ -297,21 +365,47 @@ class AzureChatClient:
         if content:
             content = _extract_json_candidate(content)
 
+        if not content:
+            finish_reason = choice0.get("finish_reason")
+            preview = (response_text or "")[:500]
+            preview_single_line = preview.replace("\n", "\\n").replace("\r", "\\r")
+            logger.error(
+                "azure empty completion (status=%s, deployment=%s, request_id=%s, finish_reason=%s): %s",
+                response.status_code,
+                self.config.deployment,
+                request_id,
+                finish_reason,
+                preview_single_line if preview_single_line else "<empty>",
+            )
+            raise RuntimeError(
+                "Azure OpenAI returned an empty completion (deployment='"
+                f"{self.config.deployment}', request_id='{request_id}', finish_reason='{finish_reason}'). "
+                f"Body preview: {preview_single_line if preview_single_line else '<empty>'}"
+            )
+
         if not isinstance(content, str):
             try:
                 content = json.dumps(content)
             except Exception:
                 content = ""
 
-        if not content and logger.isEnabledFor(logging.DEBUG):
-            logger.debug(
-                "azure empty content: finish=%s message_keys=%s",
-                choice0.get("finish_reason"),
-                list(message.keys()),
+        if not content:
+            finish_reason = choice0.get("finish_reason")
+            preview = (response_text or "")[:500]
+            preview_single_line = preview.replace("\n", "\\n").replace("\r", "\\r")
+            logger.error(
+                "azure empty completion after coercion (status=%s, deployment=%s, request_id=%s, finish_reason=%s): %s",
+                response.status_code,
+                self.config.deployment,
+                request_id,
+                finish_reason,
+                preview_single_line if preview_single_line else "<empty>",
             )
-            delta_dbg = choice0.get("delta")
-            if delta_dbg:
-                logger.debug("azure delta snapshot %s", repr(delta_dbg)[:1200])
+            raise RuntimeError(
+                "Azure OpenAI returned an empty completion after coercion (deployment='"
+                f"{self.config.deployment}', request_id='{request_id}', finish_reason='{finish_reason}'). "
+                f"Body preview: {preview_single_line if preview_single_line else '<empty>'}"
+            )
 
         usage = data.get("usage") or {}
         return content, usage

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
 from dataclasses import dataclass, field
@@ -20,6 +21,15 @@ from ..llm import LLMSettings, load_llm_settings
 
 MAX_PROMPT_SEGMENTS = 120
 MAX_PROMPT_CHARS = 8000
+DEFAULT_TOKENS_TO_CHAR_RATIO = 4.0
+
+DEFAULT_STAGE_TOKEN_LIMITS: Dict[str, int] = {
+    "summarize.extract_outline": 8000,
+    "summarize.build_timeline_seeds": 6000,
+    "summarize.build_entity_hints": 6000,
+    "summarize.draft_markdown": 8000,
+    "summarize.qa_and_finalize": 4000,
+}
 
 SUPPORTED_PROVIDERS = {"azure", "local"}
 DEFAULT_PROVIDER_CHAIN: List[str] = ["azure", "local"]
@@ -32,6 +42,173 @@ LLM_STAGE_KEYS = {
     "qa_and_finalize": "summarize.qa_and_finalize",
 }
 _llm_settings_cache: Optional[LLMSettings] = None
+
+_STAGE_ALIAS_LOOKUP: Dict[str, str] = {}
+for _attr, _stage_key in LLM_STAGE_KEYS.items():
+    _STAGE_ALIAS_LOOKUP[_attr.lower()] = _stage_key
+    _STAGE_ALIAS_LOOKUP[_stage_key.lower()] = _stage_key
+    if _stage_key.startswith("summarize."):
+        _STAGE_ALIAS_LOOKUP[_stage_key.split(".", 1)[1].lower()] = _stage_key
+
+
+def _normalize_stage_identifier(value: str) -> Optional[str]:
+    key = value.strip().lower()
+    if not key:
+        return None
+    return _STAGE_ALIAS_LOOKUP.get(key)
+
+
+def _parse_stage_mapping(
+    raw: str,
+    value_parser: Callable[[str], Optional[Any]],
+) -> Dict[str, Any]:
+    if not raw:
+        return {}
+
+    mapping: Dict[str, Any] = {}
+    entries: List[tuple[str, str]] = []
+
+    payload: Any = None
+    try:
+        payload = json.loads(raw)
+    except (TypeError, json.JSONDecodeError):
+        payload = None
+
+    if isinstance(payload, dict):
+        entries.extend((str(key), str(value)) for key, value in payload.items())
+    elif isinstance(payload, list):
+        for item in payload:
+            if not isinstance(item, (list, tuple)) or len(item) != 2:
+                continue
+            stage_name, stage_value = item
+            entries.append((str(stage_name), str(stage_value)))
+
+    if not entries:
+        parts = [part.strip() for part in raw.split(",") if part.strip()]
+        for part in parts:
+            if "=" in part:
+                stage_name, stage_value = part.split("=", 1)
+            elif ":" in part:
+                stage_name, stage_value = part.split(":", 1)
+            else:
+                continue
+            entries.append((stage_name.strip(), stage_value.strip()))
+
+    for stage_name, stage_value in entries:
+        if not stage_name:
+            continue
+        normalized = None
+        if stage_name in {"*", "default"}:
+            normalized = "*"
+        else:
+            normalized = _normalize_stage_identifier(stage_name)
+        if not normalized and stage_name != "*":
+            continue
+        parsed_value = value_parser(stage_value)
+        if parsed_value is None:
+            continue
+        target_key = normalized if normalized else "*"
+        mapping[target_key] = parsed_value
+    return mapping
+
+
+def _parse_positive_int(value: str) -> Optional[int]:
+    try:
+        parsed = int(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+    if parsed <= 0:
+        return None
+    return parsed
+
+
+def _parse_non_empty_str(value: str) -> Optional[str]:
+    string_value = str(value).strip()
+    return string_value or None
+
+
+@dataclass(frozen=True)
+class StageProfile:
+    stage_key: str
+    label: str
+    description: str
+    min_context_tokens: int
+    recommended_context_tokens: int
+    output_reserve_tokens: int
+    resource_notes: str
+
+
+SUMMARIZE_STAGE_PROFILES: Dict[str, StageProfile] = {
+    "summarize.context_builder": StageProfile(
+        stage_key="summarize.context_builder",
+        label="Context Builder",
+        description="Prepares digestible transcript snippets and intake metadata.",
+        min_context_tokens=2000,
+        recommended_context_tokens=4000,
+        output_reserve_tokens=0,
+        resource_notes="Runs locally (CPU).",
+    ),
+    "summarize.extract_outline": StageProfile(
+        stage_key="summarize.extract_outline",
+        label="Outline Extractor",
+        description="Finds parties, issues, facts, and orders across the transcript.",
+        min_context_tokens=6000,
+        recommended_context_tokens=100000,
+        output_reserve_tokens=4000,
+        resource_notes="Prefers 100k+ token context models for full hearings.",
+    ),
+    "summarize.build_timeline_seeds": StageProfile(
+        stage_key="summarize.build_timeline_seeds",
+        label="Timeline Seeding",
+        description="Generates chronological event scaffolding for timeline view.",
+        min_context_tokens=4000,
+        recommended_context_tokens=80000,
+        output_reserve_tokens=3000,
+        resource_notes="Heavier prompts; look for models with >=80k token windows.",
+    ),
+    "summarize.build_entity_hints": StageProfile(
+        stage_key="summarize.build_entity_hints",
+        label="Entity Mapper",
+        description="Extracts people, organizations, and relationships with evidence.",
+        min_context_tokens=4000,
+        recommended_context_tokens=80000,
+        output_reserve_tokens=3000,
+        resource_notes="Prefers large context for repeated mentions across the record.",
+    ),
+    "summarize.draft_markdown": StageProfile(
+        stage_key="summarize.draft_markdown",
+        label="Summary Drafter",
+        description="Produces the layered Markdown summary and checklist.",
+        min_context_tokens=6000,
+        recommended_context_tokens=100000,
+        output_reserve_tokens=6000,
+        resource_notes="Needs room for structured inputs; choose 100k token models when possible.",
+    ),
+    "summarize.qa_and_finalize": StageProfile(
+        stage_key="summarize.qa_and_finalize",
+        label="QA & Finalizer",
+        description="Ensures required sections, hashes artifacts, and finalizes outputs.",
+        min_context_tokens=2000,
+        recommended_context_tokens=16000,
+        output_reserve_tokens=2000,
+        resource_notes="Lightweight; smaller context models are acceptable.",
+    ),
+}
+
+
+def _stage_profile(stage_key: str) -> StageProfile:
+    return SUMMARIZE_STAGE_PROFILES.get(
+        stage_key,
+        StageProfile(
+            stage_key=stage_key,
+            label=stage_key,
+            description="",
+            min_context_tokens=2000,
+            recommended_context_tokens=4000,
+            output_reserve_tokens=2000,
+            resource_notes="",
+        ),
+    )
 
 
 logger = logging.getLogger("udocket.summarize.agent")
@@ -56,6 +233,8 @@ class StageRuntime:
     model: str
     azure_client: Optional[AzureChatClient]
     max_output_tokens: int
+    context_window_tokens: Optional[int]
+    profile: StageProfile
     allow_local_fallback: bool
     temperature: float
 
@@ -92,6 +271,14 @@ class SummarizeConfig:
     provider_chain: List[str] = field(
         default_factory=lambda: list(DEFAULT_PROVIDER_CHAIN)
     )
+    max_prompt_segments: int = MAX_PROMPT_SEGMENTS
+    max_prompt_chars: int = MAX_PROMPT_CHARS
+    prompt_segments_override: Optional[int] = None
+    prompt_chars_override: Optional[int] = None
+    default_stage_model: Optional[str] = None
+    stage_model_overrides: Dict[str, str] = field(default_factory=dict)
+    stage_max_output_tokens: Dict[str, int] = field(default_factory=dict)
+    chars_per_token: float = DEFAULT_TOKENS_TO_CHAR_RATIO
 
     @classmethod
     def from_env(cls) -> "SummarizeConfig":
@@ -151,6 +338,62 @@ class SummarizeConfig:
                 "AZURE_OPENAI_ENDPOINT must target canadacentral or canadaeast"
             )
 
+        prompt_segments_env = os.getenv("SUMMARY_MAX_PROMPT_SEGMENTS")
+        prompt_segments_override: Optional[int]
+        if prompt_segments_env is not None:
+            try:
+                prompt_segments_override = max(0, int(prompt_segments_env))
+            except ValueError:
+                prompt_segments_override = None
+            max_prompt_segments = (
+                prompt_segments_override
+                if prompt_segments_override is not None
+                else MAX_PROMPT_SEGMENTS
+            )
+        else:
+            max_prompt_segments = MAX_PROMPT_SEGMENTS
+            prompt_segments_override = None
+
+        prompt_chars_env = os.getenv("SUMMARY_MAX_PROMPT_CHARS")
+        prompt_chars_override: Optional[int]
+        if prompt_chars_env is not None:
+            try:
+                prompt_chars_override = max(0, int(prompt_chars_env))
+            except ValueError:
+                prompt_chars_override = None
+            max_prompt_chars = (
+                prompt_chars_override
+                if prompt_chars_override is not None
+                else MAX_PROMPT_CHARS
+            )
+        else:
+            max_prompt_chars = MAX_PROMPT_CHARS
+            prompt_chars_override = None
+
+        default_stage_model = (os.getenv("SUMMARY_MODEL") or "").strip() or None
+
+        stage_models_raw = os.getenv("SUMMARY_STAGE_MODELS")
+        stage_model_overrides = (
+            _parse_stage_mapping(stage_models_raw, _parse_non_empty_str)
+            if stage_models_raw
+            else {}
+        )
+
+        stage_max_tokens_raw = os.getenv("SUMMARY_STAGE_MAX_TOKENS")
+        stage_max_output_tokens = (
+            _parse_stage_mapping(stage_max_tokens_raw, _parse_positive_int)
+            if stage_max_tokens_raw
+            else {}
+        )
+
+        chars_per_token_env = os.getenv("SUMMARY_CHARS_PER_TOKEN")
+        try:
+            chars_per_token = float(chars_per_token_env) if chars_per_token_env else DEFAULT_TOKENS_TO_CHAR_RATIO
+            if chars_per_token <= 0:
+                chars_per_token = DEFAULT_TOKENS_TO_CHAR_RATIO
+        except (TypeError, ValueError):
+            chars_per_token = DEFAULT_TOKENS_TO_CHAR_RATIO
+
         return cls(
             azure_openai_endpoint=endpoint,
             azure_openai_key=key,
@@ -163,6 +406,14 @@ class SummarizeConfig:
             enable_offline_fallback=allow_offline,
             force_offline_mode=force_offline,
             provider_chain=filtered_chain,
+            max_prompt_segments=max_prompt_segments,
+            max_prompt_chars=max_prompt_chars,
+            default_stage_model=default_stage_model,
+            stage_model_overrides=stage_model_overrides,
+            stage_max_output_tokens=stage_max_output_tokens,
+            prompt_segments_override=prompt_segments_override,
+            prompt_chars_override=prompt_chars_override,
+            chars_per_token=chars_per_token,
         )
 
     @property
@@ -176,6 +427,32 @@ class SummarizeConfig:
             and self.azure_openai_key
             and self.azure_openai_deployment
         )
+
+    def stage_model_for(self, stage_key: str) -> Optional[str]:
+        override = self.stage_model_overrides.get(stage_key)
+        if override:
+            return override
+        return self.stage_model_overrides.get("*") or self.default_stage_model
+
+    def stage_max_tokens_for(
+        self,
+        stage_key: str,
+        model_limit: Optional[int],
+        fallback: Optional[int] = None,
+    ) -> int:
+        candidate = fallback if fallback is not None else self.max_output_tokens
+        override = self.stage_max_output_tokens.get(stage_key)
+        if override is None:
+            override = self.stage_max_output_tokens.get("*")
+        if override is None:
+            override = DEFAULT_STAGE_TOKEN_LIMITS.get(stage_key)
+        if override is not None and override > 0:
+            candidate = override
+        if model_limit:
+            candidate = min(candidate, model_limit) if candidate else model_limit
+        if not candidate or candidate <= 0:
+            candidate = model_limit if model_limit and model_limit > 0 else self.max_output_tokens
+        return max(candidate, 1)
 
     @property
     def azure_region(self) -> Optional[str]:
@@ -236,6 +513,43 @@ class SummarizeAgent:
         self._log_enabled = False
         self._log_level = logging.INFO
         enable_langgraph_debug_logging(force=self.config.debug)
+
+    def stage_catalog(self) -> Dict[str, Any]:
+        settings = _load_llm_settings()
+        catalog: Dict[str, Any] = {}
+        for stage_key, profile in SUMMARIZE_STAGE_PROFILES.items():
+            eligible_models: List[Dict[str, Any]] = []
+            for provider_name, provider in settings.providers.items():
+                for model_name, model in provider.models.items():
+                    context_tokens = model.context_window_tokens
+                    if context_tokens and context_tokens < profile.min_context_tokens:
+                        continue
+                    eligible_models.append(
+                        {
+                            "provider": provider_name,
+                            "model": model_name,
+                            "context_window_tokens": context_tokens,
+                            "max_output_tokens": model.max_output_tokens,
+                            "deployment_env": model.deployment_env,
+                        }
+                    )
+            recommended_models = [
+                entry
+                for entry in eligible_models
+                if entry["context_window_tokens"]
+                and entry["context_window_tokens"] >= profile.recommended_context_tokens
+            ]
+            catalog[stage_key] = {
+                "label": profile.label,
+                "description": profile.description,
+                "min_context_tokens": profile.min_context_tokens,
+                "recommended_context_tokens": profile.recommended_context_tokens,
+                "output_reserve_tokens": profile.output_reserve_tokens,
+                "resource_notes": profile.resource_notes,
+                "recommended_models": recommended_models,
+                "eligible_models": eligible_models,
+            }
+        return catalog
 
     def _log(self, level: int, message: str, **meta: Any) -> None:
         if not self._log_enabled:
@@ -334,7 +648,10 @@ class SummarizeAgent:
         stage_runtimes: Dict[str, StageRuntime] = {}
         provider_sequence: List[str] = []
 
+        azure_provider_meta = settings.provider("azure")
+
         for stage_attr, stage_key in LLM_STAGE_KEYS.items():
+            stage_profile = _stage_profile(stage_key)
             assignment = settings.stage(stage_key)
             providers = list(
                 assignment.providers
@@ -351,6 +668,8 @@ class SummarizeAgent:
             override = stage_overrides.get(stage_key) or stage_overrides.get(
                 stage_attr
             )
+            override_set_model = False
+            override_max_tokens = None
             if override:
                 raw_override_providers = override.get("providers")
                 override_providers: List[str] = []
@@ -392,6 +711,7 @@ class SummarizeAgent:
                         ]
                 if override.get("model"):
                     model = str(override["model"])
+                    override_set_model = True
                 if isinstance(override.get("options"), dict):
                     options.update(
                         {
@@ -399,6 +719,8 @@ class SummarizeAgent:
                             for key, value in override["options"].items()
                         }
                     )
+                if isinstance(override.get("max_tokens"), int):
+                    override_max_tokens = max(1, int(override["max_tokens"]))
 
             providers = [p for p in providers if p in SUPPORTED_PROVIDERS]
             if not providers:
@@ -415,6 +737,24 @@ class SummarizeAgent:
                 else None
             )
 
+            if not override_set_model:
+                config_model_override = self.config.stage_model_for(stage_key)
+                if config_model_override:
+                    model = config_model_override
+                    if (
+                        azure_enabled
+                        and azure_provider_meta
+                        and config_model_override in azure_provider_meta.models
+                        and "azure" not in providers
+                    ):
+                        providers = ["azure"] + [p for p in providers if p != "azure"]
+                        provider_meta = azure_provider_meta
+                        model_meta = (
+                            azure_provider_meta.models.get(model)
+                            if config_model_override in azure_provider_meta.models
+                            else model_meta
+                        )
+
             deployment = options.get("azure_deployment") if options else None
             if not deployment and model_meta and model_meta.deployment_env:
                 deployment = os.getenv(model_meta.deployment_env)
@@ -425,16 +765,32 @@ class SummarizeAgent:
                 if cfg:
                     azure_client = AzureChatClient(cfg)
 
-            stage_max_tokens = (
+            stage_max_tokens_base = (
                 model_meta.max_output_tokens
                 if model_meta and model_meta.max_output_tokens
                 else self.config.max_output_tokens
+            )
+            if override_max_tokens is not None:
+                stage_max_tokens_base = override_max_tokens
+            stage_max_tokens = self.config.stage_max_tokens_for(
+                stage_key,
+                model_meta.max_output_tokens if model_meta else None,
+                stage_max_tokens_base,
             )
             stage_temperature = (
                 model_meta.default_temperature
                 if model_meta and model_meta.default_temperature is not None
                 else self.config.temperature
             )
+
+            context_window_tokens = None
+            if model_meta and model_meta.context_window_tokens:
+                context_window_tokens = model_meta.context_window_tokens
+            elif providers[0] == "local":
+                context_window_tokens = max(
+                    stage_profile.recommended_context_tokens,
+                    stage_profile.min_context_tokens,
+                )
 
             allow_override = (
                 override.get("allow_offline_fallback") if override else None
@@ -452,6 +808,8 @@ class SummarizeAgent:
                 azure_client=azure_client,
                 max_output_tokens=stage_max_tokens
                 or self.config.max_output_tokens,
+                context_window_tokens=context_window_tokens,
+                profile=stage_profile,
                 allow_local_fallback=allow_local,
                 temperature=stage_temperature,
             )
@@ -607,6 +965,10 @@ class SummarizeAgent:
     ) -> str:
         snippets: List[str] = []
         chars = 0
+        segment_limit = getattr(self.config, "max_prompt_segments", MAX_PROMPT_SEGMENTS)
+        char_limit = getattr(self.config, "max_prompt_chars", MAX_PROMPT_CHARS)
+        unlimited_segments = segment_limit == 0
+        unlimited_chars = char_limit == 0
         for seg in parse.segments:
             text = seg.text.strip()
             if not text:
@@ -621,8 +983,8 @@ class SummarizeAgent:
             snippets.append(line)
             chars += len(line)
             if (
-                len(snippets) >= MAX_PROMPT_SEGMENTS
-                or chars >= MAX_PROMPT_CHARS
+                (not unlimited_segments and len(snippets) >= segment_limit)
+                or (not unlimited_chars and chars >= char_limit)
             ):
                 break
         context = "\n".join(snippets)

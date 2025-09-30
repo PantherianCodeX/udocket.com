@@ -10,6 +10,7 @@ Purpose: generate layered, legally‑useful summaries from approved transcripts,
 - Privacy and locality: process only transcripts and metadata; never upload audio; Azure endpoints restricted to Canada regions.
 - Composable pipeline: multiple “sub‑agents” produce structured JSON at each stage and a cohesive Markdown summary assembled last.
 - First‑class integration with Celery tasks and UI panels; no overwrites (versioned filenames).
+- Long-context friendly: allow entire interviews to flow through by tuning prompt limits and stage model/token overrides instead of truncating aggressively.
 
 
 ## Agent Composition (Sub‑Agent Roles)
@@ -17,7 +18,8 @@ Implement the SummarizeAgent as a pipeline of small, purpose‑specific stages. 
 
 - ContextBuilder (Stage 0)
   - Input: transcript header/body, case intake fields.
-  - Output: compact case brief (in‑memory) injected into all prompts.
+  - Output: compact case brief (in-memory) injected into all prompts.
+  - Automatically chunks transcript excerpts per stage so Azure prompts stay within the selected model’s context window (or any manual override).
 
 - Extractor (Stage 1)
   - Task: extract Parties, Issues, Claims & Remedies, Facts, Deadlines, Orders, Exhibits, Legal References.
@@ -46,13 +48,18 @@ Add `packages/udocket_core/agents/summarize_lib.py` implementing a pure‑Python
   - `SummarizeConfig`
     - `azure_openai_endpoint: str` — must be a Canadian region hostname (canadacentral/canadaeast) or blank to disable network.
     - `azure_openai_key: str`
-    - `azure_openai_deployment: str` — model deployment name (e.g., `gpt-4o-mini`).
+    - `azure_openai_deployment: str` — default deployment name; stages can override by model.
     - `azure_openai_api_version: str = "2024-08-01-preview"`
     - `language: str = "en-CA"`
-    - `temperature: float = 0.2`
-    - `max_output_tokens: int = 4000`
+    - `temperature: float = 1.0`
+    - `max_output_tokens: int = 24000`
+    - `max_prompt_segments: int = 120` (0 disables the segment cap)
+    - `max_prompt_chars: int = 8000` (0 disables the char cap)
+    - `default_stage_model: str | None`
+    - `stage_model_overrides: Dict[str, str]`
+    - `stage_max_output_tokens: Dict[str, int]`
     - `debug: bool = False`
-    - `@classmethod from_env()` — reads `.env` keys, validates endpoint locality, returns config.
+    - `@classmethod from_env()` — reads `.env`, validates endpoint locality, applies per-stage overrides.
   - `SummarizeResult`
     - `status: str`
     - `summary_file: Path`
@@ -157,8 +164,21 @@ Audit line in `ops/ops_summary.jsonl` mirrors the above in a single JSON object 
   - `AZURE_OPENAI_DEPLOYMENT` (e.g., `gpt-4o-mini`)
   - `AZURE_OPENAI_API_VERSION=2024-08-01-preview`
 - Optional:
-  - `SUMMARY_TEMPERATURE=0.2`, `SUMMARY_MAX_TOKENS=24000`
+  - `SUMMARY_TEMPERATURE=1.0`, `SUMMARY_MAX_TOKENS=24000`
+  - `SUMMARY_MAX_PROMPT_SEGMENTS`, `SUMMARY_MAX_PROMPT_CHARS`, `SUMMARY_CHARS_PER_TOKEN`
+  - `SUMMARY_MODEL` — global Azure stage model override
+  - `SUMMARY_STAGE_MODELS` — comma-separated or JSON map of stage identifiers to models (`summarize.extract_outline=gpt-5-mini`)
+  - `SUMMARY_STAGE_MAX_TOKENS` — per-stage completion budgets (`summarize.draft_markdown=9000,*=8000`)
+  - `SUMMARY_ALLOW_OFFLINE_FALLBACK`, `SUMMARY_FORCE_OFFLINE`
 - If Azure env is missing or invalid, agent automatically uses the offline fallback (short extract) and still emits all files and ops logs.
+
+
+## Stage Capabilities API
+- `SummarizeAgent.stage_catalog()` returns metadata for each stage:
+  - `label`, `description`, `resource_notes`
+  - `min_context_tokens`, `recommended_context_tokens`, `output_reserve_tokens`
+  - `recommended_models` (provider/model pairs with sufficient context window) and a full `eligible_models` list.
+- The UI can use this to surface model recommendations (e.g., “Outline Extractor prefers models with ≥100k tokens”).
 
 
 ## Celery/Platform Integration

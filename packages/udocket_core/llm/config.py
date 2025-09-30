@@ -17,6 +17,7 @@ class LLMProviderModel:
     label: str
     cost_tier: str
     max_output_tokens: Optional[int] = None
+    context_window_tokens: Optional[int] = None
     default_temperature: Optional[float] = None
     deployment_env: Optional[str] = None
 
@@ -76,6 +77,7 @@ def load_llm_settings(
                 label=model_cfg.get("label", model_name),
                 cost_tier=model_cfg.get("cost_tier", "standard"),
                 max_output_tokens=model_cfg.get("max_output_tokens"),
+                context_window_tokens=model_cfg.get("context_window_tokens"),
                 default_temperature=model_cfg.get("default_temperature"),
                 deployment_env=model_cfg.get("deployment_env"),
             )

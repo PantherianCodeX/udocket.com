@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 from ...common.azure_client import AzureChatClient
 from ...common.io import TranscriptParse
@@ -66,11 +66,32 @@ def _fallback_timeline(parse: TranscriptParse) -> List[Dict[str, Any]]:
     return events
 
 
+def _ensure_chunks(context: Any) -> List[str]:
+    if isinstance(context, str):
+        return [context]
+    if isinstance(context, Sequence):
+        result: List[str] = []
+        for item in context:
+            if not isinstance(item, str):
+                item = str(item)
+            if item:
+                result.append(item)
+        return result or [""]
+    return [str(context)]
+
+
+def _merge_usage(target: Dict[str, int], usage: Dict[str, Any]) -> None:
+    for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
+        value = usage.get(key)
+        if isinstance(value, int):
+            target[key] = target.get(key, 0) + value
+
+
 def generate_timeline(
     *,
     parse: TranscriptParse,
     outline_issues: List[Dict[str, Any]],
-    context_snippet: str,
+    context_snippet: Any,
     case_brief: Dict[str, Any],
     azure_client: Optional[AzureChatClient],
     temperature: float,
@@ -81,60 +102,75 @@ def generate_timeline(
         return TimelineStageResult(fallback, {})
 
     try:
-        system_prompt = (
-            "You are a legal timeline analyst. Produce normalized events with start/end offsets (seconds),"
-            " optional speakers, and descriptive labels."
-        )
-        user_prompt = (
-            "Use these transcript excerpts to generate events. Ensure every object includes labels array.\n"
-            f"Outline issues (for context): {json.dumps(outline_issues, ensure_ascii=False)}\n\n"
-            f"Case brief summary: {json.dumps(case_brief, ensure_ascii=False)}\n\n"
-            + context_snippet
-        )
-        content, usage = azure_client.chat(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=temperature,
-            max_tokens=min(max_tokens, 2000),
-            response_format={
-                "type": "json_schema",
-                "json_schema": {"name": "timeline_v1", "schema": TIMELINE_SCHEMA},
-            },
-        )
-        content_str = content.strip()
-        if not content_str:
-            logger.warning(
-                "Azure timeline stage returned empty content; falling back to transcript-derived events",
-            )
-            return TimelineStageResult(fallback, _usage_dict(usage))
-        try:
-            payload = json.loads(content_str)
-        except json.JSONDecodeError:
-            logger.warning(
-                "Azure timeline stage produced non-JSON payload; falling back to transcript-derived events",
-            )
-            return TimelineStageResult(fallback, _usage_dict(usage))
-        events = payload.get("events", []) if isinstance(payload, dict) else []
-        if not isinstance(events, list):
-            return TimelineStageResult(fallback, {})
-        normalized: List[Dict[str, Any]] = []
-        for item in events:
-            if not isinstance(item, dict):
+        chunks = _ensure_chunks(context_snippet)
+        aggregated: List[Dict[str, Any]] = []
+        usage_totals: Dict[str, int] = {}
+        signatures = set()
+        for index, chunk in enumerate(chunks, start=1):
+            chunk_text = chunk or ""
+            if not chunk_text.strip():
                 continue
-            normalized.append(
-                {
+            system_prompt = (
+                "You are a legal timeline analyst. Produce normalized events with start/end offsets (seconds),"
+                " optional speakers, and descriptive labels."
+            )
+            user_prompt = (
+                "Use these transcript excerpts to generate events. Ensure every object includes labels array.\n"
+                f"Outline issues (for context): {json.dumps(outline_issues, ensure_ascii=False)}\n\n"
+                f"Case brief summary: {json.dumps(case_brief, ensure_ascii=False)}\n\n"
+                f"Transcript excerpts (chunk {index}/{len(chunks)}):\n" + chunk_text
+            )
+            content, usage = azure_client.chat(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=temperature,
+                max_tokens=max(1, max_tokens),
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {"name": "timeline_v1", "schema": TIMELINE_SCHEMA},
+                },
+            )
+            content_str = content.strip()
+            if not content_str:
+                logger.warning(
+                    "Azure timeline stage returned empty content; continuing with aggregated results",
+                )
+                continue
+            try:
+                payload = json.loads(content_str)
+            except json.JSONDecodeError:
+                logger.warning(
+                    "Azure timeline stage produced non-JSON payload; skipping chunk",
+                )
+                continue
+            events = payload.get("events", []) if isinstance(payload, dict) else []
+            if not isinstance(events, list):
+                continue
+            for item in events:
+                if not isinstance(item, dict):
+                    continue
+                normalized = {
                     "ts_start": item.get("ts_start"),
                     "ts_end": item.get("ts_end"),
                     "speaker": item.get("speaker"),
                     "text": item.get("text", ""),
                     "labels": list(item.get("labels") or []),
                 }
-            )
-        if not normalized:
-            return TimelineStageResult(fallback, {})
-        return TimelineStageResult(normalized, _usage_dict(usage))
+                signature = (
+                    normalized["ts_start"],
+                    normalized["ts_end"],
+                    normalized["speaker"],
+                    normalized["text"],
+                )
+                if signature not in signatures:
+                    aggregated.append(normalized)
+                    signatures.add(signature)
+            _merge_usage(usage_totals, usage)
+        if not aggregated:
+            return TimelineStageResult(fallback, usage_totals)
+        return TimelineStageResult(aggregated, usage_totals)
     except Exception as exc:
         raise AzureStageFailure("timeline", exc, TimelineStageResult(fallback, {})) from exc
 

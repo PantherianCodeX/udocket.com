@@ -101,7 +101,7 @@ def generate_summary_markdown(
     timeline: List[Dict[str, Any]],
     entities: Dict[str, Any],
     intake: Dict[str, Any],
-    context_snippet: str,
+    context_snippet: Any,
     case_brief: Dict[str, Any],
     azure_client: Optional[AzureChatClient],
     temperature: float,
@@ -112,6 +112,8 @@ def generate_summary_markdown(
         return DraftStageResult(fallback, {})
 
     try:
+        if isinstance(context_snippet, (list, tuple)):
+            context_snippet = context_snippet[0] if context_snippet else ""
         system_prompt = (
             "You are a Canadian paralegal writing a layered legal summary for colleagues preparing court forms."
             " Include required sections: Case metadata, Executive summary (bullets), Detailed narrative,"
@@ -138,7 +140,7 @@ def generate_summary_markdown(
                 {"role": "user", "content": user_prompt},
             ],
             temperature=temperature,
-            max_tokens=min(max_tokens, 4000),
+            max_tokens=max(1, max_tokens),
         )
         markdown = (content or "").strip()
         if not markdown:

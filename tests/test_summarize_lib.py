@@ -1,14 +1,20 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
+from typing import Any, Dict
 
 import pytest
 
 from packages.udocket_core.agents import build_summarize_graph
 from packages.udocket_core.agents.summarize_lib import (
+    LLM_STAGE_KEYS,
+    SUMMARIZE_STAGE_PROFILES,
+    StageRuntime,
     SummarizeAgent,
     SummarizeConfig,
+    SummarizePipeline,
     TranscriptSegment,
     parse_transcript,
 )
@@ -182,6 +188,107 @@ def test_summarize_agent_adds_default_header(tmp_path):
 
     summary_text = result.summary_file.read_text(encoding="utf-8")
     assert summary_text.startswith("# Summary for case CASE-3 (job JOB-3)")
+
+
+def test_config_stage_model_override(monkeypatch):
+    monkeypatch.delenv("SUMMARY_STAGE_MODELS", raising=False)
+    monkeypatch.delenv("SUMMARY_STAGE_MAX_TOKENS", raising=False)
+    monkeypatch.delenv("SUMMARY_MODEL", raising=False)
+    monkeypatch.setenv("SUMMARY_STAGE_MODELS", "summarize.extract_outline:gpt-5-mini,qa_and_finalize=gpt-4o")
+
+    cfg = SummarizeConfig.from_env()
+
+    assert cfg.stage_model_for("summarize.extract_outline") == "gpt-5-mini"
+    assert cfg.stage_model_for("summarize.qa_and_finalize") == "gpt-4o"
+    assert cfg.stage_model_for("summarize.draft_markdown") is None
+
+
+def test_config_stage_max_tokens_override(monkeypatch):
+    monkeypatch.delenv("SUMMARY_STAGE_MAX_TOKENS", raising=False)
+    monkeypatch.setenv("SUMMARY_STAGE_MAX_TOKENS", "summarize.extract_outline=12000,*=9000")
+
+    cfg = SummarizeConfig.from_env()
+    outline_tokens = cfg.stage_max_tokens_for("summarize.extract_outline", 16000, None)
+    draft_tokens = cfg.stage_max_tokens_for("summarize.draft_markdown", 16000, None)
+
+    assert outline_tokens == 12000
+    assert draft_tokens == 9000
+
+
+def test_stage_catalog_lists_recommended_models(monkeypatch):
+    monkeypatch.delenv("SUMMARY_STAGE_MODELS", raising=False)
+    monkeypatch.delenv("SUMMARY_MODEL", raising=False)
+    agent = SummarizeAgent(SummarizeConfig())
+
+    catalog = agent.stage_catalog()
+    outline_info = catalog["summarize.extract_outline"]
+
+    assert outline_info["resource_notes"]
+    assert outline_info["recommended_models"]
+    for entry in outline_info["recommended_models"]:
+        tokens = entry.get("context_window_tokens")
+        if tokens is not None:
+            assert tokens >= outline_info["recommended_context_tokens"]
+
+
+def test_build_context_respects_config_limits(tmp_path):
+    transcript = tmp_path / "demo.txt"
+    _write_transcript(
+        transcript,
+        "Heading\n-----------------\n"
+        + "\n".join(f"[00:{i:02d}] SPK_{i % 2}: line {i}" for i in range(1, 25))
+    )
+    parse = parse_transcript(transcript)
+    cfg = SummarizeConfig(
+        max_prompt_segments=5,
+        prompt_segments_override=5,
+        max_prompt_chars=80,
+        prompt_chars_override=80,
+    )
+
+    stage_runtimes: Dict[str, StageRuntime] = {}
+    for stage_key in LLM_STAGE_KEYS.values():
+        profile = SUMMARIZE_STAGE_PROFILES[stage_key]
+        stage_runtimes[stage_key] = StageRuntime(
+            stage_key=stage_key,
+            providers=["azure"],
+            model="gpt-5-mini",
+            azure_client=None,
+            max_output_tokens=profile.min_context_tokens,
+            context_window_tokens=200000,
+            profile=profile,
+            allow_local_fallback=False,
+            temperature=cfg.temperature,
+        )
+
+    def resolve_transcript(input_path, case_dir):
+        return transcript
+
+    pipeline = SummarizePipeline(
+        case_id="CASE-CTX",
+        job_id="JOB-CTX",
+        case_dir=tmp_path,
+        intake={},
+        transcript_hint=None,
+        config=cfg,
+        resolve_transcript=resolve_transcript,
+        build_context=lambda p, _: "",
+        provider_chain=["azure"],
+        stage_runtimes=stage_runtimes,
+        default_temperature=cfg.temperature,
+        global_allow_offline=False,
+    )
+
+    state: Dict[str, Any] = {"parse": parse}
+    pipeline.context_builder(state)
+    outline_chunks = state["context_chunks"]["summarize.extract_outline"]
+    first_chunk = outline_chunks[0]
+    lines = first_chunk.splitlines()
+
+    assert len(lines) <= cfg.prompt_segments_override
+    total_chars = sum(len(line) for line in lines)
+    max_line = max((len(line) for line in lines), default=0)
+    assert total_chars <= cfg.prompt_chars_override + max_line
 
 
 def test_azure_failure_requires_consent(monkeypatch, tmp_path):
