@@ -22,6 +22,11 @@ from .analysis import enrich_summary_artifacts, enrich_timeline_artifacts
 from .analysis_modules import analysis_modules_context, artifact_payload, latest_successful_transcription_job
 from .analysis_llm import build_analysis_llm_context
 from .case_fields import prepare_case_fields
+from .guardian import (
+    collect_guardian_reviews,
+    guardian_stats_from_reviews,
+    guardian_violation_entries,
+)
 from ..presenters.jobs import (
     friendly_job_title,
     job_most_recent_timestamp,
@@ -76,7 +81,12 @@ def case_assignment_lists(case: Case, memberships: Optional[List[CaseMembership]
     }
 
 
-def build_case_progress(case: Case, jobs: List[Job], telemetry_map: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
+def build_case_progress(
+    case: Case,
+    jobs: List[Job],
+    telemetry_map: Dict[str, Dict[str, Any]],
+    guardian_stats: Optional[Dict[str, Any]] = None,
+) -> List[Dict[str, Any]]:
     latest = latest_jobs_by_agent(jobs, telemetry_map)
     items: List[Dict[str, Any]] = []
 
@@ -143,7 +153,32 @@ def build_case_progress(case: Case, jobs: List[Job], telemetry_map: Dict[str, Di
                 }
             )
 
+    guardian_stats = guardian_stats or {}
+    guardian_total = int(guardian_stats.get("total_reviews") or 0)
+    guardian_status = guardian_stats.get("status_label")
+    if not guardian_status:
+        guardian_status = "Not Started" if guardian_total == 0 else "Monitoring"
+    guardian_detail = guardian_stats.get("status_detail") or (
+        "Guardian has not reviewed any artifacts yet." if guardian_total == 0 else "Guardian reviews are in progress."
+    )
+    guardian_updated = guardian_stats.get("latest_reviewed_at_dt")
+
+    items.append(
+        {
+            "key": "guardian",
+            "label": "Guardian",
+            "status": guardian_status,
+            "status_class": status_class(guardian_status),
+            "detail": guardian_detail,
+            "updated": guardian_updated,
+            "job": None,
+            "telemetry": None,
+        }
+    )
+
     return items
+
+
 
 
 def case_progress_context(
@@ -151,9 +186,10 @@ def case_progress_context(
     jobs: List[Job],
     telemetry_map: Dict[str, Dict[str, Any]],
     memberships: Optional[List[CaseMembership]] = None,
+    guardian_stats: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     assignments = case_assignment_lists(case, memberships)
-    progress_items = build_case_progress(case, jobs, telemetry_map)
+    progress_items = build_case_progress(case, jobs, telemetry_map, guardian_stats)
     transcription_item = next((item for item in progress_items if item.get("key") == "transcription"), None)
     return {
         "progress_items": progress_items,
@@ -162,6 +198,7 @@ def case_progress_context(
         "current_reviewer_label": user_label(case.reviewer) if case.reviewer else None,
         "current_client_label": user_label(case.client_user) if case.client_user else None,
         "transcription_review_status": transcription_item.get("status") if transcription_item else None,
+        "guardian_stats": guardian_stats or {},
     }
 
 
@@ -249,7 +286,7 @@ def status_payload(progress_lookup: Dict[str, Dict[str, Any]], key: str, default
 
 
 def build_case_developer_cards(panels: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
-    order = ["case-details", "transcribe", "summary", "timeline"]
+    order = ["case-details", "transcribe", "summary", "timeline", "guardian"]
     cards: List[Dict[str, Any]] = []
     for key in order:
         panel = panels.get(key)
@@ -343,9 +380,15 @@ def build_tool_panels(
     job_summary_last_dt: Optional[datetime] = None,
     user_can_review: bool = False,
     return_url: str = "",
+    guardian_stats: Optional[Dict[str, Any]] = None,
+    guardian_reviews: Optional[List[Dict[str, Any]]] = None,
+    guardian_violations: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Dict[str, Any]]:
     progress_lookup = {item["key"]: item for item in progress_items}
     analysis_lookup = {module["key"]: module for module in analysis_modules}
+    guardian_reviews = guardian_reviews or collect_guardian_reviews(artifacts)
+    guardian_stats = guardian_stats or guardian_stats_from_reviews(guardian_reviews)
+    guardian_violations = guardian_violations or guardian_violation_entries(guardian_reviews)
     owner_labels = case_owner_labels(memberships)
     owner_ids = [str(m.user_id) for m in case_owner_memberships(memberships)]
     reviewer_label = user_label(case.reviewer) if case.reviewer else None
@@ -394,6 +437,15 @@ def build_tool_panels(
 
     for bucket in ("SUMMARY", "TIMELINE", "TRANSCRIPT"):
         artifacts_by_type.setdefault(bucket, [])
+
+    guardian_job_rows: List[Dict[str, Any]] = []
+    for row in all_rows_iterable:
+        if row.get("is_child"):
+            continue
+        telemetry_payload = row.get("telemetry") or {}
+        metadata_payload = telemetry_payload.get("metadata") or {}
+        if metadata_payload.get("guardian_last_review"):
+            guardian_job_rows.append(row)
 
     panels: Dict[str, Dict[str, Any]] = {}
 
@@ -679,6 +731,54 @@ def build_tool_panels(
             column_ids=[col["id"] for col in GLOBAL_JOB_TABLE_COLUMNS],
             filters=DEFAULT_TABLE_FILTERS,
             empty_message="No timeline jobs yet. Generate a timeline above.",
+            show_identifiers=False,
+            case_id=str(case.id),
+        ),
+    }
+
+    guardian_status_meta = status_payload(progress_lookup, "guardian", "Not Started")
+    report_url = reverse("ui-case-guardian-report", kwargs={"case_id": case.id})
+    violations_preview = guardian_violations[:5] if guardian_violations else []
+    panels["guardian"] = {
+        "key": "guardian",
+        "label": "Guardian",
+        "description": "Review compliance findings, flagged violations, and Guardian activity.",
+        "status_label": guardian_status_meta["label"],
+        "status_class": guardian_status_meta["class"],
+        "updated_at": guardian_stats.get("latest_reviewed_at_dt") if guardian_stats else guardian_status_meta.get("updated"),
+        "progress_detail": guardian_status_meta.get("detail") or (guardian_stats.get("status_detail") if guardian_stats else None),
+        "meta": [
+            {"label": "Reviews", "value": guardian_stats.get("total_reviews", 0) if guardian_stats else 0},
+            {"label": "Flagged", "value": guardian_stats.get("rejected", 0) if guardian_stats else 0},
+            {"label": "Violations", "value": guardian_stats.get("violation_count", 0) if guardian_stats else 0},
+        ],
+        "body_template": "platform_ui/tools/guardian.html",
+        "body_context": {
+            "case": case,
+            "stats": guardian_stats,
+            "reviews": guardian_reviews,
+            "violations": guardian_violations,
+            "violations_preview": violations_preview,
+            "report_url": report_url,
+        },
+        "jobs": guardian_job_rows,
+        "jobs_title": "Guardian Jobs",
+        "jobs_pill": "Compliance",
+        "jobs_empty_message": "No jobs with Guardian telemetry yet.",
+        "case_id": str(case.id),
+        "jobs_columns": list(GLOBAL_JOB_TABLE_COLUMNS),
+        "jobs_column_ids": [col["id"] for col in GLOBAL_JOB_TABLE_COLUMNS],
+        "jobs_filters": DEFAULT_TABLE_FILTERS,
+        "jobs_show_identifiers": False,
+        "jobs_table": table_config(
+            panel_key="guardian",
+            title="Guardian Jobs",
+            pill="Compliance",
+            rows=guardian_job_rows,
+            columns=GLOBAL_JOB_TABLE_COLUMNS,
+            column_ids=[col["id"] for col in GLOBAL_JOB_TABLE_COLUMNS],
+            filters=DEFAULT_TABLE_FILTERS,
+            empty_message="No jobs with Guardian telemetry yet.",
             show_identifiers=False,
             case_id=str(case.id),
         ),

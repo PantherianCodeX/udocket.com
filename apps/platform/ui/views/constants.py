@@ -14,6 +14,10 @@ STATUS_CLASS_MAP: Dict[str, str] = {
     "Not Started": "border-white/20 bg-white/5 text-slate-200",
     "No Transcript": "border-amber-400/40 bg-amber-500/10 text-amber-100",
     "Corrupted": "border-rose-400/40 bg-rose-500/15 text-rose-200",
+    "Monitoring": "border-emerald-400/40 bg-emerald-500/10 text-emerald-200",
+    "Flagged": "border-rose-400/40 bg-rose-500/15 text-rose-200",
+    "Skipped": "border-amber-400/40 bg-amber-500/10 text-amber-100",
+    "Error": "border-rose-400/40 bg-rose-500/15 text-rose-200",
 }
 
 STATUS_PILL_STYLES: Dict[str, str] = {

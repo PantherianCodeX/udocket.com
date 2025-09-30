@@ -15,6 +15,7 @@ from .cases import (
     case_tool_panel,
     case_update_title,
 )
+from .cases.guardian import case_guardian_report
 from .contexts import (
     compute_case_tool_state,
     format_metadata,
@@ -72,6 +73,7 @@ __all__ = [
     "case_job_update_title",
     "case_tool_panel",
     "case_update_title",
+    "case_guardian_report",
     "create_job",
     "summary_upload_transcript_text",
     "favicon",

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
+from urllib.parse import quote
 
 import pytest
 
@@ -14,59 +14,40 @@ def test_build_tool_panels_appends_return_url(monkeypatch):
     org = Organization.objects.create(id="ORG-PANELS", name="Panels Org")
     case = Case.objects.create(id="CASE-PANELS", title="Panels Case", organization=org)
 
-    dummy_cfg = SimpleNamespace(provider_chain=["azure"])
-    monkeypatch.setattr(presenters.SummarizeConfig, "from_env", classmethod(lambda cls: dummy_cfg))
-    class DummyAssignment:
-        def __init__(self, stage_key: str, target: str):
-            self.stage_key = stage_key
-            self.target = target
-            self.label = stage_key.replace("_", " ").title()
-            self.description = ""
-            self.providers = ["azure"]
-            self.model = "gpt"
-            self.options = {}
-            self.max_tokens = 4096
-
-    class DummySettings:
-        def __init__(self):
-            self.assignments = {
-                "summary_main": DummyAssignment("summary_main", "summary"),
-                "timeline_main": DummyAssignment("timeline_main", "timeline"),
+    def fake_llm_context(_case: Case, return_url: str):
+        encoded_next = quote(return_url, safe="")
+        def ctx(target: str) -> dict[str, object]:
+            return {
+                "target": target,
+                "provider_chain": [],
+                "provider_chain_json": "[]",
+                "configurations": [],
+                "configurations_json": "[]",
+                "active_configuration": None,
+                "active_configuration_json": "{}",
+                "configured_stages": [],
+                "stage_configs": [],
+                "stage_configs_json": "[]",
+                "stage_map_json": "{}",
+                "urls": {
+                    "base": "#",
+                    "edit": f"#?next={encoded_next}",
+                    "new": f"#?next={encoded_next}",
+                    "tuning": "#",
+                },
+                "return_url": return_url,
             }
 
-        def stage(self, stage_key: str) -> DummyAssignment:
-            return self.assignments.get(stage_key, DummyAssignment(stage_key, "summary"))
+        return {"summary": ctx("summary"), "timeline": ctx("timeline")}
 
-    monkeypatch.setattr(presenters, "load_llm_settings", lambda: DummySettings())
-    monkeypatch.setattr(presenters, "load_provider_catalog", lambda: {})
-    monkeypatch.setattr(presenters, "get_org_provider_credentials", lambda org_id: {})
-    monkeypatch.setattr(
-        presenters,
-        "build_provider_registry",
-        lambda **kwargs: {
-            "azure": {
-                "label": "Azure",
-                "available": True,
-                "configured": True,
-            }
-        },
-    )
-
-    def _org_configs(_org_id: str, target: str):
-        return [{"id": f"{target}-config", "name": f"{target.title()} Config", "is_default": True}]
-
-    def _active_config(*_args, target: str, **_kwargs):
-        return {"id": f"{target}-config", "stage_map": {}, "provider_chain": ["azure"]}
-
-    monkeypatch.setattr(presenters, "get_org_llm_configurations", _org_configs)
-    monkeypatch.setattr(presenters, "get_llm_configuration", _active_config)
-    monkeypatch.setattr(presenters, "ensure_default_llm_configuration", lambda **kwargs: None)
+    monkeypatch.setattr(presenters, "build_analysis_llm_context", fake_llm_context)
 
     progress_items = [
         {"key": "case_setup", "status": "Ready", "status_class": "ok", "updated": None, "detail": None},
         {"key": "transcription", "status": "Idle", "status_class": "idle", "updated": None, "detail": None},
         {"key": "summary", "status": "Idle", "status_class": "idle", "updated": None, "detail": None},
         {"key": "timeline", "status": "Idle", "status_class": "idle", "updated": None, "detail": None},
+        {"key": "guardian", "status": "Not Started", "status_class": "idle", "updated": None, "detail": None},
     ]
 
     analysis_modules = [
@@ -99,3 +80,5 @@ def test_build_tool_panels_appends_return_url(monkeypatch):
     assert expected_suffix in timeline_urls["edit"]
     assert expected_suffix in timeline_urls["new"]
     assert panels["summary"]["body_context"]["summary_llm"]["return_url"] == f"/cases/{case.id}/"
+    assert "guardian" in panels
+    assert panels["guardian"]["body_context"]["report_url"].endswith(f"/cases/{case.id}/guardian/report/")

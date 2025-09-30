@@ -13,7 +13,11 @@ from apps.platform.cases.models import Case
 from apps.platform.jobs.models import Job
 from apps.platform.tenancy import scope_jobs
 
-from ..presenters.cases import case_progress_context
+from ..presenters.cases import case_progress_context, collect_case_artifacts
+from ..presenters.guardian import (
+    collect_guardian_reviews,
+    guardian_stats_from_reviews,
+)
 from ..selectors import job_telemetry_map
 
 
@@ -30,6 +34,8 @@ TOOL_KEY_ALIASES = {
     "summary": "summary",
     "summaries": "summary",
     "timeline": "timeline",
+    "guardian": "guardian",
+    "compliance": "guardian",
 }
 
 
@@ -54,7 +60,18 @@ def case_progress_response(request: HttpRequest, case: Case) -> HttpResponse:
     jobs_list: Iterable[Job] = scope_jobs(jobs_qs, getattr(request, "user", None))
     jobs_sequence = list(jobs_list)
     telemetry_map = job_telemetry_map(jobs_sequence, request)
-    context = {"case": case, **case_progress_context(case, jobs_sequence, telemetry_map)}
+    artifacts = collect_case_artifacts(request, case)
+    guardian_reviews = collect_guardian_reviews(artifacts)
+    guardian_stats = guardian_stats_from_reviews(guardian_reviews)
+    context = {
+        "case": case,
+        **case_progress_context(
+            case,
+            jobs_sequence,
+            telemetry_map,
+            guardian_stats=guardian_stats,
+        ),
+    }
     return render(request, "platform_ui/components/cases/case_progress.html", context)
 
 

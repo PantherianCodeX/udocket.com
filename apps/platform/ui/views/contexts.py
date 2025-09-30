@@ -31,6 +31,11 @@ from .presenters.cases import (
 )
 from .presenters.case_fields import prepare_case_fields
 from .presenters.analysis_modules import analysis_modules_context
+from .presenters.guardian import (
+    collect_guardian_reviews,
+    guardian_stats_from_reviews,
+    guardian_violation_entries,
+)
 from .presenters.jobs import build_job_rows, friendly_job_title
 from .presenters.utils import render_audio_brief_panel_html, render_notes_panel_html
 from apps.platform.jobs.notes import serialize_notes
@@ -136,11 +141,22 @@ def compute_case_tool_state(request: HttpRequest, case: Case) -> Dict[str, Any]:
             is_child=bool(row.get("is_child")),
         )
 
-    progress_ctx = case_progress_context(case, jobs_list, telemetry_map, memberships)
     analysis_modules = analysis_modules_context(
         request, case, jobs_list, telemetry_map, transcript_artifacts
     )
     artifacts_all = collect_case_artifacts(request, case)
+
+    guardian_reviews = collect_guardian_reviews(artifacts_all)
+    guardian_stats = guardian_stats_from_reviews(guardian_reviews)
+    guardian_violations = guardian_violation_entries(guardian_reviews)
+
+    progress_ctx = case_progress_context(
+        case,
+        jobs_list,
+        telemetry_map,
+        memberships,
+        guardian_stats=guardian_stats,
+    )
 
     return_url = request.get_full_path()
 
@@ -160,6 +176,9 @@ def compute_case_tool_state(request: HttpRequest, case: Case) -> Dict[str, Any]:
         job_summary_last_dt=job_summary_last_dt,
         user_can_review=user_can_review,
         return_url=return_url,
+        guardian_stats=guardian_stats,
+        guardian_reviews=guardian_reviews,
+        guardian_violations=guardian_violations,
     )
 
     case_details_panel = tool_panels.get("case-details") or {}

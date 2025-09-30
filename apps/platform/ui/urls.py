@@ -38,6 +38,11 @@ urlpatterns = [
         name="ui-case-analysis-module",
     ),
     path(
+        "cases/<str:case_id>/guardian/report/",
+        views.case_guardian_report,
+        name="ui-case-guardian-report",
+    ),
+    path(
         "cases/<str:case_id>/tools/case-details/update/",
         views.case_details_update,
         name="ui-case-details-update",
