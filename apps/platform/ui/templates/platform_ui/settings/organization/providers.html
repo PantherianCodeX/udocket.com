@@ -10,8 +10,9 @@
       <input type="hidden" name="models_payload_compiled" value="" data-provider-models-compiled>
       <input type="hidden" name="model_test_payload" data-provider-model-test-payload>
       <div class="grid gap-4">
+        <input type="hidden" name="provider" value="" data-provider-key>
         <label class="text-sm text-slate-200">Provider
-          <select name="provider" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" data-provider-select>
+          <select name="_provider_select" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" data-provider-select>
             <option value="">Select a provider</option>
             {% for key, meta in provider_catalog.items %}
               <option value="{{ key }}" {% if selected_provider == key %}selected{% endif %}>{{ meta.display_name|default:key|title }}</option>

@@ -227,6 +227,7 @@
 
     const form = panel.querySelector('[data-provider-form]');
     const select = form?.querySelector('[data-provider-select]');
+    const providerKeyHidden = form?.querySelector('[data-provider-key]');
     const displayInput = form?.querySelector('[data-provider-display]');
     const endpointInput = form?.querySelector('[data-provider-endpoint]');
     const apiKeyInput = form?.querySelector('[data-provider-apikey]');
@@ -348,6 +349,7 @@
     }) {
       if (!form) return;
       if (select) select.value = providerKey || '';
+      if (providerKeyHidden) providerKeyHidden.value = providerKey || '';
       if (displayInput) displayInput.value = displayName || '';
       if (endpointInput) endpointInput.value = endpoint || '';
       if (apiKeyInput) apiKeyInput.value = '';
@@ -396,6 +398,7 @@
         metadata: {},
       });
       if (templateSelect) templateSelect.value = '';
+      if (providerKeyHidden) providerKeyHidden.value = '';
       setDeleteVisible(false);
       select && select.focus();
     }
@@ -455,6 +458,7 @@
       } else {
         resetForm();
       }
+      if (providerKeyHidden) providerKeyHidden.value = key || '';
     });
 
     templateApplyBtn?.addEventListener('click', () => {
