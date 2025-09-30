@@ -362,8 +362,10 @@ def jobs_by_agent(
             if children
             else []
         )
-        if _matches(row) or filtered_children:
+        if _matches(row):
             new_row = dict(row)
             new_row["children"] = filtered_children
             filtered.append(new_row)
+        elif filtered_children:
+            filtered.extend(filtered_children)
     return filtered

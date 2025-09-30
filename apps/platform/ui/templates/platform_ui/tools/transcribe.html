@@ -12,6 +12,9 @@
       </div>
       <div class="flex flex-wrap items-center gap-3 text-xs text-slate-300">
         <span class="status-pill inline-flex items-center rounded-full border border-white/20 bg-white/5 px-2 py-0.5 text-[11px] font-semibold uppercase text-slate-200" data-transcribe-status-pill>Idle</span>
+        {% if body.downloads %}
+          {% include "platform_ui/tools/components/_download_menu.html" with downloads=body.downloads label="Downloads" %}
+        {% endif %}
       </div>
     </div>
     <div class="mt-4 hidden" data-transcribe-progress>

@@ -19,6 +19,7 @@ from apps.platform.cases.models import Case, CaseMembership
 from apps.platform.jobs.models import Job, JobNote
 
 from ..constants import CASE_JOB_TABLE_COLUMNS, DEFAULT_TABLE_FILTERS, GLOBAL_JOB_TABLE_COLUMNS
+from ..common import as_dict
 from ..presenters.utils import status_class, user_label
 from .analysis import enrich_summary_artifacts, enrich_timeline_artifacts
 from ..presenters.jobs import (
@@ -320,6 +321,16 @@ def analysis_modules_context(
                 "user_can_add": _user_can_add_notes(user, case),
             }
 
+        downloads: List[Dict[str, Any]] = []
+        if latest and latest.get("download_url"):
+            downloads.append(
+                {
+                    "label": "Download",
+                    "href": latest.get("download_url"),
+                    "download": True,
+                }
+            )
+
         return {
             "key": key,
             "label": label,
@@ -331,6 +342,8 @@ def analysis_modules_context(
             "header_hint_time": latest["created_at"] if latest else None,
             "latest": latest,
             "history": history,
+            "downloads": downloads,
+            "latest_details": as_dict(latest.get("details")) if latest else {},
             "empty_message": empty_message,
             "target_job": target_job,
             "action": {
@@ -927,6 +940,24 @@ def build_tool_panels(
             transcript_artifacts.get(str(latest_job.id)),
         )
 
+    latest_downloads: List[Dict[str, Any]] = []
+    if latest_job:
+        job_id_str = str(latest_job.id)
+        latest_downloads.append(
+            {
+                "label": "Download transcript",
+                "href": f"/api/v1/jobs/{job_id_str}/download/",
+                "download": True,
+            }
+        )
+        latest_downloads.append(
+            {
+                "label": "Download audio",
+                "href": f"/api/v1/jobs/{job_id_str}/download-audio/",
+                "download": True,
+            }
+        )
+
     panels["transcribe"] = {
         "key": "transcribe",
         "label": "Transcribe",
@@ -959,6 +990,7 @@ def build_tool_panels(
             "latest_job": latest_job,
             "latest_job_telemetry": latest_job_telemetry,
             "latest_job_title": latest_job_title,
+            "downloads": latest_downloads,
             "transcript_sources": transcript_sources,
             "approved_transcripts": [item for item in transcript_sources if item.get("approved")],
             "can_review": user_can_review,

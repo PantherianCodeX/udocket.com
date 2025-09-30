@@ -1,3 +1,5 @@
+from typing import Any, Dict
+
 import pytest
 
 from apps.platform.accounts.models import Organization
@@ -69,3 +71,41 @@ def test_build_job_rows_includes_running_summary_job_status():
     assert table_meta["status_display"] == "Running"
     assert "running" in table_meta["filter"]
     assert table_meta["job_kind"] == "summary"
+
+
+def _row(job: Job, metadata: Dict[str, object], *, title: str = "Job") -> Dict[str, Any]:
+    return {
+        "job": job,
+        "telemetry": {"metadata": metadata},
+        "title": title,
+        "children": [],
+        "is_child": False,
+        "group_id": str(job.id),
+        "root_id": str(job.id),
+        "parent_id": "",
+    }
+
+
+@pytest.mark.django_db()
+def test_jobs_by_agent_excludes_non_matching_parents():
+    case, parent_job = _make_case_with_job()
+    child_job = Job.objects.create(case=case, audio_input="/tmp/summary.wav", status=Job.Status.SUCCEEDED)
+
+    parent_row = _row(parent_job, {"job_kind": "transcription"}, title="Transcription Parent")
+    child_row = _row(
+        child_job,
+        {
+            "job_kind": "summary",
+            "summary_file": "/tmp/summary.txt",
+        },
+        title="Summary Child",
+    )
+    child_row["is_child"] = True
+    child_row["parent_id"] = parent_row["group_id"]
+    child_row["root_id"] = parent_row["group_id"]
+    parent_row["children"] = [child_row]
+
+    rows = presenters.jobs_by_agent([parent_row], keywords=("summary",))
+
+    assert len(rows) == 1
+    assert rows[0]["job"].id == child_job.id
