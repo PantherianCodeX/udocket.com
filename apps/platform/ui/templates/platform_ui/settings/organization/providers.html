@@ -163,7 +163,6 @@
           <tr>
             <th class="px-4 py-3 text-left">Provider</th>
             <th class="px-4 py-3 text-left">Status</th>
-            <th class="px-4 py-3 text-left">Actions</th>
             <th class="px-4 py-3 text-left">Models</th>
           </tr>
         </thead>
@@ -211,31 +210,7 @@
                 <div class="mt-2 text-[11px] text-slate-400">{{ provider.unavailable_reason }}</div>
               {% endif %}
             </td>
-            <td class="px-4 py-4 align-top text-xs text-slate-200">
-              <div class="flex flex-wrap items-center justify-start gap-2" data-provider-actions>
-                <form method="post" class="inline" data-provider-test>
-                  {% csrf_token %}
-                  <input type="hidden" name="action" value="provider-test">
-                  <input type="hidden" name="provider" value="{{ provider.key }}">
-                  <button type="submit" class="inline-flex items-center gap-1 rounded-lg border border-primary-400/40 bg-primary-500/10 px-3 py-1 text-xs font-semibold text-primary-100 transition hover:bg-primary-500/20">Test</button>
-                </form>
-                <button type="button" class="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-200 transition hover:border-primary-400 hover:text-white" data-provider-edit>
-                  Edit
-                </button>
-                <form method="post" class="inline" data-provider-delete>
-                  {% csrf_token %}
-                  <input type="hidden" name="action" value="provider-delete">
-                  <input type="hidden" name="provider" value="{{ provider.key }}">
-                  <button type="submit" class="rounded-lg border border-rose-500/40 bg-rose-500/20 px-3 py-1 text-xs text-rose-100 transition hover:bg-rose-500/30">Delete</button>
-                </form>
-                <form method="post" class="hidden" data-provider-toggle-form>
-                  {% csrf_token %}
-                  <input type="hidden" name="action" value="provider-toggle">
-                  <input type="hidden" name="provider" value="{{ provider.key }}">
-                  <input type="hidden" name="enabled" value="1">
-                </form>
-              </div>
-            </td>
+            {# TODO: Re-introduce Actions column (Test/Edit/Delete) in a future UI update #}
             <td class="px-4 py-4 align-top text-xs text-slate-200">
               {% if provider.models %}
                 <ul class="space-y-2" data-provider-model-list>
