@@ -369,12 +369,18 @@ def build_provider_registry(
             "available": available,
             "supported": runtime_supported,
             "configured": configured,
-            "default_endpoint": catalog_entry.get("default_endpoint"),
-            "requires_api_key": bool(catalog_entry.get("requires_api_key", True)),
+            "default_endpoint": provider.default_endpoint or catalog_entry.get("default_endpoint"),
+            "requires_api_key": bool(
+                catalog_entry.get("requires_api_key")
+                if "requires_api_key" in catalog_entry
+                else provider.requires_api_key
+            ),
             "unavailable_reason": reason,
             "endpoint": credential_entry.get("endpoint"),
             "models": _catalog_models_to_options(provider.models),
             "source": "catalog",
+            "api_kind": provider.api_kind,
+            "description": provider.description or catalog_entry.get("description", ""),
         }
 
     for provider_name, credential in provider_credentials.items():
@@ -410,6 +416,8 @@ def build_provider_registry(
             "endpoint": credential.get("endpoint"),
             "models": _credential_models_to_options(credential.get("models") or []),
             "source": "credential",
+            "api_kind": credential.get("api_kind") or "custom",
+            "description": credential.get("description") or "",
         }
 
     return registry

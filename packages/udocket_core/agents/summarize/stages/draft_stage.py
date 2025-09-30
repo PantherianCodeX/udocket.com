@@ -5,8 +5,8 @@ from typing import Any, Dict, List, Optional
 
 import json
 
-from ...common.azure_client import AzureChatClient
 from ...common.io import TranscriptParse
+from packages.udocket_core.llm.runtime import ChatClient
 
 
 @dataclass
@@ -33,12 +33,12 @@ def generate_summary_markdown(
     intake: Dict[str, Any],
     context_snippet: Any,
     case_brief: Dict[str, Any],
-    azure_client: Optional[AzureChatClient],
+    llm_client: Optional[ChatClient],
     temperature: float,
     max_tokens: int,
 ) -> DraftStageResult:
-    if azure_client is None:
-        raise RuntimeError("Azure client is required for summary stage")
+    if llm_client is None:
+        raise RuntimeError("LLM client is required for summary stage")
 
     try:
         if isinstance(context_snippet, (list, tuple)):
@@ -63,7 +63,7 @@ def generate_summary_markdown(
             "Transcript excerpts:\n"
             f"{context_snippet}\n"
         )
-        content, usage = azure_client.chat(
+        content, usage = llm_client.chat(
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
@@ -73,10 +73,10 @@ def generate_summary_markdown(
         )
         markdown = (content or "").strip()
         if not markdown:
-            raise RuntimeError("Azure summary stage returned empty content")
+            raise RuntimeError("LLM summary stage returned empty content")
         return DraftStageResult(markdown, _usage_dict(usage))
     except Exception as exc:
-        raise RuntimeError(f"Azure summary stage failed: {exc}") from exc
+        raise RuntimeError(f"Summary stage failed: {exc}") from exc
 
 
 __all__ = ["DraftStageResult", "generate_summary_markdown"]

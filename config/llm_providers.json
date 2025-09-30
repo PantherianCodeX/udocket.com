@@ -56,7 +56,8 @@
           "default_temperature": 1.0,
           "deployment_env": "AZURE_OPENAI_DEPLOYMENT_GPT_5_NANO"
         }
-      }
+      },
+      "api_kind": "azure_openai"
     },
     "openai": {
       "display_name": "OpenAI",
@@ -82,7 +83,8 @@
           "cost_tier": "premium",
           "max_output_tokens": 32000
         }
-      }
+      },
+      "api_kind": "openai"
     },
     "anthropic": {
       "display_name": "Anthropic Claude",
@@ -103,7 +105,8 @@
           "cost_tier": "standard",
           "max_output_tokens": 4000
         }
-      }
+      },
+      "api_kind": "anthropic"
     },
     "google": {
       "display_name": "Google Gemini",
@@ -124,7 +127,8 @@
           "cost_tier": "standard",
           "max_output_tokens": 4000
         }
-      }
+      },
+      "api_kind": "google_genai"
     },
     "ollama": {
       "display_name": "Ollama (Local)",
@@ -132,7 +136,7 @@
       "env_requirements": [
         "OLLAMA_BASE_URL"
       ],
-      "default_endpoint": "http://127.0.0.1:11434",
+      "default_endpoint": "http://127.0.0.1:11434/v1",
       "requires_api_key": false,
       "models": {
         "llama3": {
@@ -145,7 +149,8 @@
           "cost_tier": "local",
           "max_output_tokens": 4096
         }
-      }
+      },
+      "api_kind": "ollama"
     },
     "cohere": {
       "display_name": "Cohere",
@@ -166,7 +171,8 @@
           "cost_tier": "standard",
           "max_output_tokens": 4000
         }
-      }
+      },
+      "api_kind": "cohere"
     },
     "mistral": {
       "display_name": "Mistral AI",
@@ -192,7 +198,8 @@
           "cost_tier": "standard",
           "max_output_tokens": 4000
         }
-      }
+      },
+      "api_kind": "openai"
     },
     "perplexity": {
       "display_name": "Perplexity",
@@ -213,7 +220,8 @@
           "cost_tier": "standard",
           "max_output_tokens": 4000
         }
-      }
+      },
+      "api_kind": "openai"
     },
     "deepseek": {
       "display_name": "DeepSeek",
@@ -234,7 +242,8 @@
           "cost_tier": "standard",
           "max_output_tokens": 32000
         }
-      }
+      },
+      "api_kind": "openai"
     },
     "openrouter": {
       "display_name": "OpenRouter",
@@ -255,7 +264,8 @@
           "cost_tier": "standard",
           "max_output_tokens": 4000
         }
-      }
+      },
+      "api_kind": "openai"
     },
     "together": {
       "display_name": "Together AI",
@@ -276,7 +286,8 @@
           "cost_tier": "standard",
           "max_output_tokens": 4000
         }
-      }
+      },
+      "api_kind": "openai"
     },
     "fireworks": {
       "display_name": "Fireworks AI",
@@ -297,7 +308,8 @@
           "cost_tier": "standard",
           "max_output_tokens": 8000
         }
-      }
+      },
+      "api_kind": "openai"
     },
     "groq": {
       "display_name": "Groq",
@@ -318,7 +330,8 @@
           "cost_tier": "standard",
           "max_output_tokens": 32768
         }
-      }
+      },
+      "api_kind": "openai"
     },
     "bedrock": {
       "display_name": "AWS Bedrock",
@@ -341,7 +354,8 @@
           "cost_tier": "premium",
           "max_output_tokens": 4000
         }
-      }
+      },
+      "api_kind": "bedrock"
     }
   }
 }

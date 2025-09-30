@@ -134,7 +134,7 @@ Progress To Date
   - Expand tests for capability resolution, policies, field-level redaction, and TaskRun lifecycle.
   - IAM wiring (Keycloak OIDC + API JWT validation) and role mapping on login.
   - Admin guardrails: allow-listed capability choices; read-only API for effective capabilities.
-  - Agents/LLM: untangle Azure-only dependencies in summarization so stage providers can invoke configured non-Azure chat adapters (TODO — requires shared client abstraction).
+  - Agents/LLM: extend shared chat client runtime as new providers are onboarded (ensure tests cover non-Azure adapters).
 
 Cross‑References
 - Agents contract and analysis roadmap: see `AGENTS.md`.

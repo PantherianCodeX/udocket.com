@@ -6,7 +6,6 @@ import json
 import logging
 from typing import Any, Deque, Dict, List, Optional, Sequence
 
-from ...common.azure_client import AzureChatClient
 from ...common.io import TranscriptParse
 from ...common.chunking import (
     ChunkSplitConfig,
@@ -14,6 +13,7 @@ from ...common.chunking import (
     should_retry_for_length,
     split_for_retry,
 )
+from packages.udocket_core.llm.runtime import ChatClient
 
 logger = logging.getLogger("udocket.summarize.timeline_stage")
 
@@ -86,12 +86,12 @@ def generate_timeline(
     outline_issues: List[Dict[str, Any]],
     context_snippet: Any,
     case_brief: Dict[str, Any],
-    azure_client: Optional[AzureChatClient],
+    llm_client: Optional[ChatClient],
     temperature: float,
     max_tokens: int,
 ) -> TimelineStageResult:
-    if azure_client is None:
-        raise RuntimeError("Azure client is required for timeline stage")
+    if llm_client is None:
+        raise RuntimeError("LLM client is required for timeline stage")
 
     try:
         chunk_queue: Deque[str] = deque(_ensure_chunks(context_snippet))
@@ -113,7 +113,7 @@ def generate_timeline(
                 f"Transcript excerpts (remaining chunks: {len(chunk_queue)+1}):\n" + chunk_text
             )
             try:
-                content, usage = azure_client.chat(
+                content, usage = llm_client.chat(
                     messages=[
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_prompt},
@@ -136,14 +136,14 @@ def generate_timeline(
             content_str = content.strip()
             if not content_str:
                 logger.warning(
-                    "Azure timeline stage returned empty content; continuing with aggregated results",
+                    "Timeline stage returned empty content; continuing with aggregated results",
                 )
                 continue
             try:
                 payload = json.loads(content_str)
             except json.JSONDecodeError as exc:
                 logger.warning(
-                    "Azure timeline stage produced non-JSON payload; skipping/splitting chunk",
+                    "Timeline stage produced non-JSON payload; skipping/splitting chunk",
                 )
                 if should_retry_for_json(str(exc)) or should_retry_for_length(str(exc)):
                     halves = split_for_retry(chunk_text, config=TIMELINE_SPLIT_CONFIG)
@@ -176,10 +176,10 @@ def generate_timeline(
                     signatures.add(signature)
             _merge_usage(usage_totals, usage)
         if not aggregated:
-            raise RuntimeError("Azure timeline stage returned no events")
+            raise RuntimeError("Timeline stage returned no events")
         return TimelineStageResult(aggregated, usage_totals)
     except Exception as exc:
-        raise RuntimeError(f"Azure timeline stage failed: {exc}") from exc
+        raise RuntimeError(f"Timeline stage failed: {exc}") from exc
 
 
 __all__ = ["TimelineStageResult", "generate_timeline"]

@@ -236,14 +236,14 @@ class SummarizePipeline:
         )
         case_brief: Dict[str, Any] = state["case_brief"]
         runtime = self.stage_runtimes.get("summarize.extract_outline")
-        azure_client = runtime.azure_client if runtime else None
+        llm_client = runtime.client if runtime else None
         max_tokens = runtime.max_output_tokens if runtime and runtime.max_output_tokens else self.config.max_output_tokens
         temperature = runtime.temperature if runtime else self.default_temperature
         self._notify_stage(
             "extract_outline",
             "start",
             provider=runtime.primary_provider if runtime else None,
-            azure_client=bool(azure_client),
+            client_available=bool(llm_client),
         )
         try:
             outline_result = generate_outline(
@@ -251,7 +251,7 @@ class SummarizePipeline:
                 intake=self.intake,
                 context_snippet=context_snippet,
                 case_brief=case_brief,
-                azure_client=azure_client,
+                llm_client=llm_client,
                 temperature=temperature,
                 max_tokens=max_tokens,
             )
@@ -295,14 +295,14 @@ class SummarizePipeline:
         outline_result: OutlineStageResult = state["outline_result"]
         case_brief: Dict[str, Any] = state["case_brief"]
         runtime = self.stage_runtimes.get("summarize.build_timeline_seeds")
-        azure_client = runtime.azure_client if runtime else None
+        llm_client = runtime.client if runtime else None
         max_tokens = runtime.max_output_tokens if runtime and runtime.max_output_tokens else self.config.max_output_tokens
         temperature = runtime.temperature if runtime else self.default_temperature
         self._notify_stage(
             "build_timeline_seeds",
             "start",
             provider=runtime.primary_provider if runtime else None,
-            azure_client=bool(azure_client),
+            client_available=bool(llm_client),
         )
         try:
             timeline_result = generate_timeline(
@@ -310,7 +310,7 @@ class SummarizePipeline:
                 outline_issues=outline_result.outline.get("issues", []),
                 context_snippet=context_snippet,
                 case_brief=case_brief,
-                azure_client=azure_client,
+                llm_client=llm_client,
                 temperature=temperature,
                 max_tokens=max_tokens,
             )
@@ -341,14 +341,14 @@ class SummarizePipeline:
         outline_result: OutlineStageResult = state["outline_result"]
         case_brief: Dict[str, Any] = state["case_brief"]
         runtime = self.stage_runtimes.get("summarize.build_entity_hints")
-        azure_client = runtime.azure_client if runtime else None
+        llm_client = runtime.client if runtime else None
         max_tokens = runtime.max_output_tokens if runtime and runtime.max_output_tokens else self.config.max_output_tokens
         temperature = runtime.temperature if runtime else self.default_temperature
         self._notify_stage(
             "build_entity_hints",
             "start",
             provider=runtime.primary_provider if runtime else None,
-            azure_client=bool(azure_client),
+            client_available=bool(llm_client),
         )
         try:
             entity_result = generate_entities(
@@ -356,7 +356,7 @@ class SummarizePipeline:
                 outline_parties=outline_result.outline.get("parties", {}),
                 context_snippet=context_snippet,
                 case_brief=case_brief,
-                azure_client=azure_client,
+                llm_client=llm_client,
                 temperature=temperature,
                 max_tokens=max_tokens,
             )
@@ -402,14 +402,14 @@ class SummarizePipeline:
         entity_result: EntityStageResult = state["entity_result"]
         case_brief: Dict[str, Any] = state["case_brief"]
         runtime = self.stage_runtimes.get("summarize.draft_markdown")
-        azure_client = runtime.azure_client if runtime else None
+        llm_client = runtime.client if runtime else None
         max_tokens = runtime.max_output_tokens if runtime and runtime.max_output_tokens else self.config.max_output_tokens
         temperature = runtime.temperature if runtime else self.default_temperature
         self._notify_stage(
             "draft_markdown",
             "start",
             provider=runtime.primary_provider if runtime else None,
-            azure_client=bool(azure_client),
+            client_available=bool(llm_client),
         )
         try:
             summary_result = generate_summary_markdown(
@@ -420,7 +420,7 @@ class SummarizePipeline:
                 intake=self.intake,
                 context_snippet=context_snippet,
                 case_brief=case_brief,
-                azure_client=azure_client,
+                llm_client=llm_client,
                 temperature=temperature,
                 max_tokens=max_tokens,
             )
@@ -708,8 +708,6 @@ def finalize_outputs(
         "case_brief_file": case_brief_path.name,
         "case_brief_sha256": case_brief_sha,
         "language": getattr(config, "language", "en-CA"),
-        "azure_enabled": getattr(config, "azure_enabled", False),
-        "azure_region": getattr(config, "azure_region", None),
         "timestamp_utc": timestamp_utc,
         "status": "ok",
         "words": words,

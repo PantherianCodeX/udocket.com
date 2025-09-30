@@ -1045,110 +1045,6 @@ def _collect_requested_providers(
     return sequence
 
 
-def _infer_azure_deployment(
-    secret_payload: Dict[str, Any],
-    *override_maps: Optional[Dict[str, Dict[str, Any]]],
-) -> str:
-    metadata = secret_payload.get("metadata") or {}
-    if isinstance(metadata, dict):
-        for key in ("azure_deployment", "default_deployment", "deployment", "deployment_name"):
-            value = metadata.get(key)
-            if isinstance(value, str) and value.strip():
-                return value.strip()
-
-    models = secret_payload.get("models") or []
-    if isinstance(models, list):
-        for model in models:
-            if not isinstance(model, dict):
-                continue
-            for key in ("deployment", "name", "id", "value", "label"):
-                value = model.get(key)
-                if isinstance(value, str) and value.strip():
-                    return value.strip()
-
-    for overrides in override_maps:
-        if not overrides:
-            continue
-        for payload in overrides.values():
-            if not isinstance(payload, dict):
-                continue
-            options = payload.get("options")
-            if isinstance(options, dict):
-                candidate = options.get("azure_deployment")
-                if isinstance(candidate, str) and candidate.strip():
-                    return candidate.strip()
-    return ""
-
-
-def _hydrate_summarize_config_from_org_credentials(
-    *,
-    config: SummarizeConfig,
-    organization_id: Optional[str],
-    provider_chain: Optional[List[str]],
-    stage_map: Optional[Dict[str, Dict[str, Any]]],
-) -> SummarizeConfig:
-    if not organization_id:
-        return config
-
-    requested = _collect_requested_providers(
-        config.provider_chain,
-        provider_chain,
-        stage_map,
-    )
-    if "azure" not in requested:
-        return config
-    if config.azure_enabled:
-        return config
-
-    secret = get_provider_secret_with_metadata(organization_id, "azure")
-    if not secret:
-        log.debug(
-            "No stored Azure credential for organization",
-            extra={"organization_id": organization_id},
-        )
-        return config
-
-    endpoint = str(secret.get("endpoint") or "").strip()
-    api_key = str(secret.get("api_key") or "").strip()
-    if not api_key:
-        log.warning(
-            "Azure credential lacks API key",
-            extra={"organization_id": organization_id},
-        )
-        return config
-
-    if endpoint:
-        config.azure_openai_endpoint = endpoint
-    config.azure_openai_key = api_key
-
-    deployment = _infer_azure_deployment(secret, stage_map, None)
-    if deployment:
-        if (
-            config.azure_openai_deployment
-            and config.azure_openai_deployment != deployment
-        ):
-            log.info(
-                "Azure deployment overridden by organization credential",
-                extra={
-                    "organization_id": organization_id,
-                    "old_deployment": config.azure_openai_deployment,
-                    "new_deployment": deployment,
-                },
-            )
-        config.azure_openai_deployment = deployment
-    elif not config.azure_openai_deployment:
-        log.warning(
-            "Azure credential missing deployment; set AZURE_OPENAI_DEPLOYMENT or stage option",
-            extra={"organization_id": organization_id},
-        )
-    if config.azure_enabled:
-        log.info(
-            "Azure credentials loaded from organization store",
-            extra={"organization_id": organization_id},
-        )
-    return config
-
-
 @shared_task(bind=True)
 def summarize_job(
     *_args,
@@ -1200,13 +1096,6 @@ def summarize_job(
     config_provider_chain = normalized_chain
     active_config_id = config_payload.get("id")
     active_config_name = config_payload.get("name")
-
-    summarize_config = _hydrate_summarize_config_from_org_credentials(
-        config=summarize_config,
-        organization_id=org_id_str,
-        provider_chain=config_provider_chain,
-        stage_map=config_stage_map,
-    )
 
     summarize_agent = SummarizeAgent(summarize_config)
     log.info(
@@ -1269,6 +1158,29 @@ def summarize_job(
                 },
             )
 
+    requested_providers = _collect_requested_providers(
+        summarize_config.provider_chain,
+        config_provider_chain,
+        config_stage_map,
+    )
+    provider_secrets: Dict[str, Dict[str, Any]] = {}
+    if org_id_str:
+        for provider_name in requested_providers:
+            secret_payload = get_provider_secret_with_metadata(org_id_str, provider_name)
+            if secret_payload:
+                provider_secrets[provider_name] = secret_payload
+            else:
+                provider_meta = llm_settings.provider(provider_name)
+                if provider_meta and provider_meta.requires_api_key:
+                    log.info(
+                        "Provider requires credentials but none stored",
+                        extra={
+                            "provider": provider_name,
+                            "organization_id": org_id_str,
+                            "job_id": job_id,
+                        },
+                    )
+
     try:
         result = summarize_agent.summarize(
             input=transcript,
@@ -1278,6 +1190,7 @@ def summarize_job(
             intake=intake_payload or None,
             provider_chain=config_provider_chain,
             stage_map=config_stage_map,
+            provider_credentials=provider_secrets,
             progress_callback=_progress,
         )
     except Exception as exc:

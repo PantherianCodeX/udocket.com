@@ -9,7 +9,7 @@ Purpose: generate layered, legally‑useful summaries from approved transcripts,
 - Deterministic, reproducible outputs with per‑run metadata and audit logging.
 - Privacy and locality: process only transcripts and metadata; never upload audio; ensure Canadian residency when Azure is used.
 - Composable pipeline: multiple “sub‑agents” produce structured JSON at each stage and a cohesive Markdown summary assembled last.
-- Provider-agnostic orchestration: provider/model selection flows from the active `LLMConfiguration`. (Implementation note: Azure chat completion remains the only wired runtime today; see TODO in `docs/ROADMAP.md` to generalize stage clients.)
+- Provider-agnostic orchestration: provider/model selection flows from the active `LLMConfiguration`, and chat clients are constructed dynamically via `packages.udocket_core.llm.runtime` (Azure, OpenAI-compatible, Anthropic, Ollama, etc.).
 - Stage-level tuning: per-stage output limits, temperature, and deployment overrides are stored in `LLMConfiguration.stage_map` and configured through the platform UI.
 - First‑class integration with Celery tasks and UI panels; no overwrites (versioned filenames).
 - Long-context friendly: allow entire interviews to flow through by tuning prompt limits and stage model/token overrides instead of truncating aggressively.
@@ -48,20 +48,18 @@ Add `packages/udocket_core/agents/summarize_lib.py` implementing a pure‑Python
 
 - Data classes
   - `SummarizeConfig`
-    - `azure_openai_endpoint: str` — must be a Canadian region hostname (canadacentral/canadaeast) or blank to disable network.
-    - `azure_openai_key: str`
-    - `azure_openai_deployment: str` — default deployment name; stages can override by model.
-    - `azure_openai_api_version: str = "2024-10-21"`
     - `language: str = "en-CA"`
     - `temperature: float = 1.0`
     - `max_output_tokens: int = 24000`
+    - `provider_chain: List[str]` — default provider preference order when stage configs do not override it.
     - `max_prompt_segments: int = 250` (0 disables the segment cap)
     - `max_prompt_chars: int = 32000` (0 disables the char cap)
     - `default_stage_model: str | None`
     - `stage_model_overrides: Dict[str, str]`
     - `stage_max_output_tokens: Dict[str, int]`
+    - `chars_per_token: float = 4.0`
     - `debug: bool = False`
-    - `@classmethod from_env()` — reads `.env`, validates endpoint locality, applies per-stage overrides.
+    - `@classmethod from_env()` — loads defaults from `config/summarize_defaults.json`; no credentials are pulled from environment variables.
   - `SummarizeResult`
     - `status: str`
     - `summary_file: Path`
@@ -79,7 +77,7 @@ Add `packages/udocket_core/agents/summarize_lib.py` implementing a pure‑Python
     - `def summarize(self, *, input: Path | None, case_id: str, case_dir: Path, job_id: str, intake: dict | None = None, transcript_hint: dict | None = None) -> SummarizeResult`
       - Input discovery: if `input` is None, use the most recent transcript under `transcript/`.
       - Writes artifacts and ops logs under `analysis/` and `ops/` with versioned names (`_v2` etc.).
-- Network usage: the active LLM configuration supplies provider and model details. When Azure is selected, credentials must target canadacentral or canadaeast; the agent fails fast when required credentials are missing or point to an unsupported region.
+- Network usage: the active LLM configuration supplies provider and model details. Per-provider credentials are sourced from `LLMProviderCredential` rows (decrypted in the worker) and combined with stage overrides before constructing chat clients. Azure endpoints must still target canadacentral or canadaeast unless the credential metadata explicitly allows otherwise.
 
 - Helpers
   - Transcript parsing: split header/body; detect diarized lines like `"[MM:SS] SPK_<id>: text"`; build normalized segments.
@@ -153,7 +151,7 @@ Per‑run JSON: `ops/<job_id>__summary_log.json` (keys)
 - `case_id`, `job_id`, `source_transcript`
 - `summary_file`, `outline_file`, `timeline_seeds_file`, `entity_hints_file`
 - `sha256_summary`, `sha256_outline`, `sha256_timeline_seeds`, `sha256_entity_hints`
-- `language`, `azure_endpoint_region`, `attempts_used`, `timestamp_utc`, `status`
+- `language`, `provider_chain`, `timestamp_utc`, `status`
 - Optional when `debug = True`: `prompt_tokens`, `completion_tokens`
 
 Audit line in `ops/ops_summary.jsonl` mirrors the above in a single JSON object with `ts` and `event` (`"summary.created"`).
@@ -161,13 +159,8 @@ Audit line in `ops/ops_summary.jsonl` mirrors the above in a single JSON object 
 
 ## Configuration & Environment
 - Primary control plane: `LLMConfiguration` rows (scoped per organization) capture the provider chain and stage map the worker must honour. Each configuration is surfaced in the UI for selection when queueing jobs.
-- Required when Azure is the selected provider:
-  - `AZURE_OPENAI_ENDPOINT=https://<resource>.openai.azure.com` (must contain `canadacentral` or `canadaeast` in the resource region)
-  - `AZURE_OPENAI_API_KEY`
-  - `AZURE_OPENAI_DEPLOYMENT` (e.g., `gpt-4o-mini`)
-  - `AZURE_OPENAI_API_VERSION=2024-10-21`
+- Each organization manages credentials via `LLMProviderCredential` records (UI: Case ▸ LLM ▸ Providers). The worker decrypts the API key/endpoint at runtime and merges stage overrides before invoking a provider.
 - Default runtime parameters (temperature, provider chain, prompt limits, stage token budgets) are defined in `config/summarize_defaults.json`.
-- Optional `.env` override: `SUMMARY_ALLOW_NON_CA_ENDPOINT=1` to allow non-Canadian Azure endpoints during development.
 - If the active LLM configuration references a provider without credentials, the worker must exit with a descriptive error. No offline or pseudo-local fallback is permitted.
 
 
@@ -190,14 +183,16 @@ Audit line in `ops/ops_summary.jsonl` mirrors the above in a single JSON object 
 ## Error Handling & Retries
 - Fail fast with descriptive messages when:
   - No transcript found / transcript unreadable
-  - Azure endpoint not Canadian (locality guard)
-  - Azure request failures (include HTTP status + summarized body in ops JSON)
+  - Requested provider lacks credentials or required options (e.g., missing API key/deployment)
+  - Provider API returns non-success responses (include HTTP status + summarized body in ops JSON)
+  - Azure endpoints violate the Canadian region guard (unless explicitly overridden via credential metadata)
 - Retries: exponential back‑off on transient 429/5xx (bounded by config). Log attempts in ops metadata.
 - Always write ops JSON and append an audit line on both success and failure (with `status`).
 
 
 ## Security Notes
-- Canadian endpoints only; never transmit raw audio.
+- Enforce Canadian residency for Azure endpoints; other providers must honour organization policy (store endpoints per credential).
+- Never transmit raw audio.
 - Avoid persisting sensitive prompts/responses unless `debug=1`.
 - Respect `MAX_MINUTES`/size limits upstream (transcription). Summarizer should stream transcript content to prompts with compact context windows (chunk + roll‑up strategy) when needed.
 
@@ -216,7 +211,7 @@ Stdout (success): `{ "status":"ok", "summary_file":"<abs_path>", "words":1234, "
 
 ## Testing
 - Unit: transcript parsing (diarized vs. plain), versioning behavior, schema shape validity.
-- Integration (platform): ensure platform flows surface configuration errors when Azure credentials are absent; add a gated E2E that runs with Azure env set (skipped by default).
+- Integration (platform): ensure platform flows surface configuration errors when required provider credentials are absent; add a gated E2E that runs against a configured provider (skipped by default).
 
 
 ## Roadmap

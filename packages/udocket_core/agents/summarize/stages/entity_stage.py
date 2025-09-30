@@ -6,7 +6,6 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Any, Deque, Dict, List, Optional, Sequence
 
-from ...common.azure_client import AzureChatClient
 from ...common.io import TranscriptParse
 from ...common.chunking import (
     ChunkSplitConfig,
@@ -14,6 +13,7 @@ from ...common.chunking import (
     should_retry_for_length,
     split_for_retry,
 )
+from packages.udocket_core.llm.runtime import ChatClient
 
 logger = logging.getLogger("udocket.summarize.entity_stage")
 
@@ -177,12 +177,12 @@ def generate_entities(
     outline_parties: Dict[str, Any],
     context_snippet: Any,
     case_brief: Dict[str, Any],
-    azure_client: Optional[AzureChatClient],
+    llm_client: Optional[ChatClient],
     temperature: float,
     max_tokens: int,
 ) -> EntityStageResult:
-    if azure_client is None:
-        raise RuntimeError("Azure client is required for entity stage")
+    if llm_client is None:
+        raise RuntimeError("LLM client is required for entity stage")
 
     try:
         chunk_queue: Deque[str] = deque(_ensure_chunks(context_snippet))
@@ -203,7 +203,7 @@ def generate_entities(
                 f"\nTranscript excerpts (remaining chunks: {len(chunk_queue)+1}):\n{chunk_text}\n"
             )
             try:
-                content, usage = azure_client.chat(
+                content, usage = llm_client.chat(
                     messages=[
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_prompt},
@@ -226,14 +226,14 @@ def generate_entities(
             content_str = content.strip()
             if not content_str:
                 logger.warning(
-                    "Azure entity stage returned empty content; continuing with aggregated entities",
+                    "Entity stage returned empty content; continuing with aggregated entities",
                 )
                 continue
             try:
                 payload = json.loads(content_str)
             except json.JSONDecodeError as exc:
                 logger.warning(
-                    "Azure entity stage produced non-JSON payload; attempting to split chunk",
+                    "Entity stage produced non-JSON payload; attempting to split chunk",
                 )
                 if should_retry_for_json(str(exc)) or should_retry_for_length(str(exc)):
                     halves = split_for_retry(chunk_text, config=ENTITY_SPLIT_CONFIG)
@@ -253,10 +253,10 @@ def generate_entities(
                 _merge_entity_payload(aggregate, payload)
             _merge_usage(usage_totals, usage)
         if aggregate is None:
-            raise RuntimeError("Azure entity stage returned no entities")
+            raise RuntimeError("Entity stage returned no entities")
         return EntityStageResult(aggregate, usage_totals)
     except Exception as exc:
-        raise RuntimeError(f"Azure entity stage failed: {exc}") from exc
+        raise RuntimeError(f"Entity stage failed: {exc}") from exc
 
 
 __all__ = ["EntityStageResult", "generate_entities"]

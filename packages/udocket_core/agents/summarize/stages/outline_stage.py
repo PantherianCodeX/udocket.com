@@ -7,7 +7,6 @@ from typing import Any, Deque, Dict, List, Optional, Sequence
 import copy
 import json
 
-from ...common.azure_client import AzureChatClient
 from ...common.io import TranscriptParse
 from ...common.chunking import (
     ChunkSplitConfig,
@@ -15,6 +14,7 @@ from ...common.chunking import (
     should_retry_for_length,
     split_for_retry,
 )
+from packages.udocket_core.llm.runtime import ChatClient
 
 OUTLINE_SCHEMA = {
     "type": "object",
@@ -307,12 +307,12 @@ def generate_outline(
     intake: Dict[str, Any],
     context_snippet: Any,
     case_brief: Dict[str, Any],
-    azure_client: Optional[AzureChatClient],
+    llm_client: Optional[ChatClient],
     temperature: float,
     max_tokens: int,
 ) -> OutlineStageResult:
-    if azure_client is None:
-        raise RuntimeError("Azure client is required for outline stage")
+    if llm_client is None:
+        raise RuntimeError("LLM client is required for outline stage")
 
     try:
         template = _outline_template(parse, intake)
@@ -336,7 +336,7 @@ def generate_outline(
                 f"Transcript excerpts (remaining chunks: {len(chunks)+1}):\n" + chunk_text + "\n"
             )
             try:
-                content, usage = azure_client.chat(
+                content, usage = llm_client.chat(
                     messages=[
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_prompt},
@@ -368,7 +368,7 @@ def generate_outline(
                         continue
                 preview = content.strip()[:200].replace("\n", " ")
                 raise RuntimeError(
-                    "Invalid JSON payload returned from Azure outline stage: "
+                    "Invalid JSON payload returned from outline stage: "
                     f"{exc}. Content preview: {preview!r}"
                 ) from exc
             outline_chunk = _coerce_outline(outline_payload, template)
@@ -378,10 +378,10 @@ def generate_outline(
                 _merge_outline_sections(aggregate_outline, outline_chunk)
             _merge_usage(usage_totals, usage)
         if aggregate_outline is None:
-            raise RuntimeError("Azure outline stage returned no data")
+            raise RuntimeError("Outline stage returned no data")
         return OutlineStageResult(aggregate_outline, usage_totals)
     except Exception as exc:
-        raise RuntimeError(f"Azure outline stage failed: {exc}") from exc
+        raise RuntimeError(f"Outline stage failed: {exc}") from exc
 
 
 __all__ = ["OutlineStageResult", "generate_outline"]

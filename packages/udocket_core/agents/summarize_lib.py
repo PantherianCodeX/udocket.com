@@ -9,16 +9,19 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence, cast
 
 from .common import (
-    AzureChatClient,
-    AzureClientConfig,
     parse_transcript,
     TranscriptParse,
 )
-from .common.azure_client import CANADIAN_REGIONS
 from .common.io import TranscriptSegment  # re-export for legacy imports
 from .langgraph_orchestrator import build_summarize_graph, enable_langgraph_debug_logging
 from .summarize.utils import FinalizedOutputs, SummarizePipeline
 from ..llm import LLMSettings, load_llm_settings
+from ..llm.runtime import (
+    ChatClient,
+    ChatClientError,
+    build_chat_client,
+    build_provider_runtime_config,
+)
 
 BASE_DIR = Path(__file__).resolve().parents[3]
 SUMMARIZE_DEFAULTS_PATH = BASE_DIR / "config" / "summarize_defaults.json"
@@ -283,12 +286,6 @@ def _stage_profile(stage_key: str) -> StageProfile:
 
 logger = logging.getLogger("udocket.summarize.agent")
 
-
-def _endpoint_is_canadian(endpoint: str) -> bool:
-    endpoint_lower = endpoint.lower()
-    return any(region in endpoint_lower for region in CANADIAN_REGIONS)
-
-
 def _load_llm_settings() -> LLMSettings:
     global _llm_settings_cache
     if _llm_settings_cache is None:
@@ -300,16 +297,22 @@ def _load_llm_settings() -> LLMSettings:
 class StageRuntime:
     stage_key: str
     providers: List[str]
+    provider: str
     model: str
-    azure_client: Optional[AzureChatClient]
+    client: Optional[ChatClient]
     max_output_tokens: int
     context_window_tokens: Optional[int]
     profile: StageProfile
     temperature: float
+    options: Dict[str, Any] = field(default_factory=dict)
 
     @property
     def primary_provider(self) -> str:
-        return self.providers[0] if self.providers else "azure"
+        if self.providers:
+            return self.providers[0]
+        if self.provider:
+            return self.provider
+        return "azure"
 
 
 PIPELINE_NODE_ORDER = [
@@ -327,10 +330,6 @@ PIPELINE_NODE_ORDER = [
 
 @dataclass
 class SummarizeConfig:
-    azure_openai_endpoint: str = ""
-    azure_openai_key: str = ""
-    azure_openai_deployment: str = ""
-    azure_openai_api_version: str = "2024-10-21"
     language: str = "en-CA"
     temperature: float = DEFAULT_TEMPERATURE
     max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS
@@ -349,24 +348,10 @@ class SummarizeConfig:
 
     @classmethod
     def from_env(cls) -> "SummarizeConfig":
-        endpoint = (os.getenv("AZURE_OPENAI_ENDPOINT") or "").strip()
-        key = (os.getenv("AZURE_OPENAI_API_KEY") or "").strip()
-        deployment = (os.getenv("AZURE_OPENAI_DEPLOYMENT") or "").strip()
-        api_version = (
-            os.getenv("AZURE_OPENAI_API_VERSION") or "2024-10-21"
-        ).strip()
         language = (os.getenv("LANGUAGE") or "en-CA").strip() or "en-CA"
         temperature = DEFAULT_TEMPERATURE
         max_tokens = DEFAULT_MAX_OUTPUT_TOKENS
-        debug = os.getenv("DEBUG", "0").strip() == "1"
-
-        allow_non_ca_endpoint = (
-            os.getenv("SUMMARY_ALLOW_NON_CA_ENDPOINT", "0").strip() == "1"
-        )
-        if endpoint and not allow_non_ca_endpoint and not _endpoint_is_canadian(endpoint):
-            raise ValueError(
-                "AZURE_OPENAI_ENDPOINT must target canadacentral or canadaeast"
-            )
+        debug = os.getenv("DEBUG", "0").strip().lower() in {"1", "true", "yes", "on"}
 
         max_prompt_segments = MAX_PROMPT_SEGMENTS
         prompt_segments_override: Optional[int] = None
@@ -380,20 +365,10 @@ class SummarizeConfig:
         chars_per_token = DEFAULT_TOKENS_TO_CHAR_RATIO
 
         providers = _normalize_providers(DEFAULT_PROVIDER_CHAIN)
-        if "azure" not in providers:
-            logger.warning(
-                "Summarize currently requires Azure; prepending azure to provider chain",
-                extra={"providers": providers},
-            )
-            providers = ["azure"] + [name for name in providers if name != "azure"]
         if not providers:
             providers = ["azure"]
 
         return cls(
-            azure_openai_endpoint=endpoint,
-            azure_openai_key=key,
-            azure_openai_deployment=deployment,
-            azure_openai_api_version=api_version,
             language=language,
             temperature=temperature,
             max_output_tokens=max_tokens,
@@ -407,17 +382,6 @@ class SummarizeConfig:
             stage_model_overrides=stage_model_overrides,
             stage_max_output_tokens=stage_max_output_tokens,
             chars_per_token=chars_per_token,
-        )
-
-
-    @property
-    def azure_enabled(self) -> bool:
-        if "azure" not in self.provider_chain:
-            return False
-        return bool(
-            self.azure_openai_endpoint
-            and self.azure_openai_key
-            and self.azure_openai_deployment
         )
 
     def stage_model_for(self, stage_key: str) -> Optional[str]:
@@ -449,41 +413,6 @@ class SummarizeConfig:
         if not candidate or candidate <= 0:
             candidate = model_limit if model_limit and model_limit > 0 else self.max_output_tokens
         return max(candidate, 1)
-
-    @property
-    def azure_region(self) -> Optional[str]:
-        if not self.azure_openai_endpoint:
-            return None
-        endpoint_lower = self.azure_openai_endpoint.lower()
-        if "canadacentral" in endpoint_lower:
-            return "canadacentral"
-        if "canadaeast" in endpoint_lower:
-            return "canadaeast"
-        return None
-
-    def azure_client_config(self) -> Optional[AzureClientConfig]:
-        if not self.azure_enabled:
-            return None
-        allow_non_ca_endpoint = (
-            os.getenv("SUMMARY_ALLOW_NON_CA_ENDPOINT", "0").strip() == "1"
-        )
-        return AzureClientConfig(
-            endpoint=self.azure_openai_endpoint,
-            key=self.azure_openai_key,
-            deployment=self.azure_openai_deployment,
-            api_version=self.azure_openai_api_version,
-            allow_non_ca_region=allow_non_ca_endpoint,
-        )
-
-    def azure_client_config_for(
-        self, deployment: Optional[str]
-    ) -> Optional[AzureClientConfig]:
-        cfg = self.azure_client_config()
-        if cfg is None:
-            return None
-        if deployment:
-            cfg.deployment = deployment
-        return cfg
 
 
 @dataclass
@@ -569,6 +498,7 @@ class SummarizeAgent:
         transcript_hint: Optional[Dict[str, Any]] = None,
         provider_chain: Optional[List[str]] = None,
         stage_map: Optional[Dict[str, Dict[str, Any]]] = None,
+        provider_credentials: Optional[Dict[str, Dict[str, Any]]] = None,
         progress_callback: Optional[
             Callable[[str, str, Dict[str, Any]], None]
         ] = None,
@@ -613,33 +543,13 @@ class SummarizeAgent:
                         derived_chain.append(name)
             provider_chain = derived_chain or list(self.config.provider_chain)
         provider_chain = _normalize_providers(provider_chain)
-        if "azure" not in provider_chain:
-            logger.warning(
-                "Summarize currently requires Azure; prepending azure to provider chain",
-                extra={"provider_chain": provider_chain},
-            )
-            provider_chain = ["azure"] + [value for value in provider_chain if value != "azure"]
         if not provider_chain:
             provider_chain = list(DEFAULT_PROVIDER_CHAIN)
 
-        azure_enabled = self.config.azure_enabled
-        if not azure_enabled:
-            missing_env: List[str] = []
-            if not self.config.azure_openai_endpoint:
-                missing_env.append("AZURE_OPENAI_ENDPOINT")
-            if not self.config.azure_openai_key:
-                missing_env.append("AZURE_OPENAI_API_KEY")
-            if not self.config.azure_openai_deployment:
-                missing_env.append("AZURE_OPENAI_DEPLOYMENT")
-            details = ", ".join(missing_env) if missing_env else "unknown"
-            # TODO(multi-provider): allow non-Azure providers when chat abstractions land.
-            raise RuntimeError(
-                f"Azure OpenAI configuration is required for summarization (missing: {details})"
-            )
+        provider_credentials = provider_credentials or {}
+
         stage_runtimes: Dict[str, StageRuntime] = {}
         provider_sequence: List[str] = []
-
-        azure_provider_meta = settings.provider("azure")
 
         for stage_attr, stage_key in LLM_STAGE_KEYS.items():
             stage_profile = _stage_profile(stage_key)
@@ -647,40 +557,41 @@ class SummarizeAgent:
             providers = _normalize_providers(
                 assignment.providers if assignment and assignment.providers else provider_chain
             )
-            if "azure" not in providers:
-                self.logger.debug(
-                    "azure provider inserted for stage",
-                    extra={"stage": stage_key, "providers": providers},
-                )
-                providers = ["azure"] + [value for value in providers if value != "azure"]
+            if not providers:
+                providers = list(provider_chain or DEFAULT_PROVIDER_CHAIN)
             if not providers:
                 providers = list(DEFAULT_PROVIDER_CHAIN)
 
             model = (
                 assignment.model
                 if assignment and assignment.model
-                else (providers[0] if providers else "azure")
+                else (providers[0] if providers else "")
             )
-            options = dict(assignment.options) if assignment else {}
+            options: Dict[str, Any] = {}
+            if assignment and assignment.options:
+                options.update(dict(assignment.options))
+
             stage_config = stage_map.get(stage_key) or stage_map.get(stage_attr)
             override_max_tokens = None
             if stage_config:
                 override_providers: Optional[List[str]] = None
-                if isinstance(stage_config.get("providers"), list):
-                    override_providers = [str(value) for value in stage_config["providers"]]
+                providers_payload = stage_config.get("providers")
+                if isinstance(providers_payload, list):
+                    override_providers = [str(value) for value in providers_payload]
                 elif stage_config.get("provider"):
                     override_providers = [str(stage_config["provider"])]
                 if override_providers is not None:
                     override_normalized = _normalize_providers(override_providers)
-                    if "azure" not in override_normalized:
-                        override_normalized = ["azure"] + [p for p in override_normalized if p != "azure"]
                     if override_normalized:
                         providers = override_normalized
                 if stage_config.get("model"):
                     model = str(stage_config["model"])
                 stage_options = stage_config.get("options")
                 if isinstance(stage_options, dict):
-                    options.update({str(key): str(value) for key, value in stage_options.items()})
+                    for key, value in stage_options.items():
+                        if key is None:
+                            continue
+                        options[str(key)] = value
                 max_tokens_override = stage_config.get("max_tokens")
                 if isinstance(max_tokens_override, (int, float, str)):
                     try:
@@ -692,24 +603,35 @@ class SummarizeAgent:
             if config_model_override:
                 model = config_model_override
 
-            provider_meta = settings.provider(providers[0]) if providers else None
-            if provider_meta is None and "azure" in providers and azure_provider_meta:
-                provider_meta = azure_provider_meta
-            model_meta = (
-                provider_meta.models.get(model)
-                if provider_meta and model in provider_meta.models
-                else None
-            )
+            primary_provider = providers[0] if providers else ""
+            provider_meta = settings.provider(primary_provider) if primary_provider else None
 
-            deployment = options.get("azure_deployment") if options else None
-            if not deployment and model_meta and model_meta.deployment_env:
-                deployment = os.getenv(model_meta.deployment_env)
+            requires_chat = stage_key != "summarize.context_builder"
+            chat_client: Optional[ChatClient] = None
+            model_meta = None
 
-            azure_client: Optional[AzureChatClient] = None
-            if "azure" in providers:
-                cfg = self.config.azure_client_config_for(deployment)
-                if cfg:
-                    azure_client = AzureChatClient(cfg)
+            if requires_chat:
+                if provider_meta is None:
+                    raise RuntimeError(
+                        f"Provider '{primary_provider}' is not defined for stage '{stage_key}'"
+                    )
+                credential_payload = provider_credentials.get(primary_provider)
+                try:
+                    provider_runtime = build_provider_runtime_config(
+                        provider=provider_meta,
+                        model_name=model,
+                        credential_payload=credential_payload,
+                        options=options,
+                    )
+                    chat_client = build_chat_client(provider_runtime=provider_runtime)
+                    model_meta = provider_runtime.model
+                except ChatClientError as exc:
+                    raise RuntimeError(
+                        f"Unable to initialize provider '{primary_provider}' for stage '{stage_key}': {exc}"
+                    ) from exc
+            else:
+                if provider_meta and model in provider_meta.models:
+                    model_meta = provider_meta.models[model]
 
             stage_max_tokens_base = (
                 model_meta.max_output_tokens
@@ -728,13 +650,11 @@ class SummarizeAgent:
                 if model_meta and model_meta.default_temperature is not None
                 else self.config.temperature
             )
-            if options:
-                temp_value = options.get("temperature")
-                if temp_value is not None:
-                    try:
-                        stage_temperature = float(temp_value)
-                    except (TypeError, ValueError):
-                        pass
+            if options and "temperature" in options:
+                try:
+                    stage_temperature = float(options["temperature"])
+                except (TypeError, ValueError):
+                    pass
 
             context_window_tokens = None
             if model_meta and model_meta.context_window_tokens:
@@ -743,13 +663,14 @@ class SummarizeAgent:
             runtime = StageRuntime(
                 stage_key=stage_key,
                 providers=providers,
+                provider=primary_provider,
                 model=model,
-                azure_client=azure_client,
-                max_output_tokens=stage_max_tokens
-                or self.config.max_output_tokens,
+                client=chat_client,
+                max_output_tokens=stage_max_tokens or self.config.max_output_tokens,
                 context_window_tokens=context_window_tokens,
                 profile=stage_profile,
                 temperature=stage_temperature,
+                options=dict(options),
             )
             stage_runtimes[stage_key] = runtime
 
@@ -763,7 +684,7 @@ class SummarizeAgent:
                 stage=stage_key,
                 providers=providers,
                 model=model,
-                azure_client=bool(azure_client),
+                client_available=bool(chat_client),
             )
 
         pipeline = SummarizePipeline(

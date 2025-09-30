@@ -971,6 +971,7 @@ def build_tool_panels(
                 "endpoint": entry.get("endpoint") or credential_entry.get("endpoint"),
                 "models": entry.get("models"),
                 "reason": entry.get("unavailable_reason", ""),
+                "api_kind": entry.get("api_kind"),
             }
         )
 
@@ -1063,13 +1064,13 @@ def build_tool_panels(
             "module": summary_module,
             "transcripts": transcript_sources,
             "job_endpoint_template": "/api/v1/jobs/{job_id}/analyze/summary/",
-            "summary_llm": {
-                "target": "summary",
-                "provider_options": provider_options,
-                "defaults": {
-                    "primary": summary_primary,
-                    "azure_available": summarize_cfg.azure_enabled,
-                },
+                "summary_llm": {
+                    "target": "summary",
+                    "provider_options": provider_options,
+                    "defaults": {
+                        "primary": summary_primary,
+                        "azure_available": provider_registry.get("azure", {}).get("available", False),
+                    },
                 "stage_configs": summary_stage_configs,
                 "stage_map_json": summary_stage_map_json,
                 "configurations": summary_config_list,
@@ -1130,13 +1131,13 @@ def build_tool_panels(
             "transcripts": transcript_sources,
             "artifact_options": artifacts_by_type,
             "job_endpoint_template": "/api/v1/jobs/{job_id}/analyze/timeline/",
-            "timeline_llm": {
-                "target": "timeline",
-                "provider_options": provider_options,
-                "defaults": {
-                    "primary": timeline_primary,
-                    "azure_available": summarize_cfg.azure_enabled,
-                },
+                "timeline_llm": {
+                    "target": "timeline",
+                    "provider_options": provider_options,
+                    "defaults": {
+                        "primary": timeline_primary,
+                        "azure_available": provider_registry.get("azure", {}).get("available", False),
+                    },
                 "stage_configs": timeline_stage_configs,
                 "stage_map_json": timeline_stage_map_json,
                 "configurations": timeline_config_list,

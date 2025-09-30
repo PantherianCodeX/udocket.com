@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 import pytest
 
@@ -26,6 +26,13 @@ from packages.udocket_core.agents.summarize.stages import (
     TimelineStageResult,
 )
 from packages.udocket_core.agents.summarize.stages.outline_stage import generate_outline as outline_generate
+
+
+FAKE_AZURE_SECRET = {
+    "endpoint": "https://example-canadacentral.openai.azure.com",
+    "api_key": "test-key",
+    "metadata": {"azure_deployment": "test-deployment"},
+}
 
 
 def _write_transcript(path: Path, text: str) -> Path:
@@ -109,11 +116,7 @@ def _install_stage_stubs(monkeypatch: pytest.MonkeyPatch, summary_text: str | No
 
 
 def _make_config() -> SummarizeConfig:
-    return SummarizeConfig(
-        azure_openai_endpoint="https://example-canadacentral.openai.azure.com",
-        azure_openai_key="test-key",
-        azure_openai_deployment="test-deployment",
-    )
+    return SummarizeConfig(provider_chain=["azure"])
 
 
 def test_parse_transcript_detects_header_and_segments(tmp_path):
@@ -157,6 +160,7 @@ def test_summarize_agent_writes_artifacts(monkeypatch, tmp_path):
         case_id="CASE-1",
         case_dir=case_dir,
         job_id="JOB-1",
+        provider_credentials={"azure": FAKE_AZURE_SECRET},
     )
 
     assert result.status == "ok"
@@ -203,11 +207,13 @@ def test_summarize_agent_versioned_outputs(monkeypatch, tmp_path):
         case_id="CASE-2",
         case_dir=case_dir,
         job_id="JOB-2",
+        provider_credentials={"azure": FAKE_AZURE_SECRET},
     )
     second = agent.summarize(
         case_id="CASE-2",
         case_dir=case_dir,
         job_id="JOB-2",
+        provider_credentials={"azure": FAKE_AZURE_SECRET},
     )
 
     assert first.summary_file.exists()
@@ -255,6 +261,7 @@ def test_summarize_agent_adds_default_header(monkeypatch, tmp_path):
         case_id="CASE-3",
         case_dir=case_dir,
         job_id="JOB-3",
+        provider_credentials={"azure": FAKE_AZURE_SECRET},
     )
 
     summary_text = result.summary_file.read_text(encoding="utf-8")
@@ -313,6 +320,7 @@ def test_stage_temperature_and_max_tokens_override(monkeypatch, tmp_path):
         case_dir=case_dir,
         job_id="JOB-OVR",
         input=transcript,
+        provider_credentials={"azure": FAKE_AZURE_SECRET},
         provider_chain=["azure"],
         stage_map={
             "summarize.draft_markdown": {
@@ -340,7 +348,7 @@ def test_outline_chunk_splitting_on_empty_completion():
         diarized=True,
     )
 
-    class FailingAzureClient:
+    class FailingClient:
         def __init__(self) -> None:
             self.calls: List[int] = []
 
@@ -379,21 +387,21 @@ def test_outline_chunk_splitting_on_empty_completion():
             }
             return json.dumps(payload), {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150}
 
-    azure_stub = FailingAzureClient()
+    llm_stub = FailingClient()
     context_snippet = "\n".join(seg.text for seg in large_segments)
     result = outline_generate(
         parse=parse,
         intake={},
         context_snippet=context_snippet,
         case_brief={},
-        azure_client=azure_stub,
+        llm_client=llm_stub,
         temperature=0.0,
         max_tokens=8000,
     )
 
     assert result.outline["issues"]
-    assert any(count > 12 for count in azure_stub.calls)
-    assert any(count <= 12 for count in azure_stub.calls)
+    assert any(count > 12 for count in llm_stub.calls)
+    assert any(count <= 12 for count in llm_stub.calls)
 
 
 def test_build_context_respects_config_limits(tmp_path):
@@ -417,8 +425,9 @@ def test_build_context_respects_config_limits(tmp_path):
         stage_runtimes[stage_key] = StageRuntime(
             stage_key=stage_key,
             providers=["azure"],
+            provider="azure",
             model="gpt-5-mini",
-            azure_client=None,
+            client=None,
             max_output_tokens=profile.min_context_tokens,
             context_window_tokens=200000,
             profile=profile,
@@ -476,7 +485,12 @@ def test_summarize_agent_raises_on_stage_failure(monkeypatch, tmp_path):
     agent = SummarizeAgent(_make_config())
 
     with pytest.raises(RuntimeError):
-        agent.summarize(case_id="CASE-4", case_dir=case_dir, job_id="JOB-4")
+        agent.summarize(
+            case_id="CASE-4",
+            case_dir=case_dir,
+            job_id="JOB-4",
+            provider_credentials={"azure": FAKE_AZURE_SECRET},
+        )
 
 
 

@@ -28,6 +28,10 @@ class LLMProvider:
     display_name: str
     models: Dict[str, LLMProviderModel]
     env_requirements: List[str] = field(default_factory=list)
+    api_kind: str = "openai"
+    default_endpoint: str = ""
+    requires_api_key: bool = True
+    description: str = ""
 
     def is_available(self) -> bool:
         return all(os.getenv(key) for key in self.env_requirements)
@@ -89,6 +93,10 @@ def load_llm_settings(
             display_name=payload.get("display_name", name.title()),
             models=models,
             env_requirements=list(payload.get("env_requirements", [])),
+            api_kind=str(payload.get("api_kind") or "openai"),
+            default_endpoint=str(payload.get("default_endpoint") or ""),
+            requires_api_key=bool(payload.get("requires_api_key", True)),
+            description=str(payload.get("description") or ""),
         )
 
     assignments_payload = _load_json(assignments_path).get("stages", {})
