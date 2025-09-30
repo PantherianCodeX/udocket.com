@@ -228,6 +228,15 @@
     const form = panel.querySelector('[data-provider-form]');
     const select = form?.querySelector('[data-provider-select]');
     const providerKeyHidden = form?.querySelector('[data-provider-key]');
+
+    function slugifyProviderName(name) {
+      return String(name || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 64);
+    }
     const displayInput = form?.querySelector('[data-provider-display]');
     const endpointInput = form?.querySelector('[data-provider-endpoint]');
     const apiKeyInput = form?.querySelector('[data-provider-apikey]');
@@ -323,7 +332,7 @@
       if (!form) return;
       const templateData = resolveCatalog(templateKey);
       if (!templateData) return;
-      const providerValue = select?.value || templateKey;
+      const providerValue = (providerKeyHidden?.value || '').trim() || templateKey;
       applyFormValues({
         providerKey: providerValue,
         displayName: templateData.display_name || providerValue,
@@ -334,6 +343,9 @@
       if (templateSelect) templateSelect.value = templateKey;
       setDeleteVisible(false);
       currentProviderKey = '';
+      if (providerKeyHidden && !providerKeyHidden.value) {
+        providerKeyHidden.value = templateKey;
+      }
     }
 
     function getCredential(key) {
@@ -400,7 +412,7 @@
       if (templateSelect) templateSelect.value = '';
       if (providerKeyHidden) providerKeyHidden.value = '';
       setDeleteVisible(false);
-      select && select.focus();
+      (displayInput || endpointInput)?.focus();
     }
 
     function updateModelCount(row, models, providerKey) {
@@ -451,15 +463,25 @@
       tempForm.submit();
     }
 
-    select?.addEventListener('change', () => {
-      const key = (select.value || '').trim();
-      if (key) {
-        fillForm(key);
-      } else {
-        resetForm();
-      }
-      if (providerKeyHidden) providerKeyHidden.value = key || '';
-    });
+    if (select) {
+      select.addEventListener('change', () => {
+        const key = (select.value || '').trim();
+        if (key) {
+          fillForm(key);
+        } else {
+          resetForm();
+        }
+        if (providerKeyHidden) providerKeyHidden.value = key || '';
+      });
+    }
+
+    if (displayInput) {
+      displayInput.addEventListener('input', () => {
+        if (!currentProviderKey && providerKeyHidden) {
+          providerKeyHidden.value = slugifyProviderName(displayInput.value || '');
+        }
+      });
+    }
 
     templateApplyBtn?.addEventListener('click', () => {
       const key = (templateSelect?.value || '').trim();
