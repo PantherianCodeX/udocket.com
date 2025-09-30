@@ -50,14 +50,7 @@
         <label class="text-sm text-slate-200">Configuration name
           <input type="text" name="name" value="{{ active_config.name|default:"" }}" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" required>
         </label>
-        <label class="text-sm text-slate-200">Provider chain
-          <select name="provider_chain" multiple class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" data-provider-chain>
-            {% for option in provider_options %}
-              <option value="{{ option.value }}" {% if option.value in provider_chain %}selected{% endif %}>{{ option.label }}</option>
-            {% endfor %}
-          </select>
-          <span class="mt-1 block text-[11px] text-slate-500">Drag or reorder in advanced controls to set priority.</span>
-        </label>
+        {# Provider chain removed: configured per-stage, not per-tool. #}
         <label class="md:col-span-2 text-sm text-slate-200">Description
           <textarea name="description" rows="2" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none">{{ active_config.description|default:"" }}</textarea>
         </label>

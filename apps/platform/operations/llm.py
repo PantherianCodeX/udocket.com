@@ -272,6 +272,7 @@ def get_org_provider_credentials(organization_id: str | None) -> Dict[str, Dict[
     qs = LLMProviderCredential.objects.filter(organization_id=organization_id)
     for record in qs.iterator():
         creds[record.provider] = {
+            "id": record.id,
             "provider": record.provider,
             "display_name": record.display_name,
             "endpoint": record.endpoint,
@@ -954,3 +955,76 @@ def delete_org_provider_credential(organization_id: str, provider: str) -> None:
         organization_id=organization_id,
         provider=provider.strip().lower(),
     ).delete()
+
+
+@transaction.atomic
+def delete_org_provider_credential_by_id(organization_id: str, provider_id: int | str) -> None:
+    LLMProviderCredential.objects.filter(
+        organization_id=organization_id,
+        id=provider_id,
+    ).delete()
+
+
+@transaction.atomic
+def upsert_org_provider_credential_by_id(
+    *,
+    organization_id: str,
+    provider_id: int | str,
+    provider: str,
+    display_name: str,
+    endpoint: str,
+    api_key: Optional[str],
+    models: Optional[Iterable[dict]] = None,
+    metadata: Optional[dict] = None,
+    enabled: Optional[bool] = None,
+) -> Dict[str, object]:
+    models_payload = _normalize_models(models)
+    encrypted_key = encrypt_secret(api_key)
+    enabled_value = bool(enabled) if enabled is not None else True
+    try:
+        record = LLMProviderCredential.objects.get(
+            organization_id=organization_id,
+            id=provider_id,
+        )
+    except LLMProviderCredential.DoesNotExist:
+        return upsert_org_provider_credential(
+            organization_id=organization_id,
+            provider=provider,
+            display_name=display_name,
+            endpoint=endpoint,
+            api_key=api_key,
+            models=models_payload,
+            metadata=metadata,
+            enabled=enabled,
+        )
+    record.provider = provider.strip().lower() or record.provider
+    record.display_name = display_name
+    record.endpoint = endpoint
+    if api_key is not None:
+        record.api_key_encrypted = encrypted_key
+    record.models_payload = models_payload
+    record.metadata = metadata or {}
+    if enabled is not None:
+        record.is_enabled = enabled_value
+    update_fields = [
+        "provider",
+        "display_name",
+        "endpoint",
+        "models_payload",
+        "metadata",
+        "updated_at",
+    ]
+    if api_key is not None:
+        update_fields.append("api_key_encrypted")
+    if enabled is not None:
+        update_fields.append("is_enabled")
+    record.save(update_fields=update_fields)
+    return {
+        "provider": record.provider,
+        "display_name": record.display_name,
+        "endpoint": record.endpoint,
+        "models": record.models_payload,
+        "has_api_key": bool(record.api_key_encrypted),
+        "metadata": record.metadata,
+        "is_enabled": record.is_enabled,
+    }

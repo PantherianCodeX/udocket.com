@@ -161,6 +161,7 @@ def _extract_provider_form_data(
 ) -> tuple[Dict[str, Any], List[str]]:
     errors: List[str] = []
     provider_key = (request.POST.get("provider") or "").strip().lower()
+    provider_id = (request.POST.get("provider_id") or "").strip()
     display_name = (
         (request.POST.get("display_name") or provider_key).strip() or provider_key
     )
@@ -208,6 +209,7 @@ def _extract_provider_form_data(
     )
 
     data = {
+        "provider_id": provider_id,
         "provider": provider_key,
         "display_name": display_name,
         "endpoint": endpoint,
@@ -331,23 +333,39 @@ def organization_settings(
                         api_key_value = form_data["api_key"]
                     else:
                         api_key_value = None
-                    upsert_org_provider_credential(
-                        organization_id=str(organization.id),
-                        provider=provider_key,
-                        display_name=form_data["display_name"],
-                        endpoint=form_data["endpoint"],
-                        api_key=api_key_value,
-                        models=form_data["models"],
-                        metadata=form_data["metadata"],
-                        enabled=form_data["enabled"],
-                    )
+                    if form_data.get("provider_id"):
+                        upsert_org_provider_credential_by_id(
+                            organization_id=str(organization.id),
+                            provider_id=form_data["provider_id"],
+                            provider=provider_key,
+                            display_name=form_data["display_name"],
+                            endpoint=form_data["endpoint"],
+                            api_key=api_key_value,
+                            models=form_data["models"],
+                            metadata=form_data["metadata"],
+                            enabled=form_data["enabled"],
+                        )
+                    else:
+                        upsert_org_provider_credential(
+                            organization_id=str(organization.id),
+                            provider=provider_key,
+                            display_name=form_data["display_name"],
+                            endpoint=form_data["endpoint"],
+                            api_key=api_key_value,
+                            models=form_data["models"],
+                            metadata=form_data["metadata"],
+                            enabled=form_data["enabled"],
+                        )
                     messages.success(request, f"Provider '{provider_key}' saved.")
                 except ValueError as exc:
                     errors.append(str(exc))
         elif action == "provider-delete":
-            if provider_key:
+            provider_id = form_data.get("provider_id")
+            if provider_id:
+                delete_org_provider_credential_by_id(str(organization.id), provider_id)
+            elif provider_key:
                 delete_org_provider_credential(str(organization.id), provider_key)
-                messages.success(request, f"Provider '{provider_key}' deleted.")
+            messages.success(request, f"Provider '{provider_key}' deleted.")
             else:
                 errors.append("Provider key is required for deletion.")
         elif action == "provider-toggle":
