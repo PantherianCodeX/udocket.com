@@ -6,3 +6,8 @@ class ArtifactsConfig(AppConfig):
     name = "apps.platform.artifacts"
     label = "artifacts"
 
+    def ready(self) -> None:  # pragma: no cover - import side effects
+        try:
+            from . import signals  # noqa: F401
+        except Exception:
+            pass

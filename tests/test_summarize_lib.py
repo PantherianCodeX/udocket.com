@@ -20,9 +20,9 @@ from packages.udocket_core.agents.summarize_lib import (
     summarize_defaults,
 )
 from packages.udocket_core.agents.summarize.stages import (
-    DraftStageResult,
     EntityStageResult,
     OutlineStageResult,
+    SummaryStageResult,
     TimelineStageResult,
 )
 from packages.udocket_core.agents.summarize.stages.outline_stage import generate_outline as outline_generate
@@ -44,7 +44,7 @@ def _write_transcript(path: Path, text: str) -> Path:
 def _install_stage_stubs(monkeypatch: pytest.MonkeyPatch, summary_text: str | None = None) -> None:
     if summary_text is None:
         summary_text = (
-            "# Auto Summary\n\n"
+            "# Summary\n\n"
             "## Executive summary\n- Key point\n\n"
             "## Detailed narrative\n- Narrative item\n\n"
             "## Claims and remedies sought\n- Claim A\n\n"
@@ -52,6 +52,36 @@ def _install_stage_stubs(monkeypatch: pytest.MonkeyPatch, summary_text: str | No
             "## Risks, gaps, and questions\n- Risk item\n\n"
             "## Next-step checklist\n- Next step\n"
         )
+
+    summary_payload = {
+        "case_metadata_summary": {
+            "overview": "Case overview",
+            "parties": ["Client", "Opposing"],
+            "jurisdiction": "Ontario",
+            "key_dates": ["2024-01-01"],
+        },
+        "executive_summary": {"bullets": ["Key point"]},
+        "detailed_narrative": [
+            {"heading": "Narrative item", "summary": "Narrative summary.", "citations": []}
+        ],
+        "claims_and_remedies": [
+            {"claim": "Claim A", "remedy_requested": "Remedy"}
+        ],
+        "procedural_posture": {
+            "status": "Active",
+            "deadlines": ["2024-02-01"],
+            "orders": ["Order 1"],
+        },
+        "risks_gaps_questions": [
+            {"issue": "Risk item", "risk_level": "medium", "notes": "Watch this."}
+        ],
+        "next_step_checklist": [
+            {"action": "Next step", "owner": "Team", "due": "ASAP"}
+        ],
+        "supporting_quotes": [
+            {"timestamp": "00:01", "speaker": "SPK_1", "text": "Hello there"}
+        ],
+    }
 
     def fake_outline(**_: Any) -> OutlineStageResult:
         outline = {
@@ -94,8 +124,12 @@ def _install_stage_stubs(monkeypatch: pytest.MonkeyPatch, summary_text: str | No
         }
         return EntityStageResult(hints, {"prompt_tokens": 6, "completion_tokens": 3, "total_tokens": 9})
 
-    def fake_summary(**_: Any) -> DraftStageResult:
-        return DraftStageResult(summary_text, {"prompt_tokens": 12, "completion_tokens": 8, "total_tokens": 20})
+    def fake_summary(**_: Any) -> SummaryStageResult:
+        return SummaryStageResult(
+            data=summary_payload,
+            markdown=summary_text,
+            usage={"prompt_tokens": 12, "completion_tokens": 8, "total_tokens": 20},
+        )
 
     monkeypatch.setattr(
         "packages.udocket_core.agents.summarize.utils.generate_outline",
@@ -110,7 +144,7 @@ def _install_stage_stubs(monkeypatch: pytest.MonkeyPatch, summary_text: str | No
         fake_entities,
     )
     monkeypatch.setattr(
-        "packages.udocket_core.agents.summarize.utils.generate_summary_markdown",
+        "packages.udocket_core.agents.summarize.utils.generate_summary_payload",
         fake_summary,
     )
 
@@ -177,8 +211,9 @@ def test_summarize_agent_writes_artifacts(monkeypatch, tmp_path):
     assert "case_brief_file" in meta
     assert meta.get("provider_chain")
     assert result.provider_chain
-    summary_text = result.summary_file.read_text(encoding="utf-8")
-    assert summary_text.startswith("# Auto Summary")
+    summary_payload = json.loads(result.summary_file.read_text(encoding="utf-8"))
+    assert summary_payload["executive_summary"]["bullets"][0] == "Key point"
+    markdown_text = result.summary_markdown_file.read_text(encoding="utf-8")
     required_headings = [
         "## Case metadata summary",
         "## Executive summary",
@@ -189,7 +224,7 @@ def test_summarize_agent_writes_artifacts(monkeypatch, tmp_path):
         "## Next-step checklist",
     ]
     for heading in required_headings:
-        assert heading in summary_text
+        assert heading in markdown_text
 
 
 def test_summarize_agent_versioned_outputs(monkeypatch, tmp_path):
@@ -219,7 +254,9 @@ def test_summarize_agent_versioned_outputs(monkeypatch, tmp_path):
     assert first.summary_file.exists()
     assert second.summary_file.exists()
     assert first.summary_file != second.summary_file
-    assert second.summary_file.name.endswith("_v2.md")
+    assert second.summary_file.name.endswith("_v2.json")
+    assert second.summary_markdown_file and second.summary_markdown_file.exists()
+    assert second.summary_markdown_file.name.endswith("_v2.md")
     assert first.case_brief_file and first.case_brief_file.exists()
     assert second.case_brief_file and second.case_brief_file.exists()
     assert first.case_brief_file != second.case_brief_file
@@ -264,8 +301,10 @@ def test_summarize_agent_adds_default_header(monkeypatch, tmp_path):
         provider_credentials={"azure": FAKE_AZURE_SECRET},
     )
 
-    summary_text = result.summary_file.read_text(encoding="utf-8")
+    summary_payload = json.loads(result.summary_file.read_text(encoding="utf-8"))
+    summary_text = result.summary_markdown_file.read_text(encoding="utf-8")
     assert summary_text.startswith("# Summary for case CASE-3 (job JOB-3)")
+    assert summary_payload["executive_summary"]["bullets"]
 
 
 def test_stage_catalog_lists_recommended_models():
@@ -304,13 +343,17 @@ def test_stage_temperature_and_max_tokens_override(monkeypatch, tmp_path):
     recorded_temperatures: list[float] = []
     recorded_max_tokens: list[int] = []
 
-    def capture_summary(**kwargs: Any) -> DraftStageResult:
+    def capture_summary(**kwargs: Any) -> SummaryStageResult:
         recorded_temperatures.append(kwargs.get("temperature"))
         recorded_max_tokens.append(kwargs.get("max_tokens"))
-        return DraftStageResult("Summary", {"prompt_tokens": 5, "completion_tokens": 5, "total_tokens": 10})
+        return SummaryStageResult(
+            data={"executive_summary": {"bullets": ["Summary"]}},
+            markdown="# Summary\n\n## Executive summary\n- Summary\n",
+            usage={"prompt_tokens": 5, "completion_tokens": 5, "total_tokens": 10},
+        )
 
     monkeypatch.setattr(
-        "packages.udocket_core.agents.summarize.utils.generate_summary_markdown",
+        "packages.udocket_core.agents.summarize.utils.generate_summary_payload",
         capture_summary,
     )
 

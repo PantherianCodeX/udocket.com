@@ -18,13 +18,13 @@ from ..common import (
     TranscriptParse,
 )
 from .stages import (
-    DraftStageResult,
     EntityStageResult,
     OutlineStageResult,
+    SummaryStageResult,
     TimelineStageResult,
     generate_entities,
     generate_outline,
-    generate_summary_markdown,
+    generate_summary_payload,
     generate_timeline,
 )
 
@@ -46,7 +46,8 @@ DEFAULT_CHARS_PER_TOKEN = 4.0
 
 @dataclass
 class FinalizedOutputs:
-    summary_path: Path
+    summary_path: Path  # structured JSON
+    summary_markdown_path: Path
     outline_path: Path
     timeline_seed_path: Path
     entity_hint_path: Path
@@ -412,7 +413,7 @@ class SummarizePipeline:
             client_available=bool(llm_client),
         )
         try:
-            summary_result = generate_summary_markdown(
+            summary_result = generate_summary_payload(
                 parse=parse,
                 outline=outline_result.outline,
                 timeline=timeline_result.events,
@@ -446,11 +447,15 @@ class SummarizePipeline:
     def qa_and_finalize(self, state: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
         self._notify_stage("qa_and_finalize", "start")
         parse: TranscriptParse = state["parse"]
-        summary_result: DraftStageResult = state["summary_result"]
+        summary_result: SummaryStageResult = state["summary_result"]
         markdown = summary_result.markdown.strip()
         markdown = self._ensure_header(markdown, parse)
         markdown = self._ensure_sections(markdown)
-        state["summary_result"] = DraftStageResult(markdown=markdown, usage=summary_result.usage)
+        state["summary_result"] = SummaryStageResult(
+            data=summary_result.data,
+            markdown=markdown,
+            usage=summary_result.usage,
+        )
         self._notify_stage(
             "qa_and_finalize",
             "complete",
@@ -464,7 +469,7 @@ class SummarizePipeline:
         outline_result: OutlineStageResult = state["outline_result"]
         timeline_result: TimelineStageResult = state["timeline_result"]
         entity_result: EntityStageResult = state["entity_result"]
-        summary_result: DraftStageResult = state["summary_result"]
+        summary_result: SummaryStageResult = state["summary_result"]
         transcript_path: Path = state["transcript_path"]
         token_usage: Dict[str, Dict[str, int]] = state.get("token_usage", {})
         case_brief: Dict[str, Any] = state.get("case_brief", {})
@@ -638,7 +643,7 @@ def finalize_outputs(
     outline_result: OutlineStageResult,
     timeline_result: TimelineStageResult,
     entity_result: EntityStageResult,
-    summary_result: DraftStageResult,
+    summary_result: SummaryStageResult,
     intake_payload: Dict[str, Any],
     config: Any,
     token_usage: Dict[str, Dict[str, int]],
@@ -651,8 +656,14 @@ def finalize_outputs(
     ensure_dir(analysis_dir)
     ensure_dir(ops_dir)
 
-    summary_path = next_versioned(analysis_dir / f"{job_id}__summary_v1.md")
-    summary_path.write_text(summary_result.markdown, encoding="utf-8")
+    summary_json_path = next_versioned(analysis_dir / f"{job_id}__summary_v1.json")
+    summary_json_path.write_text(
+        json.dumps(summary_result.data, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+    summary_markdown_path = next_versioned(analysis_dir / f"{job_id}__summary_v1.md")
+    summary_markdown_path.write_text(summary_result.markdown, encoding="utf-8")
 
     outline_path = next_versioned(analysis_dir / f"{job_id}__outline_v1.json")
     outline_path.write_text(json.dumps(outline_result.outline, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -671,14 +682,16 @@ def finalize_outputs(
         encoding="utf-8",
     )
 
-    summary_sha = sha256_file(summary_path)
+    summary_json_sha = sha256_file(summary_json_path)
+    summary_markdown_sha = sha256_file(summary_markdown_path)
     outline_sha = sha256_file(outline_path)
     timeline_sha = sha256_file(timeline_path)
     entity_sha = sha256_file(entity_path)
     case_brief_sha = sha256_file(case_brief_path)
 
     sha_map = {
-        "summary": summary_sha,
+        "summary_json": summary_json_sha,
+        "summary_markdown": summary_markdown_sha,
         "outline": outline_sha,
         "timeline": timeline_sha,
         "entities": entity_sha,
@@ -697,8 +710,10 @@ def finalize_outputs(
         "case_id": case_id,
         "job_id": job_id,
         "source_transcript": str(transcript_path),
-        "summary_file": summary_path.name,
-        "summary_sha256": summary_sha,
+        "summary_file": summary_json_path.name,
+        "summary_sha256": summary_json_sha,
+        "summary_markdown_file": summary_markdown_path.name,
+        "summary_markdown_sha256": summary_markdown_sha,
         "outline_file": outline_path.name,
         "outline_sha256": outline_sha,
         "timeline_seeds_file": timeline_path.name,
@@ -736,7 +751,8 @@ def finalize_outputs(
             "case_id": case_id,
             "job_id": job_id,
             "event": "summary.created",
-            "summary_file": str(summary_path),
+            "summary_file": str(summary_json_path),
+            "summary_markdown_file": str(summary_markdown_path),
             "outline_file": str(outline_path),
             "timeline_file": str(timeline_path),
             "entity_file": str(entity_path),
@@ -747,7 +763,8 @@ def finalize_outputs(
     )
 
     artifacts = {
-        "summary": AnalysisArtifact("summary", summary_path, summary_sha, {}),
+        "summary": AnalysisArtifact("summary", summary_json_path, summary_json_sha, {}),
+        "summary_markdown": AnalysisArtifact("summary_markdown", summary_markdown_path, summary_markdown_sha, {}),
         "outline": AnalysisArtifact("outline", outline_path, outline_sha, {}),
         "timeline": AnalysisArtifact("timeline", timeline_path, timeline_sha, {}),
         "entities": AnalysisArtifact("entities", entity_path, entity_sha, {}),
@@ -755,7 +772,8 @@ def finalize_outputs(
     }
 
     return FinalizedOutputs(
-        summary_path=summary_path,
+        summary_path=summary_json_path,
+        summary_markdown_path=summary_markdown_path,
         outline_path=outline_path,
         timeline_seed_path=timeline_path,
         entity_hint_path=entity_path,

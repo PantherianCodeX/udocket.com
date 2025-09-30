@@ -149,6 +149,98 @@
   </section>
 </div>
 
+{% if target == "guardian" %}
+<section class="mt-8 space-y-5 rounded-2xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-black/25" data-guardian-settings>
+  <header class="flex items-center justify-between gap-3">
+    <div>
+      <h2 class="text-xl font-semibold text-white">Guardian policy instructions</h2>
+      <p class="text-sm text-slate-300">Manage the contextual guidance delivered to the Guardian reviewer.</p>
+    </div>
+  </header>
+
+  <div class="space-y-4">
+    {% if guardian_instructions %}
+      {% for instruction in guardian_instructions %}
+        <div class="space-y-3 rounded-2xl border border-white/10 bg-slate-900/60 p-4" data-guardian-instruction>
+          <form method="post" class="space-y-3">
+            {% csrf_token %}
+            <input type="hidden" name="section" value="guardian">
+            <input type="hidden" name="target" value="guardian">
+            <input type="hidden" name="action" value="instruction-update">
+            <input type="hidden" name="instruction_id" value="{{ instruction.id }}">
+          <div class="flex flex-wrap items-start gap-4">
+            <label class="flex-1 text-sm text-slate-200">Title
+              <input type="text" name="instruction_title" value="{{ instruction.title }}" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" required>
+            </label>
+            <label class="w-full max-w-[12rem] text-sm text-slate-200">Severity
+              <select name="instruction_severity" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none">
+                {% for option in guardian_severity_options %}
+                  <option value="{{ option.value }}" {% if instruction.severity == option.value %}selected{% endif %}>{{ option.label }}</option>
+                {% endfor %}
+              </select>
+            </label>
+          </div>
+          <label class="block text-sm text-slate-200">Details / prompt guidance
+            <textarea name="instruction_text" rows="3" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" required>{{ instruction.text }}</textarea>
+          </label>
+          <label class="block text-sm text-slate-200">Applies to artifact types
+            <input type="text" name="instruction_applies_to" value="{{ instruction.applies_to|join:", " }}" placeholder="SUMMARY, TIMELINE" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none">
+            <p class="mt-1 text-[11px] text-slate-500">Comma separated list (e.g. SUMMARY, TIMELINE, DOCUMENT). Leave blank to apply to all artifacts.</p>
+          </label>
+          <div class="flex items-center justify-end gap-2">
+            <button type="submit" class="inline-flex items-center gap-2 rounded-lg bg-primary-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-primary-500/30 transition hover:bg-primary-400">Update</button>
+          </div>
+          </form>
+          <form method="post" class="flex justify-end" data-guardian-delete>
+            {% csrf_token %}
+            <input type="hidden" name="section" value="guardian">
+            <input type="hidden" name="target" value="guardian">
+            <input type="hidden" name="action" value="instruction-delete">
+            <input type="hidden" name="instruction_id" value="{{ instruction.id }}">
+            <button type="submit" class="rounded-lg border border-rose-500/40 bg-rose-500/20 px-3 py-2 text-sm text-rose-100 transition hover:bg-rose-500/30">Delete</button>
+          </form>
+        </div>
+      {% endfor %}
+    {% else %}
+      <div class="rounded-xl border border-dashed border-white/10 bg-slate-900/50 px-4 py-6 text-center text-sm text-slate-300">No guardian instructions configured yet.</div>
+    {% endif %}
+  </div>
+
+  <div class="rounded-2xl border border-white/10 bg-slate-900/60 p-4">
+    <h3 class="text-lg font-semibold text-white">Add instruction</h3>
+    <form method="post" class="mt-3 space-y-3">
+      {% csrf_token %}
+      <input type="hidden" name="section" value="guardian">
+      <input type="hidden" name="target" value="guardian">
+      <input type="hidden" name="action" value="instruction-add">
+      <label class="block text-sm text-slate-200">Title
+        <input type="text" name="instruction_title" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" required>
+      </label>
+      <label class="block text-sm text-slate-200">Details / prompt guidance
+        <textarea name="instruction_text" rows="3" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" required></textarea>
+      </label>
+      <div class="grid gap-3 md:grid-cols-2">
+        <label class="text-sm text-slate-200">Applies to artifact types
+          <input type="text" name="instruction_applies_to" placeholder="SUMMARY, TIMELINE" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none">
+        </label>
+        <label class="text-sm text-slate-200">Severity
+          <select name="instruction_severity" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none">
+            {% for option in guardian_severity_options %}
+              <option value="{{ option.value }}">{{ option.label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+      <div class="flex items-center justify-end">
+        <button type="submit" class="inline-flex items-center gap-2 rounded-lg bg-primary-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-primary-500/30 transition hover:bg-primary-400">Add instruction</button>
+      </div>
+    </form>
+  </div>
+</section>
+{% endif %}
+
 {{ stage_entries|json_script:"organization-stage-data" }}
+{{ model_options|json_script:"organization-model-options" }}
+{% endblock %}
 {{ model_options|json_script:"organization-model-options" }}
 {% endblock %}

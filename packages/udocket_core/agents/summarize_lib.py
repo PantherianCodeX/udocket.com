@@ -397,6 +397,7 @@ class SummarizeConfig:
 class SummarizeResult:
     status: str
     summary_file: Path
+    summary_markdown_file: Path
     outline_file: Optional[Path]
     timeline_seeds_file: Optional[Path]
     entity_hints_file: Optional[Path]
@@ -705,6 +706,7 @@ class SummarizeAgent:
         return SummarizeResult(
             status=final_state.get("status", "ok"),
             summary_file=final_outputs.summary_path,
+            summary_markdown_file=final_outputs.summary_markdown_path,
             outline_file=final_outputs.outline_path,
             timeline_seeds_file=final_outputs.timeline_seed_path,
             entity_hints_file=final_outputs.entity_hint_path,

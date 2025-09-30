@@ -321,15 +321,38 @@ def analysis_modules_context(
                 "user_can_add": _user_can_add_notes(user, case),
             }
 
+        latest_details = as_dict(latest.get("details")) if latest else {}
         downloads: List[Dict[str, Any]] = []
-        if latest and latest.get("download_url"):
-            downloads.append(
-                {
-                    "label": "Download",
-                    "href": latest.get("download_url"),
-                    "download": True,
-                }
-            )
+        job_identifier = latest.get("job_id") if latest else None
+        if job_identifier:
+            def _add_download(kind: str, label: str, meta: Optional[str] = None) -> None:
+                downloads.append(
+                    {
+                        "label": label,
+                        "href": f"/api/v1/jobs/{job_identifier}/download-analysis/?kind={kind}",
+                        "download": True,
+                        "meta": meta,
+                    }
+                )
+
+            if latest_details.get("summary_path") or latest.get("download_url"):
+                downloads.append(
+                    {
+                        "label": "Summary JSON",
+                        "href": latest.get("download_url") or f"/api/v1/jobs/{job_identifier}/download-analysis/?kind=summary_json",
+                        "download": True,
+                    }
+                )
+            if latest_details.get("summary_markdown_path"):
+                _add_download("summary_markdown", "Summary Markdown")
+            if latest_details.get("outline_path"):
+                _add_download("summary_outline", "Outline JSON")
+            if latest_details.get("timeline_seed_path") or latest_details.get("timeline_seed_name"):
+                _add_download("summary_timeline_seeds", "Timeline seeds")
+            if latest_details.get("entity_hint_path"):
+                _add_download("summary_entity_hints", "Entity hints")
+            if latest_details.get("case_brief_path"):
+                _add_download("summary_case_brief", "Case brief")
 
         return {
             "key": key,
@@ -343,7 +366,7 @@ def analysis_modules_context(
             "latest": latest,
             "history": history,
             "downloads": downloads,
-            "latest_details": as_dict(latest.get("details")) if latest else {},
+            "latest_details": latest_details,
             "empty_message": empty_message,
             "target_job": target_job,
             "action": {

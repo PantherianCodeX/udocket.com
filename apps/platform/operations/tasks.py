@@ -24,13 +24,13 @@ from packages.udocket_core.agents import (
     TranscriptionConfig,
     normalize_audio,
 )
+from packages.udocket_core.agents.guardian_lib import GuardianVerdict
 from packages.udocket_core.llm.config import load_llm_settings
 from packages.udocket_core.audio import probe_audio_metadata
 from apps.platform.operations.channels import send_job_update, send_case_update
 from apps.platform.jobs.models import Job
 from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.operations.blob_upload import upload_with_sas, UploadCancelled
-from apps.platform.operations.models import TaskRun
 from apps.platform.cases.models import Case
 from apps.platform.operations.audit import emit as audit_emit
 from apps.platform.operations.storage import ensure_case_dirs, tenant_case_root, ops_dir as storage_ops_dir
@@ -38,6 +38,12 @@ from apps.platform.operations.llm import (
     ensure_default_llm_configuration,
     get_llm_configuration,
     get_provider_secret_with_metadata,
+)
+from apps.platform.operations.guardian import (
+    build_guardian_context,
+    build_guardian_review_record,
+    snapshot_artifact_for_guardian,
+    store_guardian_review,
 )
 from apps.platform.operations.utils import update_job_meta, append_job_log
 
@@ -1550,16 +1556,19 @@ def summarize_job(
         raise
 
     checksum = _sha256_file(result.summary_file)
+    markdown_checksum = _sha256_file(result.summary_markdown_file)
     meta_updates: Dict[str, Any] = {
         **base_meta,
         "summary_status": "completed",
         "summary_file": str(result.summary_file),
+        "summary_markdown_file": str(result.summary_markdown_file),
         "summary_outline_file": str(result.outline_file) if result.outline_file else None,
         "summary_timeline_file": str(result.timeline_seeds_file) if result.timeline_seeds_file else None,
         "summary_entity_file": str(result.entity_hints_file) if result.entity_hints_file else None,
         "summary_case_brief_file": str(result.case_brief_file) if result.case_brief_file else None,
         "summary_words": result.words,
         "summary_sha256": checksum,
+        "summary_markdown_sha256": markdown_checksum,
         "summary_provider_chain": result.provider_chain,
         "summary_llm_config_id": active_config_id,
         "summary_llm_config_name": active_config_name,
@@ -1603,6 +1612,11 @@ def summarize_job(
                 "source_transcript": str(result.source_transcript),
                 "source_job_id": str(source_job.id),
                 "provider_chain": result.provider_chain,
+                "summary_markdown_file": str(result.summary_markdown_file),
+                "summary_outline_file": str(result.outline_file) if result.outline_file else None,
+                "summary_timeline_file": str(result.timeline_seeds_file) if result.timeline_seeds_file else None,
+                "summary_entity_file": str(result.entity_hints_file) if result.entity_hints_file else None,
+                "summary_case_brief_file": str(result.case_brief_file) if result.case_brief_file else None,
             },
         )
         summary_artifact_id = str(artifact.id)
@@ -1633,6 +1647,7 @@ def summarize_job(
         "job_id": job_id,
         "source_job_id": str(source_job.id),
         "summary_file": str(result.summary_file),
+        "summary_markdown_file": str(result.summary_markdown_file),
         "outline_file": str(result.outline_file) if result.outline_file else None,
         "timeline_file": str(result.timeline_seeds_file) if result.timeline_seeds_file else None,
         "entity_file": str(result.entity_hints_file) if result.entity_hints_file else None,
@@ -1917,4 +1932,230 @@ def graph_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
         "graph_file": str(graph_file),
         "entities": len(entities),
         "edges": len(graph.get("edges", [])),
+    }
+
+
+@shared_task(bind=True)
+def guardian_review_artifact(self, *, artifact_id: int) -> Dict[str, Any]:
+    request_id = getattr(getattr(self, "request", None), "id", "") or ""
+    try:
+        artifact = CaseArtifact.objects.select_related("case_fk").get(pk=artifact_id)
+    except CaseArtifact.DoesNotExist:
+        return {"status": "missing", "artifact_id": artifact_id}
+
+    job_id = str(artifact.job_id or "")
+    job_obj: Optional[Job] = None
+    if job_id:
+        job_obj = Job.objects.select_related("case").filter(pk=job_id).first()
+
+    org_id = artifact.organization_id
+    if org_id is None and job_obj is not None:
+        org_id = job_obj.organization_id
+    if org_id is None and artifact.case_fk_id:
+        org_id = artifact.case_fk.organization_id
+    org_id_str = str(org_id) if org_id else None
+
+    context = build_guardian_context(org_id_str)
+
+    task_meta: Dict[str, Any] = {
+        "artifact_id": artifact.id,
+        "artifact_type": artifact.type,
+        "job_id": job_id or None,
+        "case_id": artifact.case_id,
+    }
+
+    runtime: Optional[JobRuntimeContext] = None
+    if job_obj is not None:
+        runtime = JobRuntimeContext(
+            job=job_obj,
+            case_id=case_id,
+            org_id=org_id_str,
+            task_name="guardian_review_artifact",
+            task_id=request_id,
+            task_meta=dict(task_meta),
+        )
+        runtime.transition(
+            event="guardian.review.started",
+            job_event_payload={
+                "artifact_id": artifact.id,
+                "guardian_status": "running",
+            },
+        )
+
+    case_id = artifact.case_id
+
+    if context is None:
+        review_record = {
+            "status": "skipped",
+            "reason": "guardian_not_configured",
+            "reviewed_at": timezone.now().isoformat(),
+            "artifact_id": artifact.id,
+            "artifact_type": artifact.type,
+        }
+        store_guardian_review(artifact, review_record)
+        if runtime:
+            runtime.transition(
+                event="guardian.review.skipped",
+                job_event_payload={
+                    "artifact_id": artifact.id,
+                    "guardian_status": "skipped",
+                    "guardian_reason": "guardian_not_configured",
+                },
+            )
+        return {"status": "skipped", "artifact_id": artifact.id, "reason": "guardian_not_configured"}
+
+    artifact_payload = snapshot_artifact_for_guardian(artifact)
+    if "content" not in artifact_payload and "parsed" not in artifact_payload:
+        review_record = {
+            "status": "skipped",
+            "reason": "unreadable_artifact",
+            "reviewed_at": timezone.now().isoformat(),
+            "artifact_id": artifact.id,
+            "artifact_type": artifact.type,
+        }
+        store_guardian_review(artifact, review_record)
+        if runtime:
+            runtime.transition(
+                event="guardian.review.skipped",
+                job_event_payload={
+                    "artifact_id": artifact.id,
+                    "guardian_status": "skipped",
+                    "guardian_reason": "unreadable_artifact",
+                },
+            )
+        return {"status": "skipped", "artifact_id": artifact.id, "reason": "unreadable_artifact"}
+
+    verdict: Optional[GuardianVerdict] = None
+    try:
+        job_metadata: Dict[str, Any] = {}
+        if job_id and org_id_str:
+            try:
+                job_metadata = _load_job_meta(case_id, org_id_str, job_id)
+            except Exception:
+                job_metadata = {}
+
+        artifact_type_upper = (artifact.type or "").upper()
+        applicable_instructions: List[Dict[str, Any]] = []
+        for instruction in context.instructions:
+            applies_to = instruction.get("applies_to")
+            if not applies_to:
+                applicable_instructions.append(instruction)
+                continue
+            try:
+                values = [str(item).upper() for item in applies_to]
+            except Exception:
+                values = []
+            if artifact_type_upper in values:
+                applicable_instructions.append(instruction)
+
+        case_data: Dict[str, Any] = {}
+        case_obj: Optional[Case] = artifact.case_fk
+        if case_obj is None:
+            case_obj = Case.objects.filter(pk=artifact.case_id).first()
+        if case_obj is not None:
+            case_data = {
+                "id": str(case_obj.id),
+                "title": case_obj.title,
+                "client_name": case_obj.client_name,
+                "representation": case_obj.representation,
+            }
+
+        guardian_context_payload = {
+            "artifact_metadata": artifact.metadata or {},
+            "job_metadata": job_metadata,
+            "artifact_type": artifact.type,
+            "artifact_title": artifact.title,
+            "artifact_path": artifact.path,
+            "instructions": applicable_instructions,
+            "all_instructions": context.instructions,
+            "case": case_data,
+        }
+
+        verdict = context.agent.review(
+            case_id=case_id,
+            job_id=job_id,
+            artifact_kind=artifact.type or "artifact",
+            payload=artifact_payload,
+            providers=context.provider_chain,
+            model=context.model,
+            options={"temperature": context.temperature} if context.temperature is not None else None,
+            provider_credentials=context.credentials,
+            context=guardian_context_payload,
+            max_tokens=context.max_tokens,
+            temperature=context.temperature,
+        )
+    except Exception as exc:
+        review_record = {
+            "status": "error",
+            "error": str(exc),
+            "reviewed_at": timezone.now().isoformat(),
+            "artifact_id": artifact.id,
+            "artifact_type": artifact.type,
+        }
+        store_guardian_review(artifact, review_record)
+        if job_id:
+            _safe_job_log(case_id, org_id_str, job_id, f"Guardian review error: {exc}", level="ERROR")
+        if runtime:
+            runtime.transition(
+                event="guardian.review.failed",
+                job_event_payload={
+                    "artifact_id": artifact.id,
+                    "guardian_status": "error",
+                    "guardian_error": str(exc),
+                },
+                meta_updates={"guardian_last_error": str(exc)},
+            )
+        raise
+
+    status = "approved" if verdict.approved else "rejected"
+    review_record = build_guardian_review_record(
+        verdict=verdict,
+        status=status,
+        artifact=artifact,
+        context=context,
+        extra={
+            "retry_attempts": context.agent.config.retry_attempts,
+            "instructions_used": len(applicable_instructions),
+        },
+    )
+    store_guardian_review(artifact, review_record)
+    event_status = "SUCCEEDED" if verdict.approved else "FAILED"
+
+    if job_id:
+        reduced_record = dict(review_record)
+        reduced_record.pop("artifact_id", None)
+        reduced_record.pop("artifact_type", None)
+        _safe_job_meta(case_id, org_id_str, job_id, {"guardian_last_review": reduced_record})
+        _safe_job_log(
+            case_id,
+            org_id_str,
+            job_id,
+            "Guardian review completed" if verdict.approved else "Guardian review flagged violations",
+        )
+        _emit_job_update(
+            job_id,
+            case_id=case_id,
+            event="guardian.review.completed",
+            status=event_status,
+            guardian_status=status,
+            artifact_id=artifact.id,
+        )
+
+    if runtime:
+        runtime.transition(
+            event="guardian.review.completed",
+            job_event_payload={
+                "artifact_id": artifact.id,
+                "guardian_status": status,
+            },
+            meta_updates={"guardian_last_review": review_record},
+        )
+
+    return {
+        "status": status,
+        "artifact_id": artifact.id,
+        "provider": verdict.provider,
+        "model": verdict.model,
+        "violations": verdict.violations,
+        "remediation": verdict.remediation,
     }

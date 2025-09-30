@@ -71,6 +71,18 @@
         "azure"
       ],
       "model": "gpt-4o-mini"
+    },
+    "guardian.review": {
+      "target": "guardian",
+      "label": "Output Guardian",
+      "description": "Final policy and safety review to block legal advice, interpretation, or form selection.",
+      "providers": [
+        "azure"
+      ],
+      "model": "gpt-4o-mini",
+      "options": {
+        "temperature": "0.0"
+      }
     }
   }
 }

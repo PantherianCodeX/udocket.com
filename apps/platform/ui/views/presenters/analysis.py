@@ -28,6 +28,7 @@ def enrich_summary_artifacts(
         telem = telemetry_map.get(str(job_id)) or {}
         meta_payload = as_dict(telem.get("metadata"))
         summary_path = _normalize_path(meta_payload.get("summary_file"))
+        summary_markdown_path = _normalize_path(meta_payload.get("summary_markdown_file"))
         if not summary_path:
             continue
         outline_path = _normalize_path(meta_payload.get("summary_outline_file"))
@@ -44,6 +45,8 @@ def enrich_summary_artifacts(
         details: Dict[str, Any] = {
             "summary_path": summary_path,
             "summary_name": Path(summary_path).name if summary_path else None,
+            "summary_markdown_path": summary_markdown_path,
+            "summary_markdown_name": Path(summary_markdown_path).name if summary_markdown_path else None,
             "outline_path": outline_path,
             "outline_name": Path(outline_path).name if outline_path else None,
             "timeline_seed_path": timeline_seed_path,
@@ -57,6 +60,13 @@ def enrich_summary_artifacts(
             "case_brief_name": Path(case_brief_path).name if case_brief_path else None,
             "provider_chain": provider_chain,
         }
+        guardian_meta = meta_payload.get("guardian_last_review") if isinstance(meta_payload, dict) else None
+        if isinstance(guardian_meta, dict):
+            details["guardian"] = guardian_meta
+            details["guardian_status"] = guardian_meta.get("status")
+            details["guardian_reviewed_at"] = guardian_meta.get("reviewed_at")
+            details["guardian_notes"] = guardian_meta.get("notes")
+            details["guardian_violations"] = guardian_meta.get("violations")
         meta_by_job[str(job_id)] = details
 
     existing_ids = {str(item.get("job_id")) for item in artifacts}
@@ -67,6 +77,16 @@ def enrich_summary_artifacts(
         if not details:
             continue
         artifact.setdefault("details", {}).update(details)
+        artifact_meta = as_dict(artifact.get("metadata"))
+        if isinstance(artifact_meta, dict) and "guardian" in artifact_meta:
+            guardian_payload = artifact_meta.get("guardian_last_review") or artifact_meta.get("guardian")
+            if isinstance(guardian_payload, dict):
+                artifact_details = artifact.setdefault("details", {})
+                artifact_details.setdefault("guardian", guardian_payload)
+                artifact_details.setdefault("guardian_status", guardian_payload.get("status"))
+                artifact_details.setdefault("guardian_reviewed_at", guardian_payload.get("reviewed_at"))
+                artifact_details.setdefault("guardian_notes", guardian_payload.get("notes"))
+                artifact_details.setdefault("guardian_violations", guardian_payload.get("violations"))
 
     for job_id, details in meta_by_job.items():
         if job_id in existing_ids:
@@ -101,6 +121,14 @@ def enrich_timeline_artifacts(artifacts: List[Dict[str, Any]]) -> List[Dict[str,
         seed_path = meta.get("seed_source")
         if seed_path:
             artifact.setdefault("details", {})["seed_source"] = seed_path
+        guardian_meta = meta.get("guardian_last_review") or meta.get("guardian")
+        if isinstance(guardian_meta, dict):
+            details = artifact.setdefault("details", {})
+            details["guardian"] = guardian_meta
+            details["guardian_status"] = guardian_meta.get("status")
+            details["guardian_reviewed_at"] = guardian_meta.get("reviewed_at")
+            details["guardian_notes"] = guardian_meta.get("notes")
+            details["guardian_violations"] = guardian_meta.get("violations")
     return artifacts
 
 

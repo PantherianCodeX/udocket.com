@@ -32,18 +32,20 @@
       {% if summary_llm and summary_llm.stage_configs %}
         <div class="space-y-2">
           <p class="text-xs uppercase tracking-wide text-slate-400">Stage configuration</p>
-          {% include "platform_ui/tools/components/_llm_stage_cards.html" with stages=summary_llm.stage_configs %}
+          {% include "platform_ui/components/stage_cards.html" with stages=summary_llm.stage_configs %}
         </div>
       {% endif %}
-      {% if module.notes and module.notes.job_id %}
-        {% include "platform_ui/components/notes/team_notes_panel.html" with
-          job_id=module.notes.job_id
-          notes_entries=module.notes.entries
-          notes_updated_at=module.notes.updated_at
-          notes_updated_by=module.notes.updated_by
-          user_can_add_notes=module.notes.user_can_add
-        %}
-      {% endif %}
+      {% with notes=module.notes %}
+        {% if notes and notes.job_id %}
+          {% include "platform_ui/components/notes/team_notes_panel.html" with
+            job_id=notes.job_id
+            notes_entries=notes.entries
+            notes_updated_at=notes.updated_at
+            notes_updated_by=notes.updated_by
+            user_can_add_notes=notes.user_can_add
+          %}
+        {% endif %}
+      {% endwith %}
       <div class="flex items-center justify-end gap-3">
         <button type="button"
                 class="inline-flex items-center gap-2 rounded-lg bg-primary-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-primary-500/30 transition hover:bg-primary-400 disabled:cursor-not-allowed disabled:opacity-60"
@@ -105,6 +107,31 @@
               <div class="rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2">
                 <p class="text-[11px] font-semibold text-slate-200">Providers</p>
                 <p class="text-[11px] text-slate-400">{{ module.latest_details.provider_chain|join:", " }}</p>
+              </div>
+            {% endif %}
+            {% if module.latest_details.guardian_status %}
+              <div class="rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 space-y-1">
+                <div class="flex items-center justify-between text-xs">
+                  <span class="font-semibold text-slate-200">Guardian status</span>
+                  <span class="uppercase tracking-wide text-slate-300">{{ module.latest_details.guardian_status }}</span>
+                </div>
+                {% if module.latest_details.guardian_reviewed_at %}
+                  <p class="text-[11px] text-slate-500">Reviewed <time data-ts="{{ module.latest_details.guardian_reviewed_at }}" data-ts-format="datetime">{{ module.latest_details.guardian_reviewed_at }}</time></p>
+                {% endif %}
+                {% if module.latest_details.guardian_notes %}
+                  <p class="text-[11px] text-slate-400">{{ module.latest_details.guardian_notes }}</p>
+                {% endif %}
+                {% if module.latest_details.guardian_violations %}
+                  <ul class="space-y-1 text-[11px] text-rose-300">
+                    {% for violation in module.latest_details.guardian_violations %}
+                      <li>
+                        <span class="font-semibold">{{ violation.category|default:"Violation" }}:</span>
+                        {{ violation.message|default:"See notes" }}
+                        {% if violation.citation %}<span class="text-rose-200/70">({{ violation.citation }})</span>{% endif %}
+                      </li>
+                    {% endfor %}
+                  </ul>
+                {% endif %}
               </div>
             {% endif %}
           </div>

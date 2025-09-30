@@ -31,6 +31,11 @@ from apps.platform.operations.llm import (
     upsert_org_provider_credential,
     upsert_org_provider_credential_by_uuid,
 )
+from apps.platform.operations.guardian import (
+    get_guardian_instructions,
+    new_instruction_template,
+    save_guardian_instructions,
+)
 from packages.udocket_core.llm import LLMSettings, load_llm_settings
 from packages.udocket_core.llm.runtime import ChatClientError
 
@@ -627,6 +632,81 @@ def organization_settings(
         errors: List[str] = []
         target = active_section
         stage_keys = stage_targets.get(target, [])
+
+        if target == "guardian" and action in {
+            "instruction-add",
+            "instruction-update",
+            "instruction-delete",
+        }:
+            org_id_str = str(organization.id)
+            instructions = get_guardian_instructions(org_id_str)
+            instruction_id = (request.POST.get("instruction_id") or "").strip()
+            allowed_severities = {"critical", "high", "medium", "low"}
+
+            def _parse_applies(raw_value: str) -> List[str]:
+                if not raw_value:
+                    return []
+                items = [item.strip().upper() for item in raw_value.split(",")]
+                return [item for item in items if item]
+
+            if action == "instruction-add":
+                title = (request.POST.get("instruction_title") or "").strip()
+                text_value = (request.POST.get("instruction_text") or "").strip()
+                applies_raw = request.POST.get("instruction_applies_to") or ""
+                severity = (request.POST.get("instruction_severity") or "medium").strip().lower()
+                if severity not in allowed_severities:
+                    severity = "medium"
+                if not title or not text_value:
+                    errors.append("Title and details are required to add an instruction.")
+                else:
+                    entry = new_instruction_template()
+                    entry.update(
+                        {
+                            "title": title,
+                            "text": text_value,
+                            "applies_to": _parse_applies(applies_raw),
+                            "severity": severity,
+                        }
+                    )
+                    instructions.append(entry)
+                    messages.success(request, "Guardian instruction added.")
+            elif action == "instruction-update":
+                title = (request.POST.get("instruction_title") or "").strip()
+                text_value = (request.POST.get("instruction_text") or "").strip()
+                applies_raw = request.POST.get("instruction_applies_to") or ""
+                severity = (request.POST.get("instruction_severity") or "medium").strip().lower()
+                if severity not in allowed_severities:
+                    severity = "medium"
+                matched = False
+                for entry in instructions:
+                    if str(entry.get("id")) == instruction_id:
+                        matched = True
+                        if title:
+                            entry["title"] = title
+                        if text_value:
+                            entry["text"] = text_value
+                        entry["applies_to"] = _parse_applies(applies_raw)
+                        entry["severity"] = severity
+                        messages.success(request, "Guardian instruction updated.")
+                        break
+                if not matched:
+                    errors.append("Instruction not found.")
+            elif action == "instruction-delete":
+                filtered = [entry for entry in instructions if str(entry.get("id")) != instruction_id]
+                if len(filtered) == len(instructions):
+                    errors.append("Instruction not found.")
+                else:
+                    instructions = filtered
+                    messages.success(request, "Guardian instruction removed.")
+
+            if not errors:
+                save_guardian_instructions(org_id_str, instructions)
+
+            for error in errors:
+                messages.error(request, error)
+
+            return redirect(reverse("ui-organization-settings-section", args=[target]))
+
         if action == "config-delete":
             config_id = (request.POST.get("config_id") or "").strip()
             if config_id:
@@ -996,6 +1076,14 @@ def organization_settings(
         "providers_configured": bool(provider_registry),
         "provider_warning": not enabled_providers,
     }
+    if target_key == "guardian":
+        context["guardian_instructions"] = get_guardian_instructions(str(organization.id))
+        context["guardian_severity_options"] = [
+            {"value": "critical", "label": "Critical"},
+            {"value": "high", "label": "High"},
+            {"value": "medium", "label": "Medium"},
+            {"value": "low", "label": "Low"},
+        ]
     return render(
         request,
         "platform_ui/settings/organization/target.html",

@@ -11,6 +11,12 @@ from .summarize_lib import (
     SummarizeConfig,
     SummarizeResult,
 )
+from .guardian_lib import (
+    GuardianAgent,
+    GuardianConfig,
+    GuardianRejection,
+    GuardianVerdict,
+)
 from .langgraph_orchestrator import (
     SummarizeGraph,
     SummarizeNodeImpl,
@@ -25,6 +31,10 @@ __all__ = [
     "SummarizeAgent",
     "SummarizeConfig",
     "SummarizeResult",
+    "GuardianAgent",
+    "GuardianConfig",
+    "GuardianVerdict",
+    "GuardianRejection",
     "SummarizeGraph",
     "SummarizeNodeImpl",
     "build_summarize_graph",

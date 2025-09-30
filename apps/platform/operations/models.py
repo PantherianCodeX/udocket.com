@@ -64,3 +64,22 @@ class TaskRun(models.Model):
     job_id = models.CharField(max_length=36, blank=True)
     case_id = models.CharField(max_length=36, blank=True)
     meta = models.JSONField(default=dict, blank=True)
+
+
+class GuardianSettings(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    organization = models.OneToOneField(
+        "accounts.Organization",
+        on_delete=models.CASCADE,
+        related_name="guardian_settings",
+    )
+    instructions = models.JSONField(default=list, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Guardian Settings"
+        verbose_name_plural = "Guardian Settings"
+
+    def __str__(self) -> str:  # pragma: no cover - representational
+        return f"GuardianSettings(org={self.organization_id})"
