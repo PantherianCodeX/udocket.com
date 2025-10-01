@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from django.conf import settings
 from django.core.exceptions import PermissionDenied
@@ -213,6 +213,14 @@ def job_detail_context(
     )
     job_title = friendly_job_title(job, telemetry, db_artifact)
     metadata_map = as_dict(telemetry.get("metadata"))
+    job_kind_raw = str(metadata_map.get("job_kind", "") or getattr(job, "mode", "") or "")
+    job_kind_lower = job_kind_raw.lower()
+    job_kind_base = job_kind_lower.split(":")[-1] if job_kind_lower else ""
+    is_audio_conversion = job_kind_base == "audio_conversion"
+    is_analysis_job = (
+        job_kind_base in {"summary", "timeline"}
+        or job_kind_lower.startswith("analysis")
+    )
     metadata_items = format_metadata(metadata_map)
     azure_cancel_status = metadata_map.get("azure_cancel_status")
     azure_cancel_body = metadata_map.get("azure_cancel_body")
@@ -232,12 +240,13 @@ def job_detail_context(
         or telemetry_meta.get("batch_upload_converted")
         or telemetry_meta.get("converted_audio_job_id")
     )
-    job_kind = str(telemetry_meta.get("job_kind", ""))
+    job_kind = job_kind_raw
     show_convert_button = (
         job.status not in {Job.Status.SUCCEEDED, Job.Status.RUNNING, Job.Status.PENDING}
         and not converted_flag
         and not is_wav_input
-        and job_kind != "audio_conversion"
+        and not is_audio_conversion
+        and not is_analysis_job
     )
 
     source_job_id_value = str(telemetry_meta.get("source_job_id") or "")
@@ -259,7 +268,7 @@ def job_detail_context(
     notes_count = len(notes_entries)
 
     source_audio_meta: Dict[str, Any] | None = None
-    if job_kind == "audio_conversion":
+    if is_audio_conversion:
         source_job_id = telemetry_meta.get("source_job_id")
         if source_job_id:
             try:
@@ -283,7 +292,7 @@ def job_detail_context(
             can_review = True
 
     is_sub_job = bool(telemetry_meta.get("source_job_id"))
-    allow_title_edit = not (job_kind == "audio_conversion" or is_sub_job)
+    allow_title_edit = not (is_audio_conversion or is_sub_job)
 
     job_id_str = str(job.id)
     case_id_str = str(job.case_id)
@@ -295,35 +304,38 @@ def job_detail_context(
         user_can_add=can_review,
     )
 
-    audio_verify_enabled = bool(
-        audio_meta.get("path")
-        or audio_meta.get("sha256")
-        or telemetry_meta.get("converted_audio_sha256")
-        or telemetry_meta.get("audio_sha256")
-    )
-    audio_panel_current_html = render_audio_brief_panel_html(
-        panel_title="Audio",
-        panel_key="current",
-        job_id=job_id_str,
-        audio=audio_meta,
-        metadata=telemetry_meta,
-        refresh_enabled=True,
-        refresh_panel="current",
-        refresh_job_id=job_id_str,
-        refresh_display_job_id=job_id_str,
-        refresh_case_id=case_id_str,
-        verify_enabled=audio_verify_enabled,
-        verify_target="audio",
-        verify_scope=None,
-        verify_mark_targets=job_id_str,
-        case=job.case,
-        job=job,
-        case_id=case_id_str,
-    )
-
+    audio_panel_current_html = ""
     source_panel_html = ""
     converted_panel_html = ""
-    if job_kind == "audio_conversion":
+
+    if not is_analysis_job:
+        audio_verify_enabled = bool(
+            audio_meta.get("path")
+            or audio_meta.get("sha256")
+            or telemetry_meta.get("converted_audio_sha256")
+            or telemetry_meta.get("audio_sha256")
+        )
+        audio_panel_current_html = render_audio_brief_panel_html(
+            panel_title="Audio",
+            panel_key="current",
+            job_id=job_id_str,
+            audio=audio_meta,
+            metadata=telemetry_meta,
+            refresh_enabled=True,
+            refresh_panel="current",
+            refresh_job_id=job_id_str,
+            refresh_display_job_id=job_id_str,
+            refresh_case_id=case_id_str,
+            verify_enabled=audio_verify_enabled,
+            verify_target="audio",
+            verify_scope=None,
+            verify_mark_targets=job_id_str,
+            case=job.case,
+            job=job,
+            case_id=case_id_str,
+        )
+
+    if is_audio_conversion:
         source_verify_enabled = bool(
             (source_audio_meta or {}).get("path")
             or (source_audio_meta or {}).get("sha256")
@@ -376,6 +388,29 @@ def job_detail_context(
             case_id=case_id_str,
         )
 
+    analysis_artifacts: List[Dict[str, Any]] = []
+    if is_analysis_job:
+        artifacts_payload = telemetry.get("artifacts") if isinstance(telemetry, dict) else []
+        if isinstance(artifacts_payload, list):
+            for entry in artifacts_payload:
+                if not isinstance(entry, dict):
+                    continue
+                analysis_artifacts.append(
+                    {
+                        "id": entry.get("id"),
+                        "title": entry.get("title") or entry.get("filename") or "Artifact",
+                        "type": entry.get("type") or "",
+                        "download_url": entry.get("download_url"),
+                        "metadata": entry.get("metadata") or {},
+                    }
+                )
+
+    template = "platform_ui/components/jobs/job_detail.html"
+    if is_audio_conversion:
+        template = "platform_ui/components/jobs/job_detail_audio_conversion.html"
+    elif is_analysis_job:
+        template = "platform_ui/components/jobs/job_detail_analysis.html"
+
     return {
         "case": job.case,
         "job": job,
@@ -404,6 +439,10 @@ def job_detail_context(
         "audio_panel_current_html": audio_panel_current_html,
         "audio_panel_source_html": source_panel_html,
         "audio_panel_converted_html": converted_panel_html,
+        "analysis_artifacts": analysis_artifacts,
+        "template": template,
+        "is_analysis_job": is_analysis_job,
+        "is_audio_conversion": is_audio_conversion,
     }
 
 

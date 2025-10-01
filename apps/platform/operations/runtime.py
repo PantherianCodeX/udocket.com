@@ -155,10 +155,19 @@ class JobRuntimeContext:
         _safe_job_log(self.case_id, self.org_id, self.job_id, log_message or "")
         _safe_job_meta(self.case_id, self.org_id, self.job_id, meta_updates)
 
-        payload = job_event_payload or {}
-        _emit_job_update(self.job_id, case_id=self.case_id, event="job.succeeded", status=status, **payload)
-        for event_name, payload in events or []:
-            _emit_job_update(self.job_id, case_id=self.case_id, event=event_name, status=status, **payload)
+        payload = dict(job_event_payload or {})
+        event_status = payload.pop("status", status)
+        _emit_job_update(self.job_id, case_id=self.case_id, event="job.succeeded", status=event_status, **payload)
+        for event_name, event_payload in events or []:
+            payload_with_status = dict(event_payload or {})
+            event_status_override = payload_with_status.pop("status", status)
+            _emit_job_update(
+                self.job_id,
+                case_id=self.case_id,
+                event=event_name,
+                status=event_status_override,
+                **payload_with_status,
+            )
         meta_payload = {"status": status, "finished_at": finished.isoformat()}
         if task_meta_updates:
             meta_payload.update(task_meta_updates)
@@ -197,13 +206,27 @@ class JobRuntimeContext:
         _safe_job_log(self.case_id, self.org_id, self.job_id, log_line, level="ERROR")
         _safe_job_meta(self.case_id, self.org_id, self.job_id, meta_updates)
 
-        payload = job_event_payload or {}
+        payload = dict(job_event_payload or {})
         payload.setdefault("error", error)
-        _emit_job_update(self.job_id, case_id=self.case_id, event="job.failed", status=status, **payload)
-        for event_name, payload in events or []:
-            payload_with_error = dict(payload)
+        event_status = payload.pop("status", status)
+        _emit_job_update(
+            self.job_id,
+            case_id=self.case_id,
+            event="job.failed",
+            status=event_status,
+            **payload,
+        )
+        for event_name, event_payload in events or []:
+            payload_with_error = dict(event_payload or {})
             payload_with_error.setdefault("error", error)
-            _emit_job_update(self.job_id, case_id=self.case_id, event=event_name, status=status, **payload_with_error)
+            event_status_override = payload_with_error.pop("status", status)
+            _emit_job_update(
+                self.job_id,
+                case_id=self.case_id,
+                event=event_name,
+                status=event_status_override,
+                **payload_with_error,
+            )
 
         additional_meta = {"status": status, "finished_at": finished.isoformat(), "error": error}
         if task_meta_updates:

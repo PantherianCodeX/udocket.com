@@ -37,7 +37,7 @@ def build_job_action_entries(
     job_kind = str(meta.get("job_kind") or "").lower()
     converted_available = bool(meta.get("converted_wav_available"))
     source_job_id = meta.get("source_job_id")
-    is_summary = job_kind == "summary"
+    is_summary = "summary" in job_kind
 
     sections: List[Dict[str, Any]] = []
 

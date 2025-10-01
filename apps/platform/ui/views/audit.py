@@ -136,16 +136,20 @@ def guardian_overview(request: HttpRequest) -> HttpResponse:
     report_url = reverse("ui-guardian-report")
 
     section = {
-        "pretitle": f"Audit · {organization.name}",
+        "pretitle": f"Guardian · {organization.name}",
         "title": "Guardian compliance",
         "subtitle": stats.get("status_detail")
         or "Monitor organization-wide Guardian activity, flagged violations, and review history.",
         "actions": [
             {
-                "label": "Generate report",
-                "href": report_url,
-                "variant": "primary",
-                "target": "_blank",
+                "label": "View artifacts",
+                "href": "/artifacts/",
+                "variant": "default",
+            },
+            {
+                "label": "Permissions catalog",
+                "href": "/audit/permissions/",
+                "variant": "default",
             }
         ],
         "stats": [

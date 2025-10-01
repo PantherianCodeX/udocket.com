@@ -42,8 +42,8 @@ urlpatterns = [
         views.case_guardian_report,
         name="ui-case-guardian-report",
     ),
-    path("audit/guardian/", views.guardian_overview, name="ui-guardian-overview"),
-    path("audit/guardian/report/", views.guardian_report, name="ui-guardian-report"),
+    path("guardian/", views.guardian_overview, name="ui-guardian-overview"),
+    path("guardian/report/", views.guardian_report, name="ui-guardian-report"),
     path(
         "cases/<str:case_id>/tools/case-details/update/",
         views.case_details_update,
@@ -87,6 +87,7 @@ urlpatterns = [
     path("cases/<str:case_id>/assign-client/", views.case_assign_client, name="ui-case-assign-client"),
     path("jobs/", views.jobs, name="ui-jobs"),
     path("artifacts/", views.artifacts_index, name="ui-artifacts"),
+    path("audit/permissions/", views.permissions_overview, name="ui-permissions"),
     path("settings/organization/", views.organization_settings, name="ui-organization-settings"),
     path(
         "settings/organization/<str:section>/",
@@ -95,6 +96,5 @@ urlpatterns = [
     ),
     path("org/select/", views.select_organization, name="ui-select-organization"),
     path("jobs/<uuid:job_id>/detail-panel/", views.job_detail_panel, name="ui-job-detail-panel"),
-    path("permissions/", views.permissions_overview, name="ui-permissions"),
     path("logout/", views.logout_view, name="ui-logout"),
 ]
