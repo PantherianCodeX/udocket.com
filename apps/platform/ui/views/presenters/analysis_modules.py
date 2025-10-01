@@ -17,7 +17,7 @@ from apps.platform.jobs.notes import serialize_notes
 from ..common import as_dict
 from ..presenters.alerts import build_case_team_alerts
 from ..presenters.jobs import friendly_job_title
-from ..presenters.utils import status_class
+from ..presenters.utils import render_notes_panel_html, status_class
 from .analysis import enrich_summary_artifacts, enrich_timeline_artifacts
 
 
@@ -152,6 +152,7 @@ def analysis_modules_context(
             "updated_at": None,
             "updated_by": None,
             "user_can_add": False,
+            "count": 0,
         }
         latest_job_id = None
         if latest:
@@ -170,13 +171,22 @@ def analysis_modules_context(
                 if notes_entries
                 else None
             )
+            notes_count = len(notes_entries)
             notes_context = {
                 "job_id": str(latest_job_id),
                 "entries": notes_entries,
                 "updated_at": notes_updated_at,
                 "updated_by": notes_updated_by,
                 "user_can_add": _user_can_add_notes(user, case),
+                "count": notes_count,
             }
+        notes_panel_html = render_notes_panel_html(
+            job_id=notes_context.get("job_id"),
+            entries=notes_context.get("entries"),
+            updated_at=notes_context.get("updated_at"),
+            updated_by=notes_context.get("updated_by"),
+            user_can_add=notes_context.get("user_can_add", False),
+        )
         latest_details = as_dict(latest.get("details")) if latest else {}
         downloads: List[Dict[str, Any]] = []
         job_identifier = latest.get("job_id") if latest else None
@@ -235,6 +245,7 @@ def analysis_modules_context(
                 "disabled_reason": disabled_reason,
             },
             "notes": notes_context,
+            "notes_panel_html": notes_panel_html,
             "return_url": return_url,
             "team_alerts": team_alerts,
         }

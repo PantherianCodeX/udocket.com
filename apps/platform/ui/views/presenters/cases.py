@@ -624,6 +624,7 @@ def build_tool_panels(
         "updated_at": summary_status["updated"] or summary_latest.get("created_at"),
         "progress_detail": summary_status.get("detail"),
         "notes": summary_module.get("notes") or empty_notes.copy(),
+        "notes_panel_html": summary_module.get("notes_panel_html"),
         "team_alerts": summary_module.get("team_alerts", team_alerts),
         "meta": [
             {"label": "Summaries", "value": len(summary_history) + (1 if summary_latest else 0)},
@@ -677,6 +678,7 @@ def build_tool_panels(
         "updated_at": timeline_status["updated"] or timeline_latest.get("created_at"),
         "progress_detail": timeline_status.get("detail"),
         "notes": timeline_module.get("notes") or empty_notes.copy(),
+        "notes_panel_html": timeline_module.get("notes_panel_html"),
         "team_alerts": timeline_module.get("team_alerts", team_alerts),
         "meta": [
             {"label": "Timelines", "value": len(timeline_history) + (1 if timeline_latest else 0)},

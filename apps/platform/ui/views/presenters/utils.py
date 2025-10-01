@@ -73,10 +73,9 @@ def render_notes_panel_html(
     updated_by: str | None,
     user_can_add: bool,
 ) -> str:
-    if not job_id:
-        return ""
+    job_identifier = str(job_id) if job_id is not None else ""
     context: Dict[str, Any] = {
-        "job_id": job_id,
+        "job_id": job_identifier,
         "notes_entries": list(entries or []),
         "notes_updated_at": updated_at,
         "notes_updated_by": updated_by,

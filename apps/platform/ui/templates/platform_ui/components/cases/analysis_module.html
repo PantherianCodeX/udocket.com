@@ -22,25 +22,29 @@
 <div id="{{ module.panel_id }}" data-module-panel class="hidden rounded-xl border border-white/10 bg-slate-900/80 p-4 text-sm text-slate-200 space-y-4">
   <div class="grid gap-3 lg:grid-cols-2">
     <div class="min-h-[8rem]">
-      {% with notes=module.notes %}
-        {% if notes %}
-          {% include "platform_ui/components/notes/team_notes_panel.html" with
-            job_id=notes.job_id
-            notes_entries=notes.entries
-            notes_updated_at=notes.updated_at
-            notes_updated_by=notes.updated_by
-            user_can_add_notes=notes.user_can_add
-          %}
-        {% else %}
-          {% include "platform_ui/components/notes/team_notes_panel.html" with
-            job_id=None
-            notes_entries=None
-            notes_updated_at=None
-            notes_updated_by=None
-            user_can_add_notes=False
-          %}
-        {% endif %}
-      {% endwith %}
+      {% if module.notes_panel_html %}
+        {{ module.notes_panel_html|safe }}
+      {% else %}
+        {% with notes=module.notes %}
+          {% if notes %}
+            {% include "platform_ui/components/notes/team_notes_panel.html" with
+              job_id=notes.job_id
+              notes_entries=notes.entries
+              notes_updated_at=notes.updated_at
+              notes_updated_by=notes.updated_by
+              user_can_add_notes=notes.user_can_add
+            %}
+          {% else %}
+            {% include "platform_ui/components/notes/team_notes_panel.html" with
+              job_id=None
+              notes_entries=None
+              notes_updated_at=None
+              notes_updated_by=None
+              user_can_add_notes=False
+            %}
+          {% endif %}
+        {% endwith %}
+      {% endif %}
     </div>
     <div class="min-h-[8rem]">
       {% include "platform_ui/components/alerts/team_alerts_panel.html" with alerts=module.team_alerts %}
