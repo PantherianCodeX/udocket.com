@@ -322,6 +322,33 @@ LOGOUT_REDIRECT_URL = "/"
 # Development/open access toggle (bypasses auth policies when true)
 PLATFORM_DEV_OPEN = env.bool("PLATFORM_DEV_OPEN", default=False)
 
+# UI job table sizing (limits enforce websocket/poll efficiency)
+_job_limit_defaults = env.list("PLATFORM_UI_JOB_LIMIT_CHOICES", default=[25, 50, 100, 200])
+_job_limit_values: list[int] = []
+for raw_value in _job_limit_defaults:
+    try:
+        value = int(str(raw_value).strip())
+    except (TypeError, ValueError):
+        continue
+    if value > 0:
+        _job_limit_values.append(value)
+if not _job_limit_values:
+    _job_limit_values = [25, 50, 100, 200]
+_job_limit_values = sorted(set(_job_limit_values))
+PLATFORM_UI_JOB_LIMIT_CHOICES = tuple(_job_limit_values)
+PLATFORM_UI_JOB_MAX_LIMIT = max(PLATFORM_UI_JOB_LIMIT_CHOICES)
+_job_limit_default = env.int(
+    "PLATFORM_UI_JOB_DEFAULT_LIMIT",
+    default=PLATFORM_UI_JOB_LIMIT_CHOICES[0],
+)
+if _job_limit_default not in PLATFORM_UI_JOB_LIMIT_CHOICES:
+    # Fallback to closest greater-or-equal option, otherwise the largest available.
+    _job_limit_default = next(
+        (value for value in PLATFORM_UI_JOB_LIMIT_CHOICES if value >= _job_limit_default),
+        PLATFORM_UI_JOB_LIMIT_CHOICES[-1],
+    )
+PLATFORM_UI_JOB_DEFAULT_LIMIT = _job_limit_default
+
 # If discovery is not set, derive OP endpoints from OIDC_ISSUER when provided
 OIDC_ISSUER = env("OIDC_ISSUER", default=None)
 _op_auth = env("OIDC_OP_AUTHORIZATION_ENDPOINT", default=None)
