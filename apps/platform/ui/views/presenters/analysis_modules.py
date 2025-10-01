@@ -15,8 +15,9 @@ from apps.platform.jobs.models import Job, JobNote
 from apps.platform.jobs.notes import serialize_notes
 
 from ..common import as_dict
+from ..presenters.alerts import build_case_team_alerts
 from ..presenters.jobs import friendly_job_title
-from ..presenters.utils import render_notes_panel_html, status_class
+from ..presenters.utils import status_class
 from .analysis import enrich_summary_artifacts, enrich_timeline_artifacts
 
 
@@ -115,6 +116,8 @@ def analysis_modules_context(
             "finished_at": latest_transcription.finished_at,
         }
 
+    team_alerts = build_case_team_alerts(case, jobs)
+
     def build_module(
         *,
         key: str,
@@ -143,7 +146,13 @@ def analysis_modules_context(
             action_disabled = False
             disabled_reason = None
 
-        notes_context: Dict[str, Any] = {}
+        notes_context: Dict[str, Any] = {
+            "job_id": None,
+            "entries": [],
+            "updated_at": None,
+            "updated_by": None,
+            "user_can_add": False,
+        }
         latest_job_id = None
         if latest:
             latest_job_id = latest.get("job_id") or latest.get("id")
@@ -168,16 +177,6 @@ def analysis_modules_context(
                 "updated_by": notes_updated_by,
                 "user_can_add": _user_can_add_notes(user, case),
             }
-        notes_panel_html = ""
-        if notes_context.get("job_id"):
-            notes_panel_html = render_notes_panel_html(
-                job_id=notes_context["job_id"],
-                entries=notes_context.get("entries"),
-                updated_at=notes_context.get("updated_at"),
-                updated_by=notes_context.get("updated_by"),
-                user_can_add=notes_context.get("user_can_add", False),
-            )
-
         latest_details = as_dict(latest.get("details")) if latest else {}
         downloads: List[Dict[str, Any]] = []
         job_identifier = latest.get("job_id") if latest else None
@@ -236,8 +235,8 @@ def analysis_modules_context(
                 "disabled_reason": disabled_reason,
             },
             "notes": notes_context,
-            "notes_panel": notes_panel_html,
             "return_url": return_url,
+            "team_alerts": team_alerts,
         }
 
     summary_module = build_module(

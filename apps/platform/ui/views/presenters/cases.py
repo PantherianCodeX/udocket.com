@@ -17,7 +17,8 @@ from apps.platform.jobs.models import Job
 
 from ..constants import CASE_JOB_TABLE_COLUMNS, DEFAULT_TABLE_FILTERS, GLOBAL_JOB_TABLE_COLUMNS
 from ..common import as_dict
-from ..presenters.utils import render_notes_panel_html, status_class, user_label
+from ..presenters.alerts import build_case_team_alerts
+from ..presenters.utils import status_class, user_label
 from .analysis import enrich_summary_artifacts, enrich_timeline_artifacts
 from .analysis_modules import analysis_modules_context, artifact_payload, latest_successful_transcription_job
 from .analysis_llm import build_analysis_llm_context
@@ -337,6 +338,7 @@ def build_case_header_context(
 def build_tool_panels(
     case: Case,
     *,
+    jobs: Sequence[Job],
     progress_items: List[Dict[str, Any]],
     job_rows: List[Dict[str, Any]],
     telemetry_map: Dict[str, Dict[str, Any]],
@@ -354,6 +356,14 @@ def build_tool_panels(
 ) -> Dict[str, Dict[str, Any]]:
     progress_lookup = {item["key"]: item for item in progress_items}
     analysis_lookup = {module["key"]: module for module in analysis_modules}
+    team_alerts = build_case_team_alerts(case, jobs)
+    empty_notes = {
+        "job_id": None,
+        "entries": [],
+        "updated_at": None,
+        "updated_by": None,
+        "user_can_add": False,
+    }
     owner_labels = case_owner_labels(memberships)
     owner_ids = [str(m.user_id) for m in case_owner_memberships(memberships)]
     reviewer_label = user_label(case.reviewer) if case.reviewer else None
@@ -442,6 +452,8 @@ def build_tool_panels(
         "status_class": case_status["class"],
         "updated_at": case_status.get("updated") or case.updated_at,
         "progress_detail": case_status.get("detail"),
+        "notes": empty_notes.copy(),
+        "team_alerts": team_alerts,
         "meta": [
             {"label": "Owners", "value": ", ".join(owner_labels) or "Unassigned"},
             {"label": "Reviewer", "value": reviewer_label or "Unassigned"},
@@ -534,6 +546,8 @@ def build_tool_panels(
         "status_class": transcription_status["class"],
         "updated_at": transcription_status["updated"],
         "progress_detail": transcription_status.get("detail"),
+        "notes": empty_notes.copy(),
+        "team_alerts": team_alerts,
         "meta": [
             {
                 "label": "Approved",
@@ -609,6 +623,8 @@ def build_tool_panels(
         "status_class": summary_status["class"],
         "updated_at": summary_status["updated"] or summary_latest.get("created_at"),
         "progress_detail": summary_status.get("detail"),
+        "notes": summary_module.get("notes") or empty_notes.copy(),
+        "team_alerts": summary_module.get("team_alerts", team_alerts),
         "meta": [
             {"label": "Summaries", "value": len(summary_history) + (1 if summary_latest else 0)},
             {
@@ -660,6 +676,8 @@ def build_tool_panels(
         "status_class": timeline_status["class"],
         "updated_at": timeline_status["updated"] or timeline_latest.get("created_at"),
         "progress_detail": timeline_status.get("detail"),
+        "notes": timeline_module.get("notes") or empty_notes.copy(),
+        "team_alerts": timeline_module.get("team_alerts", team_alerts),
         "meta": [
             {"label": "Timelines", "value": len(timeline_history) + (1 if timeline_latest else 0)},
             {"label": "Artifacts", "value": len(artifacts)},

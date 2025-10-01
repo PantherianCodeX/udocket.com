@@ -56,6 +56,7 @@ def test_build_tool_panels_appends_return_url(monkeypatch):
 
     panels = presenters.build_tool_panels(
         case,
+        jobs=[],
         progress_items=progress_items,
         job_rows=[],
         telemetry_map={},

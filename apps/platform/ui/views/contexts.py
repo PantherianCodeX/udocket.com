@@ -152,6 +152,7 @@ def compute_case_tool_state(request: HttpRequest, case: Case) -> Dict[str, Any]:
 
     tool_panels = build_tool_panels(
         case,
+        jobs=jobs_list,
         progress_items=progress_ctx["progress_items"],
         job_rows=display_rows,
         telemetry_map=telemetry_map,

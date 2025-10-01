@@ -1,5 +1,31 @@
 {% load tz %}
 <div class="space-y-6" data-tool-panel="{{ panel.key }}">
+  <div class="grid gap-4 lg:grid-cols-2" data-tool-highlights>
+    <div class="min-h-[8rem]">
+      {% with notes=panel.notes %}
+        {% if notes %}
+          {% include "platform_ui/components/notes/team_notes_panel.html" with
+            job_id=notes.job_id
+            notes_entries=notes.entries
+            notes_updated_at=notes.updated_at
+            notes_updated_by=notes.updated_by
+            user_can_add_notes=notes.user_can_add
+          %}
+        {% else %}
+          {% include "platform_ui/components/notes/team_notes_panel.html" with
+            job_id=None
+            notes_entries=None
+            notes_updated_at=None
+            notes_updated_by=None
+            user_can_add_notes=False
+          %}
+        {% endif %}
+      {% endwith %}
+    </div>
+    <div class="min-h-[8rem]">
+      {% include "platform_ui/components/alerts/team_alerts_panel.html" with alerts=panel.team_alerts %}
+    </div>
+  </div>
   <div class="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-black/25">
     <div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
       <div class="space-y-2">
