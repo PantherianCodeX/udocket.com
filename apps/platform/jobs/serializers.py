@@ -12,6 +12,19 @@ from apps.platform.jobs.models import Job
 from apps.platform.jobs.telemetry import JobTelemetry, job_telemetry
 
 
+AGENT_LABELS = {
+    "transcription": "Transcribe",
+    "transcribe": "Transcribe",
+    "summary": "Summarize",
+    "summarize": "Summarize",
+    "timeline": "Timeline",
+    "events": "Timeline",
+    "graph": "Relationships",
+    "relationship": "Relationships",
+    "relationships": "Relationships",
+}
+
+
 class JobTelemetrySerializer(serializers.Serializer):
     """Enriched job diagnostics payload mirroring worker metadata."""
 
@@ -90,7 +103,21 @@ class JobTelemetrySerializer(serializers.Serializer):
                 agent_type = "Transcription"
             elif mode:
                 agent_type = mode.replace("_", " ").replace("-", " ").title()
+        normalized_agent_type = str(agent_type or "").strip().lower()
+        agent_label = None
+        meta_agent_label = meta_payload.get("agent_label")
+        if isinstance(meta_agent_label, str) and meta_agent_label.strip():
+            agent_label = meta_agent_label.strip()
+        if not agent_label:
+            agent_label = AGENT_LABELS.get(normalized_agent_type)
+        if not agent_label and agent_type:
+            agent_label = str(agent_type).strip() or None
+        if not agent_label and normalized_agent_type:
+            agent_label = normalized_agent_type.replace("_", " ").title()
+        if not agent_label:
+            agent_label = "Unknown"
         agent_payload["type"] = agent_type or "Unknown"
+        agent_payload["label"] = agent_label
 
         if meta_payload:
             if not allow_audio:
@@ -129,7 +156,7 @@ class JobTelemetrySerializer(serializers.Serializer):
             "transcript": transcript_payload if allow_transcript else None,
             "agent": agent_payload,
             "artifacts": [],
-            "agent_label": agent_type or "Unknown",
+            "agent_label": agent_label,
             "review_comment": getattr(instance, "review_comment", ""),
             "review_activity_id": getattr(instance, "review_activity_id", None),
         }

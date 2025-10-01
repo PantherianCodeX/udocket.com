@@ -106,9 +106,10 @@ def build_case_progress(
     )
 
     mappings = [
-        ("transcription", "Transcription", ("transcription", "speech", "audio")),
-        ("summary", "Summarize", ("summary",)),
+        ("transcription", "Transcribe", ("transcription", "speech", "audio", "transcribe")),
+        ("summary", "Summarize", ("summary", "summarize")),
         ("timeline", "Timeline", ("timeline", "events")),
+        ("relationships", "Relationships", ("relationship", "graph", "relationships")),
     ]
 
     for key, label, keywords in mappings:

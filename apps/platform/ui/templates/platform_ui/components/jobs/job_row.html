@@ -20,6 +20,7 @@
         data-table-value-type="{{ sort.type|default:'' }}"
         data-table-value-case="{{ sort.case|default:'' }}"
         data-table-value-created="{{ sort.created|default:'' }}"
+        data-table-value-modified="{{ sort.modified|default:'' }}"
         class="cursor-pointer transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 {% if is_child %}bg-slate-900/70{% endif %}"
         tabindex="0"
         aria-expanded="false"
@@ -29,7 +30,7 @@
           <td data-table-cell="{{ column.id }}" class="px-4 py-3{% if is_child %} pl-10{% endif %}{% if column.default_hidden %} hidden{% endif %}">
             <div class="flex items-center gap-3">
               <div class="min-w-0">
-                <p class="max-w-[22rem] truncate font-medium text-slate-100" data-job-title title="{{ job_title }}">{{ job_title }}</p>
+                <p class="truncate font-medium text-slate-100 {% if 'case' in table_column_ids %}max-w-[18rem]{% else %}max-w-[22rem]{% endif %}" data-job-title title="{{ job_title }}">{{ job_title }}</p>
                 <div class="mt-1 truncate text-[11px] text-slate-400">
                   {% if audio_name %}
                     <span class="truncate">{{ audio_name }}</span>
@@ -98,6 +99,19 @@
             {% else %}
               <span>—</span>
             {% endif %}
+          </td>
+        {% elif column.id == 'modified' %}
+          <td data-table-cell="{{ column.id }}" class="px-4 py-3 text-slate-300{% if column.default_hidden %} hidden{% endif %}">
+            {% with modified_dt=table_meta.modified_at %}
+              {% if modified_dt %}
+                <div class="leading-tight">
+                  <div><time data-ts="{{ modified_dt|date:'c' }}" data-ts-format="date">{{ modified_dt|date:'M d, Y' }}</time></div>
+                  <div class="text-[11px] text-slate-400"><time data-ts="{{ modified_dt|date:'c' }}" data-ts-format="time">{{ modified_dt|date:'h:i A' }}</time></div>
+                </div>
+              {% else %}
+                <span>—</span>
+              {% endif %}
+            {% endwith %}
           </td>
         {% elif column.id == 'notes' %}
           {% with count=table_meta.notes_count|default:0 %}

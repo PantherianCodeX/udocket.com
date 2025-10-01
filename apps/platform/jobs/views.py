@@ -24,6 +24,7 @@ from apps.platform.authorization.capabilities import has_capability
 from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.cases.models import Case
 from apps.platform.jobs.models import Job, JobNote
+from apps.platform.jobs.utils import unique_title
 from apps.platform.jobs.notes import serialize_notes
 from apps.platform.jobs.serializers import (
     JobCreateSerializer,
@@ -985,7 +986,14 @@ class JobViewSet(viewsets.ModelViewSet):
             .first()
         )
         source_label = source_artifact.title if source_artifact else str(source_job.id)
-        summary_title = f"Summary · {source_label}" if source_label else "Summary"
+        existing_summary_titles = (
+            CaseArtifact.objects.filter(
+                case_id=str(source_job.case_id),
+                type="SUMMARY",
+            )
+            .values_list("title", flat=True)
+        )
+        summary_title = unique_title("Summary", existing_summary_titles)
 
         organization_obj = source_job.organization or getattr(source_job.case, "organization", None)
         if organization_obj is None:

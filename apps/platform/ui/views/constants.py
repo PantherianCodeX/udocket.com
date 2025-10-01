@@ -67,13 +67,20 @@ CASE_JOB_TABLE_COLUMNS: Tuple[Dict[str, Any], ...] = (
     {"id": "status", "label": "Status", "sortable": True, "sort_key": "status"},
     {"id": "review", "label": "Approval", "sortable": True, "sort_key": "review"},
     {"id": "agent", "label": "Agent", "sortable": True, "sort_key": "agent"},
+    {"id": "type", "label": "Type", "sortable": True, "sort_key": "type", "default_hidden": True},
+    {
+        "id": "modified",
+        "label": "Modified",
+        "sortable": True,
+        "sort_key": "modified",
+        "default_direction": "desc",
+    },
     {
         "id": "created",
         "label": "Created",
         "sortable": True,
         "sort_key": "created",
-        "align": "right",
-        "default_direction": "desc",
+        "default_hidden": True,
     },
     {
         "id": "notes",
@@ -82,22 +89,30 @@ CASE_JOB_TABLE_COLUMNS: Tuple[Dict[str, Any], ...] = (
         "align": "center",
         "hide_on_mobile": True,
     },
-    {"id": "actions", "label": "Actions", "sortable": False, "align": "right", "lock_visible": True},
+    {"id": "actions", "label": "Actions", "sortable": False, "align": "center", "lock_visible": True},
     {"id": "expander", "label": "", "sortable": False, "align": "right", "lock_visible": True},
 )
 
 GLOBAL_JOB_TABLE_COLUMNS: Tuple[Dict[str, Any], ...] = (
     {"id": "title", "label": "Job", "sortable": True, "sort_key": "title", "lock_visible": True},
+    {"id": "case", "label": "Case", "sortable": True, "sort_key": "case"},
     {"id": "status", "label": "Status", "sortable": True, "sort_key": "status"},
-    {"id": "type", "label": "Type", "sortable": True, "sort_key": "type"},
+    {"id": "review", "label": "Approval", "sortable": True, "sort_key": "review"},
     {"id": "agent", "label": "Agent", "sortable": True, "sort_key": "agent"},
+    {"id": "type", "label": "Type", "sortable": True, "sort_key": "type", "default_hidden": True},
+    {
+        "id": "modified",
+        "label": "Modified",
+        "sortable": True,
+        "sort_key": "modified",
+        "default_direction": "desc",
+    },
     {
         "id": "created",
         "label": "Created",
         "sortable": True,
         "sort_key": "created",
-        "align": "right",
-        "default_direction": "desc",
+        "default_hidden": True,
     },
     {
         "id": "notes",
@@ -106,7 +121,7 @@ GLOBAL_JOB_TABLE_COLUMNS: Tuple[Dict[str, Any], ...] = (
         "align": "center",
         "hide_on_mobile": True,
     },
-    {"id": "actions", "label": "Actions", "sortable": False, "align": "right", "lock_visible": True},
+    {"id": "actions", "label": "Actions", "sortable": False, "align": "center", "lock_visible": True},
     {"id": "expander", "label": "", "sortable": False, "align": "right", "lock_visible": True},
 )
 

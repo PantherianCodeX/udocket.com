@@ -161,6 +161,14 @@ def build_row_table_meta(row: Dict[str, Any]) -> None:
         if isinstance(created_at, datetime)
         else "00000000000000000000"
     )
+    modified_at = job_most_recent_timestamp(job) if job else None
+    if isinstance(modified_at, datetime) and modified_at != datetime.min:
+        modified_sort = f"{int(modified_at.timestamp() * 1000):020d}"
+        modified_iso = modified_at.isoformat()
+    else:
+        modified_at = None
+        modified_sort = "00000000000000000000"
+        modified_iso = ""
 
     audio_name = ""
     if isinstance(audio_meta, dict):
@@ -216,6 +224,7 @@ def build_row_table_meta(row: Dict[str, Any]) -> None:
         "type": safe_lower(job_type_label_text),
         "case": safe_lower(case_label),
         "created": created_sort,
+        "modified": modified_sort,
     }
     row_table["filter"] = " ".join(safe_lower(value) for value in filter_parts if value)
     row_table["status"] = status_raw
@@ -234,6 +243,8 @@ def build_row_table_meta(row: Dict[str, Any]) -> None:
     row_table["review_status"] = review_status or "PENDING"
     row_table["created_iso"] = created_at.isoformat() if isinstance(created_at, datetime) else ""
     row_table["created_at"] = created_at if isinstance(created_at, datetime) else None
+    row_table["modified_iso"] = modified_iso
+    row_table["modified_at"] = modified_at
 
 
 def build_job_rows(

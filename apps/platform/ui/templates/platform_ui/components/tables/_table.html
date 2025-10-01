@@ -82,7 +82,7 @@
           {% for column in table.columns %}
             {% with col_id=column.id %}
               <th scope="col"
-                  class="px-4 py-3{% if column.align == 'right' %} text-right{% endif %}{% if column.hide_on_mobile %} hidden sm:table-cell{% endif %}{% if column.default_hidden %} hidden{% endif %}"
+                  class="px-4 py-3{% if column.align == 'right' %} text-right{% elif column.align == 'center' %} text-center{% endif %}{% if column.hide_on_mobile %} hidden sm:table-cell{% endif %}{% if column.default_hidden %} hidden{% endif %}"
                   data-table-column="{{ col_id }}"
                   {% if column.default_hidden %}data-table-column-hidden="1"{% endif %}>
                 {% if column.sortable %}

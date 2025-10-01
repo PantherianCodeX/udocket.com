@@ -1087,7 +1087,12 @@ def summarize_job(
     org_id = job.organization_id or job.case.organization_id
     case_dir, _, _ = _case_paths(case_id, org_id)
     existing_meta = read_job_meta(case_id, org_id, job_id)
-    summary_title = str(existing_meta.get("job_title") or f"Summary {job_id}")
+    existing_summary_titles = list(
+        CaseArtifact.objects.filter(case_id=str(case_id), type="SUMMARY").values_list("title", flat=True)
+    )
+    summary_title = str(existing_meta.get("job_title") or "").strip()
+    if not summary_title or summary_title in existing_summary_titles:
+        summary_title = unique_title("Summary", existing_summary_titles)
     transcript = (
         Path(source_job.transcript_path)
         if source_job.transcript_path
@@ -1511,6 +1516,7 @@ def timeline_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
                 }
             )
     out = analysis_dir / f"{job_id}__timeline_v1.json"
+    timeline_title: Optional[str] = None
     _write_json(out, events)
     try:
         import hashlib
@@ -1522,12 +1528,16 @@ def timeline_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
         artifact_meta = {"source_transcript": str(src), "events": len(events)}
         if seeds_path:
             artifact_meta["seed_source"] = str(seeds_path)
+        existing_timeline_titles = list(
+            CaseArtifact.objects.filter(case_id=case_id, type="TIMELINE").values_list("title", flat=True)
+        )
+        timeline_title = unique_title("Timeline", existing_timeline_titles)
         CaseArtifact.objects.create(
             case_id=case_id,
             case_fk=job.case,
             job_id=str(job_id),
             type="TIMELINE",
-            title=f"Timeline {job_id}",
+            title=timeline_title,
             path=str(out),
             checksum=h.hexdigest(),
             schema_version="v1",
@@ -1552,6 +1562,8 @@ def timeline_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
             "schema_version": "v1",
             "status": "ok",
         }
+        if timeline_title:
+            meta["timeline_title"] = timeline_title
         if seeds_path:
             meta["seed_source"] = str(seeds_path)
         _write_json(opsd / f"{job_id}__timeline_log.json", meta)
@@ -1683,6 +1695,8 @@ def graph_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
         }
     entities_file = analysis_dir / f"{job_id}__entities_v1.json"
     graph_file = analysis_dir / f"{job_id}__graph_v1.json"
+    entities_title: Optional[str] = None
+    relationships_title: Optional[str] = None
     _write_json(entities_file, {"entities": entities})
     _write_json(graph_file, graph)
     try:
@@ -1695,12 +1709,20 @@ def graph_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
         if hints_path:
             artifact_entities_meta["hint_source"] = str(hints_path)
             artifact_graph_meta["hint_source"] = str(hints_path)
+        existing_entity_titles = list(
+            CaseArtifact.objects.filter(case_id=case_id, type="ENTITIES").values_list("title", flat=True)
+        )
+        entities_title = unique_title("Entities", existing_entity_titles)
+        existing_relationship_titles = list(
+            CaseArtifact.objects.filter(case_id=case_id, type="GRAPH").values_list("title", flat=True)
+        )
+        relationships_title = unique_title("Relationships", existing_relationship_titles)
         CaseArtifact.objects.create(
             case_id=case_id,
             case_fk=job.case,
             job_id=str(job_id),
             type="ENTITIES",
-            title=f"Entities {job_id}",
+            title=entities_title,
             path=str(entities_file),
             checksum=h1,
             schema_version="v1",
@@ -1711,7 +1733,7 @@ def graph_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
             case_fk=job.case,
             job_id=str(job_id),
             type="GRAPH",
-            title=f"Graph {job_id}",
+            title=relationships_title,
             path=str(graph_file),
             checksum=h2,
             schema_version="v1",
@@ -1739,6 +1761,10 @@ def graph_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
             "schema_version": "v1",
             "status": "ok",
         }
+        if entities_title:
+            meta["entities_title"] = entities_title
+        if relationships_title:
+            meta["relationships_title"] = relationships_title
         if hints_path:
             meta["hint_source"] = str(hints_path)
         _write_json(opsd / f"{job_id}__graph_log.json", meta)
