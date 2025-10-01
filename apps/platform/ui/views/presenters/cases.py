@@ -13,12 +13,13 @@ from django.urls import reverse
 from apps.platform.accounts.models import OrganizationMembership
 from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.cases.models import Case, CaseMembership
-from apps.platform.jobs.models import Job
+from apps.platform.jobs.models import Job, JobNote
+from apps.platform.jobs.notes import serialize_notes
 
 from ..constants import CASE_JOB_TABLE_COLUMNS, DEFAULT_TABLE_FILTERS, GLOBAL_JOB_TABLE_COLUMNS
 from ..common import as_dict
 from ..presenters.alerts import build_case_team_alerts
-from ..presenters.utils import status_class, user_label
+from ..presenters.utils import render_notes_panel_html, status_class, user_label
 from .analysis import enrich_summary_artifacts, enrich_timeline_artifacts
 from .analysis_modules import analysis_modules_context, artifact_payload, latest_successful_transcription_job
 from .analysis_llm import build_analysis_llm_context
@@ -363,7 +364,17 @@ def build_tool_panels(
         "updated_at": None,
         "updated_by": None,
         "user_can_add": False,
+        "count": 0,
     }
+
+    def _notes_panel(notes: Dict[str, Any]) -> str:
+        return render_notes_panel_html(
+            job_id=notes.get("job_id"),
+            entries=notes.get("entries"),
+            updated_at=notes.get("updated_at"),
+            updated_by=notes.get("updated_by"),
+            user_can_add=notes.get("user_can_add", False),
+        )
     owner_labels = case_owner_labels(memberships)
     owner_ids = [str(m.user_id) for m in case_owner_memberships(memberships)]
     reviewer_label = user_label(case.reviewer) if case.reviewer else None
@@ -444,6 +455,8 @@ def build_tool_panels(
 
     owner_id = owner_ids[0] if owner_ids else ""
 
+    case_notes = empty_notes.copy()
+    case_notes["user_can_add"] = user_can_review
     panels["case-details"] = {
         "key": "case-details",
         "label": "Intake Form",
@@ -452,7 +465,8 @@ def build_tool_panels(
         "status_class": case_status["class"],
         "updated_at": case_status.get("updated") or case.updated_at,
         "progress_detail": case_status.get("detail"),
-        "notes": empty_notes.copy(),
+        "notes": case_notes,
+        "notes_panel_html": _notes_panel(case_notes),
         "team_alerts": team_alerts,
         "meta": [
             {"label": "Owners", "value": ", ".join(owner_labels) or "Unassigned"},
@@ -538,6 +552,33 @@ def build_tool_panels(
             }
         )
 
+    transcribe_notes = empty_notes.copy()
+    transcribe_notes["user_can_add"] = user_can_review
+    if latest_job:
+        latest_job_id = str(latest_job.id)
+        notes_qs = (
+            JobNote.objects.filter(job_id=latest_job_id)
+            .select_related("created_by")
+            .order_by("-created_at")
+        )
+        notes_entries = serialize_notes(notes_qs)
+        notes_updated_at = notes_entries[0]["created_at"] if notes_entries else None
+        notes_updated_by = (
+            notes_entries[0].get("created_by_label")
+            or notes_entries[0].get("created_by")
+            if notes_entries
+            else None
+        )
+        transcribe_notes.update(
+            {
+                "job_id": latest_job_id,
+                "entries": notes_entries,
+                "updated_at": notes_updated_at,
+                "updated_by": notes_updated_by,
+                "count": len(notes_entries),
+            }
+        )
+
     panels["transcribe"] = {
         "key": "transcribe",
         "label": "Transcribe",
@@ -546,7 +587,8 @@ def build_tool_panels(
         "status_class": transcription_status["class"],
         "updated_at": transcription_status["updated"],
         "progress_detail": transcription_status.get("detail"),
-        "notes": empty_notes.copy(),
+        "notes": transcribe_notes,
+        "notes_panel_html": _notes_panel(transcribe_notes),
         "team_alerts": team_alerts,
         "meta": [
             {
