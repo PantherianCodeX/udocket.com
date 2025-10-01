@@ -42,8 +42,8 @@ urlpatterns = [
         views.case_guardian_report,
         name="ui-case-guardian-report",
     ),
-    path("guardian/", views.guardian_overview, name="ui-guardian-overview"),
-    path("guardian/report/", views.guardian_report, name="ui-guardian-report"),
+    path("audit/guardian/", views.guardian_overview, name="ui-guardian-overview"),
+    path("audit/guardian/report/", views.guardian_report, name="ui-guardian-report"),
     path(
         "cases/<str:case_id>/tools/case-details/update/",
         views.case_details_update,

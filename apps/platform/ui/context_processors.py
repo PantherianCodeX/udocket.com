@@ -51,17 +51,17 @@ def ui_context(request: HttpRequest) -> Dict[str, Any]:
             "patterns": [r"^/artifacts/"],
         },
         {
-            "key": "guardian",
-            "label": "Guardian",
-            "href": "/guardian/",
-            "patterns": [r"^/guardian/"],
-        },
-        {
             "key": "audit",
             "label": "Audit",
             "href": "/audit/permissions/",
             "patterns": [r"^/audit/"],
             "children": [
+                {
+                    "key": "guardian",
+                    "label": "Guardian",
+                    "href": "/audit/guardian/",
+                    "patterns": [r"^/audit/guardian/"],
+                },
                 {
                     "key": "permissions",
                     "label": "Permissions Catalog",
