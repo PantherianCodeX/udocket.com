@@ -427,16 +427,17 @@
 
     if (kind === 'modal') {
       if (action === 'view-log') {
-        const caseValue = control.getAttribute('data-case-id') || ctx.jobsState.currentCaseId;
+        const caseValue = control.getAttribute('data-case-id') || ctx.jobsState.currentCaseId || ctx.caseId;
         if (jobId && caseValue) {
           await deps.modals?.openJobLogModal(caseValue, jobId);
         }
       } else if (action === 'view-transcript') {
-        if (jobId) {
-          await deps.modals?.openTranscriptModal(ctx.caseId, jobId);
+        const caseValue = control.getAttribute('data-case-id') || ctx.jobsState.currentCaseId || ctx.caseId;
+        if (jobId && caseValue) {
+          await deps.modals?.openTranscriptModal(caseValue, jobId);
         }
       } else if (action === 'view-metadata') {
-        const caseValue = control.getAttribute('data-case-id') || ctx.jobsState.currentCaseId;
+        const caseValue = control.getAttribute('data-case-id') || ctx.jobsState.currentCaseId || ctx.caseId;
         if (jobId && caseValue) {
           await deps.modals?.openJobMetadataModal(caseValue, jobId);
         }
