@@ -101,19 +101,18 @@
           </td>
         {% elif column.id == 'notes' %}
           <td data-table-cell="{{ column.id }}" class="px-4 py-3 text-center text-slate-200{% if column.default_hidden %} hidden{% endif %}" data-job-notes-cell>
-            {% if table_meta.notes_count %}
-              <span class="inline-flex items-center gap-1 rounded-full border border-primary-400/40 bg-primary-500/10 px-2 py-0.5 text-[11px] font-semibold text-primary-100" data-job-notes-indicator data-count="{{ table_meta.notes_count }}" title="Team notes available">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+            {% with count=table_meta.notes_count|default:0 %}
+              <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold"
+                    data-job-notes-indicator
+                    data-count="{{ count }}"
+                    title="Team notes">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 {% if count > 0 %}text-primary-200{% else %}text-slate-500{% endif %}" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                   <path d="M4.5 2A2.5 2.5 0 002 4.5v8A2.5 2.5 0 004.5 15H7v2.382a.5.5 0 00.816.387L11.25 15H15.5A2.5 2.5 0 0018 12.5v-8A2.5 2.5 0 0015.5 2h-11z" />
                 </svg>
-                {% if table_meta.notes_count > 1 %}
-                  <span data-job-notes-count>{{ table_meta.notes_count }}</span>
-                {% endif %}
-                <span class="sr-only">{{ table_meta.notes_count }} team note{{ table_meta.notes_count|pluralize }}</span>
+                <span data-job-notes-count class="{% if count > 0 %}text-primary-100{% else %}text-slate-500{% endif %}">{{ count }}</span>
+                <span class="sr-only">{{ count }} team note{{ count|pluralize }}</span>
               </span>
-            {% else %}
-              <span class="text-slate-500" data-job-notes-indicator data-count="0">—</span>
-            {% endif %}
+            {% endwith %}
           </td>
         {% elif column.id == 'actions' %}
           <td data-table-cell="{{ column.id }}" class="px-4 py-3{% if column.default_hidden %} hidden{% endif %}">
