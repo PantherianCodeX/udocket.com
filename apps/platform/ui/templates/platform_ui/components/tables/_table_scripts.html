@@ -156,6 +156,28 @@
       });
     }
 
+    let dismissListenersBound = false;
+
+    function bindDismissListeners() {
+      if (dismissListenersBound) return;
+      dismissListenersBound = true;
+      document.addEventListener('click', (event) => {
+        document
+          .querySelectorAll('[data-table-column-controls] details[open]')
+          .forEach((details) => {
+            if (!details.contains(event.target)) {
+              details.removeAttribute('open');
+            }
+          });
+      });
+      document.addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape') return;
+        document
+          .querySelectorAll('[data-table-column-controls] details[open]')
+          .forEach((details) => details.removeAttribute('open'));
+      });
+    }
+
     function bindTable(table) {
       if (table.dataset.tableReady === '1') return;
       const container = table.closest('[data-table-container]');
@@ -197,6 +219,7 @@
       applySearch(table, searchInput ? searchInput.value : '');
 
       if (toggleContainer) {
+        bindDismissListeners();
         toggleContainer.querySelectorAll('[data-table-column-toggle]').forEach((input) => {
           const columnId = input.value;
           if (!columnId) return;
