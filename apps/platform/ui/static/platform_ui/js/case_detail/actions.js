@@ -372,19 +372,12 @@
 
   function closeActionMenu(menu) {
     if (!menu) return;
-    menu.removeAttribute('open');
-    const popover = menu.querySelector('[data-popover]');
-    if (popover && typeof popover.hide === 'function') {
-      popover.hide();
+    const popovers = platformUI.popovers;
+    if (popovers && typeof popovers.close === 'function') {
+      popovers.close(menu);
+      return;
     }
-    menu.querySelectorAll('[data-popover]').forEach((trigger) => {
-      if (trigger.dataset.popoverTarget) {
-        const target = global.document.getElementById(trigger.dataset.popoverTarget);
-        if (target && typeof target.hide === 'function') {
-          target.hide();
-        }
-      }
-    });
+    menu.removeAttribute('open');
   }
 
   function handleRowClick(evt) {

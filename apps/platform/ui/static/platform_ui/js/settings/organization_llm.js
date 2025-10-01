@@ -1,5 +1,63 @@
 (function () {
   const doc = window.document;
+  const platformUI = (window.platformUI = window.platformUI || {});
+
+  function toBool(value, fallback = false) {
+    if (value == null) return fallback;
+    const normalized = String(value).toLowerCase();
+    if (['true', '1', 'yes', 'on'].includes(normalized)) return true;
+    if (['false', '0', 'no', 'off'].includes(normalized)) return false;
+    return fallback;
+  }
+
+  function resolveConfirmMessage(message, source) {
+    if (message && message.trim()) return message;
+    const ds = (source && source.dataset) || {};
+    if (ds.confirmMessage && ds.confirmMessage.trim()) {
+      return ds.confirmMessage;
+    }
+    return 'Are you sure?';
+  }
+
+  function resolveConfirmOptions(source, overrides = {}) {
+    const ds = (source && source.dataset) || {};
+    const options = { ...overrides };
+    if (ds.confirmHeading) options.heading = ds.confirmHeading;
+    if (ds.confirmTitle) options.title = ds.confirmTitle;
+    if (ds.confirmConfirmLabel) options.confirmLabel = ds.confirmConfirmLabel;
+    if (ds.confirmCancelLabel) options.cancelLabel = ds.confirmCancelLabel;
+    if (ds.confirmDestructive != null) {
+      options.destructive = toBool(ds.confirmDestructive, options.destructive === true);
+    }
+    if (ds.confirmContainer) options.container = ds.confirmContainer;
+    return options;
+  }
+
+  async function confirmAction(message, overrides = {}, source) {
+    const resolvedMessage = resolveConfirmMessage(message, source);
+    const options = resolveConfirmOptions(source, overrides);
+    const modalApi = platformUI.modal || {};
+    if (modalApi && typeof modalApi.confirm === 'function') {
+      try {
+        return await modalApi.confirm({
+          heading: options.heading || 'Confirm action',
+          title: options.title || 'Please confirm',
+          body: resolvedMessage,
+          confirmLabel: options.confirmLabel || 'Confirm',
+          cancelLabel: options.cancelLabel || 'Cancel',
+          destructive: options.destructive === true,
+          container: options.container,
+        });
+      } catch (error) {
+        console.warn('[OrgSettings] Confirmation modal failed', error);
+        return false;
+      }
+    }
+    if (typeof window.confirm === 'function') {
+      return window.confirm(resolvedMessage);
+    }
+    return true;
+  }
 
   function parseJSONScript(id, fallback) {
     const el = doc.getElementById(id);
@@ -283,6 +341,18 @@
       deleteButton.classList.toggle('hidden', !visible);
     }
 
+    function updateDeleteConfirmDetails(name) {
+      if (!deleteButton) return;
+      const trimmed = (name || '').trim();
+      const targetName = trimmed ? `“${trimmed}”` : 'this provider';
+      deleteButton.dataset.confirmHeading = deleteButton.dataset.confirmHeading || 'Confirm action';
+      deleteButton.dataset.confirmTitle = 'Delete provider';
+      deleteButton.dataset.confirmConfirmLabel = 'Delete';
+      deleteButton.dataset.confirmCancelLabel = 'Cancel';
+      deleteButton.dataset.confirmDestructive = 'true';
+      deleteButton.dataset.confirmMessage = `Delete provider ${targetName}? This cannot be undone.`;
+    }
+
     function clearModels() {
       if (!modelContainer) return;
       modelContainer.innerHTML = '';
@@ -385,6 +455,7 @@
       if (select) select.value = providerKey || '';
       if (providerKeyHidden) providerKeyHidden.value = providerKey || '';
       if (displayInput) displayInput.value = displayName || '';
+      updateDeleteConfirmDetails(displayName || providerKey);
       if (endpointInput) endpointInput.value = endpoint || '';
       if (apiKeyInput) apiKeyInput.value = '';
       if (clearCheckbox) clearCheckbox.checked = false;
@@ -522,20 +593,43 @@
       });
     }
 
-    templateApplyBtn?.addEventListener('click', () => {
+    templateApplyBtn?.addEventListener('click', async () => {
       const key = (templateSelect?.value || '').trim();
       if (!key) return;
       if (currentProviderKey) {
-        const confirmed = window.confirm('Loading a template will overwrite the form values. Continue?');
+        const confirmed = await confirmAction(
+          'Loading a template will overwrite the form values. Continue?',
+          {
+            title: 'Load template',
+            confirmLabel: 'Load template',
+            cancelLabel: 'Cancel',
+          },
+          templateApplyBtn,
+        );
         if (!confirmed) return;
       }
       applyTemplate(key);
     });
 
     if (templateSelect && !templateApplyBtn) {
-      templateSelect.addEventListener('change', () => {
+      templateSelect.addEventListener('change', async () => {
         const key = (templateSelect.value || '').trim();
         if (!key) return;
+        if (currentProviderKey) {
+          const confirmed = await confirmAction(
+            'Loading a template will overwrite the form values. Continue?',
+            {
+              title: 'Load template',
+              confirmLabel: 'Load template',
+              cancelLabel: 'Cancel',
+            },
+            templateSelect,
+          );
+          if (!confirmed) {
+            templateSelect.value = '';
+            return;
+          }
+        }
         applyTemplate(key);
       });
     }
@@ -552,9 +646,22 @@
       resetForm();
     });
 
-    deleteButton?.addEventListener('click', (event) => {
-      if (!window.confirm('Delete this provider configuration?')) {
-        event.preventDefault();
+    deleteButton?.addEventListener('click', async (event) => {
+      event.preventDefault();
+      const confirmed = await confirmAction(
+        '',
+        {
+          title: 'Delete provider',
+          confirmLabel: 'Delete',
+          cancelLabel: 'Cancel',
+          destructive: true,
+        },
+        deleteButton,
+      );
+      if (!confirmed) return;
+      const formEl = deleteButton.closest('form');
+      if (formEl) {
+        formEl.submit();
       }
     });
 
@@ -614,7 +721,7 @@
     });
 
     doc.querySelectorAll('[data-provider-toggle]').forEach((checkbox) => {
-      checkbox.addEventListener('change', (event) => {
+      checkbox.addEventListener('change', async (event) => {
         const target = event.currentTarget;
         if (!target) return;
         const row = target.closest('[data-provider-row]');
@@ -630,7 +737,16 @@
         const message = desired
           ? 'Enable this provider for LLM selection?'
           : 'Disable this provider? Active configurations using it may fail.';
-        const confirmed = window.confirm(message);
+        const confirmed = await confirmAction(
+          message,
+          {
+            title: desired ? 'Enable provider' : 'Disable provider',
+            confirmLabel: desired ? 'Enable' : 'Disable',
+            cancelLabel: 'Cancel',
+            destructive: !desired,
+          },
+          target,
+        );
         if (!confirmed) {
           target.checked = !desired;
           return;
@@ -656,6 +772,30 @@
   function setupStagePanel() {
     const panel = doc.querySelector('[data-config-panel]');
     if (!panel) return;
+
+    panel.querySelectorAll('[data-config-delete]').forEach((form) => {
+      form.addEventListener('submit', async (event) => {
+        if (form.dataset.confirming === '1') return;
+        event.preventDefault();
+        const confirmed = await confirmAction(
+          '',
+          {
+            title: 'Delete configuration',
+            confirmLabel: 'Delete',
+            cancelLabel: 'Cancel',
+            destructive: true,
+          },
+          form,
+        );
+        if (!confirmed) return;
+        form.dataset.confirming = '1';
+        try {
+          form.submit();
+        } finally {
+          delete form.dataset.confirming;
+        }
+      });
+    });
 
     const stageData = parseJSONScript('organization-stage-data', []);
     const stageMap = stageData.reduce((acc, item) => {
@@ -741,6 +881,35 @@
     });
   }
 
+  function setupGuardianPanel() {
+    const section = doc.querySelector('[data-guardian-settings]');
+    if (!section) return;
+
+    section.querySelectorAll('[data-guardian-delete]').forEach((form) => {
+      form.addEventListener('submit', async (event) => {
+        if (form.dataset.confirming === '1') return;
+        event.preventDefault();
+        const confirmed = await confirmAction(
+          '',
+          {
+            title: 'Delete instruction',
+            confirmLabel: 'Delete',
+            cancelLabel: 'Cancel',
+            destructive: true,
+          },
+          form,
+        );
+        if (!confirmed) return;
+        form.dataset.confirming = '1';
+        try {
+          form.submit();
+        } finally {
+          delete form.dataset.confirming;
+        }
+      });
+    });
+  }
+
   function setupNavDropdowns() {
     const groups = doc.querySelectorAll('[data-nav-group]');
     groups.forEach((group) => {
@@ -808,5 +977,6 @@
 
   setupProviderPanel();
   setupStagePanel();
+  setupGuardianPanel();
   setupNavDropdowns();
 })();

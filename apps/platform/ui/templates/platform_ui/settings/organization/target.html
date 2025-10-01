@@ -23,7 +23,7 @@
           <span class="inline-flex items-center gap-1 rounded-full border border-emerald-400/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-100">Default</span>
           {% endif %}
           <a href="{{ request.path }}?config={{ config.id }}" class="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-200 transition hover:border-primary-400 hover:text-white">Edit</a>
-          <form method="post" class="inline" data-config-delete>
+          <form method="post" class="inline" data-config-delete data-confirm-message="Delete configuration “{{ config.name }}”? This cannot be undone." data-confirm-title="Delete configuration" data-confirm-confirm-label="Delete" data-confirm-cancel-label="Cancel" data-confirm-destructive="true">
             {% csrf_token %}
             <input type="hidden" name="action" value="config-delete">
             <input type="hidden" name="config_id" value="{{ config.id }}">
@@ -191,7 +191,7 @@
             <button type="submit" class="inline-flex items-center gap-2 rounded-lg bg-primary-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-primary-500/30 transition hover:bg-primary-400">Update</button>
           </div>
           </form>
-          <form method="post" class="flex justify-end" data-guardian-delete>
+          <form method="post" class="flex justify-end" data-guardian-delete data-confirm-message="Delete instruction “{{ instruction.title }}”? This cannot be undone." data-confirm-title="Delete instruction" data-confirm-confirm-label="Delete" data-confirm-cancel-label="Cancel" data-confirm-destructive="true">
             {% csrf_token %}
             <input type="hidden" name="section" value="guardian">
             <input type="hidden" name="target" value="guardian">

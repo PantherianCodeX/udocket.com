@@ -193,19 +193,39 @@
   });
 
   const closeJobMenus = () => {
-    document.querySelectorAll('[data-job-action-menu][open]').forEach(menu => menu.removeAttribute('open'));
+    const popovers = platformUI.popovers;
+    if (popovers && typeof popovers.closeAll === 'function') {
+      popovers.closeAll('[data-job-action-menu][open]');
+      return;
+    }
+    document
+      .querySelectorAll('[data-job-action-menu][open]')
+      .forEach((menu) => menu.removeAttribute('open'));
+  };
+
+  const isJobMenuTarget = (node) => {
+    if (!node) return false;
+    return Boolean(
+      node.closest('[data-job-action-menu]')
+      || node.closest('[data-job-action-menu-panel]'),
+    );
   };
 
   document.addEventListener('pointerdown', (evt) => {
     const summary = evt.target.closest('[data-job-action-menu] > summary');
     if (summary) {
       const owner = summary.parentElement;
-      document.querySelectorAll('[data-job-action-menu][open]').forEach(menu => {
-        if (menu !== owner) menu.removeAttribute('open');
-      });
+      const popovers = platformUI.popovers;
+      if (popovers && typeof popovers.closeAll === 'function') {
+        popovers.closeAll('[data-job-action-menu][open]', owner);
+      } else {
+        document.querySelectorAll('[data-job-action-menu][open]').forEach((menu) => {
+          if (menu !== owner) menu.removeAttribute('open');
+        });
+      }
       return;
     }
-    if (!evt.target.closest('[data-job-action-menu]')) {
+    if (!isJobMenuTarget(evt.target)) {
       closeJobMenus();
     }
   });
@@ -222,6 +242,7 @@
     if (popovers && typeof popovers.closeAll === 'function') {
       popovers.closeAll();
     }
+    closeJobMenus();
   });
 
   const caseDetail = (platformUI.caseDetail = platformUI.caseDetail || {});
