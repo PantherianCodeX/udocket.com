@@ -1070,6 +1070,7 @@ def _collect_requested_providers(
 
 @shared_task(bind=True)
 def summarize_job(
+    self,
     *_args,
     case_id: str,
     job_id: str,
