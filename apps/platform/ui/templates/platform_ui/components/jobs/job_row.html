@@ -116,7 +116,7 @@
             {% endif %}
           </td>
         {% elif column.id == 'actions' %}
-          <td data-table-cell="{{ column.id }}" data-job-actions-cell class="px-4 py-3{% if column.default_hidden %} hidden{% endif %}">
+          <td data-table-cell="{{ column.id }}" class="px-4 py-3{% if column.default_hidden %} hidden{% endif %}">
             <div class="flex justify-end">
               {% include "platform_ui/tools/_job_action_menu.html" with actions=row.actions popover_key=table_key|default:'job-actions' only %}
             </div>
