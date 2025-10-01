@@ -8,6 +8,11 @@
 (function () {
   window.jobPollers = window.jobPollers || {};
   window.jobSockets = window.jobSockets || {};
+  window.jobReconnectAttempts = window.jobReconnectAttempts || {};
+  window.jobReconnectTimers = window.jobReconnectTimers || {};
+
+  const BASE_RECONNECT_DELAY = 1000;
+  const MAX_RECONNECT_DELAY = 30000;
 
   const platformUI = (window.platformUI = window.platformUI || {});
   const jobsTableApi = platformUI.jobsTable;
@@ -45,13 +50,57 @@
   const renderStatusLabel = statusUtils.renderStatusLabel || (() => {});
   const TERMINAL_STATUSES = statusUtils.TERMINAL_STATUSES || ['SUCCEEDED', 'FAILED', 'CANCELLED', 'ERROR', 'CORRUPTED'];
 
+  function clearReconnect(jobId) {
+    window.jobReconnectAttempts[jobId] = 0;
+    if (window.jobReconnectTimers[jobId]) {
+      clearTimeout(window.jobReconnectTimers[jobId]);
+      delete window.jobReconnectTimers[jobId];
+    }
+  }
+
+  function scheduleReconnect(jobId) {
+    if (!('WebSocket' in window)) return;
+    const attempt = (window.jobReconnectAttempts[jobId] || 0) + 1;
+    window.jobReconnectAttempts[jobId] = attempt;
+    const delay = Math.min(BASE_RECONNECT_DELAY * Math.pow(2, attempt - 1), MAX_RECONNECT_DELAY);
+    if (window.jobReconnectTimers[jobId]) {
+      clearTimeout(window.jobReconnectTimers[jobId]);
+    }
+    window.jobReconnectTimers[jobId] = setTimeout(() => {
+      delete window.jobReconnectTimers[jobId];
+      connectWS(jobId);
+    }, delay);
+  }
+
   function connectWS(jobId) {
+    if (!('WebSocket' in window)) {
+      ensurePolling(jobId, true);
+      return null;
+    }
+    const existing = window.jobSockets[jobId];
+    if (existing && (existing.readyState === WebSocket.OPEN || existing.readyState === WebSocket.CONNECTING)) {
+      return existing;
+    }
+    if (existing) {
+      try {
+        existing.close();
+      } catch (_) {}
+    }
     const statusEl = document.getElementById(`job-status-${jobId}`);
     const transcriptEl = document.getElementById(`job-transcript-${jobId}`);
     const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + `/ws/jobs/${jobId}/`;
-    const ws = new WebSocket(url);
+    let ws;
+    try {
+      ws = new WebSocket(url);
+    } catch (error) {
+      console.warn('Job websocket init failed', jobId, error);
+      scheduleReconnect(jobId);
+      ensurePolling(jobId, true);
+      return null;
+    }
     window.jobSockets[jobId] = ws;
     ws.onopen = () => {
+      clearReconnect(jobId);
       if (window.jobPollers[jobId]) {
         clearInterval(window.jobPollers[jobId]);
         delete window.jobPollers[jobId];
@@ -75,11 +124,15 @@
     };
     ws.onerror = (err) => {
       console.warn('Job websocket error', jobId, err);
+      scheduleReconnect(jobId);
+      ensurePolling(jobId, true);
     };
     ws.onclose = () => {
       delete window.jobSockets[jobId];
       ensurePolling(jobId, true);
+      scheduleReconnect(jobId);
     };
+    return ws;
   }
 
   async function pollJob(jobId) {
