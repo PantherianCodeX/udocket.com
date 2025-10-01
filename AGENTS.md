@@ -132,6 +132,7 @@ The repository is ready to host additional agents that consume transcripts and e
 ## Coding Guidelines
 - Language: Python 3.11
 - Style: type-annotated functions; avoid one-letter names; no inline comments unless essential
+- Strong typing: follow `docs/typing_refactor_plan.md`; new or modified modules must leave mypy/pyright errors reduced or unchanged.
 - Dependencies: avoid heavyweight or networked services unless approved; prefer Azure services in Canadian regions
 - Error handling: fail fast with clear messages; write structured meta and human logs; never raise without logging
 - Version control: keep diffs minimal and focused; avoid unrelated refactors

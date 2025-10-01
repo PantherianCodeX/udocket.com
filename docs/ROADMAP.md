@@ -11,6 +11,7 @@ Target End State (Option 3)
 - Background processing (transcription/analysis) executed as Django‑managed Celery workers that call the importable `TranscriptionAgent` interface.
 
 Implementation Roadmap
+All roadmap slices must maintain or improve our strong typing baseline—see `docs/typing_refactor_plan.md` before tackling any refactor or new feature.
 1) Repository Preparation
    - Create a new Django project under `apps/platform/` (done)
    - Maintain the root `manage.py`, `apps/platform/config/` settings package, and Django apps (`accounts`, `cases`, `artifacts`, `operations`, etc.).
@@ -24,6 +25,7 @@ Implementation Roadmap
    - Integrity/audit helpers: `django-auditlog`, `django-simple-history`, `django-cleanup`, `django-anymail` (if notifications), `django-axes`.
    - Testing: pytest, pytest‑django, factory‑boy, model‑bakery, pytest‑asyncio.
    - Dev quality gates: mypy, django‑stubs, flake8, black, bandit, django‑upgrade.
+   - Strong typing program: adhere to `docs/typing_refactor_plan.md`; refactors must not regress mypy/pyright and should chip away at the remaining errors.
 
 3) Django Project & Settings
    - Run `django-admin startproject udocket_platform apps/platform` and configure `apps/platform/config/settings/` with `base.py`, `dev.py`, `prod.py`.

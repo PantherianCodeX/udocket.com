@@ -10,6 +10,10 @@ Scope: `config/` (shared pydantic settings loader) and Django settings under `ap
 - Live in `apps/platform/config/settings`. Base resolves `STORAGE_ROOT` and robustly falls back to sqlite in dev (apps/platform/config/settings/base.py:1).
 - Use `ENV_READ_DOTENV=1` only when intentionally loading `.env` directly; docker compose already provides env vars.
 
+## Typing expectations
+- Enforce the strong typing policy in `docs/typing_refactor_plan.md` whenever you touch settings or configuration helpers.
+- Update Pydantic models and Django settings signatures so mypy/pyright stay clean; do not add ignores to work around `_env_file` or similar keyword usage.
+
 ## URL Structure & Tenancy
 - Prefer organization‑prefixed routes for UI and API: `/{org_slug}/cases/...`, `/{org_slug}/jobs/...`, and websockets `/ws/{org_slug}/jobs/<id>/`.
 - Middleware should resolve `org_slug` to the active organization; reject cross‑org access.
