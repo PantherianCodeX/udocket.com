@@ -1,8 +1,35 @@
+x-develop:
+  api-watch: &api-watch
+    watch:
+      - action: sync
+        path: apps/api
+        target: /app/apps/api
+      - action: sync
+        path: packages
+        target: /app/packages
+      - action: rebuild
+        path: apps/api/requirements.txt
+      - action: rebuild
+        path: infra/docker/Dockerfile.api
+  platform-watch: &platform-watch
+    watch:
+      - action: sync
+        path: apps/platform
+        target: /app/apps/platform
+      - action: sync
+        path: packages
+        target: /app/packages
+      - action: rebuild
+        path: apps/platform/requirements.txt
+      - action: rebuild
+        path: infra/docker/Dockerfile.platform
+
 services:
   api:
     build:
       context: .
       dockerfile: infra/docker/Dockerfile.api
+    develop: *api-watch
     env_file: .env
     volumes:
       - ./storage:/app/storage
@@ -10,26 +37,131 @@ services:
     ports:
       - "${API_PORT:-8080}:8080"
 
-  admin:
+  # New Django ASGI platform (UI + API + Channels)
+  platform:
     build:
       context: .
-      dockerfile: infra/docker/Dockerfile.admin
+      dockerfile: infra/docker/Dockerfile.platform
+    develop: *platform-watch
     env_file: .env
+    environment:
+      DJANGO_SETTINGS_MODULE: apps.platform.config.settings.prod
+      STORAGE_ROOT: /app/storage
+      REDIS_URL: redis://redis:6379/1
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: django-db
     volumes:
       - ./storage:/app/storage
       - ./.env:/app/.env:ro
     ports:
-      - "${ADMIN_PORT:-8081}:8081"
+      - "8000:8000"
     depends_on:
-      - api
+      - redis
+      - postgres
 
-  worker:
+  platform_worker:
     build:
       context: .
-      dockerfile: infra/docker/Dockerfile.worker
+      dockerfile: infra/docker/Dockerfile.platform
+    develop: *platform-watch
     env_file: .env
+    environment:
+      DJANGO_SETTINGS_MODULE: apps.platform.config.settings.prod
+      STORAGE_ROOT: /app/storage
+      REDIS_URL: redis://redis:6379/1
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: django-db
+    command: >-
+      sh -lc "python -c 'import time; time.sleep(2)' &&
+      celery -A apps.platform.config.celery worker -l ${CELERY_LOG_LEVEL:-info} --events"
     volumes:
       - ./storage:/app/storage
       - ./.env:/app/.env:ro
     depends_on:
-      - api
+      - redis
+      - postgres
+
+  platform_beat:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.platform
+    develop: *platform-watch
+    env_file: .env
+    environment:
+      DJANGO_SETTINGS_MODULE: apps.platform.config.settings.prod
+      STORAGE_ROOT: /app/storage
+      REDIS_URL: redis://redis:6379/1
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: django-db
+    command: sh -lc "python -c 'import time; time.sleep(2)' && celery -A apps.platform.config.celery beat -l ${CELERY_LOG_LEVEL:-info}"
+    volumes:
+      - ./storage:/app/storage
+      - ./.env:/app/.env:ro
+    depends_on:
+      - redis
+      - postgres
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-udocket}
+      POSTGRES_USER: ${POSTGRES_USER:-platform}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-platformpass}
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+
+  postgres-keycloak:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloakpass
+    volumes:
+      - keycloak-db-data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0.1
+    command: start-dev --import-realm --http-port=8085
+    env_file: .env
+    environment:
+      KC_DB: postgres
+      KC_DB_URL_HOST: postgres-keycloak
+      KC_DB_URL_PORT: 5432
+      KC_DB_URL_DATABASE: keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloakpass
+      # Expose on 8085 and advertise browser-accessible hostname (localhost)
+      KC_HOSTNAME: localhost
+      KC_HOSTNAME_PORT: 8085
+      KC_HOSTNAME_STRICT: "false"
+      KC_HOSTNAME_STRICT_HTTPS: "false"
+    ports:
+      - "8085:8085"
+    volumes:
+      - ./infra/docker/keycloak/udocker-realm.json:/opt/keycloak/data/import/udocker-realm.json:ro
+    depends_on:
+      - postgres-keycloak
+      - redis
+
+volumes:
+  keycloak-db-data:
+    driver: local
+  postgres-data:
+    driver: local

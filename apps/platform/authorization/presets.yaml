@@ -1,0 +1,119 @@
+version: 1
+
+# Permission Presets (aka Bundles)
+# - Combine coarse capabilities and field-level actions into named, reusable bundles
+# - Roles attach one or more presets to assemble effective permissions
+
+presets:
+  - slug: owner_core
+    name: Case Owner Core
+    description: Full control of own cases; can view/download all artifacts.
+    capabilities:
+      - case.view
+      - case.update
+      - job.create
+      - artifact.view
+      - artifact.download
+      - artifact.field.path.view
+      - artifact.field.checksum.view
+    field_policies:
+      - type: TRANSCRIPT
+        field: path
+        actions: [view, download]
+      - type: TRANSCRIPT
+        field: checksum
+        actions: [view]
+      - type: SUMMARY
+        field: path
+        actions: [view, download]
+      - type: TIMELINE
+        field: path
+        actions: [view, download]
+      - type: ENTITIES
+        field: path
+        actions: [view, download]
+      - type: GRAPH
+        field: path
+        actions: [view, download]
+
+  - slug: contributor_core
+    name: Contributor Core
+    description: Create jobs; view and download working artifacts; cannot change case metadata.
+    capabilities:
+      - case.view
+      - job.create
+      - artifact.view
+      - artifact.download
+      - artifact.field.path.view
+      - artifact.field.checksum.view
+    field_policies:
+      - type: TRANSCRIPT
+        field: path
+        actions: [view, download]
+      - type: TRANSCRIPT
+        field: checksum
+        actions: [view]
+      - type: SUMMARY
+        field: path
+        actions: [view, download]
+      - type: TIMELINE
+        field: path
+        actions: [view, download]
+
+  - slug: reviewer_readonly
+    name: Reviewer Read-Only
+    description: Read-only access; no downloads of source paths by default.
+    capabilities:
+      - case.view
+      - artifact.view
+      - artifact.field.checksum.view
+    field_policies:
+      - type: TRANSCRIPT
+        field: path
+        actions: []
+      - type: SUMMARY
+        field: path
+        actions: [view]
+      - type: TIMELINE
+        field: path
+        actions: [view]
+
+  - slug: auditor_strict
+    name: Auditor Strict
+    description: Auditing access to verify provenance; can see checksums but not raw paths.
+    capabilities:
+      - case.view
+      - artifact.view
+      - artifact.field.checksum.view
+    field_policies:
+      - type: TRANSCRIPT
+        field: checksum
+        actions: [view]
+      - type: SUMMARY
+        field: path
+        actions: [view]
+
+  - slug: external_share_min
+    name: External Share (Minimal)
+    description: Minimal viewing of select derived artifacts; no downloads, no checksums.
+    capabilities:
+      - case.view
+      - artifact.view
+    field_policies:
+      - type: SUMMARY
+        field: path
+        actions: [view]
+
+# Recommended role → preset bindings
+bindings:
+  OWNER:
+    - owner_core
+  CONTRIBUTOR:
+    - contributor_core
+  REVIEWER:
+    - reviewer_readonly
+  AUDITOR:
+    - auditor_strict
+  EXTERNAL:
+    - external_share_min
+

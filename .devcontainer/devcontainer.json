@@ -1,0 +1,46 @@
+{
+  "name": "uDocket Platform Dev",
+  "dockerComposeFile": [
+    "../docker-compose.yml",
+    "../docker-compose.override.yml",
+    "./docker-compose.devcontainer.yml"
+  ],
+  "service": "platform-dev",
+  "runServices": [
+    "postgres",
+    "redis",
+    "platform-dev"
+  ],
+  "shutdownAction": "stopCompose",
+  "workspaceFolder": "/app",
+  "overrideCommand": true,
+  "remoteUser": "root",
+  "remoteEnv": {
+    "DJANGO_SETTINGS_MODULE": "apps.platform.config.settings.dev",
+    "ENV_READ_DOTENV": "1"
+  },
+  "postCreateCommand": "pip install --upgrade pip && pip install -r apps/platform/requirements.txt",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "etmoffat.pip-packages",
+        "github.copilot",
+        "github.copilot-chat",
+        "github.vscode-pull-request-github",
+        "ms-azuretools.vscode-containers",
+        "ms-azuretools.vscode-docker",
+        "ms-python.black-formatter",
+        "ms-python.debugpy",
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-python.vscode-python-envs",
+        "ms-vscode-remote.remote-containers",
+        "openai.chatgpt",
+        "slightc.pip-manager"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python"
+      }
+    }
+  }
+}

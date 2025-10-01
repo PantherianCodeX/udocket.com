@@ -1,0 +1,88 @@
+{
+  "stages": {
+    "summarize.context_builder": {
+      "target": "summary",
+      "label": "Context Builder",
+      "description": "Prepares intake metadata and transcript snippets used by downstream prompts.",
+      "providers": [
+        "azure"
+      ],
+      "model": "gpt-4o-mini"
+    },
+    "summarize.extract_outline": {
+      "target": "summary",
+      "label": "Outline Extractor",
+      "description": "Derives parties, issues, claims, facts, and legal references as structured JSON.",
+      "providers": [
+        "azure"
+      ],
+      "model": "gpt-4o-mini"
+    },
+    "summarize.build_timeline_seeds": {
+      "target": "summary",
+      "label": "Timeline Seeder",
+      "description": "Creates candidate timestamped events that can seed the timeline generator.",
+      "providers": [
+        "azure"
+      ],
+      "model": "gpt-4o-mini"
+    },
+    "summarize.build_entity_hints": {
+      "target": "summary",
+      "label": "Entity Mapper",
+      "description": "Identifies entities and proto-relationships to accelerate graph extraction.",
+      "providers": [
+        "azure"
+      ],
+      "model": "gpt-4o-mini"
+    },
+    "summarize.draft_markdown": {
+      "target": "summary",
+      "label": "Summary Drafter",
+      "description": "Produces the layered Markdown case summary referencing transcript timestamps.",
+      "providers": [
+        "azure"
+      ],
+      "model": "gpt-4o"
+    },
+    "summarize.qa_and_finalize": {
+      "target": "summary",
+      "label": "QA & Finalize",
+      "description": "Validates mandatory sections, computes checksums, and prepares ops metadata.",
+      "providers": [
+        "azure"
+      ],
+      "model": "gpt-4o-mini"
+    },
+    "timeline.builder": {
+      "target": "timeline",
+      "label": "Timeline Builder",
+      "description": "Generates normalized events aligned to transcripts and optional summaries.",
+      "providers": [
+        "azure"
+      ],
+      "model": "gpt-4o-mini"
+    },
+    "graph.extractor": {
+      "target": "graph",
+      "label": "Graph Extractor",
+      "description": "Extracts entities and relationships suitable for graph visualization.",
+      "providers": [
+        "azure"
+      ],
+      "model": "gpt-4o-mini"
+    },
+    "guardian.review": {
+      "target": "guardian",
+      "label": "Output Guardian",
+      "description": "Final policy and safety review to block legal advice, interpretation, or form selection.",
+      "providers": [
+        "azure"
+      ],
+      "model": "gpt-4o-mini",
+      "options": {
+        "temperature": "0.0"
+      }
+    }
+  }
+}

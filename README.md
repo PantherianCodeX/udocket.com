@@ -4,18 +4,23 @@ This package includes fixes for Pydantic v2 (uses `pydantic-settings`), explicit
 and module discovery (`db/__init__.py`, `config/__init__.py`).
 
 ## Quick start
-1) Copy your **pilot agent** into:
-   packages/udocket_core/agents/transcribe.py
+1) Implement or customise your **pilot agent** inside the importable interface:
+   `packages/udocket_core/agents/transcribe_lib.py` (see `TranscriptionAgent`).
 2) Copy `.env.example` to `.env` and fill required values.
-3) Build & run:
+   - Postgres defaults are provided; start the bundled database with `docker compose up -d postgres`.
+   - Run `python manage.py migrate && python manage.py enable_rls` inside the `platform` container (idempotent; the entrypoint does this on boot).
+3) Build & run the stack:
    docker compose up --build
 - API   → http://localhost:8080
-- Admin → http://localhost:8081
+- Platform (UI + API) → http://localhost:8000
 
 ## Notes
-- SQLite by default; for Postgres, set `DATABASE_URL` and run Alembic.
-- Worker calls your agent using `AGENT_CMD_TEMPLATE` from `.env`.
-- Admin/API uploads let you choose `batch` (default) or `on-demand` transcription.
+- Postgres is now the default application database. Per-organization row-level security is enforced via `python manage.py enable_rls`.
+- Media storage is tenant-aware: artifacts for organization `ORG123` live under `/media/tenants/ORG123/cases/<CASE_ID>/...`.
+- Run tests inside the dev container directly: `pytest`. The devcontainer provides the runtime and services, so no local helper scripts are required.
+- Remote dev: open the repository in VS Code using **Dev Containers > Reopen in Container** to attach to the `platform-dev` service defined under `.devcontainer/` (starts alongside Postgres and Redis).
+- Permissions: Visit `/permissions/` for a read-only catalog of artifact fields, presets, and roles (edits still happen via Django admin for MVP).
+- Platform uploads let you choose `batch` (default) or `on-demand` transcription.
 - Batch mode optionally enables speaker diarization via UI toggle or `--diarization` flag.
 
 ## Transcription Modes
@@ -24,7 +29,7 @@ and module discovery (`db/__init__.py`, `config/__init__.py`).
     - `AZURE_BLOB_ACCOUNT` and `AZURE_BLOB_KEY` (or `AZURE_BLOB_CONNECTION_STRING`)
     - `AZURE_BLOB_CONTAINER` (e.g., `udocket-audio`)
     - Optional: `AZURE_BLOB_SAS_TTL_MIN` (default 120)
-  - In Admin UI, pick “Batch” and optionally enable “Diarization”.
+  - In the platform UI, pick “Batch” and optionally enable “Diarization”.
   - Requires Azure Speech resource tier Standard (S0). Free (F0) keys are rejected by the Batch API.
   - Diarization is supported only in Batch mode in this project. Output includes per-utterance timestamps and `SPK_n` labels.
   - Duration in the transcript header is computed from the Batch result (offset + duration), so it’s accurate for remote files.
@@ -36,6 +41,14 @@ and module discovery (`db/__init__.py`, `config/__init__.py`).
 
 ## Azure Setup (batch mode)
 1) Create a Storage account and a private container (e.g., `udocket-audio`).
-2) Add env vars in `.env` as above; rebuild worker: `docker compose build worker`.
-3) Run: `docker compose up -d`. The worker uploads audio and passes a SAS URL to the agent.
+2) Add env vars in `.env` as above; rebuild the Django platform worker: `docker compose build platform_worker`.
+3) Run: `docker compose up -d`. The Celery worker in `apps.platform` uploads audio and passes a SAS URL to the agent.
 4) Create an Azure Speech resource in the same Canada region (canadacentral/canadaeast) with tier Standard (S0) and set `AZURE_SPEECH_KEY`/`AZURE_SPEECH_REGION`.
+
+## Roadmap
+- Platform migration and consolidation plan: see `docs/ROADMAP.md`.
+
+## Devcontainer notes (persisting chat sessions)
+- Rebuilding the VS Code devcontainer used to wipe CLI/chat history stored under the container HOME.
+- The devcontainer compose now mounts persistent volumes for `/root/.config`, `/root/.cache`, and `/root/.local/share` so tools like Codex CLI and editors retain session data across rebuilds.
+- To apply: Reopen in Container (Rebuild) from VS Code. Existing named volumes are reused automatically; nothing else is required.

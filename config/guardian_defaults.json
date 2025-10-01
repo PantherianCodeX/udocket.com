@@ -1,0 +1,18 @@
+{
+  "instructions": [
+    {
+      "id": "default-summary-policy",
+      "title": "Block internally generated legal advice",
+      "text": "If the artifact originates from the platform (summary, timeline, entity graph) or includes manual edits by staff, flag any legal advice, form selection guidance, or definitive interpretations. Require rework before release.",
+      "applies_to": ["SUMMARY", "TIMELINE", "ENTITIES", "GRAPH", "ANALYSIS"],
+      "severity": "critical"
+    },
+    {
+      "id": "external-correspondence",
+      "title": "Respect uploaded correspondence",
+      "text": "When artifact metadata indicates an external source such as a lawyer letter or court-issued document, treat the content as reference material. Only flag if platform-authored commentary introduces prohibited advice.",
+      "applies_to": ["DOCUMENT", "LETTER", "UPLOAD"],
+      "severity": "medium"
+    }
+  ]
+}

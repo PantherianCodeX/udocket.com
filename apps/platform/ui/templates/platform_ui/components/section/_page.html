@@ -1,0 +1,95 @@
+{% load ui_display %}
+{% with section=section %}
+<section class="space-y-6" data-section-shell>
+  {% if section.title or section.subtitle or section.actions %}
+    <div class="rounded-2xl border border-white/10 bg-white/10 p-6 shadow-lg shadow-black/30">
+      <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div class="space-y-2">
+          {% if section.pretitle %}
+            <p class="text-xs uppercase tracking-wide text-slate-300">{{ section.pretitle }}</p>
+          {% endif %}
+          {% if section.title %}
+            <h1 class="text-3xl font-semibold text-white">{{ section.title }}</h1>
+          {% endif %}
+          {% if section.subtitle %}
+            <p class="text-sm text-slate-300">{{ section.subtitle }}</p>
+          {% endif %}
+        </div>
+        {% if section.actions %}
+          <div class="flex flex-wrap items-center justify-end gap-3">
+            {% for action in section.actions %}
+              {% with variant=action.variant|default:'default' %}
+               {% if action.href %}
+                  {% with attrs=action.attrs %}
+                  <a href="{{ action.href }}"
+                     {% if action.target %}target="{{ action.target }}"{% endif %}
+                     {% if action.rel %}rel="{{ action.rel }}"{% elif action.target == '_blank' %}rel="noopener"{% endif %}
+                     class="inline-flex items-center gap-2 rounded-lg border border-white/10 px-4 py-2 text-sm font-semibold shadow-lg transition {% if variant == 'primary' %}bg-primary-500 text-white shadow-primary-500/30 hover:bg-primary-400{% elif variant == 'danger' %}bg-rose-500 text-white shadow-rose-500/30 hover:bg-rose-400{% else %}bg-slate-900/70 text-slate-100 hover:border-primary-400 hover:text-white{% endif %}"
+                     {% if attrs %}
+                       {% for attr, value in attrs.items %}
+                         {{ attr }}="{{ value }}"
+                       {% endfor %}
+                     {% endif %}>
+                    {% if action.icon %}
+                      <span class="text-base" aria-hidden="true">{{ action.icon }}</span>
+                    {% endif %}
+                    <span>{{ action.label }}</span>
+                  </a>
+                  {% endwith %}
+                {% else %}
+                  {% with attrs=action.attrs %}
+                  <button type="button"
+                          class="inline-flex items-center gap-2 rounded-lg border border-white/10 px-4 py-2 text-sm font-semibold shadow-lg transition {% if variant == 'primary' %}bg-primary-500 text-white shadow-primary-500/30 hover:bg-primary-400{% elif variant == 'danger' %}bg-rose-500 text-white shadow-rose-500/30 hover:bg-rose-400{% else %}bg-slate-900/70 text-slate-100 hover:border-primary-400 hover:text-white{% endif %}"
+                          {% if attrs %}
+                            {% for attr, value in attrs.items %}
+                              {{ attr }}="{{ value }}"
+                            {% endfor %}
+                          {% endif %}>
+                    {% if action.icon %}
+                      <span class="text-base" aria-hidden="true">{{ action.icon }}</span>
+                    {% endif %}
+                    <span>{{ action.label }}</span>
+                  </button>
+                  {% endwith %}
+                {% endif %}
+              {% endwith %}
+            {% endfor %}
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+
+  {% if section.stats %}
+    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" data-section-stats>
+      {% for card in section.stats %}
+        <div class="rounded-2xl border p-4 {{ card.class|default:'border-white/10 bg-slate-900/70 text-slate-100' }}">
+          <p class="text-xs uppercase tracking-wide text-slate-400">{{ card.label }}</p>
+          <p class="mt-2 text-2xl font-semibold text-white">{{ card.value|default:'—' }}</p>
+          {% if card.description %}
+            <p class="mt-1 text-xs text-slate-300">{{ card.description }}</p>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  {% if section.body_template %}
+    {% include section.body_template with section_body=section.body_context %}
+  {% endif %}
+
+  {% if section.body_blocks %}
+    {% for block in section.body_blocks %}
+      {% if block.template %}
+        {% include block.template with section_body=block.context %}
+      {% endif %}
+    {% endfor %}
+  {% endif %}
+
+  {% if section.tables %}
+    {% for table in section.tables %}
+      {% include "platform_ui/components/tables/_table.html" with table=table %}
+    {% endfor %}
+  {% endif %}
+</section>
+{% endwith %}

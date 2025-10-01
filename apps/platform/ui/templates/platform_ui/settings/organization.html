@@ -1,0 +1,254 @@
+{% extends "platform_ui/layouts/base.html" %}
+
+{% block content %}
+<section class="space-y-8">
+  <div class="rounded-2xl border border-white/10 bg-white/10 p-6 shadow-lg shadow-black/30">
+    <h1 class="text-3xl font-semibold text-white">Organization settings</h1>
+    <p class="mt-2 text-sm text-slate-300">
+      Configure shared integrations and defaults for <span class="font-semibold text-slate-100">{{ organization.name }}</span>.
+      Provider credentials and LLM stage configurations set here are available to every case tool.
+    </p>
+  </div>
+
+  {% if messages %}
+  <div class="space-y-2">
+    {% for message in messages %}
+      <div class="rounded-xl border border-white/10 px-4 py-3 text-sm {% if message.tags == 'error' %}bg-rose-500/20 text-rose-100{% elif message.tags == 'success' %}bg-emerald-500/10 text-emerald-100 border-emerald-400/40{% else %}bg-white/10 text-slate-100{% endif %}">
+        {{ message }}
+      </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="grid gap-6 lg:grid-cols-3">
+    <div class="lg:col-span-1">
+      <div class="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-black/25">
+        <h2 class="text-lg font-semibold text-white">Navigation</h2>
+        <nav class="mt-4 space-y-2 text-sm">
+          <a href="#llm-providers" class="block rounded-lg border border-white/10 bg-slate-900/60 px-4 py-2 text-slate-200 transition hover:border-primary-400 hover:text-white">LLM providers</a>
+          {% for target in stage_targets %}
+          <a href="#llm-{{ target.target }}" class="block rounded-lg border border-white/10 bg-slate-900/60 px-4 py-2 text-slate-200 transition hover:border-primary-400 hover:text-white">{{ target.label }} configuration</a>
+          {% endfor %}
+        </nav>
+      </div>
+    </div>
+
+    <div class="lg:col-span-2 space-y-8">
+      <section id="llm-providers" class="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-black/25">
+        <div class="flex items-start justify-between gap-6">
+          <div>
+            <h2 class="text-xl font-semibold text-white">LLM providers</h2>
+            <p class="mt-2 text-sm text-slate-300">Add API credentials once and reuse them across all analysis tools.</p>
+          </div>
+        </div>
+
+        <div class="mt-4 grid gap-6 lg:grid-cols-2">
+          <form method="post" class="rounded-xl border border-primary-500/20 bg-slate-900/70 p-4 shadow-inner shadow-black/40">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="provider-upsert">
+            <h3 class="text-sm font-semibold uppercase tracking-wide text-primary-200">Add or update provider</h3>
+            <div class="mt-4 space-y-3 text-sm">
+              <label class="block text-slate-300">Provider key
+                <select name="provider" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-primary-400 focus:outline-none">
+                  <option value="">Select a catalog provider</option>
+                  {% for option in provider_options %}
+                  <option value="{{ option.value }}">{{ option.label }}</option>
+                  {% endfor %}
+                </select>
+              </label>
+              <label class="block text-slate-300">Display name
+                <input name="display_name" type="text" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-primary-400 focus:outline-none" placeholder="Friendly name" />
+              </label>
+              <label class="block text-slate-300">Endpoint URL
+                <input name="endpoint" type="url" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-primary-400 focus:outline-none" placeholder="https://..." />
+              </label>
+              <label class="block text-slate-300">API key (leave blank to keep existing)
+                <input name="api_key" type="password" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-primary-400 focus:outline-none" autocomplete="off" />
+              </label>
+              <label class="flex items-center gap-2 text-xs text-slate-300">
+                <input type="checkbox" name="clear_api_key" class="rounded border-white/20 bg-slate-900/70 text-primary-400 focus:ring-primary-400" />
+                Clear saved API key
+              </label>
+              <label class="block text-slate-300">Models JSON
+                <textarea name="models_json" rows="3" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 font-mono text-xs text-slate-100 focus:border-primary-400 focus:outline-none" placeholder='[ {"name": "model-id", "label": "Friendly label"} ]'></textarea>
+              </label>
+              <label class="block text-slate-300">Metadata JSON
+                <textarea name="metadata_json" rows="3" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 font-mono text-xs text-slate-100 focus:border-primary-400 focus:outline-none" placeholder='{"azure_deployment": "deployment-name"}'></textarea>
+              </label>
+            </div>
+            <button type="submit" class="mt-4 inline-flex items-center gap-2 rounded-lg border border-primary-500/40 bg-primary-500/20 px-4 py-2 text-sm font-semibold text-primary-100 transition hover:bg-primary-500/30">
+              Save provider
+            </button>
+          </form>
+
+          <div class="space-y-3">
+            {% if provider_registry %}
+            <div class="overflow-hidden rounded-xl border border-white/10 bg-slate-900/70">
+              <table class="min-w-full divide-y divide-white/10 text-sm text-slate-200">
+                <thead class="bg-white/10 text-xs uppercase tracking-wide text-slate-400">
+                  <tr>
+                    <th class="px-3 py-2 text-left">Provider</th>
+                    <th class="px-3 py-2 text-left">Status</th>
+                    <th class="px-3 py-2 text-left">Endpoint</th>
+                    <th class="px-3 py-2 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5">
+                  {% for name, entry in provider_registry.items %}
+                  <tr>
+                    <td class="px-3 py-2">
+                      <div class="font-semibold text-white">{{ entry.label }}</div>
+                      <div class="text-xs text-slate-400">Key: {{ name }}</div>
+                    </td>
+                    <td class="px-3 py-2 text-xs">
+                      {% if entry.configured %}
+                        <span class="rounded-full bg-emerald-500/20 px-3 py-1 text-emerald-100">Configured</span>
+                      {% elif entry.available %}
+                        <span class="rounded-full bg-amber-500/20 px-3 py-1 text-amber-100">Available</span>
+                      {% else %}
+                        <span class="rounded-full bg-slate-600/30 px-3 py-1 text-slate-200">Not configured</span>
+                      {% endif %}
+                    </td>
+                    <td class="px-3 py-2 text-xs text-slate-300">
+                      {{ entry.endpoint|default:"—" }}
+                    </td>
+                    <td class="px-3 py-2 text-right text-xs">
+                      <form method="post" class="inline">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="provider-delete">
+                        <input type="hidden" name="provider" value="{{ name }}">
+                        <button type="submit" class="rounded-lg border border-rose-500/40 bg-rose-500/20 px-3 py-1 text-rose-100 transition hover:bg-rose-500/30" onclick="return confirm('Remove provider {{ name }}?');">Delete</button>
+                      </form>
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            {% else %}
+            <p class="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">No providers configured yet.</p>
+            {% endif %}
+          </div>
+        </div>
+      </section>
+
+      {% for target in stage_targets %}
+      <section id="llm-{{ target.target }}" class="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-black/25">
+        <div class="flex items-start justify-between gap-6">
+          <div>
+            <h2 class="text-xl font-semibold text-white">{{ target.label }} configuration</h2>
+            <p class="mt-2 text-sm text-slate-300">Define provider chain and per-stage model selections. Stored configurations apply across every case.</p>
+          </div>
+        </div>
+
+        <div class="mt-4 space-y-4 text-sm">
+          {% if target.configurations %}
+          <details class="rounded-xl border border-white/10 bg-slate-900/60">
+            <summary class="flex cursor-pointer items-center justify-between px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-300">
+              Existing configurations
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 01.832.445l4.5 6.5a1 1 0 01-.832 1.555H5.5a1 1 0 01-.832-1.555l4.5-6.5A1 1 0 0110 3z" clip-rule="evenodd"/></svg>
+            </summary>
+            <div class="border-t border-white/10">
+              <ul class="space-y-2 px-4 py-3 text-slate-200">
+                {% for config in target.configurations %}
+                <li class="flex items-center justify-between gap-3 rounded-lg bg-white/5 px-3 py-2 text-xs">
+                  <div>
+                    <div class="font-semibold text-white">{{ config.name }}</div>
+                    <div class="text-slate-400">{{ config.description|default:"No description" }}</div>
+                    <div class="text-slate-500">Updated {{ config.updated_at|default:"—" }}</div>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    {% if config.is_default %}
+                    <span class="rounded-full border border-emerald-400/40 bg-emerald-500/10 px-3 py-1 text-emerald-100">Default</span>
+                    {% endif %}
+                    <form method="post" class="inline">
+                      {% csrf_token %}
+                      <input type="hidden" name="action" value="config-delete">
+                      <input type="hidden" name="config_id" value="{{ config.id }}">
+                      <button type="submit" class="rounded-lg border border-rose-500/40 bg-rose-500/20 px-3 py-1 text-rose-100 transition hover:bg-rose-500/30" onclick="return confirm('Delete configuration {{ config.name }}?');">Delete</button>
+                    </form>
+                  </div>
+                </li>
+                {% endfor %}
+              </ul>
+            </div>
+          </details>
+          {% endif %}
+
+          <form method="post" class="rounded-xl border border-primary-500/20 bg-slate-900/70 p-4 shadow-inner shadow-black/40">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="config-save">
+            <input type="hidden" name="target" value="{{ target.target }}">
+            <input type="hidden" name="config_id" value="{{ target.active_config.id|default:"" }}">
+            <div class="grid gap-4 lg:grid-cols-2">
+              <label class="block text-slate-300">Configuration name
+                <input name="name" type="text" value="{{ target.active_config.name|default:"" }}" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-primary-400 focus:outline-none" />
+              </label>
+              <label class="block text-slate-300">Provider chain
+                <div class="mt-2 space-y-2 rounded-lg border border-white/10 bg-slate-900/50 p-3">
+                  {% for option in provider_options %}
+                  <label class="flex items-center gap-2 text-xs text-slate-200">
+                    <input type="checkbox" name="provider_chain" value="{{ option.value }}" class="rounded border-white/20 bg-slate-900/70 text-primary-400 focus:ring-primary-400" {% if option.value in target.provider_chain %}checked{% endif %}>
+                    <span>{{ option.label }}</span>
+                  </label>
+                  {% endfor %}
+                </div>
+              </label>
+              <label class="lg:col-span-2 block text-slate-300">Description
+                <textarea name="description" rows="2" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-primary-400 focus:outline-none">{{ target.active_config.description|default:"" }}</textarea>
+              </label>
+            </div>
+            <div class="mt-4 space-y-4">
+              {% for stage in target.stage_entries %}
+              <div class="rounded-lg border border-white/10 bg-white/5 p-4">
+                <h3 class="text-sm font-semibold text-white">{{ stage.label }}</h3>
+                {% if stage.description %}
+                <p class="mt-1 text-xs text-slate-300">{{ stage.description }}</p>
+                {% endif %}
+                <div class="mt-3 grid gap-3 md:grid-cols-2">
+                  <label class="block text-xs text-slate-300 uppercase tracking-wide">Provider
+                    <select name="{{ stage.field_provider }}" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-primary-400 focus:outline-none">
+                      <option value="">(inherit from provider chain)</option>
+                      {% for option in provider_options %}
+                      <option value="{{ option.value }}" {% if option.value == stage.selected_provider %}selected{% endif %}>{{ option.label }}</option>
+                      {% endfor %}
+                    </select>
+                  </label>
+                  <label class="block text-xs text-slate-300 uppercase tracking-wide">Model
+                    <select name="{{ stage.field_model }}" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-primary-400 focus:outline-none">
+                      <option value="">(use provider default)</option>
+                      {% for model in model_options %}
+                      <option value="{{ model.value }}" {% if model.value == stage.selected_model %}selected{% endif %}>{{ model.provider_label }} · {{ model.label }}</option>
+                      {% endfor %}
+                    </select>
+                  </label>
+                  <label class="block text-xs text-slate-300 uppercase tracking-wide">Max output tokens
+                    <input name="{{ stage.field_max_tokens }}" type="number" min="0" value="{{ stage.selected_max_tokens|default:"" }}" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-primary-400 focus:outline-none" placeholder="Auto" />
+                  </label>
+                  <label class="block text-xs text-slate-300 uppercase tracking-wide">Temperature override
+                    <input name="{{ stage.field_temperature }}" type="number" step="0.01" value="{{ stage.selected_temperature|default:"" }}" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-primary-400 focus:outline-none" placeholder="Auto" />
+                  </label>
+                  <label class="md:col-span-2 block text-xs text-slate-300 uppercase tracking-wide">Additional options (JSON)
+                    <textarea name="{{ stage.field_options }}" rows="2" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 font-mono text-xs text-slate-100 focus:border-primary-400 focus:outline-none" placeholder='{"azure_deployment": "model-deployment"}'>{{ stage.selected_options_json }}</textarea>
+                  </label>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+            <label class="mt-4 flex items-center gap-2 text-xs text-slate-200">
+              <input type="checkbox" name="set_default" value="1" class="rounded border-white/20 bg-slate-900/70 text-primary-400 focus:ring-primary-400" {% if target.active_config.is_default %}checked{% endif %}>
+              Set as default for {{ target.label|lower }} jobs
+            </label>
+            <div class="mt-4 flex items-center gap-3">
+              <button type="submit" class="inline-flex items-center gap-2 rounded-lg border border-primary-500/40 bg-primary-500/20 px-4 py-2 text-sm font-semibold text-primary-100 transition hover:bg-primary-500/30">
+                Save configuration
+              </button>
+            </div>
+          </form>
+        </div>
+      </section>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endblock %}

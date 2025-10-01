@@ -1,0 +1,383 @@
+<script>
+(function (global) {
+  const platformUI = (global.platformUI = global.platformUI || {});
+  if (platformUI.popovers) return;
+
+  const popoverState = new WeakMap();
+  const zStack = platformUI.zStack;
+  const POPUP_BASE_Z = 2147483600;
+  const PORTAL_BASE_Z = POPUP_BASE_Z + 4;
+  const PANEL_FLOAT_BASE_Z = POPUP_BASE_Z + 8;
+
+  function ensurePortal(kind) {
+    const id = kind ? `popover-portal-${kind}` : 'popover-portal-default';
+    let portal = document.getElementById(id);
+    if (!portal) {
+      portal = document.createElement('div');
+      portal.id = id;
+      const style = portal.style;
+      style.position = 'fixed';
+      style.top = '0';
+      style.left = '0';
+      style.width = '100%';
+      style.height = '100%';
+      style.pointerEvents = 'none';
+      if (!zStack) {
+        style.zIndex = String(PORTAL_BASE_Z);
+      }
+      document.body.appendChild(portal);
+    }
+    return portal;
+  }
+
+  function reset(detailsEl) {
+    const state = popoverState.get(detailsEl);
+    if (!state) return;
+    window.removeEventListener('scroll', state.onScroll, true);
+    document.removeEventListener('scroll', state.onScroll, true);
+    window.removeEventListener('resize', state.onResize, true);
+    window.removeEventListener('orientationchange', state.onResize, true);
+    const { panel, original, placeholder, parent, portal, onWheel, onResizeObs, scrollAncestors } = state;
+    if (zStack) {
+      if (panel) {
+        try { zStack.release(panel); } catch (err) {}
+      }
+      if (portal) {
+        try { zStack.release(portal); } catch (err) {}
+      }
+    }
+    if (panel && panel.isConnected) {
+      Object.entries(original).forEach(([key, value]) => {
+        panel.style[key] = value;
+      });
+      panel.dataset.floating = '';
+      panel.style.minWidth = '';
+      if (placeholder && parent && parent.isConnected) {
+        try { parent.insertBefore(panel, placeholder); } catch (err) {}
+        try { placeholder.remove(); } catch (err) {}
+      }
+    }
+    if (portal) {
+      if (!zStack) {
+        portal.style.zIndex = String(PORTAL_BASE_Z);
+      }
+      portal.style.pointerEvents = 'none';
+    }
+    if (onWheel && panel) {
+      try {
+        panel.removeEventListener('wheel', onWheel, { passive: false });
+      } catch (err) {
+        panel.removeEventListener('wheel', onWheel);
+      }
+    }
+    if (onResizeObs && typeof onResizeObs.disconnect === 'function') {
+      try { onResizeObs.disconnect(); } catch (err) {}
+    }
+    if (Array.isArray(scrollAncestors)) {
+      try {
+        scrollAncestors.forEach((el) => el.removeEventListener('scroll', state.onScroll, true));
+      } catch (err) {}
+    }
+    popoverState.delete(detailsEl);
+  }
+
+  function float(detailsEl) {
+    const panel = detailsEl.querySelector('[data-popover-panel]');
+    const summary = detailsEl.querySelector('summary');
+    if (!panel || !summary) return;
+    reset(detailsEl);
+    const original = {
+      position: panel.style.position,
+      top: panel.style.top,
+      left: panel.style.left,
+      right: panel.style.right,
+      bottom: panel.style.bottom,
+      zIndex: panel.style.zIndex,
+      maxHeight: panel.style.maxHeight,
+      pointerEvents: panel.style.pointerEvents,
+      visibility: panel.style.visibility,
+      marginTop: panel.style.marginTop,
+      marginBottom: panel.style.marginBottom,
+    };
+    const parent = panel.parentElement;
+    const usePortal = (detailsEl.getAttribute('data-popover-portal') || '').toLowerCase() === 'body';
+    let placeholder = null;
+    let portal = null;
+    if (usePortal && parent) {
+      placeholder = document.createComment('popover-placeholder');
+      try { parent.insertBefore(placeholder, panel); } catch (err) {}
+      const key = detailsEl.getAttribute('data-popover') || 'menu';
+      portal = ensurePortal(key);
+      portal.style.pointerEvents = 'auto';
+      if (zStack && typeof zStack.promote === 'function') {
+        try { zStack.promote(portal, { base: PORTAL_BASE_Z }); } catch (err) {}
+      } else {
+        portal.style.zIndex = String(PORTAL_BASE_Z + 2);
+      }
+      portal.appendChild(panel);
+      panel.style.pointerEvents = 'auto';
+    }
+
+    panel.dataset.floating = '1';
+    panel.style.visibility = 'hidden';
+    panel.style.position = 'absolute';
+    if (zStack && typeof zStack.promote === 'function') {
+      const base = usePortal ? PANEL_FLOAT_BASE_Z : PANEL_FLOAT_BASE_Z + 4;
+      try { zStack.promote(panel, { base }); } catch (err) {}
+    } else {
+      panel.style.zIndex = usePortal ? String(PANEL_FLOAT_BASE_Z) : '9999';
+    }
+    panel.style.contain = 'layout paint';
+    panel.style.isolation = 'isolate';
+    panel.style.transform = 'translateZ(0)';
+    // Neutralize conflicting utility classes like right-0/top-full when floating
+    panel.style.right = 'auto';
+    panel.style.bottom = 'auto';
+
+    let gap = 8;
+    let computedMarginTop = 0;
+    let computedMarginBottom = 0;
+    try {
+      const computed = global.getComputedStyle ? global.getComputedStyle(panel) : null;
+      if (computed) {
+        computedMarginTop = parseFloat(computed.marginTop || '0') || 0;
+        computedMarginBottom = parseFloat(computed.marginBottom || '0') || 0;
+      }
+    } catch (err) {}
+    if (computedMarginTop > 0) {
+      gap = computedMarginTop;
+    } else if (computedMarginBottom > 0) {
+      gap = computedMarginBottom;
+    }
+    panel.style.marginTop = '0px';
+    panel.style.marginBottom = '0px';
+    const margin = 16;
+    const viewportCap = Math.max(240, Math.floor(window.innerHeight * 0.9));
+
+    const positionPanel = () => {
+      if (!detailsEl.isConnected || !detailsEl.open) {
+        reset(detailsEl);
+        return;
+      }
+      const rect = summary.getBoundingClientRect();
+      const width = panel.offsetWidth || panel.scrollWidth || 240;
+      let measuredHeight = panel.offsetHeight || panel.scrollHeight || 200;
+      const availableDown = window.innerHeight - rect.bottom - gap - margin;
+      const availableUp = rect.top - gap - margin;
+      const openDown = availableDown >= availableUp;
+      let maxHeight = viewportCap;
+      if (openDown && availableDown > 0) {
+        maxHeight = Math.min(viewportCap, availableDown + margin);
+      } else if (!openDown && availableUp > 0) {
+        maxHeight = Math.min(viewportCap, availableUp + margin);
+      }
+      if (measuredHeight > maxHeight) {
+        panel.style.maxHeight = `${maxHeight}px`;
+        panel.style.overflowY = 'auto';
+        panel.style.overscrollBehavior = 'contain';
+        measuredHeight = maxHeight;
+      } else {
+        panel.style.maxHeight = '';
+        panel.style.overflowY = '';
+        panel.style.overscrollBehavior = '';
+      }
+      const viewportWidth = document.documentElement.clientWidth;
+      if (usePortal) {
+        // Position using viewport coordinates (portal is fixed to viewport)
+        let leftVp = rect.left + rect.width - width;
+        leftVp = Math.min(leftVp, viewportWidth - width - margin);
+        leftVp = Math.max(margin, leftVp);
+        const topVp = openDown ? (rect.bottom + gap) : (rect.top - measuredHeight - gap);
+        panel.style.left = `${Math.round(leftVp)}px`;
+        panel.style.top = `${Math.round(topVp)}px`;
+      } else if (parent) {
+        // Position relative to document, then convert to parent coords
+        const docLeft = rect.left + window.scrollX;
+        const docTop = rect.top + window.scrollY;
+        let leftDoc = docLeft + rect.width - width;
+        leftDoc = Math.min(leftDoc, window.scrollX + viewportWidth - width - margin);
+        leftDoc = Math.max(window.scrollX + margin, leftDoc);
+        const topDoc = openDown ? (docTop + rect.height + gap) : (docTop - measuredHeight - gap);
+        const parentRect = parent.getBoundingClientRect();
+        const parentDocLeft = parentRect.left + window.scrollX;
+        const parentDocTop = parentRect.top + window.scrollY;
+        panel.style.left = `${Math.round(leftDoc - parentDocLeft)}px`;
+        panel.style.top = `${Math.round(topDoc - parentDocTop)}px`;
+      } else {
+        // Fallback to viewport-based positioning if no parent
+        let leftVp = rect.left + rect.width - width;
+        leftVp = Math.min(leftVp, viewportWidth - width - margin);
+        leftVp = Math.max(margin, leftVp);
+        const topVp = openDown ? (rect.bottom + gap) : (rect.top - measuredHeight - gap);
+        panel.style.left = `${Math.round(leftVp)}px`;
+        panel.style.top = `${Math.round(topVp)}px`;
+      }
+      panel.style.visibility = 'visible';
+    };
+
+    const state = {
+      panel,
+      original,
+      placeholder,
+      parent,
+      portal,
+      onScroll: positionPanel,
+      onResize: positionPanel,
+      onWheel: null,
+      onResizeObs: null,
+      scrollAncestors: [],
+    };
+    popoverState.set(detailsEl, state);
+    // Ensure the panel is at least as wide as the trigger to avoid misalignment
+    try {
+      const summaryRect = summary.getBoundingClientRect();
+      const triggerWidth = summaryRect.width || 0;
+      const currentWidth = panel.offsetWidth || panel.scrollWidth || 0;
+      const targetMin = Math.max(160, Math.min(Math.max(triggerWidth, currentWidth), window.innerWidth - 32));
+      if (Number.isFinite(targetMin) && targetMin > 0) {
+        panel.style.minWidth = `${Math.round(targetMin)}px`;
+      }
+    } catch (err) {}
+
+    const rafReposition = () => {
+      positionPanel();
+      requestAnimationFrame(() => positionPanel());
+    };
+    rafReposition();
+    window.addEventListener('scroll', positionPanel, true);
+    document.addEventListener('scroll', positionPanel, true);
+    window.addEventListener('resize', positionPanel, true);
+    window.addEventListener('orientationchange', positionPanel, true);
+
+    const wheelHandler = (evt) => {
+      if (!detailsEl.open || !panel) return;
+      const delta = evt.deltaY;
+      evt.preventDefault();
+      panel.scrollTop += delta;
+    };
+    try {
+      panel.addEventListener('wheel', wheelHandler, { passive: false });
+    } catch (err) {
+      panel.addEventListener('wheel', wheelHandler);
+    }
+    state.onWheel = wheelHandler;
+
+    // Observe content size changes to keep positioning accurate
+    if (window.ResizeObserver) {
+      try {
+        const ro = new ResizeObserver(() => positionPanel());
+        ro.observe(panel);
+        state.onResizeObs = ro;
+      } catch (err) {}
+    }
+
+    // Attach scroll listeners to nearest scrollable ancestors of the trigger
+    try {
+      const ancestors = [];
+      let node = summary.parentElement;
+      const root = document.documentElement;
+      while (node && node !== root && node !== document.body) {
+        try {
+          const cs = window.getComputedStyle(node);
+          const overflowY = cs.overflowY || cs.overflow;
+          const overflowX = cs.overflowX || cs.overflow;
+          const scrollable = /(auto|scroll|overlay)/.test(overflowY) || /(auto|scroll|overlay)/.test(overflowX);
+          if (scrollable && typeof node.addEventListener === 'function') {
+            node.addEventListener('scroll', positionPanel, true);
+            ancestors.push(node);
+          }
+        } catch (err) {}
+        node = node.parentElement;
+      }
+      state.scrollAncestors = ancestors;
+    } catch (err) {}
+  }
+
+  function close(detailsEl) {
+    if (!detailsEl) return;
+    reset(detailsEl);
+    detailsEl.removeAttribute('open');
+  }
+
+  function closeAll(filterSelector, except) {
+    const selector = filterSelector || '[data-popover][open]';
+    document.querySelectorAll(selector).forEach((menu) => {
+      if (menu === except) return;
+      close(menu);
+    });
+  }
+
+  function handleSummaryClick(evt) {
+    const summary = evt.target.closest('[data-popover] > summary');
+    if (!summary) return false;
+    const owner = summary.closest('[data-popover]');
+    if (!(owner instanceof HTMLElement)) return false;
+    evt.preventDefault();
+    evt.stopPropagation();
+    const willOpen = !owner.open;
+    const isTranscript = owner.matches('[data-transcript-item]');
+    if (isTranscript) {
+      closeAll('[data-transcript-item][open]', owner);
+    } else {
+      closeAll('[data-popover][open]', owner);
+    }
+    if (willOpen) {
+      owner.open = true;
+      requestAnimationFrame(() => float(owner));
+    } else {
+      close(owner);
+    }
+    evt.popoverHandled = true;
+    return true;
+  }
+
+  function isWithinPopover(target) {
+    if (!target) return false;
+    return Boolean(target.closest('[data-popover]') || target.closest('[data-popover-panel]'));
+  }
+
+  function handleDocumentClick(evt) {
+    if (evt.popoverHandled) return;
+    if (handleSummaryClick(evt)) return;
+    if (!isWithinPopover(evt.target)) {
+      closeAll();
+    }
+  }
+
+  function handleDocumentKeydown(evt) {
+    if (evt.key === 'Escape') {
+      closeAll();
+    }
+  }
+
+  function handleDocumentFocus(evt) {
+    if (!isWithinPopover(evt.target)) {
+      closeAll();
+    }
+  }
+
+  document.addEventListener('click', (evt) => {
+    handleSummaryClick(evt);
+  }, true);
+
+  document.addEventListener('click', handleDocumentClick);
+  document.addEventListener('keydown', handleDocumentKeydown);
+  document.addEventListener('focusin', handleDocumentFocus);
+  document.addEventListener('click', (evt) => {
+    const closer = evt.target.closest('[data-popover-close]');
+    if (!closer) return;
+    const owner = closer.closest('[data-popover]');
+    if (owner) {
+      close(owner);
+    }
+  });
+
+  platformUI.popovers = {
+    reset,
+    float,
+    close,
+    closeAll,
+    state: popoverState,
+  };
+})(window);
+</script>

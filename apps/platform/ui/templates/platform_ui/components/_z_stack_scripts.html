@@ -1,0 +1,116 @@
+<script>
+(function (global) {
+  const platformUI = (global.platformUI = global.platformUI || {});
+  if (platformUI.zStack) return;
+
+  const DEFAULT_BASE = 1000;
+  const DEFAULT_STEP = 1;
+  const order = [];
+  const entryMap = new WeakMap();
+
+  function normalizeOptions(options) {
+    const opts = options || {};
+    const base = typeof opts.base === 'number' && Number.isFinite(opts.base) ? opts.base : DEFAULT_BASE;
+    const step = typeof opts.step === 'number' && Number.isFinite(opts.step) && opts.step > 0 ? opts.step : DEFAULT_STEP;
+    return { base, step };
+  }
+
+  function cleanup() {
+    for (let i = order.length - 1; i >= 0; i -= 1) {
+      const entry = order[i];
+      const el = entry && entry.element;
+      if (!el || !el.isConnected) {
+        if (entry && el && el.style) {
+          el.style.zIndex = entry.originalZ || '';
+        }
+        order.splice(i, 1);
+        if (el) {
+          entryMap.delete(el);
+        }
+      }
+    }
+  }
+
+  function applyOrder() {
+    cleanup();
+    order.forEach((entry, index) => {
+      if (!entry || !entry.element || !entry.element.style) return;
+      const target = entry.base + index * entry.step;
+      entry.element.style.zIndex = String(target);
+    });
+  }
+
+  function ensureEntry(element, options) {
+    if (!(element instanceof HTMLElement)) return null;
+    const existing = entryMap.get(element);
+    if (existing) {
+      const opts = normalizeOptions(options);
+      existing.base = opts.base;
+      existing.step = opts.step;
+      return existing;
+    }
+    const opts = normalizeOptions(options);
+    const entry = {
+      element,
+      base: opts.base,
+      step: opts.step,
+      originalZ: element.style ? element.style.zIndex || '' : '',
+    };
+    entryMap.set(element, entry);
+    order.push(entry);
+    return entry;
+  }
+
+  function register(element, options) {
+    const entry = ensureEntry(element, options);
+    if (!entry) return null;
+    applyOrder();
+    return entry;
+  }
+
+  function promote(element, options) {
+    const entry = ensureEntry(element, options);
+    if (!entry) return null;
+    const idx = order.indexOf(entry);
+    if (idx >= 0) {
+      order.splice(idx, 1);
+    }
+    order.push(entry);
+    applyOrder();
+    return entry.element.style.zIndex || null;
+  }
+
+  function release(element) {
+    const entry = element instanceof HTMLElement ? entryMap.get(element) : null;
+    if (!entry) return;
+    const idx = order.indexOf(entry);
+    if (idx >= 0) {
+      order.splice(idx, 1);
+    }
+    entryMap.delete(entry.element);
+    if (entry.element && entry.element.style) {
+      entry.element.style.zIndex = entry.originalZ || '';
+    }
+    applyOrder();
+  }
+
+  function reset() {
+    while (order.length) {
+      const entry = order.pop();
+      if (!entry || !entry.element) continue;
+      entryMap.delete(entry.element);
+      if (entry.element.style) {
+        entry.element.style.zIndex = entry.originalZ || '';
+      }
+    }
+  }
+
+  platformUI.zStack = {
+    register,
+    promote,
+    release,
+    reset,
+    entries: () => order.map((entry) => entry.element).filter(Boolean),
+  };
+})(window);
+</script>

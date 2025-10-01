@@ -1,0 +1,98 @@
+{% with ctx=llm_context %}
+<details class="group rounded-xl border border-white/10 bg-slate-900/60" data-llm-advanced data-llm-target="{{ ctx.target }}" data-llm-settings-base="{{ ctx.urls.base }}" data-llm-return-url="{{ ctx.return_url }}">
+  <summary class="flex cursor-pointer items-center justify-between px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-300">
+    Advanced settings
+    <svg class="h-4 w-4 transition-transform group-open:rotate-180" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.094l3.71-3.86a.75.75 0 111.08 1.04l-4.247 4.41a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z" clip-rule="evenodd" /></svg>
+  </summary>
+  {% if ctx.configurations_json %}
+    <script type="application/json" data-llm-json="configurations">{{ ctx.configurations_json|safe }}</script>
+  {% endif %}
+  {% if ctx.active_configuration_json %}
+    <script type="application/json" data-llm-json="active-configuration">{{ ctx.active_configuration_json|safe }}</script>
+  {% endif %}
+  {% if ctx.stage_map_json %}
+    <script type="application/json" data-llm-json="stage-map">{{ ctx.stage_map_json|safe }}</script>
+  {% endif %}
+  {% if ctx.provider_chain_json %}
+    <script type="application/json" data-llm-json="provider-chain">{{ ctx.provider_chain_json|safe }}</script>
+  {% endif %}
+  {% if ctx.stage_configs_json %}
+    <script type="application/json" data-llm-json="stage-configs">{{ ctx.stage_configs_json|safe }}</script>
+  {% endif %}
+  <div class="space-y-4 border-t border-white/10 px-3 py-4 text-sm text-slate-200">
+    <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+      <div class="w-full lg:max-w-sm">
+        <label class="text-xs uppercase tracking-wide text-slate-400" for="llm-config-select-{{ ctx.target }}">Configuration</label>
+        <select id="llm-config-select-{{ ctx.target }}"
+                class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none"
+                data-llm-config-select>
+          {% for cfg in ctx.configurations %}
+            {% if cfg.id %}
+              <option value="id:{{ cfg.id }}" data-config-index="{{ forloop.counter0 }}" {% if ctx.active_configuration and cfg.id == ctx.active_configuration.id %}selected{% endif %}>
+            {% else %}
+              <option value="idx:{{ forloop.counter0 }}" data-config-index="{{ forloop.counter0 }}" {% if not ctx.active_configuration or not ctx.active_configuration.id and forloop.first %}selected{% endif %}>
+            {% endif %}
+              {{ cfg.name|default:"(Untitled configuration)" }}{% if cfg.is_default %} · Default{% endif %}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="flex flex-wrap gap-2 text-xs">
+        <a href="{{ ctx.urls.edit }}" data-llm-link="edit" class="inline-flex items-center gap-2 rounded-lg border border-white/15 bg-white/10 px-3 py-1.5 font-semibold text-white transition hover:border-primary-400 hover:text-white">Edit configuration</a>
+        <a href="{{ ctx.urls.new }}" class="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 font-semibold text-slate-200 transition hover:border-primary-400 hover:text-white">New configuration</a>
+        <a href="{{ ctx.urls.tuning }}" data-llm-link="tuning" class="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 font-semibold text-slate-200 transition hover:border-primary-400 hover:text-white">LLM tuning</a>
+      </div>
+    </div>
+
+    <div class="rounded-lg border border-white/10 bg-slate-900/40 p-3">
+      <p class="text-xs uppercase tracking-wide text-slate-400">Configuration details</p>
+      <p class="mt-2 text-sm font-semibold text-white" data-llm-config-name-display>
+        {{ ctx.active_configuration.name|default:"(Untitled configuration)" }}
+      </p>
+      <p class="mt-1 text-xs text-slate-400" data-llm-config-description-display>
+        {% if ctx.active_configuration.description %}
+          {{ ctx.active_configuration.description }}
+        {% else %}
+          No notes added.
+        {% endif %}
+      </p>
+      <p class="mt-2 text-xs text-slate-400" data-llm-config-provider-chain-display>
+        {% if ctx.provider_chain %}
+          Providers: {{ ctx.provider_chain|join:", " }}
+        {% else %}
+          Providers will be selected automatically.
+        {% endif %}
+      </p>
+    </div>
+
+    <div class="rounded-lg border border-white/10 bg-slate-900/40 p-3" data-llm-config-stages>
+      <p class="text-xs uppercase tracking-wide text-slate-400">Stage overrides</p>
+      <div class="mt-2 space-y-3{% if not ctx.configured_stages %} hidden{% endif %}" data-llm-stage-list>
+        {% for stage in ctx.configured_stages %}
+          <div class="rounded border border-white/10 bg-slate-900/60 p-3" data-llm-stage-row>
+            <p class="text-sm font-semibold text-white">{{ stage.label }}</p>
+            <dl class="mt-1 space-y-1 text-xs text-slate-400">
+              {% if stage.provider %}<div><dt class="inline font-semibold text-slate-300">Provider:</dt> <dd class="inline">{{ stage.provider }}</dd></div>{% endif %}
+              {% if stage.model %}<div><dt class="inline font-semibold text-slate-300">Model:</dt> <dd class="inline">{{ stage.model }}</dd></div>{% endif %}
+              {% if stage.max_tokens %}<div><dt class="inline font-semibold text-slate-300">Max tokens:</dt> <dd class="inline">{{ stage.max_tokens }}</dd></div>{% endif %}
+              {% if stage.options %}
+                <div>
+                  <dt class="font-semibold text-slate-300">Options:</dt>
+                  <dd>
+                    <ul class="ml-4 list-disc space-y-0.5">
+                      {% for key, value in stage.options.items %}
+                        <li><span class="font-semibold text-slate-300">{{ key|capfirst }}:</span> {{ value }}</li>
+                      {% endfor %}
+                    </ul>
+                  </dd>
+                </div>
+              {% endif %}
+            </dl>
+          </div>
+        {% endfor %}
+      </div>
+      <p class="mt-2 text-xs text-slate-400{% if ctx.configured_stages %} hidden{% endif %}" data-llm-stage-empty>Using default stage assignments.</p>
+    </div>
+  </div>
+</details>
+{% endwith %}

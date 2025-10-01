@@ -1,0 +1,60 @@
+<div class="h-full rounded-lg border border-white/10 bg-slate-900/60 p-3" data-job-notes data-job-id="{{ job_id }}">
+  <div class="flex flex-wrap items-start justify-between gap-2">
+    <div>
+      <p class="text-[11px] uppercase tracking-wide text-slate-400">Team Notes</p>
+      <p class="text-[10px] text-slate-500" data-job-notes-meta>
+        {% if notes_updated_at %}
+          Updated <time data-ts="{{ notes_updated_at }}" data-ts-format="datetime">{{ notes_updated_at }}</time>
+          {% if notes_updated_by %}· <span class="font-semibold text-slate-200">{{ notes_updated_by }}</span>{% endif %}
+        {% elif job_id %}
+          No notes yet.
+        {% else %}
+          Notes available after the first run completes.
+        {% endif %}
+      </p>
+    </div>
+    {% if user_can_add_notes and job_id %}
+      <button type="button"
+              class="inline-flex items-center gap-2 rounded-md border border-primary-400/40 bg-primary-500/10 px-2.5 py-1 text-[11px] font-semibold text-primary-100 transition hover:bg-primary-500/25"
+              data-job-notes-save
+              data-job-id="{{ job_id }}">
+        Save note
+      </button>
+    {% endif %}
+  </div>
+
+  <div class="mt-2 max-h-40 space-y-2 overflow-y-auto pr-1" data-job-notes-list>
+    {% if notes_entries %}
+      {% for note in notes_entries %}
+        <article class="rounded-md border border-white/10 bg-slate-950/40 px-3 py-2" data-job-note="{{ note.id|default:forloop.counter }}" title="{{ note.text }}">
+          <div class="flex flex-wrap items-center justify-between gap-2 text-[10px] text-slate-400">
+            <span class="font-semibold text-slate-200">{{ note.created_by_label|default:note.created_by|default:'User' }}</span>
+            {% if note.created_at %}
+              <time data-ts="{{ note.created_at }}" data-ts-format="datetime">{{ note.created_at }}</time>
+            {% endif %}
+          </div>
+          <p class="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-slate-100">{{ note.text }}</p>
+        </article>
+      {% endfor %}
+    {% else %}
+      <p class="rounded-md border border-dashed border-white/10 bg-slate-950/20 px-3 py-2 text-[11px] text-slate-500" data-job-notes-empty>
+        {% if job_id %}
+          No notes yet. Add the first note for your team.
+        {% else %}
+          Notes will appear here once a job has been created.
+        {% endif %}
+      </p>
+    {% endif %}
+  </div>
+
+  {% if user_can_add_notes and job_id %}
+    <textarea class="mt-2 w-full rounded-md border border-white/10 bg-slate-950/20 p-2 text-xs text-slate-100 focus:border-primary-400 focus:outline-none focus:ring-0"
+              rows="3"
+              placeholder="Add context for your team…"
+              data-job-notes-input></textarea>
+  {% elif user_can_add_notes and not job_id %}
+    <p class="mt-2 text-[11px] text-slate-500">Select a recent run to capture notes.</p>
+  {% elif not notes_entries %}
+    <p class="mt-2 text-[11px] text-slate-500">You do not have permission to add notes.</p>
+  {% endif %}
+</div>

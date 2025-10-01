@@ -1,0 +1,77 @@
+# Allow overriding the Python base image (useful for mirrors/registries)
+ARG PYTHON_BASE=mcr.microsoft.com/devcontainers/python:3.11
+FROM ${PYTHON_BASE}
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+       ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+# Optional dev tools (enabled via build-arg DEV_TOOLS=1)
+ARG DEV_TOOLS=0
+RUN if [ "$DEV_TOOLS" = "1" ]; then \
+      set -eux; \
+      # Base utilities
+      apt-get update && apt-get install -y --no-install-recommends \
+        bash \
+        ca-certificates \
+        build-essential \
+        curl \
+        gcc \
+        g++ \
+        git \
+        git-lfs \
+        htop \
+        iputils-ping \
+        jq \
+        less \
+        libpq-dev \
+        lsof \
+        make \
+        nano \
+        netcat-openbsd \
+        postgresql-client \
+        pkg-config \
+        procps \
+        ripgrep \
+        sqlite3 \
+        strace \
+        tcpdump \
+        tree \
+        unzip \
+        vim-tiny \
+        wget; \
+      # Install Docker CLI + Compose v2 from Docker's official repo (works on Debian trixie)
+      install -m 0755 -d /etc/apt/keyrings; \
+      curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc; \
+      chmod a+r /etc/apt/keyrings/docker.asc; \
+      echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(. /etc/os-release && echo $VERSION_CODENAME) stable" > /etc/apt/sources.list.d/docker.list; \
+      apt-get update && apt-get install -y --no-install-recommends \
+        docker-ce-cli \
+        docker-buildx-plugin \
+        docker-compose-plugin; \
+      git lfs install --system; \
+      rm -rf /var/lib/apt/lists/*; \
+    fi
+
+WORKDIR /app
+
+# Install platform requirements first for better layer caching
+COPY apps/platform/requirements.txt /tmp/requirements.txt
+RUN python -m pip install --upgrade pip \
+    && pip install -r /tmp/requirements.txt \
+    && rm -f /tmp/requirements.txt
+
+# Copy project
+COPY . /app
+
+EXPOSE 8000
+
+# Default to prod settings; override in compose if needed
+ENV DJANGO_SETTINGS_MODULE=apps.platform.config.settings.prod
+
+CMD ["sh", "-lc", "python manage.py migrate && python manage.py enable_rls && daphne -b 0.0.0.0 -p 8000 apps.platform.config.asgi:application"]

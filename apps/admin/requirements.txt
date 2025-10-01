@@ -1,9 +1,0 @@
-fastapi
-uvicorn[standard]
-jinja2
-python-dotenv
-pydantic>=2.6,<3
-pydantic-settings>=2.2,<3
-sqlalchemy
-python-multipart
-azure-storage-blob

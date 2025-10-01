@@ -1,0 +1,236 @@
+<section class="space-y-6">
+    <div class="rounded-2xl border border-white/10 bg-white/10 p-6 shadow-lg shadow-black/25">
+      <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p class="text-xs uppercase tracking-wide text-slate-300">Active organization</p>
+          <h2 class="text-3xl font-semibold text-white">{{ active_org.name|default:"Select an organization" }}</h2>
+          <p class="mt-2 text-sm text-slate-300">Cases, transcripts, and analytics are isolated per tenant. Choose a case below to manage transcription jobs.</p>
+        </div>
+        <div class="rounded-xl border border-white/10 bg-slate-900/60 px-4 py-3 text-center text-sm text-slate-200">
+          <p class="text-xs uppercase tracking-wide text-slate-400">Cases</p>
+          <p class="mt-1 text-xl font-semibold text-white">{{ cases|length }}</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid gap-6 lg:grid-cols-[3fr,2fr]">
+      <div class="rounded-2xl border border-white/10 bg-white/5 shadow-xl shadow-black/30">
+        <div class="flex items-center justify-between border-b border-white/10 px-6 py-4">
+          <h3 class="text-lg font-semibold text-white">Cases</h3>
+          <span class="text-xs uppercase tracking-wide text-slate-400">Click a row for details</span>
+        </div>
+        <div class="overflow-hidden">
+          <table class="min-w-full divide-y divide-white/10 text-sm">
+            <thead class="bg-white/5 text-left text-xs uppercase tracking-wide text-slate-400">
+              <tr>
+                <th class="px-4 py-3">Title</th>
+                <th class="px-4 py-3">Created</th>
+                <th class="px-4 py-3">Jobs</th>
+                <th class="px-4 py-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="cases-table" class="divide-y divide-white/5 bg-slate-900/40 text-slate-100">
+              {% for c in cases %}
+              <tr data-case-row
+                  data-case-id="{{ c.id }}"
+                  data-title="{{ c.title|default:c.id }}"
+                  data-created="{{ c.created_at|date:'c' }}"
+                  class="cursor-pointer transition hover:bg-white/10">
+                <td class="px-4 py-3 flex items-center gap-2">
+                  <span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-primary-500/20 text-primary-200">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 7.5A2.5 2.5 0 015.5 5h4.379a1 1 0 01.707.293l1.121 1.121a1 1 0 00.707.293H18.5A2.5 2.5 0 0121 9.207V17.5A2.5 2.5 0 0118.5 20h-13A2.5 2.5 0 013 17.5v-10z"/>
+                    </svg>
+                  </span>
+                  <span class="font-medium">{{ c.title|default:c.id }}</span>
+                </td>
+                <td class="px-4 py-3 text-slate-300"><time data-ts="{{ c.created_at|date:'c' }}" data-ts-format="datetime">{{ c.created_at|date:'M d, Y h:i A' }}</time></td>
+                <td class="px-4 py-3 text-slate-300" data-case-jobs="loading">—</td>
+                <td class="px-4 py-3 text-right">
+                  <div class="inline-flex items-center gap-2" onclick="event.stopPropagation();">
+                    <a href="/cases/{{ c.id }}/" class="inline-flex items-center gap-2 rounded-lg border border-primary-500/50 bg-primary-500/30 px-3 py-1.5 text-xs font-semibold text-primary-50 transition hover:bg-primary-500/50">Open</a>
+                    <a href="/admin/cases/case/{{ c.id }}/change/" class="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-primary-400 hover:text-white" target="_blank" rel="noopener">Edit</a>
+                  </div>
+                </td>
+              </tr>
+              {% empty %}
+              <tr>
+                <td colspan="4" class="px-4 py-6 text-center text-slate-400">No cases yet. Create one to get started.</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="space-y-4">
+        <div class="rounded-2xl border border-white/10 bg-gradient-to-br from-primary-600/70 via-primary-500/70 to-primary-700/70 p-6 shadow-xl shadow-primary-800/40">
+          <h3 class="text-lg font-semibold text-white">Create a case</h3>
+          {% if active_org %}
+            <p class="mt-2 text-sm text-primary-50/80">Cases created here belong to <span class="font-medium text-white">{{ active_org.name }}</span>. Provide the relevant metadata to keep hearings organized.</p>
+            <form method="post" class="mt-6 space-y-4">
+              {% csrf_token %}
+              <div class="grid gap-4 md:grid-cols-2">
+                <label class="text-xs font-semibold uppercase tracking-wide text-primary-100">Title
+                  <input type="text" name="title" class="mt-1 block w-full rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-primary-100/50 focus:border-white focus:outline-none">
+                </label>
+                <label class="text-xs font-semibold uppercase tracking-wide text-primary-100">Client name
+                  <input type="text" name="client_name" class="mt-1 block w-full rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-primary-100/50 focus:border-white focus:outline-none">
+                </label>
+                <label class="text-xs font-semibold uppercase tracking-wide text-primary-100">Opposing party
+                  <input type="text" name="opposing_party" class="mt-1 block w-full rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-primary-100/50 focus:border-white focus:outline-none">
+                </label>
+                <label class="text-xs font-semibold uppercase tracking-wide text-primary-100">Client position
+                  <select name="client_position" class="mt-1 block w-full rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white focus:border-white focus:outline-none">
+                    <option value="">Select role…</option>
+                    {% for value, label in client_position_choices %}
+                      <option value="{{ value }}">{{ label }}</option>
+                    {% endfor %}
+                  </select>
+                </label>
+                <label class="text-xs font-semibold uppercase tracking-wide text-primary-100">Court location
+                  <input type="text" name="court_location" class="mt-1 block w-full rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-primary-100/50 focus:border-white focus:outline-none">
+                </label>
+                <label class="text-xs font-semibold uppercase tracking-wide text-primary-100">Court level
+                  <select name="court_level" class="mt-1 block w-full rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white focus:border-white focus:outline-none">
+                    <option value="">Select level…</option>
+                    {% for value, label in court_level_choices %}
+                      <option value="{{ value }}">{{ label }}</option>
+                    {% endfor %}
+                  </select>
+                </label>
+                <label class="text-xs font-semibold uppercase tracking-wide text-primary-100">Division
+                  <select name="court_division" class="mt-1 block w-full rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white focus:border-white focus:outline-none">
+                    <option value="">Select division…</option>
+                    {% for value, label in court_division_choices %}
+                      <option value="{{ value }}">{{ label }}</option>
+                    {% endfor %}
+                  </select>
+                </label>
+                <label class="text-xs font-semibold uppercase tracking-wide text-primary-100">Court case number
+                  <input type="text" name="court_case_number" class="mt-1 block w-full rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-primary-100/50 focus:border-white focus:outline-none">
+                </label>
+                <label class="text-xs font-semibold uppercase tracking-wide text-primary-100">Representation
+                  <select name="representation" class="mt-1 block w-full rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white focus:border-white focus:outline-none">
+                    <option value="">Select representation…</option>
+                    {% for value, label in representation_choices %}
+                      <option value="{{ value }}">{{ label }}</option>
+                    {% endfor %}
+                  </select>
+                </label>
+                <label class="text-xs font-semibold uppercase tracking-wide text-primary-100">Court date
+                  <input type="datetime-local" name="court_date" class="mt-1 block w-full rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white focus:border-white focus:outline-none">
+                </label>
+                <label class="text-xs font-semibold uppercase tracking-wide text-primary-100">Filing deadline
+                  <input type="date" name="filing_deadline" class="mt-1 block w-full rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white focus:border-white focus:outline-none">
+                </label>
+              </div>
+              <div class="grid gap-4 md:grid-cols-2">
+                <label class="inline-flex items-center gap-2 text-sm text-primary-100">
+                  <input type="checkbox" name="legal_aid" class="h-4 w-4 rounded border-white/30 bg-white/10 text-primary-200 focus:ring-white"> Legal aid
+                </label>
+                <label class="inline-flex items-center gap-2 text-sm text-primary-100">
+                  <input type="checkbox" name="pro_bono" class="h-4 w-4 rounded border-white/30 bg-white/10 text-primary-200 focus:ring-white"> Pro bono
+                </label>
+              </div>
+              <label class="text-xs font-semibold uppercase tracking-wide text-primary-100">Notes
+                <textarea name="notes" rows="3" class="mt-1 block w-full rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-primary-100/50 focus:border-white focus:outline-none"></textarea>
+              </label>
+              <button type="submit" class="inline-flex w-full items-center justify-center rounded-lg bg-white/90 px-4 py-2 text-sm font-semibold text-primary-700 shadow-lg shadow-primary-900/30 transition hover:bg-white">Create case</button>
+            </form>
+          {% else %}
+            <div class="mt-4 rounded-xl border border-white/20 bg-white/10 p-4 text-sm text-primary-50">
+              Select an organization from the profile menu before creating cases.
+            </div>
+          {% endif %}
+        </div>
+
+        <div class="rounded-2xl border border-white/10 bg-white/5 p-6 text-sm text-slate-200">
+          <h3 class="text-lg font-semibold text-white">Operations shortcuts</h3>
+          <p class="mt-2">Backend admin (Django) remains available at <a class="font-semibold text-primary-300 underline" href="http://localhost:8000/admin/" target="_blank" rel="noopener">http://localhost:8000/admin/</a> while this UI evolves.</p>
+          <p class="mt-4 text-xs uppercase tracking-wide text-slate-400">Shortcuts</p>
+          <ul class="mt-2 space-y-2 text-sm">
+            <li><a class="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/10 px-3 py-1.5 text-primary-200 transition hover:border-primary-400 hover:text-white" href="http://localhost:8080/docs" target="_blank" rel="noopener">Public API docs</a></li>
+            <li><a class="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/10 px-3 py-1.5 text-primary-200 transition hover:border-primary-400 hover:text-white" href="http://localhost:8081/" target="_blank" rel="noopener">Legacy worker admin</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    const tbody = document.getElementById('cases-table');
+    let openCaseRow = null;
+
+    function closeDetails() {
+      if (openCaseRow) {
+        const detailRow = openCaseRow.nextElementSibling;
+        if (detailRow && detailRow.dataset.caseDetails === '1') detailRow.remove();
+        openCaseRow = null;
+      }
+    }
+
+    async function fetchSummarizeStats(caseId) {
+      try {
+        const resp = await fetch(`/api/v1/cases/${caseId}/jobs/summary/`, { headers: { 'Accept': 'application/json' } });
+        if (!resp.ok) return null;
+        return await resp.json();
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function summarizeBadges(stats) {
+      if (!stats) return '<span class="text-slate-400">No summarize jobs</span>';
+      const pieces = [];
+      pieces.push(`<span class="rounded-full border border-emerald-400/40 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-200">${stats.succeeded} succeeded</span>`);
+      if (stats.running) pieces.push(`<span class="rounded-full border border-blue-400/40 bg-blue-500/10 px-3 py-1 text-xs font-semibold text-blue-200">${stats.running} running</span>`);
+      if (stats.pending) pieces.push(`<span class="rounded-full border border-slate-400/40 bg-slate-500/10 px-3 py-1 text-xs font-semibold text-slate-200">${stats.pending} pending</span>`);
+      if (stats.failed) pieces.push(`<span class="rounded-full border border-rose-400/40 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-200">${stats.failed} failed</span>`);
+      return pieces.join(' ');
+    }
+
+    function detailTemplate(row, stats) {
+      const caseId = row.dataset.caseId;
+      const created = row.dataset.created;
+      return `
+        <tr data-case-details="1" class="bg-slate-900/60">
+          <td colspan="4" class="px-6 py-4">
+            <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p class="text-xs uppercase tracking-wide text-slate-400">Case ID</p>
+                <p class="font-mono text-sm text-primary-200">${caseId}</p>
+                <p class="mt-2 text-xs uppercase tracking-wide text-slate-400">Created</p>
+                <p class="text-sm text-slate-200">${created ? new Date(created).toLocaleString() : '—'}</p>
+              </div>
+              <div class="flex flex-wrap gap-2">${summarizeBadges(stats || { succeeded:0, running:0, pending:0, failed:0 })}</div>
+              <div class="flex gap-2">
+                <a href="/cases/${caseId}/" class="inline-flex items-center gap-2 rounded-lg border border-primary-500/50 bg-primary-500/30 px-3 py-1.5 text-xs font-semibold text-primary-50 transition hover:bg-primary-500/50">Open case</a>
+                <a href="/admin/cases/case/${caseId}/change/" class="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-primary-400 hover:text-white" target="_blank" rel="noopener">Legacy view</a>
+              </div>
+            </div>
+          </td>
+        </tr>`;
+    }
+
+    async function handleRowClick(event) {
+      const row = event.currentTarget;
+      if (openCaseRow === row) {
+        closeDetails();
+        return;
+      }
+      closeDetails();
+      openCaseRow = row;
+      const caseId = row.dataset.caseId;
+      const stats = await fetchSummarizeStats(caseId);
+      row.insertAdjacentHTML('afterend', detailTemplate(row, stats));
+      if (stats) {
+        const cell = row.querySelector('[data-case-jobs]');
+        if (cell) cell.textContent = stats.total;
+      }
+    }
+
+    tbody.querySelectorAll('[data-case-row]').forEach(row => {
+      row.addEventListener('click', handleRowClick);
+    });
+  </script>

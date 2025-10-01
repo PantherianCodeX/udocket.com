@@ -1,0 +1,10 @@
+<script>
+  window.UDOCKET_CASE_ROUTE = {
+    toolEndpoint(caseId, key) {
+      return `/cases/${caseId}/tools/${key}/`;
+    },
+    caseDetailsUpdate(caseId) {
+      return `/cases/${caseId}/tools/case-details/update/`;
+    }
+  };
+</script>

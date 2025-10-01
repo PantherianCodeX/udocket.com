@@ -1,0 +1,140 @@
+{% with module=body.module summary_llm=body.summary_llm %}
+<div class="space-y-6"
+     data-summary
+     data-llm-target="summary"
+     {% if summary_llm and summary_llm.provider_chain_json %}data-llm-provider-chain="{{ summary_llm.provider_chain_json|escapejs }}"{% endif %}
+     {% if summary_llm and summary_llm.active_configuration %}data-llm-config-id="{{ summary_llm.active_configuration.id }}"{% endif %}>
+  {% if summary_llm and summary_llm.provider_chain_json %}
+    <script type="application/json" data-llm-json="provider-chain">{{ summary_llm.provider_chain_json|safe }}</script>
+  {% endif %}
+  <div class="grid gap-4 md:grid-cols-3">
+    <div class="md:col-span-2 space-y-4 rounded-2xl border border-white/10 bg-slate-900/70 p-5">
+      <div class="flex flex-col gap-2">
+        <label for="summary-source" class="text-xs uppercase tracking-wide text-slate-400">Approved transcript</label>
+        {% if body.transcripts %}
+          <select id="summary-source" name="summary_source" class="rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" data-summary-source>
+            {% for transcript in body.transcripts %}
+              <option value="{{ transcript.job_id }}" {% if not transcript.approved %}disabled{% endif %}>
+                {{ transcript.label }}{% if not transcript.approved %} · Pending approval{% endif %}
+              </option>
+            {% endfor %}
+            <option value="__upload__" data-summary-upload-option>Upload Transcript...</option>
+            <option value="__upload_text__" data-summary-upload-text-option>Upload Transcript Text...</option>
+          </select>
+          <p class="text-[11px] text-slate-500">Only approved transcripts can be summarized. Pending jobs appear greyed out.</p>
+        {% else %}
+          <p class="rounded-lg border border-dashed border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-300">Run a transcription first to enable summarization.</p>
+        {% endif %}
+      </div>
+      {% if summary_llm %}
+        {% include "platform_ui/tools/components/_llm_controls.html" with llm_context=summary_llm %}
+      {% endif %}
+      {% if summary_llm and summary_llm.stage_configs %}
+        <details class="group rounded-xl border border-white/10 bg-slate-900/60" data-summary-stage-models>
+          <summary class="flex cursor-pointer items-center justify-between px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-300">
+            Stage models
+            <svg class="h-4 w-4 transition-transform group-open:rotate-180" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.094l3.71-3.86a.75.75 0 111.08 1.04l-4.247 4.41a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z" clip-rule="evenodd" /></svg>
+          </summary>
+          <div class="border-t border-white/10 px-4 py-4">
+            {% include "platform_ui/components/stage_cards.html" with stages=summary_llm.stage_configs configuration=summary_llm.active_configuration %}
+          </div>
+        </details>
+      {% endif %}
+      <div class="flex items-center justify-end gap-3">
+        <button type="button"
+                class="inline-flex items-center gap-2 rounded-lg bg-primary-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-primary-500/30 transition hover:bg-primary-400 disabled:cursor-not-allowed disabled:opacity-60"
+                data-analysis-action="summary"
+                data-analysis-endpoint="{{ body.job_endpoint_template }}"
+                {% if not body.transcripts %}disabled{% endif %}>
+          Queue summarize job
+        </button>
+      </div>
+    </div>
+    <div class="flex flex-col gap-4 rounded-2xl border border-white/10 bg-slate-900/70 p-6 text-sm text-slate-200">
+      <div class="flex items-center justify-between gap-3">
+        <p class="text-xs uppercase tracking-wide text-slate-400">Latest summarize result</p>
+        {% if module.downloads %}
+          {% include "platform_ui/tools/components/_download_menu.html" with downloads=module.downloads label="Downloads" %}
+        {% endif %}
+      </div>
+      {% if module.latest %}
+        <div class="space-y-1">
+          <p class="text-base font-semibold text-white">{{ module.latest.title }}</p>
+          <p class="text-xs text-slate-400">Generated <time data-ts="{{ module.latest.created_at|date:'c' }}" data-ts-format="datetime">{{ module.latest.created_at|date:'M d, Y h:i A' }}</time></p>
+          {% if module.latest.source %}
+            <p class="text-xs text-slate-400">Source: {{ module.latest.source }}</p>
+          {% endif %}
+        </div>
+        {% if module.latest_details %}
+          <div class="grid gap-3 text-xs text-slate-200 sm:grid-cols-2">
+            {% if module.latest_details.words %}
+              <div class="rounded-lg border border-white/10 bg-slate-900/60 px-3 py-3">
+                <p class="text-[11px] uppercase tracking-wide text-slate-400">Words</p>
+                <p class="mt-1 text-sm font-semibold text-white">{{ module.latest_details.words }}</p>
+              </div>
+            {% endif %}
+            {% if module.latest_details.outline_name %}
+              <div class="rounded-lg border border-white/10 bg-slate-900/60 px-3 py-3">
+                <p class="text-[11px] uppercase tracking-wide text-slate-400">Outline</p>
+                <p class="mt-1 text-sm font-semibold text-white">{{ module.latest_details.outline_name }}</p>
+              </div>
+            {% endif %}
+            {% if module.latest_details.timeline_seed_name %}
+              <div class="rounded-lg border border-white/10 bg-slate-900/60 px-3 py-3">
+                <p class="text-[11px] uppercase tracking-wide text-slate-400">Timeline seeds</p>
+                <p class="mt-1 text-sm font-semibold text-white">{{ module.latest_details.timeline_seed_name }}</p>
+              </div>
+            {% endif %}
+            {% if module.latest_details.entity_hint_name %}
+              <div class="rounded-lg border border-white/10 bg-slate-900/60 px-3 py-3">
+                <p class="text-[11px] uppercase tracking-wide text-slate-400">Entity hints</p>
+                <p class="mt-1 text-sm font-semibold text-white">{{ module.latest_details.entity_hint_name }}</p>
+              </div>
+            {% endif %}
+            {% if module.latest_details.case_brief_name %}
+              <div class="rounded-lg border border-white/10 bg-slate-900/60 px-3 py-3">
+                <p class="text-[11px] uppercase tracking-wide text-slate-400">Case brief</p>
+                <p class="mt-1 text-sm font-semibold text-white">{{ module.latest_details.case_brief_name }}</p>
+              </div>
+            {% endif %}
+            {% if module.latest_details.provider_chain %}
+              <div class="rounded-lg border border-white/10 bg-slate-900/60 px-3 py-3 sm:col-span-2">
+                <p class="text-[11px] uppercase tracking-wide text-slate-400">Providers</p>
+                <p class="mt-1 text-[11px] text-slate-300">{{ module.latest_details.provider_chain|join:", " }}</p>
+              </div>
+            {% endif %}
+            {% if module.latest_details.guardian_status %}
+              <div class="space-y-2 rounded-lg border border-white/10 bg-slate-900/60 px-3 py-3 sm:col-span-2">
+                <div class="flex items-center justify-between text-xs">
+                  <span class="font-semibold text-slate-200">Guardian status</span>
+                  <span class="uppercase tracking-wide text-slate-300">{{ module.latest_details.guardian_status }}</span>
+                </div>
+                {% if module.latest_details.guardian_reviewed_at %}
+                  <p class="text-[11px] text-slate-500">Reviewed <time data-ts="{{ module.latest_details.guardian_reviewed_at }}" data-ts-format="datetime">{{ module.latest_details.guardian_reviewed_at }}</time></p>
+                {% endif %}
+                {% if module.latest_details.guardian_notes %}
+                  <p class="text-[11px] text-slate-400">{{ module.latest_details.guardian_notes }}</p>
+                {% endif %}
+                {% if module.latest_details.guardian_violations %}
+                  <ul class="space-y-1 text-[11px] text-rose-300">
+                    {% for violation in module.latest_details.guardian_violations %}
+                      <li>
+                        <span class="font-semibold">{{ violation.category|default:"Violation" }}:</span>
+                        {{ violation.message|default:"See notes" }}
+                        {% if violation.citation %}<span class="text-rose-200/70">({{ violation.citation }})</span>{% endif %}
+                      </li>
+                    {% endfor %}
+                  </ul>
+                {% endif %}
+              </div>
+            {% endif %}
+          </div>
+        {% endif %}
+      {% else %}
+        <p class="text-xs text-slate-400">No summarize result yet. Queue one to populate this section.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% endwith %}

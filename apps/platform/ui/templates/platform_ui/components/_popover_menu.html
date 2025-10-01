@@ -1,0 +1,26 @@
+{% comment %}
+  Base popover menu component.
+  Extend and override blocks:
+    - popover_details_classes
+    - popover_details_attrs
+    - popover_summary_wrapper / popover_summary_classes / popover_summary
+    - popover_panel_classes / popover_panel_attrs / popover_panel
+  Optional context:
+    popover_key: string identifier used for JS portal bookkeeping.
+{% endcomment %}
+<details class="{% block popover_details_classes %}relative inline-block{% endblock %}"
+         data-popover="{{ popover_key|default:'menu' }}"
+         {% block popover_details_attrs %}{% endblock %}>
+  {% block popover_summary_wrapper %}
+    <summary class="{% block popover_summary_classes %}inline-flex cursor-pointer items-center gap-2{% endblock %}"
+             {% block popover_summary_attrs %}{% endblock %}>
+      {% block popover_summary %}{% endblock %}
+    </summary>
+  {% endblock %}
+  <div class="{% block popover_panel_classes %}absolute right-0 z-40 mt-2 w-56 rounded-xl border border-white/10 bg-slate-900/95 p-3 text-xs text-slate-200 shadow-xl shadow-black/40{% endblock %}"
+       data-popover-panel
+       {% block popover_panel_attrs %}{% endblock %}
+       style="visibility:hidden;">
+    {% block popover_panel %}{% endblock %}
+  </div>
+</details>

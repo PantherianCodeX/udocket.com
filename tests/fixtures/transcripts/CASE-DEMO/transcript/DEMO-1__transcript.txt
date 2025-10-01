@@ -1,0 +1,41 @@
+Case: CASE-DEMO
+Job: DEMO-1
+Source: upload.wav (sha256: 2f1c3c4d...fake..., md5: a1b2c3d4...fake...)
+Language: en-CA
+Azure Region: canadacentral
+Duration: 00:07:15.30
+Generated: 2025-01-01T12:00:00Z
+Notes: Sample transcript to spoof Azure batch output with diarization
+---------------------------
+[00:00] SPK_1: Good morning, Your Honour. We are ready to proceed.
+[00:05] SPK_2: Thank you, counsel. Please provide a brief overview.
+[00:12] SPK_1: This matter concerns a tenancy dispute regarding unpaid rent.
+[00:20] SPK_3: If I may, I represent the tenant and dispute the arrears.
+[00:28] SPK_2: Understood. Let's establish the timeline first.
+[00:36] SPK_1: The lease commenced on March 1st, monthly rent was $1,200.
+[00:44] SPK_1: Payments were timely until August; two months are outstanding.
+[00:53] SPK_3: The tenant lost employment due to a medical emergency in July.
+[01:02] SPK_2: Do you have documentation supporting that claim?
+[01:08] SPK_3: Yes, medical notes and a termination letter are filed as Exhibit A.
+[01:16] SPK_1: We acknowledge receipt but maintain that arrears remain payable.
+[01:25] SPK_2: Counsel, any efforts to negotiate a payment plan?
+[01:31] SPK_1: We proposed a three‑month plan; no payments were made.
+[01:38] SPK_3: The tenant attempted partial payments, which were rejected by the landlord portal.
+[01:48] SPK_2: Let's be precise—dates and amounts, please.
+[01:54] SPK_3: On Sept 5, $300; on Sept 19, $250. Both returned.
+[02:04] SPK_1: Returns were due to system rules requiring full balance.
+[02:12] SPK_2: I encourage flexibility where appropriate. Any ongoing hardship?
+[02:19] SPK_3: The tenant started new employment last week; first pay is next Friday.
+[02:28] SPK_1: We can accept a structured plan if timely and documented.
+[02:36] SPK_2: I will recess briefly for parties to confer.
+[02:44] SPK_2: We reconvene at 10:30. Please be concise on return.
+[03:10] SPK_1: After discussion, we propose $400 bi‑weekly until arrears cleared.
+[03:20] SPK_3: Tenant agrees, contingent on waiving late fees.
+[03:27] SPK_1: We will waive late fees conditional on no further defaults.
+[03:34] SPK_2: Very well. I will issue an order reflecting the plan.
+[03:42] SPK_2: Deadlines: first payment due next Friday by 5 p.m.
+[03:50] SPK_2: Any outstanding exhibits to be uploaded by end of day.
+[04:05] SPK_3: Understood.
+[04:07] SPK_1: Understood.
+[04:10] SPK_2: This concludes the hearing. Thank you all.
+Some trailing note about exhibits and follow‑up email

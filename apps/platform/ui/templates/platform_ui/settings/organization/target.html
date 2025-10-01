@@ -1,0 +1,244 @@
+{% extends "platform_ui/settings/organization/base.html" %}
+
+{% block organization_body %}
+<div class="grid gap-6 lg:grid-cols-5" data-config-panel data-target="{{ target }}">
+  <aside class="space-y-4 rounded-2xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-black/25 lg:col-span-2">
+    <div class="flex items-center justify-between">
+      <h2 class="text-xl font-semibold text-white">{{ target_label }} configurations</h2>
+      <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/10 px-3 py-1 text-xs text-slate-200 transition hover:border-primary-400 hover:text-white" data-config-new>
+        New configuration
+      </button>
+    </div>
+    {% if configurations %}
+    <ul class="space-y-2" data-config-list>
+      {% for config in configurations %}
+      <li class="rounded-xl border border-white/10 bg-slate-900/60 p-3 text-sm text-slate-200 flex items-center justify-between gap-3" data-config-item data-config-id="{{ config.id }}">
+        <div>
+          <div class="font-semibold text-white">{{ config.name }}</div>
+          {% if config.description %}<div class="text-xs text-slate-400">{{ config.description }}</div>{% endif %}
+          <div class="text-xs text-slate-500">Updated {{ config.updated_at|default:"—" }}</div>
+        </div>
+        <div class="flex items-center gap-2">
+          {% if config.is_default %}
+          <span class="inline-flex items-center gap-1 rounded-full border border-emerald-400/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-100">Default</span>
+          {% endif %}
+          <a href="{{ request.path }}?config={{ config.id }}" class="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-200 transition hover:border-primary-400 hover:text-white">Edit</a>
+          <form method="post" class="inline" data-config-delete data-confirm-message="Delete configuration “{{ config.name }}”? This cannot be undone." data-confirm-title="Delete configuration" data-confirm-confirm-label="Delete" data-confirm-cancel-label="Cancel" data-confirm-destructive="true">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="config-delete">
+            <input type="hidden" name="config_id" value="{{ config.id }}">
+            <button type="submit" class="rounded-lg border border-rose-500/40 bg-rose-500/20 px-3 py-1 text-xs text-rose-100 transition hover:bg-rose-500/30">Delete</button>
+          </form>
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <div class="rounded-xl border border-dashed border-white/15 bg-white/5 px-4 py-6 text-center text-sm text-slate-300">
+      No configurations yet. Use the form to create one.
+    </div>
+    {% endif %}
+  </aside>
+
+  <section class="lg:col-span-3 space-y-5 rounded-2xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-black/25" data-config-editor>
+    <h2 class="text-xl font-semibold text-white">Configuration details</h2>
+    <form method="post" class="space-y-5" data-config-form>
+      {% csrf_token %}
+      <input type="hidden" name="target" value="{{ target }}">
+      <input type="hidden" name="config_id" value="{{ active_config.id|default:"" }}" data-config-id-input>
+      <div class="grid gap-4 md:grid-cols-2">
+        <label class="text-sm text-slate-200">Configuration name
+          <input type="text" name="name" value="{{ active_config.name|default:"" }}" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" required>
+        </label>
+        {# Provider chain removed: configured per-stage, not per-tool. #}
+        <label class="md:col-span-2 text-sm text-slate-200">Description
+          <textarea name="description" rows="2" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none">{{ active_config.description|default:"" }}</textarea>
+        </label>
+      </div>
+
+      <div class="flex items-center gap-2 text-xs text-slate-200">
+        <input type="checkbox" name="set_default" value="1" class="rounded border-white/20 bg-slate-900/70 text-primary-400 focus:ring-primary-400" {% if active_config.is_default %}checked{% endif %}>
+        Set as default for {{ target_label|lower }} jobs
+      </div>
+
+      {% if provider_warning %}
+      <div class="rounded-xl border border-amber-400/40 bg-amber-500/15 px-4 py-3 text-xs text-amber-100">
+        No enabled LLM providers are available. Contact an administrator to configure providers before running {{ target_label|lower }} jobs.
+      </div>
+      {% endif %}
+
+      <div class="space-y-4">
+        <h3 class="text-lg font-semibold text-white">Stages</h3>
+        <div class="space-y-4" data-stage-list>
+          {% for stage in stage_entries %}
+          <div class="rounded-2xl border border-white/10 bg-slate-900/60 p-4 space-y-3" data-stage-card data-stage-key="{{ stage.key }}">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h4 class="text-base font-semibold text-white">{{ stage.label }}</h4>
+                {% if stage.description %}<p class="text-xs text-slate-400">{{ stage.description }}</p>{% endif %}
+              </div>
+              <span class="text-[11px] uppercase tracking-wide text-slate-500">{{ stage.key }}</span>
+            </div>
+            <div class="grid gap-3 md:grid-cols-2">
+              <label class="text-xs text-slate-300">Provider
+                <select name="{{ stage.field_provider }}" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-2 py-1.5 text-sm text-slate-100 focus:border-primary-400 focus:outline-none">
+                  <option value="">(chain default)</option>
+                  {% for option in provider_options %}
+                    <option value="{{ option.value }}" {% if option.value == stage.selected_provider %}selected{% endif %}>{{ option.label }}</option>
+                  {% endfor %}
+                </select>
+              </label>
+              <label class="text-xs text-slate-300">Model
+                <select name="{{ stage.field_model }}" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-2 py-1.5 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" data-stage-model>
+                  <option value="">(provider default)</option>
+                  {% for model in model_options %}
+                    <option value="{{ model.value }}" data-provider="{{ model.provider }}" {% if model.value == stage.selected_model %}selected{% endif %}>{{ model.provider_label }} · {{ model.label }}</option>
+                  {% endfor %}
+                </select>
+              </label>
+            </div>
+            <div class="grid gap-3 md:grid-cols-3">
+              <label class="text-xs text-slate-300">Max output tokens
+                <input type="number" min="0" name="{{ stage.field_max_tokens }}" value="{{ stage.selected_max_tokens|default:"" }}" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-2 py-1.5 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" placeholder="auto">
+              </label>
+              <label class="text-xs text-slate-300">Temperature
+                <input type="number" step="0.01" name="{{ stage.field_temperature }}" value="{{ stage.selected_temperature|default:"" }}" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-2 py-1.5 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" placeholder="model default">
+              </label>
+              <label class="text-xs text-slate-300">Azure deployment
+                <input type="text" name="{{ stage.field_opt_azure_deployment }}" value="{{ stage.selected_options.azure_deployment|default:"" }}" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-2 py-1.5 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" placeholder="Override deployment">
+              </label>
+            </div>
+            <details class="rounded-xl border border-white/10 bg-slate-900/50 p-3 text-xs text-slate-300" data-stage-options>
+              <summary class="flex cursor-pointer items-center justify-between text-slate-200">
+                Model options
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.094l3.71-3.86a.75.75 0 111.08 1.04l-4.247 4.41a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z" clip-rule="evenodd" /></svg>
+              </summary>
+              <div class="mt-3 grid gap-3 md:grid-cols-3">
+                <label class="text-xs text-slate-300">Max input tokens
+                  <input type="number" min="0" name="{{ stage.field_opt_max_input_tokens }}" value="{{ stage.selected_options.max_input_tokens|default:"" }}" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-2 py-1.5 text-xs text-slate-100 focus:border-primary-400 focus:outline-none" placeholder="auto">
+                </label>
+                <label class="text-xs text-slate-300">Max chunk chars
+                  <input type="number" min="0" name="{{ stage.field_opt_max_chunk_chars }}" value="{{ stage.selected_options.max_chunk_chars|default:"" }}" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-2 py-1.5 text-xs text-slate-100 focus:border-primary-400 focus:outline-none" placeholder="auto">
+                </label>
+                <label class="text-xs text-slate-300">Chunk overlap tokens
+                  <input type="number" min="0" name="{{ stage.field_opt_chunk_overlap_tokens }}" value="{{ stage.selected_options.chunk_overlap_tokens|default:"" }}" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-2 py-1.5 text-xs text-slate-100 focus:border-primary-400 focus:outline-none" placeholder="auto">
+                </label>
+                <label class="text-xs text-slate-300">Max prompt chars
+                  <input type="number" min="0" name="{{ stage.field_opt_max_prompt_chars }}" value="{{ stage.selected_options.max_prompt_chars|default:"" }}" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-2 py-1.5 text-xs text-slate-100 focus:border-primary-400 focus:outline-none" placeholder="auto">
+                </label>
+                <label class="text-xs text-slate-300">Max prompt segments
+                  <input type="number" min="0" name="{{ stage.field_opt_max_prompt_segments }}" value="{{ stage.selected_options.max_prompt_segments|default:"" }}" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-2 py-1.5 text-xs text-slate-100 focus:border-primary-400 focus:outline-none" placeholder="auto">
+                </label>
+              </div>
+              <div class="mt-3">
+                <label class="block text-slate-200">Advanced options (JSON)
+                  <textarea name="{{ stage.field_options }}" rows="3" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-2 py-2 font-mono text-xs text-slate-100 focus:border-primary-400 focus:outline-none" placeholder='{"custom_option": "value"}'>{{ stage.selected_options_json|safe }}</textarea>
+                </label>
+              </div>
+            </details>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2">
+        <button type="submit" name="action" value="config-create" class="rounded-lg border border-white/10 bg-white/10 px-4 py-2 text-sm text-slate-200 transition hover:border-primary-400 hover:text-white">Save as new</button>
+        <button type="submit" name="action" value="config-save" class="inline-flex items-center gap-2 rounded-lg bg-primary-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-primary-500/30 transition hover:bg-primary-400">Save changes</button>
+      </div>
+    </form>
+  </section>
+</div>
+
+{% if target == "guardian" %}
+<section class="mt-8 space-y-5 rounded-2xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-black/25" data-guardian-settings>
+  <header class="flex items-center justify-between gap-3">
+    <div>
+      <h2 class="text-xl font-semibold text-white">Guardian policy instructions</h2>
+      <p class="text-sm text-slate-300">Manage the contextual guidance delivered to the Guardian reviewer.</p>
+    </div>
+  </header>
+
+  <div class="space-y-4">
+    {% if guardian_instructions %}
+      {% for instruction in guardian_instructions %}
+        <div class="space-y-3 rounded-2xl border border-white/10 bg-slate-900/60 p-4" data-guardian-instruction>
+          <form method="post" class="space-y-3">
+            {% csrf_token %}
+            <input type="hidden" name="section" value="guardian">
+            <input type="hidden" name="target" value="guardian">
+            <input type="hidden" name="action" value="instruction-update">
+            <input type="hidden" name="instruction_id" value="{{ instruction.id }}">
+          <div class="flex flex-wrap items-start gap-4">
+            <label class="flex-1 text-sm text-slate-200">Title
+              <input type="text" name="instruction_title" value="{{ instruction.title }}" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" required>
+            </label>
+            <label class="w-full max-w-[12rem] text-sm text-slate-200">Severity
+              <select name="instruction_severity" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none">
+                {% for option in guardian_severity_options %}
+                  <option value="{{ option.value }}" {% if instruction.severity == option.value %}selected{% endif %}>{{ option.label }}</option>
+                {% endfor %}
+              </select>
+            </label>
+          </div>
+          <label class="block text-sm text-slate-200">Details / prompt guidance
+            <textarea name="instruction_text" rows="3" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" required>{{ instruction.text }}</textarea>
+          </label>
+          <label class="block text-sm text-slate-200">Applies to artifact types
+            <input type="text" name="instruction_applies_to" value="{{ instruction.applies_to|join:", " }}" placeholder="SUMMARY, TIMELINE" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none">
+            <p class="mt-1 text-[11px] text-slate-500">Comma separated list (e.g. SUMMARY, TIMELINE, DOCUMENT). Leave blank to apply to all artifacts.</p>
+          </label>
+          <div class="flex items-center justify-end gap-2">
+            <button type="submit" class="inline-flex items-center gap-2 rounded-lg bg-primary-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-primary-500/30 transition hover:bg-primary-400">Update</button>
+          </div>
+          </form>
+          <form method="post" class="flex justify-end" data-guardian-delete data-confirm-message="Delete instruction “{{ instruction.title }}”? This cannot be undone." data-confirm-title="Delete instruction" data-confirm-confirm-label="Delete" data-confirm-cancel-label="Cancel" data-confirm-destructive="true">
+            {% csrf_token %}
+            <input type="hidden" name="section" value="guardian">
+            <input type="hidden" name="target" value="guardian">
+            <input type="hidden" name="action" value="instruction-delete">
+            <input type="hidden" name="instruction_id" value="{{ instruction.id }}">
+            <button type="submit" class="rounded-lg border border-rose-500/40 bg-rose-500/20 px-3 py-2 text-sm text-rose-100 transition hover:bg-rose-500/30">Delete</button>
+          </form>
+        </div>
+      {% endfor %}
+    {% else %}
+      <div class="rounded-xl border border-dashed border-white/10 bg-slate-900/50 px-4 py-6 text-center text-sm text-slate-300">No guardian instructions configured yet.</div>
+    {% endif %}
+  </div>
+
+  <div class="rounded-2xl border border-white/10 bg-slate-900/60 p-4">
+    <h3 class="text-lg font-semibold text-white">Add instruction</h3>
+    <form method="post" class="mt-3 space-y-3">
+      {% csrf_token %}
+      <input type="hidden" name="section" value="guardian">
+      <input type="hidden" name="target" value="guardian">
+      <input type="hidden" name="action" value="instruction-add">
+      <label class="block text-sm text-slate-200">Title
+        <input type="text" name="instruction_title" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" required>
+      </label>
+      <label class="block text-sm text-slate-200">Details / prompt guidance
+        <textarea name="instruction_text" rows="3" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" required></textarea>
+      </label>
+      <div class="grid gap-3 md:grid-cols-2">
+        <label class="text-sm text-slate-200">Applies to artifact types
+          <input type="text" name="instruction_applies_to" placeholder="SUMMARY, TIMELINE" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none">
+        </label>
+        <label class="text-sm text-slate-200">Severity
+          <select name="instruction_severity" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none">
+            {% for option in guardian_severity_options %}
+              <option value="{{ option.value }}">{{ option.label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+      <div class="flex items-center justify-end">
+        <button type="submit" class="inline-flex items-center gap-2 rounded-lg bg-primary-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-primary-500/30 transition hover:bg-primary-400">Add instruction</button>
+      </div>
+    </form>
+  </div>
+</section>
+{% endif %}
+
+{{ stage_entries|json_script:"organization-stage-data" }}
+{{ model_options|json_script:"organization-model-options" }}
+{% endblock %}

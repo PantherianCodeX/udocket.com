@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, Text, ForeignKey, Boolean, Integer
+from sqlalchemy import Column, String, DateTime, Text, ForeignKey, Boolean, Integer, Float
 from sqlalchemy.sql import func
 from db.base import Base
 
@@ -8,7 +8,7 @@ class Job(Base):
     case_id = Column(String(36), ForeignKey("cases.id"), nullable=False, index=True)
     audio_path = Column(Text, nullable=False)
     transcript_path = Column(Text, nullable=True)
-    status = Column(String(16), nullable=False, index=True)  # PENDING/RUNNING/SUCCEEDED/FAILED
+    status = Column(String(16), nullable=False, index=True)  # PENDING/UPLOADING/RUNNING/CANCELLING/SUCCEEDED/FAILED
     error_message = Column(Text, nullable=True)
     logs_path = Column(Text, nullable=True)
     file_sha256 = Column(String(64), nullable=True)
@@ -26,6 +26,7 @@ class Job(Base):
     sample_rate_hz = Column(Integer, nullable=True)
     transcript_words = Column(Integer, nullable=True)
     transcript_bytes = Column(Integer, nullable=True)
+    upload_progress = Column(Float, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     started_at = Column(DateTime(timezone=True), nullable=True)
     finished_at = Column(DateTime(timezone=True), nullable=True)

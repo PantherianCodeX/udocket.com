@@ -2,15 +2,31 @@
 
 This document defines how automation and contributors should add and operate "agents" in the uDocket stack. It covers the current transcription agent and lays down clear conventions for future agents such as summarization, timelines, and relationship/graph extraction.
 
+Note: This is the root guide. For area‑specific practices (UI, operations, jobs, artifacts, accounts, authorization, core libs, config, infra, tests), also read the AGENTS.md files colocated in those directories. When working in any area, you must follow the closest AGENTS.md in that subtree.
+
+Quick index of AGENTS guides in this repo:
+- apps/platform/AGENTS.md
+- apps/platform/ui/AGENTS.md
+- apps/platform/operations/AGENTS.md
+- apps/platform/jobs/AGENTS.md
+- apps/platform/cases/AGENTS.md
+- apps/platform/artifacts/AGENTS.md
+- apps/platform/accounts/AGENTS.md
+- apps/platform/authorization/AGENTS.md
+- packages/udocket_core/AGENTS.md
+- apps/api/AGENTS.md
+- config/AGENTS.md
+- infra/AGENTS.md
+- tests/AGENTS.md
+
 ## Overview
-- Services: three FastAPI apps in Docker
-  - `apps/api` (public API): creates cases, uploads audio, creates jobs, exposes job status and transcript download.
-  - `apps/admin` (admin UI): case management, job diagnostics, download, and Azure remote hash refresh.
-  - `apps/worker` (background worker): polls DB jobs and invokes the agent CLI defined by `AGENT_CMD_TEMPLATE`.
-- Core agent: `packages/udocket_core/agents/transcribe.py` (Azure Speech, Canada regions only)
-  - Modes: `on-demand` (local stream) and `batch` (Azure Batch Transcription via HTTPS SAS URL)
-  - Diarization: supported in `batch` mode only
-  - Outputs: timestamped transcript `.txt`, per-job JSON metadata, append-only ops audit JSONL
+- Services:
+  - `apps/platform` (Django + Channels + Celery): primary UI, API surface, and background workers.
+  - `apps/api` (legacy FastAPI): kept for compatibility while the platform UI/API rolls out.
+- Core agent implementation lives in `packages/udocket_core/agents/transcribe_lib.py` (Azure Speech, Canada regions only).
+  - Modes: `on-demand` (local stream) and `batch` (Azure Batch Transcription via HTTPS SAS URL).
+  - Diarization: supported in `batch` mode only.
+  - Outputs: timestamped transcript `.txt`, per-job JSON metadata, append-only ops audit JSONL.
 - Storage layout (per-case): `storage/media/cases/<CASE_ID>/`
   - `audio/` original uploads as `<job_id>__<original_name>`
   - `transcript/` transcript files as `<job_id>__transcript.txt`
@@ -19,15 +35,11 @@ This document defines how automation and contributors should add and operate "ag
 - Database: SQLite by default (or Postgres) with tables `cases`, `jobs`
 
 ## Agent Contract (all agents)
-To make agents composable and observable, follow this contract:
-- CLI interface:
-  - Must accept: `--case <CASE_ID>`, `--case-dir <abs_path_to_case_dir>` or `--outdir <dir>` for primary outputs, and any agent-specific flags.
-  - Must read configuration from `.env` where relevant, mirroring `config/settings.py` keys.
-- Stdout summary:
-  - Print a single JSON object on a single line on success, then exit `0`.
-  - Include at minimum: `{"status":"ok","artifact":"<path or key>","duration_s":<optional>}`; add agent-specific fields.
-- Exit codes:
-  - `0` success; `2` recoverable/content errors (empty audio, timeout, validation); `10+` configuration/dependency errors; `11+` bad inputs or unsupported mode; `13` policy/limits.
+To make agents composable and observable when executed inside Celery workers, follow this contract:
+- Implement the `TranscriptionAgent` interface (see `packages/udocket_core/agents/transcribe_lib.py`).
+  - Accepts structured config (`TranscriptionConfig`) instead of CLI flags.
+  - Read configuration from `.env` where relevant, mirroring `config/settings.py` keys.
+- Return a `TranscriptionResult` object; raise rich exceptions for recoverable errors (the task layer records metadata and updates the UI).
 - Deterministic outputs:
   - Write artifacts with stable, case-scoped names and versioning (e.g., `_v2` suffix) when re-running the same job.
 - Ops logging:
@@ -36,10 +48,10 @@ To make agents composable and observable, follow this contract:
 - Security & locality:
   - Canada-only Azure regions (`canadacentral` or `canadaeast`). Do not send PII to non-Canadian services by default.
 
-Reference patterns exist in `packages/udocket_core/agents/transcribe.py`.
+Reference patterns exist in `packages/udocket_core/agents/transcribe_lib.py`.
 
 ## Current Transcription Agent
-- Entry: `packages/udocket_core/agents/transcribe.py`
+- Entry: `packages/udocket_core/agents/transcribe_lib.py`
 - Inputs: local file path or HTTPS SAS URL (batch mode), language, diarization flag (batch only)
 - Outputs:
   - Transcript: `storage/media/cases/<case>/transcript/<job_id>__transcript.txt`
@@ -97,18 +109,14 @@ The repository is ready to host additional agents that consume transcripts and e
   - Tracing: include `source_transcript` (abs path), `case_id`, `job_id`, timestamps, tool/library versions, and key settings in ops JSON.
 
 ## Worker Integration
-- The worker currently constructs the transcription command from `config/settings.py:AGENT_CMD_TEMPLATE` and enriches job rows with transcript metrics.
-- To integrate new agents via the worker, follow the same pattern:
-  - Add a job type/flow in DB/API (e.g., `analysis_type`), or invoke analysis agents as a post-processing step when transcripts complete.
-  - Ensure the agent keeps the stdout one-line JSON contract and writes artifacts under the case path.
-  - Keep runtime within `JOB_TIMEOUT_SEC` and ensure idempotency for retry safety.
+- Celery tasks in `apps.platform.operations.tasks` orchestrate uploads, call `TranscriptionAgent.transcribe`, and persist telemetry.
+- To integrate new agents, add Celery tasks that wrap your agent implementation and emit job/case websocket updates via `send_job_update`/`send_case_update`.
+- Ensure agents write artifacts under the case path, update ops metadata, and keep runtimes within configured Celery soft/hard timeouts.
 
 ## Configuration & Environment
 - Required (see `.env.example`):
   - `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION` (`canadacentral` or `canadaeast`)
   - `LANGUAGE`, `STORAGE_ROOT`, `DATABASE_URL`
-  - Worker: `POLL_INTERVAL_SEC`, `JOB_TIMEOUT_SEC`, `MAX_CONCURRENT`
-  - Agent command template: `AGENT_CMD_TEMPLATE`
   - Batch mode storage: `AZURE_BLOB_*` settings for SAS uploads
 - Diagnostics and provenance:
   - Set `DEBUG=1` to enable SDK-level logs into `ops/` for transcription.
@@ -132,16 +140,28 @@ The repository is ready to host additional agents that consume transcripts and e
 
 ## Local Development
 - Start stack: `docker compose up --build`
-  - API: `http://localhost:8080`
-  - Admin: `http://localhost:8081`
-- Create a case (Admin UI → New Case) and upload audio from the case page.
-- Worker picks up the job automatically and writes outputs under the case directory.
-- Run agent directly (example):
-  - On-demand from local file: `python packages/udocket_core/agents/transcribe.py --input "/app/storage/media/cases/<CASE>/audio/<job>__file.wav" --case "<CASE>" --outdir "/app/storage/media/cases/<CASE>/transcript" --language "en-CA" --mode "on-demand"`
-  - Batch from HTTPS SAS URL: `python packages/udocket_core/agents/transcribe.py --input "https://.../file.wav?<SAS>" --case "<CASE>" --case-dir "/app/storage/media/cases/<CASE>" --language "en-CA" --mode "batch" --diarization`
+  - Legacy API (optional): `http://localhost:8080`
+  - Django platform (primary UI/API): `http://localhost:8000`
+- Create a case via the platform UI and upload audio from the case page.
+- The Celery worker (`platform_worker` service) picks up jobs automatically and writes outputs under the case directory.
+- To exercise the agent manually, open a Django shell and invoke the `TranscriptionAgent`:
+  ```python
+  from packages.udocket_core.agents import TranscriptionAgent, TranscriptionConfig
+  cfg = TranscriptionConfig.from_env()
+  agent = TranscriptionAgent(cfg)
+  agent.transcribe(
+      input="/app/storage/media/cases/<CASE>/audio/<job>__file.wav",
+      case_id="<CASE>",
+      case_dir=Path("/app/storage/media/cases/<CASE>"),
+      job_id="<JOB>",
+      language="en-CA",
+      mode="batch",
+      diarization=True,
+  )
+  ```
 
 ## Operational Notes
-- Diarization is only supported in batch mode in this project. Admin UI and worker enforce this.
+- Diarization is only supported in batch mode. The platform UI enforces this.
 - Region guardrails are enforced by both settings validation and the agent.
 - Duration limits are configurable via env (e.g., `MAX_MINUTES`).
 - All agents should prefer additive file outputs and append-only audit logs.
@@ -150,11 +170,11 @@ The repository is ready to host additional agents that consume transcripts and e
 - 400 on upload: check `ALLOWED_AUDIO_MIME`.
 - Batch fails quickly: ensure Azure Speech tier Standard (S0) and correct region; Free (F0) is not supported by Batch API.
 - On-demand no speech: verify input is PCM WAV 16 kHz mono (agent auto-converts via ffmpeg when possible).
-- Missing Azure SDKs: install `azure-cognitiveservices-speech` (worker) and `azure-storage-blob` (admin for diagnostics).
+- Missing Azure SDKs: ensure `azure-cognitiveservices-speech` and `azure-storage-blob` are installed in the platform runtime.
 
 ## Roadmap Alignment (summaries, timelines, relationships)
 - Summarization: produce layered summaries (short, detailed) with links to timeline events.
 - Timelines: merge diarized offsets and transcript segments into normalized events with speakers and labels.
 - Relationships: derive entities and edges with evidence back-pointers to transcript timestamps.
 - All of the above should follow the contract here to ensure the Admin UI and API can surface artifacts consistently as features land.
-
+ - Platform migration to Django/DRF/Channels and end-to-end authorization/IAM integration: see `docs/ROADMAP.md`.

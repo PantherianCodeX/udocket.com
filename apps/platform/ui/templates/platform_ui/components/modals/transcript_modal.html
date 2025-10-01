@@ -1,0 +1,24 @@
+{% extends "platform_ui/components/modals/text_modal.html" %}
+
+{% block modal_heading %}
+  {% with heading=modal_heading|default:'Transcript Preview' %}
+    {% if heading %}
+      <p class="text-xs uppercase tracking-wide text-slate-400">{{ heading }}</p>
+    {% endif %}
+  {% endwith %}
+{% endblock %}
+
+{% block modal_actions %}
+  {% with download_label=modal_download_label|default:'Download transcript' %}
+    {% if modal_download_url|default:download_url %}
+      <a href="{{ modal_download_url|default:download_url }}" class="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/5 px-3 py-1.5 font-semibold text-slate-100 transition hover:border-primary-400 hover:text-white" download>
+        {{ download_label }}
+      </a>
+    {% endif %}
+  {% endwith %}
+  {% with copy_source=modal_text %}
+    <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 font-semibold text-slate-200 transition hover:border-primary-400 hover:text-white" data-copy-target="#{{ modal_text_id|default:'modal-text' }}" {% if not copy_source %}disabled aria-disabled="true"{% endif %}>
+      {{ modal_copy_label|default:'Copy transcript' }}
+    </button>
+  {% endwith %}
+{% endblock %}

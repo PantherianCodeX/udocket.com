@@ -1,0 +1,118 @@
+{% load ui_display %}
+<div class="space-y-6 text-sm text-slate-200">
+  <div class="flex flex-col gap-4 border-b border-white/10 pb-4 md:flex-row md:items-start md:justify-between">
+    <div class="space-y-3 md:max-w-2xl">
+      {% include "platform_ui/components/jobs/job_detail_title_form.html" %}
+      <div class="flex flex-wrap items-center gap-3 text-xs text-slate-400">
+        <span>Mode: {{ telemetry.mode|title }}</span>
+        <span>Language: {{ telemetry.language|default:"—" }}</span>
+      </div>
+      <div class="grid gap-3 text-xs text-slate-400 sm:grid-cols-3">
+        <div>
+          <span class="uppercase tracking-wide text-slate-500">Created</span>
+          <div class="mt-1 text-slate-100">
+            {% if job.created_at %}
+              <time data-ts="{{ job.created_at|date:'c' }}" data-ts-format="datetime-seconds">{{ job.created_at|date:'M d, Y h:i:s A' }}</time>
+            {% else %}—{% endif %}
+          </div>
+        </div>
+        <div>
+          <span class="uppercase tracking-wide text-slate-500">Started</span>
+          <div class="mt-1 text-slate-100">
+            {% if job.started_at %}
+              <time data-ts="{{ job.started_at|date:'c' }}" data-ts-format="datetime-seconds">{{ job.started_at|date:'M d, Y h:i:s A' }}</time>
+            {% else %}—{% endif %}
+          </div>
+        </div>
+        <div>
+          <span class="uppercase tracking-wide text-slate-500">Finished</span>
+          <div class="mt-1 text-slate-100">
+            {% if job.finished_at %}
+              <time data-ts="{{ job.finished_at|date:'c' }}" data-ts-format="datetime-seconds">{{ job.finished_at|date:'M d, Y h:i:s A' }}</time>
+            {% else %}—{% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex w-full max-w-xs flex-col items-end gap-3">
+      <div class="flex flex-wrap justify-end gap-2 w-full">
+        {% if audio_meta.path or metadata_map.converted_audio_job_id or metadata_map.converted_wav_path %}
+          <a class="inline-flex items-center gap-2 rounded-lg border border-primary-400/40 bg-primary-500/10 px-3 py-1.5 text-xs font-semibold text-primary-100 transition hover:bg-primary-500/25" href="{% url 'job-download-audio' job.id %}?converted=1" download>
+            Download audio
+          </a>
+        {% elif source_audio.path %}
+          <a class="inline-flex items-center gap-2 rounded-lg border border-primary-400/40 bg-primary-500/10 px-3 py-1.5 text-xs font-semibold text-primary-100 transition hover:bg-primary-500/25" href="{% url 'job-download-audio' job.id %}" download>
+            Download audio
+          </a>
+        {% endif %}
+      </div>
+      <button type="button"
+              class="mt-auto inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-primary-400 hover:text-white"
+              data-job-action
+              data-job-action-kind="modal"
+              data-job-action="view-metadata"
+              data-job-id="{{ job.id }}"
+              data-case-id="{{ case.id }}">
+        More details
+      </button>
+    </div>
+  </div>
+
+  <div class="grid gap-4 md:grid-cols-2">
+    {% if audio_panel_source_html %}
+      {{ audio_panel_source_html|safe }}
+    {% else %}
+      {% include "platform_ui/components/jobs/_audio_brief.html" with
+         panel_title="Source audio"
+         panel_key="source"
+         job_id=job.id
+         audio=source_audio
+         metadata=metadata_map
+         refresh_enabled=source_job_id
+         refresh_panel="source"
+         refresh_job_id=source_job_id
+         refresh_display_job_id=job.id
+         refresh_case_id=case.id
+         verify_enabled=source_audio.path or source_audio.sha256 or metadata_map.source_audio_file
+         verify_target="audio"
+         verify_scope="source"
+         verify_source_job=source_job_id
+         verify_mark_targets=conversion_mark_targets
+      %}
+    {% endif %}
+
+    {% if audio_panel_converted_html %}
+      {{ audio_panel_converted_html|safe }}
+    {% else %}
+      {% include "platform_ui/components/jobs/_audio_brief.html" with
+         panel_title="Converted WAV"
+         panel_key="converted"
+         job_id=job.id
+         audio=audio_meta
+         metadata=metadata_map
+         refresh_enabled=True
+         refresh_panel="converted"
+         refresh_job_id=job.id
+         refresh_display_job_id=job.id
+         refresh_case_id=case.id
+         verify_enabled=audio_meta.path or audio_meta.sha256 or metadata_map.converted_audio_sha256
+         verify_target="audio"
+         verify_scope="converted"
+         verify_mark_targets=conversion_mark_targets
+      %}
+    {% endif %}
+  </div>
+
+  {% if notes_panel_html %}
+    {{ notes_panel_html|safe }}
+  {% else %}
+    {% include "platform_ui/components/notes/team_notes_panel.html" with
+       job_id=job.id
+       notes_entries=notes_entries
+       notes_updated_at=notes_updated_at
+       notes_updated_by=notes_updated_by
+       user_can_add_notes=user_can_review
+    %}
+  {% endif %}
+</div>

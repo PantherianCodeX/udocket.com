@@ -1,0 +1,173 @@
+<form method="post"
+      action="{{ body.update_url }}"
+      data-case-details
+      class="space-y-6 rounded-2xl border border-white/10 bg-slate-900/70 p-6"
+      hx-post="{{ body.update_url }}"
+      hx-target="#tool-workspace"
+      hx-swap="innerHTML">
+  {% csrf_token %}
+  <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+    <div class="max-w-2xl space-y-2">
+      <p class="text-xs uppercase tracking-wide text-slate-400">Intake Form</p>
+      <h3 class="text-base font-semibold text-white">Update case assignments and metadata</h3>
+      <p class="text-sm text-slate-300">Changes are saved immediately. TODO: enforce per-field ACL when authorization work lands.</p>
+    </div>
+    <div class="grid grid-cols-2 gap-x-6 gap-y-2 text-right text-xs text-slate-300 md:text-sm">
+      <div>
+        <span class="uppercase tracking-wide text-slate-500">Owner</span>
+        <p class="mt-1 font-medium text-slate-100">{{ body.owner_labels|join:", "|default:"Unassigned" }}</p>
+      </div>
+      <div>
+        <span class="uppercase tracking-wide text-slate-500">Reviewer</span>
+        <p class="mt-1 font-medium text-slate-100">{% if body.reviewer_id %}{% for option in body.reviewer_options %}{% if option.id == body.reviewer_id %}{{ option.label }}{% endif %}{% endfor %}{% else %}Unassigned{% endif %}</p>
+      </div>
+      <div>
+        <span class="uppercase tracking-wide text-slate-500">Client User</span>
+        <p class="mt-1 font-medium text-slate-100">{% if body.client_user_id %}{% for option in body.client_options %}{% if option.id == body.client_user_id %}{{ option.label }}{% endif %}{% endfor %}{% else %}Unassigned{% endif %}</p>
+      </div>
+      <div>
+        <span class="uppercase tracking-wide text-slate-500">Last Updated</span>
+        <p class="mt-1 font-medium text-slate-100">
+          {% if body.job_summary_last_dt %}
+            <time data-ts="{{ body.job_summary_last_dt|date:'c' }}" data-ts-format="datetime">{{ body.job_summary_last_dt|date:'M d, Y h:i A' }}</time>
+          {% elif body.job_summary.last_update %}
+            <time data-ts="{{ body.job_summary.last_update }}" data-ts-format="datetime">{{ body.job_summary.last_update|date:'M d, Y h:i A' }}</time>
+          {% else %}
+            Not recorded
+          {% endif %}
+        </p>
+      </div>
+    </div>
+  </div>
+
+  {% if body.form_errors %}
+    <div class="rounded-lg border border-rose-400/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+      <p class="font-semibold">Unable to save. Fix the highlighted fields.</p>
+    </div>
+  {% endif %}
+
+  <div class="grid gap-6 xl:grid-cols-[minmax(0,2.5fr)_minmax(22rem,1fr)]">
+    <div class="space-y-6">
+      {% for group in body.field_groups %}
+        <section class="space-y-4 rounded-2xl border border-white/10 bg-slate-900/60 p-5">
+          <div class="space-y-1">
+            <p class="text-xs uppercase tracking-wide text-slate-400">{{ group.title }}</p>
+            {% if group.title == 'Case Overview' %}
+              <p class="text-sm text-slate-300">Summarize the matter so everyone shares the same framing.</p>
+            {% elif group.title == 'Scheduling & Court' %}
+              <p class="text-sm text-slate-300">Track deadlines and venues; times save using your local timezone.</p>
+            {% elif group.title == 'Client Notes' %}
+              <p class="text-sm text-slate-300">Add context that helps intake triage new evidence quickly.</p>
+            {% endif %}
+          </div>
+          <div class="grid gap-4 md:grid-cols-2">
+            {% for field in group.fields %}
+              <div class="flex flex-col gap-2 text-sm text-slate-200 {% if field.type == 'textarea' %}md:col-span-2{% endif %}">
+                <label class="text-xs uppercase tracking-wide text-slate-400" for="case-field-{{ field.name }}">{{ field.label }}</label>
+                {% if field.type == 'textarea' %}
+                  <textarea id="case-field-{{ field.name }}" name="{{ field.name }}" rows="5" class="min-h-[8rem] rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none focus:ring-0">{{ field.value|default:'' }}</textarea>
+                {% elif field.type == 'choice' %}
+                  <select id="case-field-{{ field.name }}" name="{{ field.name }}" class="rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none focus:ring-0">
+                    <option value="">—</option>
+                    {% for value,label in field.choices %}
+                      <option value="{{ value }}" {% if field.value == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                  </select>
+                {% elif field.type == 'datetime' %}
+                  <input type="datetime-local" id="case-field-{{ field.name }}" name="{{ field.name }}" value="{{ field.value|default:'' }}" class="rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none focus:ring-0">
+                {% elif field.type == 'date' %}
+                  <input type="date" id="case-field-{{ field.name }}" name="{{ field.name }}" value="{{ field.value|default:'' }}" class="rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none focus:ring-0">
+                {% else %}
+                  <input type="text" id="case-field-{{ field.name }}" name="{{ field.name }}" value="{{ field.value|default:'' }}" class="rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none focus:ring-0">
+                {% endif %}
+              </div>
+            {% endfor %}
+          </div>
+        </section>
+      {% endfor %}
+
+      <section class="space-y-4 rounded-2xl border border-white/10 bg-slate-900/60 p-5">
+        <div class="space-y-1">
+          <p class="text-xs uppercase tracking-wide text-slate-400">Client setup</p>
+          <p class="text-sm text-slate-300">Clarify representation so downstream automation and reporting stay accurate.</p>
+        </div>
+        <div class="grid gap-4 md:grid-cols-2">
+          <div class="flex flex-col gap-2 text-sm text-slate-200">
+            <label class="text-xs uppercase tracking-wide text-slate-400" for="case-field-representation">Representation</label>
+            <select id="case-field-representation" name="representation" class="rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none focus:ring-0">
+              <option value="">Unspecified</option>
+              {% for value,label in body.representation_choices %}
+                <option value="{{ value }}" {% if body.current_representation == value %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+            <p class="text-[11px] text-slate-500">Appears in automation summaries and downstream briefs.</p>
+          </div>
+          <div class="flex flex-col gap-2 text-sm text-slate-200">
+            <label class="text-xs uppercase tracking-wide text-slate-400" for="case-field-engagement">Engagement model</label>
+            <select id="case-field-engagement" name="engagement_model" class="rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none focus:ring-0">
+              {% for option in body.engagement_options %}
+                <option value="{{ option.value }}" {% if body.current_engagement == option.value %}selected{% endif %}>{{ option.label }}</option>
+              {% endfor %}
+            </select>
+            <p class="text-[11px] text-slate-500">Used for billing, reporting, and automation routing.</p>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <aside class="space-y-4">
+      <section class="space-y-5 rounded-2xl border border-white/10 bg-slate-900/70 p-5">
+        <div class="space-y-1">
+          <p class="text-xs uppercase tracking-wide text-slate-400">Case team</p>
+          <p class="text-sm text-slate-300">Assign ownership and participant access so the right people receive updates.</p>
+        </div>
+        <div class="space-y-4">
+          <div class="flex flex-col gap-2 text-sm text-slate-200">
+            <label class="text-xs uppercase tracking-wide text-slate-400" for="case-field-owner">Case owner</label>
+            <select id="case-field-owner" name="owner_id" class="rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none focus:ring-0">
+              <option value="">Unassigned</option>
+              {% for option in body.owner_options %}
+                <option value="{{ option.id }}" {% if option.id == body.current_owner_id %}selected{% endif %}>{{ option.label }}</option>
+              {% endfor %}
+            </select>
+            <p class="text-[11px] text-slate-500">One owner per case. Changing this demotes the previous owner to contributor.</p>
+          </div>
+          <div class="flex flex-col gap-2 text-sm text-slate-200">
+            <label class="text-xs uppercase tracking-wide text-slate-400" for="case-field-reviewer">Reviewer</label>
+            <select id="case-field-reviewer" name="reviewer_id" class="rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none focus:ring-0">
+              <option value="">Unassigned</option>
+              {% for option in body.reviewer_options %}
+                <option value="{{ option.id }}" {% if option.id == body.reviewer_id %}selected{% endif %}>{{ option.label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="flex flex-col gap-2 text-sm text-slate-200">
+            <label class="text-xs uppercase tracking-wide text-slate-400" for="case-field-client-user">Client user</label>
+            <select id="case-field-client-user" name="client_user_id" class="rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none focus:ring-0">
+              <option value="">Unassigned</option>
+              {% for option in body.client_options %}
+                <option value="{{ option.id }}" {% if option.id == body.client_user_id %}selected{% endif %}>{{ option.label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="flex flex-col gap-2 text-sm text-slate-200">
+            <label class="text-xs uppercase tracking-wide text-slate-400" for="case-field-contributors">Contributors</label>
+            <select id="case-field-contributors" name="contributor_ids" multiple class="h-32 w-full rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none focus:ring-0">
+              {% for option in body.contributor_options %}
+                <option value="{{ option.id }}" {% if option.id in body.contributor_ids %}selected{% endif %}>{{ option.label }}</option>
+              {% endfor %}
+            </select>
+            <p class="text-[11px] text-slate-500">Contributors can upload evidence and run automations for the team.</p>
+          </div>
+        </div>
+      </section>
+    </aside>
+  </div>
+
+  <div class="flex flex-wrap items-center justify-end gap-3">
+    <button type="reset" class="rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:border-primary-400 hover:text-white">Reset</button>
+    <button type="submit" class="inline-flex items-center gap-2 rounded-lg bg-primary-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-primary-500/30 transition hover:bg-primary-400">
+      Save changes
+    </button>
+  </div>
+</form>

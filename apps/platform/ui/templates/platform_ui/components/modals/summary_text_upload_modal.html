@@ -1,0 +1,62 @@
+{% extends "platform_ui/components/modals/modal_base.html" %}
+
+{% block modal_header %}
+  <div class="space-y-1">
+    <p class="text-xs uppercase tracking-wide text-slate-400">Summarizer dev helper</p>
+    <h2 class="text-lg font-semibold text-white">Upload transcript text</h2>
+    <p class="text-xs text-slate-400">Register a plain-text transcript as a completed transcription job for summarizer testing.</p>
+  </div>
+{% endblock %}
+
+{% block modal_body %}
+  <div class="space-y-6" data-summary-text-modal data-case-id="{{ case.id }}" data-summary-text-endpoint="{% url 'ui-summary-upload-transcript-text' case.id %}" data-summary-text-default="{{ fixture_root }}">
+    <div class="space-y-3">
+      <div class="space-y-1">
+        <h3 class="text-sm font-semibold text-white">Fixture transcripts</h3>
+        <p class="text-xs text-slate-400">Files below are loaded from <code class="rounded bg-white/10 px-1.5 py-0.5 text-[11px] text-primary-200">{{ fixture_root }}</code>.</p>
+      </div>
+      {% if fixtures %}
+        <ul class="divide-y divide-white/10 overflow-hidden rounded-lg border border-white/10 bg-slate-900/50" data-summary-text-fixture-list>
+          {% for fixture in fixtures %}
+            <li class="flex flex-col gap-2 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+              <div class="space-y-0.5 text-sm text-slate-200">
+                <p class="font-semibold text-white">{{ fixture.display }}</p>
+                <p class="flex flex-wrap items-center gap-2 text-[12px] text-slate-400">
+                  <span class="rounded bg-white/5 px-1.5 py-0.5 font-mono text-[11px] text-primary-200">{{ fixture.name }}</span>
+                  {% if fixture.bytes %}
+                    <span>{{ fixture.bytes|filesizeformat }}</span>
+                  {% endif %}
+                </p>
+              </div>
+              <button type="button" class="inline-flex items-center gap-2 self-start rounded-lg border border-primary-400/40 bg-primary-500/10 px-3 py-1.5 text-sm font-semibold text-primary-100 transition hover:bg-primary-500/20" data-summary-text-fixture="{{ fixture.name }}">
+                Use transcript
+              </button>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="rounded-lg border border-dashed border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-300">No fixture transcripts found in the expected directory.</p>
+      {% endif %}
+    </div>
+
+    <div class="space-y-3 border-t border-white/10 pt-4">
+      <h3 class="text-sm font-semibold text-white">Upload custom .txt transcript</h3>
+      <p class="text-xs text-slate-400">File names inform the job title. The <code>__transcript</code> suffix and <code>.txt</code> extension are removed when showing in the summarize tool.</p>
+      <form class="space-y-3" data-summary-text-upload-form>
+        <label class="block text-xs uppercase tracking-wide text-slate-400">Transcript text file
+          <input type="file" name="transcript_text" accept=".txt" class="mt-2 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" data-summary-text-file>
+        </label>
+        <div class="flex items-center gap-3 text-xs text-slate-400" data-summary-text-upload-actions>
+          <button type="submit" class="inline-flex items-center gap-2 rounded-lg border border-primary-400/40 bg-primary-500/10 px-3 py-1.5 font-semibold text-primary-100 transition hover:bg-primary-500/20" data-summary-text-upload-button disabled>
+            Upload transcript
+          </button>
+          <span data-summary-text-status class="hidden text-[11px] text-slate-400"></span>
+        </div>
+      </form>
+    </div>
+  </div>
+{% endblock %}
+
+{% block modal_actions %}
+  <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 font-semibold text-slate-200 transition hover:border-primary-400 hover:text-white" data-modal-close>Close</button>
+{% endblock %}

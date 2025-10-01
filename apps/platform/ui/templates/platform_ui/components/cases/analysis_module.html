@@ -1,0 +1,137 @@
+<div class="rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-3" data-module-wrapper="{{ module.panel_id }}">
+  <div class="flex items-center gap-3">
+    <div class="flex flex-col gap-1 text-left grow cursor-pointer" data-module-header="{{ module.panel_id }}">
+      <p class="text-xs uppercase tracking-wide text-slate-400">{{ module.label }}</p>
+      <p class="mt-0.5 text-xs text-slate-300">{{ module.description }}</p>
+      {% if module.latest and module.header_hint == "Latest run" %}
+        <p class="mt-1 text-xs text-slate-400">Latest run <time data-ts="{{ module.header_hint_time|date:'c' }}" data-ts-format="datetime">{{ module.header_hint_time|date:'M d, Y h:i A' }}</time></p>
+      {% else %}
+        <p class="mt-1 text-xs text-slate-400">{{ module.header_hint }}</p>
+      {% endif %}
+    </div>
+    <div class="flex items-center gap-2 text-slate-300">
+      <span class="status-pill inline-flex items-center rounded-full border {{ module.status_class }} px-2 py-0.5 text-[10px] font-semibold uppercase">{{ module.status }}</span>
+      <span class="ml-1" aria-hidden="true">
+        <svg xmlns="http://www.w3.org/2000/svg" class="module-arrow h-4 w-4 transition-transform duration-150" viewBox="0 0 20 20" fill="currentColor" data-module-chevron="{{ module.panel_id }}">
+          <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.094l3.71-3.86a.75.75 0 011.08 1.04l-4.247 4.41a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
+        </svg>
+      </span>
+    </div>
+  </div>
+</div>
+<div id="{{ module.panel_id }}" data-module-panel class="hidden rounded-xl border border-white/10 bg-slate-900/80 p-4 text-sm text-slate-200 space-y-4">
+  <div class="grid gap-3 lg:grid-cols-2">
+    <div class="min-h-[8rem]">
+      {% if module.notes_panel_html %}
+        {{ module.notes_panel_html|safe }}
+      {% else %}
+        {% with notes=module.notes %}
+          {% if notes %}
+            {% include "platform_ui/components/notes/team_notes_panel.html" with
+              job_id=notes.job_id
+              notes_entries=notes.entries
+              notes_updated_at=notes.updated_at
+              notes_updated_by=notes.updated_by
+              user_can_add_notes=notes.user_can_add
+            %}
+          {% else %}
+            {% include "platform_ui/components/notes/team_notes_panel.html" with
+              job_id=None
+              notes_entries=None
+              notes_updated_at=None
+              notes_updated_by=None
+              user_can_add_notes=False
+            %}
+          {% endif %}
+        {% endwith %}
+      {% endif %}
+    </div>
+    <div class="min-h-[8rem]">
+      {% include "platform_ui/components/alerts/team_alerts_panel.html" with alerts=module.team_alerts %}
+    </div>
+  </div>
+  <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+    <div class="space-y-1">
+      <p class="text-xs uppercase tracking-wide text-slate-400">Automation</p>
+      {% if module.target_job %}
+        <p class="text-xs text-slate-300">Uses transcript <span class="font-semibold text-white" data-copy-text="{{ module.target_job.id }}">{{ module.target_job.title }}</span></p>
+      {% else %}
+        <p class="text-xs text-slate-300">No completed transcripts available.</p>
+      {% endif %}
+    </div>
+    <div class="flex flex-wrap items-center gap-2">
+      <button type="button"
+              class="inline-flex items-center gap-2 rounded-lg border border-primary-400/40 bg-primary-500/10 px-3 py-1.5 text-xs font-semibold text-primary-100 transition hover:bg-primary-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+              data-analysis-action="analysis-start"
+              data-analysis-key="{{ module.key }}"
+              data-job-id="{{ module.action.job_id|default_if_none:'' }}"
+              data-loading-text="{{ module.action.loading_label }}"
+              data-success-label="{{ module.action.success_label }}"
+              data-analysis-label="{{ module.label }}"
+              {% if module.action.disabled %}disabled{% endif %}>
+        {{ module.action.label }}
+      </button>
+      {% if module.action.disabled_reason %}
+        <span class="text-[11px] text-slate-400">{{ module.action.disabled_reason }}</span>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if module.latest %}
+    <div class="rounded-lg border border-white/10 bg-slate-900/60 p-3 space-y-2">
+      <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <div class="flex flex-col">
+          <span class="text-sm font-semibold text-white">{{ module.latest.title }}</span>
+          <span class="text-[11px] text-slate-400">File: <span class="font-mono text-[11px] text-primary-200">{{ module.latest.filename }}</span></span>
+          {% if module.latest.source %}
+            <span class="text-[11px] text-slate-400">Source transcript: <span class="font-mono text-[11px] text-primary-200">{{ module.latest.source }}</span></span>
+          {% endif %}
+        </div>
+        <div class="flex items-center gap-2 text-xs text-slate-400">
+          <time data-ts="{{ module.latest.created_at|date:'c' }}" data-ts-format="datetime">{{ module.latest.created_at|date:'M d, Y h:i A' }}</time>
+          {% if module.latest.download_url %}
+            <a class="inline-flex items-center gap-1 rounded border border-white/20 bg-white/5 px-2 py-1 text-[11px] font-semibold text-slate-100 transition hover:border-primary-400 hover:text-white"
+               href="{{ module.latest.download_url }}" download>
+              Download
+            </a>
+          {% endif %}
+        </div>
+      </div>
+      {% if module.key == 'timeline' and module.latest.metadata.events %}
+        <p class="text-[11px] text-slate-300">Events: {{ module.latest.metadata.events }}</p>
+      {% elif module.key == 'summary' and module.latest.metadata.words %}
+        <p class="text-[11px] text-slate-300">Words summarised: {{ module.latest.metadata.words }}</p>
+      {% endif %}
+    </div>
+  {% else %}
+    <p class="text-xs text-slate-300">{{ module.empty_message }}</p>
+  {% endif %}
+
+  {% if module.history %}
+    <details class="rounded-lg border border-white/10 bg-slate-900/60">
+      <summary class="cursor-pointer px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-300">Previous runs</summary>
+      <div class="divide-y divide-white/10">
+        {% for item in module.history %}
+          <div class="flex flex-col gap-2 px-3 py-2 text-[11px] text-slate-300 md:flex-row md:items-center md:justify-between">
+            <div class="flex flex-col">
+              <span class="font-semibold text-white">{{ item.title }}</span>
+              {% if item.source %}
+                <span class="text-slate-400">Source: {{ item.source }}</span>
+              {% endif %}
+            </div>
+            <div class="flex items-center gap-2">
+              <time data-ts="{{ item.created_at|date:'c' }}" data-ts-format="datetime">{{ item.created_at|date:'M d, Y h:i A' }}</time>
+              {% if item.download_url %}
+                <a class="inline-flex items-center gap-1 rounded border border-white/20 bg-white/5 px-2 py-1 text-[11px] font-semibold text-slate-100 transition hover:border-primary-400 hover:text-white"
+                   href="{{ item.download_url }}" download>
+                  Download
+                </a>
+              {% endif %}
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    </details>
+  {% endif %}
+
+</div>

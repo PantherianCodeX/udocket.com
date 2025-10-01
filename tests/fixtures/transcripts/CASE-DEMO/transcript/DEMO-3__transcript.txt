@@ -1,0 +1,149 @@
+DRAFT — LEGAL INFORMATION ONLY — CLIENT REVIEW REQUIRED
+Case: CASE-FAM-YYC-2025-00456
+Audio: CASE-FAM-YYC-2025-00456__intake.wav
+SHA256: n/a (remote)
+Region: canadacentral
+Language: en-CA
+Duration: 80:00
+Transcribed: 2025-02-15T17:30:00Z
+
+[00:00] SPK_1: Good afternoon, this is Maya with uDocket intake for the Calgary Family Law pilot; can you hear me clearly, Avery?
+[00:25] SPK_2: Hi Maya, yes I can hear you fine, thanks for hosting this session.
+[00:50] SPK_1: Before we dive in, I need to confirm that today's interview is informational, not legal advice, and it will be shared with your counsel and the pilot case management team; do you consent?
+[01:20] SPK_2: I understand and consent to the recording and sharing with my lawyer Daniel Roy and the Calgary Family Docket Court team.
+[01:45] SPK_1: Great, let's anchor the matter—can you state the formal case style, court file number, and where it's being heard?
+[02:10] SPK_2: The case is Chen v. Patel, Court of King's Bench of Alberta, Family Division Calgary, file FAM-YYC-2024-11873, currently in the Early Intervention Case Conference pilot.
+[02:45] SPK_1: What are your objectives for today’s intake so we can feed the summarizer properly?
+[03:15] SPK_2: I want a clear summary of parenting issues, support, the January interim order, and upcoming mediation so I can prep my affidavit and tasks.
+[03:50] SPK_1: Let’s catalogue key participants—please list everyone connected to the matter and how they relate to you.
+[04:20] SPK_2: I’m Avery Chen, applicant mother; my ex-spouse is Morgan Patel, respondent father; our kids are Liam Chen-Patel, age nine, and Isla Chen-Patel, age six; my counsel is Daniel Roy at Bow Valley Family Law; Morgan’s lawyer is Jasmine Lee at Prairie Bridge Legal; parenting coordinator is Dr. Neha Sandhu; O’Connell Social Work is doing the Voices of the Child report.
+[05:05] SPK_1: Any extended family or supports we should note?
+[05:40] SPK_2: My sister Emma Chen helps with school pick-ups; Morgan’s parents Raj and Sunita Patel provide after-school care Tuesdays; Children’s Village Out-of-School Program supervises Wednesdays.
+[06:20] SPK_1: Has any guardian ad litem, assessor, or agency been appointed by the court yet?
+[06:55] SPK_2: Not yet, but Justice Morin flagged that if we can’t agree by April, a Practice Note 7 intervention might be ordered.
+[07:30] SPK_1: Let’s build the relationship timeline—when did you and Morgan start living together and when did separation occur?
+[08:05] SPK_2: We began cohabiting in August 2012 in Bridgeland, married June 28, 2014, and separated physically on September 3, 2023, after Morgan moved to a condo in Beltline.
+[08:40] SPK_1: Describe key events that led to separation so we can map conflict.
+[09:15] SPK_2: In May 2023 Morgan accepted a job requiring frequent travel; communication broke down, especially after I discovered hidden credit card debt in July; an argument on August 31 escalated, and on September 3 we agreed to trial separation.
+[09:50] SPK_1: Any police involvement or EPO applications around that time?
+[10:25] SPK_2: No police, but on September 5 I consulted Calgary Police domestic conflict unit; they recorded concerns but no charges—no EPO sought.
+[11:00] SPK_1: Walk me through major milestones post-separation in chronological order.
+[11:35] SPK_2: September 6 we signed a parenting time memorandum; September 15 Morgan filed a Statement of Defence and Counterclaim; October 10 we attended the Calgary Family Docket appearance; November 7 we entered the pilot; December 12 interim child support order; January 18, 2025, interim parenting order; February 3 we exchanged updated financial statements.
+[12:10] SPK_1: Let’s unpack the September memorandum—what schedule did it set and is it still followed?
+[12:45] SPK_2: It set week-on/week-off with Sunday exchanges at Southland Leisure Centre; that lasted until December when Liam’s hockey made midweek adjustments; now Morgan has Mondays to Wednesdays in his weeks and alternate weekends.
+[13:20] SPK_1: Describe the January 18 interim parenting order terms.
+[13:55] SPK_2: Justice Morin ordered joint decision-making with day-to-day care alternating weekly, mandated that Morgan provide 48-hour notice for travel, and required us to use OurFamilyWizard for communication.
+[14:30] SPK_1: Any breaches or concerns since that order?
+[15:05] SPK_2: Morgan returned Isla late twice in February and skipped uploading the kids’ medication log; I documented both incidents in OurFamilyWizard messages.
+[15:40] SPK_1: Regarding child-related professionals, what’s the status with Dr. Sandhu?
+[16:15] SPK_2: She was appointed November 20 for six sessions; we completed four; final report due March 8; she noted Morgan dismisses Isla’s anxiety symptoms.
+[16:50] SPK_1: You mentioned the Voices of the Child report—timeline and scope?
+[17:25] SPK_2: Intake with social worker Erin O’Connell happened February 6; Liam’s interview is set March 4 and Isla’s on March 6; draft report expected March 20 for the April case conference.
+[18:00] SPK_1: Let’s capture your parenting concerns and goals.
+[18:35] SPK_2: Liam thrives in routines; when Morgan travels, the kids stay with his parents, and homework slips; Isla has mild asthma and needs her inhaler tracked; I seek primary residence with Morgan having alternating weekends plus Wednesday dinners.
+[19:10] SPK_1: Are there cultural or extracurricular needs we should flag?
+[19:45] SPK_2: Liam plays U11 hockey at Flames Community Arena; Isla attends ballet at Decidedly Jazz Danceworks and speech therapy at Alberta Children’s Hospital Tuesdays; we observe both Lunar New Year with my family and Diwali with Morgan’s family.
+[20:20] SPK_1: Any allegations of family violence, coercive control, or substance issues?
+[20:55] SPK_2: Morgan drinks socially; no substance abuse; main issue is financial secrecy—he opened a line of credit without disclosure; he tends to raise his voice but no physical harm.
+[21:30] SPK_1: Have the children expressed preferences or concerns directly to you?
+[22:05] SPK_2: Liam wants stability for hockey practices and asked to stay primarily with me during tournament weeks; Isla says she feels rushed at Morgan’s condo mornings.
+[22:40] SPK_1: Let’s transition to financials—summarize current child and spousal support.
+[23:15] SPK_2: Interim child support of $1,420 monthly based on Morgan’s 2023 Line 150 at $118,000; no spousal support yet; my gross is $78,500 as a physiotherapist.
+[23:50] SPK_1: Have there been arrears or variances to the interim child support?
+[24:25] SPK_2: Morgan paid October through January; February payment was $600 short because he claims reduced income; he promises to top up after his March commission.
+[25:00] SPK_1: Outline property issues still in dispute.
+[25:35] SPK_2: We own the family home in Panorama Hills valued at $685,000 with $412,000 mortgage; joint RRSP worth $84,000; Morgan’s deferred bonus shares valued around $36,000; disagreement about sharing his line of credit debt of $27,000.
+[26:10] SPK_1: Any agreements on property already documented?
+[26:45] SPK_2: We signed a partial minutes of settlement on November 30 covering vehicle division—my Subaru stays with me, his Tesla with him—and equal split of joint chequing as of September 3.
+[27:20] SPK_1: Have financial statements per Form FL-17 been exchanged and up to date?
+[27:55] SPK_2: Yes, both filed December 1 and updated February 3; Morgan still owes 2024 T4 and proof of bonus structure by March 15 per order.
+[28:30] SPK_1: Any section 7 special expenses under discussion?
+[29:05] SPK_2: Hockey fees $2,100 annually and speech therapy $1,680 annually; we currently split 60/40 with Morgan covering the higher share; dispute about Isla’s summer camp costing $900.
+[29:40] SPK_1: Let’s capture debt management—any joint liabilities impacting negotiations?
+[30:15] SPK_2: Besides mortgage and his line of credit, we have a joint Visa with $5,200; we agreed to freeze it; I’m paying minimums awaiting equalization.
+[30:50] SPK_1: Are you seeking spousal support, and if so, on what basis?
+[31:25] SPK_2: I’m requesting review spousal support in the mid-range of the Spousal Support Advisory Guidelines because I reduced work hours for Isla’s therapy from 2020 to 2022.
+[32:00] SPK_1: What evidence supports the compensatory claim?
+[32:35] SPK_2: Employment letters showing reduced hours, CRA assessments showing decreased income, and therapy schedules documenting my time commitment.
+[33:10] SPK_1: Shift to procedural posture—what’s upcoming on the court calendar?
+[33:45] SPK_2: Next Early Intervention Case Conference on April 9, 2025, at 9:30 a.m. before Justice Morin; disclosure confirmation deadline March 22; mediation with Calgary Family Mediation Society on March 27.
+[34:20] SPK_1: Any prior judicial decisions or endorsements we need to summarize?
+[34:55] SPK_2: October 10 docket endorsement directed both parties to Parenting After Separation course; December 12 endorsement granted child support and OurFamilyWizard use; January 18 endorsement set parenting schedule and travel notice.
+[35:30] SPK_1: Have both parties completed Parenting After Separation and the high-conflict supplement?
+[36:05] SPK_2: I completed both on October 18; Morgan completed the basic course November 2 but not the high-conflict supplement yet.
+[36:40] SPK_1: How is communication going on OurFamilyWizard—any compliance issues?
+[37:15] SPK_2: Morgan often replies within 48 hours but occasionally switches to texting; I keep redirecting him to the app; compliance is improving.
+[37:50] SPK_1: Describe current exchange logistics and any friction points.
+[38:25] SPK_2: Exchanges Sundays 6 p.m. at Southland Leisure Centre; Wednesday midweek dinner drop-off at my condo lobby; friction arises if Morgan’s parents attend unannounced, which makes Isla anxious.
+[39:00] SPK_1: Have you considered supervised exchanges or neutral third-party assistance?
+[39:35] SPK_2: Not yet; our mediator suggested Calgary Family Services neutral drop-off if tensions rise, but we’re not there.
+[40:10] SPK_1: Safety planning—any emergency contacts or restrictions we should document?
+[40:45] SPK_2: If Morgan travels, he designates his sister Priya Patel as caregiver; I requested written itineraries; there are no restraining orders.
+[41:20] SPK_1: For the timeline, note any significant dates related to children’s health or schooling.
+[41:55] SPK_2: Liam started Grade 4 at Maple Ridge School on September 5, 2023; Isla diagnosed with mild asthma November 14, 2021; she began speech therapy sessions March 2022; Liam’s provincial hockey tournament is April 20-22, 2025.
+[42:30] SPK_1: Are there any pending medical appointments requiring coordination?
+[43:05] SPK_2: Isla’s pulmonary check-up is March 11 at Alberta Children’s Hospital; Liam has orthodontist consult May 2.
+[43:40] SPK_1: Let’s capture any collaborative efforts between you and Morgan to resolve issues.
+[44:15] SPK_2: We agreed to share a Google spreadsheet for school events, attended two co-parent coaching sessions in January, and we’re trialing Monday video calls when kids are with the other parent.
+[44:50] SPK_1: How are the kids managing transitions emotionally?
+[45:25] SPK_2: Liam internalizes stress, so his teacher Ms. Sinclair set up a calm corner; Isla cries on Tuesday mornings when she has to pack at Morgan’s; I keep a feelings journal for Dr. Sandhu.
+[46:00] SPK_1: Any involvement from schools or community supports we should include?
+[46:35] SPK_2: Maple Ridge School counsellor Adam Green holds monthly check-ins; YMCA Calgary provides subsidy for Isla’s swim lessons; Distress Centre Calgary offered me counselling sessions.
+[47:10] SPK_1: Are there Indigenous, cultural, or language considerations relevant to services?
+[47:45] SPK_2: We’re not Indigenous; I speak Mandarin with my parents, and they help the kids practice; Morgan’s family observes Hindu festivals, so we rotate Diwali celebrations.
+[48:20] SPK_1: Let’s catalogue evidence documents already compiled.
+[48:55] SPK_2: I uploaded bank statements April 2022 to January 2025, kids’ report cards, medical notes, calendars of exchanges, and screenshots of OurFamilyWizard messages; I still need Morgan’s 2024 T4.
+[49:30] SPK_1: Any digital evidence like audio, video, or emails requiring transcripts?
+[50:05] SPK_2: There’s a September 2 voice message where Morgan admits to the secret loan; I saved it and can provide the mp3 if needed.
+[50:40] SPK_1: Regarding settlement, what proposals have been exchanged?
+[51:15] SPK_2: On January 25 Daniel sent a proposal: primary residence with me, Morgan three weekends per month, child support per updated income, spousal review after mediation, equal split of home equity; Morgan responded February 7 seeking shared weeks and to cap spousal support at 12 months.
+[51:50] SPK_1: Are there interim agreements on decision-making domains?
+[52:25] SPK_2: We agree on education and health decisions jointly; extracurricular enrollments require mutual consent; religion is open, we support both traditions.
+[53:00] SPK_1: Any disputes about passports or travel?
+[53:35] SPK_2: Morgan wants to take kids to Vancouver April 12-14; I asked for itinerary and consent letter; once I get his flight info I’ll sign.
+[54:10] SPK_1: For timeline purposes, note upcoming deadlines you must meet.
+[54:45] SPK_2: March 8 submit parenting coordinator progress note, March 15 Morgan’s T4 disclosure, March 18 my updated affidavit, March 27 mediation, April 9 conference.
+[55:20] SPK_1: Any legal aid or funding arrangements to record?
+[55:55] SPK_2: I’m self-funded; Daniel Roy works on limited-scope retainer with 10-hour block remaining; Morgan pays privately.
+[56:30] SPK_1: Do you have translators or accessibility needs for hearings?
+[57:05] SPK_2: No translation needed; I might request hybrid attendance due to work schedule, but in-person is fine.
+[57:40] SPK_1: Let’s capture any third-party witnesses relevant to parenting or finances.
+[58:15] SPK_2: Witnesses include Liam’s hockey coach Sarah Leduc, Isla’s speech therapist Dr. Mei Wong, and my employer clinic director Rajiv Sharma for schedule confirmation.
+[58:50] SPK_1: Are there allegations or defenses we should detail for the summarizer?
+[59:25] SPK_2: I allege Morgan concealed debt and is inconsistent with childcare; he alleges I’m gatekeeping and overspending on extracurriculars; both are in pleadings filed September 15.
+[60:00] SPK_1: Any collaborative law or alternative dispute resolution attempts before court?
+[60:35] SPK_2: We tried two mediation sessions in October with mediator Carla Nguyen; first productive, second stalled over spousal support; no parenting plan yet.
+[61:10] SPK_1: What’s the status of disclosure of Morgan’s employment benefits?
+[61:45] SPK_2: He provided a January 12 letter summarizing base salary and commission but omitted stock options; we requested details by March 15.
+[62:20] SPK_1: Have you prepared a draft parenting plan for negotiation?
+[62:55] SPK_2: Yes, Daniel and I drafted a 22-page plan covering schedules, decision-making, travel, dispute resolution, and cultural holidays; we shared it February 12.
+[63:30] SPK_1: Let’s note any professional recommendations already issued.
+[64:05] SPK_2: Dr. Sandhu’s interim note recommends consistent bedtime routines, parental cooperation on Isla’s inhaler, and transitional rituals like shared calendars; Maple Ridge teacher recommends stable weekday environment for Liam.
+[64:40] SPK_1: Are there mental health supports for you or the children we should highlight?
+[65:15] SPK_2: I attend Counselling Calgary biweekly, Liam sees school counsellor monthly, Isla meets child psychologist Dr. Priya Menon monthly.
+[65:50] SPK_1: Document any immigration or travel restrictions that might affect planning.
+[66:25] SPK_2: Both kids have Canadian passports expiring 2026; no restrictions; Morgan’s work requires cross-border travel but he holds NEXUS; I asked him to notify me 72 hours before leaving Alberta.
+[67:00] SPK_1: For the relationship graph, describe interactions between Morgan’s parents and you.
+[67:35] SPK_2: Raj and Sunita Patel supervise kids Tuesdays; we communicate via OurFamilyWizard; they’re respectful but tend to offer advice—no major conflict.
+[68:10] SPK_1: Any significant relationships on your side?
+[68:45] SPK_2: My parents Wei and Lillian Chen live in Calgary Chinatown; they host the kids Saturdays for cultural school; they’re supportive but not involved in legal decisions.
+[69:20] SPK_1: Is anyone providing legal advice to Morgan besides Jasmine Lee?
+[69:55] SPK_2: Morgan sometimes consults his cousin Arjun Patel, who’s a corporate lawyer in Edmonton, but not formally retained.
+[70:30] SPK_1: Let’s note technology or apps used for co-parenting beyond OurFamilyWizard.
+[71:05] SPK_2: We share a Google Drive for medical records, use TeamSnap for hockey scheduling, and Morgan proposed using Splitwise for expense tracking—I haven’t agreed yet.
+[71:40] SPK_1: What tasks do you need help tracking after today?
+[72:15] SPK_2: I need reminders to gather Isla’s therapy receipts, finalize my affidavit exhibits, draft consent letter for Vancouver trip, and confirm mediator availability for backup dates.
+[72:50] SPK_1: Any barriers to completing those tasks?
+[73:25] SPK_2: Time constraints with work; I work 8 a.m. to 3 p.m.; I may need Daniel’s assistant to help compile exhibits; otherwise manageable.
+[74:00] SPK_1: How would you rate overall cooperation with Morgan on a scale of 1 to 10?
+[74:35] SPK_2: Around 5—better than September but still inconsistent, especially on finances.
+[75:10] SPK_1: What would success look like at the April conference?
+[75:45] SPK_2: Agreement on modified parenting schedule, finalized disclosure, and a roadmap for property equalization with deadlines.
+[76:20] SPK_1: Are there any urgent issues we haven’t covered?
+[76:55] SPK_2: Just Isla’s anxiety—if the Voices of the Child report recommends therapy continuity, I want that prioritized.
+[77:30] SPK_1: Understood; any final notes for your counsel or the case manager?
+[78:05] SPK_2: Please flag that I’m open to a graduated schedule giving Morgan extra time once he proves stable childcare, and that I’d accept mediation-arbitration if April conference stalls.
+[78:40] SPK_1: Thanks, Avery; we’ll compile a detailed summary, timeline, and relationship map for Daniel and the pilot team—anything else?
+[79:15] SPK_2: That’s everything; thank you for organizing this so thoroughly.
+[79:50] SPK_1: We’ll upload the transcript and notify you once the summarize tool output is ready; take care.
+[80:00] SPK_2: Thanks, Maya, speak soon.

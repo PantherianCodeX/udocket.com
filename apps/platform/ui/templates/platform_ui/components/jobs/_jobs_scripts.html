@@ -1,0 +1,319 @@
+{% load static %}
+<script src="{% static 'platform_ui/js/case_detail/helpers.js' %}"></script>
+<script src="{% static 'platform_ui/js/case_detail/ui.js' %}"></script>
+<script src="{% static 'platform_ui/js/case_detail/modals.js' %}"></script>
+<script src="{% static 'platform_ui/js/case_detail/actions.js' %}"></script>
+<script src="{% static 'platform_ui/js/jobs_table.js' %}"></script>
+<script>
+(function () {
+  window.jobPollers = window.jobPollers || {};
+  window.jobSockets = window.jobSockets || {};
+  window.jobReconnectAttempts = window.jobReconnectAttempts || {};
+  window.jobReconnectTimers = window.jobReconnectTimers || {};
+
+  const BASE_RECONNECT_DELAY = 1000;
+  const MAX_RECONNECT_DELAY = 30000;
+
+  const platformUI = (window.platformUI = window.platformUI || {});
+  const jobsTableApi = platformUI.jobsTable;
+  if (!jobsTableApi || typeof jobsTableApi.init !== 'function') {
+    console.warn('platformUI.jobsTable.init is required for jobs table interactions');
+    return;
+  }
+
+  const jobsTableController = jobsTableApi.init({
+    root: document,
+    loadDetail: async (jobId, container) => {
+      const resp = await fetch(`/jobs/${jobId}/detail-panel/`, {
+        headers: { 'HX-Request': 'true' },
+        credentials: 'same-origin',
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const html = await resp.text();
+      container.innerHTML = html;
+    },
+    detailRowSelector: (jobId) => `[data-job-detail="${jobId}"]`,
+    detailContainerSelector: (jobId) => `[data-job-detail-container="${jobId}"]`,
+    onCollapse: (row) => {
+      if (!row) return;
+      const chevron = row.querySelector('[data-job-chevron]');
+      if (chevron) chevron.classList.remove('rotate-90');
+    },
+    onAfterExpand: (row) => {
+      if (!row) return;
+      const chevron = row.querySelector('[data-job-chevron]');
+      if (chevron) chevron.classList.add('rotate-90');
+    },
+  });
+
+  const statusUtils = platformUI.status || {};
+  const renderStatusLabel = statusUtils.renderStatusLabel || (() => {});
+  const TERMINAL_STATUSES = statusUtils.TERMINAL_STATUSES || ['SUCCEEDED', 'FAILED', 'CANCELLED', 'ERROR', 'CORRUPTED'];
+
+  function clearReconnect(jobId) {
+    window.jobReconnectAttempts[jobId] = 0;
+    if (window.jobReconnectTimers[jobId]) {
+      clearTimeout(window.jobReconnectTimers[jobId]);
+      delete window.jobReconnectTimers[jobId];
+    }
+  }
+
+  function scheduleReconnect(jobId) {
+    if (!('WebSocket' in window)) return;
+    const attempt = (window.jobReconnectAttempts[jobId] || 0) + 1;
+    window.jobReconnectAttempts[jobId] = attempt;
+    const delay = Math.min(BASE_RECONNECT_DELAY * Math.pow(2, attempt - 1), MAX_RECONNECT_DELAY);
+    if (window.jobReconnectTimers[jobId]) {
+      clearTimeout(window.jobReconnectTimers[jobId]);
+    }
+    window.jobReconnectTimers[jobId] = setTimeout(() => {
+      delete window.jobReconnectTimers[jobId];
+      connectWS(jobId);
+    }, delay);
+  }
+
+  function connectWS(jobId) {
+    if (!('WebSocket' in window)) {
+      ensurePolling(jobId, true);
+      return null;
+    }
+    const existing = window.jobSockets[jobId];
+    if (existing && (existing.readyState === WebSocket.OPEN || existing.readyState === WebSocket.CONNECTING)) {
+      return existing;
+    }
+    if (existing) {
+      try {
+        existing.close();
+      } catch (_) {}
+    }
+    const statusEl = document.getElementById(`job-status-${jobId}`);
+    const transcriptEl = document.getElementById(`job-transcript-${jobId}`);
+    const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + `/ws/jobs/${jobId}/`;
+    let ws;
+    try {
+      ws = new WebSocket(url);
+    } catch (error) {
+      console.warn('Job websocket init failed', jobId, error);
+      scheduleReconnect(jobId);
+      ensurePolling(jobId, true);
+      return null;
+    }
+    window.jobSockets[jobId] = ws;
+    ws.onopen = () => {
+      clearReconnect(jobId);
+      if (window.jobPollers[jobId]) {
+        clearInterval(window.jobPollers[jobId]);
+        delete window.jobPollers[jobId];
+      }
+    };
+    ws.onmessage = (ev) => {
+      try {
+        const data = JSON.parse(ev.data);
+        const progress = data.progress_percent ?? data.upload_progress;
+        if (statusEl) renderStatusLabel(statusEl, data.status, progress);
+        const transcriptPath = data.transcript_file || data.transcript_path;
+        if (transcriptEl && (transcriptPath || (statusEl && statusEl.dataset && statusEl.dataset.status === 'SUCCEEDED'))) {
+          transcriptEl.innerHTML = `<a class="font-medium text-primary-300 underline" href="/api/v1/jobs/${data.job_id || jobId}/download/">Download</a>`;
+        }
+        const normalized = statusEl && statusEl.dataset ? statusEl.dataset.status : '';
+        if (normalized && TERMINAL_STATUSES.includes(normalized)) {
+          clearInterval(window.jobPollers[jobId]);
+          delete window.jobPollers[jobId];
+        }
+      } catch (_) {}
+    };
+    ws.onerror = (err) => {
+      console.warn('Job websocket error', jobId, err);
+      scheduleReconnect(jobId);
+      ensurePolling(jobId, true);
+    };
+    ws.onclose = () => {
+      delete window.jobSockets[jobId];
+      ensurePolling(jobId, true);
+      scheduleReconnect(jobId);
+    };
+    return ws;
+  }
+
+  async function pollJob(jobId) {
+    try {
+      const resp = await fetch(`/api/v1/jobs/${jobId}/status/`);
+      if (!resp.ok) return;
+      const data = await resp.json();
+      const statusEl = document.getElementById(`job-status-${jobId}`);
+      const transcriptEl = document.getElementById(`job-transcript-${jobId}`);
+      const progress = data.progress_percent ?? data.upload_progress;
+      if (statusEl) renderStatusLabel(statusEl, data.status, progress);
+      if (transcriptEl && (data.transcript_path || (statusEl && statusEl.dataset && statusEl.dataset.status === 'SUCCEEDED'))) {
+        transcriptEl.innerHTML = `<a class="font-medium text-primary-300 underline" href="/api/v1/jobs/${jobId}/download/">Download</a>`;
+      }
+      const normalized = statusEl && statusEl.dataset ? statusEl.dataset.status : '';
+      if (normalized && TERMINAL_STATUSES.includes(normalized)) {
+        clearInterval(window.jobPollers[jobId]);
+        delete window.jobPollers[jobId];
+      }
+    } catch (_) {}
+  }
+
+  function ensurePolling(jobId, force = false) {
+    if (window.jobPollers[jobId]) return;
+    const statusEl = document.getElementById(`job-status-${jobId}`);
+    if (!statusEl) return;
+    const normalized = statusEl.dataset ? statusEl.dataset.status : '';
+    if (normalized && TERMINAL_STATUSES.includes(normalized)) return;
+    const socket = window.jobSockets[jobId];
+    if (!force && socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+      return;
+    }
+    window.jobPollers[jobId] = setInterval(() => pollJob(jobId), 2000);
+  }
+
+  function bootstrapJobs() {
+    document.querySelectorAll('[data-job]').forEach(row => {
+      const jobId = row.dataset.job;
+      if (!row.dataset.ws) {
+        connectWS(jobId);
+        row.dataset.ws = '1';
+      }
+      ensurePolling(jobId);
+      const statusEl = document.getElementById(`job-status-${jobId}`);
+      if (statusEl) {
+        const statusValue = statusEl.dataset && statusEl.dataset.status ? statusEl.dataset.status : statusEl.textContent;
+        const progressValue = statusEl.dataset && statusEl.dataset.progress ? parseFloat(statusEl.dataset.progress) : undefined;
+        renderStatusLabel(statusEl, statusValue, progressValue);
+      }
+    });
+  }
+
+  window.addEventListener('DOMContentLoaded', bootstrapJobs);
+
+  document.addEventListener('htmx:afterSwap', () => {
+    jobsTableController.collapseAll();
+    bootstrapJobs();
+  });
+
+  const closeJobMenus = () => {
+    const popovers = platformUI.popovers;
+    if (popovers && typeof popovers.closeAll === 'function') {
+      popovers.closeAll('[data-job-action-menu][open]');
+      return;
+    }
+    document
+      .querySelectorAll('[data-job-action-menu][open]')
+      .forEach((menu) => menu.removeAttribute('open'));
+  };
+
+  const isJobMenuTarget = (node) => {
+    if (!node) return false;
+    return Boolean(
+      node.closest('[data-job-action-menu]')
+      || node.closest('[data-job-action-menu-panel]'),
+    );
+  };
+
+  document.addEventListener('pointerdown', (evt) => {
+    const summary = evt.target.closest('[data-job-action-menu] > summary');
+    if (summary) {
+      const owner = summary.parentElement;
+      const popovers = platformUI.popovers;
+      if (popovers && typeof popovers.closeAll === 'function') {
+        popovers.closeAll('[data-job-action-menu][open]', owner);
+      } else {
+        document.querySelectorAll('[data-job-action-menu][open]').forEach((menu) => {
+          if (menu !== owner) menu.removeAttribute('open');
+        });
+      }
+      return;
+    }
+    if (!isJobMenuTarget(evt.target)) {
+      closeJobMenus();
+    }
+  });
+
+  document.addEventListener('keydown', (evt) => {
+    if (evt.key === 'Escape') closeJobMenus();
+  });
+
+  // Proactively close the job action popover after any selection
+  document.addEventListener('click', (evt) => {
+    const item = evt.target.closest('[data-job-action-item]');
+    if (!item) return;
+    const popovers = platformUI.popovers;
+    if (popovers && typeof popovers.closeAll === 'function') {
+      popovers.closeAll();
+    }
+    closeJobMenus();
+  });
+
+  const caseDetail = (platformUI.caseDetail = platformUI.caseDetail || {});
+  const modalRoot = document.getElementById('modal-root');
+
+  if (caseDetail.modals && typeof caseDetail.modals.setContext === 'function') {
+    caseDetail.modals.setContext({
+      modalRoot,
+      modalApi: platformUI.modal || {},
+    });
+    caseDetail.modals.setNotify?.((x, y, text) => {
+      if (platformUI.toastAt) {
+        platformUI.toastAt(x, y, text);
+      } else if (platformUI.toast) {
+        platformUI.toast(text);
+      }
+    });
+  }
+
+  const noopRealtime = {
+    handleJobUpdate: (jobId, payload) => {
+      if (!payload || !payload.notes) return;
+      const count = typeof payload.notes.count === 'number'
+        ? payload.notes.count
+        : Array.isArray(payload.notes.entries)
+          ? payload.notes.entries.length
+          : 0;
+      caseDetail.ui?.updateNotesIndicator?.(jobId, count);
+    },
+    ensurePolling: (jobId) => ensurePolling(jobId, true),
+  };
+
+  if (caseDetail.ui && typeof caseDetail.ui.setDeps === 'function') {
+    caseDetail.ui.setDeps({
+      helpers: caseDetail.helpers || {},
+      getTableController: () => jobsTableController,
+      updateNotesIndicator: (jobId, count) => caseDetail.ui?.updateNotesIndicator?.(jobId, count),
+      scheduleTranscribeRefresh: () => {},
+      refreshCaseJobs: () => {},
+    });
+  }
+
+  if (caseDetail.actions && typeof caseDetail.actions.setContext === 'function') {
+    caseDetail.actions.setContext({
+      caseId: null,
+      modalRoot,
+      jobsState: { currentCaseId: null },
+    });
+    caseDetail.actions.setDeps?.({
+      helpers: caseDetail.helpers || {},
+      ui: {
+        getTableController: () => jobsTableController,
+        scheduleTranscribeRefresh: () => {},
+        updateNotesIndicator: (jobId, count) => caseDetail.ui?.updateNotesIndicator?.(jobId, count),
+      },
+      realtime: noopRealtime,
+      modals: caseDetail.modals || {},
+      notify: (x, y, text) => {
+        if (platformUI.toastAt) {
+          platformUI.toastAt(x, y, text);
+        } else if (platformUI.toast) {
+          platformUI.toast(text);
+        }
+      },
+    });
+
+    if (!window.__jobsActionsBound) {
+      document.addEventListener('click', caseDetail.actions.handleJobAction, true);
+      document.addEventListener('click', caseDetail.actions.handleJobNotesSave, true);
+      window.__jobsActionsBound = true;
+    }
+  }
+})();
+</script>

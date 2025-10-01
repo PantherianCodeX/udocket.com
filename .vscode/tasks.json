@@ -1,0 +1,47 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "docker: up deps (postgres, redis)",
+      "type": "shell",
+      "command": "docker compose up -d postgres redis",
+      "problemMatcher": []
+    },
+    {
+      "label": "pytest: all (in compose platform)",
+      "type": "shell",
+      "command": "docker compose run --rm platform pytest -q",
+      "dependsOn": [
+        "docker: up deps (postgres, redis)"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "pytest: current file (in compose platform)",
+      "type": "shell",
+      "command": "docker compose run --rm platform pytest -q /app/${relativeFile}",
+      "dependsOn": [
+        "docker: up deps (postgres, redis)"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "pytest: with args (prompt) in compose platform",
+      "type": "shell",
+      "command": "docker compose run --rm platform pytest ${input:pytestArgs}",
+      "dependsOn": [
+        "docker: up deps (postgres, redis)"
+      ],
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "pytestArgs",
+      "type": "promptString",
+      "description": "Additional pytest arguments (e.g. -k pattern tests/ui/test_file.py::TestClass::test_name)",
+      "default": "-q"
+    }
+  ]
+}
+

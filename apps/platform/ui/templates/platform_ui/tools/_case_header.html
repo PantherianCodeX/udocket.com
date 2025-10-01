@@ -1,0 +1,87 @@
+<details class="group rounded-2xl border border-white/10 bg-white/5 shadow-xl shadow-black/30" data-case-header>
+  <summary class="relative flex cursor-pointer flex-col gap-4 px-5 py-4 text-left transition group-open:bg-white/10">
+    <div class="w-full space-y-3">
+      <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_20rem] lg:items-stretch">
+        <!-- Col 1: Title + Client (stacked) -->
+        <div class="min-w-0">
+          <h1 class="truncate text-2xl font-semibold text-white">{{ case_header.title }}</h1>
+          <p class="mt-1 text-xs uppercase tracking-wide text-slate-400">
+            Client · <span class="font-semibold text-slate-100"{% if case_header.client_label %} title="Client user: {{ case_header.client_label }}"{% endif %}>{{ case_header.client_name }}</span>
+          </p>
+        </div>
+        <!-- Col 2: Case Owner (row 1) + Reviewer (row 2) -->
+        <div class="min-w-0">
+          <p class="text-xs uppercase tracking-wide text-slate-400">Case Owner</p>
+          <p class="mt-1 text-sm font-semibold text-slate-100">{{ case_header.owner_labels|join:", "|default:"Unassigned" }}</p>
+          <p class="mt-3 text-xs uppercase tracking-wide text-slate-400">Reviewer</p>
+          <p class="mt-1 text-sm font-semibold text-slate-100">{{ case_header.reviewer_label|default:"Unassigned" }}</p>
+        </div>
+        <!-- Col 3: Next Hearing (row 1) + Filing Deadline (row 2) -->
+        <div class="min-w-0">
+          <p class="text-xs uppercase tracking-wide text-slate-400">Next Hearing</p>
+          {% if case_header.next_hearing and case_header.next_hearing.value %}
+            <time class="mt-1 block text-sm font-semibold text-white" data-ts-format="datetime" data-ts="{{ case_header.next_hearing.value|date:'c' }}">{{ case_header.next_hearing.display }}</time>
+          {% else %}
+            <span class="mt-1 block text-sm text-slate-400">Not scheduled</span>
+          {% endif %}
+          <p class="mt-3 text-xs uppercase tracking-wide text-slate-400">Filing Deadline</p>
+          {% if case_header.filing_deadline and case_header.filing_deadline.value %}
+            <time class="mt-1 block text-sm font-semibold text-white" data-ts-format="date" data-ts="{{ case_header.filing_deadline.value|date:'c' }}">{{ case_header.filing_deadline.display }}</time>
+          {% else %}
+            <span class="mt-1 block text-sm text-slate-400">Not set</span>
+          {% endif %}
+        </div>
+        <!-- Col 4: Last Activity, stretch to match tallest column -->
+        <div class="rounded-lg border border-white/12 bg-slate-900/60 px-4 py-3 text-xs text-slate-300 lg:justify-self-end lg:self-stretch h-full">
+          <p class="uppercase tracking-wide text-slate-500">Last activity</p>
+          <p class="mt-1 font-semibold text-white">
+            {% if case_header.last_activity_ts %}
+              {% if case_header.last_activity_label %}
+                {{ case_header.last_activity_label }} ·
+              {% endif %}
+              <time data-ts="{{ case_header.last_activity_ts|date:'c' }}" data-ts-format="datetime">{{ case_header.last_activity_ts|date:'M d, Y h:i A' }}</time>
+            {% else %}
+              Not recorded
+            {% endif %}
+          </p>
+        </div>
+      </div>
+    </div>
+    <span class="pointer-events-none absolute bottom-2 left-5 text-[11px] uppercase tracking-wide text-slate-500">Click for details</span>
+  </summary>
+  <div class="border-t border-white/10 px-6 py-5 text-sm text-slate-200">
+    <div class="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+      <dl class="grid gap-x-6 gap-y-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {% for field in case_header.fields %}
+          <div>
+            <dt class="text-xs uppercase tracking-wide text-slate-400">{{ field.label }}</dt>
+            {% if field.type == 'textarea' %}
+              <dd class="mt-1 whitespace-pre-line text-sm text-slate-100">{{ field.display }}</dd>
+            {% else %}
+              <dd class="mt-1 text-sm text-slate-100">
+                {% if field.type == 'datetime' and field.value %}
+                  <time data-ts="{{ field.value|date:'c' }}" data-ts-format="datetime">{{ field.display }}</time>
+                {% else %}
+                  {{ field.display|default:'—' }}
+                {% endif %}
+              </dd>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </dl>
+    </div>
+    <div class="mt-4 rounded-xl border border-white/10 bg-slate-900/60 p-4">
+      <p class="text-xs uppercase tracking-wide text-slate-400">Last activity detail</p>
+      <p class="mt-2 text-sm text-slate-100">
+        {% if case_header.last_activity_ts %}
+          {% if case_header.last_activity_label %}
+            {{ case_header.last_activity_label }} ·
+          {% endif %}
+          <time data-ts="{{ case_header.last_activity_ts|date:'c' }}" data-ts-format="datetime">{{ case_header.last_activity_ts|date:'M d, Y h:i A' }}</time>
+        {% else %}
+          Not recorded
+        {% endif %}
+      </p>
+    </div>
+  </div>
+</details>

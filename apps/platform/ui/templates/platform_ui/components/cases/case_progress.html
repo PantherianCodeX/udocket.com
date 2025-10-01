@@ -1,0 +1,93 @@
+<div id="case-progress" class="rounded-2xl border border-white/10 bg-white/5 shadow-xl shadow-black/30">
+  <div class="flex flex-col gap-2 border-b border-white/10 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+    <div>
+      <h2 class="text-lg font-semibold text-white">Case Progress</h2>
+      <p class="text-xs text-slate-300">Track reviewer assignment and downstream analyses.</p>
+    </div>
+    {% if case.updated_at %}
+      <p class="text-xs text-slate-400">Updated <time data-ts="{{ case.updated_at|date:'c' }}" data-ts-format="datetime">{{ case.updated_at|date:'M d, Y h:i A' }}</time></p>
+    {% endif %}
+  </div>
+
+  <div class="grid gap-4 px-6 pb-5 pt-5 md:grid-cols-3">
+    {% for item in progress_items %}
+      {% if item.key == 'case_setup' %}
+        <a href="/admin/cases/case/{{ case.id }}/change/" class="group flex flex-col justify-between rounded-xl border border-white/10 bg-slate-900/60 p-4 transition hover:border-primary-400 hover:bg-slate-900/70" target="_blank" rel="noopener">
+          <div>
+            <div class="flex items-center justify-between">
+              <p class="text-xs uppercase tracking-wide text-slate-400">Case Setup</p>
+              <span class="inline-flex items-center rounded-full border {{ item.status_class }} px-2 py-1 text-[10px] font-semibold uppercase">{{ item.status }}</span>
+            </div>
+            <p class="mt-2 text-xs text-slate-300">{{ item.detail }}</p>
+          </div>
+          <p class="mt-3 text-[11px] text-primary-200 transition group-hover:text-primary-100">Open case edit page</p>
+        </a>
+      {% elif item.key == 'transcription' %}
+        <div id="module-transcription-status" class="rounded-xl border border-white/10 bg-slate-900/70 p-4 text-sm text-slate-200">
+          <div class="flex items-center justify-between">
+            <p class="text-xs uppercase tracking-wide text-slate-400">Transcribe</p>
+            <span data-transcription-status-pill data-status="{{ item.status|upper }}" class="status-pill inline-flex items-center rounded-full border {{ item.status_class }} px-2 py-1 text-[10px] font-semibold uppercase">{{ item.status }}</span>
+          </div>
+          <span class="sr-only">Transcription workflow</span>
+          <p class="mt-2 text-sm font-semibold text-white" data-status-text>
+            {% if item.status %}{{ item.status|title }}{% else %}Status pending{% endif %}
+          </p>
+          <p class="mt-1 text-xs text-slate-300" data-status-detail>
+            {% if item.updated %}
+              Updated <time data-ts="{{ item.updated|date:'c' }}" data-ts-format="datetime">{{ item.updated|date:'M d, Y h:i A' }}</time>
+            {% else %}
+              Awaiting first transcription run.
+            {% endif %}
+          </p>
+          <p class="mt-2 text-xs text-slate-400">Review
+            {% with review=transcription_review_status %}
+              {% if review == 'Approved' %}
+                <span data-review-status-pill class="ml-2 inline-flex items-center rounded-full border border-emerald-400/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-emerald-200">Approved</span>
+              {% elif review == 'Rejected' %}
+                <span data-review-status-pill class="ml-2 inline-flex items-center rounded-full border border-rose-400/40 bg-rose-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-rose-200">Rejected</span>
+              {% else %}
+                <span data-review-status-pill class="ml-2 inline-flex items-center rounded-full border border-white/20 bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-300">Pending</span>
+              {% endif %}
+            {% endwith %}
+          </p>
+          <p class="mt-2 text-xs text-slate-300" id="module-transcription-summary-text">
+            {% if item.telemetry and item.telemetry.status %}
+              Latest job {{ item.telemetry.status|title }}{% if item.updated %} · <time data-ts="{{ item.updated|date:'c' }}" data-ts-format="datetime">{{ item.updated|date:'M d, Y h:i A' }}</time>{% endif %}
+            {% else %}
+              Ready to launch the first transcription.
+            {% endif %}
+          </p>
+          <div id="module-transcription-progress" class="mt-3 hidden">
+            <div class="h-2 w-full rounded-full bg-white/10">
+              <div class="progress h-full w-0 rounded-full bg-primary-400 transition-all"></div>
+            </div>
+            <p class="mt-2 text-xs text-slate-300" id="module-transcription-progress-text"></p>
+          </div>
+        </div>
+      {% else %}
+        <div class="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+          <div class="flex items-center justify-between">
+            <p class="text-xs uppercase tracking-wide text-slate-400">{{ item.label }}</p>
+            <span class="inline-flex items-center rounded-full border {{ item.status_class }} px-2 py-1 text-[10px] font-semibold uppercase">{{ item.status }}</span>
+          </div>
+          {% if item.job %}
+            <p class="mt-2 text-xs text-slate-300">Latest: <span class="font-semibold text-white">{{ item.job.status }}</span>{% if item.updated %} · <time data-ts="{{ item.updated|date:'c' }}" data-ts-format="datetime">{{ item.updated|date:'M d, Y h:i A' }}</time>{% endif %}</p>
+          {% else %}
+            <p class="mt-2 text-xs text-slate-400">Not started</p>
+          {% endif %}
+          {% if item.detail %}
+            <p class="mt-1 text-[11px] text-slate-400">{{ item.detail }}</p>
+          {% elif item.key == 'summary' and not item.job %}
+            <p class="mt-1 text-[11px] text-slate-400">AI-powered summaries will appear here once available.</p>
+          {% elif item.key == 'timeline' and not item.job %}
+            <p class="mt-1 text-[11px] text-slate-400">AI timeline generation is coming soon.</p>
+          {% endif %}
+        </div>
+      {% endif %}
+    {% endfor %}
+  </div>
+
+  <div class="border-t border-white/10 px-6 py-4 text-[11px] text-slate-400">
+    Manage reviewer and client assignments from the case edit page.
+  </div>
+</div>

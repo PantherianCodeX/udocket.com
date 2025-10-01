@@ -1,0 +1,36 @@
+<div class="h-full rounded-lg border border-white/10 bg-slate-900/60 p-3" data-team-alerts>
+  <div class="flex flex-wrap items-start justify-between gap-2">
+    <div>
+      <p class="text-[11px] uppercase tracking-wide text-slate-400">Team Alerts</p>
+      <p class="text-[10px] text-slate-500">Requests, deadlines, and active work</p>
+    </div>
+  </div>
+  <div class="mt-2 max-h-44 overflow-y-auto pr-1" data-team-alerts-list>
+    {% if alerts %}
+      <ul class="space-y-2">
+        {% for alert in alerts %}
+          <li>
+            <article class="rounded-md border px-3 py-2 text-xs shadow-inner {{ alert.severity_class|default:'border-white/10 bg-slate-950/30 text-slate-100' }}"
+                     data-team-alert
+                     data-team-alert-severity="{{ alert.severity|default:'info' }}"
+                     title="{{ alert.tooltip|default:alert.summary }}">
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-100">{{ alert.title }}</span>
+                <span class="text-[10px] font-semibold uppercase tracking-wide text-white/80">{{ alert.severity }}</span>
+              </div>
+              <p class="mt-1 text-xs text-slate-100">{{ alert.summary }}</p>
+              {% if alert.detail %}
+                <p class="mt-1 text-[11px] text-slate-300">{{ alert.detail }}</p>
+              {% endif %}
+            </article>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="rounded-md border border-dashed border-white/10 bg-slate-950/30 px-3 py-2 text-[11px] text-slate-400"
+         title="Alerts will appear when deadlines or jobs need attention.">
+        No active alerts.
+      </p>
+    {% endif %}
+  </div>
+</div>

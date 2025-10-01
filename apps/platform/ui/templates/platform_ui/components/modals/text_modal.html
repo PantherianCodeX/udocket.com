@@ -1,0 +1,68 @@
+{% extends "platform_ui/components/modals/modal_base.html" %}
+{% load ui_display %}
+
+{% block modal_header %}
+  {% with text_id=modal_text_id|default:'modal-text' %}
+    {% with heading=modal_heading|default:'Text Viewer' %}
+      {% if heading %}
+        <p class="text-xs uppercase tracking-wide text-slate-400">{{ heading }}</p>
+      {% endif %}
+    {% endwith %}
+    {% with display_title=modal_title_text|default:title %}
+      {% if display_title %}
+        <h3 class="mt-1 text-lg font-semibold text-white">{{ display_title }}</h3>
+      {% endif %}
+    {% endwith %}
+    {% with subtitle=modal_subtitle %}
+      {% if subtitle %}
+        <p class="text-xs text-slate-400">{{ subtitle|safe }}</p>
+      {% else %}
+        <p class="text-xs text-slate-400">
+          {% if job_id %}Job {{ job_id|short_uuid }}{% endif %}
+          {% if created_at %}
+            {% if job_id %} · {% endif %}<time data-ts="{{ created_at|date:'c' }}" data-ts-format="datetime">{{ created_at|date:'M d, Y h:i A' }}</time>
+          {% endif %}
+        </p>
+      {% endif %}
+    {% endwith %}
+    {% if modal_meta_items %}
+      <div class="mt-2 space-y-1">
+        {% for item in modal_meta_items %}
+          <p class="text-xs text-slate-400">
+            {% if item.label %}<span class="font-semibold uppercase tracking-wide text-slate-500">{{ item.label }}</span>{% endif %}
+            {% if item.copy_text %}
+              <span class="ml-1 font-mono text-[11px] text-primary-200 cursor-copy underline decoration-dotted decoration-white/20 hover:decoration-primary-300" data-copy-text="{{ item.copy_text }}">{{ item.display|default:item.copy_text }}</span>
+            {% elif item.display %}
+              <span class="ml-1">{{ item.display }}</span>
+            {% endif %}
+          </p>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+{% endblock %}
+
+{% block modal_body %}
+  {% with text_id=modal_text_id|default:'modal-text' %}
+    {% if modal_text %}
+      <pre id="{{ text_id }}" data-modal-text class="whitespace-pre-wrap break-words">{{ modal_text }}</pre>
+    {% else %}
+      <p class="text-sm text-slate-400">{{ modal_empty_text|default:'Content not available.' }}</p>
+    {% endif %}
+  {% endwith %}
+{% endblock %}
+
+{% block modal_actions %}
+  {% with download_href=modal_download_url|default:download_url %}
+    {% if download_href %}
+      <a href="{{ download_href }}" class="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/5 px-3 py-1.5 font-semibold text-slate-100 transition hover:border-primary-400 hover:text-white" download>
+        {{ modal_download_label|default:'Download' }}
+      </a>
+    {% endif %}
+  {% endwith %}
+  {% with text_id=modal_text_id|default:'modal-text' copy_source=modal_text %}
+    <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 font-semibold text-slate-200 transition hover:border-primary-400 hover:text-white" data-copy-target="#{{ text_id }}" {% if not copy_source %}disabled aria-disabled="true"{% endif %}>
+      {{ modal_copy_label|default:'Copy to clipboard' }}
+    </button>
+  {% endwith %}
+{% endblock %}

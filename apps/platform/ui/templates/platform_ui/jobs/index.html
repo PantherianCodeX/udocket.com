@@ -1,0 +1,7 @@
+{% extends "platform_ui/layouts/section.html" %}
+{% load ui_display %}
+{% block head %}
+  {% include "platform_ui/components/scripts/_htmx_loader.html" %}
+  {% include "platform_ui/components/scripts/_job_status_helpers.html" %}
+  {% include "platform_ui/components/jobs/_jobs_scripts.html" %}
+{% endblock %}
