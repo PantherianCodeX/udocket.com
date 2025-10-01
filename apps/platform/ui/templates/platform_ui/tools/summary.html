@@ -30,10 +30,15 @@
         {% include "platform_ui/tools/components/_llm_controls.html" with llm_context=summary_llm %}
       {% endif %}
       {% if summary_llm and summary_llm.stage_configs %}
-        <div class="space-y-2">
-          <p class="text-xs uppercase tracking-wide text-slate-400">Stage configuration</p>
-          {% include "platform_ui/components/stage_cards.html" with stages=summary_llm.stage_configs %}
-        </div>
+        <details class="group rounded-xl border border-white/10 bg-slate-900/60" data-summary-stage-models>
+          <summary class="flex cursor-pointer items-center justify-between px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-300">
+            Stage models
+            <svg class="h-4 w-4 transition-transform group-open:rotate-180" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.094l3.71-3.86a.75.75 0 111.08 1.04l-4.247 4.41a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z" clip-rule="evenodd" /></svg>
+          </summary>
+          <div class="border-t border-white/10 px-4 py-4">
+            {% include "platform_ui/components/stage_cards.html" with stages=summary_llm.stage_configs configuration=summary_llm.active_configuration %}
+          </div>
+        </details>
       {% endif %}
       {% if module.notes_panel %}
         {{ module.notes_panel|safe }}
@@ -60,7 +65,7 @@
         </button>
       </div>
     </div>
-    <div class="space-y-3 rounded-2xl border border-white/10 bg-slate-900/70 p-5 text-sm text-slate-200">
+    <div class="flex flex-col gap-4 rounded-2xl border border-white/10 bg-slate-900/70 p-6 text-sm text-slate-200">
       <div class="flex items-center justify-between gap-3">
         <p class="text-xs uppercase tracking-wide text-slate-400">Latest summarize result</p>
         {% if module.downloads %}
@@ -68,53 +73,53 @@
         {% endif %}
       </div>
       {% if module.latest %}
-        <div class="space-y-2">
-          <p class="font-semibold text-white">{{ module.latest.title }}</p>
+        <div class="space-y-1">
+          <p class="text-base font-semibold text-white">{{ module.latest.title }}</p>
           <p class="text-xs text-slate-400">Generated <time data-ts="{{ module.latest.created_at|date:'c' }}" data-ts-format="datetime">{{ module.latest.created_at|date:'M d, Y h:i A' }}</time></p>
           {% if module.latest.source %}
             <p class="text-xs text-slate-400">Source: {{ module.latest.source }}</p>
           {% endif %}
         </div>
         {% if module.latest_details %}
-          <div class="mt-3 space-y-2 text-xs text-slate-200">
+          <div class="grid gap-3 text-xs text-slate-200 sm:grid-cols-2">
             {% if module.latest_details.words %}
-              <div class="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2">
-                <span class="font-semibold text-slate-200">Words</span>
-                <span class="text-slate-300">{{ module.latest_details.words }}</span>
+              <div class="rounded-lg border border-white/10 bg-slate-900/60 px-3 py-3">
+                <p class="text-[11px] uppercase tracking-wide text-slate-400">Words</p>
+                <p class="mt-1 text-sm font-semibold text-white">{{ module.latest_details.words }}</p>
               </div>
             {% endif %}
             {% if module.latest_details.outline_name %}
-              <div class="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2">
-                <span class="font-semibold text-slate-200">Outline</span>
-                <span class="text-slate-300">{{ module.latest_details.outline_name }}</span>
+              <div class="rounded-lg border border-white/10 bg-slate-900/60 px-3 py-3">
+                <p class="text-[11px] uppercase tracking-wide text-slate-400">Outline</p>
+                <p class="mt-1 text-sm font-semibold text-white">{{ module.latest_details.outline_name }}</p>
               </div>
             {% endif %}
             {% if module.latest_details.timeline_seed_name %}
-              <div class="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2">
-                <span class="font-semibold text-slate-200">Timeline seeds</span>
-                <span class="text-slate-300">{{ module.latest_details.timeline_seed_name }}</span>
+              <div class="rounded-lg border border-white/10 bg-slate-900/60 px-3 py-3">
+                <p class="text-[11px] uppercase tracking-wide text-slate-400">Timeline seeds</p>
+                <p class="mt-1 text-sm font-semibold text-white">{{ module.latest_details.timeline_seed_name }}</p>
               </div>
             {% endif %}
             {% if module.latest_details.entity_hint_name %}
-              <div class="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2">
-                <span class="font-semibold text-slate-200">Entity hints</span>
-                <span class="text-slate-300">{{ module.latest_details.entity_hint_name }}</span>
+              <div class="rounded-lg border border-white/10 bg-slate-900/60 px-3 py-3">
+                <p class="text-[11px] uppercase tracking-wide text-slate-400">Entity hints</p>
+                <p class="mt-1 text-sm font-semibold text-white">{{ module.latest_details.entity_hint_name }}</p>
               </div>
             {% endif %}
             {% if module.latest_details.case_brief_name %}
-              <div class="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2">
-                <span class="font-semibold text-slate-200">Case brief</span>
-                <span class="text-slate-300">{{ module.latest_details.case_brief_name }}</span>
+              <div class="rounded-lg border border-white/10 bg-slate-900/60 px-3 py-3">
+                <p class="text-[11px] uppercase tracking-wide text-slate-400">Case brief</p>
+                <p class="mt-1 text-sm font-semibold text-white">{{ module.latest_details.case_brief_name }}</p>
               </div>
             {% endif %}
             {% if module.latest_details.provider_chain %}
-              <div class="rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2">
-                <p class="text-[11px] font-semibold text-slate-200">Providers</p>
-                <p class="text-[11px] text-slate-400">{{ module.latest_details.provider_chain|join:", " }}</p>
+              <div class="rounded-lg border border-white/10 bg-slate-900/60 px-3 py-3 sm:col-span-2">
+                <p class="text-[11px] uppercase tracking-wide text-slate-400">Providers</p>
+                <p class="mt-1 text-[11px] text-slate-300">{{ module.latest_details.provider_chain|join:", " }}</p>
               </div>
             {% endif %}
             {% if module.latest_details.guardian_status %}
-              <div class="rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 space-y-1">
+              <div class="space-y-2 rounded-lg border border-white/10 bg-slate-900/60 px-3 py-3 sm:col-span-2">
                 <div class="flex items-center justify-between text-xs">
                   <span class="font-semibold text-slate-200">Guardian status</span>
                   <span class="uppercase tracking-wide text-slate-300">{{ module.latest_details.guardian_status }}</span>

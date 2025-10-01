@@ -58,7 +58,7 @@
       {% if timeline_llm and timeline_llm.stage_configs %}
         <div class="space-y-2">
           <p class="text-xs uppercase tracking-wide text-slate-400">Stage configuration</p>
-          {% include "platform_ui/components/stage_cards.html" with stages=timeline_llm.stage_configs %}
+          {% include "platform_ui/components/stage_cards.html" with stages=timeline_llm.stage_configs configuration=timeline_llm.active_configuration %}
         </div>
       {% endif %}
       {% if module.notes_panel %}
