@@ -262,8 +262,16 @@ def build_job_rows(
         }
         build_row_table_meta(row)
         if note_counts is not None:
-            row.setdefault("table", {})["notes_count"] = note_counts.get(key, 0)
-        flat_rows.append(row)
+            row.setdefault("table", {})
+            existing_count = row["table"].get("notes_count") or 0
+            db_count = note_counts.get(key)
+            if db_count is not None:
+                try:
+                    db_value = int(db_count)
+                except (TypeError, ValueError):
+                    db_value = 0
+                row["table"]["notes_count"] = max(int(existing_count or 0), db_value)
+    flat_rows.append(row)
 
     row_lookup: Dict[str, Dict[str, Any]] = {}
     for row in flat_rows:
@@ -300,7 +308,17 @@ def build_job_rows(
             children_list.sort(key=child_sort_key)
             continue
         if note_counts is not None:
-            row.setdefault("table", {})["notes_count"] = note_counts.get(str(getattr(row.get("job"), "id", "")), 0)
+            job_obj = row.get("job")
+            job_key = str(getattr(job_obj, "id", "")) if job_obj else ""
+            row.setdefault("table", {})
+            existing_count = row["table"].get("notes_count") or 0
+            db_count = note_counts.get(job_key)
+            if db_count is not None:
+                try:
+                    db_value = int(db_count)
+                except (TypeError, ValueError):
+                    db_value = 0
+                row["table"]["notes_count"] = max(int(existing_count or 0), db_value)
         display_rows.append(row)
 
     return display_rows, flat_rows
