@@ -18,6 +18,10 @@ Scope: this file governs contributions across `apps/platform/` (accounts, author
 - For writes, verify capabilities using `user_can_review_case` or `has_capability(user, case_id, ...)` (apps/platform/authorization/capabilities.py:1).
 - Deterministic outputs and ops logging: align with root AGENTS.md — metadata JSON, human logs, and JSONL audit in `ops/`.
 
+## Typing expectations
+- Adhere to `docs/typing_refactor_plan.md`. When you touch a module, bring it up to the stronger typing bar in the same PR.
+- Use `TypedDict`/`Protocol`/dataclasses for payloads instead of `dict[str, Any]`; avoid blanket ignores and casts to `Any`.
+
 ## URL Prefixes & Routing (Tenancy)
 - UI, API, and websockets should be prefixed by organization slug: `/{org_slug}/...` and `/ws/{org_slug}/...`.
 - Middleware resolves `org_slug` to the active organization and enforces cross‑org access denial.

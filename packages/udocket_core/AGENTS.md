@@ -6,6 +6,10 @@ Scope: `packages/udocket_core/` (agents, audio, storage, logging). This is the c
 - No Django imports/dependencies here; keep pure Python with careful third‑party usage.
 - Deterministic filesystem behavior and explicit APIs; return dataclasses for results.
 
+## Typing expectations
+- Follow `docs/typing_refactor_plan.md`. New or modified modules must not increase mypy/pyright errors.
+- Prefer precise types (TypedDict/Protocol/dataclasses/Enum) over `Any` and avoid blanket `# type: ignore`.
+
 ## Agents
 - Implement agents (e.g., `TranscriptionAgent`) in `agents/` and expose typed configs/results. See `agents/transcribe_lib.py:1`.
 - Canada‑only Azure regions; validate early.
