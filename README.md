@@ -11,7 +11,6 @@ and module discovery (`db/__init__.py`, `config/__init__.py`).
    - Run `python manage.py migrate && python manage.py enable_rls` inside the `platform` container (idempotent; the entrypoint does this on boot).
 3) Build & run the stack:
    docker compose up --build
-- API   → http://localhost:8080
 - Platform (UI + API) → http://localhost:8000
 
 ## Notes

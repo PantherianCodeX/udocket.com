@@ -17,7 +17,7 @@ Implementation Roadmap
 
 2) Dependencies & Tooling
    - Update requirements to include: Django 4.2, django‑environ, djangorestframework, drf‑spectacular, django‑filter.
-   - Authorization: `oso`, `django-oso` (primary policy runtime), retain `django-guardian` only for legacy compatibility during migration.
+   - Authorization: `oso`, `django-oso` (primary policy runtime); keep `django-guardian` only if object-level fallback remains required.
    - IAM/SSO: `mozilla-django-oidc` (or `python-keycloak` + `django-keycloak-auth`) for Keycloak SSO; pair with `djangorestframework-simplejwt[crypto]` for validating API tokens.
    - Realtime: `channels` 4, `channels-redis`, `asgiref`, Redis.
    - Background: Celery, `django-celery-beat`, `django-celery-results`.
@@ -34,7 +34,7 @@ Implementation Roadmap
    - Define `ASGI_APPLICATION = "config.asgi.application"` and configure Channels routing.
 
 4) Database Design
-   - Replace the legacy schema with these core models (build with migrations):
+   - Replace the prior schema with these core models (build with migrations):
      - `accounts.User`: Keycloak subject ID, email, display name, staff flags, status, MFA requirements, timestamps.
      - `accounts.Organization`: ManyToMany between users and organizations with role metadata.
      - `cases.Case`: owner organization, status, retention dates, classification level.
@@ -54,7 +54,6 @@ Implementation Roadmap
      - Service-to-service: create Keycloak service accounts for agents/workers and store credentials in Azure Key Vault.
    - Middleware syncs Keycloak claims (roles, groups, MFA status) into local User and CaseMembership on each login so Polar policies can evaluate up-to-date membership.
    - Enforce session timeout, reauth, and CSRF; rely on Keycloak for MFA/policy but add `django-axes` as fallback if local login ever enabled.
-   - During transition, keep legacy FastAPI login surfaces read-only and plan their removal once Django/Oso parity is achieved.
 
 6) Authorization Overhaul (High Security / High Isolation)
    - Introduce `django-oso`; register Case, Job, Artifact, Organization, Role, and PermissionPreset models for policy evaluation and expose helper functions (e.g., `has_capability`) to Polar.
@@ -65,7 +64,7 @@ Implementation Roadmap
 
 7) Admin Experience & Preset Consolidation
    - Update `UserAdmin` to assign roles per organization (leveraging inlines) and show effective capabilities; update `RoleAdmin` to display linked users and organization scope.
-   - Merge the legacy “group” concept into permission presets so admins manage a single entity; build a capability composer widget (object → action → field) to generate capability strings without manual typing.
+   - Merge the historical “group” concept into permission presets so admins manage a single entity; build a capability composer widget (object → action → field) to generate capability strings without manual typing.
    - Refresh the `/permissions/` catalog page to read effective permissions through Oso, highlighting field visibility rules and preset provenance for auditability.
    - Add change-history logging for Role/PermissionPreset edits using `django-simple-history` or `django-auditlog` to prove who modified policies.
 
@@ -87,12 +86,12 @@ Implementation Roadmap
    - Authenticate Channels using the same OIDC session; validate permissions before group subscription.
 
 10) Background Processing & Agent Integration
-   - Replace the legacy `apps/worker` process with the Django `operations` app containing Celery tasks (complete).
+   - Replace the old `apps/worker` process with the Django `operations` app containing Celery tasks (complete).
    - Task to launch transcription agent via existing CLI (subprocess), capturing stdout JSON and logs.
    - Tasks for future analysis agents (summary, timeline, relationships) using the documented agent contract.
    - Configure Celery with Redis or Azure Service Bus as broker; store results in Postgres with `django-celery-results`.
    - Ensure tasks write outputs to the same file layout; register new `CaseArtifact` entries when new files appear.
-   - Provide admin commands (`manage.py sync_legacy_cases`) to migrate existing jobs/cases.
+   - Provide admin commands (`manage.py sync_legacy_cases`) to migrate existing jobs/cases from the retired API.
 
 11) Storage & Media Handling
    - Keep `storage/media/cases/<CASE_ID>/...` directory conventions unchanged for compatibility.
@@ -101,7 +100,7 @@ Implementation Roadmap
    - Optional: publish artifacts to Azure Blob Storage using SAS tokens aligned with current conventions.
 
 12) Testing & Quality Gates
-   - Port FastAPI tests to DRF (APITestCase / pytest) covering auth flows, permissions, and field redaction.
+   - Expand DRF tests (APITestCase / pytest) covering auth flows, permissions, and field redaction.
    - Add contract tests verifying agent CLI output parsing, artifact creation, and field‑level policies.
    - Add async tests for Channels consumers (pytest‑asyncio).
    - Integrate static analysis (mypy, black, flake8, bandit) and run in CI.

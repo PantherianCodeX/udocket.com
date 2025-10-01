@@ -1,8 +1,8 @@
 # uDocket — Configuration Guide
 
-Scope: `config/` (pydantic settings used by legacy API) and Django settings under `apps/platform/config`.
+Scope: `config/` (shared pydantic settings loader) and Django settings under `apps/platform/config`.
 
-## Pydantic Settings (Legacy API)
+## Pydantic Settings
 - Centralized in `config/settings.py` with `.env` support.
 - Enforce CA‑only Azure regions at validation time. Compute default sqlite path off `STORAGE_ROOT`.
 

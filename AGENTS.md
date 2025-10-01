@@ -14,7 +14,6 @@ Quick index of AGENTS guides in this repo:
 - apps/platform/accounts/AGENTS.md
 - apps/platform/authorization/AGENTS.md
 - packages/udocket_core/AGENTS.md
-- apps/api/AGENTS.md
 - config/AGENTS.md
 - infra/AGENTS.md
 - tests/AGENTS.md
@@ -22,7 +21,6 @@ Quick index of AGENTS guides in this repo:
 ## Overview
 - Services:
   - `apps/platform` (Django + Channels + Celery): primary UI, API surface, and background workers.
-  - `apps/api` (legacy FastAPI): kept for compatibility while the platform UI/API rolls out.
 - Core agent implementation lives in `packages/udocket_core/agents/transcribe_lib.py` (Azure Speech, Canada regions only).
   - Modes: `on-demand` (local stream) and `batch` (Azure Batch Transcription via HTTPS SAS URL).
   - Diarization: supported in `batch` mode only.
@@ -140,7 +138,6 @@ The repository is ready to host additional agents that consume transcripts and e
 
 ## Local Development
 - Start stack: `docker compose up --build`
-  - Legacy API (optional): `http://localhost:8080`
   - Django platform (primary UI/API): `http://localhost:8000`
 - Create a case via the platform UI and upload audio from the case page.
 - The Celery worker (`platform_worker` service) picks up jobs automatically and writes outputs under the case directory.

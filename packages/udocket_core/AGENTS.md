@@ -1,6 +1,6 @@
 # uDocket — Core Packages (udocket_core) Guide
 
-Scope: `packages/udocket_core/` (agents, audio, storage, logging). This is the core, framework‑agnostic layer shared by platform and legacy API.
+Scope: `packages/udocket_core/` (agents, audio, storage, logging). This is the core, framework‑agnostic layer consumed by the platform.
 
 ## Design
 - No Django imports/dependencies here; keep pure Python with careful third‑party usage.
@@ -32,7 +32,7 @@ Scope: `packages/udocket_core/` (agents, audio, storage, logging). This is the c
  - Target 16 kHz mono WAV (`pcm_s16le`), unless diarization strategy requires otherwise; keep diarization mono for now per roadmap.
 
 ## Storage
-- Keep cross‑framework path helpers (e.g., tenant case roots if needed for legacy) in `storage/paths.py`.
+- Keep cross‑framework path helpers (e.g., tenant case roots) in `storage/paths.py`.
  - Do not assume Django; accept absolute paths and `Path` objects from callers.
 
 ## Logging

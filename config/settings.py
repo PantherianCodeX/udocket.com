@@ -13,12 +13,6 @@ class Settings(BaseSettings):
     STORAGE_ROOT: Path = Path("/app/storage")
     MAX_UPLOAD_MB: int = 500
 
-    # API/Admin
-    API_BIND: str = "0.0.0.0"
-    API_PORT: int = 8080
-    ADMIN_BIND: str | None = None
-    ADMIN_PORT: int | None = None
-
     # DB
     DATABASE_URL: str = "sqlite:///__AUTO__"
 

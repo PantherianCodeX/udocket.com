@@ -1,22 +1,4 @@
 services:
-  api:
-    # Mount source for instant edits inside the container
-    volumes:
-      - .:/app
-    # Enable hot reload for the API during development
-    command: >-
-      uvicorn apps.api.app.main:app
-      --host 0.0.0.0 --port 8080 --workers 1
-      --reload --reload-dir /app
-      --log-config infra/logging/uvicorn.yml
-    # Auto-rebuild image when Dockerfile or deps change
-    develop:
-      watch:
-        - path: infra/docker/Dockerfile.api
-          action: rebuild
-        - path: apps/api/requirements.txt
-          action: rebuild
-
   platform:
     volumes:
       - .:/app
