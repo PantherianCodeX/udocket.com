@@ -199,6 +199,13 @@
               try { if (global.htmx && global.htmx.process) { global.htmx.process(cardsContainer); } } catch (_) {}
             }
           }
+          if (Object.prototype.hasOwnProperty.call(refreshed, 'collaboration_html')) {
+            const collabContainer = global.document.querySelector('[data-case-collaboration]');
+            if (collabContainer) {
+              collabContainer.innerHTML = refreshed.collaboration_html || '';
+              try { if (global.htmx && global.htmx.process) { global.htmx.process(collabContainer); } } catch (_) {}
+            }
+          }
           if (refreshed.active_tool) {
             ui.setActiveCard(refreshed.active_tool);
           }

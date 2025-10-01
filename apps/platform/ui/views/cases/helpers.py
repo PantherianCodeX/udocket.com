@@ -104,6 +104,10 @@ def case_refresh_trigger(
     tools: Iterable[str] | None = None,
 ) -> Dict[str, object]:
     tools_list = list(tools) if tools is not None else [active_tool]
+    tool_panels = state.get("tool_panels") if isinstance(state, Mapping) else {}
+    active_panel = {}
+    if isinstance(tool_panels, Mapping):
+        active_panel = tool_panels.get(active_tool, {})
     return {
         "tools": tools_list,
         "active_tool": active_tool,
@@ -118,6 +122,10 @@ def case_refresh_trigger(
                 "cards": state.get("developer_cards"),
                 "active_tool": active_tool,
             },
+        ),
+        "collaboration_html": render_to_string(
+            "platform_ui/components/cases/_collaboration_panel.html",
+            {"panel": active_panel},
         ),
     }
 

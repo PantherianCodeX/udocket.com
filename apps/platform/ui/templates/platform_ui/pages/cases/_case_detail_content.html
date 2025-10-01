@@ -3,6 +3,12 @@
     {% include "platform_ui/tools/_case_header.html" %}
   </div>
 
+  <section aria-label="Collaboration" class="space-y-4" data-case-collaboration-section>
+    <div id="case-collaboration-panel" data-case-collaboration>
+      {% include "platform_ui/components/cases/_collaboration_panel.html" with panel=initial_tool_panel %}
+    </div>
+  </section>
+
   <section aria-label="Case Developer" class="space-y-4" data-case-developer>
     <div class="rounded-2xl border border-white/10 bg-white/5 p-5 shadow-xl shadow-black/30">
       <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
