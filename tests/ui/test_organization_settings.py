@@ -102,6 +102,55 @@ def test_organization_settings_saves_configuration(settings):
     assert stored.stage_map["summarize.context_builder"]["options"]["temperature"] == 0.35
 
 
+
+
+@pytest.mark.django_db
+def test_organization_settings_config_create_deduplicates_name(settings):
+    settings.PLATFORM_DEV_OPEN = True
+    org = Organization.objects.create(id="org-config-copy", name="Config Copy Org")
+    user = User.objects.create_user(username="copy-user", password="password")
+    OrganizationMembership.objects.create(organization=org, user=user, role=OrganizationMembership.Role.ADMIN)
+
+    client = Client()
+    client.force_login(user)
+    session = client.session
+    session["admin_active_org_id"] = org.id
+    session.save()
+
+    client.post(
+        "/settings/organization/",
+        data={
+            "action": "config-save",
+            "target": "summary",
+            "name": "Test Config",
+            "description": "Original",
+            "provider_chain": ["azure"],
+            "stage__summarize__context_builder__provider": "azure",
+        },
+    )
+
+    resp = client.post(
+        "/settings/organization/",
+        data={
+            "action": "config-create",
+            "target": "summary",
+            "name": "Test Config",
+            "description": "Copy",
+            "provider_chain": ["azure"],
+            "stage__summarize__context_builder__provider": "azure",
+        },
+        follow=True,
+    )
+    assert resp.status_code == 200
+
+    configs = list(
+        LLMConfiguration.objects.filter(organization=org, target="summary").order_by("created_at")
+    )
+    assert len(configs) == 2
+    names = {cfg.name for cfg in configs}
+    assert "Test Config" in names
+    assert any(name != "Test Config" for name in names)
+
 @pytest.mark.django_db
 def test_provider_test_action_reports_status(settings):
     settings.PLATFORM_DEV_OPEN = True

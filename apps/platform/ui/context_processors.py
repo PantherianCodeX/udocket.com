@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import re
 from typing import Any, Dict, List, Optional
 
 from django.core.exceptions import PermissionDenied
@@ -28,9 +29,65 @@ def ui_context(request: HttpRequest) -> Dict[str, Any]:
     if user and getattr(user, "is_authenticated", False):
         org_choices = list(user_accessible_organizations(user))
 
+    path = getattr(request, "path", "") or ""
+
+    nav_items: List[Dict[str, Any]] = [
+        {
+            "key": "cases",
+            "label": "Cases",
+            "href": "/",
+            "patterns": [r"^/$", r"^/cases/"],
+        },
+        {
+            "key": "jobs",
+            "label": "Jobs",
+            "href": "/jobs/",
+            "patterns": [r"^/jobs/"],
+        },
+        {
+            "key": "artifacts",
+            "label": "Artifacts",
+            "href": "/artifacts/",
+            "patterns": [r"^/artifacts/"],
+        },
+        {
+            "key": "audit",
+            "label": "Audit",
+            "href": "/audit/guardian/",
+            "patterns": [r"^/audit/", r"^/permissions/"],
+            "children": [
+                {
+                    "key": "guardian",
+                    "label": "Guardian",
+                    "href": "/audit/guardian/",
+                    "patterns": [r"^/audit/guardian/"],
+                },
+                {
+                    "key": "permissions",
+                    "label": "Permissions Catalog",
+                    "href": "/permissions/",
+                    "patterns": [r"^/permissions/"],
+                },
+            ],
+        },
+    ]
+
+    for item in nav_items:
+        patterns = item.get("patterns", [])
+        active = any(re.search(pattern, path) for pattern in patterns)
+        children = item.get("children") or []
+        for child in children:
+            child_patterns = child.get("patterns", [])
+            child_active = any(re.search(pattern, path) for pattern in child_patterns)
+            child["active"] = child_active
+            if child_active:
+                active = True
+        item["active"] = active
+
     return {
         "ui_active_org": active_org,
         "ui_org_choices": org_choices,
+        "ui_nav_items": nav_items,
     }
 
 

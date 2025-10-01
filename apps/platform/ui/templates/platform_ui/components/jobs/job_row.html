@@ -26,7 +26,7 @@
         data-review-status="{{ review_status }}">
       {% for column in columns %}
         {% if column.id == 'title' %}
-          <td class="px-4 py-3 {% if is_child %}pl-10{% endif %}">
+          <td data-table-cell="{{ column.id }}" class="px-4 py-3{% if is_child %} pl-10{% endif %}{% if column.default_hidden %} hidden{% endif %}">
             <div class="flex items-center gap-3">
               <div class="min-w-0">
                 <p class="max-w-[22rem] truncate font-medium text-slate-100" data-job-title title="{{ job_title }}">{{ job_title }}</p>
@@ -41,7 +41,7 @@
             </div>
           </td>
         {% elif column.id == 'status' %}
-          <td class="px-4 py-3" id="job-status-{{ job.id }}">
+          <td data-table-cell="{{ column.id }}" class="px-4 py-3{% if column.default_hidden %} hidden{% endif %}" id="job-status-{{ job.id }}">
             {% with status_display=table_meta.status_display|default:normalized|lower|capfirst status_style=table_meta.status_style|default:'border-white/20 bg-white/5 text-slate-300' %}
               <span class="status-pill inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase {{ status_style }}" data-status="{{ normalized }}">
                 <span data-job-status-label>
@@ -55,7 +55,7 @@
             {% endwith %}
           </td>
         {% elif column.id == 'review' %}
-          <td class="px-4 py-3">
+          <td data-table-cell="{{ column.id }}" class="px-4 py-3{% if column.default_hidden %} hidden{% endif %}">
             {% if not is_child %}
               {% if review_status == 'APPROVED' %}
                 <span id="job-review-badge-{{ job.id }}" data-review-badge class="inline-flex items-center rounded-full border border-emerald-400/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-emerald-200">Approved</span>
@@ -69,7 +69,7 @@
             {% endif %}
           </td>
         {% elif column.id == 'type' %}
-          <td class="px-4 py-3 text-slate-200">
+          <td data-table-cell="{{ column.id }}" class="px-4 py-3 text-slate-200{% if column.default_hidden %} hidden{% endif %}">
             {% if type_label %}
               {{ type_label }}
             {% else %}
@@ -77,9 +77,9 @@
             {% endif %}
           </td>
         {% elif column.id == 'agent' %}
-          <td class="px-4 py-3 text-slate-200">{{ table_meta.agent_label|default:job.mode }}</td>
+          <td data-table-cell="{{ column.id }}" class="px-4 py-3 text-slate-200{% if column.default_hidden %} hidden{% endif %}">{{ table_meta.agent_label|default:job.mode }}</td>
         {% elif column.id == 'case' %}
-          <td class="px-4 py-3 text-slate-200">
+          <td data-table-cell="{{ column.id }}" class="px-4 py-3 text-slate-200{% if column.default_hidden %} hidden{% endif %}">
             {% if case_id %}
               <a href="/cases/{{ case_id }}/" class="font-medium text-primary-200 underline decoration-dotted decoration-white/20 hover:decoration-primary-300">{{ case_title|default:case_id|short_uuid }}</a>
             {% else %}
@@ -87,7 +87,7 @@
             {% endif %}
           </td>
         {% elif column.id == 'created' %}
-          <td class="px-4 py-3 text-slate-300">
+          <td data-table-cell="{{ column.id }}" class="px-4 py-3 text-slate-300{% if column.default_hidden %} hidden{% endif %}">
             {% if created_dt %}
               {# Standard datetime block: keep date on top, hh:mm AM/PM below. Reuse this snippet when rendering datetimes. #}
               <div class="leading-tight">
@@ -100,7 +100,7 @@
             {% endif %}
           </td>
         {% elif column.id == 'notes' %}
-          <td class="px-4 py-3 text-center text-slate-200" data-job-notes-cell>
+          <td data-table-cell="{{ column.id }}" class="px-4 py-3 text-center text-slate-200{% if column.default_hidden %} hidden{% endif %}" data-job-notes-cell>
             {% if table_meta.notes_count %}
               <span class="inline-flex items-center gap-1 rounded-full border border-primary-400/40 bg-primary-500/10 px-2 py-0.5 text-[11px] font-semibold text-primary-100" data-job-notes-indicator data-count="{{ table_meta.notes_count }}" title="Team notes available">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
@@ -116,19 +116,19 @@
             {% endif %}
           </td>
         {% elif column.id == 'actions' %}
-          <td class="px-4 py-3">
+          <td data-table-cell="{{ column.id }}" class="px-4 py-3{% if column.default_hidden %} hidden{% endif %}">
             <div class="flex justify-end">
               {% include "platform_ui/tools/_job_action_menu.html" with actions=row.actions popover_key=table_key|default:'job-actions' only %}
             </div>
           </td>
         {% elif column.id == 'expander' %}
-          <td class="px-4 py-3 text-right text-slate-300">
+          <td data-table-cell="{{ column.id }}" class="px-4 py-3 text-right text-slate-300{% if column.default_hidden %} hidden{% endif %}">
             <svg xmlns="http://www.w3.org/2000/svg" class="ml-auto h-4 w-4 transition-transform duration-150" viewBox="0 0 20 20" fill="currentColor" data-job-chevron>
               <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.27a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
             </svg>
           </td>
         {% else %}
-          <td class="px-4 py-3 text-slate-200">—</td>
+          <td data-table-cell="{{ column.id }}" class="px-4 py-3 text-slate-200{% if column.default_hidden %} hidden{% endif %}">—</td>
         {% endif %}
       {% endfor %}
     </tr>

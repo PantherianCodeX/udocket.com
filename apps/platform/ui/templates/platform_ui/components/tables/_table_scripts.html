@@ -1,6 +1,7 @@
 <script>
   (function () {
     const STATE_KEY = 'platformUITables';
+    const COLUMN_STORAGE_SUFFIX = 'columns';
 
     function toSortField(field) {
       return field ? field.toString() : '';
@@ -103,10 +104,74 @@
       });
     }
 
+    function storageKey(table, suffix) {
+      const key = table.dataset.tableKey || table.getAttribute('id') || 'table';
+      return `${STATE_KEY}:${key}:${suffix}`;
+    }
+
+    function loadColumnState(table) {
+      try {
+        const stored = window.localStorage.getItem(storageKey(table, COLUMN_STORAGE_SUFFIX));
+        if (!stored) return null;
+        const parsed = JSON.parse(stored);
+        return typeof parsed === 'object' && parsed ? parsed : null;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function saveColumnState(table, state) {
+      try {
+        window.localStorage.setItem(
+          storageKey(table, COLUMN_STORAGE_SUFFIX),
+          JSON.stringify(state || {})
+        );
+      } catch (_) {
+        /* ignore storage errors */
+      }
+    }
+
+    function setColumnVisibility(table, columnId, visible) {
+      if (!columnId) return;
+      const display = visible !== false;
+      const header = table.querySelector(`[data-table-column="${CSS.escape(columnId)}"]`);
+      const cells = table.querySelectorAll(`[data-table-cell="${CSS.escape(columnId)}"]`);
+      if (header) {
+        header.classList[display ? 'remove' : 'add']('hidden');
+      }
+      cells.forEach((cell) => {
+        cell.classList[display ? 'remove' : 'add']('hidden');
+      });
+    }
+
+    function applyColumnState(table, state, container) {
+      if (!state) return;
+      Object.keys(state).forEach((columnId) => setColumnVisibility(table, columnId, state[columnId]));
+      if (!container) return;
+      container.querySelectorAll('[data-table-column-toggle]').forEach((input) => {
+        const columnId = input.value;
+        if (!columnId) return;
+        const visible = state[columnId];
+        input.checked = visible !== false;
+      });
+    }
+
     function bindTable(table) {
       if (table.dataset.tableReady === '1') return;
       const container = table.closest('[data-table-container]');
       const searchInput = container ? container.querySelector('[data-table-search-input]') : null;
+      const toggleContainer = container ? container.querySelector('[data-table-column-controls]') : null;
+
+      const defaultColumnState = {};
+      table.querySelectorAll('[data-table-column]').forEach((header) => {
+        const columnId = header.getAttribute('data-table-column');
+        if (!columnId) return;
+        defaultColumnState[columnId] = header.getAttribute('data-table-column-hidden') === '1' ? false : true;
+      });
+
+      const savedColumnState = loadColumnState(table) || {};
+      const columnState = Object.assign({}, defaultColumnState, savedColumnState);
+      applyColumnState(table, columnState, container);
 
       table.querySelectorAll('[data-table-sort]').forEach((button) => {
         button.addEventListener('click', () => {
@@ -130,6 +195,20 @@
       }
 
       applySearch(table, searchInput ? searchInput.value : '');
+
+      if (toggleContainer) {
+        toggleContainer.querySelectorAll('[data-table-column-toggle]').forEach((input) => {
+          const columnId = input.value;
+          if (!columnId) return;
+          input.addEventListener('change', () => {
+            columnState[columnId] = input.checked;
+            setColumnVisibility(table, columnId, input.checked);
+            saveColumnState(table, columnState);
+          });
+        });
+      }
+
+      saveColumnState(table, columnState);
       table.dataset.tableReady = '1';
     }
 

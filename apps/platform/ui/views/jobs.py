@@ -106,15 +106,13 @@ def jobs(request: HttpRequest) -> HttpResponse:
                 "id": str(case_obj.id),
             }
 
-    context = {
-        "active_org": organization,
-        "job_rows": display_rows,
-        "job_columns": list(GLOBAL_JOB_TABLE_COLUMNS),
-        "job_column_ids": [col["id"] for col in GLOBAL_JOB_TABLE_COLUMNS],
-        "job_filters": DEFAULT_TABLE_FILTERS,
-        "job_total": len(display_rows),
-        "job_show_identifiers": False,
-        "jobs_table": table_config(
+    job_total = len(display_rows)
+    cases_seen: set[str] = set()
+    for row in flat_rows:
+        job_obj = row.get("job")
+        if job_obj and getattr(job_obj, "case_id", None):
+            cases_seen.add(str(job_obj.case_id))
+    jobs_table = table_config(
             panel_key="jobs",
             title="Jobs",
             pill="Live updates",
@@ -125,7 +123,35 @@ def jobs(request: HttpRequest) -> HttpResponse:
             empty_message="No jobs yet.",
             show_identifiers=False,
             case_id=None,
-        ),
+        )
+
+    context = {
+        "active_org": organization,
+        "job_rows": display_rows,
+        "job_columns": list(GLOBAL_JOB_TABLE_COLUMNS),
+        "job_column_ids": [col["id"] for col in GLOBAL_JOB_TABLE_COLUMNS],
+        "job_filters": DEFAULT_TABLE_FILTERS,
+        "job_total": job_total,
+        "job_show_identifiers": False,
+        "jobs_table": jobs_table,
+        "section": {
+            "pretitle": f"Jobs · {organization.name}",
+            "title": "Recent transcription jobs",
+            "subtitle": "Track automations across this tenant, including their status, agent, and originating case.",
+            "stats": [
+                {
+                    "label": "Displayed",
+                    "value": job_total,
+                    "class": "border-primary-400/40 bg-primary-500/10 text-primary-100",
+                },
+                {
+                    "label": "Cases",
+                    "value": len(cases_seen),
+                    "class": "border-white/10 bg-slate-900/70 text-slate-100",
+                },
+            ],
+            "tables": [jobs_table],
+        },
     }
     return render(request, "platform_ui/jobs/index.html", context)
 

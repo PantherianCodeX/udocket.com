@@ -31,6 +31,7 @@ from apps.platform.operations.llm import (
     upsert_org_provider_credential,
     upsert_org_provider_credential_by_uuid,
 )
+from apps.platform.operations.models import LLMConfiguration
 from apps.platform.operations.guardian import (
     get_guardian_instructions,
     new_instruction_template,
@@ -719,7 +720,7 @@ def organization_settings(
         elif action in {"config-save", "config-create"}:
             if not stage_keys:
                 errors.append("Unknown LLM target.")
-            name = (request.POST.get("name") or "").strip() or f"{target.title()} configuration"
+            raw_name = (request.POST.get("name") or "").strip()
             description = (request.POST.get("description") or "").strip()
             config_id = (request.POST.get("config_id") or "").strip() or None
             provider_chain = [
@@ -811,6 +812,10 @@ def organization_settings(
 
             set_default = bool(request.POST.get("set_default"))
             if not errors:
+                name = raw_name or f"{target.title()} configuration"
+                if action == "config-create":
+                    name = _unique_configuration_name(str(organization.id), target, name)
+
                 updated = upsert_llm_configuration(
                     organization_id=str(organization.id),
                     name=name,
@@ -1089,3 +1094,20 @@ def organization_settings(
         "platform_ui/settings/organization/target.html",
         context,
     )
+def _unique_configuration_name(organization_id: str, target: str, desired: str) -> str:
+    """Return a configuration name unique for the organization/target."""
+
+    base = desired or f"{target.title()} configuration"
+    existing = set(
+        LLMConfiguration.objects.filter(organization_id=organization_id, target=target)
+        .values_list("name", flat=True)
+    )
+    if base not in existing:
+        return base
+
+    counter = 2
+    while True:
+        candidate = f"{base} ({counter})"
+        if candidate not in existing:
+            return candidate
+        counter += 1

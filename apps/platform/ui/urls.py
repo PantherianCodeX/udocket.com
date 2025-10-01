@@ -42,6 +42,8 @@ urlpatterns = [
         views.case_guardian_report,
         name="ui-case-guardian-report",
     ),
+    path("audit/guardian/", views.guardian_overview, name="ui-guardian-overview"),
+    path("audit/guardian/report/", views.guardian_report, name="ui-guardian-report"),
     path(
         "cases/<str:case_id>/tools/case-details/update/",
         views.case_details_update,
@@ -84,6 +86,7 @@ urlpatterns = [
     path("cases/<str:case_id>/assign-reviewer/", views.case_assign_reviewer, name="ui-case-assign-reviewer"),
     path("cases/<str:case_id>/assign-client/", views.case_assign_client, name="ui-case-assign-client"),
     path("jobs/", views.jobs, name="ui-jobs"),
+    path("artifacts/", views.artifacts_index, name="ui-artifacts"),
     path("settings/organization/", views.organization_settings, name="ui-organization-settings"),
     path(
         "settings/organization/<str:section>/",

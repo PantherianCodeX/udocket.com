@@ -47,7 +47,6 @@ def test_build_tool_panels_appends_return_url(monkeypatch):
         {"key": "transcription", "status": "Idle", "status_class": "idle", "updated": None, "detail": None},
         {"key": "summary", "status": "Idle", "status_class": "idle", "updated": None, "detail": None},
         {"key": "timeline", "status": "Idle", "status_class": "idle", "updated": None, "detail": None},
-        {"key": "guardian", "status": "Not Started", "status_class": "idle", "updated": None, "detail": None},
     ]
 
     analysis_modules = [
@@ -80,5 +79,4 @@ def test_build_tool_panels_appends_return_url(monkeypatch):
     assert expected_suffix in timeline_urls["edit"]
     assert expected_suffix in timeline_urls["new"]
     assert panels["summary"]["body_context"]["summary_llm"]["return_url"] == f"/cases/{case.id}/"
-    assert "guardian" in panels
-    assert panels["guardian"]["body_context"]["report_url"].endswith(f"/cases/{case.id}/guardian/report/")
+    assert "guardian" not in panels

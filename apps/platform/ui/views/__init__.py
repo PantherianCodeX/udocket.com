@@ -3,6 +3,7 @@ from __future__ import annotations
 from apps.platform.operations.tasks import transcribe_job
 
 from .auth import ensure_authenticated, logout_view, select_organization
+from .artifacts import artifacts_index
 from .cases import (
     case_analysis_module,
     case_assign_client,
@@ -15,6 +16,7 @@ from .cases import (
     case_tool_panel,
     case_update_title,
 )
+from .audit import guardian_overview, guardian_report
 from .cases.guardian import case_guardian_report
 from .contexts import (
     compute_case_tool_state,
@@ -74,6 +76,9 @@ __all__ = [
     "case_tool_panel",
     "case_update_title",
     "case_guardian_report",
+    "artifacts_index",
+    "guardian_overview",
+    "guardian_report",
     "create_job",
     "summary_upload_transcript_text",
     "favicon",
