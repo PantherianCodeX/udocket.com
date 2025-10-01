@@ -271,7 +271,7 @@ def build_job_rows(
                 except (TypeError, ValueError):
                     db_value = 0
                 row["table"]["notes_count"] = max(int(existing_count or 0), db_value)
-    flat_rows.append(row)
+        flat_rows.append(row)
 
     row_lookup: Dict[str, Dict[str, Any]] = {}
     for row in flat_rows:
@@ -348,8 +348,16 @@ def jobs_by_agent(
     *,
     keywords: Tuple[str, ...],
     include_conversion: bool = False,
+    exclude_keywords: Tuple[str, ...] = (),
 ) -> List[Dict[str, Any]]:
     keywords_lower = tuple(word.lower() for word in keywords)
+    exclude_lower = tuple(word.lower() for word in exclude_keywords if word)
+
+    def _has_excluded(value: str) -> bool:
+        if not exclude_lower:
+            return False
+        normalized = str(value or "").lower()
+        return any(term in normalized for term in exclude_lower)
 
     def _matches(row: Dict[str, Any]) -> bool:
         job = row.get("job")
@@ -361,12 +369,20 @@ def jobs_by_agent(
         job_mode = str(getattr(job, "mode", "") or "").lower()
 
         if any(word in agent_type for word in keywords_lower):
+            if _has_excluded(agent_type):
+                return False
             return True
         if any(word in job_kind for word in keywords_lower):
+            if _has_excluded(job_kind):
+                return False
             return True
         if any(word in job_mode for word in keywords_lower):
+            if _has_excluded(job_mode):
+                return False
             return True
         if _metadata_matches_keywords(meta, keywords_lower):
+            if _has_excluded(agent_type) or _has_excluded(job_kind) or _has_excluded(job_mode):
+                return False
             return True
         if include_conversion and job_kind.startswith("audio_conversion"):
             return True
@@ -376,7 +392,12 @@ def jobs_by_agent(
     for row in job_rows:
         children = row.get("children") or []
         filtered_children = (
-            jobs_by_agent(children, keywords=keywords, include_conversion=include_conversion)
+            jobs_by_agent(
+                children,
+                keywords=keywords,
+                include_conversion=include_conversion,
+                exclude_keywords=exclude_keywords,
+            )
             if children
             else []
         )

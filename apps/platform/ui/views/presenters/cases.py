@@ -595,7 +595,11 @@ def build_tool_panels(
     summary_module = analysis_lookup.get("summary") or {}
     summary_latest = summary_module.get("latest") or {}
     summary_history = summary_module.get("history") or []
-    summary_jobs = jobs_by_agent(all_rows_iterable, keywords=("summary", "summarization", "summarize"))
+    summary_jobs = jobs_by_agent(
+        all_rows_iterable,
+        keywords=("summary", "summarization", "summarize"),
+        exclude_keywords=("transcription", "audio", "speech"),
+    )
     panels["summary"] = {
         "key": "summary",
         "label": "Summarize",

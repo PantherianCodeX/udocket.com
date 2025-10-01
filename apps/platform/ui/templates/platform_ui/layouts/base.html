@@ -284,6 +284,7 @@
     }
   </style>
   {% block head %}{% endblock %}
+  {% include "platform_ui/components/_z_stack_scripts.html" %}
   {% include "platform_ui/components/_popover_scripts.html" %}
   {% include "platform_ui/components/_job_action_menu_scripts.html" %}
   {% csrf_token %}
@@ -302,12 +303,16 @@
           {% if request.user.is_authenticated %}
             {% for item in ui_nav_items %}
               {% if item.children %}
-                <details class="group relative">
+                <details class="group relative"
+                         data-popover="nav-menu">
                   <summary class="flex cursor-pointer items-center gap-1 rounded-lg px-3 py-2 transition {% if item.active %}bg-white/10 text-white{% else %}hover:bg-white/10 hover:text-white{% endif %}">
                     <span>{{ item.label }}</span>
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 transition group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.27a.75.75 0 01.02-1.06z" clip-rule="evenodd" /></svg>
                   </summary>
-                  <div class="absolute left-0 top-full mt-2 w-48 rounded-xl border border-white/10 bg-slate-900/95 p-2 shadow-xl shadow-black/40" data-nav-dropdown>
+                  <div class="absolute left-0 top-full mt-2 w-48 rounded-xl border border-white/10 bg-slate-900/95 p-2 shadow-xl shadow-black/40"
+                       data-nav-dropdown
+                       data-popover-panel
+                       style="visibility:hidden;">
                     {% for child in item.children %}
                       <a href="{{ child.href }}"
                          class="block rounded-lg px-3 py-2 text-sm transition {% if child.active %}bg-primary-500/20 text-white{% else %}hover:bg-white/10 hover:text-white{% endif %}"

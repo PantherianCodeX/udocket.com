@@ -73,6 +73,26 @@ def test_build_job_rows_includes_running_summary_job_status():
     assert table_meta["job_kind"] == "summary"
 
 
+@pytest.mark.django_db()
+def test_build_job_rows_retains_all_parent_jobs():
+    case, first_job = _make_case_with_job()
+    second_job = Job.objects.create(
+        case=case,
+        audio_input="/tmp/second.wav",
+        mode=Job.Mode.ON_DEMAND,
+        status=Job.Status.PENDING,
+    )
+
+    telemetry_map = {
+        str(first_job.id): {"status": Job.Status.SUCCEEDED},
+        str(second_job.id): {"status": Job.Status.PENDING},
+    }
+
+    display_rows, _ = presenters.build_job_rows([first_job, second_job], telemetry_map)
+
+    assert {row["job"].id for row in display_rows} == {first_job.id, second_job.id}
+
+
 def _row(job: Job, metadata: Dict[str, object], *, title: str = "Job") -> Dict[str, Any]:
     return {
         "job": job,

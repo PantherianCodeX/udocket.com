@@ -4,8 +4,10 @@
   if (platformUI.popovers) return;
 
   const popoverState = new WeakMap();
-  const PORTAL_BASE_Z = 2147483636;
-  const PANEL_Z_INDEX = 2147483640;
+  const zStack = platformUI.zStack;
+  const POPUP_BASE_Z = 2147483600;
+  const PORTAL_BASE_Z = POPUP_BASE_Z + 4;
+  const PANEL_FLOAT_BASE_Z = POPUP_BASE_Z + 8;
 
   function ensurePortal(kind) {
     const id = kind ? `popover-portal-${kind}` : 'popover-portal-default';
@@ -20,7 +22,9 @@
       style.width = '100%';
       style.height = '100%';
       style.pointerEvents = 'none';
-      style.zIndex = String(PORTAL_BASE_Z);
+      if (!zStack) {
+        style.zIndex = String(PORTAL_BASE_Z);
+      }
       document.body.appendChild(portal);
     }
     return portal;
@@ -34,6 +38,14 @@
     window.removeEventListener('resize', state.onResize, true);
     window.removeEventListener('orientationchange', state.onResize, true);
     const { panel, original, placeholder, parent, portal, onWheel, onResizeObs, scrollAncestors } = state;
+    if (zStack) {
+      if (panel) {
+        try { zStack.release(panel); } catch (err) {}
+      }
+      if (portal) {
+        try { zStack.release(portal); } catch (err) {}
+      }
+    }
     if (panel && panel.isConnected) {
       Object.entries(original).forEach(([key, value]) => {
         panel.style[key] = value;
@@ -46,7 +58,9 @@
       }
     }
     if (portal) {
-      portal.style.zIndex = String(PORTAL_BASE_Z);
+      if (!zStack) {
+        portal.style.zIndex = String(PORTAL_BASE_Z);
+      }
       portal.style.pointerEvents = 'none';
     }
     if (onWheel && panel) {
@@ -82,6 +96,8 @@
       maxHeight: panel.style.maxHeight,
       pointerEvents: panel.style.pointerEvents,
       visibility: panel.style.visibility,
+      marginTop: panel.style.marginTop,
+      marginBottom: panel.style.marginBottom,
     };
     const parent = panel.parentElement;
     const usePortal = (detailsEl.getAttribute('data-popover-portal') || '').toLowerCase() === 'body';
@@ -92,8 +108,12 @@
       try { parent.insertBefore(placeholder, panel); } catch (err) {}
       const key = detailsEl.getAttribute('data-popover') || 'menu';
       portal = ensurePortal(key);
-      portal.style.zIndex = String(PORTAL_BASE_Z + 2);
       portal.style.pointerEvents = 'auto';
+      if (zStack && typeof zStack.promote === 'function') {
+        try { zStack.promote(portal, { base: PORTAL_BASE_Z }); } catch (err) {}
+      } else {
+        portal.style.zIndex = String(PORTAL_BASE_Z + 2);
+      }
       portal.appendChild(panel);
       panel.style.pointerEvents = 'auto';
     }
@@ -101,7 +121,12 @@
     panel.dataset.floating = '1';
     panel.style.visibility = 'hidden';
     panel.style.position = 'absolute';
-    panel.style.zIndex = usePortal ? String(PANEL_Z_INDEX) : '9999';
+    if (zStack && typeof zStack.promote === 'function') {
+      const base = usePortal ? PANEL_FLOAT_BASE_Z : PANEL_FLOAT_BASE_Z + 4;
+      try { zStack.promote(panel, { base }); } catch (err) {}
+    } else {
+      panel.style.zIndex = usePortal ? String(PANEL_FLOAT_BASE_Z) : '9999';
+    }
     panel.style.contain = 'layout paint';
     panel.style.isolation = 'isolate';
     panel.style.transform = 'translateZ(0)';
@@ -109,7 +134,23 @@
     panel.style.right = 'auto';
     panel.style.bottom = 'auto';
 
-    const gap = 8;
+    let gap = 8;
+    let computedMarginTop = 0;
+    let computedMarginBottom = 0;
+    try {
+      const computed = global.getComputedStyle ? global.getComputedStyle(panel) : null;
+      if (computed) {
+        computedMarginTop = parseFloat(computed.marginTop || '0') || 0;
+        computedMarginBottom = parseFloat(computed.marginBottom || '0') || 0;
+      }
+    } catch (err) {}
+    if (computedMarginTop > 0) {
+      gap = computedMarginTop;
+    } else if (computedMarginBottom > 0) {
+      gap = computedMarginBottom;
+    }
+    panel.style.marginTop = '0px';
+    panel.style.marginBottom = '0px';
     const margin = 16;
     const viewportCap = Math.max(240, Math.floor(window.innerHeight * 0.9));
 
