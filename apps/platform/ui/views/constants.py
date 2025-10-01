@@ -75,6 +75,7 @@ CASE_JOB_TABLE_COLUMNS: Tuple[Dict[str, Any], ...] = (
         "align": "right",
         "default_direction": "desc",
     },
+    {"id": "actions", "label": "Actions", "sortable": False, "align": "right", "lock_visible": True},
     {
         "id": "notes",
         "label": "Notes",
@@ -83,7 +84,6 @@ CASE_JOB_TABLE_COLUMNS: Tuple[Dict[str, Any], ...] = (
         "hide_on_mobile": True,
         "default_hidden": True,
     },
-    {"id": "actions", "label": "Actions", "sortable": False, "align": "right", "lock_visible": True},
     {"id": "expander", "label": "", "sortable": False, "align": "right", "lock_visible": True},
 )
 
@@ -100,6 +100,7 @@ GLOBAL_JOB_TABLE_COLUMNS: Tuple[Dict[str, Any], ...] = (
         "align": "right",
         "default_direction": "desc",
     },
+    {"id": "actions", "label": "Actions", "sortable": False, "align": "right", "lock_visible": True},
     {
         "id": "notes",
         "label": "Notes",
@@ -108,7 +109,6 @@ GLOBAL_JOB_TABLE_COLUMNS: Tuple[Dict[str, Any], ...] = (
         "hide_on_mobile": True,
         "default_hidden": True,
     },
-    {"id": "actions", "label": "Actions", "sortable": False, "align": "right", "lock_visible": True},
     {"id": "expander", "label": "", "sortable": False, "align": "right", "lock_visible": True},
 )
 
