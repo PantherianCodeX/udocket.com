@@ -35,6 +35,7 @@ from .presenters.jobs import build_job_rows, friendly_job_title
 from .presenters.utils import render_audio_brief_panel_html, render_notes_panel_html
 from apps.platform.jobs.notes import serialize_notes
 from .selectors import job_telemetry_map, job_telemetry_payload
+from .job_tables import build_job_table_state
 
 
 def format_metadata(metadata: Dict[str, Any] | None) -> list[Dict[str, Any]]:
@@ -75,7 +76,8 @@ def compute_case_tool_state(request: HttpRequest, case: Case) -> Dict[str, Any]:
         .filter(case=case)
         .order_by("-created_at")
     )
-    jobs_list = list(scope_jobs(jobs_qs, getattr(request, "user", None)))
+    scoped_jobs_qs = scope_jobs(jobs_qs, getattr(request, "user", None))
+    jobs_list = list(scoped_jobs_qs)
 
     job_ids = [str(job.id) for job in jobs_list]
     transcript_artifacts: Dict[str, CaseArtifact] = {}
@@ -110,6 +112,7 @@ def compute_case_tool_state(request: HttpRequest, case: Case) -> Dict[str, Any]:
         note_counts=note_counts,
     )
 
+    total_display_rows = len(display_rows)
     latest_job = None
     latest_job_telemetry = None
     latest_activity_ts = None
@@ -150,6 +153,19 @@ def compute_case_tool_state(request: HttpRequest, case: Case) -> Dict[str, Any]:
 
     return_url = request.get_full_path()
 
+    table_state = build_job_table_state(
+        request,
+        scoped_jobs_qs,
+        prefix="case_jobs",
+        include_case_filters=False,
+    )
+    page_job_ids = {str(job.id) for job in table_state.rows}
+    display_rows = [
+        row
+        for row in display_rows
+        if row.get("job") and str(getattr(row.get("job"), "id", "")) in page_job_ids
+    ]
+
     tool_panels = build_tool_panels(
         case,
         jobs=jobs_list,
@@ -167,6 +183,15 @@ def compute_case_tool_state(request: HttpRequest, case: Case) -> Dict[str, Any]:
         job_summary_last_dt=job_summary_last_dt,
         user_can_review=user_can_review,
         return_url=return_url,
+        job_row_limit=table_state.page_size,
+        job_row_total=table_state.pagination.get("total", total_display_rows),
+        job_limit_choices=tuple(table_state.limit_choices),
+        job_filters=table_state.filters,
+        job_pagination=table_state.pagination,
+        job_param_prefix=table_state.param_prefix,
+        job_param_names=table_state.param_names,
+        job_has_advanced_filters=table_state.has_advanced_filters,
+        job_filters_active=table_state.active_filters,
     )
 
     case_details_panel = tool_panels.get("case-details") or {}
@@ -192,6 +217,8 @@ def compute_case_tool_state(request: HttpRequest, case: Case) -> Dict[str, Any]:
         "latest_activity_ts": latest_activity_ts,
         "job_summary_last_dt": job_summary_last_dt,
         "user_can_review": user_can_review,
+        "job_table_state": table_state,
+        "job_row_total": table_state.pagination.get("total", total_display_rows),
     }
 
 

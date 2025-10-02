@@ -69,6 +69,9 @@ def test_build_tool_panels_appends_return_url(monkeypatch):
         job_summary={},
         user_can_review=False,
         return_url=f"/cases/{case.id}/",
+        job_row_limit=25,
+        job_row_total=0,
+        job_limit_choices=(25, 50, 100, 200),
     )
 
     summary_urls = panels["summary"]["body_context"]["summary_llm"]["urls"]

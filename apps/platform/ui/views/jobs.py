@@ -5,10 +5,10 @@ from uuid import UUID
 from typing import Dict, Optional, cast
 
 from django.core.exceptions import PermissionDenied
+from django.db.models import Count
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import render
 from django.views.decorators.http import require_http_methods
-from django.db.models import Count
 
 from apps.platform.accounts.utils import resolve_request_organization
 from apps.platform.artifacts.models import CaseArtifact
@@ -18,11 +18,12 @@ from apps.platform.tenancy import scope_jobs
 
 from .auth import ensure_authenticated
 from .contexts import get_case_and_org, job_detail_context, user_can_review_case
-from .constants import DEFAULT_TABLE_FILTERS, GLOBAL_JOB_TABLE_COLUMNS
+from .constants import GLOBAL_JOB_TABLE_COLUMNS
 from .presenters.cases import table_config
 from .presenters.job_actions import build_job_action_entries
 from .presenters.jobs import build_job_rows
 from .selectors import job_telemetry_map
+from .job_tables import build_job_table_state
 
 # Backwards-compatible exports for tests and legacy imports
 from .jobs_actions import create_job as create_job
@@ -51,13 +52,20 @@ def jobs(request: HttpRequest) -> HttpResponse:
         raise Http404
 
     jobs_qs = Job.objects.select_related("case", "case__organization", "reviewed_by")
-    scoped = scope_jobs(jobs_qs, getattr(request, "user", None))
-    scoped = scoped.filter(organization=organization)
-    jobs_list = list(scoped[:200])
+    scoped = scope_jobs(jobs_qs, getattr(request, "user", None)).filter(organization=organization)
 
-    telemetry_map = job_telemetry_map(jobs_list, request)
+    table_state = build_job_table_state(
+        request,
+        scoped,
+        prefix="jobs",
+        include_case_filters=True,
+    )
 
-    job_ids = [str(job.id) for job in jobs_list]
+    jobs_page = table_state.rows
+
+    telemetry_map = job_telemetry_map(jobs_page, request)
+
+    job_ids = [str(job.id) for job in jobs_page]
     transcript_artifacts: Dict[str, CaseArtifact] = {}
     if job_ids:
         for art in (
@@ -69,16 +77,16 @@ def jobs(request: HttpRequest) -> HttpResponse:
                 transcript_artifacts[job_id_value] = art
 
     note_counts: Dict[str, int] = {}
-    if jobs_list:
+    if jobs_page:
         note_count_rows = (
-            JobNote.objects.filter(job__in=jobs_list)
+            JobNote.objects.filter(job__in=jobs_page)
             .values("job_id")
             .annotate(count=Count("id"))
         )
         note_counts = {str(row["job_id"]): int(row["count"]) for row in note_count_rows}
 
     display_rows, flat_rows = build_job_rows(
-        jobs_list,
+        jobs_page,
         telemetry_map,
         transcript_artifacts,
         note_counts=note_counts,
@@ -106,7 +114,8 @@ def jobs(request: HttpRequest) -> HttpResponse:
                 "id": str(case_obj.id),
             }
 
-    job_total = len(display_rows)
+    job_display_count = table_state.pagination.get("display_count", len(display_rows))
+    job_total = table_state.pagination.get("total", job_display_count)
     cases_seen: set[str] = set()
     for row in flat_rows:
         job_obj = row.get("job")
@@ -119,10 +128,18 @@ def jobs(request: HttpRequest) -> HttpResponse:
             rows=display_rows,
             columns=GLOBAL_JOB_TABLE_COLUMNS,
             column_ids=[col["id"] for col in GLOBAL_JOB_TABLE_COLUMNS],
-            filters=DEFAULT_TABLE_FILTERS,
+            filters=table_state.filters,
             empty_message="No jobs yet.",
             show_identifiers=False,
             case_id=None,
+            limit_value=table_state.page_size,
+            limit_options=table_state.limit_choices,
+            total_count=table_state.pagination.get("total", job_display_count),
+            pagination=table_state.pagination,
+            param_prefix=table_state.param_prefix,
+            filter_param_names=table_state.param_names,
+            filters_active=table_state.active_filters,
+            has_advanced_filters=table_state.has_advanced_filters,
         )
 
     context = {
@@ -130,8 +147,12 @@ def jobs(request: HttpRequest) -> HttpResponse:
         "job_rows": display_rows,
         "job_columns": list(GLOBAL_JOB_TABLE_COLUMNS),
         "job_column_ids": [col["id"] for col in GLOBAL_JOB_TABLE_COLUMNS],
-        "job_filters": DEFAULT_TABLE_FILTERS,
+        "job_filters": table_state.filters,
+        "job_filters_active": table_state.active_filters,
         "job_total": job_total,
+        "job_display_count": job_display_count,
+        "job_limit": table_state.page_size,
+        "job_limit_choices": table_state.limit_choices,
         "job_show_identifiers": False,
         "jobs_table": jobs_table,
         "section": {
@@ -141,7 +162,7 @@ def jobs(request: HttpRequest) -> HttpResponse:
             "stats": [
                 {
                     "label": "Displayed",
-                    "value": job_total,
+                    "value": job_display_count,
                     "class": "border-primary-400/40 bg-primary-500/10 text-primary-100",
                 },
                 {

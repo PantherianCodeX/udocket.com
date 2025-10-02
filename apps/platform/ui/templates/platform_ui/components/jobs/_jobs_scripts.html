@@ -4,18 +4,12 @@
 <script src="{% static 'platform_ui/js/case_detail/modals.js' %}"></script>
 <script src="{% static 'platform_ui/js/case_detail/actions.js' %}"></script>
 <script src="{% static 'platform_ui/js/jobs_table.js' %}"></script>
+<script src="{% static 'platform_ui/js/job_stream.js' %}"></script>
 <script>
 (function () {
-  window.jobPollers = window.jobPollers || {};
-  window.jobSockets = window.jobSockets || {};
-  window.jobReconnectAttempts = window.jobReconnectAttempts || {};
-  window.jobReconnectTimers = window.jobReconnectTimers || {};
-
-  const BASE_RECONNECT_DELAY = 1000;
-  const MAX_RECONNECT_DELAY = 30000;
-
   const platformUI = (window.platformUI = window.platformUI || {});
   const jobsTableApi = platformUI.jobsTable;
+  const jobStream = platformUI.jobStream || null;
   if (!jobsTableApi || typeof jobsTableApi.init !== 'function') {
     console.warn('platformUI.jobsTable.init is required for jobs table interactions');
     return;
@@ -50,142 +44,164 @@
   const renderStatusLabel = statusUtils.renderStatusLabel || (() => {});
   const TERMINAL_STATUSES = statusUtils.TERMINAL_STATUSES || ['SUCCEEDED', 'FAILED', 'CANCELLED', 'ERROR', 'CORRUPTED'];
 
-  function clearReconnect(jobId) {
-    window.jobReconnectAttempts[jobId] = 0;
-    if (window.jobReconnectTimers[jobId]) {
-      clearTimeout(window.jobReconnectTimers[jobId]);
-      delete window.jobReconnectTimers[jobId];
-    }
+  const FALLBACK_INTERVAL_MS = 5000;
+  const fallbackJobs = new Set();
+  let fallbackTimer = null;
+  let fallbackInFlight = false;
+  let streamStatus = 'idle';
+
+  function ensureFallbackTimer() {
+    if (fallbackTimer) return;
+    fallbackTimer = setInterval(() => runFallbackPoll(), FALLBACK_INTERVAL_MS);
   }
 
-  function scheduleReconnect(jobId) {
-    if (!('WebSocket' in window)) return;
-    const attempt = (window.jobReconnectAttempts[jobId] || 0) + 1;
-    window.jobReconnectAttempts[jobId] = attempt;
-    const delay = Math.min(BASE_RECONNECT_DELAY * Math.pow(2, attempt - 1), MAX_RECONNECT_DELAY);
-    if (window.jobReconnectTimers[jobId]) {
-      clearTimeout(window.jobReconnectTimers[jobId]);
-    }
-    window.jobReconnectTimers[jobId] = setTimeout(() => {
-      delete window.jobReconnectTimers[jobId];
-      connectWS(jobId);
-    }, delay);
+  function stopFallbackTimer() {
+    if (!fallbackTimer) return;
+    clearInterval(fallbackTimer);
+    fallbackTimer = null;
   }
 
-  function connectWS(jobId) {
-    if (!('WebSocket' in window)) {
-      ensurePolling(jobId, true);
-      return null;
-    }
-    const existing = window.jobSockets[jobId];
-    if (existing && (existing.readyState === WebSocket.OPEN || existing.readyState === WebSocket.CONNECTING)) {
-      return existing;
-    }
-    if (existing) {
-      try {
-        existing.close();
-      } catch (_) {}
-    }
-    const statusEl = document.getElementById(`job-status-${jobId}`);
-    const transcriptEl = document.getElementById(`job-transcript-${jobId}`);
-    const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + `/ws/jobs/${jobId}/`;
-    let ws;
-    try {
-      ws = new WebSocket(url);
-    } catch (error) {
-      console.warn('Job websocket init failed', jobId, error);
-      scheduleReconnect(jobId);
-      ensurePolling(jobId, true);
-      return null;
-    }
-    window.jobSockets[jobId] = ws;
-    ws.onopen = () => {
-      clearReconnect(jobId);
-      if (window.jobPollers[jobId]) {
-        clearInterval(window.jobPollers[jobId]);
-        delete window.jobPollers[jobId];
-      }
-    };
-    ws.onmessage = (ev) => {
-      try {
-        const data = JSON.parse(ev.data);
-        const progress = data.progress_percent ?? data.upload_progress;
-        if (statusEl) renderStatusLabel(statusEl, data.status, progress);
-        const transcriptPath = data.transcript_file || data.transcript_path;
-        if (transcriptEl && (transcriptPath || (statusEl && statusEl.dataset && statusEl.dataset.status === 'SUCCEEDED'))) {
-          transcriptEl.innerHTML = `<a class="font-medium text-primary-300 underline" href="/api/v1/jobs/${data.job_id || jobId}/download/">Download</a>`;
-        }
-        const normalized = statusEl && statusEl.dataset ? statusEl.dataset.status : '';
-        if (normalized && TERMINAL_STATUSES.includes(normalized)) {
-          clearInterval(window.jobPollers[jobId]);
-          delete window.jobPollers[jobId];
-        }
-      } catch (_) {}
-    };
-    ws.onerror = (err) => {
-      console.warn('Job websocket error', jobId, err);
-      scheduleReconnect(jobId);
-      ensurePolling(jobId, true);
-    };
-    ws.onclose = () => {
-      delete window.jobSockets[jobId];
-      ensurePolling(jobId, true);
-      scheduleReconnect(jobId);
-    };
-    return ws;
-  }
-
-  async function pollJob(jobId) {
-    try {
-      const resp = await fetch(`/api/v1/jobs/${jobId}/status/`);
-      if (!resp.ok) return;
-      const data = await resp.json();
-      const statusEl = document.getElementById(`job-status-${jobId}`);
-      const transcriptEl = document.getElementById(`job-transcript-${jobId}`);
-      const progress = data.progress_percent ?? data.upload_progress;
-      if (statusEl) renderStatusLabel(statusEl, data.status, progress);
-      if (transcriptEl && (data.transcript_path || (statusEl && statusEl.dataset && statusEl.dataset.status === 'SUCCEEDED'))) {
-        transcriptEl.innerHTML = `<a class="font-medium text-primary-300 underline" href="/api/v1/jobs/${jobId}/download/">Download</a>`;
-      }
-      const normalized = statusEl && statusEl.dataset ? statusEl.dataset.status : '';
-      if (normalized && TERMINAL_STATUSES.includes(normalized)) {
-        clearInterval(window.jobPollers[jobId]);
-        delete window.jobPollers[jobId];
-      }
-    } catch (_) {}
-  }
-
-  function ensurePolling(jobId, force = false) {
-    if (window.jobPollers[jobId]) return;
-    const statusEl = document.getElementById(`job-status-${jobId}`);
-    if (!statusEl) return;
-    const normalized = statusEl.dataset ? statusEl.dataset.status : '';
-    if (normalized && TERMINAL_STATUSES.includes(normalized)) return;
-    const socket = window.jobSockets[jobId];
-    if (!force && socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+  async function runFallbackPoll(explicitIds) {
+    if (fallbackInFlight) return;
+    const ids = explicitIds ? Array.from(new Set(explicitIds)) : Array.from(fallbackJobs);
+    if (!ids.length) {
+      stopFallbackTimer();
       return;
     }
-    window.jobPollers[jobId] = setInterval(() => pollJob(jobId), 2000);
+
+    fallbackInFlight = true;
+    try {
+      const params = new URLSearchParams();
+      params.set('ids', ids.join(','));
+      const resp = await fetch(`/api/v1/jobs/status/bulk/?${params.toString()}`, { credentials: 'same-origin' });
+      if (!resp.ok) {
+        return;
+      }
+      const records = await resp.json();
+      const seen = new Set();
+      if (Array.isArray(records)) {
+        records.forEach((item) => {
+          const jobId = String(item.id || '').trim();
+          if (!jobId) return;
+          seen.add(jobId);
+          applyJobPayload(jobId, item);
+          const normalized = (item.status || '').toString().toUpperCase();
+          if (normalized && TERMINAL_STATUSES.includes(normalized)) {
+            clearFallback(jobId);
+          }
+        });
+      }
+      ids.forEach((jobId) => {
+        if (!seen.has(jobId)) {
+          clearFallback(jobId);
+        }
+      });
+    } catch (error) {
+      console.warn('jobs fallback poll failed', ids, error);
+    } finally {
+      fallbackInFlight = false;
+      if (!fallbackJobs.size) {
+        stopFallbackTimer();
+      }
+    }
+  }
+
+  function markFallback(jobId, immediate) {
+    if (!jobId) return;
+    const id = String(jobId);
+    if (!fallbackJobs.has(id)) {
+      fallbackJobs.add(id);
+    }
+    ensureFallbackTimer();
+    if (immediate) runFallbackPoll([id]);
+  }
+
+  function clearFallback(jobId) {
+    if (!jobId) return;
+    const id = String(jobId);
+    if (fallbackJobs.delete(id) && !fallbackJobs.size) {
+      stopFallbackTimer();
+    }
+  }
+
+  function applyJobPayload(jobId, payload) {
+    const statusEl = document.getElementById(`job-status-${jobId}`);
+    const transcriptEl = document.getElementById(`job-transcript-${jobId}`);
+    const status = payload.status || payload.event || '';
+    const normalized = statusUtils.normalizeStatus ? statusUtils.normalizeStatus(status) : (status || '').toString().toUpperCase();
+    const progress = payload.progress_percent ?? payload.upload_progress;
+
+    if (statusEl) {
+      renderStatusLabel(statusEl, normalized, progress);
+      statusEl.dataset.status = normalized;
+    }
+    if (transcriptEl && (payload.transcript_file || payload.transcript_path || normalized === 'SUCCEEDED')) {
+      transcriptEl.innerHTML = `<a class="font-medium text-primary-300 underline" href="/api/v1/jobs/${payload.job_id || jobId}/download/">Download</a>`;
+    }
+    if (normalized && TERMINAL_STATUSES.includes(normalized)) {
+      clearFallback(jobId);
+    }
+  }
+
+  function currentJobIds() {
+    return Array.from(document.querySelectorAll('[data-job]')).map((row) => row.dataset.job).filter(Boolean);
   }
 
   function bootstrapJobs() {
-    document.querySelectorAll('[data-job]').forEach(row => {
-      const jobId = row.dataset.job;
-      if (!row.dataset.ws) {
-        connectWS(jobId);
-        row.dataset.ws = '1';
+    const jobIds = currentJobIds();
+    if (jobStream && typeof jobStream.setJobsForSource === 'function') {
+      jobStream.setJobsForSource('jobs-page', jobIds);
+    }
+    const visible = new Set(jobIds.map((id) => String(id)));
+    Array.from(fallbackJobs).forEach((jobId) => {
+      if (!visible.has(jobId)) {
+        fallbackJobs.delete(jobId);
       }
-      ensurePolling(jobId);
+    });
+    if (!fallbackJobs.size) stopFallbackTimer();
+    jobIds.forEach((jobId) => {
       const statusEl = document.getElementById(`job-status-${jobId}`);
       if (statusEl) {
         const statusValue = statusEl.dataset && statusEl.dataset.status ? statusEl.dataset.status : statusEl.textContent;
         const progressValue = statusEl.dataset && statusEl.dataset.progress ? parseFloat(statusEl.dataset.progress) : undefined;
         renderStatusLabel(statusEl, statusValue, progressValue);
       }
+      if (streamStatus !== 'connected') {
+        markFallback(jobId, false);
+      } else {
+        clearFallback(jobId);
+      }
+    });
+  }
+
+  if (jobStream) {
+    jobStream.onUpdate((payload) => {
+      const jobId = String(payload.job_id || payload.id || '').trim();
+      if (!jobId) return;
+      applyJobPayload(jobId, payload);
+    });
+
+    jobStream.onStatus((status) => {
+      streamStatus = status;
+      const jobIds = currentJobIds();
+      if (status === 'connected') {
+        fallbackJobs.clear();
+        stopFallbackTimer();
+      } else {
+        jobIds.forEach((jobId) => markFallback(jobId, false));
+      }
     });
   }
 
   window.addEventListener('DOMContentLoaded', bootstrapJobs);
+
+  window.addEventListener('beforeunload', () => {
+    if (jobStream && typeof jobStream.removeJobSource === 'function') {
+      jobStream.removeJobSource('jobs-page');
+    }
+    fallbackJobs.clear();
+    stopFallbackTimer();
+  });
 
   document.addEventListener('htmx:afterSwap', () => {
     jobsTableController.collapseAll();
@@ -196,124 +212,13 @@
     const popovers = platformUI.popovers;
     if (popovers && typeof popovers.closeAll === 'function') {
       popovers.closeAll('[data-job-action-menu][open]');
-      return;
     }
-    document
-      .querySelectorAll('[data-job-action-menu][open]')
-      .forEach((menu) => menu.removeAttribute('open'));
   };
 
-  const isJobMenuTarget = (node) => {
-    if (!node) return false;
-    return Boolean(
-      node.closest('[data-job-action-menu]')
-      || node.closest('[data-job-action-menu-panel]'),
-    );
-  };
-
-  document.addEventListener('pointerdown', (evt) => {
-    const summary = evt.target.closest('[data-job-action-menu] > summary');
-    if (summary) {
-      const owner = summary.parentElement;
-      const popovers = platformUI.popovers;
-      if (popovers && typeof popovers.closeAll === 'function') {
-        popovers.closeAll('[data-job-action-menu][open]', owner);
-      } else {
-        document.querySelectorAll('[data-job-action-menu][open]').forEach((menu) => {
-          if (menu !== owner) menu.removeAttribute('open');
-        });
-      }
-      return;
-    }
-    if (!isJobMenuTarget(evt.target)) {
+  document.addEventListener('click', (event) => {
+    if (!event.target.closest('[data-job-action-menu]')) {
       closeJobMenus();
     }
   });
-
-  document.addEventListener('keydown', (evt) => {
-    if (evt.key === 'Escape') closeJobMenus();
-  });
-
-  // Proactively close the job action popover after any selection
-  document.addEventListener('click', (evt) => {
-    const item = evt.target.closest('[data-job-action-item]');
-    if (!item) return;
-    const popovers = platformUI.popovers;
-    if (popovers && typeof popovers.closeAll === 'function') {
-      popovers.closeAll();
-    }
-    closeJobMenus();
-  });
-
-  const caseDetail = (platformUI.caseDetail = platformUI.caseDetail || {});
-  const modalRoot = document.getElementById('modal-root');
-
-  if (caseDetail.modals && typeof caseDetail.modals.setContext === 'function') {
-    caseDetail.modals.setContext({
-      modalRoot,
-      modalApi: platformUI.modal || {},
-    });
-    caseDetail.modals.setNotify?.((x, y, text) => {
-      if (platformUI.toastAt) {
-        platformUI.toastAt(x, y, text);
-      } else if (platformUI.toast) {
-        platformUI.toast(text);
-      }
-    });
-  }
-
-  const noopRealtime = {
-    handleJobUpdate: (jobId, payload) => {
-      if (!payload || !payload.notes) return;
-      const count = typeof payload.notes.count === 'number'
-        ? payload.notes.count
-        : Array.isArray(payload.notes.entries)
-          ? payload.notes.entries.length
-          : 0;
-      caseDetail.ui?.updateNotesIndicator?.(jobId, count);
-    },
-    ensurePolling: (jobId) => ensurePolling(jobId, true),
-  };
-
-  if (caseDetail.ui && typeof caseDetail.ui.setDeps === 'function') {
-    caseDetail.ui.setDeps({
-      helpers: caseDetail.helpers || {},
-      getTableController: () => jobsTableController,
-      updateNotesIndicator: (jobId, count) => caseDetail.ui?.updateNotesIndicator?.(jobId, count),
-      scheduleTranscribeRefresh: () => {},
-      refreshCaseJobs: () => {},
-    });
-  }
-
-  if (caseDetail.actions && typeof caseDetail.actions.setContext === 'function') {
-    caseDetail.actions.setContext({
-      caseId: null,
-      modalRoot,
-      jobsState: { currentCaseId: null },
-    });
-    caseDetail.actions.setDeps?.({
-      helpers: caseDetail.helpers || {},
-      ui: {
-        getTableController: () => jobsTableController,
-        scheduleTranscribeRefresh: () => {},
-        updateNotesIndicator: (jobId, count) => caseDetail.ui?.updateNotesIndicator?.(jobId, count),
-      },
-      realtime: noopRealtime,
-      modals: caseDetail.modals || {},
-      notify: (x, y, text) => {
-        if (platformUI.toastAt) {
-          platformUI.toastAt(x, y, text);
-        } else if (platformUI.toast) {
-          platformUI.toast(text);
-        }
-      },
-    });
-
-    if (!window.__jobsActionsBound) {
-      document.addEventListener('click', caseDetail.actions.handleJobAction, true);
-      document.addEventListener('click', caseDetail.actions.handleJobNotesSave, true);
-      window.__jobsActionsBound = true;
-    }
-  }
 })();
 </script>

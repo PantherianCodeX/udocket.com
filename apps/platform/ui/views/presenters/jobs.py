@@ -152,6 +152,14 @@ def build_row_table_meta(row: Dict[str, Any]) -> None:
 
     status_raw = str(telemetry.get("status") or getattr(job, "status", "") or "").strip().upper()
     review_status = str(getattr(job, "review_status", "") or "").strip().upper()
+    review_status_label = "Pending"
+    if review_status == Job.ReviewStatus.APPROVED:
+        review_status_label = "Approved"
+    elif review_status == Job.ReviewStatus.REJECTED:
+        review_status_label = "Rejected"
+
+    agent_payload = as_dict((telemetry or {}).get("agent"))
+    agent_type_value = safe_lower(agent_payload.get("type")) if agent_payload else ""
     agent_label = job_agent_label(job, telemetry) or "Unknown"
     job_type_label_text = job_type_label(job, telemetry)
     case_label = humanize_label(getattr(getattr(job, "case", None), "title", ""))
@@ -198,6 +206,7 @@ def build_row_table_meta(row: Dict[str, Any]) -> None:
         job_kind_value = str(meta.get("job_kind") or "")
     if not job_kind_value and job and getattr(job, "mode", None):
         job_kind_value = str(job.mode)
+    job_kind_label = humanize_label(job_kind_value) if job_kind_value else ""
 
     status_display = map_job_status(job)
     status_style = STATUS_PILL_STYLES.get(status_raw, "border-white/20 bg-white/5 text-slate-300")
@@ -212,6 +221,7 @@ def build_row_table_meta(row: Dict[str, Any]) -> None:
         case_label,
         audio_name,
         metadata_source,
+        job_kind_label,
     ]
 
     row.setdefault("table", {})
@@ -232,12 +242,21 @@ def build_row_table_meta(row: Dict[str, Any]) -> None:
     row_table["status_display"] = status_display or "—"
     row_table["status_style"] = status_style
     row_table["agent_label"] = agent_label
+    row_table["agent_type"] = agent_type_value
     row_table["type_label"] = job_type_label_text
     row_table["case_label"] = getattr(getattr(job, "case", None), "title", "") or ""
     row_table["case_id"] = str(getattr(job, "case_id", "") or "")
     row_table["job_id"] = str(getattr(job, "id", "") or "")
     row_table["audio_name"] = audio_name
     row_table["metadata_source"] = metadata_source
+    row_table["job_kind"] = job_kind_value
+    row_table["job_kind_label"] = job_kind_label
+    row_table["review_status"] = review_status
+    row_table["review_status_label"] = review_status_label
+    row_table["created_at"] = created_at
+    row_table["modified_at"] = modified_at
+    row_table["created_iso"] = created_at.isoformat() if isinstance(created_at, datetime) else ""
+    row_table["modified_iso"] = modified_iso
     row_table["notes_count"] = notes_count
     row_table["job_kind"] = job_kind_value
     row_table["review_status"] = review_status or "PENDING"

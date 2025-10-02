@@ -229,15 +229,15 @@
     if (caseAttr && caseAttr !== ctx.jobsState.currentCaseId) {
       ctx.jobsState.currentCaseId = caseAttr;
     }
+    const visibleJobIds = [];
     jobsBody.querySelectorAll('[data-job]').forEach((row) => {
       const jobId = row.dataset.job;
       if (!jobId) return;
+      visibleJobIds.push(jobId);
       if (deps.realtime?.watchJob) {
         deps.realtime.watchJob(jobId);
-      } else {
-        deps.realtime?.connectSocket(jobId);
-        deps.realtime?.ensurePolling(jobId);
       }
+      deps.realtime?.ensurePolling?.(jobId);
       const statusEl = global.document.getElementById(`job-status-${jobId}`);
       if (statusEl) {
         const statusValue = statusEl.dataset && statusEl.dataset.status ? statusEl.dataset.status : statusEl.textContent;
@@ -249,6 +249,7 @@
         }
       }
     });
+    deps.realtime?.syncJobs?.(visibleJobIds);
   }
 
   function boost(caseIdParam) {

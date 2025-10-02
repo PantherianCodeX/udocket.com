@@ -222,22 +222,70 @@ def table_config(
     empty_message: str,
     show_identifiers: bool,
     case_id: Optional[str] = None,
+    limit_value: Optional[int] = None,
+    limit_options: Sequence[int] | None = None,
+    total_count: Optional[int] = None,
+    pagination: Optional[Dict[str, Any]] = None,
+    param_prefix: Optional[str] = None,
+    filter_param_names: Optional[Sequence[str]] = None,
+    filters_active: int = 0,
+    has_advanced_filters: bool = False,
 ) -> Dict[str, Any]:
+    pagination_payload: Dict[str, Any] = dict(pagination or {})
+    filters_list = [dict(filter_payload) for filter_payload in (filters or [])]
+    filter_lookup = {
+        str(payload.get("id")): payload for payload in filters_list if payload.get("id")
+    }
+    columns_payload: List[Dict[str, Any]] = []
+    for column in columns:
+        column_payload = dict(column)
+        filter_id = column_payload.get("filter_id")
+        if filter_id and filter_id in filter_lookup:
+            column_payload["filter"] = filter_lookup[filter_id]
+        columns_payload.append(column_payload)
+    default_total = total_count if total_count is not None else len(rows)
+    default_page = int(pagination_payload.get("page") or 1)
+    default_pages = int(pagination_payload.get("pages") or 1)
+    default_page_size = int(pagination_payload.get("page_size") or (limit_value or len(rows) or 1))
+    default_pages = max(default_pages, 1)
+    default_page = max(min(default_page, default_pages), 1)
+    pagination_payload.setdefault("total", default_total)
+    pagination_payload.setdefault("pages", default_pages)
+    pagination_payload.setdefault("page", default_page)
+    pagination_payload.setdefault("page_size", default_page_size)
+    pagination_payload.setdefault("start", pagination_payload.get("start", 0))
+    pagination_payload.setdefault("end", pagination_payload.get("end", 0))
+    pagination_payload.setdefault("has_previous", pagination_payload.get("has_previous", default_page > 1))
+    pagination_payload.setdefault("has_next", pagination_payload.get("has_next", default_page < default_pages))
+    pagination_payload.setdefault("previous_page", pagination_payload.get("previous_page", max(default_page - 1, 1)))
+    pagination_payload.setdefault("next_page", pagination_payload.get("next_page", min(default_page + 1, default_pages)))
+    pagination_payload.setdefault("display_count", pagination_payload.get("display_count", len(rows)))
+    pagination_payload.setdefault("first_page", pagination_payload.get("first_page", 1))
+    pagination_payload.setdefault("last_page", pagination_payload.get("last_page", default_pages))
+
     return {
         "id": f"{panel_key}-jobs",
         "key": panel_key,
         "title": title,
         "pill": pill,
         "rows": rows,
-        "columns": list(columns),
+        "columns": columns_payload,
         "column_ids": list(column_ids),
-        "filters": list(filters),
+        "filters": filters_list,
         "row_template": "platform_ui/components/jobs/job_row.html",
         "empty_message": empty_message,
         "show_identifiers": show_identifiers,
         "body_id": "jobs-body",
         "case_id": case_id,
         "allow_column_toggle": True,
+        "limit_value": limit_value,
+        "limit_options": list(limit_options) if limit_options else [],
+        "total_count": total_count,
+        "pagination": pagination_payload,
+        "param_prefix": param_prefix or panel_key,
+        "filter_param_names": list(filter_param_names) if filter_param_names else [],
+        "filters_active": filters_active,
+        "has_advanced_filters": has_advanced_filters,
     }
 
 
@@ -354,6 +402,15 @@ def build_tool_panels(
     job_summary_last_dt: Optional[datetime] = None,
     user_can_review: bool = False,
     return_url: str = "",
+    job_row_limit: int = 25,
+    job_row_total: int = 0,
+    job_limit_choices: Sequence[int] = (),
+    job_filters: Optional[Sequence[Dict[str, Any]]] = None,
+    job_pagination: Optional[Dict[str, Any]] = None,
+    job_param_prefix: Optional[str] = None,
+    job_param_names: Optional[Sequence[str]] = None,
+    job_has_advanced_filters: bool = False,
+    job_filters_active: int = 0,
 ) -> Dict[str, Dict[str, Any]]:
     progress_lookup = {item["key"]: item for item in progress_items}
     analysis_lookup = {module["key"]: module for module in analysis_modules}
@@ -509,6 +566,9 @@ def build_tool_panels(
         "jobs_column_ids": [col["id"] for col in CASE_JOB_TABLE_COLUMNS],
         "jobs_filters": DEFAULT_TABLE_FILTERS,
         "jobs_show_identifiers": True,
+        "jobs_limit": job_row_limit,
+        "jobs_limit_options": list(job_limit_choices),
+        "jobs_total_count": job_row_total,
         "jobs_table": table_config(
             panel_key="case-details",
             title="All Jobs",
@@ -516,10 +576,18 @@ def build_tool_panels(
             rows=job_rows,
             columns=CASE_JOB_TABLE_COLUMNS,
             column_ids=[col["id"] for col in CASE_JOB_TABLE_COLUMNS],
-            filters=DEFAULT_TABLE_FILTERS,
+            filters=job_filters or DEFAULT_TABLE_FILTERS,
             empty_message="No jobs recorded yet.",
             show_identifiers=True,
             case_id=str(case.id),
+            limit_value=job_row_limit,
+            limit_options=job_limit_choices,
+            total_count=job_row_total,
+            pagination=job_pagination,
+            param_prefix=job_param_prefix,
+            filter_param_names=job_param_names,
+            filters_active=job_filters_active,
+            has_advanced_filters=job_has_advanced_filters,
         ),
     }
 

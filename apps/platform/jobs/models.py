@@ -55,6 +55,17 @@ class Job(models.Model):
     error_message = models.TextField(null=True, blank=True)
     transcript_path = models.TextField(null=True, blank=True)
     duration_s = models.FloatField(null=True, blank=True)
+    display_title = models.CharField(max_length=255, blank=True)
+    agent_type = models.CharField(max_length=64, blank=True, db_index=True)
+    agent_label = models.CharField(max_length=128, blank=True)
+    job_kind = models.CharField(max_length=64, blank=True, db_index=True)
+    source_job = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="child_jobs",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     started_at = models.DateTimeField(null=True, blank=True, db_index=True)
     finished_at = models.DateTimeField(null=True, blank=True, db_index=True)

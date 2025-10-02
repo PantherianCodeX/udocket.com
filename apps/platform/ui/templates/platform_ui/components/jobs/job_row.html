@@ -16,11 +16,16 @@
         data-table-value-title="{{ sort.title|default:'' }}"
         data-table-value-status="{{ sort.status|default:'' }}"
         data-table-value-review="{{ sort.review|default:'' }}"
+        data-table-value-review-status="{{ table_meta.review_status|default:'' }}"
         data-table-value-agent="{{ sort.agent|default:'' }}"
         data-table-value-type="{{ sort.type|default:'' }}"
+        data-table-value-agent-type="{{ table_meta.agent_type|default:'' }}"
+        data-table-value-job-kind="{{ table_meta.job_kind|default:'' }}"
         data-table-value-case="{{ sort.case|default:'' }}"
         data-table-value-created="{{ sort.created|default:'' }}"
         data-table-value-modified="{{ sort.modified|default:'' }}"
+        data-table-created="{{ table_meta.created_iso|default:'' }}"
+        data-table-modified="{{ table_meta.modified_iso|default:'' }}"
         class="cursor-pointer transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 {% if is_child %}bg-slate-900/70{% endif %}"
         tabindex="0"
         aria-expanded="false"
@@ -74,7 +79,7 @@
             {% if type_label %}
               {{ type_label }}
             {% else %}
-              {{ table_meta.job_kind|default:job.mode|default:'—'|title }}
+              {{ table_meta.job_kind_label|default:table_meta.job_kind|default:job.mode|default:'—'|title }}
             {% endif %}
           </td>
         {% elif column.id == 'agent' %}
