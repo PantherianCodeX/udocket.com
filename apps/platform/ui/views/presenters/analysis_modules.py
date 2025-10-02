@@ -246,6 +246,7 @@ def analysis_modules_context(
             },
             "notes": notes_context,
             "notes_panel_html": notes_panel_html,
+            "notes_panel": notes_panel_html,
             "return_url": return_url,
             "team_alerts": team_alerts,
         }

@@ -1,80 +1,134 @@
 {% load i18n %}
-{% with resolved_id=table.id|default:table.key|default:table.title|slugify %}
-<div class="rounded-2xl border border-white/10 bg-white/5 shadow-xl shadow-black/30" data-table-container data-table-id="{{ resolved_id }}">
+{% with resolved_id=table.id %}
+{% with prefix=table.param_prefix|default:resolved_id %}
+{% with form_id=resolved_id|add:'-filters' %}
+<div class="rounded-2xl border border-white/10 bg-white/5 shadow-xl shadow-black/30" data-table-container data-table-id="{{ resolved_id }}" data-table-prefix="{{ prefix }}" data-table-params="{{ table.filter_param_names|join:',' }}">
   <div class="flex items-center justify-between border-b border-white/10 px-6 py-4">
     <h3 class="text-lg font-semibold text-white">{{ table.title }}</h3>
     {% if table.pill %}
       <span class="text-xs uppercase tracking-wide text-slate-400">{{ table.pill }}</span>
     {% endif %}
   </div>
-  {% if table.filters %}
-    <div class="border-b border-white/10 bg-slate-900/40 px-6 py-3" data-table-filters>
-      <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <form class="flex flex-1 flex-wrap items-center gap-3" data-table-filter-form>
-          {% for filter in table.filters %}
-            {% if filter.type == 'search' %}
-              <label class="flex min-w-[16rem] flex-1 items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-200 focus-within:border-primary-400">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-slate-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 013.98 9.3l3.11 3.11a.75.75 0 11-1.06 1.06l-3.11-3.11A5.5 5.5 0 119 3.5zm0 1.5a4 4 0 100 8 4 4 0 000-8z" clip-rule="evenodd" /></svg>
-                <input type="search"
-                       name="{{ filter.id }}"
-                       data-table-search-input
-                       placeholder="{{ filter.placeholder|default:_('Filter rows') }}"
-                       class="w-full bg-transparent text-sm text-white placeholder:text-slate-400 focus:outline-none"
-                       autocomplete="off" />
-              </label>
-            {% elif filter.type == 'select' %}
-              <label class="flex items-center gap-2 text-xs text-slate-200">
-                <span class="font-semibold uppercase tracking-wide text-slate-400">{{ filter.label }}</span>
-                <select name="{{ filter.id }}"
-                        data-table-select-filter="{{ filter.id }}"
-                        class="rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-xs text-white focus:border-primary-400">
-                  {% if filter.blank_option %}
-                    <option value="">{{ filter.blank_option }}</option>
-                  {% endif %}
-                  {% for option in filter.options %}
-                    <option value="{{ option.value }}">{{ option.label }}</option>
-                  {% endfor %}
-                </select>
-              </label>
-            {% endif %}
-          {% endfor %}
-        </form>
-        {% if table.allow_column_toggle|default:True %}
-          <div class="flex items-center justify-end" data-table-column-controls>
-            <details class="group relative"
-                     data-popover="table-columns">
-              <summary class="flex cursor-pointer items-center gap-2 rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-200 transition hover:border-primary-400 hover:text-white">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-slate-400 transition group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a.75.75 0 01.65.38l4 7a.75.75 0 11-1.3.74L10 4.868 6.65 11.12a.75.75 0 11-1.3-.74l4-7A.75.75 0 0110 3zm-4 12.25a.75.75 0 01.75-.75h6.5a.75.75 0 010 1.5h-6.5a.75.75 0 01-.75-.75z" clip-rule="evenodd" /></svg>
-                Columns
-              </summary>
-              <div class="absolute right-0 top-full z-50 mt-3 w-56 max-h-[60vh] overflow-y-auto rounded-xl border border-white/10 bg-slate-900/95 p-3 text-xs text-slate-200 shadow-xl shadow-black/40"
-                   data-table-column-menu
-                   data-popover-panel
-                   style="visibility:hidden;">
-                <p class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Toggle columns</p>
-                <ul class="space-y-2" data-table-column-list>
-                  {% for column in table.columns %}
-                    {% if not column.lock_visible %}
-                      <li>
-                        <label class="flex items-center justify-between gap-3 rounded-lg border border-white/5 bg-white/5 px-3 py-2 text-xs text-slate-200">
-                          <span>{{ column.label }}</span>
-                          <input type="checkbox"
-                                 class="h-3.5 w-3.5 rounded border border-white/20 bg-slate-900 text-primary-400 focus:ring-primary-400"
-                                 value="{{ column.id }}"
-                                 data-table-column-toggle
-                                 {% if not column.default_hidden %}checked{% endif %}>
-                        </label>
-                      </li>
-                    {% endif %}
-                  {% endfor %}
-                </ul>
-              </div>
-            </details>
-          </div>
+  <div class="border-b border-white/10 bg-slate-900/40 px-6 py-3" data-table-toolbar>
+    <form method="get" id="{{ form_id }}" class="flex flex-wrap items-center gap-3" data-table-filter-form>
+      {% if request.GET %}
+        {% for key, values in request.GET.lists %}
+          {% if key not in table.filter_param_names %}
+            {% for value in values %}
+              <input type="hidden" name="{{ key }}" value="{{ value }}">
+            {% endfor %}
+          {% endif %}
+        {% endfor %}
+      {% endif %}
+      <input type="hidden" name="{{ prefix }}_page" value="{{ table.pagination.page|default:1 }}" data-table-page-input>
+      {% for filter in table.filters %}
+        {% if filter.type == 'search' %}
+          <label class="flex min-w-[16rem] flex-1 items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-200 focus-within:border-primary-400">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-slate-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 013.98 9.3l3.11 3.11a.75.75 0 11-1.06 1.06l-3.11-3.11A5.5 5.5 0 119 3.5zm0 1.5a4 4 0 100 8 4 4 0 000-8z" clip-rule="evenodd" /></svg>
+            <input type="search"
+                   name="{{ filter.param|default:filter.id }}"
+                   value="{{ filter.value|default:'' }}"
+                   data-table-search-input
+                   data-table-search-mode="server"
+                   placeholder="{{ filter.placeholder|default:_('Search rows') }}"
+                   class="w-full bg-transparent text-sm text-white placeholder:text-slate-400 focus:outline-none"
+                   data-table-filter-input
+                   data-table-filter-name="{{ filter.param|default:filter.id }}"
+                   autocomplete="off" />
+          </label>
         {% endif %}
-      </div>
-    </div>
-  {% endif %}
+      {% endfor %}
+
+      {% if table.has_advanced_filters %}
+      <details class="group relative" data-popover="table-filters">
+        <summary class="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-200 transition hover:border-primary-400 hover:text-white" data-table-filters-toggle>
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-slate-400 transition group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10.75 3a.75.75 0 01.66.41l5.5 10.5a.75.75 0 01-.66 1.09H3.75a.75.75 0 01-.66-1.09l5.5-10.5A.75.75 0 0110.75 3z" clip-rule="evenodd" /></svg>
+          {% trans 'Filters' %}
+          {% if table.filters_active %}
+            <span class="ml-1 rounded-md bg-primary-500/20 px-2 py-0.5 text-[11px] font-semibold text-primary-100">{{ table.filters_active }}</span>
+          {% endif %}
+        </summary>
+        <div class="absolute left-0 top-full z-50 mt-3 min-w-[18rem] max-w-xl rounded-xl border border-white/10 bg-slate-900/95 p-4 text-xs text-slate-200 shadow-xl shadow-black/40" data-popover-panel data-table-filters-panel style="visibility:hidden;">
+          <div class="space-y-3">
+            {% for filter in table.filters %}
+              {% if filter.type != 'search' %}
+                <div class="rounded-lg border border-white/10 bg-slate-900/80 p-3" data-table-filter-group>
+                  <details class="group">
+                    <summary class="flex cursor-pointer items-center justify-between gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-300">
+                      <span>{{ filter.label }}</span>
+                      <span class="text-slate-500">
+                        {% if filter.selected %}
+                          {{ filter.selected|join:', ' }}
+                        {% else %}
+                          {% trans 'All' %}
+                        {% endif %}
+                      </span>
+                    </summary>
+                    <div class="mt-2 space-y-1">
+                      {% include "platform_ui/components/tables/_filter_inputs.html" with filter=filter form_id=form_id %}
+                    </div>
+                  </details>
+                </div>
+              {% endif %}
+            {% endfor %}
+          </div>
+          <div class="mt-4 flex items-center justify-between">
+            <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-200 hover:border-white/30" data-table-reset>{% trans 'Reset' %}</button>
+            <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-primary-400/40 bg-primary-500/10 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-primary-100 hover:border-primary-300" data-table-apply form="{{ form_id }}">{% trans 'Apply' %}</button>
+          </div>
+        </div>
+      </details>
+      {% endif %}
+
+      {% if table.allow_column_toggle|default:True %}
+        <details class="group relative" data-popover="table-columns">
+          <summary class="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-200 transition hover:border-primary-400 hover:text-white">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-slate-400 transition group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a.75.75 0 01.65.38l4 7a.75.75 0 11-1.3.74L10 4.868 6.65 11.12a.75.75 0 11-1.3-.74l4-7A.75.75 0 0110 3zm-4 12.25a.75.75 0 01.75-.75h6.5a.75.75 0 010 1.5h-6.5a.75.75 0 01-.75-.75z" clip-rule="evenodd" /></svg>
+            {% trans 'Columns' %}
+          </summary>
+          <div class="absolute right-0 top-full z-50 mt-3 w-56 max-h-[60vh] overflow-y-auto rounded-xl border border-white/10 bg-slate-900/95 p-3 text-xs text-slate-200 shadow-xl shadow-black/40" data-table-column-menu data-popover-panel style="visibility:hidden;">
+            <p class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">{% trans 'Toggle columns' %}</p>
+            <ul class="space-y-2" data-table-column-list>
+              {% for column in table.columns %}
+                {% if not column.lock_visible %}
+                  <li>
+                    <label class="flex items-center justify-between gap-3 rounded-lg border border-white/5 bg-white/5 px-3 py-2 text-xs text-slate-200">
+                      <span>{{ column.label }}</span>
+                      <input type="checkbox"
+                             class="h-3.5 w-3.5 rounded border border-white/20 bg-slate-900 text-primary-400 focus:ring-primary-400"
+                             value="{{ column.id }}"
+                             data-table-column-toggle
+                             {% if not column.default_hidden %}checked{% endif %}>
+                    </label>
+                  </li>
+                {% endif %}
+              {% endfor %}
+            </ul>
+          </div>
+        </details>
+      {% endif %}
+
+      {% if table.limit_options %}
+        <label class="flex items-center gap-2 rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-xs text-slate-200">
+          <span class="font-semibold uppercase tracking-wide text-slate-400">{% trans 'Show' %}</span>
+          <select name="{{ prefix }}_page_size"
+                  data-table-page-size
+                  class="rounded-lg border border-white/10 bg-slate-900/80 px-2 py-1 text-xs text-white focus:border-primary-400">
+            {% for option in table.limit_options %}
+              <option value="{{ option }}" {% if option == table.limit_value %}selected{% endif %}>{{ option }}</option>
+            {% endfor %}
+          </select>
+          <span class="text-slate-400">{% trans 'rows' %}</span>
+        </label>
+      {% endif %}
+
+      {% if table.pagination %}
+        <div class="ml-auto flex items-center gap-2" data-table-toolbar-pagination>
+          {% include "platform_ui/components/tables/_pagination.html" with pagination=table.pagination prefix=prefix %}
+        </div>
+      {% endif %}
+    </form>
+  </div>
   <div class="overflow-x-auto overflow-y-visible" data-table-wrapper>
     <table class="min-w-full divide-y divide-white/10 text-sm" data-table data-table-key="{{ table.key|default:resolved_id }}">
       <thead class="bg-white/5 text-left text-xs uppercase tracking-wide text-slate-400">
@@ -85,19 +139,22 @@
                   class="px-4 py-3{% if column.align == 'right' %} text-right{% elif column.align == 'center' %} text-center{% endif %}{% if column.hide_on_mobile %} hidden sm:table-cell{% endif %}{% if column.default_hidden %} hidden{% endif %}"
                   data-table-column="{{ col_id }}"
                   {% if column.default_hidden %}data-table-column-hidden="1"{% endif %}>
-                {% if column.sortable %}
-                  <button type="button"
-                          class="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide transition hover:text-white"
-                          data-table-sort="{{ col_id }}"
-                          data-table-sort-field="{{ column.sort_key|default:col_id }}"
-                          {% if column.default_direction %}data-table-sort-default="{{ column.default_direction }}"{% endif %}>
-                    <span>{{ column.label }}</span>
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-slate-500" viewBox="0 0 20 20" fill="currentColor" data-table-sort-icon>
-                      <path fill-rule="evenodd" d="M10 3a.75.75 0 01.53.22l3.75 3.75a.75.75 0 11-1.06 1.06L10 4.81 6.78 8.03a.75.75 0 11-1.06-1.06l3.75-3.75A.75.75 0 0110 3zm0 14a.75.75 0 01-.53-.22l-3.75-3.75a.75.75 0 111.06-1.06L10 15.19l3.22-3.22a.75.75 0 111.06 1.06l-3.75 3.75A.75.75 0 0110 17z" clip-rule="evenodd" />
-                    </svg>
-                  </button>
+                {% if column.align == 'right' %}
+                  {% with header_class='flex items-center justify-end gap-2' %}
+                    {% include "platform_ui/components/tables/_table_header_content.html" with column=column col_id=col_id form_id=form_id header_class=header_class %}
+                  {% endwith %}
+                {% elif column.align == 'center' %}
+                  {% with header_class='flex items-center justify-center gap-2' %}
+                    {% include "platform_ui/components/tables/_table_header_content.html" with column=column col_id=col_id form_id=form_id header_class=header_class %}
+                  {% endwith %}
+                {% elif column.filter %}
+                  {% with header_class='flex items-center justify-between gap-2' %}
+                    {% include "platform_ui/components/tables/_table_header_content.html" with column=column col_id=col_id form_id=form_id header_class=header_class %}
+                  {% endwith %}
                 {% else %}
-                  <span class="text-xs font-semibold uppercase tracking-wide text-slate-400">{{ column.label }}</span>
+                  {% with header_class='flex items-center justify-start gap-2' %}
+                    {% include "platform_ui/components/tables/_table_header_content.html" with column=column col_id=col_id form_id=form_id header_class=header_class %}
+                  {% endwith %}
                 {% endif %}
               </th>
             {% endwith %}
@@ -126,6 +183,16 @@
       </tbody>
     </table>
   </div>
+  {% if table.pagination.total %}
+    <div class="flex flex-col gap-3 border-t border-white/10 bg-slate-900/40 px-6 py-3 text-xs text-slate-300 sm:flex-row sm:items-center sm:justify-between" data-table-pagination>
+      <div>
+        {% blocktrans with start=table.pagination.start end=table.pagination.end total=table.pagination.total %}Showing {{ start }}–{{ end }} of {{ total }} jobs{% endblocktrans %}
+      </div>
+      {% include "platform_ui/components/tables/_pagination.html" with pagination=table.pagination prefix=prefix %}
+    </div>
+  {% endif %}
 </div>
+{% endwith %}
+{% endwith %}
 {% endwith %}
 {% include "platform_ui/components/tables/_table_scripts.html" %}

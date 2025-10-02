@@ -13,6 +13,7 @@ from apps.platform.cases.models import Case
 from apps.platform.jobs.models import Job
 from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.operations import tasks as op_tasks
+from packages.udocket_core.agents.summarize_lib import SummarizeAgent, SummarizeResult
 from apps.platform.operations.storage import tenant_case_root
 
 
@@ -77,13 +78,79 @@ def _make_transcript(settings, case_id: str, job_id: str) -> Path:
     return p
 
 
-def test_analysis_tasks_generate_artifacts(db, settings):
+def test_analysis_tasks_generate_artifacts(db, settings, monkeypatch):
     org = Organization.objects.create(id="ORG-FLOW2", name="Flow Org 2")
     case = Case.objects.create(id="CASE-T2", title="Analysis Test", organization=org)
     job = Job.objects.create(case=case, audio_input="/tmp/a.wav")
     transcript = _make_transcript(settings, str(case.id), str(job.id))
     job.transcript_path = str(transcript)
     job.save(update_fields=["transcript_path"])
+
+    def _stub_summarize(self, **kwargs):
+        case_dir = Path(kwargs["case_dir"])
+        job_id = kwargs["job_id"]
+        analysis_dir = case_dir / "analysis"
+        ops_dir = case_dir / "ops"
+        analysis_dir.mkdir(parents=True, exist_ok=True)
+        ops_dir.mkdir(parents=True, exist_ok=True)
+
+        summary_path = analysis_dir / f"{job_id}__summary_v1.md"
+        summary_path.write_text("# Summary\n\nThis is a test summary.\n", encoding="utf-8")
+
+        outline_path = analysis_dir / f"{job_id}__outline_v1.json"
+        outline_payload = {"sections": [{"title": "Intro", "items": []}]}
+        outline_path.write_text(json.dumps(outline_payload, indent=2), encoding="utf-8")
+
+        timeline_path = analysis_dir / f"{job_id}__timeline_seed_v1.json"
+        timeline_events = [
+            {
+                "ts_start": 0,
+                "ts_end": None,
+                "speaker": "SPK_1",
+                "text": "This is a timeline seed",
+                "labels": [],
+            }
+        ]
+        timeline_path.write_text(json.dumps({"events": timeline_events}, indent=2), encoding="utf-8")
+
+        entity_path = analysis_dir / f"{job_id}__entity_hints_v1.json"
+        entity_payload = {
+            "entities": [
+                {
+                    "id": "E1",
+                    "name": "Person A",
+                    "type": "PERSON",
+                    "mentions": [{"ts": 0, "text": "Person A"}],
+                }
+            ]
+        }
+        entity_path.write_text(json.dumps(entity_payload, indent=2), encoding="utf-8")
+
+        case_brief_path = analysis_dir / f"{job_id}__case_brief_v1.md"
+        case_brief_path.write_text("Case brief placeholder", encoding="utf-8")
+
+        meta_path = analysis_dir / f"{job_id}__summary_meta.json"
+        meta_path.write_text(json.dumps({"status": "ok"}, indent=2), encoding="utf-8")
+
+        audit_path = ops_dir / f"{job_id}__summary_audit.jsonl"
+        audit_path.write_text(json.dumps({"status": "ok"}) + "\n", encoding="utf-8")
+
+        return SummarizeResult(
+            status="ok",
+            summary_file=summary_path,
+            summary_markdown_file=summary_path,
+            outline_file=outline_path,
+            timeline_seeds_file=timeline_path,
+            entity_hints_file=entity_path,
+            case_brief_file=case_brief_path,
+            words=5,
+            source_transcript=Path(kwargs["input"]),
+            meta_json=meta_path,
+            audit_jsonl=audit_path,
+            provider_chain=["stub"],
+        )
+
+    monkeypatch.setattr(SummarizeAgent, "summarize", _stub_summarize)
 
     # Call task functions directly (avoid Celery runtime)
     out1 = op_tasks.summarize_job.run(None, case_id=str(case.id), job_id=str(job.id))

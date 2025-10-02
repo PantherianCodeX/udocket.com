@@ -1,0 +1,44 @@
+{% load i18n %}
+{% with pag=pagination prefix=prefix|default:'' %}
+{% with page=pag.page|default:1 pages=pag.pages|default:1 has_previous=pag.has_previous|default:False has_next=pag.has_next|default:False %}
+{% with previous_page=pag.previous_page|default:1 next_page=pag.next_page|default:pages first_page=pag.first_page|default:1 last_page=pag.last_page|default:pages %}
+<div class="flex items-center gap-2" data-table-pagination-toolbar>
+  <button type="button"
+          class="inline-flex items-center rounded-lg border border-white/10 bg-slate-900/60 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-slate-200 disabled:cursor-not-allowed disabled:opacity-40 hover:border-primary-400 hover:text-white"
+          data-table-page-first="{{ first_page }}"
+          {% if not has_previous %}disabled{% endif %}>
+    |&lt;
+  </button>
+  <button type="button"
+          class="inline-flex items-center rounded-lg border border-white/10 bg-slate-900/60 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-slate-200 disabled:cursor-not-allowed disabled:opacity-40 hover:border-primary-400 hover:text-white"
+          data-table-page-previous="{{ previous_page }}"
+          {% if not has_previous %}disabled{% endif %}>
+    &lt;
+  </button>
+  <div class="flex items-center gap-1 rounded-lg border border-white/10 bg-slate-900/60 px-2 py-1 text-xs text-slate-200">
+    <input type="text"
+           value="{{ page }}"
+           spellcheck="false"
+           inputmode="numeric"
+           class="w-12 border-none bg-transparent text-center font-semibold uppercase tracking-wide text-white focus:outline-none focus:ring-0"
+           data-table-page-field
+           data-table-page-current="{{ page }}"
+           data-table-page-total="{{ pages }}">
+    <span class="text-slate-400">/ {{ pages }}</span>
+  </div>
+  <button type="button"
+          class="inline-flex items-center rounded-lg border border-white/10 bg-slate-900/60 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-slate-200 disabled:cursor-not-allowed disabled:opacity-40 hover:border-primary-400 hover:text-white"
+          data-table-page-next="{{ next_page }}"
+          {% if not has_next %}disabled{% endif %}>
+    &gt;
+  </button>
+  <button type="button"
+          class="inline-flex items-center rounded-lg border border-white/10 bg-slate-900/60 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-slate-200 disabled:cursor-not-allowed disabled:opacity-40 hover:border-primary-400 hover:text-white"
+          data-table-page-last="{{ last_page }}"
+          {% if not has_next %}disabled{% endif %}>
+    &gt;|
+  </button>
+</div>
+{% endwith %}
+{% endwith %}
+{% endwith %}

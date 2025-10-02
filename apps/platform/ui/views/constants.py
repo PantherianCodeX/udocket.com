@@ -54,26 +54,46 @@ STATUS_SORT_ORDER: Dict[str, int] = {
     "ERROR": 110,
 }
 
-DEFAULT_TABLE_FILTERS = (
-    {
-        "type": "search",
-        "id": "query",
-        "placeholder": "Filter jobs",
-    },
-)
+DEFAULT_TABLE_FILTERS: Tuple[Dict[str, Any], ...] = ()
 
 CASE_JOB_TABLE_COLUMNS: Tuple[Dict[str, Any], ...] = (
     {"id": "title", "label": "Title", "sortable": True, "sort_key": "title", "lock_visible": True},
-    {"id": "status", "label": "Status", "sortable": True, "sort_key": "status"},
-    {"id": "review", "label": "Approval", "sortable": True, "sort_key": "review"},
-    {"id": "agent", "label": "Agent", "sortable": True, "sort_key": "agent"},
-    {"id": "type", "label": "Type", "sortable": True, "sort_key": "type", "default_hidden": True},
+    {
+        "id": "status",
+        "label": "Status",
+        "sortable": True,
+        "sort_key": "status",
+        "filter_id": "status",
+    },
+    {
+        "id": "review",
+        "label": "Approval",
+        "sortable": True,
+        "sort_key": "review",
+        "filter_id": "review",
+    },
+    {
+        "id": "agent",
+        "label": "Agent",
+        "sortable": True,
+        "sort_key": "agent",
+        "filter_id": "agent",
+    },
+    {
+        "id": "type",
+        "label": "Type",
+        "sortable": True,
+        "sort_key": "type",
+        "default_hidden": True,
+        "filter_id": "kind",
+    },
     {
         "id": "modified",
         "label": "Modified",
         "sortable": True,
         "sort_key": "modified",
         "default_direction": "desc",
+        "filter_id": "modified",
     },
     {
         "id": "created",
@@ -81,6 +101,7 @@ CASE_JOB_TABLE_COLUMNS: Tuple[Dict[str, Any], ...] = (
         "sortable": True,
         "sort_key": "created",
         "default_hidden": True,
+        "filter_id": "created",
     },
     {
         "id": "notes",
@@ -95,17 +116,49 @@ CASE_JOB_TABLE_COLUMNS: Tuple[Dict[str, Any], ...] = (
 
 GLOBAL_JOB_TABLE_COLUMNS: Tuple[Dict[str, Any], ...] = (
     {"id": "title", "label": "Job", "sortable": True, "sort_key": "title", "lock_visible": True},
-    {"id": "case", "label": "Case", "sortable": True, "sort_key": "case"},
-    {"id": "status", "label": "Status", "sortable": True, "sort_key": "status"},
-    {"id": "review", "label": "Approval", "sortable": True, "sort_key": "review"},
-    {"id": "agent", "label": "Agent", "sortable": True, "sort_key": "agent"},
-    {"id": "type", "label": "Type", "sortable": True, "sort_key": "type", "default_hidden": True},
+    {
+        "id": "case",
+        "label": "Case",
+        "sortable": True,
+        "sort_key": "case",
+        "filter_id": "case",
+    },
+    {
+        "id": "status",
+        "label": "Status",
+        "sortable": True,
+        "sort_key": "status",
+        "filter_id": "status",
+    },
+    {
+        "id": "review",
+        "label": "Approval",
+        "sortable": True,
+        "sort_key": "review",
+        "filter_id": "review",
+    },
+    {
+        "id": "agent",
+        "label": "Agent",
+        "sortable": True,
+        "sort_key": "agent",
+        "filter_id": "agent",
+    },
+    {
+        "id": "type",
+        "label": "Type",
+        "sortable": True,
+        "sort_key": "type",
+        "default_hidden": True,
+        "filter_id": "kind",
+    },
     {
         "id": "modified",
         "label": "Modified",
         "sortable": True,
         "sort_key": "modified",
         "default_direction": "desc",
+        "filter_id": "modified",
     },
     {
         "id": "created",
@@ -113,6 +166,7 @@ GLOBAL_JOB_TABLE_COLUMNS: Tuple[Dict[str, Any], ...] = (
         "sortable": True,
         "sort_key": "created",
         "default_hidden": True,
+        "filter_id": "created",
     },
     {
         "id": "notes",

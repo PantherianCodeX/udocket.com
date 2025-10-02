@@ -4,6 +4,9 @@ from collections import Counter
 from typing import Any, Dict, List
 
 from django.core.exceptions import PermissionDenied
+from django.core.paginator import Paginator
+from django.db.models import Q
+from django.conf import settings
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import render
 from django.views.decorators.http import require_http_methods
@@ -71,8 +74,63 @@ def artifacts_index(request: HttpRequest) -> HttpResponse:
         .select_related("case_fk")
         .order_by("-created_at")
     )
-    artifacts_list = list(queryset[:200])
+
+    prefix = "artifacts"
+    search_param = f"{prefix}_search"
+    search_value = (request.GET.get(search_param) or "").strip()
+    if search_value:
+        queryset = queryset.filter(
+            Q(title__icontains=search_value)
+            | Q(type__icontains=search_value)
+            | Q(case_fk__title__icontains=search_value)
+            | Q(case_id__icontains=search_value)
+            | Q(job_id__icontains=search_value)
+        )
+
+    raw_limit_choices = getattr(settings, "PLATFORM_UI_ARTIFACT_LIMIT_CHOICES", (10, 25, 50, 100, 200))
+    limit_choices = sorted({int(value) for value in raw_limit_choices if int(value) > 0}) or [25, 50, 100, 200]
+    default_limit = getattr(settings, "PLATFORM_UI_ARTIFACT_DEFAULT_LIMIT", limit_choices[0])
+    page_size_param = f"{prefix}_page_size"
+    try:
+        page_size = int(request.GET.get(page_size_param, default_limit))
+    except (TypeError, ValueError):
+        page_size = default_limit
+    if page_size not in limit_choices:
+        for option in limit_choices:
+            if page_size <= option:
+                page_size = option
+                break
+        else:
+            page_size = limit_choices[-1]
+
+    page_param = f"{prefix}_page"
+    try:
+        page_number = int(request.GET.get(page_param, "1"))
+    except (TypeError, ValueError):
+        page_number = 1
+    if page_number < 1:
+        page_number = 1
+
+    paginator = Paginator(queryset, page_size)
+    page_obj = paginator.get_page(page_number)
+    artifacts_list = list(page_obj.object_list)
     rows = _artifact_rows(artifacts_list)
+
+    pagination = {
+        "page": page_obj.number,
+        "pages": paginator.num_pages or 1,
+        "page_size": page_size,
+        "total": paginator.count,
+        "start": page_obj.start_index() if paginator.count else 0,
+        "end": page_obj.end_index() if paginator.count else 0,
+        "has_previous": page_obj.has_previous(),
+        "has_next": page_obj.has_next(),
+        "previous_page": page_obj.previous_page_number() if page_obj.has_previous() else 1,
+        "next_page": page_obj.next_page_number() if page_obj.has_next() else paginator.num_pages or 1,
+        "display_count": len(rows),
+        "first_page": 1,
+        "last_page": paginator.num_pages or 1,
+    }
 
     type_counts = Counter(artifact.type for artifact in artifacts_list)
 
@@ -80,15 +138,20 @@ def artifacts_index(request: HttpRequest) -> HttpResponse:
         {
             "type": "search",
             "id": "query",
+            "param": search_param,
             "placeholder": "Filter artifacts",
+            "value": search_value,
         },
     )
+
+    filter_param_names = [search_param, page_param, page_size_param]
+    filters_active = 1 if search_value else 0
 
     artifacts_table = {
         "id": "artifacts-table",
         "key": "artifacts",
         "title": "Artifacts",
-        "pill": "Latest 200",
+        "pill": f"Page {pagination['page']} of {pagination['pages']}",
         "rows": rows,
         "columns": ARTIFACT_TABLE_COLUMNS,
         "column_ids": [col["id"] for col in ARTIFACT_TABLE_COLUMNS],
@@ -97,6 +160,15 @@ def artifacts_index(request: HttpRequest) -> HttpResponse:
         "empty_message": "No artifacts yet.",
         "show_identifiers": False,
         "allow_column_toggle": True,
+        "pagination": pagination,
+        "limit_value": page_size,
+        "limit_options": limit_choices,
+        "total_count": paginator.count,
+        "param_prefix": prefix,
+        "filter_param_names": filter_param_names,
+        "filters_active": filters_active,
+        "has_advanced_filters": False,
+        "body_id": "artifacts-body",
     }
 
     section = {
@@ -106,7 +178,7 @@ def artifacts_index(request: HttpRequest) -> HttpResponse:
         "stats": [
             {
                 "label": "Total artifacts",
-                "value": len(artifacts_list),
+                "value": paginator.count,
                 "class": "border-white/10 bg-slate-900/70 text-white",
             },
             {
@@ -132,6 +204,7 @@ def artifacts_index(request: HttpRequest) -> HttpResponse:
         "section": section,
         "artifact_rows": rows,
         "artifact_type_counts": type_counts,
+        "artifact_pagination": pagination,
     }
 
     return render(request, "platform_ui/artifacts/index.html", context)

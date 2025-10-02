@@ -294,7 +294,20 @@ class AzureChatClient:
             raise RuntimeError(message) from exc
 
         response_text = response.text
-        request_id = response.headers.get("x-ms-request-id") or response.headers.get("x-request-id")
+        headers_obj = getattr(response, "headers", None)
+        if headers_obj is None:
+            response_headers: Dict[str, Any] = {}
+        elif hasattr(headers_obj, "get"):
+            response_headers = headers_obj  # type: ignore[assignment]
+        else:
+            try:
+                response_headers = dict(headers_obj)
+            except Exception:
+                response_headers = {}
+
+        request_id = None
+        if hasattr(response_headers, "get"):
+            request_id = response_headers.get("x-ms-request-id") or response_headers.get("x-request-id")
 
         if logger.isEnabledFor(logging.DEBUG):
             preview = (response_text or "")[:2000]

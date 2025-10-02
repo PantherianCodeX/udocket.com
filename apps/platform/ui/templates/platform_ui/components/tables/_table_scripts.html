@@ -7,6 +7,11 @@
       return field ? field.toString() : '';
     }
 
+    function storageKey(table, suffix) {
+      const key = table.dataset.tableKey || table.getAttribute('id') || 'table';
+      return `${STATE_KEY}:${key}:${suffix}`;
+    }
+
     function getGroups(table) {
       const body = table.querySelector('[data-table-body]');
       if (!body) return [];
@@ -61,30 +66,6 @@
       table.setAttribute('data-table-sorted-direction', appliedDirection);
     }
 
-    function applySearch(table, query) {
-      const body = table.querySelector('[data-table-body]');
-      if (!body) return;
-      const normalized = (query || '').toString().trim().toLowerCase();
-      const groups = getGroups(table);
-      groups.forEach((group) => {
-        let visible = true;
-        if (normalized) {
-          visible = group.rows.some((row) => {
-            const haystack = row.getAttribute('data-table-filter') || '';
-            return haystack.includes(normalized);
-          });
-        }
-        group.rows.forEach((row) => {
-          if (!row) return;
-          if (visible) {
-            row.classList.remove('hidden');
-          } else {
-            row.classList.add('hidden');
-          }
-        });
-      });
-    }
-
     function resetSortIndicators(table, activeButton, direction) {
       table.querySelectorAll('[data-table-sort]').forEach((btn) => {
         const icon = btn.querySelector('[data-table-sort-icon]');
@@ -102,11 +83,6 @@
           if (icon) icon.classList.remove('rotate-180');
         }
       });
-    }
-
-    function storageKey(table, suffix) {
-      const key = table.dataset.tableKey || table.getAttribute('id') || 'table';
-      return `${STATE_KEY}:${key}:${suffix}`;
     }
 
     function loadColumnState(table) {
@@ -163,7 +139,7 @@
       dismissListenersBound = true;
       document.addEventListener('click', (event) => {
         document
-          .querySelectorAll('[data-table-column-controls] details[open]')
+          .querySelectorAll('details[data-popover][open]')
           .forEach((details) => {
             if (!details.contains(event.target)) {
               details.removeAttribute('open');
@@ -173,16 +149,112 @@
       document.addEventListener('keydown', (event) => {
         if (event.key !== 'Escape') return;
         document
-          .querySelectorAll('[data-table-column-controls] details[open]')
+          .querySelectorAll('details[data-popover][open]')
           .forEach((details) => details.removeAttribute('open'));
+      });
+    }
+
+    function resetTableFilters(container, paramNames) {
+      if (!paramNames.length) return;
+      try {
+        const url = new URL(window.location.href);
+        paramNames.forEach((name) => url.searchParams.delete(name));
+        window.location.assign(url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : ''));
+      } catch (_) {
+        const [base] = window.location.href.split('?');
+        window.location.assign(base);
+      }
+    }
+
+    function syncFilterInputs(container, source) {
+      if (!container || !source) return;
+      const name = source.getAttribute('name');
+      if (!name) return;
+      const selector = `[data-table-filter-input][name="${CSS.escape(name)}"]`;
+      const sourceValue = source.value;
+      const sourceType = source.type;
+      container.querySelectorAll(selector).forEach((input) => {
+        if (input === source) return;
+        if (sourceType === 'checkbox') {
+          if (input.value === sourceValue) {
+            input.checked = source.checked;
+          }
+        } else if (sourceType === 'radio') {
+          input.checked = input.value === sourceValue;
+        } else {
+          input.value = source.value;
+        }
+      });
+      updateFilterSummaries(container, '');
+    }
+
+    function updateFilterSummaries(container, paramName) {
+      if (!container) return;
+      const detailsNodes = container.querySelectorAll('details[data-table-filter-param]');
+      detailsNodes.forEach((details) => {
+        const detailsParam = details.getAttribute('data-table-filter-param');
+        if (paramName && detailsParam && detailsParam !== paramName) {
+          return;
+        }
+        const type = details.getAttribute('data-table-filter-type') || '';
+        const summaryEl = details.querySelector('[data-table-filter-summary]');
+        if (!summaryEl) return;
+        let summaryText = summaryEl.dataset.defaultText || 'All';
+        let hasValue = false;
+        if (type === 'select') {
+          const inputName = details.getAttribute('data-table-filter-param');
+          if (inputName) {
+            const labels = [];
+            container.querySelectorAll(`[data-table-filter-input][name="${CSS.escape(inputName)}"]`).forEach((input) => {
+              if (!input.checked) return;
+              if (!input.value) return;
+              const label = input.closest('label');
+              if (label) {
+                const text = label.textContent ? label.textContent.trim() : '';
+                if (text) labels.push(text);
+              }
+            });
+            if (labels.length) {
+              summaryText = labels.slice(0, 3).join(', ');
+              if (labels.length > 3) {
+                summaryText += '…';
+              }
+              hasValue = true;
+            }
+          }
+        } else if (type === 'daterange') {
+          const startParam = details.getAttribute('data-table-filter-start');
+          const endParam = details.getAttribute('data-table-filter-end');
+          const startInput = startParam ? container.querySelector(`[data-table-filter-input][name="${CSS.escape(startParam)}"]`) : null;
+          const endInput = endParam ? container.querySelector(`[data-table-filter-input][name="${CSS.escape(endParam)}"]`) : null;
+          const startValue = startInput && startInput.value ? startInput.value : '';
+          const endValue = endInput && endInput.value ? endInput.value : '';
+          if (startValue || endValue) {
+            summaryText = `${startValue || '—'} → ${endValue || '—'}`;
+            hasValue = true;
+          }
+        }
+        summaryEl.textContent = summaryText;
+        summaryEl.classList.toggle('text-primary-200', hasValue);
+        summaryEl.classList.toggle('text-slate-500', !hasValue);
       });
     }
 
     function bindTable(table) {
       if (table.dataset.tableReady === '1') return;
       const container = table.closest('[data-table-container]');
-      const searchInput = container ? container.querySelector('[data-table-search-input]') : null;
-      const toggleContainer = container ? container.querySelector('[data-table-column-controls]') : null;
+      const form = container ? container.querySelector('[data-table-filter-form]') : null;
+      const pageInput = form ? form.querySelector('[data-table-page-input]') : null;
+      const pageSizeSelect = form ? form.querySelector('[data-table-page-size]') : null;
+      const applyButtons = container ? container.querySelectorAll('[data-table-apply]') : [];
+      const resetButtons = container ? container.querySelectorAll('[data-table-reset]') : [];
+      const columnPopover = container ? container.querySelector('details[data-popover="table-columns"]') : null;
+      const filtersPopover = container ? container.querySelector('details[data-popover="table-filters"]') : null;
+      const paginationWrappers = container ? container.querySelectorAll('[data-table-pagination-toolbar]') : [];
+      const paramNames = (container?.dataset.tableParams || '')
+        .split(',')
+        .map((name) => name.trim())
+        .filter(Boolean);
 
       const defaultColumnState = {};
       table.querySelectorAll('[data-table-column]').forEach((header) => {
@@ -212,15 +284,10 @@
         }
       });
 
-      if (searchInput) {
-        searchInput.addEventListener('input', () => applySearch(table, searchInput.value));
-      }
+      bindDismissListeners();
 
-      applySearch(table, searchInput ? searchInput.value : '');
-
-      if (toggleContainer) {
-        bindDismissListeners();
-        toggleContainer.querySelectorAll('[data-table-column-toggle]').forEach((input) => {
+      if (columnPopover) {
+        columnPopover.querySelectorAll('[data-table-column-toggle]').forEach((input) => {
           const columnId = input.value;
           if (!columnId) return;
           input.addEventListener('change', () => {
@@ -231,12 +298,167 @@
         });
       }
 
+      if (container) {
+        container.querySelectorAll('[data-table-filter-input]').forEach((input) => {
+          input.addEventListener('change', () => {
+            syncFilterInputs(container, input);
+            if (pageInput) pageInput.value = '1';
+          });
+        });
+      }
+
+      if (filtersPopover) {
+        filtersPopover.addEventListener('keydown', (event) => {
+          if (event.key === 'Escape') {
+            filtersPopover.removeAttribute('open');
+          }
+        });
+      }
+
+      if (container) {
+        container.querySelectorAll('[data-table-filter-clear]').forEach((button) => {
+          button.addEventListener('click', () => {
+            const param = button.getAttribute('data-table-filter-clear');
+            const group = button.closest('[data-table-filter-group]');
+            if (!group || !param) return;
+            group.querySelectorAll(`input[name="${CSS.escape(param)}"]`).forEach((input) => {
+              if (input.type === 'checkbox') {
+                input.checked = false;
+              } else if (input.type === 'radio') {
+                input.checked = input.value === '';
+              }
+              syncFilterInputs(container, input);
+            });
+            if (pageInput) pageInput.value = '1';
+          });
+        });
+      }
+
+      if (form) {
+        form.addEventListener('submit', (event) => {
+          const submitter = event.submitter;
+          if (!pageInput) return;
+          if (!submitter || submitter.hasAttribute('data-table-apply')) {
+            pageInput.value = '1';
+          }
+        });
+      }
+
+      function submitPage(targetPage) {
+        if (!form || !pageInput) return;
+        if (!targetPage) return;
+        pageInput.value = String(targetPage);
+        form.submit();
+      }
+
+      paginationWrappers.forEach((wrapper) => {
+        wrapper.querySelectorAll('[data-table-page-first]').forEach((button) => {
+          button.addEventListener('click', () => {
+            const value = button.getAttribute('data-table-page-first');
+            submitPage(value);
+          });
+        });
+        wrapper.querySelectorAll('[data-table-page-previous]').forEach((button) => {
+          button.addEventListener('click', () => {
+            const value = button.getAttribute('data-table-page-previous');
+            submitPage(value);
+          });
+        });
+        wrapper.querySelectorAll('[data-table-page-next]').forEach((button) => {
+          button.addEventListener('click', () => {
+            const value = button.getAttribute('data-table-page-next');
+            submitPage(value);
+          });
+        });
+        wrapper.querySelectorAll('[data-table-page-last]').forEach((button) => {
+          button.addEventListener('click', () => {
+            const value = button.getAttribute('data-table-page-last');
+            submitPage(value);
+          });
+        });
+        wrapper.querySelectorAll('[data-table-page-field]').forEach((inputField) => {
+          const total = Number(inputField.getAttribute('data-table-page-total')) || 1;
+          const current = Number(inputField.getAttribute('data-table-page-current')) || 1;
+          let originalValue = inputField.value;
+
+          function clamp(value) {
+            const parsed = Number(value);
+            if (Number.isNaN(parsed) || parsed < 1) return 1;
+            if (parsed > total) return total;
+            return parsed;
+          }
+
+          inputField.addEventListener('focus', () => {
+            originalValue = inputField.value;
+          });
+
+          inputField.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              const target = clamp(inputField.value);
+              if (target !== current) {
+                submitPage(target);
+              } else {
+                inputField.value = String(current);
+                inputField.blur();
+              }
+            } else if (event.key === 'Escape') {
+              inputField.value = originalValue;
+              inputField.blur();
+            }
+          });
+
+          inputField.addEventListener('blur', () => {
+            const target = clamp(inputField.value);
+            inputField.value = String(target);
+            if (target !== current) {
+              submitPage(target);
+            }
+          });
+        });
+      });
+
+      if (pageSizeSelect && form && pageInput) {
+        pageSizeSelect.addEventListener('change', () => {
+          pageInput.value = '1';
+          form.submit();
+        });
+      }
+
+      resetButtons.forEach((button) => {
+        button.addEventListener('click', (event) => {
+          event.preventDefault();
+          resetTableFilters(container, paramNames);
+        });
+      });
+
+      applyButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+          if (pageInput) pageInput.value = '1';
+          if (form && typeof form.requestSubmit === 'function') {
+            form.requestSubmit(button);
+          } else if (form) {
+            form.submit();
+          }
+          container?.querySelectorAll('details[data-popover][open]').forEach((details) => {
+            details.removeAttribute('open');
+          });
+        });
+      });
+
+      updateFilterSummaries(container, '');
       saveColumnState(table, columnState);
       table.dataset.tableReady = '1';
     }
 
     function initAll() {
-      document.querySelectorAll('[data-table]:not([data-table-ready="1"])').forEach(bindTable);
+      document.querySelectorAll('[data-table-container]').forEach((container) => {
+        const table = container.querySelector('[data-table]');
+        if (!table) return;
+        container.dataset.tableParams = container.dataset.tableParams ||
+          (container.getAttribute('data-table-params') || '');
+        bindTable(table);
+      });
     }
 
     if (!window[STATE_KEY]) {

@@ -1,0 +1,80 @@
+{% load i18n %}
+{% with param=filter.param|default:filter.id %}
+  {% if filter.type == 'select' %}
+    {% if filter.multiple %}
+      <div class="space-y-1" data-table-filter-options>
+        <button type="button"
+                class="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-200 hover:border-white/30"
+                data-table-filter-clear="{{ param }}">
+          {% trans 'All' %}
+        </button>
+        {% for option in filter.options %}
+          <label class="flex items-center gap-2 rounded-lg border border-white/5 bg-white/5 px-2 py-1 text-xs text-slate-200">
+            <input type="checkbox"
+                   name="{{ param }}"
+                   value="{{ option.value }}"
+                   form="{{ form_id }}"
+                   class="h-3.5 w-3.5 rounded border border-white/20 bg-slate-900 text-primary-400 focus:ring-primary-400"
+                   data-table-filter-input
+                   data-table-filter-name="{{ param }}"
+                   data-table-filter-value="{{ option.value }}"
+                   {% if option.value in filter.value %}checked{% endif %}>
+            <span class="truncate" title="{{ option.label }}">{{ option.label }}</span>
+          </label>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="space-y-1" data-table-filter-options>
+        <label class="flex items-center gap-2 rounded-lg border border-white/5 bg-white/5 px-2 py-1 text-xs text-slate-200">
+          <input type="radio"
+                 name="{{ param }}"
+                 value=""
+                 form="{{ form_id }}"
+                 class="h-3.5 w-3.5 rounded border border-white/20 bg-slate-900 text-primary-400 focus:ring-primary-400"
+                 data-table-filter-input
+                 data-table-filter-name="{{ param }}"
+                 data-table-filter-value=""
+                 {% if not filter.value %}checked{% endif %}>
+          <span>{% trans 'All' %}</span>
+        </label>
+        {% for option in filter.options %}
+          <label class="flex items-center gap-2 rounded-lg border border-white/5 bg-white/5 px-2 py-1 text-xs text-slate-200">
+            <input type="radio"
+                   name="{{ param }}"
+                   value="{{ option.value }}"
+                   form="{{ form_id }}"
+                   class="h-3.5 w-3.5 rounded border border-white/20 bg-slate-900 text-primary-400 focus:ring-primary-400"
+                   data-table-filter-input
+                   data-table-filter-name="{{ param }}"
+                   data-table-filter-value="{{ option.value }}"
+                   {% if option.value == filter.value %}checked{% endif %}>
+            <span class="truncate" title="{{ option.label }}">{{ option.label }}</span>
+          </label>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% elif filter.type == 'daterange' %}
+    <div class="space-y-2" data-table-filter-options>
+      <label class="flex items-center gap-2 text-xs text-slate-200">
+        <span class="w-16 text-[11px] uppercase tracking-wide text-slate-400">{% trans 'From' %}</span>
+        <input type="date"
+               name="{{ filter.start_param }}"
+               value="{{ filter.start_value }}"
+               form="{{ form_id }}"
+               class="flex-1 rounded-lg border border-white/15 bg-slate-900/80 px-2 py-1 text-xs text-white focus:border-primary-400"
+               data-table-filter-input
+               data-table-filter-name="{{ filter.start_param }}">
+      </label>
+      <label class="flex items-center gap-2 text-xs text-slate-200">
+        <span class="w-16 text-[11px] uppercase tracking-wide text-slate-400">{% trans 'To' %}</span>
+        <input type="date"
+               name="{{ filter.end_param }}"
+               value="{{ filter.end_value }}"
+               form="{{ form_id }}"
+               class="flex-1 rounded-lg border border-white/15 bg-slate-900/80 px-2 py-1 text-xs text-white focus:border-primary-400"
+               data-table-filter-input
+               data-table-filter-name="{{ filter.end_param }}">
+      </label>
+    </div>
+  {% endif %}
+{% endwith %}
