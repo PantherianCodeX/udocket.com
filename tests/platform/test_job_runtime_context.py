@@ -109,6 +109,37 @@ def test_job_runtime_context_lifecycle(monkeypatch):
 
 
 @pytest.mark.django_db()
+def test_job_runtime_emit_sanitizes_reserved_keys(monkeypatch):
+    org = Organization.objects.create(id="ORG-RUNTIME-EMIT", name="Runtime Org Emit")
+    case = Case.objects.create(id="CASE-RUNTIME-EMIT", title="Runtime Case Emit", organization=org)
+    job = Job.objects.create(case=case, audio_input="/tmp/source3.wav")
+
+    captured: Dict[str, Any] = {}
+
+    def _capture_event(job_id: str, *, event: str, case_id: str, status: str | None = None, **payload: Any) -> None:
+        captured["job_id"] = job_id
+        captured["event"] = event
+        captured["case_id"] = case_id
+        captured["status"] = status
+        captured["payload"] = dict(payload)
+
+    monkeypatch.setattr(runtime, "send_job_update", _capture_event)
+
+    runtime_ctx = runtime.JobRuntimeContext(job=job, case_id=str(case.id), org_id=str(org.id))
+
+    runtime_ctx.emit(
+        "custom.progress",
+        status="ok",
+        case_id="SHOULD_BE_IGNORED",
+        stage="context_builder",
+    )
+
+    assert captured["case_id"] == str(case.id)
+    assert captured["payload"].get("stage") == "context_builder"
+    assert "case_id" not in captured["payload"]
+
+
+@pytest.mark.django_db()
 def test_job_runtime_context_fail_and_cancel(monkeypatch):
     org = Organization.objects.create(id="ORG-RUNTIME2", name="Runtime Org 2")
     case = Case.objects.create(id="CASE-RUNTIME2", title="Runtime Case 2", organization=org)

@@ -344,7 +344,16 @@ class JobRuntimeContext:
         self._update_task_state(task_meta_updates)
 
     def emit(self, event: str, *, status: Optional[str] = None, **payload: Any) -> None:
-        _emit_job_update(self.job_id, case_id=self.case_id, event=event, status=status, **payload)
+        sanitized = dict(payload)
+        sanitized.pop("case_id", None)
+        sanitized.pop("event", None)
+        _emit_job_update(
+            self.job_id,
+            case_id=self.case_id,
+            event=event,
+            status=status,
+            **sanitized,
+        )
 
 
 __all__ = [

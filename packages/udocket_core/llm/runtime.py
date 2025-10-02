@@ -7,7 +7,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass
-from typing import Any, Dict, List, Mapping, Optional, Protocol, Tuple, cast
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Protocol, Tuple, cast
 
 
 class _ResponseProtocol(Protocol):
@@ -326,6 +326,46 @@ def _resolve_metadata(credential_payload: Optional[Dict[str, Any]]) -> Dict[str,
     return dict(metadata or {})
 
 
+def _first_matching_model(
+    models_payload: Optional[Iterable[Any]],
+    model_name: str,
+) -> Optional[Dict[str, Any]]:
+    if not models_payload or not model_name:
+        return None
+    target_name = model_name.strip().lower()
+    if not target_name:
+        return None
+    for entry in models_payload:
+        if not isinstance(entry, Mapping):
+            continue
+        entry_name_raw = entry.get("name") or entry.get("id")
+        if not isinstance(entry_name_raw, str):
+            continue
+        entry_name = entry_name_raw.strip().lower()
+        if not entry_name:
+            continue
+        if entry_name == target_name:
+            return {str(key): value for key, value in entry.items()}
+    return None
+
+
+def _merge_default_options(base: Dict[str, Any], defaults: Optional[Mapping[str, Any]]) -> None:
+    if not defaults:
+        return
+    for key, value in defaults.items():
+        if key in base:
+            continue
+        if value is None:
+            continue
+        if isinstance(value, str):
+            candidate = value.strip()
+            if not candidate:
+                continue
+            base[key] = candidate
+        else:
+            base[key] = value
+
+
 def build_chat_client(
     *,
     provider_runtime: ProviderRuntimeConfig,
@@ -415,6 +455,36 @@ def build_provider_runtime_config(
 ) -> ProviderRuntimeConfig:
     model = provider.models.get(model_name) if model_name in provider.models else None
     options = dict(options or {})
+    if model and model.options:
+        _merge_default_options(options, model.options)
+
+    models_payload = credential_payload.get("models") if credential_payload else None
+    credential_model = _first_matching_model(models_payload, model_name)
+    if credential_model:
+        credential_options = credential_model.get("options")
+        if isinstance(credential_options, Mapping):
+            _merge_default_options(options, credential_options)
+        deployment_env = credential_model.get("deployment_env")
+        if (
+            "azure_deployment" not in options
+            and isinstance(deployment_env, str)
+            and deployment_env.strip()
+        ):
+            options["azure_deployment"] = deployment_env.strip()
+
+    if (
+        provider.api_kind == "azure_openai"
+        and "azure_deployment" not in options
+        and model
+        and isinstance(model.deployment_env, str)
+        and model.deployment_env.strip()
+    ):
+        env_value = os.getenv(model.deployment_env.strip())
+        if env_value and env_value.strip():
+            options["azure_deployment"] = env_value.strip()
+        else:
+            options["azure_deployment"] = model.deployment_env.strip()
+
     endpoint = _resolve_endpoint(provider, credential_payload, options)
     api_key = _resolve_api_key(provider, credential_payload, options)
     metadata = _resolve_metadata(credential_payload)
