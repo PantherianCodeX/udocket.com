@@ -7,6 +7,7 @@ from urllib.parse import quote
 from django.urls import reverse
 
 from apps.platform.cases.models import Case
+from packages.udocket_core.agents.compose import COMPOSE_STAGE_PROFILES
 from packages.udocket_core.agents.summarize_lib import SUMMARIZE_STAGE_PROFILES, SummarizeConfig
 from packages.udocket_core.llm import load_llm_settings
 
@@ -32,8 +33,13 @@ def collect_provider_chain(provider_chain: Sequence[str], default_chain: Sequenc
     return sequence
 
 
-def _stage_profile_hint(stage_key: str) -> Dict[str, Any] | None:
-    profile = SUMMARIZE_STAGE_PROFILES.get(stage_key)
+def _stage_profile_hint(stage_key: str, *, target: str) -> Dict[str, Any] | None:
+    if target == "summary":
+        profile = SUMMARIZE_STAGE_PROFILES.get(stage_key)
+    elif target == "compose":
+        profile = COMPOSE_STAGE_PROFILES.get(stage_key)
+    else:
+        profile = None
     if profile is None:
         return None
     return {
@@ -118,6 +124,7 @@ def build_llm_stage_configs(*, target: str, llm_settings, stage_map: Dict[str, D
                 if max_value > 0:
                     selected_max_tokens = max_value
 
+        profile_hint = _stage_profile_hint(stage_key, target=target)
         stage_configs.append(
             {
                 "key": stage_key,
@@ -128,7 +135,7 @@ def build_llm_stage_configs(*, target: str, llm_settings, stage_map: Dict[str, D
                 "selected_model": selected_model,
                 "selected_options": selected_options,
                 "selected_max_tokens": selected_max_tokens,
-                "profile": _stage_profile_hint(stage_key) if target == "summary" else None,
+                "profile": profile_hint,
             }
         )
     return stage_configs

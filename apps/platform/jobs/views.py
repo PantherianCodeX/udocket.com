@@ -37,7 +37,7 @@ from apps.platform.operations.tasks import transcribe_job
 from apps.platform.operations.channels import send_job_update
 from apps.platform.operations.audit import emit as audit_emit
 from django.db import transaction
-from apps.platform.operations.tasks import summarize_job, timeline_job, graph_job
+from apps.platform.operations.tasks import summarize_job, timeline_job, graph_job, compose_job
 from apps.platform.tenancy import scope_jobs
 from apps.platform.operations.storage import ensure_case_dirs, ops_dir as storage_ops_dir
 from apps.platform.operations.utils import append_job_log, read_job_meta, update_job_meta
@@ -1071,6 +1071,86 @@ class JobViewSet(viewsets.ModelViewSet):
             {"status": "queued", "job_id": str(summary_job.id)},
             status=status.HTTP_202_ACCEPTED,
         )
+
+    @action(detail=True, methods=["post"], url_path="analyze/compose")
+    def analyze_compose(self, request, pk=None):
+        summary_job = self.get_object()
+        payload = request.data if hasattr(request, "data") else {}
+        llm_config_id = None
+        if isinstance(payload, dict):
+            config_value = payload.get("llm_config_id")
+            if isinstance(config_value, str) and config_value.strip():
+                llm_config_id = config_value.strip()
+
+        organization_obj = summary_job.organization or getattr(summary_job.case, "organization", None)
+        if organization_obj is None:
+            try:
+                organization_obj = summary_job.case.organization
+            except Exception:
+                organization_obj = None
+        if organization_obj is None:
+            return Response({"detail": "Organization context unavailable for compose job."}, status=status.HTTP_400_BAD_REQUEST)
+
+        with transaction.atomic():
+            new_job = Job.objects.create(
+                case=summary_job.case,
+                organization=organization_obj,
+                audio_input=summary_job.audio_input,
+                mode=summary_job.mode,
+                diarization=summary_job.diarization,
+                language=summary_job.language,
+                transcript_path=summary_job.transcript_path,
+                duration_s=summary_job.duration_s,
+            )
+
+        ensure_case_dirs(str(summary_job.case_id), summary_job.organization_id)
+        meta_seed: Dict[str, Any] = {
+            "job_kind": "compose",
+            "agent_type": "compose",
+            "job_title": unique_title("Compose", CaseArtifact.objects.filter(case_id=str(summary_job.case_id), type="COMPOSE").values_list("title", flat=True)),
+            "summary_job_id": str(summary_job.id),
+        }
+        if llm_config_id:
+            meta_seed["requested_llm_config_id"] = llm_config_id
+
+        update_job_meta(
+            str(summary_job.case_id),
+            summary_job.organization_id,
+            str(new_job.id),
+            meta_seed,
+        )
+        append_job_log(
+            str(summary_job.case_id),
+            summary_job.organization_id,
+            str(new_job.id),
+            f"Queued compose job from summary {summary_job.id}",
+        )
+
+        send_job_update(
+            str(new_job.id),
+            event="job.created",
+            status=Job.Status.PENDING,
+            case_id=str(new_job.case_id),
+        )
+
+        compose_job.delay(
+            case_id=str(new_job.case_id),
+            job_id=str(new_job.id),
+            summary_job_id=str(summary_job.id),
+            llm_config_id=llm_config_id,
+        )
+        audit_emit(
+            request,
+            case_id=str(summary_job.case_id),
+            event="analysis.compose.requested",
+            data={
+                "job_id": str(new_job.id),
+                "summary_job_id": str(summary_job.id),
+                "llm_config_id": llm_config_id,
+            },
+        )
+
+        return Response({"status": "queued", "job_id": str(new_job.id)}, status=status.HTTP_202_ACCEPTED)
 
     @action(detail=True, methods=["post"], url_path="analyze/timeline")
     def analyze_timeline(self, request, pk=None):

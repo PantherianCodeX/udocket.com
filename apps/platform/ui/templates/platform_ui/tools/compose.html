@@ -96,6 +96,44 @@
           {% endfor %}
         </div>
       {% endif %}
+      <div class="space-y-3 text-xs text-slate-200">
+        <div class="rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2">
+          <p class="text-[11px] uppercase tracking-wide text-slate-400">Timeline</p>
+          {% if module.timeline.latest %}
+            <p class="font-semibold text-white">{{ module.timeline.latest.title|default:"Timeline" }}</p>
+            {% if module.timeline.latest.created_at %}
+              <p class="text-[11px] text-slate-400">Generated <time data-ts="{{ module.timeline.latest.created_at|date:'c' }}" data-ts-format="datetime">{{ module.timeline.latest.created_at|date:'M d, Y h:i A' }}</time></p>
+            {% endif %}
+            {% if module.timeline.latest.download_url %}
+              <a href="{{ module.timeline.latest.download_url }}" class="mt-2 inline-flex items-center justify-center rounded border border-white/15 px-3 py-1 text-[11px] uppercase tracking-wide text-slate-100 transition hover:border-primary-400" download>Download timeline</a>
+            {% endif %}
+          {% else %}
+            <p class="text-slate-400">Timeline will be generated when Compose runs.</p>
+          {% endif %}
+        </div>
+        <div class="rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2">
+          <p class="text-[11px] uppercase tracking-wide text-slate-400">Relationships &amp; Entities</p>
+          {% if module.graph.latest %}
+            <p class="font-semibold text-white">{{ module.graph.latest.title|default:"Relationship graph" }}</p>
+            {% if module.graph.latest.created_at %}
+              <p class="text-[11px] text-slate-400">Generated <time data-ts="{{ module.graph.latest.created_at|date:'c' }}" data-ts-format="datetime">{{ module.graph.latest.created_at|date:'M d, Y h:i A' }}</time></p>
+            {% endif %}
+            {% if module.graph.latest.download_url %}
+              <a href="{{ module.graph.latest.download_url }}"
+                 class="mt-2 inline-flex items-center justify-center rounded border border-white/15 px-3 py-1 text-[11px] uppercase tracking-wide text-slate-100 transition hover:border-primary-400"
+                 download>
+                {% if module.graph.latest.artifact_type and module.graph.latest.artifact_type|upper == 'ENTITIES' %}
+                  Download entities
+                {% else %}
+                  Download graph
+                {% endif %}
+              </a>
+            {% endif %}
+          {% else %}
+            <p class="text-slate-400">Relationships will be generated when Compose runs.</p>
+          {% endif %}
+        </div>
+      </div>
       {% if module.history %}
         <div class="space-y-1 text-xs text-slate-400">
           <p class="font-semibold uppercase tracking-wide">Previous runs</p>

@@ -54,23 +54,62 @@
       ],
       "model": "gpt-4o-mini"
     },
-    "timeline.builder": {
-      "target": "timeline",
-      "label": "Timeline Builder",
-      "description": "Generates normalized events aligned to transcripts and optional summaries.",
+    "compose.context_builder": {
+      "target": "compose",
+      "label": "Context Builder",
+      "description": "Condenses intake metadata and approved summaries into a case brief for downstream stages.",
       "providers": [
         "azure"
       ],
       "model": "gpt-4o-mini"
     },
-    "graph.extractor": {
-      "target": "graph",
-      "label": "Graph Extractor",
-      "description": "Extracts entities and relationships suitable for graph visualization.",
+    "compose.timeline_builder": {
+      "target": "compose",
+      "label": "Timeline Builder",
+      "description": "Generates normalized timeline events with timestamp references for compose deliverables.",
       "providers": [
         "azure"
       ],
       "model": "gpt-4o-mini"
+    },
+    "compose.graph_builder": {
+      "target": "compose",
+      "label": "Graph Builder",
+      "description": "Extracts entities and relationships with evidence links for compose outputs.",
+      "providers": [
+        "azure"
+      ],
+      "model": "gpt-4o-mini"
+    },
+    "compose.client_brief": {
+      "target": "compose",
+      "label": "Client Brief Drafter",
+      "description": "Drafts client-facing deliverables at a grade-six reading level with timeline references.",
+      "providers": [
+        "azure"
+      ],
+      "model": "gpt-4o"
+    },
+    "compose.lawyer_brief": {
+      "target": "compose",
+      "label": "Lawyer Brief Drafter",
+      "description": "Drafts professional deliverables for counsel, organized by legal issues and evidence.",
+      "providers": [
+        "azure"
+      ],
+      "model": "gpt-4o"
+    },
+    "compose.qa_review": {
+      "target": "compose",
+      "label": "QA Reviewer",
+      "description": "Performs compliance checks on compose outputs and records discrepancies for ops logs.",
+      "providers": [
+        "azure"
+      ],
+      "model": "gpt-4o-mini",
+      "options": {
+        "temperature": "0.0"
+      }
     },
     "guardian.review": {
       "target": "guardian",

@@ -1410,6 +1410,25 @@
         payload.llm_config_id = timelineConfigId;
         if (platformUI.llmDebug) console.debug('[LLM] Queueing timeline with config', timelineConfigId);
       }
+    } else if (action === 'compose') {
+      const container = button.closest('[data-compose]');
+      const summarySelect = container?.querySelector('[data-compose-summary]');
+      if (!summarySelect || !summarySelect.value) {
+        return;
+      }
+      if (summarySelect.value === '__upload__') {
+        if (deps.notify) {
+          deps.notify(evt.clientX, evt.clientY, 'Upload flow not yet supported.');
+        }
+        return;
+      }
+      jobId = summarySelect.value;
+      payload.summary_job_id = jobId;
+      const composeConfigId = container?.dataset.llmConfigId || container?.getAttribute('data-llm-config-id');
+      if (composeConfigId) {
+        payload.llm_config_id = composeConfigId;
+        if (platformUI.llmDebug) console.debug('[LLM] Queueing compose with config', composeConfigId);
+      }
     }
     if (!jobId) return;
 

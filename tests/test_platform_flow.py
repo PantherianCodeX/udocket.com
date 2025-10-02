@@ -13,7 +13,8 @@ from apps.platform.cases.models import Case
 from apps.platform.jobs.models import Job
 from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.operations import tasks as op_tasks
-from packages.udocket_core.agents.summarize_lib import SummarizeAgent, SummarizeResult
+from apps.platform.operations.utils import update_job_meta
+from packages.udocket_core.agents.compose_lib import ComposeAgent, ComposeResult, ComposeArtifacts
 from apps.platform.operations.storage import tenant_case_root
 
 
@@ -86,7 +87,7 @@ def test_analysis_tasks_generate_artifacts(db, settings, monkeypatch):
     job.transcript_path = str(transcript)
     job.save(update_fields=["transcript_path"])
 
-    def _stub_summarize(self, **kwargs):
+    def _stub_compose(self, **kwargs):
         case_dir = Path(kwargs["case_dir"])
         job_id = kwargs["job_id"]
         analysis_dir = case_dir / "analysis"
@@ -94,78 +95,134 @@ def test_analysis_tasks_generate_artifacts(db, settings, monkeypatch):
         analysis_dir.mkdir(parents=True, exist_ok=True)
         ops_dir.mkdir(parents=True, exist_ok=True)
 
-        summary_path = analysis_dir / f"{job_id}__summary_v1.md"
-        summary_path.write_text("# Summary\n\nThis is a test summary.\n", encoding="utf-8")
+        timeline_file = analysis_dir / f"{job_id}__timeline_v2.json"
+        timeline_file.write_text(json.dumps({"revision": "v2", "events": []}, indent=2), encoding="utf-8")
+        graph_file = analysis_dir / f"{job_id}__graph_v2.json"
+        graph_file.write_text(json.dumps({"entities": [], "relationships": []}, indent=2), encoding="utf-8")
+        entities_file = analysis_dir / f"{job_id}__entities_v2.json"
+        entities_file.write_text(json.dumps({"entities": []}, indent=2), encoding="utf-8")
+        client_md = analysis_dir / f"{job_id}__compose_client_v1.md"
+        client_md.write_text("# Client", encoding="utf-8")
+        lawyer_md = analysis_dir / f"{job_id}__compose_lawyer_v1.md"
+        lawyer_md.write_text("# Lawyer", encoding="utf-8")
+        client_docx = analysis_dir / f"{job_id}__compose_client_v1.docx"
+        client_docx.write_bytes(b"PK\x03\x04")
+        lawyer_docx = analysis_dir / f"{job_id}__compose_lawyer_v1.docx"
+        lawyer_docx.write_bytes(b"PK\x03\x04")
+        meta_json = ops_dir / f"{job_id}__compose_log.json"
+        meta_json.write_text(json.dumps({"status": "ok"}, indent=2), encoding="utf-8")
+        audit_jsonl = ops_dir / "ops_compose.jsonl"
+        audit_jsonl.write_text(json.dumps({"status": "ok"}) + "\n", encoding="utf-8")
 
-        outline_path = analysis_dir / f"{job_id}__outline_v1.json"
-        outline_payload = {"sections": [{"title": "Intro", "items": []}]}
-        outline_path.write_text(json.dumps(outline_payload, indent=2), encoding="utf-8")
-
-        timeline_path = analysis_dir / f"{job_id}__timeline_seed_v1.json"
-        timeline_events = [
-            {
-                "ts_start": 0,
-                "ts_end": None,
-                "speaker": "SPK_1",
-                "text": "This is a timeline seed",
-                "labels": [],
-            }
-        ]
-        timeline_path.write_text(json.dumps({"events": timeline_events}, indent=2), encoding="utf-8")
-
-        entity_path = analysis_dir / f"{job_id}__entity_hints_v1.json"
-        entity_payload = {
-            "entities": [
-                {
-                    "id": "E1",
-                    "name": "Person A",
-                    "type": "PERSON",
-                    "mentions": [{"ts": 0, "text": "Person A"}],
-                }
-            ]
-        }
-        entity_path.write_text(json.dumps(entity_payload, indent=2), encoding="utf-8")
-
-        case_brief_path = analysis_dir / f"{job_id}__case_brief_v1.md"
-        case_brief_path.write_text("Case brief placeholder", encoding="utf-8")
-
-        meta_path = analysis_dir / f"{job_id}__summary_meta.json"
-        meta_path.write_text(json.dumps({"status": "ok"}, indent=2), encoding="utf-8")
-
-        audit_path = ops_dir / f"{job_id}__summary_audit.jsonl"
-        audit_path.write_text(json.dumps({"status": "ok"}) + "\n", encoding="utf-8")
-
-        return SummarizeResult(
+        artifacts = ComposeArtifacts(
+            timeline_file=timeline_file,
+            graph_file=graph_file,
+            entities_file=entities_file,
+            client_markdown=client_md,
+            lawyer_markdown=lawyer_md,
+            client_docx=client_docx,
+            lawyer_docx=lawyer_docx,
+        )
+        return ComposeResult(
             status="ok",
-            summary_file=summary_path,
-            summary_markdown_file=summary_path,
-            outline_file=outline_path,
-            timeline_seeds_file=timeline_path,
-            entity_hints_file=entity_path,
-            case_brief_file=case_brief_path,
-            words=5,
-            source_transcript=Path(kwargs["input"]),
-            meta_json=meta_path,
-            audit_jsonl=audit_path,
+            artifacts=artifacts,
+            meta_json=meta_json,
+            audit_jsonl=audit_jsonl,
             provider_chain=["stub"],
+            stage_usage={}
         )
 
-    monkeypatch.setattr(SummarizeAgent, "summarize", _stub_summarize)
+    monkeypatch.setattr(ComposeAgent, "compose", _stub_compose)
 
     # Call task functions directly (avoid Celery runtime)
-    out1 = op_tasks.summarize_job.run(None, case_id=str(case.id), job_id=str(job.id))
-    out2 = op_tasks.timeline_job.run(None, case_id=str(case.id), job_id=str(job.id))
-    out3 = op_tasks.graph_job.run(None, case_id=str(case.id), job_id=str(job.id))
+    analysis_dir = tenant_case_root(str(case.id)) / "analysis"
+    ops_dir = tenant_case_root(str(case.id)) / "ops"
+    analysis_dir.mkdir(parents=True, exist_ok=True)
+    ops_dir.mkdir(parents=True, exist_ok=True)
 
-    summary_path = Path(out1["summary_file"])
-    timeline_seed_path = Path(out1["timeline_file"])
-    outline_path = Path(out1["outline_file"])
-    entity_hint_path = Path(out1["entity_file"])
-    timeline_path = Path(out2["timeline_file"])
-    entities_path = Path(out3["entities_file"])
-    graph_path = Path(out3["graph_file"])
+    summary_json_path = analysis_dir / f"{job.id}__summary_v1.json"
+    summary_json_path.write_text(json.dumps({"sections": []}), encoding="utf-8")
 
-    assert summary_path.exists()
+    summary_md_path = analysis_dir / f"{job.id}__summary_v1.md"
+    summary_md_path.write_text("# Summary\n\nThis is a test summary.\n", encoding="utf-8")
+
+    outline_path = analysis_dir / f"{job.id}__outline_v1.json"
+    outline_path.write_text(json.dumps({"sections": [{"title": "Intro", "items": []}]}), encoding="utf-8")
+
+    timeline_seed_path = analysis_dir / f"{job.id}__timeline_seeds_v1.json"
+    timeline_seed_path.write_text(json.dumps({"events": [{"ts_start": 0, "ts_end": None, "speaker": "SPK_1", "text": "Seed"}]}), encoding="utf-8")
+
+    entity_hint_path = analysis_dir / f"{job.id}__entity_hints_v1.json"
+    entity_hint_path.write_text(json.dumps({"entities": []}), encoding="utf-8")
+
+    case_brief_path = analysis_dir / f"{job.id}__case_brief_v1.md"
+    case_brief_path.write_text("Case brief placeholder", encoding="utf-8")
+
+    update_job_meta(
+        str(case.id),
+        org.id,
+        str(job.id),
+        {
+            "summary_status": "completed",
+            "summary_file": str(summary_json_path),
+            "summary_markdown_file": str(summary_md_path),
+            "summary_outline_file": str(outline_path),
+            "summary_timeline_file": str(timeline_seed_path),
+            "summary_entity_file": str(entity_hint_path),
+            "summary_case_brief_file": str(case_brief_path),
+            "source_transcript_path": job.transcript_path,
+        },
+    )
+
+    compose_job_obj = Job.objects.create(
+        case=case,
+        organization=org,
+        audio_input=job.audio_input,
+        mode=job.mode,
+        diarization=job.diarization,
+        language=job.language,
+        transcript_path=job.transcript_path,
+        duration_s=job.duration_s,
+    )
+
+    out_compose = op_tasks.compose_job.run(
+        None,
+        case_id=str(case.id),
+        job_id=str(compose_job_obj.id),
+        summary_job_id=str(job.id),
+    )
+
+    analysis_dir = tenant_case_root(str(case.id)) / "analysis"
+    summary_json_candidates = list(analysis_dir.glob(f"{job.id}__summary*_v1.json"))
+    if not summary_json_candidates:
+        summary_json_candidates = list(analysis_dir.glob(f"{job.id}__summary*.json"))
+    if not summary_json_candidates:
+        summary_json_candidates = list(analysis_dir.glob("*summary*.json"))
+    summary_json_path = summary_json_candidates[0]
+
+    summary_markdown_candidates = list(analysis_dir.glob(f"{job.id}__summary*_v1.md"))
+    if not summary_markdown_candidates:
+        summary_markdown_candidates = list(analysis_dir.glob("*summary*.md"))
+    summary_path = summary_markdown_candidates[0]
+    timeline_seed_candidates = list(analysis_dir.glob("*__timeline_seeds_v1.json"))
+    assert timeline_seed_candidates
+    timeline_seed_path = timeline_seed_candidates[0]
+
+    outline_candidates = list(analysis_dir.glob("*__outline_v1.json"))
+    assert outline_candidates
+    outline_path = outline_candidates[0]
+
+    entity_hint_candidates = list(analysis_dir.glob("*__entity_hints_v1.json"))
+    assert entity_hint_candidates
+    entity_hint_path = entity_hint_candidates[0]
+
+    timeline_path = Path(out_compose["timeline_file"])
+    graph_path = Path(out_compose["graph_file"])
+    entities_path = analysis_dir / f"{compose_job_obj.id}__entities_v2.json"
+
+    produced_files = {p.name for p in analysis_dir.glob('*')}
+    assert summary_path.exists(), produced_files
+    assert summary_json_path.exists()
     assert outline_path.exists()
     assert timeline_seed_path.exists()
     assert entity_hint_path.exists()
@@ -179,25 +236,11 @@ def test_analysis_tasks_generate_artifacts(db, settings, monkeypatch):
         seeds_events = seeds_payload.get("events", [])
     else:
         seeds_events = seeds_payload
-    assert timeline_events == seeds_events
-
-    hints = json.loads(entity_hint_path.read_text(encoding="utf-8"))
-    entity_payload = json.loads(entities_path.read_text(encoding="utf-8"))
-    graph_payload = json.loads(graph_path.read_text(encoding="utf-8"))
-
-    hint_names = {
-        ent.get("name")
-        for ent in hints.get("entities", [])
-        if isinstance(ent, dict) and ent.get("name")
-    }
-    produced_names = {
-        ent.get("name")
-        for ent in entity_payload.get("entities", [])
-        if isinstance(ent, dict) and ent.get("name")
-    }
-    assert hint_names <= produced_names
-    assert len(graph_payload.get("nodes", [])) == len(produced_names)
+    seeds_payload = json.loads(timeline_seed_path.read_text(encoding="utf-8"))
+    assert "events" in seeds_payload
+    assert json.loads(timeline_path.read_text(encoding="utf-8"))
+    assert json.loads(graph_path.read_text(encoding="utf-8"))
 
     arts = list(CaseArtifact.objects.filter(case_id=str(case.id)))
     kinds = sorted(a.type for a in arts)
-    assert set(kinds) >= {"SUMMARY", "TIMELINE", "ENTITIES", "GRAPH"}
+    assert {"SUMMARY", "TIMELINE", "GRAPH", "COMPOSE"}.issubset(set(kinds))

@@ -93,7 +93,10 @@ def analysis_modules_context(
     artifacts_manager = cast(CaseArtifactQuerySet, CaseArtifact.objects)
     artifacts_qs = (
         artifacts_manager.for_user(user)
-        .filter(case_id=str(case.id), type__in=["SUMMARY", "TIMELINE", "ANALYSIS", "COMPOSE"])
+        .filter(
+            case_id=str(case.id),
+            type__in=["SUMMARY", "TIMELINE", "ANALYSIS", "COMPOSE", "GRAPH", "ENTITIES"],
+        )
         .order_by("-created_at")
     )
 
@@ -101,6 +104,8 @@ def analysis_modules_context(
 
     summary_artifacts: List[Dict[str, Any]] = []
     timeline_artifacts: List[Dict[str, Any]] = []
+    graph_artifacts: List[Dict[str, Any]] = []
+    entity_artifacts: List[Dict[str, Any]] = []
     compose_candidates: Dict[str, Dict[str, Any]] = {}
 
     for payload in artifact_payloads:
@@ -109,6 +114,10 @@ def analysis_modules_context(
             summary_artifacts.append(payload)
         elif artifact_type == "TIMELINE":
             timeline_artifacts.append(payload)
+        elif artifact_type == "GRAPH":
+            graph_artifacts.append(payload)
+        elif artifact_type == "ENTITIES":
+            entity_artifacts.append(payload)
         else:
             filename = payload.get("filename", "").lower()
             title = (payload.get("title") or "").lower()
@@ -298,16 +307,6 @@ def analysis_modules_context(
         action_label="Queue summarize job",
         success_label="Summarize queued",
     )
-    timeline_module = build_module(
-        key="timeline",
-        label="Timeline",
-        description="Build an event timeline anchored to transcript timestamps.",
-        artifacts=timeline_artifacts,
-        empty_message="No timeline has been generated yet.",
-        action_label="Generate timeline",
-        success_label="Timeline queued",
-    )
-
     compose_entries = sorted(
         compose_candidates.values(),
         key=lambda entry: entry.get("created_at") or datetime.min,
@@ -367,6 +366,37 @@ def analysis_modules_context(
         for item in (compose_latest_entry.get("deliverables", []) if compose_latest_entry else [])
         if item.get("download_url")
     ]
+
+    timeline_latest = timeline_artifacts[0] if timeline_artifacts else None
+    timeline_history = timeline_artifacts[1:5] if timeline_artifacts else []
+    graph_latest: Optional[Dict[str, Any]]
+    graph_history: List[Dict[str, Any]]
+    if graph_artifacts:
+        graph_latest = graph_artifacts[0]
+        graph_history = graph_artifacts[1:5]
+    elif entity_artifacts:
+        graph_latest = entity_artifacts[0]
+        graph_history = entity_artifacts[1:5]
+    else:
+        graph_latest = None
+        graph_history = []
+
+    if timeline_latest and timeline_latest.get("download_url"):
+        compose_downloads.append(
+            {
+                "label": "Timeline JSON",
+                "href": timeline_latest["download_url"],
+                "download": True,
+            }
+        )
+    if graph_latest and graph_latest.get("download_url"):
+        compose_downloads.append(
+            {
+                "label": "Graph JSON" if (graph_latest.get("artifact_type", "").upper() == "GRAPH") else "Entities JSON",
+                "href": graph_latest["download_url"],
+                "download": True,
+            }
+        )
     compose_status = "Not Started"
     compose_header_hint = "No deliverables yet"
     compose_disabled = False
@@ -397,6 +427,8 @@ def analysis_modules_context(
     compose_dependencies = {
         "has_transcript": bool(target_job),
         "has_summary": bool(summary_artifacts),
+        "has_timeline": bool(timeline_artifacts),
+        "has_graph": bool(graph_artifacts or entity_artifacts),
     }
 
     compose_module: Dict[str, Any] = {
@@ -411,7 +443,11 @@ def analysis_modules_context(
         "latest": compose_latest_entry,
         "history": compose_history_entries,
         "downloads": compose_downloads,
-        "latest_details": compose_latest_entry.get("details") if compose_latest_entry else {},
+        "latest_details": {
+            **(compose_latest_entry.get("details") if compose_latest_entry else {}),
+            "timeline": timeline_latest,
+            "graph": graph_latest,
+        },
         "empty_message": "No compose jobs yet. Generate deliverables from the latest summary.",
         "target_job": target_job,
         "action": {
@@ -429,9 +465,18 @@ def analysis_modules_context(
         "team_alerts": team_alerts,
         "available_summaries": available_summaries,
         "dependencies": compose_dependencies,
+        "timeline": {
+            "latest": timeline_latest,
+            "history": timeline_history,
+        },
+        "graph": {
+            "latest": graph_latest,
+            "history": graph_history,
+            "entities": entity_artifacts,
+        },
     }
 
-    return [summary_module, timeline_module, compose_module]
+    return [summary_module, compose_module]
 
 
 __all__ = [

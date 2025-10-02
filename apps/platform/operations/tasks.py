@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 import hashlib
 import uuid
 import json
@@ -17,6 +17,8 @@ from django.conf import settings
 from django.utils import timezone
 
 from packages.udocket_core.agents import (
+    ComposeAgent,
+    ComposeConfig,
     GraphAgent,
     GraphConfig,
     SummarizeAgent,
@@ -1200,6 +1202,413 @@ def summarize_job(
         )
         raise
 
+
+@shared_task(bind=True)
+def compose_job(
+    self,
+    *_args,
+    case_id: str,
+    job_id: str,
+    summary_job_id: str,
+    llm_config_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    job = Job.objects.select_related("case", "case__organization").get(pk=job_id)
+    summary_job = Job.objects.select_related("case", "case__organization").get(pk=summary_job_id)
+    if summary_job.case_id != job.case_id:
+        raise RuntimeError("Summary job belongs to a different case")
+
+    org_id = job.organization_id or job.case.organization_id
+    case_dir, _, _ = _case_paths(case_id, org_id)
+
+    compose_config = ComposeConfig.from_env()
+    runtime = JobRuntimeContext(
+        job=job,
+        case_id=case_id,
+        org_id=org_id,
+        task_name="compose_job",
+        task_id=getattr(self.request, "id", None) or "",
+        task_meta={
+            "summary_job_id": summary_job_id,
+            "requested_llm_config_id": llm_config_id,
+        },
+    )
+
+    summary_meta = read_job_meta(case_id, org_id, summary_job_id)
+    summary_json_path = summary_meta.get("summary_file") or summary_meta.get("summary_json_file")
+    summary_markdown_path = summary_meta.get("summary_markdown_file") or summary_meta.get("summary_markdown")
+    timeline_seed_path = summary_meta.get("summary_timeline_file")
+    entity_hint_path = summary_meta.get("summary_entity_file")
+    staff_report_path = summary_meta.get("summary_case_brief_file") or summary_meta.get("summary_staff_report_file")
+    transcript_path = summary_meta.get("source_transcript_path") or summary_job.transcript_path
+
+    def _to_path(value: Optional[str]) -> Optional[Path]:
+        if not value:
+            return None
+        try:
+            path_obj = Path(value)
+            if not path_obj.is_absolute():
+                return case_dir / path_obj
+            return path_obj
+        except Exception:
+            return None
+
+    summary_json_path = _to_path(summary_json_path)
+    summary_markdown_path = _to_path(summary_markdown_path)
+    timeline_seed_path = _to_path(timeline_seed_path)
+    entity_hint_path = _to_path(entity_hint_path)
+    staff_report_path = _to_path(staff_report_path)
+    transcript_path = _to_path(transcript_path)
+
+    analysis_dir = case_dir / "analysis"
+    summary_case_dir, _, _ = _case_paths(case_id, summary_job.organization_id or summary_job.case.organization_id)
+    summary_analysis_dir = summary_case_dir / "analysis"
+    search_dirs = []
+    for directory in (analysis_dir, summary_analysis_dir):
+        if directory not in search_dirs and directory.exists():
+            search_dirs.append(directory)
+
+    if summary_json_path is None or not (summary_json_path.exists() if summary_json_path else False):
+        for directory in search_dirs:
+            candidate = directory / f"{summary_job_id}__summary_v1.json"
+            if candidate.exists():
+                summary_json_path = candidate
+                break
+    if summary_markdown_path is None or not (summary_markdown_path.exists() if summary_markdown_path else False):
+        for directory in search_dirs:
+            candidate = directory / f"{summary_job_id}__summary_v1.md"
+            if candidate.exists():
+                summary_markdown_path = candidate
+                break
+        if summary_markdown_path is None:
+            for directory in search_dirs:
+                try:
+                    candidates = sorted(
+                        directory.glob("*__summary_v1.md"),
+                        key=lambda p: p.stat().st_mtime,
+                        reverse=True,
+                    )
+                except Exception:
+                    candidates = []
+                if candidates:
+                    summary_markdown_path = candidates[0]
+                    break
+    if timeline_seed_path is None or not (timeline_seed_path.exists() if timeline_seed_path else False):
+        for directory in search_dirs:
+            candidate = directory / f"{summary_job_id}__timeline_seeds_v1.json"
+            if candidate.exists():
+                timeline_seed_path = candidate
+                break
+    if entity_hint_path is None or not (entity_hint_path.exists() if entity_hint_path else False):
+        for directory in search_dirs:
+            candidate = directory / f"{summary_job_id}__entity_hints_v1.json"
+            if candidate.exists():
+                entity_hint_path = candidate
+                break
+    if staff_report_path is None or not (staff_report_path.exists() if staff_report_path else False):
+        for directory in search_dirs:
+            candidate = directory / f"{summary_job_id}__case_brief_v1.md"
+            if candidate.exists():
+                staff_report_path = candidate
+                break
+
+    if summary_json_path is None or not summary_json_path.exists():
+        if summary_markdown_path and summary_markdown_path.exists():
+            placeholder = analysis_dir / f"{summary_job_id}__summary_fallback_v1.json"
+            placeholder.write_text(
+                json.dumps({"markdown": summary_markdown_path.read_text(encoding="utf-8")}, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            summary_json_path = placeholder
+        else:
+            for directory in search_dirs:
+                try:
+                    candidates = sorted(
+                        directory.glob("*__summary_v1.json"),
+                        key=lambda p: p.stat().st_mtime,
+                        reverse=True,
+                    )
+                except Exception:
+                    candidates = []
+                if candidates:
+                    summary_json_path = candidates[0]
+                    break
+        if summary_json_path is None or not summary_json_path.exists():
+            fallback_json = analysis_dir / f"{summary_job_id}__summary_autogen_v1.json"
+            fallback_json.write_text(json.dumps({"sections": [], "generated": True}, indent=2), encoding="utf-8")
+            summary_json_path = fallback_json
+
+    if summary_markdown_path is None or not summary_markdown_path.exists():
+        fallback_md = analysis_dir / f"{summary_job_id}__summary_autogen_v1.md"
+        fallback_md.write_text("# Summary\n\nNo summary available.", encoding="utf-8")
+        summary_markdown_path = fallback_md
+
+    compose_started_meta = {
+        "compose_status": "running",
+        "summary_job_id": summary_job_id,
+        "summary_json": str(summary_json_path) if summary_json_path else None,
+        "summary_markdown": str(summary_markdown_path) if summary_markdown_path else None,
+    }
+    runtime.start(
+        status=Job.Status.RUNNING,
+        log_message="Worker started compose pipeline",
+        event="job.started",
+        meta_updates=compose_started_meta,
+    )
+
+    llm_settings = load_llm_settings()
+    active_config = None
+    if llm_config_id:
+        active_config = get_llm_configuration(
+            organization_id=str(job.organization_id or summary_job.organization_id or ""),
+            config_id=llm_config_id,
+            target="compose",
+        )
+    if not active_config:
+        active_config = get_llm_configuration(
+            organization_id=str(job.organization_id or summary_job.organization_id or ""),
+            config_id=None,
+            target="compose",
+        )
+    if not active_config:
+        active_config = ensure_default_llm_configuration(
+            organization_id=str(job.organization_id or summary_job.organization_id or ""),
+            target="compose",
+            llm_settings=llm_settings,
+        )
+
+    stage_map = dict(active_config.get("stage_map") or {}) if active_config else {}
+    provider_chain = active_config.get("provider_chain") if active_config else None
+    provider_chain = provider_chain or compose_config.provider_chain
+    provider_chain = [str(p) for p in provider_chain]
+
+    provider_credentials: Dict[str, Dict[str, Any]] = {}
+    org_id_str = str(org_id) if org_id else None
+    if org_id_str:
+        requested_providers: List[str] = []
+        def _add_provider(name: Optional[str]) -> None:
+            if not name:
+                return
+            candidate = str(name).strip().lower()
+            if candidate and candidate not in requested_providers:
+                requested_providers.append(candidate)
+
+        for provider in compose_config.provider_chain:
+            _add_provider(provider)
+        for provider in provider_chain or []:
+            _add_provider(provider)
+        for cfg in (stage_map or {}).values():
+            if isinstance(cfg, dict):
+                _add_provider(cfg.get("provider"))
+                prov_list = cfg.get("providers")
+                if isinstance(prov_list, Sequence):
+                    for entry in prov_list:
+                        _add_provider(entry)
+
+        for provider in requested_providers:
+            secret_payload = get_provider_secret_with_metadata(org_id_str, provider)
+            if secret_payload:
+                provider_credentials[provider] = secret_payload
+
+    compose_agent = ComposeAgent(compose_config)
+
+    def _progress(stage: str, event: str, details: Dict[str, Any]) -> None:
+        runtime.emit(
+            "compose.progress",
+            stage=stage,
+            event=event,
+            summary_job_id=summary_job_id,
+            details=details,
+        )
+
+    try:
+        result = compose_agent.compose(
+            case_id=case_id,
+            case_dir=case_dir,
+            job_id=job_id,
+            summary_json_path=summary_json_path,
+            summary_markdown_path=summary_markdown_path,
+            transcript_path=transcript_path,
+            timeline_seed_path=timeline_seed_path,
+            entity_hint_path=entity_hint_path,
+            staff_report_path=staff_report_path,
+            intake=summary_meta.get("intake") if isinstance(summary_meta.get("intake"), dict) else None,
+            provider_chain=provider_chain,
+            stage_map=stage_map,
+            provider_credentials=provider_credentials,
+            progress_callback=_progress,
+        )
+    except Exception as exc:
+        error_message = str(exc)
+        runtime.fail(
+            error=error_message,
+            log_message=f"Compose failed: {error_message}",
+            meta_updates={"compose_status": "failed", "compose_error": error_message},
+            events=[("compose.failed", {"summary_job_id": summary_job_id})],
+        )
+        raise
+
+    artifacts = result.artifacts
+
+    meta_updates: Dict[str, Any] = {
+        "compose_status": "completed",
+        "compose_meta_json": str(result.meta_json),
+        "compose_provider_chain": result.provider_chain,
+        "compose_stage_usage": result.stage_usage,
+        "summary_job_id": summary_job_id,
+    }
+    if artifacts.timeline_file:
+        meta_updates["timeline_v2_file"] = str(artifacts.timeline_file)
+    if artifacts.graph_file:
+        meta_updates["graph_v2_file"] = str(artifacts.graph_file)
+    if artifacts.entities_file:
+        meta_updates["entities_v2_file"] = str(artifacts.entities_file)
+    if artifacts.client_markdown:
+        meta_updates["compose_client_markdown"] = str(artifacts.client_markdown)
+    if artifacts.lawyer_markdown:
+        meta_updates["compose_lawyer_markdown"] = str(artifacts.lawyer_markdown)
+    if artifacts.client_docx:
+        meta_updates["compose_client_docx"] = str(artifacts.client_docx)
+    if artifacts.lawyer_docx:
+        meta_updates["compose_lawyer_docx"] = str(artifacts.lawyer_docx)
+
+    _safe_job_meta(case_id, org_id, job_id, meta_updates)
+
+    # Register artifacts
+    created_titles = {
+        kind: set(
+            CaseArtifact.objects.filter(case_id=case_id, type=kind).values_list("title", flat=True)
+        )
+        for kind in ("COMPOSE", "TIMELINE", "GRAPH", "ENTITIES")
+    }
+
+    def _create_artifact(*, kind: str, path: Optional[Path], title_hint: str, metadata: Dict[str, Any], schema_version: str = "v1") -> None:
+        if path is None or not path.exists():
+            return
+        checksum = _sha256_file(path)
+        titles = created_titles.setdefault(kind, set())
+        title = unique_title(title_hint, titles)
+        titles.add(title)
+        CaseArtifact.objects.create(
+            case_id=case_id,
+            case_fk=job.case,
+            organization=job.organization or summary_job.organization,
+            job_id=str(job.id),
+            type=kind,
+            title=title,
+            path=str(path),
+            checksum=checksum or "",
+            schema_version=schema_version,
+            metadata=metadata,
+        )
+
+    summary_source = Path(summary_markdown_path) if summary_markdown_path else None
+    summary_source_name = summary_source.name if summary_source else None
+
+    _create_artifact(
+        kind="COMPOSE",
+        path=artifacts.client_markdown,
+        title_hint="Client deliverable",
+        metadata={
+            "format": "markdown",
+            "source_summary": summary_source_name,
+        },
+    )
+    _create_artifact(
+        kind="COMPOSE",
+        path=artifacts.client_docx,
+        title_hint="Client deliverable (DOCX)",
+        metadata={
+            "format": "docx",
+            "source_summary": summary_source_name,
+        },
+    )
+    _create_artifact(
+        kind="COMPOSE",
+        path=artifacts.lawyer_markdown,
+        title_hint="Lawyer deliverable",
+        metadata={
+            "format": "markdown",
+            "source_summary": summary_source_name,
+        },
+    )
+    _create_artifact(
+        kind="COMPOSE",
+        path=artifacts.lawyer_docx,
+        title_hint="Lawyer deliverable (DOCX)",
+        metadata={
+            "format": "docx",
+            "source_summary": summary_source_name,
+        },
+    )
+    _create_artifact(
+        kind="TIMELINE",
+        path=artifacts.timeline_file,
+        title_hint="Timeline",
+        metadata={
+            "source_summary": summary_source_name,
+            "schema": "v2",
+        },
+        schema_version="v2",
+    )
+    _create_artifact(
+        kind="GRAPH",
+        path=artifacts.graph_file,
+        title_hint="Relationship graph",
+        metadata={
+            "source_summary": summary_source_name,
+            "schema": "v2",
+        },
+        schema_version="v2",
+    )
+    _create_artifact(
+        kind="ENTITIES",
+        path=artifacts.entities_file,
+        title_hint="Entities",
+        metadata={
+            "source_summary": summary_source_name,
+            "schema": "v2",
+        },
+        schema_version="v2",
+    )
+
+    finished_ts = runtime.succeed(
+        log_message="Compose pipeline completed",
+        meta_updates={"compose_status": "completed"},
+        events=[("compose.completed", {"summary_job_id": summary_job_id})],
+        job_updates={"agent_type": "compose", "display_title": meta_updates.get("job_title") or "Compose"},
+        task_meta_updates={},
+    )
+    _safe_job_meta(
+        case_id,
+        org_id,
+        job_id,
+        {
+            "compose_completed_at": finished_ts.isoformat(),
+            "celery_task_finished_at": finished_ts.isoformat(),
+            "celery_task_status": "succeeded",
+        },
+    )
+
+    send_job_update(
+        str(job.id),
+        event="job.succeeded",
+        status=Job.Status.SUCCEEDED,
+        case_id=case_id,
+    )
+    send_case_update(
+        case_id,
+        event="artifact.created",
+        kind="compose",
+        job_id=str(job.id),
+    )
+
+    return {
+        "status": "ok",
+        "timeline_file": str(artifacts.timeline_file) if artifacts.timeline_file else None,
+        "graph_file": str(artifacts.graph_file) if artifacts.graph_file else None,
+        "client_markdown": str(artifacts.client_markdown) if artifacts.client_markdown else None,
+        "lawyer_markdown": str(artifacts.lawyer_markdown) if artifacts.lawyer_markdown else None,
+    }
     org_id_str = str(org_id) if org_id else None
     llm_settings = load_llm_settings()
     config_payload = get_llm_configuration(

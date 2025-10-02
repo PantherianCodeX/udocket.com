@@ -11,6 +11,11 @@ from .summarize_lib import (
     SummarizeConfig,
     SummarizeResult,
 )
+from .compose_lib import (
+    ComposeAgent,
+    ComposeConfig,
+    ComposeResult,
+)
 from .timeline_lib import (
     TimelineAgent,
     TimelineConfig,
@@ -42,6 +47,9 @@ __all__ = [
     "SummarizeAgent",
     "SummarizeConfig",
     "SummarizeResult",
+    "ComposeAgent",
+    "ComposeConfig",
+    "ComposeResult",
     "TimelineAgent",
     "TimelineConfig",
     "TimelineEvent",
