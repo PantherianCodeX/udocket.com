@@ -315,35 +315,85 @@ def analysis_modules_context(
 
     def _format_compose_entry(entry: Dict[str, Any]) -> Dict[str, Any]:
         items: List[Dict[str, Any]] = entry.get("artifacts", [])
-        deliverables: List[Dict[str, Any]] = []
-        for item in items:
-            filename = item.get("filename", "")
-            label = item.get("title") or filename
-            lower_name = filename.lower()
-            if "client" in lower_name:
-                label = "Client deliverable"
-            elif "lawyer" in lower_name:
-                label = "Lawyer deliverable"
-            deliverables.append(
-                {
-                    "label": label,
-                    "download_url": item.get("download_url"),
-                    "filename": filename,
-                    "format": filename.split(".")[-1] if "." in filename else "",
-                }
+
+        def _deliverable_meta(artifact: Dict[str, Any]) -> Dict[str, Any]:
+            filename = artifact.get("filename", "")
+            lower = filename.lower()
+            label = artifact.get("title") or filename or "Deliverable"
+            kind = None
+            priority = 100
+            if "compose_client_v1.md" in lower:
+                label = "Client deliverable (Markdown)"
+                kind = "client_markdown"
+                priority = 0
+            elif "compose_client_v1.docx" in lower:
+                label = "Client deliverable (DOCX)"
+                kind = "client_docx"
+                priority = 1
+            elif "compose_lawyer_v1.md" in lower:
+                label = "Lawyer deliverable (Markdown)"
+                kind = "lawyer_markdown"
+                priority = 2
+            elif "compose_lawyer_v1.docx" in lower:
+                label = "Lawyer deliverable (DOCX)"
+                kind = "lawyer_docx"
+                priority = 3
+            elif "compose_timeline" in lower:
+                label = "Timeline narrative"
+                kind = "timeline_narrative"
+                priority = 10
+            elif "compose_entities" in lower:
+                label = "Entity briefing"
+                kind = "entity_brief"
+                priority = 11
+            elif "compose_graph_visual" in lower:
+                label = "Graph visual embed"
+                kind = "graph_visual"
+                priority = 12
+            return {
+                "label": label,
+                "download_url": artifact.get("download_url"),
+                "filename": filename,
+                "format": filename.split(".")[-1] if "." in filename else "",
+                "kind": kind,
+                "priority": priority,
+            }
+
+        deliverables = [_deliverable_meta(item) for item in items]
+        deliverables.sort(key=lambda meta: meta.get("priority", 100))
+        primary_deliverable = deliverables[0] if deliverables else None
+        primary_artifact = items[0] if items else entry
+        if primary_deliverable is not None:
+            primary_artifact = next(
+                (item for item in items if item.get("filename") == primary_deliverable.get("filename")),
+                primary_artifact,
             )
-        primary = items[0] if items else entry
+
+        for deliverable in deliverables:
+            deliverable.pop("priority", None)
+
+        details_map: Dict[str, Any] = {
+            "deliverables": deliverables,
+            "source_summary": entry.get("source"),
+        }
+        for deliverable in deliverables:
+            kind = deliverable.get("kind")
+            if kind:
+                details_map[kind] = deliverable
+
         return {
-            "id": primary.get("id"),
+            "id": primary_artifact.get("id") if isinstance(primary_artifact, dict) else entry.get("id"),
             "job_id": entry.get("job_id"),
             "title": entry.get("title") or "Compose Deliverables",
             "created_at": entry.get("created_at"),
             "source": entry.get("source"),
-            "download_url": (deliverables[0]["download_url"] if deliverables and deliverables[0]["download_url"] else primary.get("download_url")),
-            "details": {
-                "deliverables": deliverables,
-                "source_summary": entry.get("source"),
-            },
+            "filename": primary_deliverable.get("filename") if primary_deliverable else primary_artifact.get("filename"),
+            "download_url": (
+                primary_deliverable.get("download_url")
+                if primary_deliverable and primary_deliverable.get("download_url")
+                else primary_artifact.get("download_url")
+            ),
+            "details": details_map,
             "deliverables": deliverables,
         }
 

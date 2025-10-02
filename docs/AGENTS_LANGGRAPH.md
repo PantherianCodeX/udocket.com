@@ -211,10 +211,13 @@ def build_analyze_graph(impl):
 - Stage roles:
   1. `compose.context_builder` → synthesize the case brief JSON from summary/staff report inputs.
   2. `compose.timeline_builder` → promote timeline seeds into timeline_v2 while preserving upstream UUIDs.
-  3. `compose.graph_builder` → expand entity hints into graph_v2, keeping stable UUIDs and evidence back-pointers.
-  4. `compose.client_brief` → draft client Markdown at grade-six reading level with timeline highlights.
-  5. `compose.lawyer_brief` → draft counsel Markdown organized by issues and evidence references.
-  6. `compose.qa_review` → emit JSON QA status (temperature forced to 0 for deterministic checks).
+  3. `compose.timeline_summary` → narrate the normalized timeline for downstream briefs.
+  4. `compose.graph_builder` → expand entity hints into graph_v2, keeping stable UUIDs and evidence back-pointers.
+  5. `compose.entity_brief` → summarize key parties and relationships for quick reference sections.
+  6. `compose.graph_visual` → plan embeddable visuals (HTML + alt text) for the relationship graph.
+  7. `compose.client_brief` → draft client Markdown at grade-six reading level with timeline highlights.
+  8. `compose.lawyer_brief` → draft counsel Markdown organized by issues and evidence references.
+  9. `compose.qa_review` → emit JSON QA status (temperature forced to 0 for deterministic checks).
 - Each stage receives Analyze outputs plus the live case intake payload and a `case_metadata` bundle (case id/title, organization, composing job ids) so prompts remain grounded in the current matter context.
 - Timeline summary, entity briefing, and graph visual planner stages emit Markdown/JSON artifacts that downstream writers embed alongside the primary briefs.
 - Azure (Canada regions) is the default provider; org-specific overrides are supplied via `LLMConfiguration` provider chains or stage maps.

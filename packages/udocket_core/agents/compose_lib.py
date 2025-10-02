@@ -487,10 +487,14 @@ class ComposeAgent:
         def _bucket_enabled(bucket: str) -> bool:
             if bucket == "context":
                 return True
+            if bucket == "timeline":
+                return any(target in requested_targets for target in {"timeline", "client", "lawyer", "qa"})
             if bucket == "timeline_summary":
-                return "timeline" in requested_targets
+                return any(target in requested_targets for target in {"timeline", "client", "lawyer", "qa"})
+            if bucket == "graph":
+                return any(target in requested_targets for target in {"graph", "client", "lawyer", "qa"})
             if bucket in {"entity_brief", "graph_visual"}:
-                return "graph" in requested_targets
+                return any(target in requested_targets for target in {"graph", "client", "lawyer", "qa"})
             return bucket in requested_targets
 
         for stage_key, bucket in stage_order:
