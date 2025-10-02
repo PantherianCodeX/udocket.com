@@ -1,7 +1,7 @@
 {% extends "platform_ui/components/_popover_menu.html" %}
 
 {% block popover_details_classes %}group relative w-full rounded-lg border border-white/10 bg-slate-900/50 transition hover:border-primary-400 focus-within:border-primary-400{% endblock %}
-{% block popover_details_attrs %}data-transcript-item data-popover-portal="body"{% endblock %}
+{% block popover_details_attrs %}data-transcript-item{% endblock %}
 {% block popover_summary_classes %}flex w-full cursor-pointer items-center justify-between gap-3 px-3 py-2 text-left text-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400{% endblock %}
 {% block popover_summary %}
   <span class="line-clamp-2 text-sm leading-snug" title="{{ transcript.label }}">{{ transcript.label }}</span>

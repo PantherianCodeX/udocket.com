@@ -80,20 +80,18 @@ def build_job_action_entries(
             {
                 "label": "Approve transcript",
                 "action": "approve",
-                "confirm": "Approve this transcript?",
                 "visible_when": "review",
                 "job_id": job_id,
-                "kind": "api",
+                "kind": "review",
             }
         )
         review_items.append(
             {
                 "label": "Reject transcript",
                 "action": "reject",
-                "prompt": "Reason for rejection (optional):",
                 "visible_when": "review",
                 "job_id": job_id,
-                "kind": "api",
+                "kind": "review",
             }
         )
     if review_items:

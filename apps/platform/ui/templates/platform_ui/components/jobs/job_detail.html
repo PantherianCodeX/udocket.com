@@ -44,8 +44,26 @@
           </a>
         {% endif %}
         {% if user_can_review and telemetry.status == 'SUCCEEDED' %}
-          <button type="button" class="inline-flex items-center rounded border border-emerald-400/40 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-500/25 disabled:opacity-60" data-job-approve="{{ job.id }}"{% if telemetry.review_status == 'APPROVED' %} disabled{% endif %}>Approve</button>
-          <button type="button" class="inline-flex items-center rounded border border-rose-400/40 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-100 transition hover:bg-rose-500/25 disabled:opacity-60" data-job-reject="{{ job.id }}"{% if telemetry.review_status == 'REJECTED' %} disabled{% endif %}>Reject</button>
+          <button type="button"
+                  class="inline-flex items-center rounded border border-emerald-400/40 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-500/25 disabled:opacity-60"
+                  data-job-approve="{{ job.id }}"
+                  data-job-action
+                  data-job-action-kind="review"
+                  data-job-action="approve"
+                  data-job-id="{{ job.id }}"
+                  {% if telemetry.review_status == 'APPROVED' %}disabled{% endif %}>
+            Approve
+          </button>
+          <button type="button"
+                  class="inline-flex items-center rounded border border-rose-400/40 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-100 transition hover:bg-rose-500/25 disabled:opacity-60"
+                  data-job-reject="{{ job.id }}"
+                  data-job-action
+                  data-job-action-kind="review"
+                  data-job-action="reject"
+                  data-job-id="{{ job.id }}"
+                  {% if telemetry.review_status == 'REJECTED' %}disabled{% endif %}>
+            Reject
+          </button>
         {% endif %}
       </div>
       <div class="w-full space-y-1 text-xs text-slate-300" data-review-summary>

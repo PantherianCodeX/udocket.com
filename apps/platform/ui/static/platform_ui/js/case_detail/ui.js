@@ -8,6 +8,14 @@
   const JOB_DETAIL_LOADING =
     '<div class="flex items-center gap-2 text-xs text-slate-300"><svg class="h-3 w-3 animate-spin text-primary-300" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle class="opacity-30" cx="12" cy="12" r="10" stroke-width="2"></circle><path d="M22 12a10 10 0 00-10-10" stroke-width="2" stroke-linecap="round"></path></svg><span>Loading…</span></div>';
   const JOB_DETAIL_ERROR = '<div class="text-xs text-rose-300">Unable to load job detail.</div>';
+  const REVIEW_BADGE_CLASSES = {
+    APPROVED:
+      'inline-flex items-center rounded-full border border-emerald-400/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-emerald-200',
+    REJECTED:
+      'inline-flex items-center rounded-full border border-rose-400/40 bg-rose-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-rose-200',
+    PENDING:
+      'inline-flex items-center rounded-full border border-white/20 bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-300',
+  };
 
   let ctx = null;
   let deps = {};
@@ -131,6 +139,98 @@
     if (pill) {
       renderStatusLabel(pill, status, progress);
     }
+  }
+
+  function normalizeReviewStatus(value) {
+    const status = (value || '').toString().toUpperCase();
+    if (status === 'APPROVED' || status === 'REJECTED') {
+      return status;
+    }
+    return 'PENDING';
+  }
+
+  function formatReviewTimestamp(value) {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return '';
+    }
+    try {
+      return date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+    } catch (_) {
+      return date.toISOString().replace('T', ' ').split('.')[0];
+    }
+  }
+
+  function updateReviewDisplays(jobId, payload) {
+    if (!ctx || !jobId) return;
+    const normalized = normalizeReviewStatus(payload && payload.review_status);
+    const label = normalized === 'APPROVED' ? 'Approved' : normalized === 'REJECTED' ? 'Rejected' : 'Pending';
+    const comment = payload && typeof payload.review_comment === 'string' ? payload.review_comment.trim() : '';
+    const reviewer = payload && typeof payload.reviewed_by === 'string' ? payload.reviewed_by.trim() : '';
+    const reviewedAt = formatReviewTimestamp(payload && payload.reviewed_at);
+
+    const row = global.document.querySelector(`[data-job="${jobId}"]`);
+    if (row) {
+      row.dataset.reviewStatus = normalized;
+      row.setAttribute('data-review-status', normalized);
+      row.dataset.tableValueReviewStatus = normalized;
+      row.dataset.tableValueReview = normalized;
+    }
+
+    const badge = global.document.getElementById(`job-review-badge-${jobId}`);
+    if (badge) {
+      badge.className = REVIEW_BADGE_CLASSES[normalized] || REVIEW_BADGE_CLASSES.PENDING;
+      badge.textContent = label;
+    }
+
+    const approveDisabled = normalized === 'APPROVED';
+    const rejectDisabled = normalized === 'REJECTED';
+    global.document.querySelectorAll(`[data-job-approve="${jobId}"]`).forEach((button) => {
+      if (button && button.dataset.reviewLoading === '1') return;
+      button.disabled = approveDisabled;
+    });
+    global.document.querySelectorAll(`[data-job-reject="${jobId}"]`).forEach((button) => {
+      if (button && button.dataset.reviewLoading === '1') return;
+      button.disabled = rejectDisabled;
+    });
+
+    const summaries = global.document.querySelectorAll(
+      `[data-job-detail-container="${jobId}"] [data-review-summary]`,
+    );
+    summaries.forEach((summary) => {
+      const statusEl = summary.querySelector('[data-review-status-text]');
+      if (statusEl) {
+        statusEl.textContent = label;
+      }
+      const commentEl = summary.querySelector('[data-review-comment]');
+      if (commentEl) {
+        commentEl.textContent = comment || 'No review notes yet.';
+      }
+      const metaEl = summary.querySelector('[data-review-meta]');
+      if (metaEl) {
+        if (reviewer || reviewedAt) {
+          metaEl.textContent = '';
+          if (reviewer) {
+            metaEl.appendChild(global.document.createTextNode('Reviewed by '));
+            const name = global.document.createElement('span');
+            name.className = 'font-semibold text-slate-100';
+            name.textContent = reviewer;
+            metaEl.appendChild(name);
+          }
+          if (reviewedAt) {
+            if (metaEl.childNodes.length) {
+              metaEl.appendChild(global.document.createTextNode(' · '));
+            }
+            const timeText = global.document.createElement('span');
+            timeText.textContent = reviewedAt;
+            metaEl.appendChild(timeText);
+          }
+        } else {
+          metaEl.textContent = 'Awaiting reviewer decision.';
+        }
+      }
+    });
   }
 
   function resetSidebarBinding() {
@@ -296,5 +396,6 @@
     refreshCaseJobs,
     boost,
     getTableController,
+    updateReviewDisplays,
   };
 })(window);

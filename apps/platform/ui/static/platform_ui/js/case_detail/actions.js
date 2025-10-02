@@ -370,6 +370,209 @@
     }
   }
 
+  function collectReviewButtons(jobId) {
+    if (!jobId) return [];
+    const selectors = [`[data-job-approve="${jobId}"]`, `[data-job-reject="${jobId}"]`];
+    const buttons = [];
+    selectors.forEach((selector) => {
+      global.document.querySelectorAll(selector).forEach((button) => {
+        if (button instanceof HTMLElement && !buttons.includes(button)) {
+          buttons.push(button);
+        }
+      });
+    });
+    return buttons;
+  }
+
+  function promptReviewReasonThroughPrompt(mode) {
+    const label = mode === 'reject' ? 'Enter a reason for rejecting this transcript:' : 'Enter a reason for approving this transcript:';
+    while (true) {
+      const result = global.prompt(label, '');
+      if (result === null) {
+        return null;
+      }
+      const trimmed = result.trim();
+      if (trimmed) {
+        return trimmed;
+      }
+    }
+  }
+
+  function promptReviewReasonThroughModal(mode, jobId) {
+    if (!ctx || !ctx.modalApi || typeof ctx.modalApi.create !== 'function') {
+      return Promise.resolve(promptReviewReasonThroughPrompt(mode));
+    }
+    return new global.Promise((resolve) => {
+      let settled = false;
+      const container = global.document.createElement('div');
+      container.className = 'space-y-4 text-sm text-slate-200';
+      const intro = global.document.createElement('div');
+      intro.innerHTML = `
+        <p class="text-xs uppercase tracking-wide text-slate-400">${mode === 'reject' ? 'Reject transcript' : 'Approve transcript'}</p>
+        <p class="mt-1 text-xs text-slate-400">Provide a short note so teammates understand this decision.</p>
+      `;
+      container.appendChild(intro);
+
+      const field = global.document.createElement('label');
+      field.className = 'block';
+      field.innerHTML = `
+        <span class="text-xs font-semibold uppercase tracking-wide text-slate-400">Reason</span>
+        <textarea rows="4" class="mt-2 w-full rounded-lg border border-white/10 bg-slate-950/40 p-3 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" data-review-reason placeholder="Share the key detail driving this decision"></textarea>
+      `;
+      container.appendChild(field);
+
+      const error = global.document.createElement('p');
+      error.className = 'hidden text-xs text-rose-300';
+      error.dataset.reviewError = '1';
+      error.textContent = 'Reason is required.';
+      container.appendChild(error);
+
+      const textarea = field.querySelector('textarea');
+      if (textarea) {
+        textarea.dataset.modalAutoFocus = '1';
+        textarea.addEventListener('input', () => {
+          if (!error.classList.contains('hidden')) {
+            error.classList.add('hidden');
+          }
+        });
+      }
+
+      const modal = ctx.modalApi.create({
+        heading: mode === 'reject' ? 'Reject transcript' : 'Approve transcript',
+        title: jobId ? `Job ${jobId}` : '',
+        bodyNode: container,
+        actions: [
+          {
+            label: 'Cancel',
+            onClick: () => {
+              settled = true;
+              ctx.modalApi.close(modal);
+              resolve(null);
+            },
+          },
+          {
+            label: mode === 'reject' ? 'Reject' : 'Approve',
+            variant: mode === 'reject' ? 'danger' : 'primary',
+            autoFocus: true,
+            onClick: () => {
+              const value = textarea ? textarea.value.trim() : '';
+              if (!value) {
+                error.classList.remove('hidden');
+                if (textarea) {
+                  textarea.focus({ preventScroll: true });
+                }
+                return;
+              }
+              settled = true;
+              resolve(value);
+              ctx.modalApi.close(modal);
+            },
+          },
+        ],
+      });
+
+      ctx.modalApi.open(modal, {
+        container: ctx.modalRoot || undefined,
+        removeOnClose: true,
+        onClose: () => {
+          if (!settled) {
+            resolve(null);
+          }
+        },
+      });
+    });
+  }
+
+  function promptReviewReason(mode, jobId) {
+    if (!ctx || !ctx.modalApi || typeof ctx.modalApi.create !== 'function') {
+      return global.Promise.resolve(promptReviewReasonThroughPrompt(mode));
+    }
+    return promptReviewReasonThroughModal(mode, jobId);
+  }
+
+  async function runReviewWorkflow({ jobId, mode, clientX, clientY, control }) {
+    if (!jobId) return;
+    const comment = await promptReviewReason(mode, jobId);
+    if (comment == null) return;
+    const buttons = collectReviewButtons(jobId);
+    const priorStates = buttons.map((button) => button.disabled);
+    buttons.forEach((button) => {
+      button.disabled = true;
+      button.dataset.reviewLoading = '1';
+    });
+    const sourceButton = control instanceof HTMLElement ? control : null;
+    if (sourceButton) {
+      sourceButton.disabled = true;
+      sourceButton.dataset.reviewLoading = '1';
+    }
+    const toastX = Number.isFinite(clientX) ? clientX : global.innerWidth / 2;
+    const toastY = Number.isFinite(clientY) ? clientY : global.innerHeight / 2;
+    let succeeded = false;
+    try {
+      const endpoint = `/api/v1/jobs/${jobId}/${mode}/`;
+      const resp = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'X-CSRFToken': helpers.getCSRFToken(),
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify({ comment }),
+      });
+      if (!resp.ok) {
+        let message = `HTTP ${resp.status}`;
+        const contentType = resp.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          try {
+            const data = await resp.json();
+            if (data && typeof data.detail === 'string') {
+              message = data.detail;
+            } else if (data && typeof data.error === 'string') {
+              message = data.error;
+            }
+          } catch (_) {}
+        } else {
+          try {
+            const text = (await resp.text()).trim();
+            if (text) {
+              message = text.slice(0, 200);
+            }
+          } catch (_) {}
+        }
+        throw new Error(message);
+      }
+      const data = await resp.json();
+      buttons.forEach((button) => {
+        delete button.dataset.reviewLoading;
+      });
+      deps.ui?.updateReviewDisplays?.(jobId, data);
+      deps.realtime?.handleJobUpdate?.(jobId, data, 'review');
+      succeeded = true;
+      if (deps.notify) {
+        deps.notify(toastX, toastY, mode === 'reject' ? 'Transcript rejected' : 'Transcript approved');
+      }
+    } catch (error) {
+      console.error('Job review failed', mode, jobId, error);
+      if (deps.notify) {
+        const fallback = mode === 'reject' ? 'Unable to reject transcript' : 'Unable to approve transcript';
+        const detail = error instanceof Error && error.message ? error.message.trim() : fallback;
+        deps.notify(toastX, toastY, detail || fallback);
+      }
+    } finally {
+      if (sourceButton) {
+        delete sourceButton.dataset.reviewLoading;
+        sourceButton.disabled = false;
+      }
+      buttons.forEach((button, index) => {
+        delete button.dataset.reviewLoading;
+        if (!succeeded) {
+          button.disabled = priorStates[index];
+        }
+      });
+    }
+  }
+
   function closeActionMenu(menu) {
     if (!menu) return;
     const popovers = platformUI.popovers;
@@ -417,6 +620,18 @@
     const action = control.getAttribute('data-job-action');
     const menu = control.closest('[data-job-action-menu]');
     const closeMenu = () => closeActionMenu(menu);
+
+    if (action === 'approve' || action === 'reject' || kind === 'review') {
+      closeMenu();
+      await runReviewWorkflow({
+        jobId,
+        mode: action === 'reject' ? 'reject' : 'approve',
+        clientX: evt.clientX,
+        clientY: evt.clientY,
+        control,
+      });
+      return;
+    }
 
     if (kind === 'modal') {
       if (action === 'view-log') {

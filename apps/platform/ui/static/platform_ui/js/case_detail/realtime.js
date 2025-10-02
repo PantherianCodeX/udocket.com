@@ -203,6 +203,10 @@
     deps.ui?.updateStatusDisplays(jobId, status, progressValue);
     ctx.jobsState.lastStatus[jobId] = status;
 
+    if (payload && Object.prototype.hasOwnProperty.call(payload, 'review_status')) {
+      deps.ui?.updateReviewDisplays?.(jobId, payload);
+    }
+
     if (payload.notes) {
       const notesContainer = global.document.querySelector(
         `[data-job-notes][data-job-id="${jobId}"]`,

@@ -3,6 +3,10 @@
   const platformUI = (global.platformUI = global.platformUI || {});
   if (platformUI.modal) return;
 
+  const zStack = platformUI.zStack;
+  const MODAL_BASE_Z = 2147483600;
+  const MODAL_DIALOG_BASE_Z = MODAL_BASE_Z + 4;
+
   const FOCUSABLE_SELECTORS = [
     'a[href]',
     'button:not([disabled])',
@@ -126,6 +130,48 @@
     };
   }
 
+  function applyModalZ(entry) {
+    if (!entry || !entry.modal) return;
+    const overlay = entry.modal;
+    const dialog = overlay.querySelector('[data-modal-dialog]');
+    entry.dialogEl = dialog instanceof HTMLElement ? dialog : null;
+    entry.originalModalZ = overlay.style ? overlay.style.zIndex || '' : '';
+    entry.originalDialogZ = entry.dialogEl && entry.dialogEl.style ? entry.dialogEl.style.zIndex || '' : '';
+    entry.promotedElements = entry.promotedElements || [];
+    if (zStack && typeof zStack.promote === 'function') {
+      try { zStack.promote(overlay, { base: MODAL_BASE_Z }); } catch (err) {}
+      if (entry.dialogEl) {
+        try { zStack.promote(entry.dialogEl, { base: MODAL_DIALOG_BASE_Z }); } catch (err) {}
+      }
+      entry.promotedElements = [overlay].concat(entry.dialogEl ? [entry.dialogEl] : []);
+    } else {
+      if (overlay && overlay.style) {
+        overlay.style.zIndex = String(MODAL_BASE_Z);
+      }
+      if (entry.dialogEl && entry.dialogEl.style) {
+        entry.dialogEl.style.zIndex = String(MODAL_DIALOG_BASE_Z);
+      }
+    }
+  }
+
+  function releaseModalZ(entry) {
+    if (!entry) return;
+    if (zStack && typeof zStack.release === 'function') {
+      (entry.promotedElements || []).forEach((el) => {
+        if (!el) return;
+        try { zStack.release(el); } catch (err) {}
+      });
+    } else {
+      if (entry.modal && entry.modal.style) {
+        entry.modal.style.zIndex = entry.originalModalZ || '';
+      }
+      if (entry.dialogEl && entry.dialogEl.style) {
+        entry.dialogEl.style.zIndex = entry.originalDialogZ || '';
+      }
+    }
+    entry.promotedElements = [];
+  }
+
   function removeModalElement(entry) {
     const modal = entry.modal;
     if (modal && modal.isConnected && entry.removeOnClose !== false) {
@@ -165,6 +211,7 @@
       container.innerHTML = '';
     }
     container.appendChild(modal);
+    applyModalZ(entry);
     entry.allowScroll = options.allowScroll === true || modal.hasAttribute('data-modal-allow-scroll');
     modalStack.push(entry);
     syncBodyScrollLock();
@@ -181,6 +228,7 @@
     if (entry.cleanupHandlers) {
       try { entry.cleanupHandlers(); } catch (err) {}
     }
+    releaseModalZ(entry);
     removeModalElement(entry);
     syncBodyScrollLock();
     if (typeof entry.onClose === 'function') {

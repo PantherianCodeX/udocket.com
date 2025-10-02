@@ -7,9 +7,12 @@
     - popover_panel_classes / popover_panel_attrs / popover_panel
   Optional context:
     popover_key: string identifier used for JS portal bookkeeping.
+    popover_portal: set to '' to opt out of body portal behaviour.
 {% endcomment %}
+{% with portal_value=popover_portal|default:'body' %}
 <details class="{% block popover_details_classes %}relative inline-block{% endblock %}"
          data-popover="{{ popover_key|default:'menu' }}"
+         {% if portal_value %}data-popover-portal="{{ portal_value }}"{% endif %}
          {% block popover_details_attrs %}{% endblock %}>
   {% block popover_summary_wrapper %}
     <summary class="{% block popover_summary_classes %}inline-flex cursor-pointer items-center gap-2{% endblock %}"
@@ -24,3 +27,4 @@
     {% block popover_panel %}{% endblock %}
   </div>
 </details>
+{% endwith %}
