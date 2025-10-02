@@ -4,6 +4,7 @@
   if (platformUI.popovers) return;
 
   const popoverState = new WeakMap();
+  const panelOwners = new WeakMap();
   const zStack = platformUI.zStack;
   const POPUP_BASE_Z = 2147483600;
   const PORTAL_BASE_Z = POPUP_BASE_Z + 4;
@@ -45,6 +46,9 @@
       if (portal) {
         try { zStack.release(portal); } catch (err) {}
       }
+    }
+    if (panel) {
+      panelOwners.delete(panel);
     }
     if (panel && panel.isConnected) {
       Object.entries(original).forEach(([key, value]) => {
@@ -118,6 +122,7 @@
       panel.style.pointerEvents = 'auto';
     }
 
+    panelOwners.set(panel, detailsEl);
     panel.dataset.floating = '1';
     panel.style.visibility = 'hidden';
     panel.style.position = 'absolute';
@@ -299,6 +304,18 @@
     detailsEl.removeAttribute('open');
   }
 
+  function findOwner(node) {
+    if (!node) return null;
+    const directOwner = node.closest('[data-popover]');
+    if (directOwner) return directOwner;
+    const panel = node.closest('[data-popover-panel]');
+    if (panel) {
+      const owner = panelOwners.get(panel);
+      if (owner) return owner;
+    }
+    return null;
+  }
+
   function closeAll(filterSelector, except) {
     const selector = filterSelector || '[data-popover][open]';
     document.querySelectorAll(selector).forEach((menu) => {
@@ -366,9 +383,9 @@
   document.addEventListener('click', (evt) => {
     const closer = evt.target.closest('[data-popover-close]');
     if (!closer) return;
-    const owner = closer.closest('[data-popover]');
+    const owner = findOwner(closer);
     if (owner) {
-      close(owner);
+      requestAnimationFrame(() => close(owner));
     }
   });
 
