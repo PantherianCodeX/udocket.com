@@ -18,13 +18,13 @@ from ..selectors import job_telemetry_map
 
 
 TOOL_KEY_ALIASES = {
-    "": "case-details",
-    "case": "case-details",
-    "details": "case-details",
-    "case-details": "case-details",
-    "setup": "case-details",
-    "intake": "case-details",
-    "intake-form": "case-details",
+    "": "intake",
+    "case": "intake",
+    "details": "intake",
+    "case-details": "intake",
+    "setup": "intake",
+    "intake": "intake",
+    "intake-form": "intake",
     "transcribe": "transcribe",
     "transcription": "transcribe",
     "summary": "summary",
@@ -69,7 +69,7 @@ def case_progress_response(request: HttpRequest, case: Case) -> HttpResponse:
 def resolve_tool_key(
     raw_key: str,
     available_keys: Iterable[str],
-    default: str = "case-details",
+    default: str = "intake",
     allow_fallback: bool = True,
 ) -> str:
     """Resolve a tool key against aliases and available keys."""
@@ -88,7 +88,7 @@ def resolve_tool_key(
 def resolve_panel(
     raw_key: str,
     panels: Mapping[str, object],
-    default: str = "case-details",
+    default: str = "intake",
     allow_fallback: bool = True,
 ) -> Tuple[str, object | None]:
     """Return the canonical tool key and corresponding panel."""

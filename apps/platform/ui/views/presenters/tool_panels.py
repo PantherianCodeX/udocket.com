@@ -228,7 +228,7 @@ def build_tool_panels(
     for artifact in artifacts:
         artifacts_by_type.setdefault(str(artifact.get("type", "")).upper(), []).append(artifact)
 
-    for bucket in ("SUMMARY", "TIMELINE", "TRANSCRIPT"):
+    for bucket in ("SUMMARY", "TIMELINE", "TRANSCRIPT", "QUESTIONNAIRE"):
         artifacts_by_type.setdefault(bucket, [])
 
     panels: Dict[str, Dict[str, Any]] = {}
@@ -262,7 +262,9 @@ def build_tool_panels(
 
     owner_id = owner_ids[0] if owner_ids else ""
 
-    case_panel = _panel_from_definition("case-details")
+    questionnaire_artifacts = artifacts_by_type.get("QUESTIONNAIRE", [])
+
+    case_panel = _panel_from_definition("intake")
     case_notes = empty_notes.copy()
     case_notes["user_can_add"] = user_can_review
     case_panel.update(
@@ -304,6 +306,12 @@ def build_tool_panels(
                 "current_representation": current_representation,
                 "engagement_options": engagement_options,
                 "current_engagement": current_engagement,
+                "questionnaire": {
+                    "latest": questionnaire_artifacts[0] if questionnaire_artifacts else None,
+                    "history": questionnaire_artifacts[1:5] if questionnaire_artifacts else [],
+                    "manual_edit_url": "#",
+                    "agent_edit_available": False,
+                },
             },
             "jobs": job_rows,
             "jobs_title": "All Jobs",
@@ -440,7 +448,7 @@ def build_tool_panels(
 
     analysis_llm = build_analysis_llm_context(case, return_url=return_url)
     summary_llm = analysis_llm["summary"]
-    timeline_llm = analysis_llm["timeline"]
+    compose_llm = analysis_llm["compose"]
     summary_status = status_payload(progress_lookup, "summary", "Not Started")
     summary_module = analysis_lookup.get("summary") or {}
     summary_latest = summary_module.get("latest") or {}
@@ -499,57 +507,67 @@ def build_tool_panels(
     )
     panels[summary_panel["key"]] = summary_panel
 
-    timeline_status = status_payload(progress_lookup, "timeline", "Not Started")
-    timeline_module = analysis_lookup.get("timeline") or {}
-    timeline_latest = timeline_module.get("latest") or {}
-    timeline_history = timeline_module.get("history") or []
-    timeline_jobs = jobs_by_agent(all_rows_iterable, keywords=("timeline", "event"))
-    timeline_panel = _panel_from_definition("timeline")
-    timeline_panel.update(
+    compose_status = status_payload(progress_lookup, "compose", "Not Started")
+    compose_module = analysis_lookup.get("compose") or {}
+    compose_latest = compose_module.get("latest") or {}
+    compose_history = compose_module.get("history") or []
+    compose_jobs = jobs_by_agent(all_rows_iterable, keywords=("compose",))
+    compose_panel = _panel_from_definition("compose")
+    compose_details = compose_module.get("latest_details") or {}
+    compose_panel.update(
         {
-            "status_label": timeline_status["label"],
-            "status_class": timeline_status["class"],
-            "updated_at": timeline_status["updated"] or timeline_latest.get("created_at"),
-            "progress_detail": timeline_status.get("detail"),
-            "notes": timeline_module.get("notes") or empty_notes.copy(),
-            "notes_panel_html": timeline_module.get("notes_panel_html"),
-            "team_alerts": timeline_module.get("team_alerts", team_alerts),
+            "status_label": compose_status["label"],
+            "status_class": compose_status["class"],
+            "updated_at": compose_status["updated"] or compose_latest.get("created_at"),
+            "progress_detail": compose_status.get("detail"),
+            "notes": compose_module.get("notes") or empty_notes.copy(),
+            "notes_panel_html": compose_module.get("notes_panel_html"),
+            "team_alerts": compose_module.get("team_alerts", team_alerts),
             "meta": [
-                {"label": "Timelines", "value": len(timeline_history) + (1 if timeline_latest else 0)},
-                {"label": "Artifacts", "value": len(artifacts)},
+                {
+                    "label": "Deliverables",
+                    "value": len(compose_details.get("deliverables", [])),
+                },
+                {
+                    "label": "History",
+                    "value": len(compose_history) + (1 if compose_latest else 0),
+                },
             ],
             "body_context": {
                 "case": case,
-                "module": timeline_module,
+                "module": compose_module,
+                "summary_module": summary_module,
                 "transcripts": transcript_sources,
-                "artifact_options": artifacts_by_type,
-                "job_endpoint_template": timeline_panel.get("job_endpoint_template"),
-                "timeline_llm": timeline_llm,
+                "summaries": compose_module.get("available_summaries") or [],
+                "compose_llm": compose_llm,
+                "job_endpoint_template": compose_panel.get("job_endpoint_template"),
+                "dependencies": compose_module.get("dependencies")
+                or {"has_summary": False, "has_transcript": False},
             },
-            "jobs": timeline_jobs,
-            "jobs_title": "Timeline Jobs",
+            "jobs": compose_jobs,
+            "jobs_title": "Compose Jobs",
             "jobs_pill": "Automations",
-            "jobs_empty_message": "No timeline jobs yet. Generate a timeline above.",
+            "jobs_empty_message": "No compose jobs yet. Generate deliverables above.",
             "case_id": str(case.id),
             "jobs_columns": list(GLOBAL_JOB_TABLE_COLUMNS),
             "jobs_column_ids": [col["id"] for col in GLOBAL_JOB_TABLE_COLUMNS],
             "jobs_filters": DEFAULT_TABLE_FILTERS,
             "jobs_show_identifiers": False,
             "jobs_table": table_config(
-                panel_key=timeline_panel["key"],
-                title="Timeline Jobs",
+                panel_key=compose_panel["key"],
+                title="Compose Jobs",
                 pill="Automations",
-                rows=timeline_jobs,
+                rows=compose_jobs,
                 columns=GLOBAL_JOB_TABLE_COLUMNS,
                 column_ids=[col["id"] for col in GLOBAL_JOB_TABLE_COLUMNS],
                 filters=DEFAULT_TABLE_FILTERS,
-                empty_message="No timeline jobs yet. Generate a timeline above.",
+                empty_message="No compose jobs yet. Generate deliverables above.",
                 show_identifiers=False,
                 case_id=str(case.id),
             ),
         }
     )
-    panels[timeline_panel["key"]] = timeline_panel
+    panels[compose_panel["key"]] = compose_panel
 
     return panels
 

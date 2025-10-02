@@ -37,10 +37,10 @@ class ToolDefinition:
 
 
 _REGISTRY: dict[str, ToolDefinition] = {
-    "case-details": ToolDefinition(
-        key="case-details",
-        label="Intake Form",
-        description="Update assignments, key dates, and intake metadata for this case.",
+    "intake": ToolDefinition(
+        key="intake",
+        label="Intake",
+        description="Manage intake details, assignments, and questionnaire artifacts for this case.",
         body_template="platform_ui/tools/case_details.html",
         notes_enabled=True,
     ),
@@ -65,17 +65,17 @@ _REGISTRY: dict[str, ToolDefinition] = {
         artifact_types=("SUMMARY", "ANALYSIS"),
         data_attributes={"data-summary": "", "data-llm-target": "summary"},
     ),
-    "timeline": ToolDefinition(
-        key="timeline",
-        label="Timeline",
-        description="Produce an event timeline anchored to transcript timestamps and summaries.",
-        body_template="platform_ui/tools/timeline.html",
+    "compose": ToolDefinition(
+        key="compose",
+        label="Compose",
+        description="Generate client and lawyer-ready deliverables from approved summaries and transcripts.",
+        body_template="platform_ui/tools/compose.html",
         notes_enabled=True,
-        alerts_key="timeline",
-        llm_target="timeline",
-        job_endpoint_template="/api/v1/jobs/{job_id}/analyze/timeline/",
-        artifact_types=("TIMELINE",),
-        data_attributes={"data-timeline": "", "data-llm-target": "timeline"},
+        alerts_key="compose",
+        llm_target="compose",
+        job_endpoint_template="/api/v1/jobs/{job_id}/analyze/compose/",
+        artifact_types=("ANALYSIS", "COMPOSE"),
+        data_attributes={"data-compose": "", "data-llm-target": "compose"},
     ),
 }
 

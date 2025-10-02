@@ -194,7 +194,7 @@ def compute_case_tool_state(request: HttpRequest, case: Case) -> Dict[str, Any]:
         job_filters_active=table_state.active_filters,
     )
 
-    case_details_panel = tool_panels.get("case-details") or {}
+    case_details_panel = tool_panels.get("intake") or {}
     case_fields = case_details_panel.get("body_context", {}).get("fields", prepare_case_fields(case))
     case_header = build_case_header_context(
         case,

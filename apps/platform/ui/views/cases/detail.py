@@ -48,7 +48,7 @@ def case_detail(request: HttpRequest, case_id: str) -> HttpResponse:
     latest_activity_ts = state["latest_activity_ts"]
 
     raw_tool = (request.GET.get("tool") or request.GET.get("module") or "")
-    initial_tool_key = resolve_tool_key(raw_tool, tool_panels.keys(), default="case-details")
+    initial_tool_key = resolve_tool_key(raw_tool, tool_panels.keys(), default="intake")
     initial_panel = tool_panels.get(initial_tool_key)
 
     context = {

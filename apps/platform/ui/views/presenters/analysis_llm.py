@@ -239,6 +239,7 @@ def build_analysis_llm_context(case: Case, *, return_url: str) -> Dict[str, Dict
     return {
         "summary": _build_target("summary"),
         "timeline": _build_target("timeline"),
+        "compose": _build_target("compose"),
     }
 
 

@@ -22,6 +22,7 @@ from .analysis_modules import artifact_payload, analysis_modules_context as _ana
 from .analysis_llm import build_analysis_llm_context as _build_analysis_llm_context
 from .tool_panels import build_tool_panels as _build_tool_panels, table_config as _table_config
 from .case_memberships import case_assignment_lists, case_owner_details
+from .tool_registry import iter_tool_definitions
 
 
 build_tool_panels = _build_tool_panels
@@ -74,7 +75,7 @@ def build_case_progress(
     mappings = [
         ("transcription", "Transcribe", ("transcription", "speech", "audio", "transcribe")),
         ("summary", "Summarize", ("summary", "summarize")),
-        ("timeline", "Timeline", ("timeline", "events")),
+        ("compose", "Compose", ("compose", "deliverable", "compose_job")),
         ("relationships", "Relationships", ("relationship", "graph", "relationships")),
     ]
 
@@ -157,15 +158,14 @@ def collect_case_artifacts(
 
 
 def build_case_developer_cards(panels: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
-    order = ["case-details", "transcribe", "summary", "timeline"]
     cards: List[Dict[str, Any]] = []
-    for key in order:
-        panel = panels.get(key)
+    for definition in iter_tool_definitions():
+        panel = panels.get(definition.key)
         if not panel:
             continue
         cards.append(
             {
-                "key": key,
+                "key": definition.key,
                 "label": panel.get("label"),
                 "status_label": panel.get("status_label"),
                 "status_class": panel.get("status_class"),

@@ -102,7 +102,7 @@ def case_details_update(request: HttpRequest, case_id: str) -> HttpResponse:
 
     if form_errors:
         state = compute_case_tool_state(request, case)
-        panel = state["tool_panels"].get("case-details")
+        panel = state["tool_panels"].get("intake")
         if panel:
             panel_body = panel.get("body_context", {})
             panel_body["form_errors"] = form_errors
@@ -154,7 +154,7 @@ def case_details_update(request: HttpRequest, case_id: str) -> HttpResponse:
         case.save(update_fields=list(set(update_fields)))
 
     state = compute_case_tool_state(request, case)
-    panel = state["tool_panels"].get("case-details")
+    panel = state["tool_panels"].get("intake")
     if panel is None:
         return render(request, "platform_ui/tools/_panel.html", {"panel": panel})
     return render_case_panel_with_refresh(
@@ -162,8 +162,8 @@ def case_details_update(request: HttpRequest, case_id: str) -> HttpResponse:
         panel,
         case=case,
         state=state,
-        active_tool="case-details",
-        tools=["case-details"],
+        active_tool="intake",
+        tools=["intake"],
     )
 
 

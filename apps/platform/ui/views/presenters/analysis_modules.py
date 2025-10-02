@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from django.conf import settings
 from django.http import HttpRequest
 from django.urls import reverse
 
 from apps.platform.authorization.capabilities import has_capability
-from apps.platform.artifacts.models import CaseArtifact
+from apps.platform.artifacts.models import CaseArtifact, CaseArtifactQuerySet
 from apps.platform.cases.models import Case
 from apps.platform.jobs.models import Job, JobNote
 from apps.platform.jobs.notes import serialize_notes
@@ -50,10 +50,15 @@ def latest_successful_transcription_job(jobs: List[Job]) -> Optional[Job]:
 
 
 def artifact_payload(artifact: CaseArtifact) -> Dict[str, Any]:
-    metadata = artifact.metadata or {}
+    metadata = cast(Dict[str, Any], artifact.metadata or {})
     path_obj = Path(artifact.path) if artifact.path else None
-    filename = path_obj.name if path_obj else (artifact.path or "")
-    source = metadata.get("source_transcript") or metadata.get("source")
+    filename = path_obj.name if path_obj else str(artifact.path or "")
+    source_val = metadata.get("source_transcript") or metadata.get("source")
+    source: Optional[str]
+    if source_val:
+        source = str(source_val)
+    else:
+        source = None
     if source:
         try:
             source = Path(source).name
@@ -72,6 +77,7 @@ def artifact_payload(artifact: CaseArtifact) -> Dict[str, Any]:
         "filename": filename,
         "metadata": metadata,
         "source": source,
+        "artifact_type": artifact.type,
     }
 
 
@@ -84,20 +90,46 @@ def analysis_modules_context(
 ) -> List[Dict[str, Any]]:
     return_url = request.get_full_path() if hasattr(request, "get_full_path") else ""
     user = getattr(request, "user", None)
+    artifacts_manager = cast(CaseArtifactQuerySet, CaseArtifact.objects)
     artifacts_qs = (
-        CaseArtifact.objects.for_user(user)
-        .filter(case_id=str(case.id), type__in=["SUMMARY", "TIMELINE"])
+        artifacts_manager.for_user(user)
+        .filter(case_id=str(case.id), type__in=["SUMMARY", "TIMELINE", "ANALYSIS", "COMPOSE"])
         .order_by("-created_at")
     )
 
+    artifact_payloads: List[Dict[str, Any]] = [artifact_payload(artifact) for artifact in artifacts_qs]
+
     summary_artifacts: List[Dict[str, Any]] = []
     timeline_artifacts: List[Dict[str, Any]] = []
-    for artifact in artifacts_qs:
-        payload = artifact_payload(artifact)
-        if artifact.type == "SUMMARY":
+    compose_candidates: Dict[str, Dict[str, Any]] = {}
+
+    for payload in artifact_payloads:
+        artifact_type = str(payload.get("artifact_type") or "").upper()
+        if artifact_type == "SUMMARY":
             summary_artifacts.append(payload)
-        elif artifact.type == "TIMELINE":
+        elif artifact_type == "TIMELINE":
             timeline_artifacts.append(payload)
+        else:
+            filename = payload.get("filename", "").lower()
+            title = (payload.get("title") or "").lower()
+            if "compose" in filename or "compose" in title:
+                job_key = payload.get("job_id") or str(payload["id"]).replace(" ", "")
+                candidate = compose_candidates.setdefault(
+                    job_key,
+                    {
+                        "job_id": job_key,
+                        "artifacts": [],
+                        "created_at": payload.get("created_at"),
+                        "source": payload.get("metadata", {}).get("source_summary"),
+                        "title": payload.get("title") or "Compose Deliverables",
+                    },
+                )
+                candidate["artifacts"].append(payload)
+                created_at = payload.get("created_at")
+                if created_at and (candidate.get("created_at") is None or created_at > candidate["created_at"]):
+                    candidate["created_at"] = created_at
+                if payload.get("title"):
+                    candidate["title"] = payload["title"]
 
     summary_artifacts = enrich_summary_artifacts(summary_artifacts, jobs, telemetry_map)
     timeline_artifacts = enrich_timeline_artifacts(timeline_artifacts)
@@ -117,6 +149,42 @@ def analysis_modules_context(
         }
 
     team_alerts = build_case_team_alerts(case, jobs)
+
+    def _notes_context(job_identifier: Optional[str]) -> Dict[str, Any]:
+        context: Dict[str, Any] = {
+            "job_id": None,
+            "entries": [],
+            "updated_at": None,
+            "updated_by": None,
+            "user_can_add": False,
+            "count": 0,
+        }
+        if not job_identifier:
+            return context
+        notes_qs = (
+            JobNote.objects.filter(job_id=job_identifier)
+            .select_related("created_by")
+            .order_by("-created_at")
+        )
+        notes_entries = serialize_notes(notes_qs)
+        notes_updated_at = notes_entries[0]["created_at"] if notes_entries else None
+        notes_updated_by = (
+            notes_entries[0].get("created_by_label")
+            or notes_entries[0].get("created_by")
+            if notes_entries
+            else None
+        )
+        context.update(
+            {
+                "job_id": str(job_identifier),
+                "entries": notes_entries,
+                "updated_at": notes_updated_at,
+                "updated_by": notes_updated_by,
+                "user_can_add": _user_can_add_notes(user, case),
+                "count": len(notes_entries),
+            }
+        )
+        return context
 
     def build_module(
         *,
@@ -146,40 +214,10 @@ def analysis_modules_context(
             action_disabled = False
             disabled_reason = None
 
-        notes_context: Dict[str, Any] = {
-            "job_id": None,
-            "entries": [],
-            "updated_at": None,
-            "updated_by": None,
-            "user_can_add": False,
-            "count": 0,
-        }
         latest_job_id = None
         if latest:
             latest_job_id = latest.get("job_id") or latest.get("id")
-        if latest_job_id:
-            notes_qs = (
-                JobNote.objects.filter(job_id=latest_job_id)
-                .select_related("created_by")
-                .order_by("-created_at")
-            )
-            notes_entries = serialize_notes(notes_qs)
-            notes_updated_at = notes_entries[0]["created_at"] if notes_entries else None
-            notes_updated_by = (
-                notes_entries[0].get("created_by_label")
-                or notes_entries[0].get("created_by")
-                if notes_entries
-                else None
-            )
-            notes_count = len(notes_entries)
-            notes_context = {
-                "job_id": str(latest_job_id),
-                "entries": notes_entries,
-                "updated_at": notes_updated_at,
-                "updated_by": notes_updated_by,
-                "user_can_add": _user_can_add_notes(user, case),
-                "count": notes_count,
-            }
+        notes_context = _notes_context(latest_job_id)
         notes_panel_html = render_notes_panel_html(
             job_id=notes_context.get("job_id"),
             entries=notes_context.get("entries"),
@@ -270,7 +308,130 @@ def analysis_modules_context(
         success_label="Timeline queued",
     )
 
-    return [summary_module, timeline_module]
+    compose_entries = sorted(
+        compose_candidates.values(),
+        key=lambda entry: entry.get("created_at") or datetime.min,
+        reverse=True,
+    )
+
+    def _format_compose_entry(entry: Dict[str, Any]) -> Dict[str, Any]:
+        items: List[Dict[str, Any]] = entry.get("artifacts", [])
+        deliverables: List[Dict[str, Any]] = []
+        for item in items:
+            filename = item.get("filename", "")
+            label = item.get("title") or filename
+            lower_name = filename.lower()
+            if "client" in lower_name:
+                label = "Client deliverable"
+            elif "lawyer" in lower_name:
+                label = "Lawyer deliverable"
+            deliverables.append(
+                {
+                    "label": label,
+                    "download_url": item.get("download_url"),
+                    "filename": filename,
+                    "format": filename.split(".")[-1] if "." in filename else "",
+                }
+            )
+        primary = items[0] if items else entry
+        return {
+            "id": primary.get("id"),
+            "job_id": entry.get("job_id"),
+            "title": entry.get("title") or "Compose Deliverables",
+            "created_at": entry.get("created_at"),
+            "source": entry.get("source"),
+            "download_url": (deliverables[0]["download_url"] if deliverables and deliverables[0]["download_url"] else primary.get("download_url")),
+            "details": {
+                "deliverables": deliverables,
+                "source_summary": entry.get("source"),
+            },
+            "deliverables": deliverables,
+        }
+
+    compose_latest_entry = _format_compose_entry(compose_entries[0]) if compose_entries else None
+    compose_history_entries = [_format_compose_entry(entry) for entry in compose_entries[1:5]]
+    compose_notes_context = _notes_context(compose_latest_entry.get("job_id") if compose_latest_entry else None)
+    compose_notes_panel = render_notes_panel_html(
+        job_id=compose_notes_context.get("job_id"),
+        entries=compose_notes_context.get("entries"),
+        updated_at=compose_notes_context.get("updated_at"),
+        updated_by=compose_notes_context.get("updated_by"),
+        user_can_add=compose_notes_context.get("user_can_add", False),
+    )
+    compose_downloads: List[Dict[str, Any]] = [
+        {
+            "label": item["label"],
+            "href": item["download_url"],
+            "download": True,
+        }
+        for item in (compose_latest_entry.get("deliverables", []) if compose_latest_entry else [])
+        if item.get("download_url")
+    ]
+    compose_status = "Not Started"
+    compose_header_hint = "No deliverables yet"
+    compose_disabled = False
+    compose_disabled_reason = None
+    if not target_job:
+        compose_status = "No Transcript"
+        compose_header_hint = "Upload and run a transcription to enable Compose."
+        compose_disabled = True
+        compose_disabled_reason = "Requires a completed transcript."
+    elif not summary_artifacts:
+        compose_status = "Needs Summary"
+        compose_header_hint = "Generate and approve a summary before composing deliverables."
+        compose_disabled = True
+        compose_disabled_reason = "Requires an approved summary."
+    elif compose_latest_entry:
+        compose_status = "Ready"
+        compose_header_hint = "Latest deliverables"
+
+    available_summaries = [
+        {
+            "job_id": item.get("job_id"),
+            "title": item.get("title"),
+            "created_at": item.get("created_at"),
+        }
+        for item in summary_artifacts[:5]
+    ]
+
+    compose_dependencies = {
+        "has_transcript": bool(target_job),
+        "has_summary": bool(summary_artifacts),
+    }
+
+    compose_module: Dict[str, Any] = {
+        "key": "compose",
+        "label": "Compose",
+        "description": "Generate client and lawyer deliverables from approved summaries and transcripts.",
+        "panel_id": "module-compose",
+        "status": compose_status,
+        "status_class": status_class(compose_status),
+        "header_hint": compose_header_hint,
+        "header_hint_time": compose_latest_entry["created_at"] if compose_latest_entry else None,
+        "latest": compose_latest_entry,
+        "history": compose_history_entries,
+        "downloads": compose_downloads,
+        "latest_details": compose_latest_entry.get("details") if compose_latest_entry else {},
+        "empty_message": "No compose jobs yet. Generate deliverables from the latest summary.",
+        "target_job": target_job,
+        "action": {
+            "job_id": target_job["id"] if target_job else None,
+            "label": "Queue compose job",
+            "loading_label": "Queuing…",
+            "success_label": "Compose queued",
+            "disabled": compose_disabled,
+            "disabled_reason": compose_disabled_reason,
+        },
+        "notes": compose_notes_context,
+        "notes_panel_html": compose_notes_panel,
+        "notes_panel": compose_notes_panel,
+        "return_url": return_url,
+        "team_alerts": team_alerts,
+        "available_summaries": available_summaries,
+        "dependencies": compose_dependencies,
+    }
+
+    return [summary_module, timeline_module, compose_module]
 
 
 __all__ = [

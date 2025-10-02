@@ -38,7 +38,7 @@ def test_build_tool_panels_appends_return_url(monkeypatch):
                 "return_url": return_url,
             }
 
-        return {"summary": ctx("summary"), "timeline": ctx("timeline")}
+        return {"summary": ctx("summary"), "compose": ctx("compose")}
 
     monkeypatch.setattr(presenters, "build_analysis_llm_context", fake_llm_context)
 
@@ -46,12 +46,12 @@ def test_build_tool_panels_appends_return_url(monkeypatch):
         {"key": "case_setup", "status": "Ready", "status_class": "ok", "updated": None, "detail": None},
         {"key": "transcription", "status": "Idle", "status_class": "idle", "updated": None, "detail": None},
         {"key": "summary", "status": "Idle", "status_class": "idle", "updated": None, "detail": None},
-        {"key": "timeline", "status": "Idle", "status_class": "idle", "updated": None, "detail": None},
+        {"key": "compose", "status": "Idle", "status_class": "idle", "updated": None, "detail": None},
     ]
 
     analysis_modules = [
         {"key": "summary", "latest": None, "history": [], "notes": {"job_id": None, "entries": [], "user_can_add": False}},
-        {"key": "timeline", "latest": None, "history": [], "notes": {"job_id": None, "entries": [], "user_can_add": False}},
+        {"key": "compose", "latest": None, "history": [], "notes": {"job_id": None, "entries": [], "user_can_add": False}},
     ]
 
     panels = presenters.build_tool_panels(
@@ -75,12 +75,13 @@ def test_build_tool_panels_appends_return_url(monkeypatch):
     )
 
     summary_urls = panels["summary"]["body_context"]["summary_llm"]["urls"]
-    timeline_urls = panels["timeline"]["body_context"]["timeline_llm"]["urls"]
+    compose_urls = panels["compose"]["body_context"]["compose_llm"]["urls"]
 
     expected_suffix = f"next=%2Fcases%2F{case.id}%2F"
     assert expected_suffix in summary_urls["edit"]
     assert expected_suffix in summary_urls["new"]
-    assert expected_suffix in timeline_urls["edit"]
-    assert expected_suffix in timeline_urls["new"]
+    assert expected_suffix in compose_urls["edit"]
+    assert expected_suffix in compose_urls["new"]
     assert panels["summary"]["body_context"]["summary_llm"]["return_url"] == f"/cases/{case.id}/"
+    assert panels["compose"]["body_context"]["compose_llm"]["return_url"] == f"/cases/{case.id}/"
     assert "guardian" not in panels

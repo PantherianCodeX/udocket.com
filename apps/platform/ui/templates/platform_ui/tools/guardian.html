@@ -1,1 +1,7 @@
-{% include "platform_ui/components/guardian/_overview.html" with payload=body %}
+{% extends "platform_ui/tools/components/_tool_panel.html" %}
+
+{% block tool_primary %}
+  {% include "platform_ui/components/guardian/_overview.html" with payload=body %}
+{% endblock %}
+
+{% block tool_sidebar_wrapper %}{% endblock %}
