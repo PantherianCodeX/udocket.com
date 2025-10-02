@@ -20,6 +20,25 @@ import requests
 log = logging.getLogger("apps.platform.jobs.views")
 from pathlib import Path
 
+ANALYSIS_KIND_TO_META_KEY: Dict[str, str] = {
+    "summary_json": "summary_file",
+    "summary_markdown": "summary_markdown_file",
+    "summary_outline": "summary_outline_file",
+    "summary_timeline_seeds": "summary_timeline_file",
+    "summary_entity_hints": "summary_entity_file",
+    "summary_case_brief": "summary_case_brief_file",
+    "timeline_v2": "timeline_v2_file",
+    "graph_v2": "graph_v2_file",
+    "entities_v2": "entities_v2_file",
+    "compose_client_markdown": "compose_client_markdown",
+    "compose_client_docx": "compose_client_docx",
+    "compose_lawyer_markdown": "compose_lawyer_markdown",
+    "compose_lawyer_docx": "compose_lawyer_docx",
+    "compose_timeline_summary": "compose_timeline_summary",
+    "compose_entity_brief": "compose_entity_brief",
+    "compose_graph_visual": "compose_graph_visual",
+}
+
 from apps.platform.authorization.capabilities import has_capability
 from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.cases.models import Case
@@ -41,6 +60,8 @@ from apps.platform.operations.tasks import analyze_job, timeline_job, graph_job,
 from apps.platform.tenancy import scope_jobs
 from apps.platform.operations.storage import ensure_case_dirs, ops_dir as storage_ops_dir
 from apps.platform.operations.utils import append_job_log, read_job_meta, update_job_meta
+from apps.platform.operations.services import case_paths, resolve_case_relative
+from apps.platform.operations.services.files import sha256_file
 from packages.udocket_core.audio import probe_audio_metadata
 
 
@@ -87,19 +108,6 @@ def _derive_audio_filename(path_obj: Path | None, meta: Dict[str, Any], fallback
         if candidate:
             return candidate
     return fallback or "audio"
-
-
-def _sha256_file(path: Path) -> Optional[str]:
-    try:
-        digest = hashlib.sha256()
-        with path.open("rb") as handle:
-            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                digest.update(chunk)
-        return digest.hexdigest()
-    except Exception:
-        return None
-
-
 class JobViewSet(viewsets.ModelViewSet):
     queryset = Job.objects.all()
     serializer_class = JobSerializer
@@ -596,7 +604,7 @@ class JobViewSet(viewsets.ModelViewSet):
         if path_obj is None or not path_obj.exists():
             return Response({"detail": "File not found for verification."}, status=status.HTTP_404_NOT_FOUND)
 
-        observed_hash = _sha256_file(path_obj)
+        observed_hash = sha256_file(path_obj)
         size_bytes: Optional[int]
         try:
             size_bytes = path_obj.stat().st_size
@@ -638,7 +646,7 @@ class JobViewSet(viewsets.ModelViewSet):
         except Exception as exc:  # noqa: BLE001
             return Response({"detail": f"Unable to probe audio: {exc}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        sha256_val = _sha256_file(path)
+        sha256_val = sha256_file(path)
         try:
             size_bytes = path.stat().st_size
         except Exception:  # noqa: BLE001
@@ -1165,6 +1173,38 @@ class JobViewSet(viewsets.ModelViewSet):
         graph_job.delay(case_id=str(job.case_id), job_id=str(job.id))
         audit_emit(request, case_id=str(job.case_id), event="analysis.graph.requested", data={"job_id": str(job.id)})
         return Response({"status": "queued"}, status=status.HTTP_202_ACCEPTED)
+
+    @action(detail=True, methods=["get"], url_path="download-analysis")
+    def download_analysis(self, request, pk=None):
+        job = self.get_object()
+        kind = (request.query_params.get("kind") or "").strip()
+        if not kind:
+            return Response({"detail": "Missing kind parameter."}, status=status.HTTP_400_BAD_REQUEST)
+
+        meta_key = ANALYSIS_KIND_TO_META_KEY.get(kind)
+        if meta_key is None:
+            return Response({"detail": "Unsupported analysis kind."}, status=status.HTTP_400_BAD_REQUEST)
+
+        case_id = str(job.case_id)
+        org_id = job.organization_id or job.case.organization_id
+        meta = read_job_meta(case_id, org_id, str(job.id))
+        path_hint = meta.get(meta_key)
+        if not path_hint:
+            return Response({"detail": "Artifact not found for requested kind."}, status=status.HTTP_404_NOT_FOUND)
+
+        case_dir, _, _ = case_paths(case_id, org_id)
+        path_obj = resolve_case_relative(str(path_hint), case_dir)
+        if path_obj is None or not path_obj.exists():
+            return Response({"detail": "Artifact file is missing."}, status=status.HTTP_404_NOT_FOUND)
+
+        audit_emit(
+            request,
+            case_id=case_id,
+            event="analysis.download",
+            data={"job_id": str(job.id), "kind": kind},
+        )
+
+        return FileResponse(path_obj.open("rb"), as_attachment=True, filename=path_obj.name)
 
     @action(detail=True, methods=["post"], url_path="title")
     def update_title(self, request, pk=None):

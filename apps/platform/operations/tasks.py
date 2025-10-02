@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
-import hashlib
 import uuid
 import json
 import logging
@@ -17,7 +16,6 @@ from django.conf import settings
 from django.utils import timezone
 
 from packages.udocket_core.agents import (
-    ComposeAgent,
     ComposeConfig,
     GraphAgent,
     GraphConfig,
@@ -57,6 +55,17 @@ from apps.platform.operations.runtime import (
     _safe_job_log,
     _safe_job_meta,
 )
+from apps.platform.operations.services import (
+    case_intake_payload,
+    case_paths,
+    collect_requested_providers,
+    load_summary_entity_hints,
+    load_summary_timeline_events,
+    ops_dir,
+    latest_transcript,
+    execute_compose_job,
+)
+from apps.platform.operations.services.files import sha256_file
 
 # Backwards compatibility for tests importing _update_job_meta
 def _update_job_meta(case_id: str, organization_id: Optional[str], job_id: str, updates: Dict[str, Any]) -> None:  # pragma: no cover - shim
@@ -64,18 +73,6 @@ def _update_job_meta(case_id: str, organization_id: Optional[str], job_id: str, 
 from apps.platform.jobs.utils import unique_title
 
 log = logging.getLogger("apps.platform.operations.tasks")
-
-def _sha256_file(path: Path) -> Optional[str]:
-    try:
-        digest = hashlib.sha256()
-        with path.open("rb") as handle:
-            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                digest.update(chunk)
-        return digest.hexdigest()
-    except Exception:
-        return None
-
-
 
 def _unique_conversion_title(case_id: str, organization_id: Optional[str], source_job_id: str) -> str:
     existing: set[str] = set()
@@ -177,7 +174,7 @@ def transcribe_job(
             audio_path = Path(audio_input)
             if audio_path.exists():
                 audio_meta_updates = {
-                    "audio_sha256": _sha256_file(audio_path),
+                    "audio_sha256": sha256_file(audio_path),
                     "audio_size_bytes": audio_path.stat().st_size,
                     "audio_mime": mimetypes.guess_type(audio_path.name)[0],
                 }
@@ -421,7 +418,7 @@ def transcribe_job(
                     except Exception:
                         converted_stats = {}
 
-                    converted_sha = _sha256_file(converted_path)
+                    converted_sha = sha256_file(converted_path)
                     converted_size = None
                     try:
                         converted_size = converted_path.stat().st_size
@@ -817,7 +814,7 @@ def transcribe_job(
             transcript_bytes = transcript_path_obj.stat().st_size
         except Exception:
             transcript_bytes = None
-        transcript_checksum = _sha256_file(transcript_path_obj)
+        transcript_checksum = sha256_file(transcript_path_obj)
 
     artifact_title: Optional[str] = None
     job_meta_title: Optional[str] = None
@@ -914,160 +911,200 @@ def transcribe_job(
         )
     return payload
 
+@shared_task(bind=True)
+def analyze_job(
+    self,
+    *_args,
+    case_id: str,
+    job_id: str,
+    llm_config_id: Optional[str] = None,
+    source_job_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    job = Job.objects.select_related("case", "case__organization").get(pk=job_id)
+    source_job = job
+    if source_job_id and str(source_job_id) != str(job_id):
+        try:
+            source_job = Job.objects.select_related("case", "case__organization").get(pk=source_job_id)
+        except Job.DoesNotExist:
+            source_job = job
+    org_id = job.organization_id or job.case.organization_id
+    case_dir, _, _ = case_paths(case_id, org_id)
+    existing_meta = read_job_meta(case_id, org_id, job_id)
+    existing_summary_titles = list(
+        CaseArtifact.objects.filter(case_id=str(case_id), type="SUMMARY").values_list("title", flat=True)
+    )
+    summary_title = str(existing_meta.get("job_title") or "").strip()
+    if not summary_title or summary_title in existing_summary_titles:
+        summary_title = unique_title("Summary", existing_summary_titles)
+    transcript = (
+        Path(source_job.transcript_path)
+        if source_job.transcript_path
+        else latest_transcript(case_id, org_id)
+    )
+    transcript_path_str = str(transcript) if transcript else None
 
-# ----------------------
-# Analysis task helpers
-# ----------------------
+    base_meta: Dict[str, Any] = {
+        "job_kind": "analyze",
+        "agent_type": "analyze",
+        "job_title": summary_title,
+        "source_job_id": str(source_job.id),
+        "source_transcript_path": transcript_path_str,
+    }
 
-def _case_paths(case_id: str, organization_id: str | None = None) -> tuple[Path, Path, Path]:
-    base = ensure_case_dirs(case_id, organization_id)
-    return base, base / "transcript", base / "analysis"
-
-
-def _ops_dir(case_id: str, organization_id: str | None = None) -> Path:
-    return storage_ops_dir(case_id, organization_id)
-
-
-def _resolve_case_relative(path_str: str, case_dir: Path) -> Optional[Path]:
-    candidate = Path(path_str)
-    if candidate.exists():
-        return candidate
-    candidate = case_dir / path_str
-    if candidate.exists():
-        return candidate
-    return None
-
-
-def _load_summary_timeline_events(
-    meta: Dict[str, Any], case_dir: Path
-) -> Tuple[List[Dict[str, Any]], Optional[Path]]:
-    file_str = meta.get("summary_timeline_file") if isinstance(meta, dict) else None
-    if not file_str:
-        return [], None
-    seeds_path = _resolve_case_relative(str(file_str), case_dir)
-    if not seeds_path:
-        return [], None
-    try:
-        payload = json.loads(seeds_path.read_text(encoding="utf-8"))
-    except Exception:
-        return [], None
-    if isinstance(payload, dict) and "events" in payload:
-        payload = payload.get("events")
-    events: List[Dict[str, Any]] = []
-    if isinstance(payload, list):
-        for item in payload:
-            if not isinstance(item, dict):
-                continue
-            events.append(
-                {
-                    "ts_start": item.get("ts_start"),
-                    "ts_end": item.get("ts_end"),
-                    "speaker": item.get("speaker"),
-                    "text": item.get("text", ""),
-                    "labels": list(item.get("labels") or []),
-                }
-            )
-    if not events:
-        return [], None
-    return events, seeds_path
-
-
-def _load_summary_entity_hints(
-    meta: Dict[str, Any], case_dir: Path
-) -> Tuple[Optional[Dict[str, Any]], Optional[Path]]:
-    file_str = meta.get("summary_entity_file") if isinstance(meta, dict) else None
-    if not file_str:
-        return None, None
-    hints_path = _resolve_case_relative(str(file_str), case_dir)
-    if not hints_path:
-        return None, None
-    try:
-        payload = json.loads(hints_path.read_text(encoding="utf-8"))
-    except Exception:
-        return None, None
-    if not isinstance(payload, dict):
-        return None, None
-    return payload, hints_path
-
-
-def _latest_transcript(case_id: str, organization_id: str | None = None) -> Path | None:
-    _, tdir, _ = _case_paths(case_id, organization_id)
-    if not tdir.exists():
-        return None
-    fx = sorted((p for p in tdir.glob("*__transcript.txt") if p.is_file()), key=lambda p: p.stat().st_mtime, reverse=True)
-    return fx[0] if fx else None
-
-
-def _case_intake_payload(case: Case | None) -> Dict[str, Any]:
-    if case is None:
-        return {}
-    fields = [
-        "client_position",
-        "court_level",
-        "court_division",
-        "court_location",
-        "court_case_number",
-        "court_date",
-        "filing_deadline",
-        "client_name",
-        "opposing_party",
-    ]
-    payload: Dict[str, Any] = {}
-    for field in fields:
-        value = getattr(case, field, None)
-        if value in (None, ""):
-            continue
-        if isinstance(value, datetime):
-            payload[field] = value.isoformat()
-        elif isinstance(value, date):
-            payload[field] = value.isoformat()
+    runtime = JobRuntimeContext(
+        job=job,
+        case_id=case_id,
+        org_id=org_id,
+        task_name="analyze_job",
+        task_id=getattr(self.request, "id", None) or "",
+        task_meta={
+            "requested_llm_config_id": llm_config_id,
+            "source_job_id": str(source_job.id),
+        },
+    )
+    summary_start_meta = {**base_meta, "summary_status": "running"}
+    summary_task_id = runtime.task_id or None
+    if summary_task_id:
+        history: List[str] = []
+        history_payload = existing_meta.get("celery_task_history")
+        if isinstance(history_payload, list):
+            history = [value for value in history_payload if isinstance(value, str) and value]
         else:
-            payload[field] = value
-    payload.setdefault("case_id", str(case.id))
-    payload.setdefault("case_title", case.title)
-    if getattr(case, "organization", None) is not None:
-        payload.setdefault("organization_id", str(case.organization_id))
-        name = getattr(case.organization, "name", None)
-        if name:
-            payload.setdefault("organization_name", name)
-    return payload
+            previous_id = existing_meta.get("celery_task_id")
+            if isinstance(previous_id, str) and previous_id:
+                history.append(previous_id)
+        if summary_task_id not in history:
+            history.append(summary_task_id)
+        summary_start_meta["celery_task_id"] = summary_task_id
+        summary_start_meta["celery_task_status"] = "running"
+        if history:
+            summary_start_meta["celery_task_history"] = history
+        if runtime.task_name:
+            summary_start_meta.setdefault("celery_task_name", runtime.task_name)
+
+    summary_started_at = runtime.start(
+        status=Job.Status.RUNNING,
+        log_message="Worker started analyze pipeline",
+        event="job.started",
+        meta_updates=summary_start_meta,
+    )
+
+    if summary_task_id and summary_started_at:
+        _safe_job_meta(
+            case_id,
+            org_id,
+            job_id,
+            {"celery_task_started_at": summary_started_at.isoformat()},
+        )
+
+    if not transcript or not transcript.exists():
+        failure_meta = {**base_meta, "summary_status": "failed", "summary_error": "transcript_missing"}
+        if summary_task_id:
+            failure_meta.setdefault("celery_task_id", summary_task_id)
+            failure_meta["celery_task_status"] = "failed"
+        failure_ts = runtime.fail(
+            error="No transcript found to analyze",
+            log_message="Analyze failed: transcript missing",
+            meta_updates=failure_meta,
+            events=[("analyze.failed", {})],
+            task_meta_updates={"stage": "preflight", "reason": "missing_transcript"},
+        )
+        _safe_job_meta(
+            case_id,
+            org_id,
+            job_id,
+            {
+                "summary_completed_at": failure_ts.isoformat(),
+                "celery_task_finished_at": failure_ts.isoformat(),
+                "celery_task_status": "failed" if summary_task_id else None,
+            },
+        )
+        raise RuntimeError("No transcript found to analyze")
+
+    try:
+        analyze_config = AnalyzeConfig.from_env()
+    except ValueError as exc:
+        log.error(
+            "analyze config invalid",
+            extra={"job_id": job_id, "case_id": case_id, "reason": str(exc)},
+        )
+        failure_meta = {**base_meta, "summary_status": "failed", "summary_error": str(exc)}
+        if summary_task_id:
+            failure_meta.setdefault("celery_task_id", summary_task_id)
+            failure_meta["celery_task_status"] = "failed"
+        failure_ts = runtime.fail(
+            error=str(exc),
+            log_message="Analyze configuration invalid",
+            meta_updates=failure_meta,
+            events=[("analyze.failed", {"llm_config_id": llm_config_id})],
+            task_meta_updates={"stage": "config", "reason": str(exc)},
+        )
+        _safe_job_meta(
+            case_id,
+            org_id,
+            job_id,
+            {
+                "summary_completed_at": failure_ts.isoformat(),
+                "celery_task_finished_at": failure_ts.isoformat(),
+                "celery_task_status": "failed" if summary_task_id else None,
+            },
+        )
+        raise
 
 
-def _collect_requested_providers(
-    config_chain: List[str],
-    provider_chain: Optional[List[str]],
-    stage_map: Optional[Dict[str, Dict[str, Any]]] = None,
-) -> List[str]:
-    sequence: List[str] = []
+@shared_task(bind=True)
+def compose_job(
+    self,
+    *_args,
+    case_id: str,
+    job_id: str,
+    summary_job_id: str,
+    llm_config_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    job = Job.objects.select_related("case", "case__organization").get(pk=job_id)
+    summary_job = Job.objects.select_related("case", "case__organization").get(pk=summary_job_id)
+    if summary_job.case_id != job.case_id:
+        raise RuntimeError("Summary job belongs to a different case")
 
-    def _add(value: Any) -> None:
-        if not value:
-            return
-        if not isinstance(value, str):
-            return
-        lowered = value.strip().lower()
-        if lowered and lowered not in sequence:
-            sequence.append(lowered)
+    compose_config = ComposeConfig.from_env()
+    runtime = JobRuntimeContext(
+        job=job,
+        case_id=case_id,
+        org_id=job.organization_id or job.case.organization_id,
+        task_name="compose_job",
+        task_id=getattr(self.request, "id", None) or "",
+        task_meta={"summary_job_id": summary_job_id, "requested_llm_config_id": llm_config_id},
+    )
 
-    if stage_map:
-        for payload in stage_map.values():
-            if not isinstance(payload, dict):
-                continue
-            raw_providers = payload.get("providers")
-            if isinstance(raw_providers, list):
-                for item in raw_providers:
-                    _add(item)
-            _add(payload.get("provider"))
+    result = execute_compose_job(
+        runtime=runtime,
+        compose_config=compose_config,
+        job=job,
+        summary_job=summary_job,
+        case_id=case_id,
+        llm_config_id=llm_config_id,
+    )
 
-    if provider_chain:
-        for item in provider_chain:
-            _add(item)
+    send_job_update(
+        str(job.id),
+        event="job.succeeded",
+        status=Job.Status.SUCCEEDED,
+        case_id=case_id,
+    )
+    send_case_update(
+        case_id,
+        event="artifact.created",
+        kind="compose",
+        job_id=str(job.id),
+    )
+    audit_emit(
+        None,
+        case_id=case_id,
+        event="analysis.compose.completed",
+        data={"job_id": str(job.id), "summary_job_id": summary_job_id},
+    )
 
-    for item in config_chain:
-        _add(item)
-
-    return sequence
-
+    return result
 
 @shared_task(bind=True)
 def analyze_job(
@@ -1086,7 +1123,7 @@ def analyze_job(
         except Job.DoesNotExist:
             source_job = job
     org_id = job.organization_id or job.case.organization_id
-    case_dir, _, _ = _case_paths(case_id, org_id)
+    case_dir, _, _ = case_paths(case_id, org_id)
     existing_meta = read_job_meta(case_id, org_id, job_id)
     existing_summary_titles = list(
         CaseArtifact.objects.filter(case_id=str(case_id), type="SUMMARY").values_list("title", flat=True)
@@ -1097,7 +1134,7 @@ def analyze_job(
     transcript = (
         Path(source_job.transcript_path)
         if source_job.transcript_path
-        else _latest_transcript(case_id, org_id)
+        else latest_transcript(case_id, org_id)
     )
     transcript_path_str = str(transcript) if transcript else None
 
@@ -1225,7 +1262,7 @@ def compose_job(
         raise RuntimeError("Summary job belongs to a different case")
 
     org_id = job.organization_id or job.case.organization_id
-    case_dir, _, _ = _case_paths(case_id, org_id)
+    case_dir, _, _ = case_paths(case_id, org_id)
 
     compose_config = ComposeConfig.from_env()
     runtime = JobRuntimeContext(
@@ -1267,7 +1304,7 @@ def compose_job(
     transcript_path = _to_path(transcript_path)
 
     analysis_dir = case_dir / "analysis"
-    summary_case_dir, _, _ = _case_paths(case_id, summary_job.organization_id or summary_job.case.organization_id)
+    summary_case_dir, _, _ = case_paths(case_id, summary_job.organization_id or summary_job.case.organization_id)
     summary_analysis_dir = summary_case_dir / "analysis"
     search_dirs = []
     for directory in (analysis_dir, summary_analysis_dir):
@@ -1429,7 +1466,7 @@ def compose_job(
 
     intake_payload = summary_meta.get("intake") if isinstance(summary_meta.get("intake"), dict) else None
     if not intake_payload:
-        intake_payload = _case_intake_payload(job.case)
+        intake_payload = case_intake_payload(job.case)
 
     case_metadata: Dict[str, Any] = {
         "case_id": case_id,
@@ -1517,7 +1554,7 @@ def compose_job(
     def _create_artifact(*, kind: str, path: Optional[Path], title_hint: str, metadata: Dict[str, Any], schema_version: str = "v1") -> None:
         if path is None or not path.exists():
             return
-        checksum = _sha256_file(path)
+        checksum = sha256_file(path)
         titles = created_titles.setdefault(kind, set())
         title = unique_title(title_hint, titles)
         titles.add(title)
@@ -1743,7 +1780,7 @@ def compose_job(
             "llm_config_name": active_config_name,
         },
     )
-    intake_payload = _case_intake_payload(job.case)
+    intake_payload = case_intake_payload(job.case)
 
     def _progress(stage: str, event: str, payload: Dict[str, Any]) -> None:
         progress_payload: Dict[str, Any] = {
@@ -1768,7 +1805,7 @@ def compose_job(
                 },
             )
 
-    requested_providers = _collect_requested_providers(
+    requested_providers = collect_requested_providers(
         analyze_config.provider_chain,
         config_provider_chain,
         config_stage_map,
@@ -1832,8 +1869,8 @@ def compose_job(
         )
         raise
 
-    checksum = _sha256_file(result.summary_file)
-    markdown_checksum = _sha256_file(result.summary_markdown_file)
+    checksum = sha256_file(result.summary_file)
+    markdown_checksum = sha256_file(result.summary_markdown_file)
     meta_updates: Dict[str, Any] = {
         **base_meta,
         "summary_status": "completed",
@@ -1952,13 +1989,13 @@ def compose_job(
 def timeline_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
     job = Job.objects.select_related("case").get(pk=job_id)
     org_id = job.organization_id or job.case.organization_id
-    case_dir, _, _ = _case_paths(case_id, org_id)
-    transcript_path = Path(job.transcript_path) if job.transcript_path else _latest_transcript(case_id, org_id)
+    case_dir, _, _ = case_paths(case_id, org_id)
+    transcript_path = Path(job.transcript_path) if job.transcript_path else latest_transcript(case_id, org_id)
     if not transcript_path or not transcript_path.exists():
         raise RuntimeError("No transcript found to build timeline")
 
     meta = read_job_meta(case_id, org_id, job_id)
-    events_payload, seeds_path = _load_summary_timeline_events(meta, case_dir)
+    events_payload, seeds_path = load_summary_timeline_events(meta, case_dir)
 
     agent = TimelineAgent(TimelineConfig.from_env())
     result = agent.build(
@@ -2021,13 +2058,13 @@ def timeline_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
 def graph_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
     job = Job.objects.select_related("case").get(pk=job_id)
     org_id = job.organization_id or job.case.organization_id
-    case_dir, _, _ = _case_paths(case_id, org_id)
-    transcript_path = Path(job.transcript_path) if job.transcript_path else _latest_transcript(case_id, org_id)
+    case_dir, _, _ = case_paths(case_id, org_id)
+    transcript_path = Path(job.transcript_path) if job.transcript_path else latest_transcript(case_id, org_id)
     if not transcript_path or not transcript_path.exists():
         raise RuntimeError("No transcript found to extract entities/graph")
 
     meta = read_job_meta(case_id, org_id, job_id)
-    hints_data, hints_path = _load_summary_entity_hints(meta, case_dir)
+    hints_data, hints_path = load_summary_entity_hints(meta, case_dir)
 
     agent = GraphAgent(GraphConfig.from_env())
     result = agent.build(
