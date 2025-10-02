@@ -33,8 +33,8 @@ This roadmap consolidates every planning artefact in `docs/`, the agents guides,
 - Establish ToolDefinition schema (see Phase 1) with typed dataclasses/TypedDict to keep future pipeline typed.
 
 ### Phase 1 – Tool Platform Standardisation
-- **ToolDefinition registry**: backend dataclass describing key, label, permissions, LLM target, job endpoint, artifacts, editors, alerts support. Consumed by `build_tool_panels`/`analysis_modules_context` to avoid ad-hoc dictionaries.
-- **Shared panel layout**: create `_tool_panel.html` for consistent header, controls, downloads, history, alerts, approvals; refactor `transcribe.html`, `summary.html`, upcoming `compose.html` to extend it. Consolidate `_llm_controls.html`, status pills, job queue buttons, downloads menu across tools.
+- **ToolDefinition registry (done)**: backend dataclass describing key, label, permissions, LLM target, job endpoint, artifacts, editors, alerts support. Consumed by `build_tool_panels`/`analysis_modules_context` to avoid ad-hoc dictionaries. Implemented in `apps/platform/ui/views/presenters/tool_registry.py` with presenters updated to hydrate panels from the registry.
+- **Shared panel layout (done)**: create `_tool_panel.html` for consistent header, controls, downloads, history, alerts, approvals; refactor `transcribe.html`, `summary.html`, upcoming `compose.html` to extend it. Consolidate `_llm_controls.html`, status pills, job queue buttons, downloads menu across tools. Shared layout now lives at `apps/platform/ui/templates/platform_ui/tools/components/_tool_panel.html`; Transcribe, Summarize, and Timeline panels extend it.
 - **ToolRun data model**: represent parent ToolRun (e.g., Transcribe) with child steps (Upload → Convert → Agent → Manual/Agent Edit) using consistent statuses; update presenters, tables, websocket payloads.
 - **Modal upgrades**: extend `components/modals/text_modal.html` for version list, diff toggle, approval actions; reuse for transcripts, summary outputs, compose deliverables, Manual/Agent edits.
 - **Manual Edit & Agent Edit tooling**: Manual Edit provides a textual editor saving proposed versions; Agent Edit offers chat-powered modifications. Both create child ToolRuns requiring approval per reviewer policy.
@@ -83,7 +83,7 @@ This roadmap consolidates every planning artefact in `docs/`, the agents guides,
 - **Metrics & observability**: track job runtimes, LLM token usage, approval latency, retention/deletion events.
 
 ## Immediate Next Steps
-1. Finalise ToolDefinition schema and shared tool panel template (Phase 1 kickoff).
+1. Finalise ToolDefinition schema and shared tool panel template (done).
 2. Update Celery tasks to emit parent/child ToolRun payloads and leverage the registry.
 3. Begin Compose agent implementation with timeline/graph migration; update AGENTS/ops docs as artifacts land.
 4. Stand up Org Settings groundwork (template upload, reviewer policy seeds) to support approvals.

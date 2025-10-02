@@ -1,0 +1,17 @@
+{% load tz %}
+<div class="space-y-6" {% block tool_root_attrs %}{% if panel.data_attributes %}{% for name, value in panel.data_attributes.items %}{{ name }}{% if value %}="{{ value }}"{% endif %} {% endfor %}{% endif %}{% endblock %}>
+  {% block tool_status %}{% endblock %}
+  <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
+    {% block tool_primary_wrapper %}
+      <div class="space-y-4 rounded-2xl border border-white/10 bg-slate-900/70 p-6" data-tool-primary>
+        {% block tool_primary %}{% endblock %}
+      </div>
+    {% endblock %}
+    {% block tool_sidebar_wrapper %}
+      <div class="flex flex-col gap-4 rounded-2xl border border-white/10 bg-slate-900/70 p-6 text-sm text-slate-200" data-tool-sidebar>
+        {% block tool_sidebar %}{% endblock %}
+      </div>
+    {% endblock %}
+  </div>
+  {% block tool_footer %}{% endblock %}
+</div>

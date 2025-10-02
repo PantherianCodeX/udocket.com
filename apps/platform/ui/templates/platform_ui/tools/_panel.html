@@ -35,7 +35,7 @@
       </div>
     </div>
     <div class="mt-6" data-tool-body="{{ panel.key }}">
-      {% with body=panel.body_context %}
+      {% with body=panel.body_context panel=panel %}
         {% include panel.body_template %}
       {% endwith %}
     </div>
