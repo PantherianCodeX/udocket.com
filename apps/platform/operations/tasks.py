@@ -17,8 +17,12 @@ from django.conf import settings
 from django.utils import timezone
 
 from packages.udocket_core.agents import (
+    GraphAgent,
+    GraphConfig,
     SummarizeAgent,
     SummarizeConfig,
+    TimelineAgent,
+    TimelineConfig,
     TranscriptionAgent,
     TranscriptionConfig,
     normalize_audio,
@@ -55,7 +59,6 @@ from apps.platform.operations.runtime import (
 # Backwards compatibility for tests importing _update_job_meta
 def _update_job_meta(case_id: str, organization_id: Optional[str], job_id: str, updates: Dict[str, Any]) -> None:  # pragma: no cover - shim
     return update_job_meta(case_id, organization_id, job_id, updates)
-import re
 from apps.platform.jobs.utils import unique_title
 
 log = logging.getLogger("apps.platform.operations.tasks")
@@ -993,17 +996,6 @@ def _latest_transcript(case_id: str, organization_id: str | None = None) -> Path
     return fx[0] if fx else None
 
 
-def _write_json(p: Path, data: Any) -> None:
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-
-
-def _append_jsonl(p: Path, data: Any) -> None:
-    p.parent.mkdir(parents=True, exist_ok=True)
-    with open(p, "a", encoding="utf-8") as f:
-        f.write(json.dumps(data, ensure_ascii=False) + "\n")
-
-
 def _case_intake_payload(case: Case | None) -> Dict[str, Any]:
     if case is None:
         return {}
@@ -1491,242 +1483,129 @@ def summarize_job(
 def timeline_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
     job = Job.objects.select_related("case").get(pk=job_id)
     org_id = job.organization_id or job.case.organization_id
-    case_dir, _, analysis_dir = _case_paths(case_id, org_id)
-    src = Path(job.transcript_path) if job.transcript_path else _latest_transcript(case_id, org_id)
-    if not src or not src.exists():
+    case_dir, _, _ = _case_paths(case_id, org_id)
+    transcript_path = Path(job.transcript_path) if job.transcript_path else _latest_transcript(case_id, org_id)
+    if not transcript_path or not transcript_path.exists():
         raise RuntimeError("No transcript found to build timeline")
+
     meta = read_job_meta(case_id, org_id, job_id)
-    events, seeds_path = _load_summary_timeline_events(meta, case_dir)
+    events_payload, seeds_path = _load_summary_timeline_events(meta, case_dir)
 
-    if not events:
-        rx = re.compile(r"^\[(\d{2}):(\d{2})\]\s+(?:SPK_(\d+):\s+)?(.*)$")
-        for ln in src.read_text(encoding="utf-8", errors="ignore").splitlines():
-            m = rx.match(ln.strip())
-            if not m:
-                continue
-            mm, ss, spk, text = m.groups()
-            ts = int(mm) * 60 + int(ss)
-            events.append(
-                {
-                    "ts_start": ts,
-                    "ts_end": None,
-                    "speaker": f"SPK_{spk}" if spk else None,
-                    "text": text.strip(),
-                    "labels": [],
-                }
-            )
-    out = analysis_dir / f"{job_id}__timeline_v1.json"
+    agent = TimelineAgent(TimelineConfig.from_env())
+    result = agent.build(
+        case_id=case_id,
+        case_dir=case_dir,
+        job_id=str(job_id),
+        transcript_path=transcript_path,
+        seed_path=seeds_path,
+        seed_events=events_payload,
+    )
+
     timeline_title: Optional[str] = None
-    _write_json(out, events)
     try:
-        import hashlib
-
-        h = hashlib.sha256()
-        with open(out, "rb") as f:
-            for ch in iter(lambda: f.read(65536), b""):
-                h.update(ch)
-        artifact_meta = {"source_transcript": str(src), "events": len(events)}
-        if seeds_path:
-            artifact_meta["seed_source"] = str(seeds_path)
-        existing_timeline_titles = list(
+        existing_titles = list(
             CaseArtifact.objects.filter(case_id=case_id, type="TIMELINE").values_list("title", flat=True)
         )
-        timeline_title = unique_title("Timeline", existing_timeline_titles)
+        timeline_title = unique_title("Timeline", existing_titles)
+        artifact_meta = {
+            "source_transcript": str(result.source_transcript),
+            "events": len(result.events),
+        }
+        if result.seed_source is not None:
+            artifact_meta["seed_source"] = str(result.seed_source)
         CaseArtifact.objects.create(
             case_id=case_id,
             case_fk=job.case,
             job_id=str(job_id),
             type="TIMELINE",
             title=timeline_title,
-            path=str(out),
-            checksum=h.hexdigest(),
-            schema_version="v1",
+            path=str(result.timeline_file),
+            checksum=result.checksum,
+            schema_version=agent.config.schema_version,
             metadata=artifact_meta,
         )
     except Exception:
         pass
-    audit_payload = {"job_id": job_id, "events": len(events)}
-    if seeds_path:
-        audit_payload["seed_source"] = str(seeds_path)
+
+    audit_payload = {
+        "job_id": job_id,
+        "events": len(result.events),
+        "timeline_file": str(result.timeline_file),
+    }
+    if result.seed_source is not None:
+        audit_payload["seed_source"] = str(result.seed_source)
     audit_emit(None, case_id=case_id, event="analysis.timeline.created", data=audit_payload)
-    try:
-        opsd = _ops_dir(case_id, org_id)
-        meta = {
-            "case_id": case_id,
-            "job_id": job_id,
-            "artifact": str(out),
-            "checksum": h.hexdigest() if 'h' in locals() else None,
-            "source_transcript": str(src),
-            "events": len(events),
-            "ts": timezone.now().isoformat(),
-            "schema_version": "v1",
-            "status": "ok",
-        }
-        if timeline_title:
-            meta["timeline_title"] = timeline_title
-        if seeds_path:
-            meta["seed_source"] = str(seeds_path)
-        _write_json(opsd / f"{job_id}__timeline_log.json", meta)
-        _append_jsonl(opsd / "ops_timeline.jsonl", meta)
-    except Exception:
-        pass
+
     try:
         send_case_update(case_id, event="artifact.created", kind="timeline", job_id=job_id)
     except Exception:
         pass
-    return {"status": "ok", "timeline_file": str(out), "events": len(events)}
+
+    return {
+        "status": "ok",
+        "timeline_file": str(result.timeline_file),
+        "events": len(result.events),
+    }
 
 
 @shared_task(bind=True)
 def graph_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
     job = Job.objects.select_related("case").get(pk=job_id)
     org_id = job.organization_id or job.case.organization_id
-    case_dir, _, analysis_dir = _case_paths(case_id, org_id)
-    src = Path(job.transcript_path) if job.transcript_path else _latest_transcript(case_id, org_id)
-    if not src or not src.exists():
+    case_dir, _, _ = _case_paths(case_id, org_id)
+    transcript_path = Path(job.transcript_path) if job.transcript_path else _latest_transcript(case_id, org_id)
+    if not transcript_path or not transcript_path.exists():
         raise RuntimeError("No transcript found to extract entities/graph")
-    text = src.read_text(encoding="utf-8", errors="ignore")
+
     meta = read_job_meta(case_id, org_id, job_id)
     hints_data, hints_path = _load_summary_entity_hints(meta, case_dir)
 
-    entities: List[Dict[str, Any]] = []
-    graph: Dict[str, Any]
+    agent = GraphAgent(GraphConfig.from_env())
+    result = agent.build(
+        case_id=case_id,
+        case_dir=case_dir,
+        job_id=str(job_id),
+        transcript_path=transcript_path,
+        hint_path=hints_path,
+        hint_payload=hints_data,
+    )
 
-    if hints_data:
-        entity_map: Dict[str, Dict[str, Any]] = {}
-        for raw in hints_data.get("entities", []):
-            if not isinstance(raw, dict):
-                continue
-            ent_id = str(raw.get("id") or f"E{len(entity_map) + 1}")
-            name = raw.get("name") or ent_id
-            ent_type = raw.get("type") or "OTHER"
-            mentions_list: List[Dict[str, Any]] = []
-            mentions_raw = raw.get("mentions")
-            if isinstance(mentions_raw, list):
-                for item in mentions_raw:
-                    if isinstance(item, dict):
-                        mentions_list.append(
-                            {
-                                "ts": item.get("ts"),
-                                "text": item.get("text", ""),
-                            }
-                        )
-            entity_map[ent_id] = {
-                "id": ent_id,
-                "name": name,
-                "type": ent_type,
-                "mentions": mentions_list,
-            }
-
-        edges: List[Dict[str, Any]] = []
-        for raw_rel in hints_data.get("relations", []):
-            if not isinstance(raw_rel, dict):
-                continue
-            source = raw_rel.get("source")
-            target = raw_rel.get("target")
-            if not source or not target:
-                continue
-            rel_type = raw_rel.get("type") or "relation"
-            evidence_list: List[Dict[str, Any]] = []
-            evidence_raw = raw_rel.get("evidence")
-            if isinstance(evidence_raw, list):
-                for item in evidence_raw:
-                    if isinstance(item, dict):
-                        evidence_list.append(
-                            {
-                                "ts": item.get("ts"),
-                                "text": item.get("text", ""),
-                            }
-                        )
-            if source not in entity_map:
-                entity_map[source] = {
-                    "id": source,
-                    "name": source,
-                    "type": "OTHER",
-                    "mentions": [],
-                }
-            if target not in entity_map:
-                entity_map[target] = {
-                    "id": target,
-                    "name": target,
-                    "type": "OTHER",
-                    "mentions": [],
-                }
-            edges.append(
-                {
-                    "id": f"REL-{len(edges) + 1}",
-                    "source": source,
-                    "target": target,
-                    "type": rel_type,
-                    "evidence": evidence_list,
-                }
-            )
-
-        if not entity_map:
-            hints_data = None
-        else:
-            entities = list(entity_map.values())
-            graph = {
-                "nodes": [
-                    {"id": ent["id"], "label": ent["name"], "type": ent.get("type") or "OTHER"}
-                    for ent in entities
-                ],
-                "edges": edges,
-            }
-
-    if not hints_data:
-        tokens = re.findall(r"\b([A-Z][a-zA-Z]{2,})\b", text)
-        names = sorted(set(tokens))[:50]
-        entities = [
-            {
-                "id": f"E{i+1}",
-                "name": n,
-                "type": "OTHER",
-                "mentions": [],
-            }
-            for i, n in enumerate(names)
-        ]
-        graph = {
-            "nodes": [
-                {"id": ent["id"], "label": ent["name"], "type": ent["type"]}
-                for ent in entities
-            ],
-            "edges": [],
-        }
-    entities_file = analysis_dir / f"{job_id}__entities_v1.json"
-    graph_file = analysis_dir / f"{job_id}__graph_v1.json"
     entities_title: Optional[str] = None
     relationships_title: Optional[str] = None
-    _write_json(entities_file, {"entities": entities})
-    _write_json(graph_file, graph)
     try:
-        import hashlib
-
-        h1 = hashlib.sha256(entities_file.read_bytes()).hexdigest()
-        h2 = hashlib.sha256(graph_file.read_bytes()).hexdigest()
-        artifact_entities_meta = {"source_transcript": str(src), "entities": len(entities)}
-        artifact_graph_meta = {"source_transcript": str(src), "nodes": len(graph["nodes"]), "edges": len(graph.get("edges", []))}
-        if hints_path:
-            artifact_entities_meta["hint_source"] = str(hints_path)
-            artifact_graph_meta["hint_source"] = str(hints_path)
         existing_entity_titles = list(
             CaseArtifact.objects.filter(case_id=case_id, type="ENTITIES").values_list("title", flat=True)
         )
         entities_title = unique_title("Entities", existing_entity_titles)
-        existing_relationship_titles = list(
+        entity_meta = {
+            "source_transcript": str(result.source_transcript),
+            "entities": len(result.entities),
+        }
+        if result.hint_source is not None:
+            entity_meta["hint_source"] = str(result.hint_source)
+
+        existing_graph_titles = list(
             CaseArtifact.objects.filter(case_id=case_id, type="GRAPH").values_list("title", flat=True)
         )
-        relationships_title = unique_title("Relationships", existing_relationship_titles)
+        relationships_title = unique_title("Relationships", existing_graph_titles)
+        graph_meta = {
+            "source_transcript": str(result.source_transcript),
+            "nodes": len(result.entities),
+            "edges": len(result.edges),
+        }
+        if result.hint_source is not None:
+            graph_meta["hint_source"] = str(result.hint_source)
+
         CaseArtifact.objects.create(
             case_id=case_id,
             case_fk=job.case,
             job_id=str(job_id),
             type="ENTITIES",
             title=entities_title,
-            path=str(entities_file),
-            checksum=h1,
-            schema_version="v1",
-            metadata=artifact_entities_meta,
+            path=str(result.entities_file),
+            checksum=result.entities_checksum,
+            schema_version=agent.config.schema_version,
+            metadata=entity_meta,
         )
         CaseArtifact.objects.create(
             case_id=case_id,
@@ -1734,53 +1613,36 @@ def graph_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
             job_id=str(job_id),
             type="GRAPH",
             title=relationships_title,
-            path=str(graph_file),
-            checksum=h2,
-            schema_version="v1",
-            metadata=artifact_graph_meta,
+            path=str(result.graph_file),
+            checksum=result.graph_checksum,
+            schema_version=agent.config.schema_version,
+            metadata=graph_meta,
         )
     except Exception:
         pass
-    audit_payload = {"job_id": job_id, "entities": len(entities), "edges": len(graph.get("edges", []))}
-    if hints_path:
-        audit_payload["hint_source"] = str(hints_path)
+
+    audit_payload = {
+        "job_id": job_id,
+        "entities": len(result.entities),
+        "edges": len(result.edges),
+        "entities_file": str(result.entities_file),
+        "graph_file": str(result.graph_file),
+    }
+    if result.hint_source is not None:
+        audit_payload["hint_source"] = str(result.hint_source)
     audit_emit(None, case_id=case_id, event="analysis.graph.created", data=audit_payload)
-    try:
-        opsd = _ops_dir(case_id, org_id)
-        meta = {
-            "case_id": case_id,
-            "job_id": job_id,
-            "entities_file": str(entities_file),
-            "graph_file": str(graph_file),
-            "entities_checksum": h1 if 'h1' in locals() else None,
-            "graph_checksum": h2 if 'h2' in locals() else None,
-            "source_transcript": str(src),
-            "entities": len(entities),
-            "edges": len(graph.get("edges", [])),
-            "ts": timezone.now().isoformat(),
-            "schema_version": "v1",
-            "status": "ok",
-        }
-        if entities_title:
-            meta["entities_title"] = entities_title
-        if relationships_title:
-            meta["relationships_title"] = relationships_title
-        if hints_path:
-            meta["hint_source"] = str(hints_path)
-        _write_json(opsd / f"{job_id}__graph_log.json", meta)
-        _append_jsonl(opsd / "ops_graph.jsonl", meta)
-    except Exception:
-        pass
+
     try:
         send_case_update(case_id, event="artifact.created", kind="graph", job_id=job_id)
     except Exception:
         pass
+
     return {
         "status": "ok",
-        "entities_file": str(entities_file),
-        "graph_file": str(graph_file),
-        "entities": len(entities),
-        "edges": len(graph.get("edges", [])),
+        "entities_file": str(result.entities_file),
+        "graph_file": str(result.graph_file),
+        "entities": len(result.entities),
+        "edges": len(result.edges),
     }
 
 
