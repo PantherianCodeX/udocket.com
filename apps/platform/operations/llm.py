@@ -491,9 +491,26 @@ def evaluate_provider_setup(
             issues.append("Azure endpoint is required")
         elif "<" in endpoint_value or ">" in endpoint_value:
             issues.append("Replace the placeholder resource name in the Azure endpoint")
+        # Determine whether a deployment is provided either in provider metadata
+        # or in at least one enabled model's options/payload.
         deployment = metadata_dict.get("azure_deployment") or metadata_dict.get("default_deployment")
         if not deployment:
-            issues.append("Add an Azure deployment name in provider metadata or stage options")
+            # Look for deployment on any enabled model
+            try:
+                candidate_models = _normalize_models(models)
+            except Exception:
+                candidate_models = []
+            for m in candidate_models:
+                if not isinstance(m, dict):
+                    continue
+                if m.get("enabled", True) is False:
+                    continue
+                opts = m.get("options") if isinstance(m.get("options"), dict) else {}
+                if (opts.get("azure_deployment") or m.get("deployment_env")):
+                    deployment = opts.get("azure_deployment") or m.get("deployment_env")
+                    break
+        if not deployment:
+            issues.append("Add an Azure deployment name in provider metadata or model options")
     if provider.requires_api_key and not has_api_key:
         issues.append("API key is required")
 

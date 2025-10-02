@@ -556,8 +556,32 @@
         body: JSON.stringify({ notes: textarea.value }),
       });
       if (!resp.ok) {
-        const text = await resp.text();
-        throw new Error(text || `HTTP ${resp.status}`);
+        const bodyText = await resp.text();
+        let message = `HTTP ${resp.status}`;
+        if (bodyText) {
+          try {
+            const parsed = JSON.parse(bodyText);
+            if (parsed && typeof parsed === 'object') {
+              const detail = typeof parsed.detail === 'string' ? parsed.detail.trim() : '';
+              if (detail) {
+                message = detail;
+              }
+              if (Array.isArray(parsed.issues) && parsed.issues.length) {
+                const issue = String(parsed.issues[0] || '').trim();
+                if (issue) {
+                  const separator = message.endsWith('.') ? ' ' : ': ';
+                  message = `${message}${separator}${issue}`.trim();
+                }
+              }
+            }
+          } catch (parseError) {
+            const trimmed = bodyText.trim();
+            if (trimmed) {
+              message = trimmed.slice(0, 250);
+            }
+          }
+        }
+        throw new Error(message);
       }
       const data = await resp.json();
       const notes = data && data.notes ? data.notes : {};
@@ -1465,8 +1489,32 @@
         body: Object.keys(payload).length ? JSON.stringify(payload) : null,
       });
       if (!resp.ok) {
-        const text = await resp.text();
-        throw new Error(text || `HTTP ${resp.status}`);
+        const bodyText = await resp.text();
+        let message = `HTTP ${resp.status}`;
+        if (bodyText) {
+          try {
+            const parsed = JSON.parse(bodyText);
+            if (parsed && typeof parsed === 'object') {
+              const detail = typeof parsed.detail === 'string' ? parsed.detail.trim() : '';
+              if (detail) {
+                message = detail;
+              }
+              if (Array.isArray(parsed.issues) && parsed.issues.length) {
+                const issue = String(parsed.issues[0] || '').trim();
+                if (issue) {
+                  const separator = message.endsWith('.') ? ' ' : ': ';
+                  message = `${message}${separator}${issue}`.trim();
+                }
+              }
+            }
+          } catch (parseError) {
+            const trimmed = bodyText.trim();
+            if (trimmed) {
+              message = trimmed.slice(0, 250);
+            }
+          }
+        }
+        throw new Error(message);
       }
       if (deps.notify) {
         deps.notify(toastX, toastY, 'Automation queued');
@@ -1479,8 +1527,10 @@
       if (platformUI.llmDebug) {
         console.debug('[LLM] Queue failure details', { action, jobId, error });
       }
+      const fallbackMessage = 'Unable to queue automation';
+      const errorMessage = error instanceof Error && error.message ? error.message.trim() : fallbackMessage;
       if (deps.notify) {
-        deps.notify(toastX, toastY, 'Unable to queue automation');
+        deps.notify(toastX, toastY, errorMessage || fallbackMessage);
       }
     } finally {
       button.disabled = false;

@@ -759,7 +759,7 @@ def transcribe_job(
             log_message=f"Job failed: {error_message}",
             meta_updates=failure_meta,
             job_updates={"upload_progress": None},
-            job_event_payload={k: v for k, v in failure_payload.items() if k != "job_id"},
+            job_event_payload={k: v for k, v in failure_payload.items() if k not in {"job_id", "case_id", "event"}},
         )
         _safe_job_meta(
             case_id,
@@ -871,7 +871,7 @@ def transcribe_job(
     if job_meta_title:
         meta_updates.setdefault("job_title", job_meta_title)
 
-    emit_payload = {k: v for k, v in payload.items() if k != "job_id"}
+    emit_payload = {k: v for k, v in payload.items() if k not in {"job_id", "case_id", "event"}}
     if artifact_title:
         payload["title"] = artifact_title
         emit_payload["title"] = artifact_title

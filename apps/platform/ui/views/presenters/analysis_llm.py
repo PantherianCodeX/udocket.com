@@ -97,7 +97,7 @@ def build_llm_stage_configs(*, target: str, llm_settings, stage_map: Dict[str, D
             if assignment and assignment.providers
             else (provider_configs[0]["value"] if provider_configs else "azure")
         )
-        selected_model = assignment.model or ""
+        selected_model = assignment.model if assignment and getattr(assignment, "model", None) else ""
         selected_options: Dict[str, Any] = dict(assignment.options) if assignment else {}
         selected_max_tokens: int | None = None
 

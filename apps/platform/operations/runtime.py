@@ -115,7 +115,9 @@ class JobRuntimeContext:
         _safe_job_log(self.case_id, self.org_id, self.job_id, log_message or "")
         _safe_job_meta(self.case_id, self.org_id, self.job_id, meta_updates)
         if event:
-            payload = job_event_payload or {}
+            payload = dict(job_event_payload or {})
+            payload.pop("case_id", None)
+            payload.pop("event", None)
             _emit_job_update(self.job_id, case_id=self.case_id, event=event, status=status, **payload)
         self._update_task_state(
             {
@@ -156,10 +158,14 @@ class JobRuntimeContext:
         _safe_job_meta(self.case_id, self.org_id, self.job_id, meta_updates)
 
         payload = dict(job_event_payload or {})
+        payload.pop("case_id", None)
+        payload.pop("event", None)
         event_status = payload.pop("status", status)
         _emit_job_update(self.job_id, case_id=self.case_id, event="job.succeeded", status=event_status, **payload)
         for event_name, event_payload in events or []:
             payload_with_status = dict(event_payload or {})
+            payload_with_status.pop("case_id", None)
+            payload_with_status.pop("event", None)
             event_status_override = payload_with_status.pop("status", status)
             _emit_job_update(
                 self.job_id,
@@ -207,6 +213,8 @@ class JobRuntimeContext:
         _safe_job_meta(self.case_id, self.org_id, self.job_id, meta_updates)
 
         payload = dict(job_event_payload or {})
+        payload.pop("case_id", None)
+        payload.pop("event", None)
         payload.setdefault("error", error)
         event_status = payload.pop("status", status)
         _emit_job_update(
@@ -218,6 +226,8 @@ class JobRuntimeContext:
         )
         for event_name, event_payload in events or []:
             payload_with_error = dict(event_payload or {})
+            payload_with_error.pop("case_id", None)
+            payload_with_error.pop("event", None)
             payload_with_error.setdefault("error", error)
             event_status_override = payload_with_error.pop("status", status)
             _emit_job_update(

@@ -361,10 +361,11 @@ def build_tool_panels(
 
     latest_job_title = None
     if latest_job:
+        latest_artifact = (transcript_artifacts or {}).get(str(latest_job.id)) if transcript_artifacts else None
         latest_job_title = friendly_job_title(
             latest_job,
             latest_job_telemetry,
-            telemetry_map=telemetry_map,
+            latest_artifact,
         )
 
     latest_downloads = []
@@ -378,11 +379,19 @@ def build_tool_panels(
     transcribe_notes = notes_payload or empty_notes.copy()
     if latest_job:
         serialized_notes = serialize_notes(JobNote.objects.filter(job=latest_job))
+        latest_entry = serialized_notes[0] if serialized_notes else None
+        updated_at = latest_entry.get("created_at") if latest_entry else None
+        updated_by = (
+            latest_entry.get("created_by_label")
+            or latest_entry.get("created_by")
+            if latest_entry
+            else None
+        )
         transcribe_notes = {
             "job_id": str(latest_job.id),
             "entries": serialized_notes,
-            "updated_at": latest_job.notes_updated_at,
-            "updated_by": getattr(latest_job.notes_updated_by, "display_name", None),
+            "updated_at": updated_at,
+            "updated_by": updated_by,
             "user_can_add": user_can_review,
             "count": len(serialized_notes),
         }

@@ -63,6 +63,16 @@ from apps.platform.operations.utils import append_job_log, read_job_meta, update
 from apps.platform.operations.services import case_paths, resolve_case_relative
 from apps.platform.operations.services.files import sha256_file
 from packages.udocket_core.audio import probe_audio_metadata
+from packages.udocket_core.agents.analyze_lib import AnalyzeConfig
+from apps.platform.operations.llm import (
+    ensure_default_llm_configuration,
+    evaluate_provider_setup,
+    get_llm_configuration,
+    get_org_provider_credentials,
+    get_provider_secret_with_metadata,
+    load_llm_settings,
+)
+from apps.platform.operations.services.analysis import collect_requested_providers
 
 
 def _derive_audio_filename(path_obj: Path | None, meta: Dict[str, Any], fallback: str) -> str:
@@ -1014,6 +1024,90 @@ class JobViewSet(viewsets.ModelViewSet):
                 {"detail": "Organization context unavailable for summary job."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        org_id_str = str(organization_obj.id)
+        try:
+            analyze_config = AnalyzeConfig.from_env()
+        except ValueError as exc:
+            return Response(
+                {"detail": f"Analyze configuration is invalid: {exc}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        llm_settings = load_llm_settings()
+        config_payload: Optional[Dict[str, Any]] = None
+        if llm_config_id:
+            config_payload = get_llm_configuration(
+                organization_id=org_id_str,
+                config_id=llm_config_id,
+                target="analyze",
+            )
+        if not config_payload:
+            config_payload = ensure_default_llm_configuration(
+                organization_id=org_id_str,
+                target="analyze",
+                llm_settings=llm_settings,
+            )
+        if not config_payload:
+            return Response(
+                {
+                    "detail": "Configure an Analyze LLM provider before queueing this job.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        requested_providers = collect_requested_providers(
+            analyze_config.provider_chain or [],
+            config_payload.get("provider_chain") or [],
+            config_payload.get("stage_map") or {},
+        )
+        provider_credentials = get_org_provider_credentials(org_id_str)
+        provider_issues: List[str] = []
+        if not requested_providers:
+            provider_issues.append("No providers defined for the active Analyze configuration.")
+        else:
+            for provider_name in requested_providers:
+                provider_meta = llm_settings.provider(provider_name)
+                if provider_meta is None:
+                    provider_issues.append(f"Provider '{provider_name}' is not recognized.")
+                    continue
+
+                cred_entry = provider_credentials.get(provider_name, {})
+                if not cred_entry:
+                    provider_issues.append(
+                        f"Provider '{provider_meta.display_name or provider_name}' is not configured."
+                    )
+                    continue
+
+                secret_details = get_provider_secret_with_metadata(org_id_str, provider_name) or {}
+                secret_metadata = secret_details.get("metadata")
+                if not isinstance(secret_metadata, dict):
+                    secret_metadata = {}
+                credential_metadata = cred_entry.get("metadata") if isinstance(cred_entry.get("metadata"), dict) else {}
+                merged_metadata = {**secret_metadata, **credential_metadata}
+                has_api_key = bool(secret_details.get("api_key") or cred_entry.get("has_api_key"))
+                analysis = evaluate_provider_setup(
+                    provider=provider_meta,
+                    endpoint=cred_entry.get("endpoint"),
+                    has_api_key=has_api_key,
+                    metadata=merged_metadata,
+                    models=cred_entry.get("models"),
+                )
+                if not analysis.get("ready"):
+                    issues = analysis.get("issues") or ["Provider configuration is incomplete."]
+                    for issue in issues:
+                        provider_issues.append(
+                            f"{provider_meta.display_name or provider_name}: {issue}"
+                        )
+
+        if provider_issues:
+            return Response(
+                {
+                    "detail": "Analyze cannot start until required LLM providers are enabled.",
+                    "issues": provider_issues,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         with transaction.atomic():
             summary_job = Job.objects.create(
                 case=source_job.case,

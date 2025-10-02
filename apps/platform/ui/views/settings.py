@@ -232,6 +232,33 @@ def _extract_provider_form_data(
     return data, errors
 
 
+def _infer_provider_key(raw_key: str, endpoint: str) -> str:
+    """Try to coerce a provider key from input, falling back to endpoint heuristics.
+
+    Accepts friendly names like "azure canada" and maps them to catalog keys when
+    possible so actions like Test/Enable do not fail with "Unknown provider".
+    """
+    key = (raw_key or "").strip().lower()
+    if key in load_provider_catalog().keys() or key in {"azure", "openai", "anthropic", "google", "ollama", "mistral", "cohere"}:
+        return key
+    host = (endpoint or "").strip().lower()
+    if "openai.azure.com" in host or ".azure.com" in host:
+        return "azure"
+    if "api.openai.com" in host or "openai.com" in host:
+        return "openai"
+    if "api.anthropic.com" in host or "anthropic.com" in host:
+        return "anthropic"
+    if "generativelanguage.googleapis.com" in host or "googleapis.com" in host:
+        return "google"
+    if "api.mistral.ai" in host or "mistral.ai" in host:
+        return "mistral"
+    if "api.cohere.ai" in host or "cohere.ai" in host:
+        return "cohere"
+    if "ollama" in host:
+        return "ollama"
+    return key
+
+
 @require_http_methods(["GET", "POST"])
 def organization_settings(
     request: HttpRequest, section: str | None = None
@@ -331,9 +358,10 @@ def organization_settings(
 
     if request.method == "POST" and active_section == "providers":
         action = (request.POST.get("action") or "").strip()
-        provider_key = (request.POST.get("provider") or "").strip().lower()
-        selected_provider_key = provider_key or selected_provider_key
-        existing_cred = provider_credentials.get(provider_key)
+        raw_provider_key = (request.POST.get("provider") or "").strip().lower()
+        # Use the raw key for initial lookup; we may normalize it later
+        selected_provider_key = raw_provider_key or selected_provider_key
+        existing_cred = provider_credentials.get(raw_provider_key)
         form_data, parse_errors = _extract_provider_form_data(
             request,
             existing=existing_cred,
@@ -343,6 +371,9 @@ def organization_settings(
         if form_provider_uuid:
             selected_provider_uuid = form_provider_uuid
 
+        # Normalize provider key using endpoint heuristics when necessary
+        provider_key = _infer_provider_key(raw_provider_key, form_data.get("endpoint") or "")
+        selected_provider_key = provider_key or selected_provider_key
         if action == "provider-upsert":
             if not provider_key:
                 errors.append("Provider key is required.")
@@ -402,7 +433,7 @@ def organization_settings(
                 else:
                     provider_obj = llm_settings.provider(provider_key)
                     if not provider_obj:
-                        errors.append("Unknown provider selected.")
+                        errors.append("Unknown provider selected. Choose a template like 'Azure' or 'OpenAI', or ensure the endpoint matches the provider.")
                     else:
                         analysis = evaluate_provider_setup(
                             provider=provider_obj,
@@ -440,7 +471,7 @@ def organization_settings(
             if not provider_key:
                 errors.append("Provider key is required for testing.")
             elif not provider_obj:
-                errors.append("Unknown provider selected.")
+                errors.append("Unknown provider selected. Use the 'Load template' menu to set a provider type.")
             elif not errors:
                 cred = existing_cred or {}
                 secret_details = get_provider_secret_with_metadata(
@@ -525,7 +556,7 @@ def organization_settings(
             if not provider_key:
                 errors.append("Provider key is required for testing.")
             elif not provider_obj:
-                errors.append("Unknown provider selected.")
+                errors.append("Unknown provider selected. Use the 'Load template' menu to set a provider type.")
             else:
                 payload_raw = (request.POST.get("model_test_payload") or "").strip()
                 try:

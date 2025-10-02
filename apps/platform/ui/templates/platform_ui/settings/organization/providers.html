@@ -166,6 +166,14 @@
             <td class="px-4 py-4 align-top">
               <div class="flex items-start gap-3">
                 <input type="checkbox" class="mt-[3px] rounded border-white/20 bg-slate-900/70 text-primary-400 focus:ring-primary-400" data-provider-toggle data-provider-can-enable="{{ provider.can_enable|yesno:'true,false' }}" {% if provider.enabled %}checked{% endif %} {% if not provider.can_enable %}disabled{% endif %} aria-label="Enable provider">
+                <form method="post" class="hidden" data-provider-toggle-form>
+                  {% csrf_token %}
+                  <input type="hidden" name="section" value="providers">
+                  <input type="hidden" name="action" value="provider-toggle">
+                  <input type="hidden" name="provider" value="{{ provider.key }}">
+                  <input type="hidden" name="provider_uuid" value="{{ provider.uid|default:"" }}">
+                  <input type="hidden" name="enabled" value="{{ provider.enabled|yesno:'1,0' }}">
+                </form>
                 <div class="flex flex-col gap-2">
                   <span class="font-semibold text-white">{{ provider.label }}</span>
                   <div class="text-xs text-slate-400 break-words">{{ provider.endpoint|default:"—" }}</div>
