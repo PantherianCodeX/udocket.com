@@ -30,9 +30,9 @@
           <option value="__upload__" data-summary-upload-option>Upload Transcript...</option>
           <option value="__upload_text__" data-summary-upload-text-option>Upload Transcript Text...</option>
         </select>
-        <p class="text-[11px] text-slate-500">Only approved transcripts can be summarized. Pending jobs appear greyed out.</p>
+        <p class="text-[11px] text-slate-500">Only approved transcripts can be analyzed. Pending jobs appear greyed out.</p>
       {% else %}
-        <p class="rounded-lg border border-dashed border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-300">Run a transcription first to enable summarization.</p>
+        <p class="rounded-lg border border-dashed border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-300">Run a transcription first to enable analyze jobs.</p>
       {% endif %}
     </div>
     {% if summary_llm %}
@@ -52,10 +52,10 @@
     <div class="flex items-center justify-end gap-3">
       <button type="button"
               class="inline-flex items-center gap-2 rounded-lg bg-primary-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-primary-500/30 transition hover:bg-primary-400 disabled:cursor-not-allowed disabled:opacity-60"
-              data-analysis-action="summary"
+              data-analysis-action="analyze"
               data-analysis-endpoint="{{ body.job_endpoint_template }}"
               {% if not body.transcripts %}disabled{% endif %}>
-        Queue summarize job
+        Queue analyze job
       </button>
     </div>
   {% endwith %}
@@ -64,7 +64,7 @@
 {% block tool_sidebar %}
   {% with module=body.module summary_llm=body.summary_llm %}
     <div class="flex items-center justify-between gap-3">
-      <p class="text-xs uppercase tracking-wide text-slate-400">Latest summarize result</p>
+      <p class="text-xs uppercase tracking-wide text-slate-400">Latest analyze result</p>
       {% if module.downloads %}
         {% include "platform_ui/tools/components/_download_menu.html" with downloads=module.downloads label="Downloads" %}
       {% endif %}
@@ -143,7 +143,7 @@
         </div>
       {% endif %}
     {% else %}
-      <p class="text-xs text-slate-400">No summarize result yet. Queue one to populate this section.</p>
+      <p class="text-xs text-slate-400">No analyze result yet. Queue one to populate this section.</p>
     {% endif %}
   {% endwith %}
 {% endblock %}

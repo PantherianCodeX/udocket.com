@@ -98,6 +98,8 @@ The repository hosts agents that consume transcripts and emit analysis artifacts
   - Hashing: where feasible, compute SHA-256 of outputs and include in ops JSON for provenance.
   - Tracing: include `source_transcript` (abs path), `case_id`, `job_id`, timestamps, tool/library versions, and key settings in ops JSON.
   - Approvals/versioning: Manual Edit and Agent Edit produce new versions that require Reviewer approval to promote to the parent task.
+  - Object identity: every structured record (events, entities, relationships, outline nodes, etc.) must include a stable `uuid` field. Derive UUIDs deterministically (e.g., UUID5 of canonical content) to avoid collisions across reruns while keeping outputs reproducible.
+  - Titles: when creating human-readable artifact titles, always call the shared `unique_title` helper to avoid collisions within a case/organization.
 
 ## Worker Integration
 - Celery tasks in `apps.platform.operations.tasks` orchestrate uploads, call `TranscriptionAgent.transcribe`, and persist telemetry.
@@ -144,6 +146,7 @@ The repository hosts agents that consume transcripts and emit analysis artifacts
 - Stub dependencies: install `apps/platform/requirements.txt` (which bundles the Django and DRF stub packages) so Pyright has Django/DRF annotations locally.
 - Dependencies: avoid heavyweight or networked services unless approved; prefer Azure services in Canadian regions.
 - Error handling: fail fast with clear messages; write structured meta and human logs; never raise without logging.
+- Refactors spanning many files should rely on helper scripts (add them under `scripts/` when reusable) instead of manual editing. Always run `pyright` to surface import/function issues across the tree before finishing a refactor.
 - Version control: keep diffs minimal and focused; avoid unrelated refactors.
 
 ## Local Development

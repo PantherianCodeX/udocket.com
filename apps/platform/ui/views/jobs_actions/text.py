@@ -42,7 +42,7 @@ class UploadResult:
 
 @require_http_methods(["GET", "POST"])
 def summary_upload_transcript_text(request: HttpRequest, case_id: str) -> Union[HttpResponse, JsonResponse]:
-    """Render modal or handle transcript text injection for summarizer testing."""
+    """Render modal or handle transcript text injection for analyzer testing."""
 
     auth_response = ensure_authenticated(request)
     if auth_response:

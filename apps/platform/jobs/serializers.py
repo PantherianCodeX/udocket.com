@@ -15,8 +15,8 @@ from apps.platform.jobs.telemetry import JobTelemetry, job_telemetry
 AGENT_LABELS = {
     "transcription": "Transcribe",
     "transcribe": "Transcribe",
-    "summary": "Summarize",
-    "summarize": "Summarize",
+    "summary": "Analyze",
+    "analyze": "Analyze",
     "timeline": "Timeline",
     "events": "Timeline",
     "graph": "Relationships",

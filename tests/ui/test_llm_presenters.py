@@ -50,16 +50,16 @@ def _build_settings() -> LLMSettings:
     }
 
     assignments = {
-        "summarize.context_builder": LLMStageAssignment(
-            stage_key="summarize.context_builder",
+        "analyze.context_builder": LLMStageAssignment(
+            stage_key="analyze.context_builder",
             providers=["azure"],
             model="gpt-4o-mini",
             target="summary",
             label="Context Builder",
             description="Collects intake context",
         ),
-        "summarize.qa_and_finalize": LLMStageAssignment(
-            stage_key="summarize.qa_and_finalize",
+        "analyze.qa_and_finalize": LLMStageAssignment(
+            stage_key="analyze.qa_and_finalize",
             providers=["azure"],
             model="gpt-4o-mini",
             target="summary",
@@ -151,7 +151,7 @@ def test_build_llm_stage_configs_uses_defaults_and_overrides(llm_settings):
         provider_registry=provider_registry,
     )
 
-    context_entry = next(cfg for cfg in configs if cfg["key"] == "summarize.context_builder")
+    context_entry = next(cfg for cfg in configs if cfg["key"] == "analyze.context_builder")
     assert context_entry["selected_provider"] == "azure"
     assert context_entry["profile"] is not None
     # Providers should include every cache entry so the UI can surface unsupported options.
@@ -161,7 +161,7 @@ def test_build_llm_stage_configs_uses_defaults_and_overrides(llm_settings):
 
     # Apply overrides and ensure they take precedence.
     stage_map = {
-        "summarize.context_builder": {
+        "analyze.context_builder": {
             "provider": "azure",
             "model": "gpt-4o",
             "max_tokens": 6400,
@@ -176,7 +176,7 @@ def test_build_llm_stage_configs_uses_defaults_and_overrides(llm_settings):
         provider_registry=provider_registry,
     )
 
-    override_entry = next(cfg for cfg in configs_with_override if cfg["key"] == "summarize.context_builder")
+    override_entry = next(cfg for cfg in configs_with_override if cfg["key"] == "analyze.context_builder")
     assert override_entry["selected_provider"] == "azure"
     assert override_entry["selected_model"] == "gpt-4o"
     assert override_entry["selected_max_tokens"] == 6400

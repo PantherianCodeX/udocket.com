@@ -455,7 +455,7 @@ def build_tool_panels(
     summary_history = summary_module.get("history") or []
     summary_jobs = jobs_by_agent(
         all_rows_iterable,
-        keywords=("summary", "summarization", "summarize"),
+        keywords=("summary", "summarization", "analyze"),
         exclude_keywords=("transcription", "audio", "speech"),
     )
     summary_panel = _panel_from_definition("summary")
@@ -483,9 +483,9 @@ def build_tool_panels(
                 "summary_llm": summary_llm,
             },
             "jobs": summary_jobs,
-            "jobs_title": "Summarize Jobs",
+            "jobs_title": "Analyze Jobs",
             "jobs_pill": "Automations",
-            "jobs_empty_message": "No summarize jobs yet. Queue one above.",
+            "jobs_empty_message": "No analyze jobs yet. Queue one above.",
             "case_id": str(case.id),
             "jobs_columns": list(GLOBAL_JOB_TABLE_COLUMNS),
             "jobs_column_ids": [col["id"] for col in GLOBAL_JOB_TABLE_COLUMNS],
@@ -493,13 +493,13 @@ def build_tool_panels(
             "jobs_show_identifiers": False,
             "jobs_table": table_config(
                 panel_key=summary_panel["key"],
-                title="Summarize Jobs",
+                title="Analyze Jobs",
                 pill="Automations",
                 rows=summary_jobs,
                 columns=GLOBAL_JOB_TABLE_COLUMNS,
                 column_ids=[col["id"] for col in GLOBAL_JOB_TABLE_COLUMNS],
                 filters=DEFAULT_TABLE_FILTERS,
-                empty_message="No summarize jobs yet. Queue one above.",
+                empty_message="No analyze jobs yet. Queue one above.",
                 show_identifiers=False,
                 case_id=str(case.id),
             ),

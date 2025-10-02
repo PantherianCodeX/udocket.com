@@ -17,7 +17,7 @@ from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.authorization.capabilities import has_capability
 from apps.platform.cases.models import Case
 from apps.platform.jobs.models import Job, JobNote
-from apps.platform.jobs.telemetry import summarize_jobs
+from apps.platform.jobs.telemetry import analyze_jobs
 from apps.platform.tenancy import scope_jobs
 
 from .common import JobTelemetryPayload, as_dict
@@ -99,7 +99,7 @@ def compute_case_tool_state(request: HttpRequest, case: Case) -> Dict[str, Any]:
         )
         note_counts = {str(row["job_id"]): int(row["count"]) for row in note_count_rows}
 
-    job_summary = summarize_jobs(jobs_list)
+    job_summary = analyze_jobs(jobs_list)
     job_summary_last_dt = job_summary.get("last_update")
     job_summary["last_update"] = job_summary_last_dt.isoformat() if job_summary_last_dt else None
 

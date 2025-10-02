@@ -6,26 +6,26 @@ from typing import Any, Dict, List
 
 import pytest
 
-from packages.udocket_core.agents import build_summarize_graph
-from packages.udocket_core.agents.summarize_lib import (
+from packages.udocket_core.agents import build_analyze_graph
+from packages.udocket_core.agents.analyze_lib import (
     LLM_STAGE_KEYS,
     SUMMARIZE_STAGE_PROFILES,
     StageRuntime,
-    SummarizeAgent,
-    SummarizeConfig,
-    SummarizePipeline,
+    AnalyzeAgent,
+    AnalyzeConfig,
+    AnalyzePipeline,
     TranscriptParse,
     TranscriptSegment,
     parse_transcript,
-    summarize_defaults,
+    analyze_defaults,
 )
-from packages.udocket_core.agents.summarize.stages import (
+from packages.udocket_core.agents.analyze.stages import (
     EntityStageResult,
     OutlineStageResult,
     SummaryStageResult,
     TimelineStageResult,
 )
-from packages.udocket_core.agents.summarize.stages.outline_stage import generate_outline as outline_generate
+from packages.udocket_core.agents.analyze.stages.outline_stage import generate_outline as outline_generate
 
 
 FAKE_AZURE_SECRET = {
@@ -111,16 +111,42 @@ def _install_stage_stubs(monkeypatch: pytest.MonkeyPatch, summary_text: str | No
 
     def fake_timeline(**_: Any) -> TimelineStageResult:
         events = [
-            {"ts_start": 1.0, "ts_end": None, "speaker": "SPK_1", "text": "Event", "labels": ["summary"]}
+            {
+                "id": "event-1",
+                "uuid": "event-1",
+                "ts_start": 1.0,
+                "ts_end": None,
+                "speaker": "SPK_1",
+                "text": "Event",
+                "labels": ["summary"],
+            }
         ]
         return TimelineStageResult(events, {"prompt_tokens": 8, "completion_tokens": 4, "total_tokens": 12})
 
     def fake_entities(**_: Any) -> EntityStageResult:
         hints = {
             "entities": [
-                {"id": "E1", "name": "Test Person", "type": "PERSON", "aliases": [], "mentions": []},
+                {
+                    "id": "entity-1",
+                    "uuid": "entity-1",
+                    "name": "Test Person",
+                    "type": "PERSON",
+                    "aliases": [],
+                    "mentions": [],
+                    "description": "",
+                },
             ],
-            "relations": [],
+            "relations": [
+                {
+                    "id": "relation-1",
+                    "uuid": "relation-1",
+                    "type": "RELATED_TO",
+                    "source": "entity-1",
+                    "target": "entity-1",
+                    "evidence": [],
+                    "summary": "",
+                }
+            ],
         }
         return EntityStageResult(hints, {"prompt_tokens": 6, "completion_tokens": 3, "total_tokens": 9})
 
@@ -132,25 +158,25 @@ def _install_stage_stubs(monkeypatch: pytest.MonkeyPatch, summary_text: str | No
         )
 
     monkeypatch.setattr(
-        "packages.udocket_core.agents.summarize.utils.generate_outline",
+        "packages.udocket_core.agents.analyze.utils.generate_outline",
         fake_outline,
     )
     monkeypatch.setattr(
-        "packages.udocket_core.agents.summarize.utils.generate_timeline",
+        "packages.udocket_core.agents.analyze.utils.generate_timeline",
         fake_timeline,
     )
     monkeypatch.setattr(
-        "packages.udocket_core.agents.summarize.utils.generate_entities",
+        "packages.udocket_core.agents.analyze.utils.generate_entities",
         fake_entities,
     )
     monkeypatch.setattr(
-        "packages.udocket_core.agents.summarize.utils.generate_summary_payload",
+        "packages.udocket_core.agents.analyze.utils.generate_summary_payload",
         fake_summary,
     )
 
 
-def _make_config() -> SummarizeConfig:
-    return SummarizeConfig(provider_chain=["azure"])
+def _make_config() -> AnalyzeConfig:
+    return AnalyzeConfig(provider_chain=["azure"])
 
 
 def test_parse_transcript_detects_header_and_segments(tmp_path):
@@ -179,7 +205,7 @@ def test_parse_transcript_handles_missing_divider(tmp_path):
     assert parsed.segments[0].ts == 10
 
 
-def test_summarize_agent_writes_artifacts(monkeypatch, tmp_path):
+def test_analyze_agent_writes_artifacts(monkeypatch, tmp_path):
     case_dir = tmp_path / "cases" / "CASE-1"
     transcript_dir = case_dir / "transcript"
     transcript_path = transcript_dir / "JOB-1__transcript.txt"
@@ -189,8 +215,8 @@ def test_summarize_agent_writes_artifacts(monkeypatch, tmp_path):
     )
 
     _install_stage_stubs(monkeypatch)
-    agent = SummarizeAgent(_make_config())
-    result = agent.summarize(
+    agent = AnalyzeAgent(_make_config())
+    result = agent.analyze(
         case_id="CASE-1",
         case_dir=case_dir,
         job_id="JOB-1",
@@ -227,7 +253,7 @@ def test_summarize_agent_writes_artifacts(monkeypatch, tmp_path):
         assert heading in markdown_text
 
 
-def test_summarize_agent_versioned_outputs(monkeypatch, tmp_path):
+def test_analyze_agent_versioned_outputs(monkeypatch, tmp_path):
     case_dir = tmp_path / "cases" / "CASE-2"
     transcript_dir = case_dir / "transcript"
     transcript_path = transcript_dir / "JOB-2__transcript.txt"
@@ -237,14 +263,14 @@ def test_summarize_agent_versioned_outputs(monkeypatch, tmp_path):
     )
 
     _install_stage_stubs(monkeypatch)
-    agent = SummarizeAgent(_make_config())
-    first = agent.summarize(
+    agent = AnalyzeAgent(_make_config())
+    first = agent.analyze(
         case_id="CASE-2",
         case_dir=case_dir,
         job_id="JOB-2",
         provider_credentials={"azure": FAKE_AZURE_SECRET},
     )
-    second = agent.summarize(
+    second = agent.analyze(
         case_id="CASE-2",
         case_dir=case_dir,
         job_id="JOB-2",
@@ -264,7 +290,7 @@ def test_summarize_agent_versioned_outputs(monkeypatch, tmp_path):
     assert first.provider_chain
 
 
-def test_summarize_agent_requires_azure_configuration(tmp_path):
+def test_analyze_agent_requires_azure_configuration(tmp_path):
     case_dir = tmp_path / "cases" / "CASE-WARN"
     transcript_dir = case_dir / "transcript"
     transcript_path = transcript_dir / "JOB-WARN__transcript.txt"
@@ -273,17 +299,17 @@ def test_summarize_agent_requires_azure_configuration(tmp_path):
         """Heading\n---------------------------\n[00:01] SPK_1: Missing key test\n""",
     )
 
-    agent = SummarizeAgent(SummarizeConfig())
+    agent = AnalyzeAgent(AnalyzeConfig())
 
     with pytest.raises(RuntimeError):
-        agent.summarize(
+        agent.analyze(
             case_id="CASE-WARN",
             case_dir=case_dir,
             job_id="JOB-WARN",
         )
 
 
-def test_summarize_agent_adds_default_header(monkeypatch, tmp_path):
+def test_analyze_agent_adds_default_header(monkeypatch, tmp_path):
     case_dir = tmp_path / "cases" / "CASE-3"
     transcript_dir = case_dir / "transcript"
     transcript_path = transcript_dir / "JOB-3__transcript.txt"
@@ -293,8 +319,8 @@ def test_summarize_agent_adds_default_header(monkeypatch, tmp_path):
     )
 
     _install_stage_stubs(monkeypatch, summary_text="Executive summary only")
-    agent = SummarizeAgent(_make_config())
-    result = agent.summarize(
+    agent = AnalyzeAgent(_make_config())
+    result = agent.analyze(
         case_id="CASE-3",
         case_dir=case_dir,
         job_id="JOB-3",
@@ -308,10 +334,10 @@ def test_summarize_agent_adds_default_header(monkeypatch, tmp_path):
 
 
 def test_stage_catalog_lists_recommended_models():
-    agent = SummarizeAgent(SummarizeConfig())
+    agent = AnalyzeAgent(AnalyzeConfig())
 
     catalog = agent.stage_catalog()
-    outline_info = catalog["summarize.extract_outline"]
+    outline_info = catalog["analyze.extract_outline"]
 
     assert outline_info["resource_notes"]
     assert outline_info["recommended_models"]
@@ -321,9 +347,9 @@ def test_stage_catalog_lists_recommended_models():
             assert tokens >= outline_info["recommended_context_tokens"]
 
 
-def test_summarize_config_uses_defaults_file():
-    defaults = summarize_defaults()
-    cfg = SummarizeConfig.from_env()
+def test_analyze_config_uses_defaults_file():
+    defaults = analyze_defaults()
+    cfg = AnalyzeConfig.from_env()
 
     assert cfg.temperature == defaults["temperature"]
     assert cfg.max_output_tokens == defaults["max_output_tokens"]
@@ -353,12 +379,12 @@ def test_stage_temperature_and_max_tokens_override(monkeypatch, tmp_path):
         )
 
     monkeypatch.setattr(
-        "packages.udocket_core.agents.summarize.utils.generate_summary_payload",
+        "packages.udocket_core.agents.analyze.utils.generate_summary_payload",
         capture_summary,
     )
 
-    agent = SummarizeAgent(_make_config())
-    agent.summarize(
+    agent = AnalyzeAgent(_make_config())
+    agent.analyze(
         case_id="CASE-OVR",
         case_dir=case_dir,
         job_id="JOB-OVR",
@@ -366,7 +392,7 @@ def test_stage_temperature_and_max_tokens_override(monkeypatch, tmp_path):
         provider_credentials={"azure": FAKE_AZURE_SECRET},
         provider_chain=["azure"],
         stage_map={
-            "summarize.draft_markdown": {
+            "analyze.draft_markdown": {
                 "provider": "azure",
                 "model": "gpt-4o",
                 "max_tokens": 5000,
@@ -455,7 +481,7 @@ def test_build_context_respects_config_limits(tmp_path):
         + "\n".join(f"[00:{i:02d}] SPK_{i % 2}: line {i}" for i in range(1, 25))
     )
     parse = parse_transcript(transcript)
-    cfg = SummarizeConfig(
+    cfg = AnalyzeConfig(
         max_prompt_segments=5,
         prompt_segments_override=5,
         max_prompt_chars=80,
@@ -480,7 +506,7 @@ def test_build_context_respects_config_limits(tmp_path):
     def resolve_transcript(input_path, case_dir):
         return transcript
 
-    pipeline = SummarizePipeline(
+    pipeline = AnalyzePipeline(
         case_id="CASE-CTX",
         job_id="JOB-CTX",
         case_dir=tmp_path,
@@ -496,7 +522,7 @@ def test_build_context_respects_config_limits(tmp_path):
 
     state: Dict[str, Any] = {"parse": parse}
     pipeline.context_builder(state)
-    outline_chunks = state["context_chunks"]["summarize.extract_outline"]
+    outline_chunks = state["context_chunks"]["analyze.extract_outline"]
     first_chunk = outline_chunks[0]
     lines = first_chunk.splitlines()
 
@@ -506,14 +532,14 @@ def test_build_context_respects_config_limits(tmp_path):
     assert total_chars <= cfg.prompt_chars_override + max_line
 
 
-def test_summarize_agent_raises_on_stage_failure(monkeypatch, tmp_path):
+def test_analyze_agent_raises_on_stage_failure(monkeypatch, tmp_path):
     _install_stage_stubs(monkeypatch)
 
     def boom(**_: Any) -> OutlineStageResult:
         raise RuntimeError("outline failure")
 
     monkeypatch.setattr(
-        "packages.udocket_core.agents.summarize.utils.generate_outline",
+        "packages.udocket_core.agents.analyze.utils.generate_outline",
         boom,
     )
 
@@ -525,10 +551,10 @@ def test_summarize_agent_raises_on_stage_failure(monkeypatch, tmp_path):
         """Header\n---------------------------\n[00:01] SPK_1: Test line\n""",
     )
 
-    agent = SummarizeAgent(_make_config())
+    agent = AnalyzeAgent(_make_config())
 
     with pytest.raises(RuntimeError):
-        agent.summarize(
+        agent.analyze(
             case_id="CASE-4",
             case_dir=case_dir,
             job_id="JOB-4",
@@ -537,7 +563,7 @@ def test_summarize_agent_raises_on_stage_failure(monkeypatch, tmp_path):
 
 
 
-def test_build_summarize_graph_requires_langgraph():
+def test_build_analyze_graph_requires_langgraph():
     class Dummy:
         def input_discovery(self, state):
             return state
@@ -546,4 +572,4 @@ def test_build_summarize_graph_requires_langgraph():
 
     dummy = Dummy()
     with pytest.raises(RuntimeError):
-        build_summarize_graph(dummy)
+        build_analyze_graph(dummy)

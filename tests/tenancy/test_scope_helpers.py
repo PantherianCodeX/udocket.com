@@ -42,7 +42,7 @@ def test_scope_helpers_respect_memberships():
         job_id=str(job_b.id),
         organization=org_a,
         type="SUMMARY",
-        title="Summarize",
+        title="Analyze",
         path="/tmp/summary.md",
         checksum="",
     )
@@ -52,7 +52,7 @@ def test_scope_helpers_respect_memberships():
         job_id=str(job_a.id),
         organization=org_b,
         type="SUMMARY",
-        title="Summarize B",
+        title="Analyze B",
         path="/tmp/summary_b.md",
         checksum="",
     )

@@ -74,7 +74,7 @@ def build_case_progress(
 
     mappings = [
         ("transcription", "Transcribe", ("transcription", "speech", "audio", "transcribe")),
-        ("summary", "Summarize", ("summary", "summarize")),
+        ("summary", "Analyze", ("summary", "analyze")),
         ("compose", "Compose", ("compose", "deliverable", "compose_job")),
         ("relationships", "Relationships", ("relationship", "graph", "relationships")),
     ]

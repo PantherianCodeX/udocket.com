@@ -1,6 +1,6 @@
-# uDocket — Summarize Analysis Agent Guide
+# uDocket — Analyze Analysis Agent Guide
 
-Scope: this guide governs the Summarize analyzer implementation under `packages/udocket_core/agents/summarize/` and any platform tasks that orchestrate it. It extends the root AGENTS.md contract and the `packages/udocket_core/AGENTS.md` rules.
+Scope: this guide governs the Analyze analyzer implementation under `packages/udocket_core/agents/analyze/` and any platform tasks that orchestrate it. It extends the root AGENTS.md contract and the `packages/udocket_core/AGENTS.md` rules.
 
 Purpose: generate layered, legally‑useful summaries from approved transcripts, suitable for preparing court forms and feeding the Compose pipeline. The agent consumes diarized or plain transcripts and produces both human‑readable and structured artifacts for downstream tools.
 
@@ -16,7 +16,7 @@ Purpose: generate layered, legally‑useful summaries from approved transcripts,
 
 
 ## Agent Composition (Sub‑Agent Roles)
-Implement the SummarizeAgent as a pipeline of small, purpose‑specific stages. Each stage has an input contract and a structured output, written to disk under `analysis/`, and referenced by the ops metadata.
+Implement the AnalyzeAgent as a pipeline of small, purpose‑specific stages. Each stage has an input contract and a structured output, written to disk under `analysis/`, and referenced by the ops metadata.
 
 - ContextBuilder (Stage 0)
   - Input: transcript header/body, case intake fields.
@@ -44,10 +44,10 @@ Implement the SummarizeAgent as a pipeline of small, purpose‑specific stages. 
 
 
 ## Library API (Core Package)
-Add `packages/udocket_core/agents/summarize_lib.py` implementing a pure‑Python library (no Django imports).
+Add `packages/udocket_core/agents/analyze_lib.py` implementing a pure‑Python library (no Django imports).
 
 - Data classes
-  - `SummarizeConfig`
+  - `AnalyzeConfig`
     - `language: str = "en-CA"`
     - `temperature: float = 1.0`
     - `max_output_tokens: int = 24000`
@@ -56,8 +56,8 @@ Add `packages/udocket_core/agents/summarize_lib.py` implementing a pure‑Python
     - `max_prompt_chars: int = 32000` (0 disables the char cap)
     - `chars_per_token: float = 4.0`
     - `debug: bool = False`
-    - `@classmethod from_env()` — loads defaults from `config/summarize_defaults.json`; no credentials are pulled from environment variables.
-  - `SummarizeResult`
+    - `@classmethod from_env()` — loads defaults from `config/analyze_defaults.json`; no credentials are pulled from environment variables.
+  - `AnalyzeResult`
     - `status: str`
     - `summary_file: Path`
     - `outline_file: Path | None`
@@ -68,9 +68,9 @@ Add `packages/udocket_core/agents/summarize_lib.py` implementing a pure‑Python
     - `audit_jsonl: Path` — case ops audit stream
 
 - Main class
-  - `class SummarizeAgent:`
-    - `def __init__(self, config: SummarizeConfig | None = None) -> None`
-    - `def summarize(self, *, input: Path | None, case_id: str, case_dir: Path, job_id: str, intake: dict | None = None, transcript_hint: dict | None = None) -> SummarizeResult`
+  - `class AnalyzeAgent:`
+    - `def __init__(self, config: AnalyzeConfig | None = None) -> None`
+    - `def analyze(self, *, input: Path | None, case_id: str, case_dir: Path, job_id: str, intake: dict | None = None, transcript_hint: dict | None = None) -> AnalyzeResult`
       - Input discovery: if `input` is None, use the most recent transcript under `transcript/`.
       - Writes artifacts and ops logs under `analysis/` and `ops/` with versioned names (`_v2` etc.).
 - Network usage: the active LLM configuration supplies provider and model details. Per-provider credentials are sourced from `LLMProviderCredential` rows (decrypted in the worker) and merged with the organization’s stage map before constructing chat clients. No offline fallbacks for content generation.
@@ -121,14 +121,46 @@ Outline v1 (written as JSON):
 
 Timeline seeds v1:
 ```
-[{ "ts_start": number, "ts_end": number|null, "speaker": string|null, "text": string, "labels": [string] }]
+{
+  "events": [
+    {
+      "id": string,          # stable UUIDv5 identifier
+      "uuid": string,        # same value as `id` (future-proofing)
+      "ts_start": number|null,
+      "ts_end": number|null,
+      "speaker": string|null,
+      "text": string,
+      "labels": [string]
+    }
+  ]
+}
 ```
 
 Entity hints v1:
 ```
 {
-  "entities": [{ "id": string, "name": string, "type": "PERSON"|"ORG"|"LOC"|"DOCKET"|"OTHER", "aliases": [string] }],
-  "relations": [{ "type": string, "source": string, "target": string, "evidence": [{ "ts": number|null, "text": string }] }]
+  "entities": [
+    {
+      "id": string,          # stable UUIDv5 identifier
+      "uuid": string,
+      "name": string,
+      "type": "PERSON"|"ORG"|"LOC"|"DOCKET"|"OTHER",
+      "aliases": [string],
+      "mentions": [{ "ts": number|null, "text": string }],
+      "description": string
+    }
+  ],
+  "relations": [
+    {
+      "id": string,          # stable UUIDv5 identifier
+      "uuid": string,
+      "type": string,
+      "source": string,
+      "target": string,
+      "summary": string,
+      "evidence": [{ "ts": number|null, "text": string }]
+    }
+  ]
 }
 ```
 
@@ -156,13 +188,13 @@ Audit line in `ops/ops_summary.jsonl` mirrors the above in a single JSON object 
 ## Configuration & Environment
 - Primary control plane: `LLMConfiguration` rows (scoped per organization) capture the provider chain and stage map the worker must honour. Each configuration is surfaced in the UI for selection when queueing jobs.
 - Each organization manages credentials via `LLMProviderCredential` records (UI: Profile ▸ Organization settings ▸ LLM providers). The worker decrypts the API key/endpoint at runtime and merges stage overrides before invoking a provider.
-- Default runtime parameters (temperature, provider chain, prompt limits, stage token budgets) are defined in `config/summarize_defaults.json`.
+- Default runtime parameters (temperature, provider chain, prompt limits, stage token budgets) are defined in `config/analyze_defaults.json`.
 - If the active LLM configuration references a provider without credentials, the worker must exit with a descriptive error. No offline or pseudo-local fallback is permitted.
 - Default and custom LLM configurations are edited from the Organization settings page; stage selections there flow directly into worker `LLMConfiguration` rows used by every summarization and timeline task.
 
 
 ## Stage Capabilities API
-- `SummarizeAgent.stage_catalog()` returns metadata for each stage:
+- `AnalyzeAgent.stage_catalog()` returns metadata for each stage:
   - `label`, `description`, `resource_notes`
   - `min_context_tokens`, `recommended_context_tokens`, `output_reserve_tokens`
   - `recommended_models` (provider/model pairs with sufficient context window) and a full `eligible_models` list.
@@ -170,8 +202,8 @@ Audit line in `ops/ops_summary.jsonl` mirrors the above in a single JSON object 
 
 
 ## Celery/Platform Integration
-- Task: `apps.platform.operations.tasks.summarize_job`
-  - Replace internal logic to invoke `SummarizeAgent.summarize(...)`.
+- Task: `apps.platform.operations.tasks.analyze_job`
+  - Replace internal logic to invoke `AnalyzeAgent.analyze(...)`.
   - Pass `intake` from `Case` model fields (if present): `client_position`, `court_level`, `court_division`, `court_location`, `court_case_number`, `court_date`, `filing_deadline`, `client_name`, `opposing_party`.
   - Register artifact (`CaseArtifact` type = `SUMMARY`) with checksum; emit `send_case_update(..., event="artifact.created", kind="summary")`.
   - Fail fast when no configured LLM provider is available. The worker must surface a descriptive error and record the ops JSON/JSONL entry rather than attempting a degraded offline path.
@@ -191,13 +223,13 @@ Audit line in `ops/ops_summary.jsonl` mirrors the above in a single JSON object 
 - Enforce Canadian residency for Azure endpoints; other providers must honour organization policy (store endpoints per credential).
 - Never transmit raw audio.
 - Avoid persisting sensitive prompts/responses unless `debug=1`.
-- Respect `MAX_MINUTES`/size limits upstream (transcription). Summarizer should stream transcript content to prompts with compact context windows (chunk + roll‑up strategy) when needed.
+- Respect `MAX_MINUTES`/size limits upstream (transcription). Analyzer should stream transcript content to prompts with compact context windows (chunk + roll‑up strategy) when needed.
 
 
 ## CLI (Optional)
 You may expose a thin CLI under `scripts/`:
 ```
-python -m packages.udocket_core.agents.summarize_lib \
+python -m packages.udocket_core.agents.analyze_lib \
   --case <CASE_ID> \
   --case-dir /app/storage/media/cases/<CASE_ID> \
   --job <JOB_ID> \
@@ -213,6 +245,6 @@ Stdout (success): `{ "status":"ok", "summary_file":"<abs_path>", "words":1234, "
 
 
 ## Roadmap
-- Remove timeline/entity seeding responsibilities from Summarize (now owned by Compose). Update the platform task to no longer emit seeds/hints.
+- Remove timeline/entity seeding responsibilities from Analyze (now owned by Compose). Update the platform task to no longer emit seeds/hints.
 - Add citation links back to transcript timestamps in Markdown summary.
 - Add per‑section confidence/coverage diagnostics in ops JSON.

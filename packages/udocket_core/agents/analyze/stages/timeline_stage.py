@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import json
 import logging
 from typing import Any, Deque, Dict, List, Optional, Sequence
+from uuid import NAMESPACE_URL, uuid5
 
 from ...common.io import TranscriptParse
 from ...common.chunking import (
@@ -15,7 +16,7 @@ from ...common.chunking import (
 )
 from packages.udocket_core.llm.runtime import ChatClient
 
-logger = logging.getLogger("udocket.summarize.timeline_stage")
+logger = logging.getLogger("udocket.analyze.timeline_stage")
 
 TIMELINE_SCHEMA = {
     "type": "object",
@@ -78,6 +79,64 @@ def _merge_usage(target: Dict[str, int], usage: Dict[str, Any]) -> None:
         value = usage.get(key)
         if isinstance(value, int):
             target[key] = target.get(key, 0) + value
+
+
+def _normalize_event(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    text = str(payload.get("text") or payload.get("summary") or "").strip()
+    if not text:
+        return None
+
+    ts_start_raw = payload.get("ts_start")
+    ts_end_raw = payload.get("ts_end")
+    speaker_raw = payload.get("speaker")
+
+    def _coerce_ts(value: Any) -> Optional[float]:
+        if value is None:
+            return None
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            return None
+        return parsed if parsed >= 0 else None
+
+    ts_start = _coerce_ts(ts_start_raw)
+    ts_end = _coerce_ts(ts_end_raw)
+
+    speaker = None
+    if isinstance(speaker_raw, str):
+        candidate = speaker_raw.strip()
+        if candidate:
+            speaker = candidate
+
+    labels_raw = payload.get("labels")
+    labels: List[str] = []
+    if isinstance(labels_raw, (list, tuple)):
+        labels = [str(item).strip() for item in labels_raw if str(item).strip()]
+    elif isinstance(labels_raw, str) and labels_raw.strip():
+        labels = [labels_raw.strip()]
+
+    signature = "|".join(
+        [
+            "timeline_seed",
+            "" if ts_start is None else f"{ts_start:.3f}",
+            "" if ts_end is None else f"{ts_end:.3f}",
+            speaker or "",
+            text,
+        ]
+    )
+    derived_uuid = uuid5(NAMESPACE_URL, signature)
+    event_id = str(payload.get("id") or payload.get("uuid") or derived_uuid)
+
+    normalized = {
+        "id": event_id,
+        "uuid": str(derived_uuid),
+        "ts_start": ts_start,
+        "ts_end": ts_end,
+        "speaker": speaker,
+        "text": text,
+        "labels": labels,
+    }
+    return normalized
 
 
 def generate_timeline(
@@ -158,22 +217,20 @@ def generate_timeline(
             for item in events:
                 if not isinstance(item, dict):
                     continue
-                normalized = {
-                    "ts_start": item.get("ts_start"),
-                    "ts_end": item.get("ts_end"),
-                    "speaker": item.get("speaker"),
-                    "text": item.get("text", ""),
-                    "labels": list(item.get("labels") or []),
-                }
+                normalized = _normalize_event(item)
+                if normalized is None:
+                    continue
                 signature = (
+                    normalized.get("uuid"),
                     normalized["ts_start"],
                     normalized["ts_end"],
-                    normalized["speaker"],
+                    normalized.get("speaker"),
                     normalized["text"],
                 )
-                if signature not in signatures:
-                    aggregated.append(normalized)
-                    signatures.add(signature)
+                if signature in signatures:
+                    continue
+                aggregated.append(normalized)
+                signatures.add(signature)
             _merge_usage(usage_totals, usage)
         if not aggregated:
             raise RuntimeError("Timeline stage returned no events")

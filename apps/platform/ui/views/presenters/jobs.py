@@ -354,7 +354,7 @@ def build_job_rows(
     return display_rows, flat_rows
 
 
-SUMMARY_KEYWORDS = {"summary", "summarize", "summarization"}
+SUMMARY_KEYWORDS = {"summary", "analyze", "summarization"}
 
 
 def _metadata_matches_keywords(meta: Dict[str, Any], keywords: Tuple[str, ...]) -> bool:

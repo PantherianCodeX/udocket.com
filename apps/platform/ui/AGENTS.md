@@ -33,7 +33,7 @@ Scope: everything beneath `apps/platform/ui/` (templates, views, presenters, sel
   - Do not duplicate those resources in child templates.
 - Tools panel base (all tools share):
   - Shared analysis/tools base template (`platform_ui/tools/_panel_base.html`).
-  - Transcribe, Summarize, Compose inherit this base. Timeline/Relationships are managed within Compose.
+  - Transcribe, Analyze, Compose inherit this base. Timeline/Relationships are managed within Compose.
   - The base defines: panel header (label/status/pill), left action area (form/buttons), right sidebar (latest artifact), and history (child job actions).
   - LLM tool panel: common sub-layout for prompt configs, provider selection, job runs history, and Manual/Agent Edit affordances.
 - For modals, inherit from `platform_ui/components/modals/modal_base.html` and only override the relevant blocks.

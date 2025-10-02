@@ -12,7 +12,7 @@ Scope: `apps/platform/jobs/` (Job model, telemetry shaping, serializers, API vie
 - Avoid unscoped `.objects` access in APIs; always filter by case/org where applicable.
 
 ## Telemetry
-- Use `jobs.telemetry` (`JobTelemetry`, `job_telemetry`, `summarize_jobs`) to produce stable payloads for UI and API (apps/platform/jobs/telemetry.py:1).
+- Use `jobs.telemetry` (`JobTelemetry`, `job_telemetry`, `analyze_jobs`) to produce stable payloads for UI and API (apps/platform/jobs/telemetry.py:1).
 - When adding new metadata keys written by tasks, extend telemetry accessors rather than inlining file reads elsewhere.
  - Telemetry endpoints (DRF): `GET /api/v1/jobs/<id>/detail/` returns the enriched payload consumed by UI; keep compatibility when evolving keys.
  - Status polling: `GET /api/v1/jobs/<id>/status/` must remain lightweight and stable for frequent polling.

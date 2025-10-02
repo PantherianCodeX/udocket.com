@@ -6,6 +6,7 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from uuid import NAMESPACE_URL, uuid5
 
 from .common import AnalysisArtifact, ensure_dir, next_versioned, parse_transcript, sha256_file
 from .common.docx import write_basic_docx
@@ -119,6 +120,159 @@ def _markdown_paragraphs(markdown_text: str) -> List[str]:
     if buffer:
         paragraphs.append(" ".join(buffer).strip())
     return paragraphs or [markdown_text.strip()]
+
+
+def _normalize_timeline_payload(payload: Mapping[str, Any]) -> Dict[str, Any]:
+    events = payload.get("events") if isinstance(payload, Mapping) else None
+    if not isinstance(events, list):
+        return {"events": []}
+    normalized_events: List[Dict[str, Any]] = []
+    for event in events:
+        if not isinstance(event, Mapping):
+            continue
+        title = str(event.get("title") or event.get("summary") or event.get("text") or "").strip()
+        summary = str(event.get("summary") or event.get("text") or "").strip()
+        ts_start = event.get("ts_start")
+        ts_end = event.get("ts_end")
+        try:
+            ts_start_val = float(ts_start) if ts_start is not None else None
+        except (TypeError, ValueError):
+            ts_start_val = None
+        try:
+            ts_end_val = float(ts_end) if ts_end is not None else None
+        except (TypeError, ValueError):
+            ts_end_val = None
+        speakers_raw = event.get("speakers")
+        if isinstance(speakers_raw, (list, tuple)):
+            speakers = [str(item).strip() for item in speakers_raw if str(item).strip()]
+        else:
+            speaker = str(event.get("speaker") or "").strip()
+            speakers = [speaker] if speaker else []
+        references_raw = event.get("references")
+        if isinstance(references_raw, (list, tuple)):
+            references = [str(item).strip() for item in references_raw if str(item).strip()]
+        else:
+            references = []
+        labels_raw = event.get("labels")
+        if isinstance(labels_raw, (list, tuple)):
+            labels = [str(item).strip() for item in labels_raw if str(item).strip()]
+        elif isinstance(labels_raw, str) and labels_raw.strip():
+            labels = [labels_raw.strip()]
+        else:
+            labels = []
+        signature = "|".join(
+            [
+                "compose.timeline",
+                "" if ts_start_val is None else f"{ts_start_val:.3f}",
+                "" if ts_end_val is None else f"{ts_end_val:.3f}",
+                "::".join(speakers),
+                summary,
+            ]
+        )
+        derived_uuid = uuid5(NAMESPACE_URL, signature)
+        event_id = str(event.get("id") or event.get("uuid") or derived_uuid)
+        normalized_events.append(
+            {
+                "id": event_id,
+                "uuid": str(derived_uuid),
+                "title": title or summary or "Timeline event",
+                "summary": summary,
+                "ts_start": ts_start_val,
+                "ts_end": ts_end_val,
+                "speakers": speakers,
+                "references": references,
+                "labels": labels,
+            }
+        )
+    return {"events": normalized_events, **{k: v for k, v in payload.items() if k != "events"}}
+
+
+def _normalize_graph_payload(payload: Mapping[str, Any]) -> Dict[str, Any]:
+    entities_raw = payload.get("entities") if isinstance(payload, Mapping) else None
+    relations_raw = payload.get("relationships") if isinstance(payload, Mapping) else None
+    normalized_entities: List[Dict[str, Any]] = []
+    normalized_relations: List[Dict[str, Any]] = []
+    if isinstance(entities_raw, list):
+        for entity in entities_raw:
+            if not isinstance(entity, Mapping):
+                continue
+            name = str(entity.get("name") or "").strip()
+            entity_type = str(entity.get("type") or "UNKNOWN").strip() or "UNKNOWN"
+            signature = f"compose.entity|{entity_type}|{name.lower()}"
+            derived_uuid = uuid5(NAMESPACE_URL, signature)
+            entity_id = str(entity.get("id") or entity.get("uuid") or derived_uuid)
+            aliases_raw = entity.get("aliases")
+            if isinstance(aliases_raw, (list, tuple)):
+                aliases = [str(item).strip() for item in aliases_raw if str(item).strip()]
+            else:
+                aliases = []
+            mentions_raw = entity.get("mentions")
+            mentions: List[Dict[str, Any]] = []
+            if isinstance(mentions_raw, list):
+                for mention in mentions_raw:
+                    if not isinstance(mention, Mapping):
+                        continue
+                    text = str(mention.get("text") or mention.get("excerpt") or "").strip()
+                    if not text:
+                        continue
+                    ts_val = mention.get("ts") or mention.get("timestamp")
+                    try:
+                        ts = float(ts_val) if ts_val is not None else None
+                    except (TypeError, ValueError):
+                        ts = None
+                    mentions.append({"ts": ts, "text": text})
+            normalized_entities.append(
+                {
+                    "id": entity_id,
+                    "uuid": str(derived_uuid),
+                    "name": name,
+                    "type": entity_type,
+                    "aliases": aliases,
+                    "mentions": mentions,
+                    "description": str(entity.get("description") or "").strip(),
+                }
+            )
+    if isinstance(relations_raw, list):
+        for relation in relations_raw:
+            if not isinstance(relation, Mapping):
+                continue
+            relation_type = str(relation.get("type") or "RELATED_TO").strip() or "RELATED_TO"
+            source = str(relation.get("source") or "").strip()
+            target = str(relation.get("target") or "").strip()
+            signature = f"compose.relation|{relation_type}|{source.lower()}|{target.lower()}"
+            derived_uuid = uuid5(NAMESPACE_URL, signature)
+            relation_id = str(relation.get("id") or relation.get("uuid") or derived_uuid)
+            evidence_raw = relation.get("evidence")
+            evidence: List[Dict[str, Any]] = []
+            if isinstance(evidence_raw, list):
+                for item in evidence_raw:
+                    if isinstance(item, Mapping):
+                        text = str(item.get("text") or item.get("excerpt") or "").strip()
+                        if not text:
+                            continue
+                        ts_val = item.get("ts") or item.get("timestamp")
+                        try:
+                            ts = float(ts_val) if ts_val is not None else None
+                        except (TypeError, ValueError):
+                            ts = None
+                        evidence.append({"ts": ts, "text": text})
+                    elif isinstance(item, str) and item.strip():
+                        evidence.append({"ts": None, "text": item.strip()})
+            normalized_relations.append(
+                {
+                    "id": relation_id,
+                    "uuid": str(derived_uuid),
+                    "type": relation_type,
+                    "source": source,
+                    "target": target,
+                    "summary": str(relation.get("summary") or "").strip(),
+                    "evidence": evidence,
+                }
+            )
+    result: Dict[str, Any] = dict(payload)
+    result["entities"] = normalized_entities
+    result["relationships"] = normalized_relations
+    return result
 
 
 @dataclass
@@ -335,9 +489,9 @@ class ComposeAgent:
             if stage_key == "compose.context_builder":
                 context_payload = response  # type: ignore[assignment]
             elif stage_key == "compose.timeline_builder":
-                timeline_payload = response  # type: ignore[assignment]
+                timeline_payload = _normalize_timeline_payload(response)  # type: ignore[assignment]
             elif stage_key == "compose.graph_builder":
-                graph_payload = response  # type: ignore[assignment]
+                graph_payload = _normalize_graph_payload(response)  # type: ignore[assignment]
             elif stage_key == "compose.client_brief":
                 client_markdown = str(response)
             elif stage_key == "compose.lawyer_brief":
@@ -678,7 +832,10 @@ class ComposeAgent:
             }
             user_prompt = (
                 "Produce timeline_v2 JSON describing the proceedings. Each event must reference "
-                "timestamps and speakers when known. Keep the order chronological."
+                "timestamps and speakers when known, include a deterministic `id`, and mirror the "
+                "existing `uuid` from seeds when available. Generate stable `uuid` values (use the "
+                "provided one or derive via UUID5 over the event signature) so downstream tools can "
+                "cross-link results. Keep the order chronological."
             ) + "\n\n" + json.dumps(payload, ensure_ascii=False)
             return base_system, user_prompt, response_schema
 
@@ -746,6 +903,9 @@ class ComposeAgent:
             }
             user_prompt = (
                 "Generate entities and relationships JSON. Include evidence references to transcript timestamps or timeline IDs."
+                " Preserve provided entity/relationship IDs when present and emit stable UUID values"
+                " (existing `uuid` or new UUID5 signatures). Every entity and relationship must have"
+                " both `id` and `uuid` fields."
             ) + "\n\n" + json.dumps(payload, ensure_ascii=False)
             return base_system, user_prompt, response_schema
 

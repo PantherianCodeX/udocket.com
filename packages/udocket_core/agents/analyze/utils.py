@@ -28,7 +28,7 @@ from .stages import (
     generate_timeline,
 )
 
-logger = logging.getLogger("udocket.summarize.pipeline")
+logger = logging.getLogger("udocket.analyze.pipeline")
 
 
 REQUIRED_HEADINGS = {
@@ -60,7 +60,7 @@ class FinalizedOutputs:
     provider_chain: List[str]
 
 
-class SummarizePipeline:
+class AnalyzePipeline:
     """Single-run pipeline implementing the LangGraph node flow."""
 
     def __init__(
@@ -97,7 +97,7 @@ class SummarizePipeline:
         self.stage_runtimes = stage_runtimes
         self.default_temperature = default_temperature
         self.provider_chain = list(provider_chain or [])
-        self.logger = logger or logging.getLogger("udocket.summarize.pipeline")
+        self.logger = logger or logging.getLogger("udocket.analyze.pipeline")
         self.progress_callback = progress_callback
         self.chars_per_token = (
             getattr(config, "chars_per_token", DEFAULT_CHARS_PER_TOKEN) or DEFAULT_CHARS_PER_TOKEN
@@ -233,10 +233,10 @@ class SummarizePipeline:
     def extract_outline(self, state: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
         parse: TranscriptParse = state["parse"]
         context_snippet = self._context_input_for_stage(
-            "summarize.extract_outline", state
+            "analyze.extract_outline", state
         )
         case_brief: Dict[str, Any] = state["case_brief"]
-        runtime = self.stage_runtimes.get("summarize.extract_outline")
+        runtime = self.stage_runtimes.get("analyze.extract_outline")
         llm_client = runtime.client if runtime else None
         max_tokens = runtime.max_output_tokens if runtime and runtime.max_output_tokens else self.config.max_output_tokens
         temperature = runtime.temperature if runtime else self.default_temperature
@@ -291,11 +291,11 @@ class SummarizePipeline:
     def build_timeline_seeds(self, state: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
         parse: TranscriptParse = state["parse"]
         context_snippet = self._context_input_for_stage(
-            "summarize.build_timeline_seeds", state
+            "analyze.build_timeline_seeds", state
         )
         outline_result: OutlineStageResult = state["outline_result"]
         case_brief: Dict[str, Any] = state["case_brief"]
-        runtime = self.stage_runtimes.get("summarize.build_timeline_seeds")
+        runtime = self.stage_runtimes.get("analyze.build_timeline_seeds")
         llm_client = runtime.client if runtime else None
         max_tokens = runtime.max_output_tokens if runtime and runtime.max_output_tokens else self.config.max_output_tokens
         temperature = runtime.temperature if runtime else self.default_temperature
@@ -337,11 +337,11 @@ class SummarizePipeline:
     def build_entity_hints(self, state: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
         parse: TranscriptParse = state["parse"]
         context_snippet = self._context_input_for_stage(
-            "summarize.build_entity_hints", state
+            "analyze.build_entity_hints", state
         )
         outline_result: OutlineStageResult = state["outline_result"]
         case_brief: Dict[str, Any] = state["case_brief"]
-        runtime = self.stage_runtimes.get("summarize.build_entity_hints")
+        runtime = self.stage_runtimes.get("analyze.build_entity_hints")
         llm_client = runtime.client if runtime else None
         max_tokens = runtime.max_output_tokens if runtime and runtime.max_output_tokens else self.config.max_output_tokens
         temperature = runtime.temperature if runtime else self.default_temperature
@@ -396,13 +396,13 @@ class SummarizePipeline:
     def draft_markdown(self, state: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
         parse: TranscriptParse = state["parse"]
         context_snippet = self._context_input_for_stage(
-            "summarize.draft_markdown", state
+            "analyze.draft_markdown", state
         )
         outline_result: OutlineStageResult = state["outline_result"]
         timeline_result: TimelineStageResult = state["timeline_result"]
         entity_result: EntityStageResult = state["entity_result"]
         case_brief: Dict[str, Any] = state["case_brief"]
-        runtime = self.stage_runtimes.get("summarize.draft_markdown")
+        runtime = self.stage_runtimes.get("analyze.draft_markdown")
         llm_client = runtime.client if runtime else None
         max_tokens = runtime.max_output_tokens if runtime and runtime.max_output_tokens else self.config.max_output_tokens
         temperature = runtime.temperature if runtime else self.default_temperature
@@ -513,7 +513,7 @@ class SummarizePipeline:
             return state.get("context_snippet", "")
         if len(chunks) == 1:
             return chunks[0]
-        if stage_key in {"summarize.draft_markdown", "summarize.qa_and_finalize"}:
+        if stage_key in {"analyze.draft_markdown", "analyze.qa_and_finalize"}:
             return chunks[0]
         return chunks
 
@@ -787,4 +787,4 @@ def finalize_outputs(
     )
 
 
-__all__ = ["FinalizedOutputs", "SummarizePipeline", "finalize_outputs"]
+__all__ = ["FinalizedOutputs", "AnalyzePipeline", "finalize_outputs"]

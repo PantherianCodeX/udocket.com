@@ -1,4 +1,4 @@
-"""Stage helpers for SummarizeAgent."""
+"""Stage helpers for AnalyzeAgent."""
 
 from .outline_stage import OutlineStageResult, generate_outline
 from .timeline_stage import TimelineStageResult, generate_timeline

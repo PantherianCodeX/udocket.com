@@ -1101,7 +1101,7 @@
     if (summaryContainer) {
       setupLLMControls(summaryContainer);
       const select = summaryContainer.querySelector('[data-summary-source]');
-      const button = summaryContainer.querySelector('[data-analysis-action="summary"]');
+      const button = summaryContainer.querySelector('[data-analysis-action="analyze"]');
 
       const uploadAttr = 'data-summary-upload-option';
       const uploadTextAttr = 'data-summary-upload-text-option';

@@ -1,4 +1,4 @@
-"""Summarize agent package compat exports."""
+"""Analyze agent package compat exports."""
 
 from . import utils
 

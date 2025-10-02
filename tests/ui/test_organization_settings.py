@@ -84,10 +84,10 @@ def test_organization_settings_saves_configuration(settings):
             "description": "Primary summarization settings",
             "provider_chain": ["azure"],
             "set_default": "1",
-            "stage__summarize__context_builder__provider": "azure",
-            "stage__summarize__context_builder__model": "gpt-4o-mini",
-            "stage__summarize__context_builder__max_tokens": "6000",
-            "stage__summarize__context_builder__temperature": "0.35",
+            "stage__analyze__context_builder__provider": "azure",
+            "stage__analyze__context_builder__model": "gpt-4o-mini",
+            "stage__analyze__context_builder__max_tokens": "6000",
+            "stage__analyze__context_builder__temperature": "0.35",
         },
         follow=True,
     )
@@ -96,10 +96,10 @@ def test_organization_settings_saves_configuration(settings):
     assert stored is not None
     assert stored.is_default is True
     assert stored.name == "Org default summary"
-    assert stored.stage_map["summarize.context_builder"]["provider"] == "azure"
-    assert stored.stage_map["summarize.context_builder"]["model"] == "gpt-4o-mini"
-    assert stored.stage_map["summarize.context_builder"]["max_tokens"] == 6000
-    assert stored.stage_map["summarize.context_builder"]["options"]["temperature"] == 0.35
+    assert stored.stage_map["analyze.context_builder"]["provider"] == "azure"
+    assert stored.stage_map["analyze.context_builder"]["model"] == "gpt-4o-mini"
+    assert stored.stage_map["analyze.context_builder"]["max_tokens"] == 6000
+    assert stored.stage_map["analyze.context_builder"]["options"]["temperature"] == 0.35
 
 
 
@@ -125,7 +125,7 @@ def test_organization_settings_config_create_deduplicates_name(settings):
             "name": "Test Config",
             "description": "Original",
             "provider_chain": ["azure"],
-            "stage__summarize__context_builder__provider": "azure",
+            "stage__analyze__context_builder__provider": "azure",
         },
     )
 
@@ -137,7 +137,7 @@ def test_organization_settings_config_create_deduplicates_name(settings):
             "name": "Test Config",
             "description": "Copy",
             "provider_chain": ["azure"],
-            "stage__summarize__context_builder__provider": "azure",
+            "stage__analyze__context_builder__provider": "azure",
         },
         follow=True,
     )

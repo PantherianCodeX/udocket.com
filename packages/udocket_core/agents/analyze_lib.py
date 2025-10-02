@@ -13,8 +13,8 @@ from .common import (
     TranscriptParse,
 )
 from .common.io import TranscriptSegment  # re-export for legacy imports
-from .langgraph_orchestrator import build_summarize_graph, enable_langgraph_debug_logging
-from .summarize.utils import FinalizedOutputs, SummarizePipeline
+from .langgraph_orchestrator import build_analyze_graph, enable_langgraph_debug_logging
+from .analyze.utils import FinalizedOutputs, AnalyzePipeline
 from ..llm import LLMSettings, load_llm_settings
 from ..llm.runtime import (
     ChatClient,
@@ -24,13 +24,13 @@ from ..llm.runtime import (
 )
 
 BASE_DIR = Path(__file__).resolve().parents[3]
-SUMMARIZE_DEFAULTS_PATH = BASE_DIR / "config" / "summarize_defaults.json"
+ANALYZE_DEFAULTS_PATH = BASE_DIR / "config" / "analyze_defaults.json"
 
 
 @lru_cache(maxsize=1)
-def load_summarize_defaults() -> Dict[str, Any]:
+def load_analyze_defaults() -> Dict[str, Any]:
     try:
-        payload = json.loads(SUMMARIZE_DEFAULTS_PATH.read_text(encoding="utf-8"))
+        payload = json.loads(ANALYZE_DEFAULTS_PATH.read_text(encoding="utf-8"))
         return payload if isinstance(payload, dict) else {}
     except FileNotFoundError:
         return {}
@@ -38,11 +38,11 @@ def load_summarize_defaults() -> Dict[str, Any]:
         return {}
 
 
-def summarize_defaults() -> Dict[str, Any]:
-    return dict(load_summarize_defaults())
+def analyze_defaults() -> Dict[str, Any]:
+    return dict(load_analyze_defaults())
 
 
-_DEFAULTS = load_summarize_defaults()
+_DEFAULTS = load_analyze_defaults()
 
 MAX_PROMPT_SEGMENTS = int(_DEFAULTS.get("max_prompt_segments", 250))
 MAX_PROMPT_CHARS = int(_DEFAULTS.get("max_prompt_chars", 32000))
@@ -59,19 +59,19 @@ DEFAULT_PROVIDER_CHAIN: List[str] = _DEFAULT_CHAIN or ["azure"]
 
 _STAGE_LIMITS_DEFAULT = _DEFAULTS.get("stage_token_limits") or {}
 DEFAULT_STAGE_TOKEN_LIMITS: Dict[str, int] = {
-    "summarize.extract_outline": int(_STAGE_LIMITS_DEFAULT.get("summarize.extract_outline", 12000)),
-    "summarize.build_timeline_seeds": int(_STAGE_LIMITS_DEFAULT.get("summarize.build_timeline_seeds", 8000)),
-    "summarize.build_entity_hints": int(_STAGE_LIMITS_DEFAULT.get("summarize.build_entity_hints", 8000)),
-    "summarize.draft_markdown": int(_STAGE_LIMITS_DEFAULT.get("summarize.draft_markdown", 12000)),
-    "summarize.qa_and_finalize": int(_STAGE_LIMITS_DEFAULT.get("summarize.qa_and_finalize", 6000)),
+    "analyze.extract_outline": int(_STAGE_LIMITS_DEFAULT.get("analyze.extract_outline", 12000)),
+    "analyze.build_timeline_seeds": int(_STAGE_LIMITS_DEFAULT.get("analyze.build_timeline_seeds", 8000)),
+    "analyze.build_entity_hints": int(_STAGE_LIMITS_DEFAULT.get("analyze.build_entity_hints", 8000)),
+    "analyze.draft_markdown": int(_STAGE_LIMITS_DEFAULT.get("analyze.draft_markdown", 12000)),
+    "analyze.qa_and_finalize": int(_STAGE_LIMITS_DEFAULT.get("analyze.qa_and_finalize", 6000)),
 }
 LLM_STAGE_KEYS = {
-    "context_builder": "summarize.context_builder",
-    "extract_outline": "summarize.extract_outline",
-    "build_timeline_seeds": "summarize.build_timeline_seeds",
-    "build_entity_hints": "summarize.build_entity_hints",
-    "draft_markdown": "summarize.draft_markdown",
-    "qa_and_finalize": "summarize.qa_and_finalize",
+    "context_builder": "analyze.context_builder",
+    "extract_outline": "analyze.extract_outline",
+    "build_timeline_seeds": "analyze.build_timeline_seeds",
+    "build_entity_hints": "analyze.build_entity_hints",
+    "draft_markdown": "analyze.draft_markdown",
+    "qa_and_finalize": "analyze.qa_and_finalize",
 }
 _llm_settings_cache: Optional[LLMSettings] = None
 
@@ -79,7 +79,7 @@ _STAGE_ALIAS_LOOKUP: Dict[str, str] = {}
 for _attr, _stage_key in LLM_STAGE_KEYS.items():
     _STAGE_ALIAS_LOOKUP[_attr.lower()] = _stage_key
     _STAGE_ALIAS_LOOKUP[_stage_key.lower()] = _stage_key
-    if _stage_key.startswith("summarize."):
+    if _stage_key.startswith("analyze."):
         _STAGE_ALIAS_LOOKUP[_stage_key.split(".", 1)[1].lower()] = _stage_key
 
 
@@ -205,8 +205,8 @@ class StageProfile:
 
 
 SUMMARIZE_STAGE_PROFILES: Dict[str, StageProfile] = {
-    "summarize.context_builder": StageProfile(
-        stage_key="summarize.context_builder",
+    "analyze.context_builder": StageProfile(
+        stage_key="analyze.context_builder",
         label="Context Builder",
         description="Prepares digestible transcript snippets and intake metadata.",
         min_context_tokens=4000,
@@ -215,8 +215,8 @@ SUMMARIZE_STAGE_PROFILES: Dict[str, StageProfile] = {
         output_reserve_tokens=0,
         resource_notes="Runs locally (CPU).",
     ),
-    "summarize.extract_outline": StageProfile(
-        stage_key="summarize.extract_outline",
+    "analyze.extract_outline": StageProfile(
+        stage_key="analyze.extract_outline",
         label="Outline Extractor",
         description="Finds parties, issues, facts, and orders across the transcript.",
         min_context_tokens=8000,
@@ -225,8 +225,8 @@ SUMMARIZE_STAGE_PROFILES: Dict[str, StageProfile] = {
         output_reserve_tokens=12000,
         resource_notes="Prefers 100k+ token context models for full hearings.",
     ),
-    "summarize.build_timeline_seeds": StageProfile(
-        stage_key="summarize.build_timeline_seeds",
+    "analyze.build_timeline_seeds": StageProfile(
+        stage_key="analyze.build_timeline_seeds",
         label="Timeline Seeding",
         description="Generates chronological event scaffolding for timeline view.",
         min_context_tokens=6000,
@@ -235,8 +235,8 @@ SUMMARIZE_STAGE_PROFILES: Dict[str, StageProfile] = {
         output_reserve_tokens=6000,
         resource_notes="Heavier prompts; look for models with >=80k token windows.",
     ),
-    "summarize.build_entity_hints": StageProfile(
-        stage_key="summarize.build_entity_hints",
+    "analyze.build_entity_hints": StageProfile(
+        stage_key="analyze.build_entity_hints",
         label="Entity Mapper",
         description="Extracts people, organizations, and relationships with evidence.",
         min_context_tokens=6000,
@@ -245,18 +245,18 @@ SUMMARIZE_STAGE_PROFILES: Dict[str, StageProfile] = {
         output_reserve_tokens=6000,
         resource_notes="Prefers large context for repeated mentions across the record.",
     ),
-    "summarize.draft_markdown": StageProfile(
-        stage_key="summarize.draft_markdown",
-        label="Summary Drafter",
-        description="Produces the layered Markdown summary and checklist.",
+    "analyze.draft_markdown": StageProfile(
+        stage_key="analyze.draft_markdown",
+        label="Analysis Drafter",
+        description="Produces the layered Markdown analysis and checklist.",
         min_context_tokens=8000,
         recommended_context_tokens=80000,
         target_chunk_tokens=50000,
         output_reserve_tokens=12000,
         resource_notes="Needs room for structured inputs; choose 100k token models when possible.",
     ),
-    "summarize.qa_and_finalize": StageProfile(
-        stage_key="summarize.qa_and_finalize",
+    "analyze.qa_and_finalize": StageProfile(
+        stage_key="analyze.qa_and_finalize",
         label="QA & Finalizer",
         description="Ensures required sections, hashes artifacts, and finalizes outputs.",
         min_context_tokens=4000,
@@ -284,7 +284,7 @@ def _stage_profile(stage_key: str) -> StageProfile:
     )
 
 
-logger = logging.getLogger("udocket.summarize.agent")
+logger = logging.getLogger("udocket.analyze.agent")
 
 def _load_llm_settings() -> LLMSettings:
     global _llm_settings_cache
@@ -329,7 +329,7 @@ PIPELINE_NODE_ORDER = [
 
 
 @dataclass
-class SummarizeConfig:
+class AnalyzeConfig:
     language: str = "en-CA"
     temperature: float = DEFAULT_TEMPERATURE
     max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS
@@ -344,7 +344,7 @@ class SummarizeConfig:
     chars_per_token: float = DEFAULT_TOKENS_TO_CHAR_RATIO
 
     @classmethod
-    def from_env(cls) -> "SummarizeConfig":
+    def from_env(cls) -> "AnalyzeConfig":
         language = (os.getenv("LANGUAGE") or "en-CA").strip() or "en-CA"
         temperature = DEFAULT_TEMPERATURE
         max_tokens = DEFAULT_MAX_OUTPUT_TOKENS
@@ -394,7 +394,7 @@ class SummarizeConfig:
 
 
 @dataclass
-class SummarizeResult:
+class AnalyzeResult:
     status: str
     summary_file: Path
     summary_markdown_file: Path
@@ -409,9 +409,9 @@ class SummarizeResult:
     provider_chain: List[str]
 
 
-class SummarizeAgent:
-    def __init__(self, config: Optional[SummarizeConfig] = None) -> None:
-        self.config = config or SummarizeConfig.from_env()
+class AnalyzeAgent:
+    def __init__(self, config: Optional[AnalyzeConfig] = None) -> None:
+        self.config = config or AnalyzeConfig.from_env()
         self.logger = logger
         self._log_enabled = False
         self._log_level = logging.INFO
@@ -466,7 +466,7 @@ class SummarizeAgent:
         full_message = message if not details else f"{message} | {details}"
         self.logger.log(level, full_message)
 
-    def summarize(
+    def analyze(
         self,
         *,
         input: Optional[Path] = None,
@@ -481,7 +481,7 @@ class SummarizeAgent:
         progress_callback: Optional[
             Callable[[str, str, Dict[str, Any]], None]
         ] = None,
-    ) -> SummarizeResult:
+    ) -> AnalyzeResult:
         case_dir = Path(case_dir)
         state: Dict[str, Any] = {
             "case_id": case_id,
@@ -497,7 +497,7 @@ class SummarizeAgent:
         self._log_level = logging.INFO if self.config.debug else logging.DEBUG
         self._log(
             self._log_level,
-            "summarize.start",
+            "analyze.start",
             case_id=case_id,
             job_id=job_id,
         )
@@ -581,7 +581,7 @@ class SummarizeAgent:
             primary_provider = providers[0] if providers else ""
             provider_meta = settings.provider(primary_provider) if primary_provider else None
 
-            requires_chat = stage_key != "summarize.context_builder"
+            requires_chat = stage_key != "analyze.context_builder"
             chat_client: Optional[ChatClient] = None
             model_meta = None
 
@@ -662,7 +662,7 @@ class SummarizeAgent:
                 client_available=bool(chat_client),
             )
 
-        pipeline = SummarizePipeline(
+        pipeline = AnalyzePipeline(
             case_id=case_id,
             job_id=job_id,
             case_dir=case_dir,
@@ -684,7 +684,7 @@ class SummarizeAgent:
         final_state = self._execute_pipeline(pipeline, state)
         final_outputs = final_state.get("final_outputs")
         if not isinstance(final_outputs, FinalizedOutputs):
-            raise RuntimeError("Summarize pipeline did not produce outputs")
+            raise RuntimeError("Analyze pipeline did not produce outputs")
 
         transcript_path = final_state.get("transcript_path")
         if not isinstance(transcript_path, Path):
@@ -698,12 +698,12 @@ class SummarizeAgent:
         )
         self._log(
             self._log_level,
-            "summarize.completed",
+            "analyze.completed",
             status=final_state.get("status", "ok"),
             summary=str(final_outputs.summary_path),
             outline=str(final_outputs.outline_path),
         )
-        return SummarizeResult(
+        return AnalyzeResult(
             status=final_state.get("status", "ok"),
             summary_file=final_outputs.summary_path,
             summary_markdown_file=final_outputs.summary_markdown_path,
@@ -719,12 +719,12 @@ class SummarizeAgent:
         )
 
     def _execute_pipeline(
-        self, pipeline: SummarizePipeline, state: Dict[str, Any]
+        self, pipeline: AnalyzePipeline, state: Dict[str, Any]
     ) -> Dict[str, Any]:
         current_state: Dict[str, Any] = dict(state)
         graph = None
         try:
-            graph = build_summarize_graph(pipeline)
+            graph = build_analyze_graph(pipeline)
         except RuntimeError:
             graph = None
         if graph is not None:
@@ -824,9 +824,9 @@ class SummarizeAgent:
 
 
 __all__ = [
-    "SummarizeAgent",
-    "SummarizeConfig",
-    "SummarizeResult",
+    "AnalyzeAgent",
+    "AnalyzeConfig",
+    "AnalyzeResult",
     "parse_transcript",
     "TranscriptParse",
     "TranscriptSegment",

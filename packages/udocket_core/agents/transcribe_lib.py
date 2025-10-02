@@ -370,7 +370,7 @@ def _to_seconds(val: Any) -> float:
     return 0.0
 
 
-def _summarize_batch_error(payload: Any) -> str:
+def _analyze_batch_error(payload: Any) -> str:
     try:
         if isinstance(payload, dict):
             errors = payload.get("errors")
@@ -405,10 +405,10 @@ def _summarize_batch_error(payload: Any) -> str:
                 return " | ".join(p for p in (f"code={code}" if code else None, message) if p) or str(error_obj)
             details = payload.get("details")
             if isinstance(details, list) and details:
-                return "; ".join(_summarize_batch_error(item) for item in details)
+                return "; ".join(_analyze_batch_error(item) for item in details)
             props = payload.get("properties")
             if isinstance(props, dict) and props.get("error"):
-                return _summarize_batch_error(props.get("error"))
+                return _analyze_batch_error(props.get("error"))
         return str(payload)
     except Exception:
         return repr(payload)
@@ -462,7 +462,7 @@ def _rest_batch_transcribe(
             raise RuntimeError("REST batch timeout waiting for completion")
         time.sleep(5)
     if status != "Succeeded":
-        err = _summarize_batch_error(pdata)
+        err = _analyze_batch_error(pdata)
         try:
             detail = json.dumps(pdata, ensure_ascii=False)[:800]
         except Exception:

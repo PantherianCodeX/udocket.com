@@ -5,6 +5,7 @@ import logging
 from collections import deque
 from dataclasses import dataclass
 from typing import Any, Deque, Dict, List, Optional, Sequence
+from uuid import NAMESPACE_URL, uuid5
 
 from ...common.io import TranscriptParse
 from ...common.chunking import (
@@ -15,7 +16,7 @@ from ...common.chunking import (
 )
 from packages.udocket_core.llm.runtime import ChatClient
 
-logger = logging.getLogger("udocket.summarize.entity_stage")
+logger = logging.getLogger("udocket.analyze.entity_stage")
 
 ENTITY_SCHEMA = {
     "type": "object",
@@ -106,6 +107,71 @@ def _ensure_chunks(context: Any) -> List[str]:
     return [str(context)]
 
 
+def _assign_entity_defaults(entity: Dict[str, Any]) -> Dict[str, Any]:
+    name = str(entity.get("name") or "").strip()
+    entity_type = str(entity.get("type") or "UNKNOWN").strip() or "UNKNOWN"
+    signature = f"entity|{entity_type}|{name.lower()}"
+    derived_uuid = uuid5(NAMESPACE_URL, signature)
+    entity_id = str(entity.get("id") or entity.get("uuid") or derived_uuid)
+    entity["id"] = entity_id
+    entity.setdefault("uuid", str(derived_uuid))
+    aliases = entity.get("aliases")
+    if not isinstance(aliases, list):
+        aliases = []
+    entity["aliases"] = [str(alias).strip() for alias in aliases if str(alias).strip()]
+    mentions = entity.get("mentions")
+    if not isinstance(mentions, list):
+        mentions = []
+    normalized_mentions: List[Dict[str, Any]] = []
+    for mention in mentions:
+        if not isinstance(mention, dict):
+            continue
+        text = str(mention.get("text") or "").strip()
+        if not text:
+            continue
+        ts = mention.get("ts")
+        try:
+            ts_val = float(ts) if ts is not None else None
+        except (TypeError, ValueError):
+            ts_val = None
+        normalized_mentions.append({"ts": ts_val, "text": text})
+    entity["mentions"] = normalized_mentions
+    entity["type"] = entity_type
+    entity.setdefault("description", "")
+    return entity
+
+
+def _assign_relation_defaults(relation: Dict[str, Any]) -> Dict[str, Any]:
+    relation_type = str(relation.get("type") or "RELATED_TO").strip() or "RELATED_TO"
+    source = str(relation.get("source") or "").strip()
+    target = str(relation.get("target") or "").strip()
+    signature = f"relation|{relation_type}|{source.lower()}|{target.lower()}"
+    derived_uuid = uuid5(NAMESPACE_URL, signature)
+    relation_id = str(relation.get("id") or relation.get("uuid") or derived_uuid)
+    relation["id"] = relation_id
+    relation.setdefault("uuid", str(derived_uuid))
+    evidence = relation.get("evidence")
+    if not isinstance(evidence, list):
+        evidence = []
+    normalized_evidence: List[Dict[str, Any]] = []
+    for item in evidence:
+        if isinstance(item, dict):
+            text = str(item.get("text") or item.get("excerpt") or "").strip()
+            if not text:
+                continue
+            ts_val = item.get("ts") or item.get("timestamp")
+            try:
+                ts = float(ts_val) if ts_val is not None else None
+            except (TypeError, ValueError):
+                ts = None
+            normalized_evidence.append({"ts": ts, "text": text})
+        elif isinstance(item, str) and item.strip():
+            normalized_evidence.append({"ts": None, "text": item.strip()})
+    relation["evidence"] = normalized_evidence
+    relation["type"] = relation_type
+    return relation
+
+
 def _merge_entity_payload(target: Dict[str, Any], update: Dict[str, Any]) -> None:
     existing_entities = target.setdefault("entities", [])
     update_entities = update.get("entities") or []
@@ -113,36 +179,39 @@ def _merge_entity_payload(target: Dict[str, Any], update: Dict[str, Any]) -> Non
         return
 
     def entity_key(entity: Dict[str, Any]) -> Any:
-        return entity.get("id") or (entity.get("name"), entity.get("type"))
+        entity = _assign_entity_defaults(dict(entity))
+        return entity["id"]
 
     index: Dict[Any, Dict[str, Any]] = {}
     for entity in existing_entities:
-        index[entity_key(entity)] = entity
+        normalized = _assign_entity_defaults(entity)
+        index[normalized["id"]] = normalized
 
     for entity in update_entities:
         if not isinstance(entity, dict):
             continue
-        key = entity_key(entity)
+        normalized_entity = _assign_entity_defaults(entity)
+        key = normalized_entity["id"]
         existing = index.get(key)
         if existing is None:
-            existing_entities.append(entity)
-            index[key] = entity
+            existing_entities.append(normalized_entity)
+            index[key] = normalized_entity
             continue
-        if entity.get("name") and not existing.get("name"):
-            existing["name"] = entity["name"]
-        if entity.get("type") and not existing.get("type"):
-            existing["type"] = entity["type"]
+        if normalized_entity.get("name") and not existing.get("name"):
+            existing["name"] = normalized_entity["name"]
+        if normalized_entity.get("type") and not existing.get("type"):
+            existing["type"] = normalized_entity["type"]
         existing_aliases = existing.setdefault("aliases", [])
         if isinstance(existing_aliases, list):
             alias_seen = set(existing_aliases)
-            for alias in entity.get("aliases") or []:
+            for alias in normalized_entity.get("aliases") or []:
                 if alias not in alias_seen:
                     existing_aliases.append(alias)
                     alias_seen.add(alias)
         existing_mentions = existing.setdefault("mentions", [])
         if isinstance(existing_mentions, list):
             mention_seen = {json.dumps(m, sort_keys=True) for m in existing_mentions}
-            for mention in entity.get("mentions") or []:
+            for mention in normalized_entity.get("mentions") or []:
                 if not isinstance(mention, dict):
                     continue
                 signature = json.dumps(mention, sort_keys=True)
@@ -153,13 +222,19 @@ def _merge_entity_payload(target: Dict[str, Any], update: Dict[str, Any]) -> Non
     existing_relations = target.setdefault("relations", [])
     update_relations = update.get("relations") or []
     if isinstance(existing_relations, list) and isinstance(update_relations, list):
-        relation_seen = {json.dumps(rel, sort_keys=True) for rel in existing_relations}
+        normalized_existing = []
+        for item in existing_relations:
+            if isinstance(item, dict):
+                normalized_existing.append(_assign_relation_defaults(item))
+        relation_seen = {json.dumps(rel, sort_keys=True) for rel in normalized_existing}
+        existing_relations[:] = normalized_existing
         for relation in update_relations:
             if not isinstance(relation, dict):
                 continue
-            signature = json.dumps(relation, sort_keys=True)
+            normalized_relation = _assign_relation_defaults(relation)
+            signature = json.dumps(normalized_relation, sort_keys=True)
             if signature not in relation_seen:
-                existing_relations.append(relation)
+                existing_relations.append(normalized_relation)
                 relation_seen.add(signature)
 
 
@@ -248,9 +323,8 @@ def generate_entities(
             if not isinstance(entities, list) or not entities:
                 continue
             if aggregate is None:
-                aggregate = payload
-            else:
-                _merge_entity_payload(aggregate, payload)
+                aggregate = {"entities": [], "relations": []}
+            _merge_entity_payload(aggregate, payload)
             _merge_usage(usage_totals, usage)
         if aggregate is None:
             raise RuntimeError("Entity stage returned no entities")

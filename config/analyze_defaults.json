@@ -6,10 +6,10 @@
   "chars_per_token": 4.0,
   "default_provider_chain": ["azure"],
   "stage_token_limits": {
-    "summarize.extract_outline": 12000,
-    "summarize.build_timeline_seeds": 8000,
-    "summarize.build_entity_hints": 8000,
-    "summarize.draft_markdown": 12000,
-    "summarize.qa_and_finalize": 6000
+    "analyze.extract_outline": 12000,
+    "analyze.build_timeline_seeds": 8000,
+    "analyze.build_entity_hints": 8000,
+    "analyze.draft_markdown": 12000,
+    "analyze.qa_and_finalize": 6000
   }
 }

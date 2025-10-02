@@ -165,7 +165,7 @@
       }
     }
 
-    async function fetchSummarizeStats(caseId) {
+    async function fetchAnalyzeStats(caseId) {
       try {
         const resp = await fetch(`/api/v1/cases/${caseId}/jobs/summary/`, { headers: { 'Accept': 'application/json' } });
         if (!resp.ok) return null;
@@ -175,8 +175,8 @@
       }
     }
 
-    function summarizeBadges(stats) {
-      if (!stats) return '<span class="text-slate-400">No summarize jobs</span>';
+    function analyzeBadges(stats) {
+      if (!stats) return '<span class="text-slate-400">No analyze jobs</span>';
       const pieces = [];
       pieces.push(`<span class="rounded-full border border-emerald-400/40 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-200">${stats.succeeded} succeeded</span>`);
       if (stats.running) pieces.push(`<span class="rounded-full border border-blue-400/40 bg-blue-500/10 px-3 py-1 text-xs font-semibold text-blue-200">${stats.running} running</span>`);
@@ -198,7 +198,7 @@
                 <p class="mt-2 text-xs uppercase tracking-wide text-slate-400">Created</p>
                 <p class="text-sm text-slate-200">${created ? new Date(created).toLocaleString() : '—'}</p>
               </div>
-              <div class="flex flex-wrap gap-2">${summarizeBadges(stats || { succeeded:0, running:0, pending:0, failed:0 })}</div>
+              <div class="flex flex-wrap gap-2">${analyzeBadges(stats || { succeeded:0, running:0, pending:0, failed:0 })}</div>
               <div class="flex gap-2">
                 <a href="/cases/${caseId}/" class="inline-flex items-center gap-2 rounded-lg border border-primary-500/50 bg-primary-500/30 px-3 py-1.5 text-xs font-semibold text-primary-50 transition hover:bg-primary-500/50">Open case</a>
                 <a href="/admin/cases/case/${caseId}/change/" class="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-primary-400 hover:text-white" target="_blank" rel="noopener">Legacy view</a>
@@ -217,7 +217,7 @@
       closeDetails();
       openCaseRow = row;
       const caseId = row.dataset.caseId;
-      const stats = await fetchSummarizeStats(caseId);
+      const stats = await fetchAnalyzeStats(caseId);
       row.insertAdjacentHTML('afterend', detailTemplate(row, stats));
       if (stats) {
         const cell = row.querySelector('[data-case-jobs]');

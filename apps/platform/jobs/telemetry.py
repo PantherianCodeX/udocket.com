@@ -170,7 +170,7 @@ def job_telemetry(job: Job) -> JobTelemetry:
     return payload
 
 
-def summarize_jobs(jobs: Iterable[Job]) -> Dict[str, Any]:
+def analyze_jobs(jobs: Iterable[Job]) -> Dict[str, Any]:
     summary = {
         "total": 0,
         "succeeded": 0,

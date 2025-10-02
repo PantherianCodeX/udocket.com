@@ -36,7 +36,7 @@ def test_jobs_by_agent_matches_summary_metadata():
 
     summary_rows = presenters.jobs_by_agent(
         display_rows,
-        keywords=("summary", "summarization", "summarize"),
+        keywords=("summary", "summarization", "analyze"),
     )
 
     assert len(summary_rows) == 1

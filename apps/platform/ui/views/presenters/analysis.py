@@ -18,7 +18,7 @@ def enrich_summary_artifacts(
     jobs: List[Any],
     telemetry_map: Dict[str, Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
-    """Merge summarize job metadata (outline/seeds/entities) into artifact payloads."""
+    """Merge analyze job metadata (outline/seeds/entities) into artifact payloads."""
 
     meta_by_job: Dict[str, Dict[str, Any]] = {}
     for job in jobs:

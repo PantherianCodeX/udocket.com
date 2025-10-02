@@ -1,6 +1,6 @@
 {
   "stages": {
-    "summarize.context_builder": {
+    "analyze.context_builder": {
       "target": "summary",
       "label": "Context Builder",
       "description": "Prepares intake metadata and transcript snippets used by downstream prompts.",
@@ -9,7 +9,7 @@
       ],
       "model": "gpt-4o-mini"
     },
-    "summarize.extract_outline": {
+    "analyze.extract_outline": {
       "target": "summary",
       "label": "Outline Extractor",
       "description": "Derives parties, issues, claims, facts, and legal references as structured JSON.",
@@ -18,7 +18,7 @@
       ],
       "model": "gpt-4o-mini"
     },
-    "summarize.build_timeline_seeds": {
+    "analyze.build_timeline_seeds": {
       "target": "summary",
       "label": "Timeline Seeder",
       "description": "Creates candidate timestamped events that can seed the timeline generator.",
@@ -27,7 +27,7 @@
       ],
       "model": "gpt-4o-mini"
     },
-    "summarize.build_entity_hints": {
+    "analyze.build_entity_hints": {
       "target": "summary",
       "label": "Entity Mapper",
       "description": "Identifies entities and proto-relationships to accelerate graph extraction.",
@@ -36,16 +36,16 @@
       ],
       "model": "gpt-4o-mini"
     },
-    "summarize.draft_markdown": {
+    "analyze.draft_markdown": {
       "target": "summary",
-      "label": "Summary Drafter",
-      "description": "Produces the layered Markdown case summary referencing transcript timestamps.",
+      "label": "Analysis Drafter",
+      "description": "Produces the layered Markdown case analysis referencing transcript timestamps.",
       "providers": [
         "azure"
       ],
       "model": "gpt-4o"
     },
-    "summarize.qa_and_finalize": {
+    "analyze.qa_and_finalize": {
       "target": "summary",
       "label": "QA & Finalize",
       "description": "Validates mandatory sections, computes checksums, and prepares ops metadata.",

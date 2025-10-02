@@ -13,9 +13,9 @@ from packages.udocket_core.llm.runtime import (
 )
 
 try:
-    from packages.udocket_core.agents.summarize_lib import DISALLOWED_PROVIDERS as _SUMMARIZE_DISALLOWED_PROVIDERS
-except Exception:  # pragma: no cover - fallback when summarizer unavailable
-    _SUMMARIZE_DISALLOWED_PROVIDERS = set()
+    from packages.udocket_core.agents.analyze_lib import DISALLOWED_PROVIDERS as _ANALYZE_DISALLOWED_PROVIDERS
+except Exception:  # pragma: no cover - fallback when analyzer unavailable
+    _ANALYZE_DISALLOWED_PROVIDERS = set()
 
 from .crypto import decrypt_secret, encrypt_secret
 from .models import LLMProviderCredential, LLMConfiguration
@@ -538,13 +538,13 @@ def build_provider_registry(
         supported_set = {
             name
             for name in llm_settings.providers.keys()
-            if name not in _SUMMARIZE_DISALLOWED_PROVIDERS
+            if name not in _ANALYZE_DISALLOWED_PROVIDERS
         }
     else:
         supported_set = {
             name
             for name in supported_providers
-            if name not in _SUMMARIZE_DISALLOWED_PROVIDERS
+            if name not in _ANALYZE_DISALLOWED_PROVIDERS
         }
 
     registry: Dict[str, Dict[str, object]] = {}

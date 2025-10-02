@@ -147,7 +147,7 @@ Compose + Review & Edit Program (New)
      - Artifacts: `<job>__compose_client_v1.md/.docx`, `<job>__compose_lawyer_v1.md/.docx`; embed timeline/graph SVG/PNG; link JSON in ops.
      - Templates: per-organization DOCX template with uDocket default fallback; configurable in Org Settings.
   2) Migrate Timeline/Graph into Compose
-     - Remove timeline/graph generation from Summarize; Compose owns LLM timeline/graph sub-stages and their outputs (`timeline_v2.json/html/png`, `graph_v2.json/html/png`).
+     - Remove timeline/graph generation from Analyze; Compose owns LLM timeline/graph sub-stages and their outputs (`timeline_v2.json/html/png`, `graph_v2.json/html/png`).
      - Keep existing Timeline/Graph tasks as thin wrappers that delegate to Compose sub-stages (optional; may be removed once UI is switched).
   3) Approvals & Versioning
      - Manual Edit tool: creates a child job action on save, writes a new versioned artifact with diff metadata; requires Reviewer approval. Approval promotes the new version to the parent task’s current output.
@@ -155,16 +155,16 @@ Compose + Review & Edit Program (New)
      - Configurable reviewer policy: required reviewer count and allowed roles per page/tool, set in Org Settings; defaults seeded from file.
      - Modal text viewer: standard version history access (browse/compare) for all text artifacts.
   4) Parent/Child Job Actions
-     - Parent rows represent a tool (Transcribe, Summarize, Compose); children represent steps (e.g., Upload → Convert → Transcribe Agent → Manual Edit).
+     - Parent rows represent a tool (Transcribe, Analyze, Compose); children represent steps (e.g., Upload → Convert → Transcribe Agent → Manual Edit).
      - Parent status reflects the next blocking child action; cancelled children are skipped.
 
 
-Summarize Enhancements (LLM-only)
+Analyze Enhancements (LLM-only)
 - Deliverables: standardize mandatory sections across outputs, including a Staff Report.
 - Staff Report: gaps/flags/discrepancies; questionnaire completion score; next steps. Stored as `analysis/<job>__staff_report_v1.md` + JSON payload.
 - Discrepancy detection: compare all intake/case fields to transcript; categorize severity and emit alerts.
 - Speaker mapping proposals: propose role/identity per speaker; UI modal for approval; approved changes back-propagate to case metadata (always require confirmation).
-- Remove timeline/graph seeding from Summarize (moved to Compose).
+- Remove timeline/graph seeding from Analyze (moved to Compose).
 
 
 Questionnaire & Interview Guidance

@@ -55,7 +55,7 @@ _REGISTRY: dict[str, ToolDefinition] = {
     ),
     "summary": ToolDefinition(
         key="summary",
-        label="Summarize",
+        label="Analyze",
         description="Generate layered summaries from approved transcripts.",
         body_template="platform_ui/tools/summary.html",
         notes_enabled=True,

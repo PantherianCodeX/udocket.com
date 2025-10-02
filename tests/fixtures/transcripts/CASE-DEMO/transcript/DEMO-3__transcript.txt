@@ -47,7 +47,7 @@ Transcribed: 2025-02-15T17:30:00Z
 [20:55] SPK_2: Morgan drinks socially; no substance abuse; main issue is financial secrecy—he opened a line of credit without disclosure; he tends to raise his voice but no physical harm.
 [21:30] SPK_1: Have the children expressed preferences or concerns directly to you?
 [22:05] SPK_2: Liam wants stability for hockey practices and asked to stay primarily with me during tournament weeks; Isla says she feels rushed at Morgan’s condo mornings.
-[22:40] SPK_1: Let’s transition to financials—summarize current child and spousal support.
+[22:40] SPK_1: Let’s transition to financials—analyze current child and spousal support.
 [23:15] SPK_2: Interim child support of $1,420 monthly based on Morgan’s 2023 Line 150 at $118,000; no spousal support yet; my gross is $78,500 as a physiotherapist.
 [23:50] SPK_1: Have there been arrears or variances to the interim child support?
 [24:25] SPK_2: Morgan paid October through January; February payment was $600 short because he claims reduced income; he promises to top up after his March commission.
@@ -145,5 +145,5 @@ Transcribed: 2025-02-15T17:30:00Z
 [78:05] SPK_2: Please flag that I’m open to a graduated schedule giving Morgan extra time once he proves stable childcare, and that I’d accept mediation-arbitration if April conference stalls.
 [78:40] SPK_1: Thanks, Avery; we’ll compile a detailed summary, timeline, and relationship map for Daniel and the pilot team—anything else?
 [79:15] SPK_2: That’s everything; thank you for organizing this so thoroughly.
-[79:50] SPK_1: We’ll upload the transcript and notify you once the summarize tool output is ready; take care.
+[79:50] SPK_1: We’ll upload the transcript and notify you once the analyze tool output is ready; take care.
 [80:00] SPK_2: Thanks, Maya, speak soon.

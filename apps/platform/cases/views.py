@@ -18,7 +18,7 @@ from apps.platform.accounts.models import OrganizationMembership
 from apps.platform.accounts.utils import resolve_request_organization
 from apps.platform.jobs.models import Job
 from apps.platform.jobs.serializers import JobTelemetrySerializer
-from apps.platform.jobs.telemetry import summarize_jobs
+from apps.platform.jobs.telemetry import analyze_jobs
 
 
 class CaseViewSet(viewsets.ModelViewSet):
@@ -89,7 +89,7 @@ class CaseViewSet(viewsets.ModelViewSet):
             Job.objects.filter(case=case).select_related("case", "case__organization").order_by("-created_at"),
             getattr(request, "user", None),
         )
-        summary = summarize_jobs(jobs)
+        summary = analyze_jobs(jobs)
         last_update = summary.get("last_update")
         summary["last_update"] = last_update.isoformat() if last_update else None
         return Response(summary)

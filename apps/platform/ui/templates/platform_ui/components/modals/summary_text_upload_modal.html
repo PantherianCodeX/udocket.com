@@ -2,9 +2,9 @@
 
 {% block modal_header %}
   <div class="space-y-1">
-    <p class="text-xs uppercase tracking-wide text-slate-400">Summarizer dev helper</p>
+    <p class="text-xs uppercase tracking-wide text-slate-400">Analyzer dev helper</p>
     <h2 class="text-lg font-semibold text-white">Upload transcript text</h2>
-    <p class="text-xs text-slate-400">Register a plain-text transcript as a completed transcription job for summarizer testing.</p>
+    <p class="text-xs text-slate-400">Register a plain-text transcript as a completed transcription job for analyzer testing.</p>
   </div>
 {% endblock %}
 
@@ -41,7 +41,7 @@
 
     <div class="space-y-3 border-t border-white/10 pt-4">
       <h3 class="text-sm font-semibold text-white">Upload custom .txt transcript</h3>
-      <p class="text-xs text-slate-400">File names inform the job title. The <code>__transcript</code> suffix and <code>.txt</code> extension are removed when showing in the summarize tool.</p>
+      <p class="text-xs text-slate-400">File names inform the job title. The <code>__transcript</code> suffix and <code>.txt</code> extension are removed when showing in the analyze tool.</p>
       <form class="space-y-3" data-summary-text-upload-form>
         <label class="block text-xs uppercase tracking-wide text-slate-400">Transcript text file
           <input type="file" name="transcript_text" accept=".txt" class="mt-2 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" data-summary-text-file>

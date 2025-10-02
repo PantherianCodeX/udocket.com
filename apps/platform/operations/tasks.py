@@ -21,8 +21,8 @@ from packages.udocket_core.agents import (
     ComposeConfig,
     GraphAgent,
     GraphConfig,
-    SummarizeAgent,
-    SummarizeConfig,
+    AnalyzeAgent,
+    AnalyzeConfig,
     TimelineAgent,
     TimelineConfig,
     TranscriptionAgent,
@@ -1063,7 +1063,7 @@ def _collect_requested_providers(
 
 
 @shared_task(bind=True)
-def summarize_job(
+def analyze_job(
     self,
     *_args,
     case_id: str,
@@ -1106,7 +1106,7 @@ def summarize_job(
         job=job,
         case_id=case_id,
         org_id=org_id,
-        task_name="summarize_job",
+        task_name="analyze_job",
         task_id=getattr(self.request, "id", None) or "",
         task_meta={
             "requested_llm_config_id": llm_config_id,
@@ -1135,7 +1135,7 @@ def summarize_job(
 
     summary_started_at = runtime.start(
         status=Job.Status.RUNNING,
-        log_message="Worker started summarize pipeline",
+        log_message="Worker started analyze pipeline",
         event="job.started",
         meta_updates=summary_start_meta,
     )
@@ -1154,8 +1154,8 @@ def summarize_job(
             failure_meta.setdefault("celery_task_id", summary_task_id)
             failure_meta["celery_task_status"] = "failed"
         failure_ts = runtime.fail(
-            error="No transcript found to summarize",
-            log_message="Summarize failed: transcript missing",
+            error="No transcript found to analyze",
+            log_message="Analyze failed: transcript missing",
             meta_updates=failure_meta,
             events=[("summary.failed", {})],
             task_meta_updates={"stage": "preflight", "reason": "missing_transcript"},
@@ -1170,13 +1170,13 @@ def summarize_job(
                 "celery_task_status": "failed" if summary_task_id else None,
             },
         )
-        raise RuntimeError("No transcript found to summarize")
+        raise RuntimeError("No transcript found to analyze")
 
     try:
-        summarize_config = SummarizeConfig.from_env()
+        analyze_config = AnalyzeConfig.from_env()
     except ValueError as exc:
         log.error(
-            "summarize config invalid",
+            "analyze config invalid",
             extra={"job_id": job_id, "case_id": case_id, "reason": str(exc)},
         )
         failure_meta = {**base_meta, "summary_status": "failed", "summary_error": str(exc)}
@@ -1185,7 +1185,7 @@ def summarize_job(
             failure_meta["celery_task_status"] = "failed"
         failure_ts = runtime.fail(
             error=str(exc),
-            log_message="Summarize configuration invalid",
+            log_message="Analyze configuration invalid",
             meta_updates=failure_meta,
             events=[("summary.failed", {"llm_config_id": llm_config_id})],
             task_meta_updates={"stage": "config", "reason": str(exc)},
@@ -1672,9 +1672,9 @@ def compose_job(
     runtime.emit("summary.started", llm_config_id=active_config_id)
     runtime.transition(task_meta_updates={"active_llm_config_id": active_config_id})
 
-    summarize_agent = SummarizeAgent(summarize_config)
+    analyze_agent = AnalyzeAgent(analyze_config)
     log.info(
-        "summarize job started",
+        "analyze job started",
         extra={
             "job_id": job_id,
             "case_id": case_id,
@@ -1696,9 +1696,9 @@ def compose_job(
         if payload:
             progress_payload["details"] = payload
         runtime.emit("summary.progress", **progress_payload)
-        if summarize_agent.config.debug:
+        if analyze_agent.config.debug:
             log.info(
-                "summarize stage",
+                "analyze stage",
                 extra={
                     "job_id": job_id,
                     "case_id": case_id,
@@ -1709,7 +1709,7 @@ def compose_job(
             )
 
     requested_providers = _collect_requested_providers(
-        summarize_config.provider_chain,
+        analyze_config.provider_chain,
         config_provider_chain,
         config_stage_map,
     )
@@ -1732,7 +1732,7 @@ def compose_job(
                     )
 
     try:
-        result = summarize_agent.summarize(
+        result = analyze_agent.analyze(
             input=transcript,
             case_id=case_id,
             case_dir=case_dir,
@@ -1746,7 +1746,7 @@ def compose_job(
     except Exception as exc:
         error_message = str(exc)
         log.error(
-            "summarize job failed",
+            "analyze job failed",
             extra={"job_id": job_id, "case_id": case_id, "error": error_message},
         )
         failure_meta = {**base_meta, "summary_status": "failed", "summary_error": error_message}
@@ -1755,7 +1755,7 @@ def compose_job(
             failure_meta["celery_task_status"] = "failed"
         failure_ts = runtime.fail(
             error=error_message,
-            log_message=f"Summarize failed: {error_message}",
+            log_message=f"Analyze failed: {error_message}",
             meta_updates=failure_meta,
             events=[("summary.failed", {"llm_config_id": active_config_id, "details": {"stage": "runtime"}})],
             task_meta_updates={"error": error_message, "stage": "runtime"},
@@ -1795,7 +1795,7 @@ def compose_job(
         meta_updates["celery_task_status"] = "succeeded"
 
     finished_ts = runtime.succeed(
-        log_message="Summarize pipeline completed",
+        log_message="Analyze pipeline completed",
         meta_updates=meta_updates,
         events=[
             (

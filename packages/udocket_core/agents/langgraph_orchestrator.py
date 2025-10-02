@@ -15,7 +15,7 @@ except Exception:  # pragma: no cover - graceful fallback
 NodeCallable = Callable[[MutableMapping[str, Any]], MutableMapping[str, Any] | None]
 
 
-class SummarizeNodeImpl(Protocol):
+class AnalyzeNodeImpl(Protocol):
     def input_discovery(self, state: MutableMapping[str, Any]) -> MutableMapping[str, Any] | None: ...
     def parse_transcript(self, state: MutableMapping[str, Any]) -> MutableMapping[str, Any] | None: ...
     def context_builder(self, state: MutableMapping[str, Any]) -> MutableMapping[str, Any] | None: ...
@@ -28,7 +28,7 @@ class SummarizeNodeImpl(Protocol):
 
 
 @dataclass
-class SummarizeGraph:
+class AnalyzeGraph:
     graph: Any
     entry: str = "input_discovery"
     nodes: Iterable[str] = field(default_factory=lambda: [])
@@ -40,8 +40,8 @@ class SummarizeGraph:
         return self.graph.invoke(starter)
 
 
-def build_summarize_graph(impl: SummarizeNodeImpl) -> SummarizeGraph:
-    """Compile a LangGraph state machine for the Summarize pipeline.
+def build_analyze_graph(impl: AnalyzeNodeImpl) -> AnalyzeGraph:
+    """Compile a LangGraph state machine for the Analyze pipeline.
 
     Raises:
         RuntimeError: if langgraph is not installed in the environment.
@@ -50,7 +50,7 @@ def build_summarize_graph(impl: SummarizeNodeImpl) -> SummarizeGraph:
     if StateGraph is None or END is None:
         raise RuntimeError("langgraph not installed")
 
-    logging.getLogger("udocket.summarize.agent").debug(
+    logging.getLogger("udocket.analyze.agent").debug(
         "langgraph.compile.start",
         extra={"nodes": [
             "input_discovery",
@@ -87,11 +87,11 @@ def build_summarize_graph(impl: SummarizeNodeImpl) -> SummarizeGraph:
     graph.add_edge(node_order[-1], END)
 
     compiled = graph.compile()
-    logging.getLogger("udocket.summarize.agent").debug(
+    logging.getLogger("udocket.analyze.agent").debug(
         "langgraph.compile.complete",
         extra={"entry": "input_discovery", "node_count": len(node_order)},
     )
-    return SummarizeGraph(compiled, entry="input_discovery", nodes=node_order)
+    return AnalyzeGraph(compiled, entry="input_discovery", nodes=node_order)
 
 
 _LANGGRAPH_DEBUG_ENV = {"1", "true", "yes", "on"}
@@ -103,7 +103,7 @@ def enable_langgraph_debug_logging(force: bool = False) -> None:
     """Ensure langgraph/langchain loggers emit DEBUG output to the console.
 
     This respects the :envvar:`LANGGRAPH_DEBUG` flag and can also be forced
-    programmatically when a caller enables verbose summarizer tracing.
+    programmatically when a caller enables verbose analyzer tracing.
     """
 
     global _LANGGRAPH_DEBUG_INITIALIZED
@@ -124,8 +124,8 @@ def enable_langgraph_debug_logging(force: bool = False) -> None:
         "langchain_core",
         "langchain.text_splitter",
         "langchain.schema",
-        "udocket.summarize.pipeline",
-        "udocket.summarize.agent",
+        "udocket.analyze.pipeline",
+        "udocket.analyze.agent",
     ):
         scoped_logger = logging.getLogger(name)
         if scoped_logger.level > logging.DEBUG:
@@ -136,8 +136,8 @@ def enable_langgraph_debug_logging(force: bool = False) -> None:
 
 
 __all__ = [
-    "SummarizeGraph",
-    "SummarizeNodeImpl",
-    "build_summarize_graph",
+    "AnalyzeGraph",
+    "AnalyzeNodeImpl",
+    "build_analyze_graph",
     "enable_langgraph_debug_logging",
 ]

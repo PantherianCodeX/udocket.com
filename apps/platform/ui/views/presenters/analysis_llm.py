@@ -8,7 +8,7 @@ from django.urls import reverse
 
 from apps.platform.cases.models import Case
 from packages.udocket_core.agents.compose import COMPOSE_STAGE_PROFILES
-from packages.udocket_core.agents.summarize_lib import SUMMARIZE_STAGE_PROFILES, SummarizeConfig
+from packages.udocket_core.agents.analyze_lib import SUMMARIZE_STAGE_PROFILES, AnalyzeConfig
 from packages.udocket_core.llm import load_llm_settings
 
 from apps.platform.operations.llm import (
@@ -185,9 +185,9 @@ def _configured_stages(stage_configs: List[Dict[str, Any]], stage_map: Dict[str,
 
 def build_analysis_llm_context(case: Case, *, return_url: str) -> Dict[str, Dict[str, Any]]:
     try:
-        summarize_cfg = SummarizeConfig.from_env()
+        analyze_cfg = AnalyzeConfig.from_env()
     except Exception:  # noqa: BLE001
-        summarize_cfg = SummarizeConfig()
+        analyze_cfg = AnalyzeConfig()
 
     llm_settings = load_llm_settings()
     provider_catalog = load_provider_catalog()
@@ -199,7 +199,7 @@ def build_analysis_llm_context(case: Case, *, return_url: str) -> Dict[str, Dict
         provider_credentials=provider_credentials,
     )
 
-    default_chain = list(summarize_cfg.provider_chain or ["azure"])
+    default_chain = list(analyze_cfg.provider_chain or ["azure"])
 
     def _build_target(target: str) -> Dict[str, Any]:
         config_list = get_org_llm_configurations(str(case.organization_id), target=target)

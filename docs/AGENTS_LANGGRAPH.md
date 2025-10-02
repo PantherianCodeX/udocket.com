@@ -82,7 +82,7 @@ header_meta: dict
 segments: list[dict]  # {ts: float|None, speaker: str|None, text: str}
 intake: dict          # case fields (position, court, division, etc.)
 outline: dict | None
-timeline_seeds: list[dict] | None
+timeline_seeds: dict | None  # {"events": [...]} each event carries stable uuid/id fields
 entity_hints: dict | None
 draft_md: str | None
 final_md: str | None
@@ -117,7 +117,7 @@ attempts: dict[str, int]
 
 - `build_timeline_seeds` (Azure JSON schema)
   - In: segments
-  - Out: `timeline_seeds` (array of events)
+  - Out: `timeline_seeds` (object with `events` array)
 
 - `build_entity_hints` (Azure JSON schema)
   - In: segments
@@ -138,30 +138,30 @@ attempts: dict[str, int]
 
 ## Prompt Principles
 - Shared system prompt: Canadian paralegal assistant. Use only provided info. Do not fabricate. Return exact schema/Markdown requested.
-- JSON stages use response_format: json_schema with schemas defined in the Summarize agent AGENTS.
+- JSON stages use response_format: json_schema with schemas defined in the Analyze agent AGENTS.
 - Include compact context: intake brief + a bounded window of diarized segments (chunk and slide if needed; keep token limits configurable).
 
 
 ## Security & Locality
 - Validate endpoint hostnames; deny non‑Canadian regions.
 - Mask PII in ops logs; do not log raw prompts unless `DEBUG=1`.
-- Respect upstream duration limits; summarizer should process text only.
+- Respect upstream duration limits; analyzer should process text only.
 
 
 ## Integration Points
 - Celery tasks
   - Transcription: `transcribe_job` (exists)
-  - Summarize: `summarize_job` → call SummarizeAgent; write artifacts and ops logs, register CaseArtifact, emit websocket.
+- Analyze: `analyze_job` → call AnalyzeAgent; write artifacts and ops logs, register CaseArtifact, emit websocket.
   - Timeline: consume `timeline_seeds` if present.
   - Graph: consume `entity_hints` if present.
 
 - UI
-  - Summarize panel already wired; ensure artifact titles and download links reflect new outputs.
+  - Analyze panel already wired; ensure artifact titles and download links reflect new outputs.
 
 
 ## Implementation Plan
-1) Implement `packages/udocket_core/agents/summarize_lib.py` (config, agent, pipeline, Azure REST client).
-2) Update `apps/platform/operations/tasks.py:summarize_job` to use SummarizeAgent, pass intake fields.
+1) Implement `packages/udocket_core/agents/analyze_lib.py` (config, agent, pipeline, Azure REST client).
+2) Update `apps/platform/operations/tasks.py:analyze_job` to use AnalyzeAgent, pass intake fields.
 3) Ensure versioned outputs and ops logs; register CaseArtifact for summary.
 4) Extend timeline/graph tasks to optionally read `timeline_seeds`/`entity_hints` if present.
 5) Add unit tests for transcript parsing, versioned filenames, and schema shapes; keep flow test passing without Azure.
@@ -177,7 +177,7 @@ except Exception:  # optional dependency
     StateGraph = None
     END = None
 
-def build_summarize_graph(impl):
+def build_analyze_graph(impl):
     # `impl` provides python callables for each node, operating on a mutable dict state
     if StateGraph is None:
         raise RuntimeError("langgraph not installed")

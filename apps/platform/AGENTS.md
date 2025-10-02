@@ -64,7 +64,7 @@ Scope: this file governs contributions across `apps/platform/` (accounts, author
 - Tests avoid executing external services; mock Azure and blob uploads; exercise task code directly when feasible (see tests/test_platform_flow.py:18).
 
 ## Analysis & Compose
-- Summary task: writes outline/summary/staff report under `analysis/` with ops meta/audit.
+- Analyze task: writes outline/summary/staff report/timeline seeds/entity hints under `analysis/` with ops meta/audit.
 - Compose task (target=`compose`): assembles final deliverables and owns timeline/graph generations internally (LLM-only). Artifacts:
   - `analysis/<job_id>__compose_client_v1.(md|docx)` and `analysis/<job_id>__compose_lawyer_v1.(md|docx)`
   - `analysis/<job_id>__timeline_v2.(json|html|png)` and `analysis/<job_id>__graph_v2.(json|html|png)`
@@ -73,7 +73,7 @@ Scope: this file governs contributions across `apps/platform/` (accounts, author
 - Emit `send_case_update(..., event="artifact.created", kind=<type>, job_id=<id>)` after writing artifacts to notify UI modules.
 
 ## Parent/Child Job Actions & Approvals
-- Parent rows represent a tool (Transcribe, Summarize, Compose). Child rows capture steps (Upload → Convert → Agent → Manual/Agent Edit).
+- Parent rows represent a tool (Transcribe, Analyze, Compose). Child rows capture steps (Upload → Convert → Agent → Manual/Agent Edit).
 - Parent status reflects the next blocking child action; cancelled children skip; pending edits keep parent pending.
 - Manual Edit and Agent Edit create child tasks on save and require Reviewer approval to promote the version into the parent.
 - Text artifact modal viewer must expose version history and comparison by default.

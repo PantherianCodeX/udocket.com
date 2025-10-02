@@ -34,7 +34,7 @@ This roadmap consolidates every planning artefact in `docs/`, the agents guides,
 
 ### Phase 1 – Tool Platform Standardisation
 - **ToolDefinition registry (done)**: backend dataclass describing key, label, permissions, LLM target, job endpoint, artifacts, editors, alerts support. Consumed by `build_tool_panels`/`analysis_modules_context` to avoid ad-hoc dictionaries. Implemented in `apps/platform/ui/views/presenters/tool_registry.py` with presenters updated to hydrate panels from the registry.
-- **Shared panel layout (done)**: create `_tool_panel.html` for consistent header, controls, downloads, history, alerts, approvals; refactor Intake, Transcribe, Summarize, and Compose panels to extend it. Consolidate `_llm_controls.html`, status pills, job queue buttons, downloads menu across tools. Shared layout now lives at `apps/platform/ui/templates/platform_ui/tools/components/_tool_panel.html`; Timeline panel is being retired as compose absorbs that workflow.
+- **Shared panel layout (done)**: create `_tool_panel.html` for consistent header, controls, downloads, history, alerts, approvals; refactor Intake, Transcribe, Analyze, and Compose panels to extend it. Consolidate `_llm_controls.html`, status pills, job queue buttons, downloads menu across tools. Shared layout now lives at `apps/platform/ui/templates/platform_ui/tools/components/_tool_panel.html`; Timeline panel is being retired as compose absorbs that workflow.
 - **ToolRun data model**: represent parent ToolRun (e.g., Transcribe) with child steps (Upload → Convert → Agent → Manual/Agent Edit) using consistent statuses; update presenters, tables, websocket payloads.
 - **Modal upgrades**: extend `components/modals/text_modal.html` for version list, diff toggle, approval actions; reuse for transcripts, summary outputs, compose deliverables, Manual/Agent edits.
 - **Manual Edit & Agent Edit tooling**: Manual Edit provides a textual editor saving proposed versions; Agent Edit offers chat-powered modifications. Both create child ToolRuns requiring approval per reviewer policy.
@@ -42,7 +42,7 @@ This roadmap consolidates every planning artefact in `docs/`, the agents guides,
 
 ### Phase 2 – Core Deliverables & Staff Workflow
 - **Compose Agent** (root `AGENTS.md`, docs/ROADMAP.md, AGENTS_LANGGRAPH): LLM-only pipeline producing client (grade-6 voice) and lawyer (professional) Markdown + DOCX deliverables, embedding timeline/graph assets (`timeline_v2.*`, `graph_v2.*`) with ops/audit logs.
-- **Summarize Enhancements** (`packages/udocket_core/agents/summarize/AGENTS.md`): staff report artifact, discrepancy detector generating alerts, speaker mapping proposals with approval, removal of timeline/entity seeding (now Compose).
+- **Analyze Enhancements** (`packages/udocket_core/agents/analyze/AGENTS.md`): staff report artifact, discrepancy detector generating alerts, speaker mapping proposals with approval, removal of timeline/entity seeding (now Compose).
 - **Questionnaire Tool & Interview Hub**: intake LLM tool with per-org question seeds, jobs history, Manual/Agent edits, Markdown artifact, transcript completion score; per-case interview page with live checklist, notes, call logging, questionnaire links, ops audit entries.
 - **Alert Tool**: allow LLMs/staff to raise alerts (severity, category, message, action). Display on case banner & Alerts tab; audit everything. Acknowledgement deferred for future roadmap.
 - **Parent/Child UI & Approvals**: parent rows show blocking child actions; pending edits set parent to waiting; cancelled children ignored. Reviewer-configurable approvals promote Manual/Agent edits; modal viewers expose version history & diffs.
@@ -70,7 +70,7 @@ This roadmap consolidates every planning artefact in `docs/`, the agents guides,
 - **Future enhancements**: additional Compose variants, guardian policy wizards, pipeline health telemetry.
 
 ## Agents & LangGraph Alignment
-- Maintain LangGraph personas and node design (docs/AGENTS_LANGGRAPH.md) for Summarize/Compose orchestration; optional dependency via `packages/udocket_core/agents/langgraph_orchestrator.py`.
+- Maintain LangGraph personas and node design (docs/AGENTS_LANGGRAPH.md) for Analyze/Compose orchestration; optional dependency via `packages/udocket_core/agents/langgraph_orchestrator.py`.
 - Shared state should capture all artifacts (summary, staff report, timeline, graph, compose outputs) plus intake, alerts, approvals.
 - Prompts must enforce Canadian residency, schema compliance, and deterministic outputs; JSON stages leverage response-format schemas.
 - Legacy LangGraph spec mentions offline summarisation fallback; per current policy we run LLM-only in production and reserve local fallback strictly for developer environments if ever enabled.

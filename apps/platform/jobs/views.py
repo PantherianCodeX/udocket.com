@@ -37,7 +37,7 @@ from apps.platform.operations.tasks import transcribe_job
 from apps.platform.operations.channels import send_job_update
 from apps.platform.operations.audit import emit as audit_emit
 from django.db import transaction
-from apps.platform.operations.tasks import summarize_job, timeline_job, graph_job, compose_job
+from apps.platform.operations.tasks import analyze_job, timeline_job, graph_job, compose_job
 from apps.platform.tenancy import scope_jobs
 from apps.platform.operations.storage import ensure_case_dirs, ops_dir as storage_ops_dir
 from apps.platform.operations.utils import append_job_log, read_job_meta, update_job_meta
@@ -1023,7 +1023,7 @@ class JobViewSet(viewsets.ModelViewSet):
             "job_kind": "summary",
             "job_title": summary_title,
             "agent_type": "summary",
-            "agent_label": "Summarize",
+            "agent_label": "Analyze",
             "source_job_id": str(source_job.id),
             "source_job_title": source_label,
             "source_transcript_path": transcript_path,
@@ -1041,7 +1041,7 @@ class JobViewSet(viewsets.ModelViewSet):
             str(source_job.case_id),
             source_job.organization_id,
             str(summary_job.id),
-            f"Queued summarize job from transcription {source_job.id}",
+            f"Queued analyze job from transcription {source_job.id}",
         )
 
         send_job_update(
@@ -1051,7 +1051,7 @@ class JobViewSet(viewsets.ModelViewSet):
             case_id=str(summary_job.case_id),
         )
 
-        summarize_job.delay(
+        analyze_job.delay(
             case_id=str(summary_job.case_id),
             job_id=str(summary_job.id),
             llm_config_id=llm_config_id,

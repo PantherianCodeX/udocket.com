@@ -300,12 +300,12 @@ def analysis_modules_context(
 
     summary_module = build_module(
         key="summary",
-        label="Summarize",
+        label="Analyze",
         description="Generate layered summaries of transcripts with AI assistance.",
         artifacts=summary_artifacts,
-        empty_message="No summarize jobs yet. Generate one from the latest transcript.",
-        action_label="Queue summarize job",
-        success_label="Summarize queued",
+        empty_message="No analyze jobs yet. Generate one from the latest transcript.",
+        action_label="Queue analyze job",
+        success_label="Analyze queued",
     )
     compose_entries = sorted(
         compose_candidates.values(),
