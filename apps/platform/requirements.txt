@@ -1,52 +1,53 @@
 # Django core
-Django>=4.2,<4.3
-django-environ>=0.11
-pydantic-settings>=2.4,<3
+Django>=4.2.25,<4.3
+django-environ>=0.12.0
+pydantic-settings>=2.11.0,<3
 
 # API & schema
-djangorestframework>=3.14
-drf-spectacular>=0.26
-django-filter>=24.2
+djangorestframework>=3.16.1
+drf-spectacular>=0.28.0
+django-filter>=25.1
 
 # AuthN/Z
-django-guardian>=2.4
-rules>=3.4
-drf-access-policy>=1.5
-mozilla-django-oidc>=4.0
-djangorestframework-simplejwt[crypto]>=5.3
-psycopg[binary]>=3.1
+django-guardian>=3.2.0
+rules>=3.5
+drf-access-policy>=1.5.0
+mozilla-django-oidc>=4.0.1
+djangorestframework-simplejwt[crypto]>=5.5.1
+psycopg[binary]>=3.2.10
 
 # Realtime
-channels>=4.1
-channels-redis>=4.2
-asgiref>=3.8
-redis>=5.0
-daphne>=4.1
+channels>=4.3.1
+channels-redis>=4.3.0
+asgiref>=3.9.2
+redis>=6.4.0
+daphne>=4.2.1
 
 # Background jobs
-celery>=5.3
-django-celery-beat>=2.6
-django-celery-results>=2.5
-PyYAML>=6.0
-azure-storage-blob>=12.19
-azure-cognitiveservices-speech>=1.38
+celery>=5.5.3
+django-celery-beat>=2.8.1
+django-celery-results>=2.6.0
+PyYAML>=6.0.3
+azure-storage-blob>=12.26.0
+azure-cognitiveservices-speech>=1.46.0
 
 # Integrity / audit helpers
-django-auditlog>=2.3
-django-simple-history>=3.5
-django-cleanup>=8.1
-django-anymail[mailgun]>=10.3
-django-axes>=6.5
+django-auditlog>=3.2.1
+django-simple-history>=3.10.1
+django-cleanup>=9.0.0
+django-anymail[mailgun]>=13.1
+django-axes>=8.0.0
 
 # Dev / testing
-pytest>=8.2
-pytest-django>=4.7
-pytest-asyncio>=0.24
-factory-boy>=3.3
-model-bakery>=1.17
-mypy>=1.11
-django-stubs[compatible-mypy]>=5.0
-flake8>=7.1
-black>=24.8
-bandit>=1.7
-django-upgrade>=1.16
+pytest>=8.4.2
+pytest-django>=4.11.1
+pytest-asyncio>=1.2.0
+factory-boy>=3.3.3
+model-bakery>=1.20.5
+mypy>=1.18.2
+django-stubs[compatible-mypy]>=5.2.5
+djangorestframework-stubs>=3.16.4
+flake8>=7.3.0
+black>=25.9.0
+bandit>=1.8.6
+django-upgrade>=1.28.0

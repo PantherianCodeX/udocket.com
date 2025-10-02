@@ -8,7 +8,7 @@
 
 ## Recommended Strategy Before Enforcing Strict Mode
 1. **Add missing stub packages**
-   - Install `django-stubs`, `djangorestframework-stubs`, and `pytest-django-stubs` so Pyright recognizes Django managers, DRF clients, and pytest fixtures. The repository now carries `apps/platform/requirements-stubs.txt` to pin the latter two packages alongside the main requirements file.
+   - Install `django-stubs` and `djangorestframework-stubs` (bundled with the platform requirements) so Pyright recognizes Django managers and DRF clients. PyPI does not currently publish `pytest-django` stubs, so focus on annotating fixtures directly until an official stub package is available.
    - Configure `pyrightconfig.json` to include any local stub directories if we add custom protocol definitions.
 
 2. **Annotate pytest fixtures explicitly**
