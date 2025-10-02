@@ -32,7 +32,10 @@ def test_compose_agent_creates_artifacts(tmp_path, monkeypatch):
     stage_outputs = {
         "compose.context_builder": ({"parties": [], "issues": []}, {"prompt_tokens": 10, "completion_tokens": 5}, "stub"),
         "compose.timeline_builder": ({"revision": "v2", "events": []}, {"prompt_tokens": 8, "completion_tokens": 4}, "stub"),
+        "compose.timeline_summary": ("## Key Milestones\n- Item", {"prompt_tokens": 4, "completion_tokens": 3}, "stub"),
         "compose.graph_builder": ({"entities": [], "relationships": []}, {"prompt_tokens": 8, "completion_tokens": 4}, "stub"),
+        "compose.entity_brief": ("## Primary Parties\n- Example", {"prompt_tokens": 5, "completion_tokens": 3}, "stub"),
+        "compose.graph_visual": ({"embed_html": "<div></div>", "alt_text": "Graph"}, {"prompt_tokens": 4, "completion_tokens": 2}, "stub"),
         "compose.client_brief": ("# Client Brief", {"prompt_tokens": 12, "completion_tokens": 6}, "stub"),
         "compose.lawyer_brief": ("# Lawyer Brief", {"prompt_tokens": 12, "completion_tokens": 6}, "stub"),
         "compose.qa_review": ({"status": "ok"}, {"prompt_tokens": 6, "completion_tokens": 3}, "stub"),
@@ -57,6 +60,9 @@ def test_compose_agent_creates_artifacts(tmp_path, monkeypatch):
     artifacts = result.artifacts
     assert artifacts.timeline_file and artifacts.timeline_file.exists()
     assert artifacts.graph_file and artifacts.graph_file.exists()
+    assert artifacts.timeline_summary and artifacts.timeline_summary.exists()
+    assert artifacts.entity_brief and artifacts.entity_brief.exists()
+    assert artifacts.graph_visual and artifacts.graph_visual.exists()
     assert artifacts.client_markdown and artifacts.client_markdown.exists()
     assert artifacts.lawyer_markdown and artifacts.lawyer_markdown.exists()
     assert artifacts.client_docx and artifacts.client_docx.exists()
@@ -123,3 +129,33 @@ def test_normalize_graph_payload_preserves_uuid():
     assert entity["id"] == "entity-1"
     assert relation["uuid"] == "rel-uuid-1"
     assert relation["id"] == "rel-1"
+
+
+def test_compose_prompts_include_case_metadata():
+    agent = ComposeAgent(ComposeConfig(provider_chain=["stub"], debug=True))
+
+    system_prompt, user_prompt, response_schema = agent._build_prompts(
+        stage_key="compose.context_builder",
+        transcript_text="",
+        summary_markdown="",
+        summary_data={},
+        timeline_seeds=[],
+        entity_hints={},
+        staff_report="",
+        case_brief={},
+        timeline_payload={},
+        graph_payload={},
+        intake={"court_level": "APPEAL"},
+        case_metadata={"case_title": "Example Case", "case_id": "CASE-123"},
+        timeline_summary="",
+        entity_brief="",
+        graph_visual={},
+        attachments=[],
+        transcript_parse=None,
+        profile=None,
+        client_markdown="",
+        lawyer_markdown="",
+    )
+
+    assert "Example Case" in user_prompt
+    assert "case_metadata" in user_prompt

@@ -6,18 +6,19 @@ This guide covers the Compose agent pipeline that generates case deliverables (c
 - Consume approved Analyze outputs (summary JSON/Markdown, timeline seeds, entity hints, case brief) plus transcript excerpts and intake metadata.
 - Produce deterministic artifacts housed under `storage/media/cases/<CASE>/analysis/` with `_vN` suffix versioning and append-only ops logs under `ops/`.
 - Maintain stable UUIDs for every structured record (timeline events, entities, relationships) and reserve user-facing titles for presenter helpers via `unique_title`.
+- Hydrate stages with the current case metadata (case identifiers, organization, job titles) alongside Analyze outputs so prompts stay grounded in the matter context.
 
 ## Stage Plan
 The Compose pipeline runs sequential stages. Stage keys align with `config/llm_assignments.json` and `packages/udocket_core/agents/compose/profiles.py`.
 
 | Stage key | Role | Inputs | Output | Notes |
 |-----------|------|--------|--------|-------|
-| `compose.context_builder` | Case Brief Synthesizer | Intake payload, summary JSON/Markdown, staff report, transcript excerpt | JSON case brief (`parties`, `issues`, `posture`, `risks`, `next_steps`, `key_facts`) | Must return structured JSON; feeds downstream prompts. |
-| `compose.timeline_builder` | Timeline Author | Case brief, timeline seeds, summary data, transcript excerpt | `timeline_v2` JSON `{"events": [...]}` | Preserve provided `id`/`uuid` values when present; derive UUID5 otherwise. |
-| `compose.graph_builder` | Relationship Cartographer | Case brief, entity hints, timeline, summary data, transcript excerpt | Graph JSON `{entities, relationships}` | Every entity/relationship returns stable `uuid` + `id`; include evidence pointers. |
-| `compose.client_brief` | Client Brief Drafter | Case brief, timeline, graph, summary Markdown, staff report, intake | Markdown deliverable at grade-six reading level | Tone: empathetic/explanatory. |
-| `compose.lawyer_brief` | Counsel Brief Drafter | Case brief, timeline, graph, summary Markdown | Professional Markdown with issue/evidence organization | Lower temperature (`COMPOSE_LAWYER_TEMPERATURE`). |
-| `compose.qa_review` | QA Reviewer | Case brief, timeline, graph, client & lawyer Markdown | JSON QA payload (`status`, `alerts`, `recommendations`) | Temperature forced to 0; no generative text. |
+| `compose.context_builder` | Case Brief Synthesizer | Intake payload, case metadata, summary JSON/Markdown, staff report, transcript excerpt | JSON case brief (`parties`, `issues`, `posture`, `risks`, `next_steps`, `key_facts`) | Must return structured JSON; feeds downstream prompts. |
+| `compose.timeline_builder` | Timeline Author | Case brief, timeline seeds, case metadata, summary data, transcript excerpt | `timeline_v2` JSON `{"events": [...]}` | Preserve provided `id`/`uuid` values when present; derive UUID5 otherwise. |
+| `compose.graph_builder` | Relationship Cartographer | Case brief, entity hints, timeline, case metadata, summary data, transcript excerpt | Graph JSON `{entities, relationships}` | Every entity/relationship returns stable `uuid` + `id`; include evidence pointers. |
+| `compose.client_brief` | Client Brief Drafter | Case brief, timeline, graph, summary Markdown, staff report, intake, case metadata | Markdown deliverable at grade-six reading level | Tone: empathetic/explanatory. |
+| `compose.lawyer_brief` | Counsel Brief Drafter | Case brief, timeline, graph, summary Markdown, case metadata | Professional Markdown with issue/evidence organization | Lower temperature (`COMPOSE_LAWYER_TEMPERATURE`). |
+| `compose.qa_review` | QA Reviewer | Case brief, timeline, graph, client & lawyer Markdown, case metadata | JSON QA payload (`status`, `alerts`, `recommendations`) | Temperature forced to 0; no generative text. |
 
 All stages rely on Canadian-region Azure OpenAI deployments by default. Configure per-organization overrides through LLM assignments.
 
@@ -40,6 +41,9 @@ All stages rely on Canadian-region Azure OpenAI deployments by default. Configur
 - `analysis/<job_id>__timeline_v2.json`
 - `analysis/<job_id>__graph_v2.json`
 - `analysis/<job_id>__entities_v2.json` (entity list derived from graph payload)
+- `analysis/<job_id>__compose_timeline_v1.md` (timeline narrative)
+- `analysis/<job_id>__compose_entities_v1.md` (entity briefing)
+- `analysis/<job_id>__compose_graph_visual_v1.json` (graph embed instructions)
 - `analysis/<job_id>__compose_client_v1.{md,docx}`
 - `analysis/<job_id>__compose_lawyer_v1.{md,docx}`
 - Ops log: `ops/<job_id>__compose_log.json`

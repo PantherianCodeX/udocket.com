@@ -72,10 +72,37 @@
       ],
       "model": "gpt-4o-mini"
     },
+    "compose.timeline_summary": {
+      "target": "compose",
+      "label": "Timeline Narrative",
+      "description": "Summarizes the normalized timeline into a narrative section with key timestamps and parties.",
+      "providers": [
+        "azure"
+      ],
+      "model": "gpt-4o-mini"
+    },
     "compose.graph_builder": {
       "target": "compose",
       "label": "Graph Builder",
       "description": "Extracts entities and relationships with evidence links, grounding against analysis hints and timelines.",
+      "providers": [
+        "azure"
+      ],
+      "model": "gpt-4o-mini"
+    },
+    "compose.entity_brief": {
+      "target": "compose",
+      "label": "Entity Briefing",
+      "description": "Produces a concise briefing of principal entities, roles, and relationship highlights.",
+      "providers": [
+        "azure"
+      ],
+      "model": "gpt-4o-mini"
+    },
+    "compose.graph_visual": {
+      "target": "compose",
+      "label": "Graph Visual Planner",
+      "description": "Plans embeddable graph visuals with sizing guidance and accessibility copy.",
       "providers": [
         "azure"
       ],

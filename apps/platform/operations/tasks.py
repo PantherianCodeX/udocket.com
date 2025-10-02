@@ -1023,6 +1023,13 @@ def _case_intake_payload(case: Case | None) -> Dict[str, Any]:
             payload[field] = value.isoformat()
         else:
             payload[field] = value
+    payload.setdefault("case_id", str(case.id))
+    payload.setdefault("case_title", case.title)
+    if getattr(case, "organization", None) is not None:
+        payload.setdefault("organization_id", str(case.organization_id))
+        name = getattr(case.organization, "name", None)
+        if name:
+            payload.setdefault("organization_name", name)
     return payload
 
 
@@ -1420,6 +1427,25 @@ def compose_job(
             details=details,
         )
 
+    intake_payload = summary_meta.get("intake") if isinstance(summary_meta.get("intake"), dict) else None
+    if not intake_payload:
+        intake_payload = _case_intake_payload(job.case)
+
+    case_metadata: Dict[str, Any] = {
+        "case_id": case_id,
+        "case_title": job.case.title,
+        "compose_job_id": job_id,
+        "summary_job_id": summary_job_id,
+        "job_display_title": job.display_title or "",
+    }
+    if job.case.organization:
+        case_metadata["organization_id"] = str(job.case.organization_id)
+        case_metadata["organization_name"] = job.case.organization.name
+    if summary_markdown_path:
+        case_metadata["summary_markdown_file"] = summary_markdown_path.name
+    if summary_json_path:
+        case_metadata["summary_json_file"] = summary_json_path.name
+
     try:
         result = compose_agent.compose(
             case_id=case_id,
@@ -1431,7 +1457,8 @@ def compose_job(
             timeline_seed_path=timeline_seed_path,
             entity_hint_path=entity_hint_path,
             staff_report_path=staff_report_path,
-            intake=summary_meta.get("intake") if isinstance(summary_meta.get("intake"), dict) else None,
+            intake=intake_payload,
+            case_metadata=case_metadata,
             provider_chain=provider_chain,
             stage_map=stage_map,
             provider_credentials=provider_credentials,
@@ -1462,6 +1489,12 @@ def compose_job(
         meta_updates["graph_v2_file"] = str(artifacts.graph_file)
     if artifacts.entities_file:
         meta_updates["entities_v2_file"] = str(artifacts.entities_file)
+    if artifacts.timeline_summary:
+        meta_updates["compose_timeline_summary"] = str(artifacts.timeline_summary)
+    if artifacts.entity_brief:
+        meta_updates["compose_entity_brief"] = str(artifacts.entity_brief)
+    if artifacts.graph_visual:
+        meta_updates["compose_graph_visual"] = str(artifacts.graph_visual)
     if artifacts.client_markdown:
         meta_updates["compose_client_markdown"] = str(artifacts.client_markdown)
     if artifacts.lawyer_markdown:
@@ -1537,6 +1570,33 @@ def compose_job(
         title_hint="Lawyer deliverable (DOCX)",
         metadata={
             "format": "docx",
+            "source_summary": summary_source_name,
+        },
+    )
+    _create_artifact(
+        kind="COMPOSE",
+        path=artifacts.timeline_summary,
+        title_hint="Timeline narrative",
+        metadata={
+            "format": "markdown",
+            "source_summary": summary_source_name,
+        },
+    )
+    _create_artifact(
+        kind="COMPOSE",
+        path=artifacts.entity_brief,
+        title_hint="Entity briefing",
+        metadata={
+            "format": "markdown",
+            "source_summary": summary_source_name,
+        },
+    )
+    _create_artifact(
+        kind="COMPOSE",
+        path=artifacts.graph_visual,
+        title_hint="Graph visual embed",
+        metadata={
+            "format": "json",
             "source_summary": summary_source_name,
         },
     )

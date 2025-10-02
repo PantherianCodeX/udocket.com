@@ -354,6 +354,9 @@ class ComposeArtifacts:
     lawyer_markdown: Optional[Path] = None
     client_docx: Optional[Path] = None
     lawyer_docx: Optional[Path] = None
+    timeline_summary: Optional[Path] = None
+    entity_brief: Optional[Path] = None
+    graph_visual: Optional[Path] = None
 
 
 @dataclass
@@ -385,6 +388,7 @@ class ComposeAgent:
         entity_hint_path: Optional[Path] = None,
         staff_report_path: Optional[Path] = None,
         intake: Optional[Dict[str, Any]] = None,
+        case_metadata: Optional[Dict[str, Any]] = None,
         provider_chain: Optional[List[str]] = None,
         stage_map: Optional[Dict[str, Dict[str, Any]]] = None,
         provider_credentials: Optional[Dict[str, Dict[str, Any]]] = None,
@@ -449,7 +453,10 @@ class ComposeAgent:
         stage_order: List[Tuple[str, str]] = [
             ("compose.context_builder", "context"),
             ("compose.timeline_builder", "timeline"),
+            ("compose.timeline_summary", "timeline_summary"),
             ("compose.graph_builder", "graph"),
+            ("compose.entity_brief", "entity_brief"),
+            ("compose.graph_visual", "graph_visual"),
             ("compose.client_brief", "client"),
             ("compose.lawyer_brief", "lawyer"),
             ("compose.qa_review", "qa"),
@@ -462,6 +469,10 @@ class ComposeAgent:
         lawyer_markdown = ""
         qa_payload: Dict[str, Any] = {}
         used_providers: List[str] = []
+        case_metadata = dict(case_metadata or {})
+        timeline_summary_markdown = ""
+        entity_brief_markdown = ""
+        graph_visual_payload: Dict[str, Any] = {}
 
         def emit(stage: str, event: str, details: Optional[Dict[str, Any]] = None) -> None:
             if progress_callback is None:
@@ -473,8 +484,17 @@ class ComposeAgent:
             except Exception:  # pragma: no cover - defensive
                 self.logger.debug("progress callback failed", exc_info=True)
 
+        def _bucket_enabled(bucket: str) -> bool:
+            if bucket == "context":
+                return True
+            if bucket == "timeline_summary":
+                return "timeline" in requested_targets
+            if bucket in {"entity_brief", "graph_visual"}:
+                return "graph" in requested_targets
+            return bucket in requested_targets
+
         for stage_key, bucket in stage_order:
-            if bucket != "context" and bucket not in requested_targets:
+            if not _bucket_enabled(bucket):
                 continue
 
             emit(stage_key, "start")
@@ -495,6 +515,10 @@ class ComposeAgent:
                     timeline_payload=timeline_payload,
                     graph_payload=graph_payload,
                     intake=intake or {},
+                    case_metadata=case_metadata,
+                    timeline_summary=timeline_summary_markdown,
+                    entity_brief=entity_brief_markdown,
+                    graph_visual=graph_visual_payload,
                     attachments=attachments or [],
                 )
             except ComposeStageError:
@@ -508,8 +532,14 @@ class ComposeAgent:
                 context_payload = response  # type: ignore[assignment]
             elif stage_key == "compose.timeline_builder":
                 timeline_payload = _normalize_timeline_payload(response)  # type: ignore[assignment]
+            elif stage_key == "compose.timeline_summary":
+                timeline_summary_markdown = str(response)
             elif stage_key == "compose.graph_builder":
                 graph_payload = _normalize_graph_payload(response)  # type: ignore[assignment]
+            elif stage_key == "compose.entity_brief":
+                entity_brief_markdown = str(response)
+            elif stage_key == "compose.graph_visual":
+                graph_visual_payload = response if isinstance(response, Mapping) else {}
             elif stage_key == "compose.client_brief":
                 client_markdown = str(response)
             elif stage_key == "compose.lawyer_brief":
@@ -526,6 +556,11 @@ class ComposeAgent:
             timeline_file.write_text(json.dumps(timeline_payload, ensure_ascii=False, indent=2), encoding="utf-8")
             artifacts.timeline_file = timeline_file
 
+        if timeline_summary_markdown:
+            timeline_summary_file = next_versioned(analysis_dir / f"{job_id}__compose_timeline_v1.md")
+            timeline_summary_file.write_text(timeline_summary_markdown, encoding="utf-8")
+            artifacts.timeline_summary = timeline_summary_file
+
         if "graph" in requested_targets and graph_payload:
             entities = graph_payload.get("entities") if isinstance(graph_payload, Mapping) else None
             relationships = graph_payload.get("relationships") if isinstance(graph_payload, Mapping) else None
@@ -536,6 +571,16 @@ class ComposeAgent:
                 entities_file = next_versioned(analysis_dir / f"{job_id}__entities_v2.json")
                 entities_file.write_text(json.dumps({"entities": entities}, ensure_ascii=False, indent=2), encoding="utf-8")
                 artifacts.entities_file = entities_file
+
+        if entity_brief_markdown:
+            entity_brief_file = next_versioned(analysis_dir / f"{job_id}__compose_entities_v1.md")
+            entity_brief_file.write_text(entity_brief_markdown, encoding="utf-8")
+            artifacts.entity_brief = entity_brief_file
+
+        if graph_visual_payload:
+            graph_visual_file = next_versioned(analysis_dir / f"{job_id}__compose_graph_visual_v1.json")
+            graph_visual_file.write_text(json.dumps(graph_visual_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            artifacts.graph_visual = graph_visual_file
 
         if "client" in requested_targets and client_markdown:
             client_md = next_versioned(analysis_dir / f"{job_id}__compose_client_v1.md")
@@ -570,6 +615,10 @@ class ComposeAgent:
             "timeline": timeline_payload,
             "graph": graph_payload,
             "qa": qa_payload,
+            "case_metadata": case_metadata,
+            "timeline_summary": timeline_summary_markdown,
+            "entity_brief": entity_brief_markdown,
+            "graph_visual": graph_visual_payload,
             "provider_chain": used_providers,
             "stage_usage": state_usage,
             "status": "ok",
@@ -617,6 +666,10 @@ class ComposeAgent:
         timeline_payload: Mapping[str, Any],
         graph_payload: Mapping[str, Any],
         intake: Mapping[str, Any],
+        case_metadata: Mapping[str, Any],
+        timeline_summary: str,
+        entity_brief: str,
+        graph_visual: Mapping[str, Any],
         attachments: Sequence[Mapping[str, Any]],
     ) -> Tuple[Any, Dict[str, int], str]:
         assignment = self.settings.stage(stage_key)
@@ -688,6 +741,10 @@ class ComposeAgent:
                 timeline_payload=timeline_payload,
                 graph_payload=graph_payload,
                 intake=intake,
+                case_metadata=case_metadata,
+                timeline_summary=timeline_summary,
+                entity_brief=entity_brief,
+                graph_visual=graph_visual,
                 attachments=attachments,
                 transcript_parse=transcript_parse,
                 profile=profile,
@@ -736,6 +793,10 @@ class ComposeAgent:
         timeline_payload: Mapping[str, Any],
         graph_payload: Mapping[str, Any],
         intake: Mapping[str, Any],
+        case_metadata: Mapping[str, Any],
+        timeline_summary: str,
+        entity_brief: str,
+        graph_visual: Mapping[str, Any],
         attachments: Sequence[Mapping[str, Any]],
         transcript_parse,
         profile,
@@ -791,6 +852,7 @@ class ComposeAgent:
             }
             user_payload = {
                 "intake": intake,
+                "case_metadata": case_metadata,
                 "summary": summary_data,
                 "summary_markdown": summary_markdown,
                 "staff_report": staff_report,
@@ -847,6 +909,7 @@ class ComposeAgent:
                 "timeline_seeds": timeline_seeds,
                 "summary": summary_data,
                 "transcript_excerpt": transcript_excerpt,
+                "case_metadata": case_metadata,
             }
             user_prompt = (
                 "Produce timeline_v2 JSON describing the proceedings. Each event must reference "
@@ -856,6 +919,20 @@ class ComposeAgent:
                 "cross-link results. Keep the order chronological."
             ) + "\n\n" + json.dumps(payload, ensure_ascii=False)
             return base_system, user_prompt, response_schema
+
+        if stage_key == "compose.timeline_summary":
+            payload = {
+                "case_metadata": case_metadata,
+                "timeline": timeline_payload,
+                "summary": summary_data,
+            }
+            user_prompt = (
+                "Create a Markdown narrative capturing the timeline."
+                " Include sections for 'Key Milestones' and 'Upcoming Deadlines' when applicable,"
+                " with bullet lists referencing timestamps in [mm:ss] format."
+                " Highlight speakers or parties for each item."
+            ) + "\n\n" + json.dumps(payload, ensure_ascii=False)
+            return base_system, user_prompt, None
 
         if stage_key == "compose.graph_builder":
             response_schema = {
@@ -918,12 +995,62 @@ class ComposeAgent:
                 "timeline": timeline_payload,
                 "summary": summary_data,
                 "transcript_excerpt": transcript_excerpt,
+                "case_metadata": case_metadata,
             }
             user_prompt = (
                 "Generate entities and relationships JSON. Include evidence references to transcript timestamps or timeline IDs."
                 " Preserve provided entity/relationship IDs when present and emit stable UUID values"
                 " (existing `uuid` or new UUID5 signatures). Every entity and relationship must have"
                 " both `id` and `uuid` fields."
+            ) + "\n\n" + json.dumps(payload, ensure_ascii=False)
+            return base_system, user_prompt, response_schema
+
+        if stage_key == "compose.entity_brief":
+            payload = {
+                "case_metadata": case_metadata,
+                "entity_hints": entity_hints,
+                "graph": graph_payload,
+                "timeline": timeline_payload,
+            }
+            user_prompt = (
+                "Draft a Markdown briefing summarizing principal entities, their roles, and notable relationships."
+                " Organize content into 'Primary Parties', 'Supporting Participants', and 'Key Relationships'."
+                " Reference timestamps or timeline event IDs when available."
+            ) + "\n\n" + json.dumps(payload, ensure_ascii=False)
+            return base_system, user_prompt, None
+
+        if stage_key == "compose.graph_visual":
+            response_schema = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "compose_graph_visual_response",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "embed_html": {"type": "string"},
+                            "alt_text": {"type": "string"},
+                            "size_hint": {
+                                "type": "object",
+                                "properties": {
+                                    "width": {"type": "string"},
+                                    "height": {"type": "string"},
+                                },
+                            },
+                            "notes": {"type": "string"},
+                        },
+                        "required": ["embed_html", "alt_text"],
+                    },
+                },
+            }
+            payload = {
+                "case_metadata": case_metadata,
+                "graph": graph_payload,
+                "existing_visual": graph_visual,
+            }
+            user_prompt = (
+                "Plan an embeddable relationship graph snippet."
+                " Return responsive HTML (max-width 100%), clear alt text summarizing the network,"
+                " and optional notes with styling guidance or next actions (PNG export, etc.)."
             ) + "\n\n" + json.dumps(payload, ensure_ascii=False)
             return base_system, user_prompt, response_schema
 
@@ -935,6 +1062,10 @@ class ComposeAgent:
                 "summary_text": summary_markdown,
                 "staff_report": staff_report,
                 "intake": intake,
+                "case_metadata": case_metadata,
+                "timeline_summary": timeline_summary,
+                "entity_brief": entity_brief,
+                "graph_visual": graph_visual,
             }
             user_prompt = (
                 "Draft a Markdown brief for the client in grade-six reading level. Include sections: Overview, Timeline Highlights, Key Issues, Next Steps."
@@ -947,6 +1078,10 @@ class ComposeAgent:
                 "timeline": timeline_payload,
                 "graph": graph_payload,
                 "summary_text": summary_markdown,
+                "case_metadata": case_metadata,
+                "timeline_summary": timeline_summary,
+                "entity_brief": entity_brief,
+                "graph_visual": graph_visual,
             }
             user_prompt = (
                 "Draft a professional Markdown brief for counsel. Organize by issue, reference timestamps, and list supporting evidence."
@@ -981,6 +1116,10 @@ class ComposeAgent:
                 "graph": graph_payload,
                 "client_markdown": client_markdown,
                 "lawyer_markdown": lawyer_markdown,
+                "case_metadata": case_metadata,
+                "timeline_summary": timeline_summary,
+                "entity_brief": entity_brief,
+                "graph_visual": graph_visual,
             }
             user_prompt = (
                 "Review the compose outputs for completeness and compliance. Respond with JSON describing status, alerts, and recommendations."
@@ -994,6 +1133,7 @@ class ComposeAgent:
             "compose.context_builder",
             "compose.timeline_builder",
             "compose.graph_builder",
+            "compose.graph_visual",
             "compose.qa_review",
         }:
             try:
@@ -1006,6 +1146,8 @@ class ComposeAgent:
                 raise ComposeStageError(stage_key, "Graph response must be an object")
             if stage_key == "compose.context_builder" and not isinstance(parsed, Mapping):
                 raise ComposeStageError(stage_key, "Context response must be an object")
+            if stage_key == "compose.graph_visual" and not isinstance(parsed, Mapping):
+                raise ComposeStageError(stage_key, "Graph visual response must be an object")
             return parsed
 
         if stage_key in {"compose.client_brief", "compose.lawyer_brief"}:
