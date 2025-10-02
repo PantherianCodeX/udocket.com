@@ -19,8 +19,10 @@ Scope: this file governs contributions across `apps/platform/` (accounts, author
 - Deterministic outputs and ops logging: align with root AGENTS.md — metadata JSON, human logs, and JSONL audit in `ops/`.
 
 ## Typing expectations
-- Adhere to `docs/typing_refactor_plan.md`. When you touch a module, bring it up to the stronger typing bar in the same PR.
+- Adhere to `docs/typing-roadmap.md` and `docs/typing_refactor_plan.md`. When you touch a module, raise its typing bar in the same PR.
+- For `apps/platform/operations/*`, CI runs with `disallow_untyped_defs`; do not introduce new untyped defs or `Any` returns.
 - Use `TypedDict`/`Protocol`/dataclasses for payloads instead of `dict[str, Any]`; avoid blanket ignores and casts to `Any`.
+- Annotate pytest fixtures (see `tests/AGENTS.md`) before adding new tests; never suppress pyright warnings in the UI layer.
 
 ## URL Prefixes & Routing (Tenancy)
 - UI, API, and websockets should be prefixed by organization slug: `/{org_slug}/...` and `/ws/{org_slug}/...`.

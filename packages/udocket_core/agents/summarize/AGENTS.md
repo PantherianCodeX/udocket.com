@@ -209,6 +209,7 @@ Stdout (success): `{ "status":"ok", "summary_file":"<abs_path>", "words":1234, "
 ## Testing
 - Unit: transcript parsing (diarized vs. plain), versioning behavior, schema shape validity.
 - Integration (platform): ensure platform flows surface configuration errors when required provider credentials are absent; add a gated E2E that runs against a configured provider (skipped by default).
+- Typing: adhere to `docs/typing-roadmap.md`; annotate new helper functions, replace `Any` payloads with precise structures, and remove redundant casts flagged by mypy/pyright.
 
 
 ## Roadmap

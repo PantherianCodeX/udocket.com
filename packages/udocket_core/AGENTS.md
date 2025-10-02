@@ -7,7 +7,12 @@ Scope: `packages/udocket_core/` (agents, audio, storage, logging). This is the c
 - Deterministic filesystem behavior and explicit APIs; return dataclasses for results.
 
 ## Typing expectations
-- Follow `docs/typing_refactor_plan.md`. New or modified modules must not increase mypy/pyright errors.
+- Mandatory reading: `docs/typing-roadmap.md` and `docs/typing_refactor_plan.md`.
+- CI enforces `mypy packages/udocket_core/logging` and `pyright packages/udocket_core/logging`. Keep that package free of `Any` and untyped defs.
+- Treat all `packages/udocket_core` modules as the first frontier for strict typing. When editing a file here:
+  - Remove legacy `# type: ignore` comments unless documented in the typing roadmap.
+  - Replace ad-hoc dicts/lists with `TypedDict`, `dataclass`, or `Protocol` wrappers.
+  - Use generic type parameters (`dict[str, str]` etc.) and never return `Any`.
 - Prefer precise types (TypedDict/Protocol/dataclasses/Enum) over `Any` and avoid blanket `# type: ignore`.
 
 ## Agents

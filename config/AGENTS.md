@@ -14,6 +14,7 @@ Scope: `config/` (shared pydantic settings loader) and Django settings under `ap
 ## Typing expectations
 - Enforce the strong typing policy in `docs/typing_refactor_plan.md` whenever you touch settings or configuration helpers.
 - Update Pydantic models and Django settings signatures so mypy/pyright stay clean; do not add ignores to work around `_env_file` or similar keyword usage.
+- Ensure new settings helpers are typed and compatible with pyright; consult `docs/typing-roadmap.md` before adding temporary ignores.
 
 ## URL Structure & Tenancy
 - Prefer organization‑prefixed routes for UI and API: `/{org_slug}/cases/...`, `/{org_slug}/jobs/...`, and websockets `/ws/{org_slug}/jobs/<id>/`.

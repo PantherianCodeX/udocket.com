@@ -17,6 +17,18 @@
       "problemMatcher": []
     },
     {
+      "label": "typecheck: mypy (core logging)",
+      "type": "shell",
+      "command": "mypy packages/udocket_core/logging",
+      "problemMatcher": []
+    },
+    {
+      "label": "typecheck: pyright (core logging)",
+      "type": "shell",
+      "command": "pyright packages/udocket_core/logging",
+      "problemMatcher": []
+    },
+    {
       "label": "pytest: current file (in compose platform)",
       "type": "shell",
       "command": "docker compose run --rm platform pytest -q /app/${relativeFile}",
@@ -44,4 +56,3 @@
     }
   ]
 }
-

@@ -184,6 +184,12 @@ Scope: everything beneath `apps/platform/ui/` (templates, views, presenters, sel
   - Copy affordances (`data-copy-*`)
   - HTMX swaps and `HX-Trigger` events
 
+## Typing Discipline
+- Follow `docs/typing-roadmap.md` when touching UI presenters, selectors, or tests.
+- Annotate view functions (`HttpRequest`, `HttpResponse`), context builders, and HTMX handlers. Replace `dict[str, Any]` payloads with `TypedDict` or dataclasses.
+- When tests reference fixtures like `client`, `settings`, or `monkeypatch`, import the corresponding types (`Client`, `MonkeyPatch`) and annotate parameters.
+- Do not introduce new `Any` suppressions; if Pyright complains, model the structure explicitly or add missing stubs as described in the typing roadmap.
+
 
 ## Do / Don’t
 - Do

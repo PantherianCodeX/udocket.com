@@ -134,12 +134,17 @@ The repository hosts agents that consume transcripts and emit analysis artifacts
 - Audit streams: `ops/ops_<agent>.jsonl`
 
 ## Coding Guidelines
-- Language: Python 3.11
-- Style: type-annotated functions; avoid one-letter names; no inline comments unless essential
-- Strong typing: follow `docs/typing_refactor_plan.md`; new or modified modules must leave mypy/pyright errors reduced or unchanged.
-- Dependencies: avoid heavyweight or networked services unless approved; prefer Azure services in Canadian regions
-- Error handling: fail fast with clear messages; write structured meta and human logs; never raise without logging
-- Version control: keep diffs minimal and focused; avoid unrelated refactors
+- Language: Python 3.11.
+- Style: type-annotated functions; avoid one-letter names; no inline comments unless essential.
+- Strong typing:
+  - Read and follow `docs/typing-roadmap.md` and `docs/typing_refactor_plan.md` before touching code.
+  - Per-module enforcement: `packages/udocket_core/logging` must remain mypy/pyright clean (CI enforces `mypy packages/udocket_core/logging` and `pyright packages/udocket_core/logging`). Do not introduce `Any` or untyped defs there.
+  - When editing other modules, remove `Any` usage, add precise types, and reduce pyright warnings in that scope. Never add `# type: ignore` without an accompanying TODO referencing the typing roadmap.
+  - Annotate pytest fixtures and helper lambdas per the typing roadmap; prefer `TypedDict`/`Protocol` for structured payloads.
+- Stub dependencies: install both `apps/platform/requirements.txt` and `apps/platform/requirements-stubs.txt` (see typing roadmap) so Pyright has Django/DRF/pytest annotations locally.
+- Dependencies: avoid heavyweight or networked services unless approved; prefer Azure services in Canadian regions.
+- Error handling: fail fast with clear messages; write structured meta and human logs; never raise without logging.
+- Version control: keep diffs minimal and focused; avoid unrelated refactors.
 
 ## Local Development
 - Start stack: `docker compose up --build`

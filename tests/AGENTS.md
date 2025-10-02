@@ -10,6 +10,7 @@ Scope: `tests/` covering the platform UI, APIs, and agents.
 - Celery/tasks: call task functions directly; do not rely on Celery runtime within unit tests (see tests/test_platform_flow.py:87).
 - UI fragments: when exercising HTMX views, pass `HX-Request: true` and assert returned partials and `HX-Trigger` headers where applicable.
 - Realtime events: validate websocket payloads include required keys per the event schema (type, event, job_id/status). Prefer lightweight channel consumer tests using Channels' test client.
+- Typing discipline: follow `docs/typing-roadmap.md` when adding or modifying tests. Import fixture types (e.g., `MonkeyPatch`, `Client`, `SettingsWrapper`) and annotate parameters; convert helper lambdas into typed callables or `TypedDict` definitions.
 
 ## E2E Transcription Tests
 - Location: `tests/e2e/test_transcribe_e2e.py`

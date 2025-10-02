@@ -35,6 +35,11 @@ Scope: `apps/platform/operations/` (tasks, storage paths, websocket updates, ops
 - Fail fast with clear logs; include actionable metadata in ops JSON (e.g., `error_code`, `error_message`).
 - Avoid raising without logging; rely on `JobRuntimeContext` to update status and provenance metadata.
 
+## Typing Expectations
+- This package runs under `disallow_untyped_defs` in `mypy.ini`; every new function must be fully annotated.
+- Follow `docs/typing-roadmap.md`: replace loose `dict[str, Any]` payloads with `TypedDict`/dataclasses and avoid new `# type: ignore` comments.
+- When patching tests that exercise operations, ensure fixtures are annotated (see `tests/AGENTS.md`).
+
 ## Patterns
 - If batch mode requires local WAV, normalize via core `normalize_audio` and persist the conversion reasons to ops JSON.
 - Prefer `_unique_*` helpers to create reproducible titles/labels (see `_unique_conversion_title`).
