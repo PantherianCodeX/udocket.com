@@ -18,7 +18,7 @@ Scope: everything beneath `apps/platform/ui/` (templates, views, presenters, sel
 - Templates root: `apps/platform/ui/templates/platform_ui/`
   - Base layout: `platform_ui/layouts/base.html` (apps/platform/ui/templates/platform_ui/layouts/base.html:1)
   - Components: `platform_ui/components/` (server-rendered fragments, modals, reusable HTML/JS assets)
-  - Tools: `platform_ui/tools/` (case tools such as transcribe, summary, timeline)
+- Tools: `platform_ui/tools/` (case tools such as transcribe, summary, compose)
   - Pages: dashboard, cases, jobs
 - Views root: `apps/platform/ui/views/` (HTTP endpoints and context builders)
   - Presenters: `views/presenters/` (pure formatting/aggregation helpers for UI shape)
@@ -32,9 +32,10 @@ Scope: everything beneath `apps/platform/ui/` (templates, views, presenters, sel
   - Base injects Tailwind CDN config, global copy‑to‑clipboard, modal/popover scripts, and styles.
   - Do not duplicate those resources in child templates.
 - Tools panel base (all tools share):
-  - Create a shared analysis/tools base template (planned: `platform_ui/tools/_panel_base.html`).
-  - Transcribe, Summarize, Timeline, and Relationships should inherit this base.
-  - The base defines: panel header (label/status/pill), left action area (form/buttons), right sidebar (latest artifact), and history section.
+  - Shared analysis/tools base template (`platform_ui/tools/_panel_base.html`).
+  - Transcribe, Summarize, Compose inherit this base. Timeline/Relationships are managed within Compose.
+  - The base defines: panel header (label/status/pill), left action area (form/buttons), right sidebar (latest artifact), and history (child job actions).
+  - LLM tool panel: common sub-layout for prompt configs, provider selection, job runs history, and Manual/Agent Edit affordances.
 - For modals, inherit from `platform_ui/components/modals/modal_base.html` and only override the relevant blocks.
   - Example pattern: `platform_ui/components/modals/text_modal.html` (apps/platform/ui/templates/platform_ui/components/modals/text_modal.html:1) extends the base and defines header/body/actions.
   - Specialized modals (e.g., transcript) extend `text_modal.html` (apps/platform/ui/templates/platform_ui/components/modals/transcript_modal.html:1).
@@ -139,12 +140,14 @@ Scope: everything beneath `apps/platform/ui/` (templates, views, presenters, sel
   - Use helpers in `views/transcripts.py` to resolve candidate paths and titles (`ensure_transcript_artifact`, `default_transcript_title`, `unique_transcript_title`).
   - Promote/update artifacts with metadata that records provenance (`created_via`, timestamps, user IDs where available).
 - Logs & metadata modals follow the same modal base; keep copy/download affordances wired via data‑attributes and reuse the styles.
+ - Text viewer: must expose version history and comparison. Manual Edit/Agent Edit create child tasks on save and show as pending until approved.
 
 
 ## Roadmap Alignment
 - Authorization is migrating toward policy‑based (Oso/Polar) plus Postgres RLS; continue to use `has_capability` and membership checks until policies land.
 - UI should prefer server‑rendered fragments with HTMX swaps, real‑time updates via Channels, and DRF endpoints for summaries/detail (see docs/ROADMAP.md:1).
-- Analysis panels (summary, timeline, relationships/graph) should follow artifact and ops logging conventions so the Admin UI can surface history consistently.
+- Analysis panels (summary, compose) should follow artifact and ops logging conventions so the Admin UI can surface history consistently.
+ - Intake adds a Questionnaire tool (LLM) with jobs history and edit approvals; Interview page aggregates live checklists and notes.
 
 
 ## Naming & Data Attributes

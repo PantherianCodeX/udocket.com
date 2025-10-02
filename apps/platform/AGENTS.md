@@ -61,9 +61,28 @@ Scope: this file governs contributions across `apps/platform/` (accounts, author
 - Start with focused unit tests for presenters/selectors and model utils, then integration tests for views and tasks.
 - Tests avoid executing external services; mock Azure and blob uploads; exercise task code directly when feasible (see tests/test_platform_flow.py:18).
 
-## Analysis Agents (summarize/timeline/graph)
-- Implement Celery tasks that read the latest transcript (or a specified one) and write artifacts under `analysis/` with per‑run ops meta and audit JSONL:
-  - Summarize: `<job_id>__summary_v1.md`, ops `<job_id>__summary_log.json`, audit `ops_summary.jsonl`
-  - Timeline: `<job_id>__timeline_v1.json`, ops `<job_id>__timeline_log.json`, audit `ops_timeline.jsonl`
-  - Entities/Graph: `<job_id>__entities_v1.json`, `<job_id>__graph_v1.json`, ops `<job_id>__graph_log.json`, audit `ops_graph.jsonl`
+## Analysis & Compose
+- Summary task: writes outline/summary/staff report under `analysis/` with ops meta/audit.
+- Compose task (target=`compose`): assembles final deliverables and owns timeline/graph generations internally (LLM-only). Artifacts:
+  - `analysis/<job_id>__compose_client_v1.(md|docx)` and `analysis/<job_id>__compose_lawyer_v1.(md|docx)`
+  - `analysis/<job_id>__timeline_v2.(json|html|png)` and `analysis/<job_id>__graph_v2.(json|html|png)`
+  - Ops: `ops/<job_id>__compose_log.json`, audit `ops/ops_compose.jsonl`
+- Existing timeline/graph tasks may temporarily wrap Compose sub-stages; prefer routing UI to Compose directly.
 - Emit `send_case_update(..., event="artifact.created", kind=<type>, job_id=<id>)` after writing artifacts to notify UI modules.
+
+## Parent/Child Job Actions & Approvals
+- Parent rows represent a tool (Transcribe, Summarize, Compose). Child rows capture steps (Upload → Convert → Agent → Manual/Agent Edit).
+- Parent status reflects the next blocking child action; cancelled children skip; pending edits keep parent pending.
+- Manual Edit and Agent Edit create child tasks on save and require Reviewer approval to promote the version into the parent.
+- Text artifact modal viewer must expose version history and comparison by default.
+
+## LLM Tool Panels & Questionnaire
+- All LLM tools share a common panel template with jobs history and Manual/Agent Edit actions.
+- Intake panel adds “Generate Questionnaire” (LLM) using per‑org seeds/forms; saves Markdown for interview use; computes transcript completion score.
+
+## Interview Page
+- Add a per-case Interview page: live checklists (consent/content), notes, call start/end logging, questionnaire access; append minimal ops JSONL.
+
+## Org & Reviewer Settings (file-driven defaults)
+- Seed defaults for roles (ensure Reviewer exists), reviewer policies (required counts, allowed roles per page/tool), DOCX template selection, alert thresholds, retention windows, questionnaire seeds, branding/theme.
+- Expose these in Org Settings; keep Canada-only region guard for now; TODO: design cross-provider region policy.

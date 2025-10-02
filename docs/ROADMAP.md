@@ -137,5 +137,72 @@ Progress To Date
   - Agents/LLM: extend shared chat client runtime as new providers are onboarded (ensure tests cover non-Azure adapters).
     - TODO: implement first-class chat clients for AWS Bedrock and Google Gemini providers in `packages/udocket_core/llm/runtime.py` so organization configs can activate them without Azure-specific fallbacks.
 
+
+Compose + Review & Edit Program (New)
+- Goal: unify final document assembly and review, migrate timeline/graph into Compose, and standardize approvals + artifact versioning.
+- Milestones:
+  1) Compose Agent (target="compose")
+     - Implement Compose pipeline (LLM-only) that consumes: summary.json, timeline JSON, graph JSON, intake, and attached artifacts (letters, statements, forms).
+     - Stages: input discovery → context builder → timeline (LLM) → graph (LLM) → drafting (audience variants: client grade-6 voice; lawyer professional) → QA & finalize → render (Markdown + DOCX) → ops/audit.
+     - Artifacts: `<job>__compose_client_v1.md/.docx`, `<job>__compose_lawyer_v1.md/.docx`; embed timeline/graph SVG/PNG; link JSON in ops.
+     - Templates: per-organization DOCX template with uDocket default fallback; configurable in Org Settings.
+  2) Migrate Timeline/Graph into Compose
+     - Remove timeline/graph generation from Summarize; Compose owns LLM timeline/graph sub-stages and their outputs (`timeline_v2.json/html/png`, `graph_v2.json/html/png`).
+     - Keep existing Timeline/Graph tasks as thin wrappers that delegate to Compose sub-stages (optional; may be removed once UI is switched).
+  3) Approvals & Versioning
+     - Manual Edit tool: creates a child job action on save, writes a new versioned artifact with diff metadata; requires Reviewer approval. Approval promotes the new version to the parent task’s current output.
+     - Agent Edit tool: interactive chat editor that modifies artifacts via prompts; identical approval/versioning semantics.
+     - Configurable reviewer policy: required reviewer count and allowed roles per page/tool, set in Org Settings; defaults seeded from file.
+     - Modal text viewer: standard version history access (browse/compare) for all text artifacts.
+  4) Parent/Child Job Actions
+     - Parent rows represent a tool (Transcribe, Summarize, Compose); children represent steps (e.g., Upload → Convert → Transcribe Agent → Manual Edit).
+     - Parent status reflects the next blocking child action; cancelled children are skipped.
+
+
+Summarize Enhancements (LLM-only)
+- Deliverables: standardize mandatory sections across outputs, including a Staff Report.
+- Staff Report: gaps/flags/discrepancies; questionnaire completion score; next steps. Stored as `analysis/<job>__staff_report_v1.md` + JSON payload.
+- Discrepancy detection: compare all intake/case fields to transcript; categorize severity and emit alerts.
+- Speaker mapping proposals: propose role/identity per speaker; UI modal for approval; approved changes back-propagate to case metadata (always require confirmation).
+- Remove timeline/graph seeding from Summarize (moved to Compose).
+
+
+Questionnaire & Interview Guidance
+- Questionnaire Tool (Intake panel)
+  - Common LLM tool panel with jobs list + Manual Edit; generate questionnaire from intake and per-org question seeds/forms; store as Markdown; compute a transcript completion score.
+  - Seed files: per-org base questions + default seed for new orgs.
+- Interview Page
+  - Per-case central hub with live checklist (consent/content), notes, call start/end logging, links to questionnaire/intake/artifacts; multiple sessions supported; append minimal ops JSONL audit lines.
+
+
+Alerts System (LLM-controllable)
+- Alert tool available to LLMs and staff: fields include severity (info/warn/critical), category, message, suggested action.
+- Visibility: case banner + Alerts tab; acknowledgement system out of scope for now; record creation in ops JSONL.
+- Org Settings: thresholds and behavior per severity, file-driven defaults.
+
+
+Org & User UX Improvements
+- Sign-in & branding: add welcome/sign-in page with theme hooks; branding doc describing where brand files live; default theme colors (green/blue) configurable per org.
+- Org selection: after login, show org chooser when >1 org; auto-forward when only one; fix case-page switching edge cases.
+- Org settings: DOCX templates, data retention, default LLM configs, reviewer policies, questionnaire seeds, permissions config, org profile.
+- User profile: view/edit profile, password/MFA/preferences.
+
+
+LLM Execution Policy & Regions
+- LLM-only generation: remove local/offline fallbacks for content; fail fast with descriptive errors on missing credentials or capacity.
+- Region policy: keep Canada-only Azure default for now; add TODO to design cross-provider region enforcement that’s adjustable per org.
+
+
+Data Retention & Deletion Certificates
+- Default retention 90 days (file-driven defaults). Per-org settings by artifact class (audio, transcripts, analysis, composed docs, logs).
+- Early deletion: requires two-party confirmation (client + reviewer). Always produce a deletion certificate artifact for any removal, including maintenance.
+- Backups: purge deleted data from backups; make purge behavior configurable in backup settings; TODO: define what to anonymize vs. delete.
+- Audit logs: independent retention settings per org; deletion certificate also required if purged.
+
+
+Seeds & Defaults (File-driven)
+- Maintain default seed files for: roles (including Reviewer), LLM stage maps by target, reviewer policy, template selection, alert thresholds, data retention, questionnaire seeds, branding/theme.
+- Roadmap item: bootstrap new orgs from these defaults and expose them in Org Settings for later adjustment.
+
 Cross‑References
 - Agents contract and analysis roadmap: see `AGENTS.md`.

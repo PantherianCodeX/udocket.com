@@ -2,7 +2,7 @@
 
 Scope: this guide governs the Summarize analyzer implementation under `packages/udocket_core/agents/summarize/` and any platform tasks that orchestrate it. It extends the root AGENTS.md contract and the `packages/udocket_core/AGENTS.md` rules.
 
-Purpose: generate layered, legally‑useful summaries from approved transcripts, suitable for preparing court forms, timelines, and relationship graphs. The agent consumes diarized or plain transcripts and produces both human‑readable and structured artifacts for downstream tools.
+Purpose: generate layered, legally‑useful summaries from approved transcripts, suitable for preparing court forms and feeding the Compose pipeline. The agent consumes diarized or plain transcripts and produces both human‑readable and structured artifacts for downstream tools.
 
 
 ## Design Goals
@@ -27,13 +27,13 @@ Implement the SummarizeAgent as a pipeline of small, purpose‑specific stages. 
   - Task: extract Parties, Issues, Claims & Remedies, Facts, Deadlines, Orders, Exhibits, Legal References.
   - Output file: `analysis/<job_id>__outline_v1.json` (schema below).
 
-- Chronologist (Stage 2)
-  - Task: produce normalized event seeds for the Timeline agent.
-  - Output file: `analysis/<job_id>__timeline_seeds_v1.json`.
+- StaffReport (Stage 2)
+  - Task: produce an internal staff report with gaps, risks, discrepancies (intake/case vs transcript), questionnaire score, and recommended next steps.
+  - Output file: `analysis/<job_id>__staff_report_v1.md` (+ optional JSON companion).
 
-- EntityMapper (Stage 3)
-  - Task: derive entity/role hints and proto‑relations to jump‑start the Graph agent.
-  - Output file: `analysis/<job_id>__entity_hints_v1.json`.
+- SpeakerMapping (Stage 3)
+  - Task: propose speaker identities/roles with evidence and confidence for staff approval in the Transcribe panel.
+  - Output: proposals in ops JSON; approved changes back‑propagate to case metadata after confirmation.
 
 - Drafter (Stage 4)
   - Task: assemble a layered Markdown summary with mandatory sections and references to timestamps.
@@ -61,8 +61,7 @@ Add `packages/udocket_core/agents/summarize_lib.py` implementing a pure‑Python
     - `status: str`
     - `summary_file: Path`
     - `outline_file: Path | None`
-    - `timeline_seeds_file: Path | None`
-    - `entity_hints_file: Path | None`
+    - `staff_report_file: Path | None`
     - `words: int`
     - `source_transcript: Path`
     - `meta_json: Path` — per‑run ops JSON
@@ -74,7 +73,7 @@ Add `packages/udocket_core/agents/summarize_lib.py` implementing a pure‑Python
     - `def summarize(self, *, input: Path | None, case_id: str, case_dir: Path, job_id: str, intake: dict | None = None, transcript_hint: dict | None = None) -> SummarizeResult`
       - Input discovery: if `input` is None, use the most recent transcript under `transcript/`.
       - Writes artifacts and ops logs under `analysis/` and `ops/` with versioned names (`_v2` etc.).
-- Network usage: the active LLM configuration supplies provider and model details. Per-provider credentials are sourced from `LLMProviderCredential` rows (decrypted in the worker) and merged with the organization’s stage map before constructing chat clients. Azure endpoints must still target canadacentral or canadaeast unless the credential metadata explicitly allows otherwise.
+- Network usage: the active LLM configuration supplies provider and model details. Per-provider credentials are sourced from `LLMProviderCredential` rows (decrypted in the worker) and merged with the organization’s stage map before constructing chat clients. No offline fallbacks for content generation.
 
 - Helpers
   - Transcript parsing: split header/body; detect diarized lines like `"[MM:SS] SPK_<id>: text"`; build normalized segments.
@@ -213,6 +212,6 @@ Stdout (success): `{ "status":"ok", "summary_file":"<abs_path>", "words":1234, "
 
 
 ## Roadmap
-- Link timeline seeds and entity hints directly into the Timeline and Graph agents when those tasks are invoked, preferring latest versions.
+- Remove timeline/entity seeding responsibilities from Summarize (now owned by Compose). Update the platform task to no longer emit seeds/hints.
 - Add citation links back to transcript timestamps in Markdown summary.
 - Add per‑section confidence/coverage diagnostics in ops JSON.

@@ -60,8 +60,8 @@ Reference patterns exist in `packages/udocket_core/agents/transcribe_lib.py`.
   - Case ops audit: `storage/media/cases/<case>/ops/ops_transcription.jsonl`
 - One-line JSON to stdout on success, e.g.: `{ "status":"ok", "transcript_file":"/app/storage/.../transcript/<job>__transcript.txt", "region":"canadacentral", "language":"en-CA", "attempts":1, "duration_s":732.5 }`
 
-## Future Analysis Agents (proposed)
-The repository is ready to host additional agents that consume transcripts and emit analysis artifacts. Use the following conventions.
+## Analysis Agents
+The repository hosts agents that consume transcripts and emit analysis artifacts. Use the following conventions.
 
 - Common input discovery:
   - Default transcript input: the latest `<job_id>__transcript.txt` or the most recent transcript file in `transcript/`.
@@ -78,33 +78,26 @@ The repository is ready to host additional agents that consume transcripts and e
     - Optional: `analysis/<job_id>__outline_v1.json` (hierarchical bullets)
     - Ops JSON (per run): `ops/<job_id>__summary_log.json`
     - Ops audit JSONL: `ops/ops_summary.jsonl`
+  - Staff report (mandatory): `analysis/<job_id>__staff_report_v1.md` (+ optional JSON companion) with gaps/risks/discrepancies and questionnaire score.
   - Stdout (success): `{ "status":"ok", "summary_file":"<abs_path>", "words":1234, "source_transcript":"<abs_path>" }`
 
-- Timeline agent
-  - Purpose: create a time-ordered event list, optionally linked to speakers and transcript offsets.
-  - Artifacts:
-    - Primary: `analysis/<job_id>__timeline_v1.json`
-      - Schema (array): `{ "ts_start": number, "ts_end": number|null, "speaker": "SPK_1"|null, "text": string, "labels": [string] }`
-    - Optional visualization: `analysis/<job_id>__timeline_v1.html` (self-contained)
-    - Ops JSON: `ops/<job_id>__timeline_log.json`
-    - Ops audit: `ops/ops_timeline.jsonl`
-  - Stdout: `{ "status":"ok", "timeline_file":"<abs_path>", "events": 42 }`
-
-- Entities & relationships agent
-  - Purpose: extract people, organizations, locations, docket numbers, and relationships (e.g., said_by, represented_by, alleges, agrees_with).
-  - Artifacts:
-    - Entities: `analysis/<job_id>__entities_v1.json`
-      - Schema: `{ "entities": [{ "id": string, "name": string, "type": "PERSON"|"ORG"|"LOC"|"DOCKET"|"OTHER", "mentions": [{ "ts": number|null, "text": string }] }] }`
-    - Graph: `analysis/<job_id>__graph_v1.json`
-      - Schema: `{ "nodes": [{ "id": string, "label": string, "type": string }], "edges": [{ "id": string, "source": string, "target": string, "type": string, "evidence": [{ "ts": number|null, "text": string }] }] }`
-    - Ops JSON: `ops/<job_id>__graph_log.json`
-    - Ops audit: `ops/ops_graph.jsonl`
-  - Stdout: `{ "status":"ok", "entities_file":"<abs_path>", "graph_file":"<abs_path>", "entities": N, "edges": M }`
+- Compose agent (final assembly)
+  - Purpose: generate final, audience-specific deliverables; timeline and relationships are produced within this pipeline (LLM-only).
+  - Inputs: `summary_v1.json`, `timeline_v2.json` (or transcript), `entities_v2.json`/`graph_v2.json` (or transcript), intake data, and case artifacts (letters, statements, forms).
+  - Outputs:
+    - Client deliverable (grade 6, in-client voice): `analysis/<job_id>__compose_client_v1.md` and `.docx`
+    - Lawyer deliverable (professional legal): `analysis/<job_id>__compose_lawyer_v1.md` and `.docx`
+    - Timeline: `analysis/<job_id>__timeline_v2.json` (+ `...html` and optional `...png`)
+    - Graph: `analysis/<job_id>__graph_v2.json` (+ `...html` and optional `...png`)
+    - Ops JSON (per run): `ops/<job_id>__compose_log.json`
+    - Ops audit JSONL: `ops/ops_compose.jsonl`
+  - Notes: per‑org DOCX template selection with uDocket default fallback; no offline fallbacks; fail fast on missing credentials.
 
 - Cross-artifact conventions
   - Versioning: use `_v2`, `_v3`, etc. when regenerating artifacts without overwriting previous outputs.
   - Hashing: where feasible, compute SHA-256 of outputs and include in ops JSON for provenance.
   - Tracing: include `source_transcript` (abs path), `case_id`, `job_id`, timestamps, tool/library versions, and key settings in ops JSON.
+  - Approvals/versioning: Manual Edit and Agent Edit produce new versions that require Reviewer approval to promote to the parent task.
 
 ## Worker Integration
 - Celery tasks in `apps.platform.operations.tasks` orchestrate uploads, call `TranscriptionAgent.transcribe`, and persist telemetry.
@@ -118,6 +111,17 @@ The repository is ready to host additional agents that consume transcripts and e
   - Batch mode storage: `AZURE_BLOB_*` settings for SAS uploads
 - Diagnostics and provenance:
   - Set `DEBUG=1` to enable SDK-level logs into `ops/` for transcription.
+
+## Tools (Editors)
+- Manual Edit: common tool to edit text artifacts (Markdown/JSON) as a child job action; saving creates a version proposal requiring Reviewer approval.
+- Agent Edit: interactive chat editor (LLM) that modifies the artifact; same approval/versioning semantics as Manual Edit.
+
+## Intake, Questionnaire, and Interview Guidance
+- Intake panel includes a “Generate Questionnaire” tool (LLM panel), using per‑org seed questions and forms; result is Markdown, editable via Manual/Agent Edit, and used during interviews.
+- Interview page is a per‑case hub with live checklist, notes, and call logging; sessions append minimal audit lines.
+
+## Approvals & Roles
+- Reviewer role is part of default seed roles; approvals are configurable per page/tool (required reviewer count, allowed roles) in Org Settings.
   - `BATCH_HASH_REMOTE=1` and `BATCH_HASH_MAX_MB` to record remote SHA-256 and MD5 (if present) when using batch mode.
 
 ## File & Naming Conventions

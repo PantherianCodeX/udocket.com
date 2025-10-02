@@ -5,6 +5,7 @@ Scope: `config/` (shared pydantic settings loader) and Django settings under `ap
 ## Pydantic Settings
 - Centralized in `config/settings.py` with `.env` support.
 - Enforce CA‑only Azure regions at validation time. Compute default sqlite path off `STORAGE_ROOT`.
+ - Roadmap: add cross‑provider, per‑org region policy (adjustable) and enforce across all LLM providers.
 
 ## Django Settings
 - Live in `apps/platform/config/settings`. Base resolves `STORAGE_ROOT` and robustly falls back to sqlite in dev (apps/platform/config/settings/base.py:1).
@@ -25,6 +26,17 @@ Scope: `config/` (shared pydantic settings loader) and Django settings under `ap
 
 ## Storage Layout
 - Platform uses `MEDIA_ROOT/tenants/<org>/cases/<case_id>/...` (audio/transcript/analysis/ops). Always allocate via `ensure_case_dirs`.
+
+## Seeded Defaults (File‑Driven)
+- Maintain file‑driven defaults for:
+  - Roles (ensure `Reviewer` exists), reviewer policies (required counts, allowed roles per page/tool)
+  - LLM stage maps per target (`summary`, `compose`, etc.)
+  - DOCX template selection (per‑org) with uDocket default fallback
+  - Alert thresholds/behavior per severity
+  - Data retention windows (default 90 days) and backup purge behavior
+  - Questionnaire seed questions/forms
+  - Branding/theme colors and assets
+- Expose these in Org Settings; bootstrap new orgs from seed files.
 
 ## Security Defaults
 - Keep DEBUG off in production; limit allowed hosts; enforce OIDC/Keycloak auth for DRF.
