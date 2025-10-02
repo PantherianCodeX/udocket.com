@@ -47,7 +47,7 @@
         {% for artifact in body.artifact_options.SUMMARY %}
           <option value="{{ artifact.id }}">{{ artifact.title }}</option>
         {% empty %}
-          <option value="" disabled>No summaries yet</option>
+          <option value="" disabled>No analyses yet</option>
         {% endfor %}
       </select>
       <p class="text-[11px] text-slate-500">Pick an approved summary to enrich events (optional).</p>

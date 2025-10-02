@@ -27,8 +27,8 @@ TOOL_KEY_ALIASES = {
     "intake-form": "intake",
     "transcribe": "transcribe",
     "transcription": "transcribe",
-    "summary": "summary",
-    "summaries": "summary",
+    "summary": "analyze",
+    "summaries": "analyze",
     "timeline": "timeline",
 }
 

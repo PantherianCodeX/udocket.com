@@ -38,19 +38,19 @@ def test_build_tool_panels_appends_return_url(monkeypatch):
                 "return_url": return_url,
             }
 
-        return {"summary": ctx("summary"), "compose": ctx("compose")}
+        return {"analyze": ctx("analyze"), "compose": ctx("compose")}
 
     monkeypatch.setattr(presenters, "build_analysis_llm_context", fake_llm_context)
 
     progress_items = [
         {"key": "case_setup", "status": "Ready", "status_class": "ok", "updated": None, "detail": None},
         {"key": "transcription", "status": "Idle", "status_class": "idle", "updated": None, "detail": None},
-        {"key": "summary", "status": "Idle", "status_class": "idle", "updated": None, "detail": None},
+        {"key": "analyze", "status": "Idle", "status_class": "idle", "updated": None, "detail": None},
         {"key": "compose", "status": "Idle", "status_class": "idle", "updated": None, "detail": None},
     ]
 
     analysis_modules = [
-        {"key": "summary", "latest": None, "history": [], "notes": {"job_id": None, "entries": [], "user_can_add": False}},
+        {"key": "analyze", "latest": None, "history": [], "notes": {"job_id": None, "entries": [], "user_can_add": False}},
         {"key": "compose", "latest": None, "history": [], "notes": {"job_id": None, "entries": [], "user_can_add": False}},
     ]
 
@@ -74,7 +74,7 @@ def test_build_tool_panels_appends_return_url(monkeypatch):
         job_limit_choices=(25, 50, 100, 200),
     )
 
-    summary_urls = panels["summary"]["body_context"]["summary_llm"]["urls"]
+    summary_urls = panels["analyze"]["body_context"]["analyze_llm"]["urls"]
     compose_urls = panels["compose"]["body_context"]["compose_llm"]["urls"]
 
     expected_suffix = f"next=%2Fcases%2F{case.id}%2F"
@@ -82,6 +82,6 @@ def test_build_tool_panels_appends_return_url(monkeypatch):
     assert expected_suffix in summary_urls["new"]
     assert expected_suffix in compose_urls["edit"]
     assert expected_suffix in compose_urls["new"]
-    assert panels["summary"]["body_context"]["summary_llm"]["return_url"] == f"/cases/{case.id}/"
+    assert panels["analyze"]["body_context"]["analyze_llm"]["return_url"] == f"/cases/{case.id}/"
     assert panels["compose"]["body_context"]["compose_llm"]["return_url"] == f"/cases/{case.id}/"
     assert "guardian" not in panels

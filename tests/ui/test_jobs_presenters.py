@@ -34,13 +34,13 @@ def test_jobs_by_agent_matches_summary_metadata():
 
     display_rows, _ = presenters.build_job_rows([job], telemetry_map)
 
-    summary_rows = presenters.jobs_by_agent(
+    analyze_rows = presenters.jobs_by_agent(
         display_rows,
         keywords=("summary", "summarization", "analyze"),
     )
 
-    assert len(summary_rows) == 1
-    assert summary_rows[0]["job"].id == job.id
+    assert len(analyze_rows) == 1
+    assert analyze_rows[0]["job"].id == job.id
 
     timeline_rows = presenters.jobs_by_agent(display_rows, keywords=("timeline", "event"))
     assert timeline_rows == []
@@ -57,7 +57,7 @@ def test_build_job_rows_includes_running_summary_job_status():
         str(job.id): {
             "status": Job.Status.RUNNING,
             "metadata": {
-                "job_kind": "summary",
+                "job_kind": "analyze",
                 "summary_file": "/tmp/summary.md",
             },
         }
@@ -70,7 +70,7 @@ def test_build_job_rows_includes_running_summary_job_status():
     table_meta = row["table"]
     assert table_meta["status_display"] == "Running"
     assert "running" in table_meta["filter"]
-    assert table_meta["job_kind"] == "summary"
+    assert table_meta["job_kind"] == "analyze"
 
 
 @pytest.mark.django_db()
@@ -115,17 +115,17 @@ def test_jobs_by_agent_excludes_non_matching_parents():
     child_row = _row(
         child_job,
         {
-            "job_kind": "summary",
+            "job_kind": "analyze",
             "summary_file": "/tmp/summary.txt",
         },
-        title="Summary Child",
+        title="Analyze Child",
     )
     child_row["is_child"] = True
     child_row["parent_id"] = parent_row["group_id"]
     child_row["root_id"] = parent_row["group_id"]
     parent_row["children"] = [child_row]
 
-    rows = presenters.jobs_by_agent([parent_row], keywords=("summary",))
+    rows = presenters.jobs_by_agent([parent_row], keywords=("summary", "analyze"))
 
     assert len(rows) == 1
     assert rows[0]["job"].id == child_job.id

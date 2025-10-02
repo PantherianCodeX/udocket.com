@@ -63,7 +63,7 @@
 
   let ctx = null;
   let deps = {};
-  let summaryPendingSelection = null;
+  let analyzePendingSelection = null;
 
   function setContext(value) {
     ctx = value;
@@ -878,14 +878,14 @@
     });
   }
 
-  function setSummaryPendingSelection(jobId) {
+  function setAnalyzePendingSelection(jobId) {
     if (!jobId) return;
-    summaryPendingSelection = jobId;
+    analyzePendingSelection = jobId;
   }
 
-  function resolveSummaryPendingSelection() {
-    const value = summaryPendingSelection;
-    summaryPendingSelection = null;
+  function resolveAnalyzePendingSelection() {
+    const value = analyzePendingSelection;
+    analyzePendingSelection = null;
     return value;
   }
 
@@ -919,14 +919,22 @@
   }
 
   function attachSummaryTextModal(modal, select) {
-    const container = modal.querySelector('[data-summary-text-modal]');
+    const container =
+      modal.querySelector('[data-analyze-text-modal]') || modal.querySelector('[data-summary-text-modal]');
     if (!container) return;
-    const endpoint = container.getAttribute('data-summary-text-endpoint');
+    const endpoint =
+      container.getAttribute('data-analyze-text-endpoint') || container.getAttribute('data-summary-text-endpoint');
     if (!endpoint) return;
-    const statusEl = container.querySelector('[data-summary-text-status]');
-    const uploadButton = container.querySelector('[data-summary-text-upload-button]');
-    const uploadForm = container.querySelector('[data-summary-text-upload-form]');
-    const fileInput = container.querySelector('[data-summary-text-file]');
+    const statusEl =
+      container.querySelector('[data-analyze-text-status]') || container.querySelector('[data-summary-text-status]');
+    const uploadButton =
+      container.querySelector('[data-analyze-text-upload-button]') ||
+      container.querySelector('[data-summary-text-upload-button]');
+    const uploadForm =
+      container.querySelector('[data-analyze-text-upload-form]') ||
+      container.querySelector('[data-summary-text-upload-form]');
+    const fileInput =
+      container.querySelector('[data-analyze-text-file]') || container.querySelector('[data-summary-text-file]');
 
     const setStatus = (message, variant = 'info') => {
       if (!statusEl) return;
@@ -957,7 +965,7 @@
         setStatus('Unexpected response from server.', 'error');
         return;
       }
-      setSummaryPendingSelection(data.job_id);
+      setAnalyzePendingSelection(data.job_id);
       if (deps.modals && typeof deps.modals.close === 'function') {
         deps.modals.close(modal);
       }
@@ -997,7 +1005,8 @@
     };
 
     const submitFixture = async (button) => {
-      const name = button.getAttribute('data-summary-text-fixture');
+      const name =
+        button.getAttribute('data-analyze-text-fixture') || button.getAttribute('data-summary-text-fixture');
       if (!name) return;
       button.disabled = true;
       const originalText = button.textContent;
@@ -1067,9 +1076,11 @@
       }
     };
 
-    container.querySelectorAll('[data-summary-text-fixture]').forEach((button) => {
-      button.addEventListener('click', () => submitFixture(button));
-    });
+    container
+      .querySelectorAll('[data-analyze-text-fixture], [data-summary-text-fixture]')
+      .forEach((button) => {
+        button.addEventListener('click', () => submitFixture(button));
+      });
 
     if (uploadForm && fileInput) {
       fileInput.addEventListener('change', () => {
@@ -1091,34 +1102,37 @@
 
   function setupAnalysisActions(root) {
     if (!root) return;
+    const analyzeContainer = root.querySelector('[data-analyze]') || root.querySelector('[data-summary]');
     if (platformUI.llmDebug) {
       console.debug('[LLM] setupAnalysisActions', {
-        hasSummary: Boolean(root.querySelector('[data-summary]')),
+        hasAnalyze: Boolean(analyzeContainer),
         hasTimeline: Boolean(root.querySelector('[data-timeline]')),
       });
     }
-    const summaryContainer = root.querySelector('[data-summary]');
-    if (summaryContainer) {
-      setupLLMControls(summaryContainer);
-      const select = summaryContainer.querySelector('[data-summary-source]');
-      const button = summaryContainer.querySelector('[data-analysis-action="analyze"]');
+    if (analyzeContainer) {
+      setupLLMControls(analyzeContainer);
+      const select =
+        analyzeContainer.querySelector('[data-analyze-source]') ||
+        analyzeContainer.querySelector('[data-summary-source]');
+      const button = analyzeContainer.querySelector('[data-analysis-action="analyze"]');
 
-      const uploadAttr = 'data-summary-upload-option';
-      const uploadTextAttr = 'data-summary-upload-text-option';
-      const specialAttrs = [uploadAttr, uploadTextAttr];
+      const uploadOptionAttrs = ['data-analyze-upload-option', 'data-summary-upload-option'];
+      const uploadTextAttrs = ['data-analyze-upload-text-option', 'data-summary-upload-text-option'];
+      const isUploadOption = (option) => uploadOptionAttrs.some((attr) => option.hasAttribute(attr));
+      const isUploadTextOption = (option) => uploadTextAttrs.some((attr) => option.hasAttribute(attr));
+      const isSpecialOption = (option) => isUploadOption(option) || isUploadTextOption(option);
+
       const findFirstRunnableOption = () => {
         if (!select) return null;
         return (
-          Array.from(select.options).find(
-            (option) => !option.disabled && !specialAttrs.some((attr) => option.hasAttribute(attr)),
-          ) || null
+          Array.from(select.options).find((option) => !option.disabled && !isSpecialOption(option)) || null
         );
       };
 
       let lastValidValue = null;
       if (select) {
         const current = select.selectedOptions[0];
-        if (current && !current.disabled && !specialAttrs.some((attr) => current.hasAttribute(attr))) {
+        if (current && !current.disabled && !isSpecialOption(current)) {
           lastValidValue = current.value;
         } else {
           const firstRunnable = findFirstRunnableOption();
@@ -1172,9 +1186,8 @@
           return;
         }
         const selected = select.selectedOptions[0];
-        const isSpecial = specialAttrs.some((attr) => selected.hasAttribute(attr));
         const isDisabled = selected.disabled || selected.hasAttribute('disabled');
-        button.disabled = isSpecial || isDisabled;
+        button.disabled = isSpecialOption(selected) || isDisabled;
       };
 
       if (select) {
@@ -1184,25 +1197,20 @@
             updateDisabled();
             return;
           }
-          const isUpload = selected.hasAttribute(uploadAttr);
-          const isUploadText = selected.hasAttribute(uploadTextAttr);
-          if (isUpload || isUploadText) {
+          if (isSpecialOption(selected)) {
             evt.preventDefault();
-            if (isUpload) {
+            if (isUploadOption(selected)) {
               openTranscriptUpload();
-            } else {
+            } else if (isUploadTextOption(selected)) {
               openSummaryTextUpload(select);
             }
             if (lastValidValue) {
               select.value = lastValidValue;
             } else {
-              const firstRunnable = findFirstRunnableOption()
-                || Array.from(select.options).find(
-                  (option) => !specialAttrs.some((attr) => option.hasAttribute(attr)),
-                );
+              const firstRunnable = findFirstRunnableOption();
               if (firstRunnable) {
                 select.value = firstRunnable.value;
-                if (!firstRunnable.disabled && !specialAttrs.some((attr) => firstRunnable.hasAttribute(attr))) {
+                if (!firstRunnable.disabled) {
                   lastValidValue = firstRunnable.value;
                 }
               } else {
@@ -1212,21 +1220,20 @@
             updateDisabled();
             return;
           }
-          const isSpecial = specialAttrs.some((attr) => selected.hasAttribute(attr));
-          if (!selected.disabled && !isSpecial) {
+          if (!selected.disabled) {
             lastValidValue = selected.value;
           }
-          const pending = resolveSummaryPendingSelection();
+          const pending = resolveAnalyzePendingSelection();
           if (pending) {
             select.value = pending;
             lastValidValue = pending;
           }
           updateDisabled();
         });
-        const pending = resolveSummaryPendingSelection();
+        const pending = resolveAnalyzePendingSelection();
         if (pending) {
-          const option = Array.from(select.options).find((opt) => opt.value === pending);
-          if (option && !option.disabled) {
+          const option = Array.from(select.options).find((opt) => opt.value === pending && !opt.disabled);
+          if (option) {
             select.value = pending;
             lastValidValue = pending;
           }
@@ -1367,9 +1374,11 @@
     if (!endpointTemplate) return;
     let jobId;
     const payload = {};
-    if (action === 'summary') {
-      const summaryContainer = button.closest('[data-summary]');
-      const select = summaryContainer?.querySelector('[data-summary-source]');
+    if (action === 'analyze') {
+      const analyzeContainer = button.closest('[data-analyze]') || button.closest('[data-summary]');
+      const select =
+        analyzeContainer?.querySelector('[data-analyze-source]') ||
+        analyzeContainer?.querySelector('[data-summary-source]');
       if (!select || !select.value) {
         button.disabled = true;
         return;
@@ -1383,7 +1392,7 @@
       }
       jobId = select.value;
 
-      const configId = summaryContainer?.dataset.llmConfigId || null;
+      const configId = analyzeContainer?.dataset.llmConfigId || null;
       if (configId) {
         payload.llm_config_id = configId;
         if (platformUI.llmDebug) console.debug('[LLM] Queueing with config', configId);

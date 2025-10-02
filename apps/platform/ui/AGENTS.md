@@ -99,7 +99,7 @@ Scope: everything beneath `apps/platform/ui/` (templates, views, presenters, sel
 
 ## Adding a New Tool Panel (e.g., Entities/Graph)
 1) Templates
-   - Add `platform_ui/tools/<key>.html` for the panel body. Follow the patterns in `tools/transcribe.html`, `tools/summary.html`, and `tools/timeline.html`.
+   - Add `platform_ui/tools/<key>.html` for the panel body. Follow the patterns in `tools/transcribe.html`, `tools/analyze.html`, and `tools/timeline.html`.
    - Standard tool panel scaffold: inherit from the shared base (planned `tools/_panel_base.html`) that defines slots for header, action area (left), and sidebar/history (right).
 
 2) Presenter wiring

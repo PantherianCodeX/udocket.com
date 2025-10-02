@@ -2,50 +2,50 @@
 
 {% block tool_root_attrs %}
   {{ block.super }}
-  {% if body.summary_llm and body.summary_llm.provider_chain_json %}
-    data-llm-provider-chain="{{ body.summary_llm.provider_chain_json|escapejs }}"
+  {% if body.analyze_llm and body.analyze_llm.provider_chain_json %}
+    data-llm-provider-chain="{{ body.analyze_llm.provider_chain_json|escapejs }}"
   {% endif %}
-  {% if body.summary_llm and body.summary_llm.active_configuration %}
-    data-llm-config-id="{{ body.summary_llm.active_configuration.id }}"
+  {% if body.analyze_llm and body.analyze_llm.active_configuration %}
+    data-llm-config-id="{{ body.analyze_llm.active_configuration.id }}"
   {% endif %}
 {% endblock %}
 
 {% block tool_status %}
-  {% if body.summary_llm and body.summary_llm.provider_chain_json %}
-    <script type="application/json" data-llm-json="provider-chain">{{ body.summary_llm.provider_chain_json|safe }}</script>
+  {% if body.analyze_llm and body.analyze_llm.provider_chain_json %}
+    <script type="application/json" data-llm-json="provider-chain">{{ body.analyze_llm.provider_chain_json|safe }}</script>
   {% endif %}
 {% endblock %}
 
 {% block tool_primary %}
-  {% with summary_llm=body.summary_llm module=body.module %}
+  {% with analyze_llm=body.analyze_llm module=body.module %}
     <div class="flex flex-col gap-2">
-      <label for="summary-source" class="text-xs uppercase tracking-wide text-slate-400">Approved transcript</label>
+      <label for="analyze-source" class="text-xs uppercase tracking-wide text-slate-400">Approved transcript</label>
       {% if body.transcripts %}
-        <select id="summary-source" name="summary_source" class="rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" data-summary-source>
+        <select id="analyze-source" name="analyze_source" class="rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" data-analyze-source>
           {% for transcript in body.transcripts %}
             <option value="{{ transcript.job_id }}" {% if not transcript.approved %}disabled{% endif %}>
               {{ transcript.label }}{% if not transcript.approved %} · Pending approval{% endif %}
             </option>
           {% endfor %}
-          <option value="__upload__" data-summary-upload-option>Upload Transcript...</option>
-          <option value="__upload_text__" data-summary-upload-text-option>Upload Transcript Text...</option>
+          <option value="__upload__" data-analyze-upload-option>Upload Transcript...</option>
+          <option value="__upload_text__" data-analyze-upload-text-option>Upload Transcript Text...</option>
         </select>
         <p class="text-[11px] text-slate-500">Only approved transcripts can be analyzed. Pending jobs appear greyed out.</p>
       {% else %}
         <p class="rounded-lg border border-dashed border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-300">Run a transcription first to enable analyze jobs.</p>
       {% endif %}
     </div>
-    {% if summary_llm %}
-      {% include "platform_ui/tools/components/_llm_controls.html" with llm_context=summary_llm %}
+    {% if analyze_llm %}
+      {% include "platform_ui/tools/components/_llm_controls.html" with llm_context=analyze_llm %}
     {% endif %}
-    {% if summary_llm and summary_llm.stage_configs %}
-      <details class="group rounded-xl border border-white/10 bg-slate-900/60" data-summary-stage-models>
+    {% if analyze_llm and analyze_llm.stage_configs %}
+      <details class="group rounded-xl border border-white/10 bg-slate-900/60" data-analyze-stage-models>
         <summary class="flex cursor-pointer items-center justify-between px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-300">
           Stage models
           <svg class="h-4 w-4 transition-transform group-open:rotate-180" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.094l3.71-3.86a.75.75 0 111.08 1.04l-4.247 4.41a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z" clip-rule="evenodd" /></svg>
         </summary>
         <div class="border-t border-white/10 px-4 py-4">
-          {% include "platform_ui/components/stage_cards.html" with stages=summary_llm.stage_configs configuration=summary_llm.active_configuration %}
+          {% include "platform_ui/components/stage_cards.html" with stages=analyze_llm.stage_configs configuration=analyze_llm.active_configuration %}
         </div>
       </details>
     {% endif %}
@@ -62,7 +62,7 @@
 {% endblock %}
 
 {% block tool_sidebar %}
-  {% with module=body.module summary_llm=body.summary_llm %}
+  {% with module=body.module analyze_llm=body.analyze_llm %}
     <div class="flex items-center justify-between gap-3">
       <p class="text-xs uppercase tracking-wide text-slate-400">Latest analyze result</p>
       {% if module.downloads %}

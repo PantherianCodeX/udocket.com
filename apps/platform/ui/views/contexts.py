@@ -246,7 +246,7 @@ def job_detail_context(
     job_kind_base = job_kind_lower.split(":")[-1] if job_kind_lower else ""
     is_audio_conversion = job_kind_base == "audio_conversion"
     is_analysis_job = (
-        job_kind_base in {"summary", "timeline"}
+        job_kind_base in {"analyze", "timeline"}
         or job_kind_lower.startswith("analysis")
     )
     metadata_items = format_metadata(metadata_map)

@@ -99,8 +99,8 @@
       </div>
       {% if module.key == 'timeline' and module.latest.metadata.events %}
         <p class="text-[11px] text-slate-300">Events: {{ module.latest.metadata.events }}</p>
-      {% elif module.key == 'summary' and module.latest.metadata.words %}
-        <p class="text-[11px] text-slate-300">Words summarised: {{ module.latest.metadata.words }}</p>
+      {% elif module.key == 'analyze' and module.latest.metadata.words %}
+        <p class="text-[11px] text-slate-300">Words analyzed: {{ module.latest.metadata.words }}</p>
       {% endif %}
     </div>
   {% else %}

@@ -54,7 +54,7 @@ def _build_settings() -> LLMSettings:
             stage_key="analyze.context_builder",
             providers=["azure"],
             model="gpt-4o-mini",
-            target="summary",
+            target="analyze",
             label="Context Builder",
             description="Collects intake context",
         ),
@@ -62,7 +62,7 @@ def _build_settings() -> LLMSettings:
             stage_key="analyze.qa_and_finalize",
             providers=["azure"],
             model="gpt-4o-mini",
-            target="summary",
+            target="analyze",
             label="QA",
             description="QA stage",
         ),
@@ -145,7 +145,7 @@ def test_build_llm_stage_configs_uses_defaults_and_overrides(llm_settings):
 
     # No overrides: should use assignment defaults
     configs = analysis_llm.build_llm_stage_configs(
-        target="summary",
+        target="analyze",
         llm_settings=llm_settings,
         stage_map={},
         provider_registry=provider_registry,
@@ -170,7 +170,7 @@ def test_build_llm_stage_configs_uses_defaults_and_overrides(llm_settings):
     }
 
     configs_with_override = analysis_llm.build_llm_stage_configs(
-        target="summary",
+        target="analyze",
         llm_settings=llm_settings,
         stage_map=stage_map,
         provider_registry=provider_registry,

@@ -38,9 +38,9 @@ def test_build_job_table_state_produces_unique_filter_options():
         organization=org,
         audio_input="/tmp/audio3.wav",
         status=Job.Status.SUCCEEDED,
-        agent_type="summary",
-        job_kind="summary",
-        display_title="Summary Job",
+        agent_type="analyze",
+        job_kind="analyze",
+        display_title="Analyze Job",
     )
 
     request = rf.get(

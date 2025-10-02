@@ -14,6 +14,7 @@ Quick index of AGENTS guides in this repo:
 - apps/platform/accounts/AGENTS.md
 - apps/platform/authorization/AGENTS.md
 - packages/udocket_core/AGENTS.md
+- packages/udocket_core/agents/compose/AGENTS.md
 - config/AGENTS.md
 - infra/AGENTS.md
 - tests/AGENTS.md
@@ -71,11 +72,13 @@ The repository hosts agents that consume transcripts and emit analysis artifacts
   - Write to `storage/media/cases/<case>/analysis/` and `storage/media/cases/<case>/ops/`.
   - Use per-job or per-run names with the same prefix style when tied to a transcription job: `<job_id>__<artifact>.<ext>`.
 
-- Summarization agent
-  - Purpose: produce one or more levels of summary from a transcript.
+- Analyze agent
+  - Purpose: produce layered analyses from transcripts, including structured artifacts for downstream compose/timeline/graph tooling.
   - Artifacts:
     - Primary: `analysis/<job_id>__summary_v1.md` (markdown) or `.txt`
     - Optional: `analysis/<job_id>__outline_v1.json` (hierarchical bullets)
+    - Timeline seeds: `analysis/<job_id>__timeline_seeds_v1.json` with deterministic `uuid` per event
+    - Entity hints: `analysis/<job_id>__entity_hints_v1.json` with deterministic `uuid` per entity/relationship
     - Ops JSON (per run): `ops/<job_id>__summary_log.json`
     - Ops audit JSONL: `ops/ops_summary.jsonl`
   - Staff report (mandatory): `analysis/<job_id>__staff_report_v1.md` (+ optional JSON companion) with gaps/risks/discrepancies and questionnaire score.
@@ -98,8 +101,26 @@ The repository hosts agents that consume transcripts and emit analysis artifacts
   - Hashing: where feasible, compute SHA-256 of outputs and include in ops JSON for provenance.
   - Tracing: include `source_transcript` (abs path), `case_id`, `job_id`, timestamps, tool/library versions, and key settings in ops JSON.
   - Approvals/versioning: Manual Edit and Agent Edit produce new versions that require Reviewer approval to promote to the parent task.
-  - Object identity: every structured record (events, entities, relationships, outline nodes, etc.) must include a stable `uuid` field. Derive UUIDs deterministically (e.g., UUID5 of canonical content) to avoid collisions across reruns while keeping outputs reproducible.
-  - Titles: when creating human-readable artifact titles, always call the shared `unique_title` helper to avoid collisions within a case/organization.
+- Object identity: every structured record (events, entities, relationships, outline nodes, etc.) must include a stable `uuid` field. Preserve upstream UUIDs when rerunning stages; derive deterministic fallbacks (e.g., UUID5 of canonical content) when none exist. Never expose these UUIDs as user-facing titles.
+  - Titles: when creating human-readable artifact titles or per-org/per-case labels, always call the shared `unique_title` helper to avoid collisions within a case/organization.
+
+### Tool and artifact naming map
+
+To avoid future confusion, the table below captures the canonical naming conventions for every first-party agent. Always refer to the *tool* (UI panel, Celery task wrapper, job kind) separately from the *artifacts* it emits.
+
+| Tool / Agent | UI label & panel key | `job_kind` / `agent_type` | Primary artifacts (types & filenames) | Notes |
+|--------------|----------------------|---------------------------|----------------------------------------|-------|
+| Transcribe   | `Transcribe` / `transcribe` | `transcription` | `transcript/<job_id>__transcript.txt`, ops logs | Produces audio conversions when needed. |
+| Analyze      | `Analyze` / `analyze` | `analyze` | Stage outputs written under `analysis/` (summary JSON+MD, outline, timeline seeds, entity hints, case brief, optional staff report). Approved outputs generate individual artifacts automatically. | Stage outputs are stored on disk immediately; artifacts are promoted versions exposed in the UI once approved. |
+| Compose      | `Compose` / `compose` | `compose` | Client & lawyer deliverables (`compose_client_v1.*`, `compose_lawyer_v1.*`), timeline v2, graph v2, HTML/PNG renderings, compose ops logs | Consumes summaries plus other analysis artifacts. |
+| Timeline (future standalone) | `Timeline` / `timeline` | `timeline` | To-be-defined `timeline_v2.*` assets | When run independently, should still read latest summary outputs. |
+
+General guidelines:
+
+- Keep UI copy and telemetry fields aligned with the tool name (`Analyze`) while the structured payloads keep the `summary_*` vocabulary for the case narrative outputs.
+- Stage outputs may encompass multiple files; artifacts are per-file records created only after approval and removed if later rejected. Each artifact points to a single physical file.
+- When adding new artifacts to an existing tool, prefix them with the job ID and use the tool’s directory (`analysis/`, `compose/`, etc.).
+- Dependency flags in presenters/components must describe artifacts (`has_summary`, `has_timeline`, etc.) rather than tools. Avoid introducing aliases that duplicate the same concept under different names.
 
 ## Worker Integration
 - Celery tasks in `apps.platform.operations.tasks` orchestrate uploads, call `TranscriptionAgent.transcribe`, and persist telemetry.
@@ -183,7 +204,7 @@ The repository hosts agents that consume transcripts and emit analysis artifacts
 - Missing Azure SDKs: ensure `azure-cognitiveservices-speech` and `azure-storage-blob` are installed in the platform runtime.
 
 ## Roadmap Alignment (summaries, timelines, relationships)
-- Summarization: produce layered summaries (short, detailed) with links to timeline events.
+- Analyze: produce layered analyses (short, detailed) with links to timeline events and seed timeline/entity extraction.
 - Timelines: merge diarized offsets and transcript segments into normalized events with speakers and labels.
 - Relationships: derive entities and edges with evidence back-pointers to transcript timestamps.
 - All of the above should follow the contract here to ensure the Admin UI and API can surface artifacts consistently as features land.

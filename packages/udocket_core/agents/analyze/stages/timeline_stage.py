@@ -125,11 +125,13 @@ def _normalize_event(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         ]
     )
     derived_uuid = uuid5(NAMESPACE_URL, signature)
-    event_id = str(payload.get("id") or payload.get("uuid") or derived_uuid)
+    existing_uuid = payload.get("uuid")
+    event_uuid = str(existing_uuid) if isinstance(existing_uuid, str) and existing_uuid.strip() else str(derived_uuid)
+    event_id = str(payload.get("id") or event_uuid or derived_uuid)
 
     normalized = {
         "id": event_id,
-        "uuid": str(derived_uuid),
+        "uuid": event_uuid,
         "ts_start": ts_start,
         "ts_end": ts_end,
         "speaker": speaker,

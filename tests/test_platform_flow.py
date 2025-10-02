@@ -88,7 +88,7 @@ def test_analysis_tasks_generate_artifacts(db, settings, monkeypatch):
     LLMConfiguration.objects.create(
         organization=org,
         name="Default Analyze",
-        target="summary",
+        target="analyze",
         provider_chain=["azure"],
         stage_map={},
         is_default=True,
@@ -190,8 +190,8 @@ def test_analysis_tasks_generate_artifacts(db, settings, monkeypatch):
         job.save(update_fields=["status"])
 
         meta_payload = {
-            "job_kind": "summary",
-            "agent_type": "summary",
+            "job_kind": "analyze",
+            "agent_type": "analyze",
             "summary_status": "completed",
             "summary_file": str(result.summary_file),
             "summary_markdown_file": str(result.summary_markdown_file),

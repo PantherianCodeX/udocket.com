@@ -112,9 +112,15 @@ def _assign_entity_defaults(entity: Dict[str, Any]) -> Dict[str, Any]:
     entity_type = str(entity.get("type") or "UNKNOWN").strip() or "UNKNOWN"
     signature = f"entity|{entity_type}|{name.lower()}"
     derived_uuid = uuid5(NAMESPACE_URL, signature)
-    entity_id = str(entity.get("id") or entity.get("uuid") or derived_uuid)
+    existing_uuid = entity.get("uuid")
+    entity_uuid = (
+        str(existing_uuid).strip()
+        if isinstance(existing_uuid, str) and existing_uuid.strip()
+        else str(derived_uuid)
+    )
+    entity_id = str(entity.get("id") or entity_uuid or derived_uuid)
     entity["id"] = entity_id
-    entity.setdefault("uuid", str(derived_uuid))
+    entity["uuid"] = entity_uuid
     aliases = entity.get("aliases")
     if not isinstance(aliases, list):
         aliases = []
@@ -147,9 +153,15 @@ def _assign_relation_defaults(relation: Dict[str, Any]) -> Dict[str, Any]:
     target = str(relation.get("target") or "").strip()
     signature = f"relation|{relation_type}|{source.lower()}|{target.lower()}"
     derived_uuid = uuid5(NAMESPACE_URL, signature)
-    relation_id = str(relation.get("id") or relation.get("uuid") or derived_uuid)
+    existing_uuid = relation.get("uuid")
+    relation_uuid = (
+        str(existing_uuid).strip()
+        if isinstance(existing_uuid, str) and existing_uuid.strip()
+        else str(derived_uuid)
+    )
+    relation_id = str(relation.get("id") or relation_uuid or derived_uuid)
     relation["id"] = relation_id
-    relation.setdefault("uuid", str(derived_uuid))
+    relation["uuid"] = relation_uuid
     evidence = relation.get("evidence")
     if not isinstance(evidence, list):
         evidence = []

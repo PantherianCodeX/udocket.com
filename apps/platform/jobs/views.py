@@ -1020,9 +1020,9 @@ class JobViewSet(viewsets.ModelViewSet):
 
         ensure_case_dirs(str(source_job.case_id), source_job.organization_id)
         meta_seed: Dict[str, Any] = {
-            "job_kind": "summary",
+            "job_kind": "analyze",
             "job_title": summary_title,
-            "agent_type": "summary",
+            "agent_type": "analyze",
             "agent_label": "Analyze",
             "source_job_id": str(source_job.id),
             "source_job_title": source_label,
@@ -1060,7 +1060,7 @@ class JobViewSet(viewsets.ModelViewSet):
         audit_emit(
             request,
             case_id=str(source_job.case_id),
-            event="analysis.summary.requested",
+            event="analysis.analyze.requested",
             data={
                 "job_id": str(summary_job.id),
                 "source_job_id": str(source_job.id),

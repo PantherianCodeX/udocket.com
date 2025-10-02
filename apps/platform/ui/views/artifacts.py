@@ -187,7 +187,7 @@ def artifacts_index(request: HttpRequest) -> HttpResponse:
                 "class": "border-primary-400/40 bg-primary-500/10 text-primary-100",
             },
             {
-                "label": "Summaries",
+                "label": "Analyses",
                 "value": type_counts.get("SUMMARY", 0),
                 "class": "border-emerald-400/40 bg-emerald-500/10 text-emerald-100",
             },

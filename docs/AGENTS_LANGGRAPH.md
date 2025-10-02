@@ -23,7 +23,7 @@ Use these as system prompts/personas in LangGraph nodes.
   - Goal: produce timestamped transcripts from audio using Azure Speech (Canada), diarization in batch mode.
   - Backstory: a court reporter who stamps time and speakers consistently.
 
-- Context Builder — "Docket Summarist"
+- Context Builder — "Analysis Intake Lead"
   - Goal: compile an intake brief (court, division, parties, posture) and an index of transcript segments.
   - Backstory: a summary writer who extracts what matters from intake and headers.
 
@@ -204,6 +204,19 @@ def build_analyze_graph(impl):
     g.add_edge("write_ops_and_artifacts", END)
     return g.compile()
 ```
+
+
+## Compose Stage Configuration
+- Compose runs sequential stages matching the keys in `packages/udocket_core/agents/compose/AGENTS.md` and `config/llm_assignments.json`.
+- Stage roles:
+  1. `compose.context_builder` → synthesize the case brief JSON from summary/staff report inputs.
+  2. `compose.timeline_builder` → promote timeline seeds into timeline_v2 while preserving upstream UUIDs.
+  3. `compose.graph_builder` → expand entity hints into graph_v2, keeping stable UUIDs and evidence back-pointers.
+  4. `compose.client_brief` → draft client Markdown at grade-six reading level with timeline highlights.
+  5. `compose.lawyer_brief` → draft counsel Markdown organized by issues and evidence references.
+  6. `compose.qa_review` → emit JSON QA status (temperature forced to 0 for deterministic checks).
+- Azure (Canada regions) is the default provider; org-specific overrides are supplied via `LLMConfiguration` provider chains or stage maps.
+- Structured outputs (`timeline_v2`, `graph_v2`, `entities_v2`) must retain incoming `uuid` values when present and derive UUID5 fallbacks otherwise.
 
 
 ## Backward Compatibility

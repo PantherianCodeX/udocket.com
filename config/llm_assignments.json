@@ -1,7 +1,7 @@
 {
   "stages": {
     "analyze.context_builder": {
-      "target": "summary",
+      "target": "analyze",
       "label": "Context Builder",
       "description": "Prepares intake metadata and transcript snippets used by downstream prompts.",
       "providers": [
@@ -10,7 +10,7 @@
       "model": "gpt-4o-mini"
     },
     "analyze.extract_outline": {
-      "target": "summary",
+      "target": "analyze",
       "label": "Outline Extractor",
       "description": "Derives parties, issues, claims, facts, and legal references as structured JSON.",
       "providers": [
@@ -19,7 +19,7 @@
       "model": "gpt-4o-mini"
     },
     "analyze.build_timeline_seeds": {
-      "target": "summary",
+      "target": "analyze",
       "label": "Timeline Seeder",
       "description": "Creates candidate timestamped events that can seed the timeline generator.",
       "providers": [
@@ -28,7 +28,7 @@
       "model": "gpt-4o-mini"
     },
     "analyze.build_entity_hints": {
-      "target": "summary",
+      "target": "analyze",
       "label": "Entity Mapper",
       "description": "Identifies entities and proto-relationships to accelerate graph extraction.",
       "providers": [
@@ -37,7 +37,7 @@
       "model": "gpt-4o-mini"
     },
     "analyze.draft_markdown": {
-      "target": "summary",
+      "target": "analyze",
       "label": "Analysis Drafter",
       "description": "Produces the layered Markdown case analysis referencing transcript timestamps.",
       "providers": [
@@ -46,7 +46,7 @@
       "model": "gpt-4o"
     },
     "analyze.qa_and_finalize": {
-      "target": "summary",
+      "target": "analyze",
       "label": "QA & Finalize",
       "description": "Validates mandatory sections, computes checksums, and prepares ops metadata.",
       "providers": [
@@ -57,7 +57,7 @@
     "compose.context_builder": {
       "target": "compose",
       "label": "Context Builder",
-      "description": "Condenses intake metadata and approved summaries into a case brief for downstream stages.",
+      "description": "Condenses intake metadata and approved analyses into a case brief for downstream stages.",
       "providers": [
         "azure"
       ],
@@ -66,7 +66,7 @@
     "compose.timeline_builder": {
       "target": "compose",
       "label": "Timeline Builder",
-      "description": "Generates normalized timeline events with timestamp references for compose deliverables.",
+      "description": "Generates normalized timeline events with timestamp references using analysis seeds and transcript context.",
       "providers": [
         "azure"
       ],
@@ -75,7 +75,7 @@
     "compose.graph_builder": {
       "target": "compose",
       "label": "Graph Builder",
-      "description": "Extracts entities and relationships with evidence links for compose outputs.",
+      "description": "Extracts entities and relationships with evidence links, grounding against analysis hints and timelines.",
       "providers": [
         "azure"
       ],

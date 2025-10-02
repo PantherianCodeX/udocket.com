@@ -9,14 +9,14 @@ from apps.platform.ui.views.presenters.job_actions import build_job_action_entri
 
 
 @pytest.mark.django_db()
-def test_summary_job_actions_include_download_link():
+def test_analyze_job_actions_include_summary_download_link():
     org = Organization.objects.create(id="ORG-ACTIONS", name="Actions Org")
     case = Case.objects.create(id="CASE-ACTIONS", title="Actions Case", organization=org)
     job = Job.objects.create(case=case, audio_input="/tmp/a.wav", status=Job.Status.SUCCEEDED)
 
     telemetry = {
         "metadata": {
-            "job_kind": "summary",
+            "job_kind": "analyze",
         },
         "artifacts": [
             {

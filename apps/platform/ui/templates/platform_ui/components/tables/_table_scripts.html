@@ -185,10 +185,10 @@
           input.value = source.value;
         }
       });
-      updateFilterSummaries(container, '');
+      updateFilterAnalyses(container, '');
     }
 
-    function updateFilterSummaries(container, paramName) {
+    function updateFilterAnalyses(container, paramName) {
       if (!container) return;
       const detailsNodes = container.querySelectorAll('details[data-table-filter-param]');
       detailsNodes.forEach((details) => {
@@ -446,7 +446,7 @@
         });
       });
 
-      updateFilterSummaries(container, '');
+      updateFilterAnalyses(container, '');
       saveColumnState(table, columnState);
       table.dataset.tableReady = '1';
     }

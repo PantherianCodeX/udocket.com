@@ -42,8 +42,15 @@ def table_config(
     filters_active: int = 0,
     has_advanced_filters: bool = False,
 ) -> Dict[str, Any]:
-    filter_lookup = {item["key"]: item for item in filters}
-    filters_list = list(filters)
+    filter_lookup: Dict[str, Dict[str, Any]] = {}
+    filters_list: List[Dict[str, Any]] = []
+    for item in filters:
+        entry = dict(item)
+        key = entry.get("key") or entry.get("id")
+        if key:
+            entry.setdefault("key", key)
+            filter_lookup[key] = entry
+        filters_list.append(entry)
     pagination_payload = dict(pagination or {})
     columns_payload: List[Dict[str, Any]] = []
     for column in columns:
@@ -447,29 +454,29 @@ def build_tool_panels(
         return_url = reverse("ui-case-detail", kwargs={"case_id": case.id})
 
     analysis_llm = build_analysis_llm_context(case, return_url=return_url)
-    summary_llm = analysis_llm["summary"]
+    analyze_llm = analysis_llm["analyze"]
     compose_llm = analysis_llm["compose"]
-    summary_status = status_payload(progress_lookup, "summary", "Not Started")
-    summary_module = analysis_lookup.get("summary") or {}
-    summary_latest = summary_module.get("latest") or {}
-    summary_history = summary_module.get("history") or []
-    summary_jobs = jobs_by_agent(
+    analyze_status = status_payload(progress_lookup, "analyze", "Not Started")
+    analyze_module = analysis_lookup.get("analyze") or {}
+    analyze_latest = analyze_module.get("latest") or {}
+    analyze_history = analyze_module.get("history") or []
+    analyze_jobs = jobs_by_agent(
         all_rows_iterable,
         keywords=("summary", "summarization", "analyze"),
         exclude_keywords=("transcription", "audio", "speech"),
     )
-    summary_panel = _panel_from_definition("summary")
-    summary_panel.update(
+    analyze_panel = _panel_from_definition("analyze")
+    analyze_panel.update(
         {
-            "status_label": summary_status["label"],
-            "status_class": summary_status["class"],
-            "updated_at": summary_status["updated"] or summary_latest.get("created_at"),
-            "progress_detail": summary_status.get("detail"),
-            "notes": summary_module.get("notes") or empty_notes.copy(),
-            "notes_panel_html": summary_module.get("notes_panel_html"),
-            "team_alerts": summary_module.get("team_alerts", team_alerts),
+            "status_label": analyze_status["label"],
+            "status_class": analyze_status["class"],
+            "updated_at": analyze_status["updated"] or analyze_latest.get("created_at"),
+            "progress_detail": analyze_status.get("detail"),
+            "notes": analyze_module.get("notes") or empty_notes.copy(),
+            "notes_panel_html": analyze_module.get("notes_panel_html"),
+            "team_alerts": analyze_module.get("team_alerts", team_alerts),
             "meta": [
-                {"label": "Summaries", "value": len(summary_history) + (1 if summary_latest else 0)},
+                {"label": "Summaries", "value": len(analyze_history) + (1 if analyze_latest else 0)},
                 {
                     "label": "Approved transcripts",
                     "value": sum(1 for src in transcript_sources if src.get("approved")),
@@ -477,12 +484,12 @@ def build_tool_panels(
             ],
             "body_context": {
                 "case": case,
-                "module": summary_module,
+                "module": analyze_module,
                 "transcripts": transcript_sources,
-                "job_endpoint_template": summary_panel.get("job_endpoint_template"),
-                "summary_llm": summary_llm,
+                "job_endpoint_template": analyze_panel.get("job_endpoint_template"),
+                "analyze_llm": analyze_llm,
             },
-            "jobs": summary_jobs,
+            "jobs": analyze_jobs,
             "jobs_title": "Analyze Jobs",
             "jobs_pill": "Automations",
             "jobs_empty_message": "No analyze jobs yet. Queue one above.",
@@ -492,10 +499,10 @@ def build_tool_panels(
             "jobs_filters": DEFAULT_TABLE_FILTERS,
             "jobs_show_identifiers": False,
             "jobs_table": table_config(
-                panel_key=summary_panel["key"],
+                panel_key=analyze_panel["key"],
                 title="Analyze Jobs",
                 pill="Automations",
-                rows=summary_jobs,
+                rows=analyze_jobs,
                 columns=GLOBAL_JOB_TABLE_COLUMNS,
                 column_ids=[col["id"] for col in GLOBAL_JOB_TABLE_COLUMNS],
                 filters=DEFAULT_TABLE_FILTERS,
@@ -505,7 +512,7 @@ def build_tool_panels(
             ),
         }
     )
-    panels[summary_panel["key"]] = summary_panel
+    panels[analyze_panel["key"]] = analyze_panel
 
     compose_status = status_payload(progress_lookup, "compose", "Not Started")
     compose_module = analysis_lookup.get("compose") or {}
@@ -536,7 +543,7 @@ def build_tool_panels(
             "body_context": {
                 "case": case,
                 "module": compose_module,
-                "summary_module": summary_module,
+                "analyze_module": analyze_module,
                 "transcripts": transcript_sources,
                 "summaries": compose_module.get("available_summaries") or [],
                 "compose_llm": compose_llm,

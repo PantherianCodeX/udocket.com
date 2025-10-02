@@ -85,4 +85,3 @@ __all__ = [
     "COMPOSE_STAGE_PROFILES",
     "ComposeStageProfile",
 ]
-

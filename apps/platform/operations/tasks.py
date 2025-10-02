@@ -1095,8 +1095,8 @@ def analyze_job(
     transcript_path_str = str(transcript) if transcript else None
 
     base_meta: Dict[str, Any] = {
-        "job_kind": "summary",
-        "agent_type": "summary",
+        "job_kind": "analyze",
+        "agent_type": "analyze",
         "job_title": summary_title,
         "source_job_id": str(source_job.id),
         "source_transcript_path": transcript_path_str,
@@ -1157,7 +1157,7 @@ def analyze_job(
             error="No transcript found to analyze",
             log_message="Analyze failed: transcript missing",
             meta_updates=failure_meta,
-            events=[("summary.failed", {})],
+            events=[("analyze.failed", {})],
             task_meta_updates={"stage": "preflight", "reason": "missing_transcript"},
         )
         _safe_job_meta(
@@ -1187,7 +1187,7 @@ def analyze_job(
             error=str(exc),
             log_message="Analyze configuration invalid",
             meta_updates=failure_meta,
-            events=[("summary.failed", {"llm_config_id": llm_config_id})],
+            events=[("analyze.failed", {"llm_config_id": llm_config_id})],
             task_meta_updates={"stage": "config", "reason": str(exc)},
         )
         _safe_job_meta(
@@ -1614,16 +1614,16 @@ def compose_job(
     config_payload = get_llm_configuration(
         organization_id=org_id_str,
         config_id=llm_config_id,
-        target="summary",
+        target="analyze",
     )
     if not config_payload:
         config_payload = ensure_default_llm_configuration(
             organization_id=org_id_str,
-            target="summary",
+            target="analyze",
             llm_settings=llm_settings,
         )
     if not config_payload:
-        error_message = "No LLM configuration available for summarization"
+        error_message = "No LLM configuration available for analyze stage"
         failure_meta = {**base_meta, "summary_status": "failed", "summary_error": error_message}
         if summary_task_id:
             failure_meta.setdefault("celery_task_id", summary_task_id)
@@ -1632,7 +1632,7 @@ def compose_job(
             error=error_message,
             log_message=error_message,
             meta_updates=failure_meta,
-            events=[("summary.failed", {"llm_config_id": llm_config_id})],
+            events=[("analyze.failed", {"llm_config_id": llm_config_id})],
             task_meta_updates={"stage": "config", "reason": "missing_configuration"},
         )
         _safe_job_meta(
@@ -1665,11 +1665,11 @@ def compose_job(
         org_id,
         job_id,
         {
-            "summary_llm_config_id": active_config_id,
-            "summary_llm_config_name": active_config_name,
+            "analyze_llm_config_id": active_config_id,
+            "analyze_llm_config_name": active_config_name,
         },
     )
-    runtime.emit("summary.started", llm_config_id=active_config_id)
+    runtime.emit("analyze.started", llm_config_id=active_config_id)
     runtime.transition(task_meta_updates={"active_llm_config_id": active_config_id})
 
     analyze_agent = AnalyzeAgent(analyze_config)
@@ -1695,7 +1695,7 @@ def compose_job(
             progress_payload["llm_config_id"] = active_config_id
         if payload:
             progress_payload["details"] = payload
-        runtime.emit("summary.progress", **progress_payload)
+        runtime.emit("analyze.progress", **progress_payload)
         if analyze_agent.config.debug:
             log.info(
                 "analyze stage",
@@ -1757,7 +1757,7 @@ def compose_job(
             error=error_message,
             log_message=f"Analyze failed: {error_message}",
             meta_updates=failure_meta,
-            events=[("summary.failed", {"llm_config_id": active_config_id, "details": {"stage": "runtime"}})],
+            events=[("analyze.failed", {"llm_config_id": active_config_id, "details": {"stage": "runtime"}})],
             task_meta_updates={"error": error_message, "stage": "runtime"},
         )
         _safe_job_meta(
@@ -1787,8 +1787,8 @@ def compose_job(
         "summary_sha256": checksum,
         "summary_markdown_sha256": markdown_checksum,
         "summary_provider_chain": result.provider_chain,
-        "summary_llm_config_id": active_config_id,
-        "summary_llm_config_name": active_config_name,
+        "analyze_llm_config_id": active_config_id,
+        "analyze_llm_config_name": active_config_name,
     }
     if summary_task_id:
         meta_updates.setdefault("celery_task_id", summary_task_id)
@@ -1799,7 +1799,7 @@ def compose_job(
         meta_updates=meta_updates,
         events=[
             (
-                "summary.completed",
+                "analyze.completed",
                 {
                     "summary": str(result.summary_file),
                     "llm_config_id": active_config_id,
@@ -1855,7 +1855,7 @@ def compose_job(
     audit_emit(
         None,
         case_id=case_id,
-        event="analysis.summary.created",
+        event="analysis.analyze.created",
         data={
             "job_id": job_id,
             "source_job_id": str(source_job.id),

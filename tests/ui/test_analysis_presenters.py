@@ -30,7 +30,7 @@ def test_analysis_modules_include_notes(settings):
         transcript_path="/tmp/transcript.txt",
     )
 
-    # Summary job with note
+    # Analyze job with note
     job_summary = Job.objects.create(
         case=case,
         audio_input="/tmp/audio.wav",
@@ -56,14 +56,14 @@ def test_analysis_modules_include_notes(settings):
         str(job_transcribe.id): {"metadata": {"job_kind": "transcription"}},
         str(job_summary.id): {
             "metadata": {
-                "job_kind": "summary",
+                "job_kind": "analyze",
                 "summary_file": "/tmp/summary.md",
                 "summary_words": 256,
             }
         },
     }
 
-    request = RequestFactory().get(f"/cases/{case.id}/tools/summary/")
+    request = RequestFactory().get(f"/cases/{case.id}/tools/analyze/")
     request.user = user
 
     modules = analysis_modules_context(
@@ -73,11 +73,11 @@ def test_analysis_modules_include_notes(settings):
         telemetry_map=telemetry_map,
     )
 
-    summary_module = next(module for module in modules if module["key"] == "summary")
-    notes = summary_module["notes"]
+    analyze_module = next(module for module in modules if module["key"] == "analyze")
+    notes = analyze_module["notes"]
 
     assert notes["job_id"] == str(job_summary.id)
     assert notes["user_can_add"] is True
     assert notes["entries"]
     assert notes["entries"][0]["text"] == "Needs factual review"
-    assert "Needs factual review" in summary_module["notes_panel"]
+    assert "Needs factual review" in analyze_module["notes_panel"]

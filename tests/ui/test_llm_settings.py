@@ -22,7 +22,7 @@ def test_case_llm_settings_updates_summary_defaults(settings):
     client.force_login(user)
 
     payload = {
-        "target": "summary",
+        "target": "analyze",
         "configuration": {
             "name": "Primary summary",
             "provider_chain": ["azure"],
@@ -51,11 +51,11 @@ def test_case_llm_settings_updates_summary_defaults(settings):
     assert resp.status_code == 200
     data = resp.json()
     assert data["status"] == "ok"
-    assert data["target"] == "summary"
+    assert data["target"] == "analyze"
     assert isinstance(data.get("configurations"), list)
     assert data.get("active")
 
-    stored_configs = list(LLMConfiguration.objects.filter(organization=org, target="summary"))
+    stored_configs = list(LLMConfiguration.objects.filter(organization=org, target="analyze"))
     assert len(stored_configs) == 1
     stored = stored_configs[0]
     assert stored.name == "Primary summary"

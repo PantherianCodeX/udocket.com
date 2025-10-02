@@ -298,10 +298,10 @@ def analysis_modules_context(
             "team_alerts": team_alerts,
         }
 
-    summary_module = build_module(
-        key="summary",
+    analyze_module = build_module(
+        key="analyze",
         label="Analyze",
-        description="Generate layered summaries of transcripts with AI assistance.",
+        description="Generate layered summaries and companion analysis artifacts with AI assistance.",
         artifacts=summary_artifacts,
         empty_message="No analyze jobs yet. Generate one from the latest transcript.",
         action_label="Queue analyze job",
@@ -422,6 +422,7 @@ def analysis_modules_context(
             "created_at": item.get("created_at"),
         }
         for item in summary_artifacts[:5]
+        if item.get("job_id")
     ]
 
     compose_dependencies = {
@@ -476,7 +477,7 @@ def analysis_modules_context(
         },
     }
 
-    return [summary_module, compose_module]
+    return [analyze_module, compose_module]
 
 
 __all__ = [

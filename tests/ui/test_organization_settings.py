@@ -79,7 +79,7 @@ def test_organization_settings_saves_configuration(settings):
         "/settings/organization/",
         data={
             "action": "config-save",
-            "target": "summary",
+            "target": "analyze",
             "name": "Org default summary",
             "description": "Primary summarization settings",
             "provider_chain": ["azure"],
@@ -92,7 +92,7 @@ def test_organization_settings_saves_configuration(settings):
         follow=True,
     )
     assert resp.status_code == 200
-    stored = LLMConfiguration.objects.filter(organization=org, target="summary").first()
+    stored = LLMConfiguration.objects.filter(organization=org, target="analyze").first()
     assert stored is not None
     assert stored.is_default is True
     assert stored.name == "Org default summary"
@@ -121,7 +121,7 @@ def test_organization_settings_config_create_deduplicates_name(settings):
         "/settings/organization/",
         data={
             "action": "config-save",
-            "target": "summary",
+            "target": "analyze",
             "name": "Test Config",
             "description": "Original",
             "provider_chain": ["azure"],
@@ -133,7 +133,7 @@ def test_organization_settings_config_create_deduplicates_name(settings):
         "/settings/organization/",
         data={
             "action": "config-create",
-            "target": "summary",
+            "target": "analyze",
             "name": "Test Config",
             "description": "Copy",
             "provider_chain": ["azure"],
@@ -144,7 +144,7 @@ def test_organization_settings_config_create_deduplicates_name(settings):
     assert resp.status_code == 200
 
     configs = list(
-        LLMConfiguration.objects.filter(organization=org, target="summary").order_by("created_at")
+        LLMConfiguration.objects.filter(organization=org, target="analyze").order_by("created_at")
     )
     assert len(configs) == 2
     names = {cfg.name for cfg in configs}

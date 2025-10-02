@@ -367,7 +367,10 @@ def _metadata_matches_keywords(meta: Dict[str, Any], keywords: Tuple[str, ...]) 
     if SUMMARY_KEYWORDS.intersection(normalized_keywords):
         for key, value in meta.items():
             key_str = str(key).lower()
-            if key_str.startswith("summary_") and value is not None:
+            if key_str.startswith("summary_") or key_str.startswith("analysis_"):
+                if value is not None:
+                    return True
+            elif key_str.startswith("analyze_") and value is not None:
                 return True
 
     return False

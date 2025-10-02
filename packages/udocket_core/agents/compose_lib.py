@@ -170,11 +170,17 @@ def _normalize_timeline_payload(payload: Mapping[str, Any]) -> Dict[str, Any]:
             ]
         )
         derived_uuid = uuid5(NAMESPACE_URL, signature)
-        event_id = str(event.get("id") or event.get("uuid") or derived_uuid)
+        existing_uuid = event.get("uuid")
+        event_uuid = (
+            str(existing_uuid).strip()
+            if isinstance(existing_uuid, str) and existing_uuid.strip()
+            else str(derived_uuid)
+        )
+        event_id = str(event.get("id") or event_uuid or derived_uuid)
         normalized_events.append(
             {
                 "id": event_id,
-                "uuid": str(derived_uuid),
+                "uuid": event_uuid,
                 "title": title or summary or "Timeline event",
                 "summary": summary,
                 "ts_start": ts_start_val,
@@ -200,7 +206,13 @@ def _normalize_graph_payload(payload: Mapping[str, Any]) -> Dict[str, Any]:
             entity_type = str(entity.get("type") or "UNKNOWN").strip() or "UNKNOWN"
             signature = f"compose.entity|{entity_type}|{name.lower()}"
             derived_uuid = uuid5(NAMESPACE_URL, signature)
-            entity_id = str(entity.get("id") or entity.get("uuid") or derived_uuid)
+            existing_uuid = entity.get("uuid")
+            entity_uuid = (
+                str(existing_uuid).strip()
+                if isinstance(existing_uuid, str) and existing_uuid.strip()
+                else str(derived_uuid)
+            )
+            entity_id = str(entity.get("id") or entity_uuid or derived_uuid)
             aliases_raw = entity.get("aliases")
             if isinstance(aliases_raw, (list, tuple)):
                 aliases = [str(item).strip() for item in aliases_raw if str(item).strip()]
@@ -224,7 +236,7 @@ def _normalize_graph_payload(payload: Mapping[str, Any]) -> Dict[str, Any]:
             normalized_entities.append(
                 {
                     "id": entity_id,
-                    "uuid": str(derived_uuid),
+                    "uuid": entity_uuid,
                     "name": name,
                     "type": entity_type,
                     "aliases": aliases,
@@ -241,7 +253,13 @@ def _normalize_graph_payload(payload: Mapping[str, Any]) -> Dict[str, Any]:
             target = str(relation.get("target") or "").strip()
             signature = f"compose.relation|{relation_type}|{source.lower()}|{target.lower()}"
             derived_uuid = uuid5(NAMESPACE_URL, signature)
-            relation_id = str(relation.get("id") or relation.get("uuid") or derived_uuid)
+            existing_uuid = relation.get("uuid")
+            relation_uuid = (
+                str(existing_uuid).strip()
+                if isinstance(existing_uuid, str) and existing_uuid.strip()
+                else str(derived_uuid)
+            )
+            relation_id = str(relation.get("id") or relation_uuid or derived_uuid)
             evidence_raw = relation.get("evidence")
             evidence: List[Dict[str, Any]] = []
             if isinstance(evidence_raw, list):
@@ -261,7 +279,7 @@ def _normalize_graph_payload(payload: Mapping[str, Any]) -> Dict[str, Any]:
             normalized_relations.append(
                 {
                     "id": relation_id,
-                    "uuid": str(derived_uuid),
+                    "uuid": relation_uuid,
                     "type": relation_type,
                     "source": source,
                     "target": target,
@@ -779,8 +797,8 @@ class ComposeAgent:
                 "transcript_excerpt": transcript_excerpt,
             }
             user_prompt = (
-                "Use the provided materials to build a concise case brief JSON with parties, "
-                "legal posture, key issues, risks, and next steps."
+                "Use the provided summary outputs, staff report, and transcript excerpt to build a concise "
+                "case brief JSON with parties, legal posture, key issues, risks, and next steps."
             ) + "\n\n" + json.dumps(user_payload, ensure_ascii=False)
             return base_system, user_prompt, response_schema
 

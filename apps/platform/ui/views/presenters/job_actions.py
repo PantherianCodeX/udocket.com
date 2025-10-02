@@ -37,7 +37,7 @@ def build_job_action_entries(
     job_kind = str(meta.get("job_kind") or "").lower()
     converted_available = bool(meta.get("converted_wav_available"))
     source_job_id = meta.get("source_job_id")
-    is_summary = "summary" in job_kind
+    is_analyze = any(token in job_kind for token in ("analyze", "summary"))
 
     sections: List[Dict[str, Any]] = []
 
@@ -59,7 +59,7 @@ def build_job_action_entries(
             }
         )
 
-    if not is_summary and status in RESTARTABLE_STATUSES:
+    if not is_analyze and status in RESTARTABLE_STATUSES:
         workflow_items.append(
             {
                 "label": "Restart transcription",
@@ -75,7 +75,7 @@ def build_job_action_entries(
         _add_section("Workflow").extend(workflow_items)
 
     review_items: List[Dict[str, Any]] = []
-    if not is_summary and can_review and status == Job.Status.SUCCEEDED:
+    if not is_analyze and can_review and status == Job.Status.SUCCEEDED:
         review_items.append(
             {
                 "label": "Approve transcript",
@@ -100,7 +100,7 @@ def build_job_action_entries(
         _add_section("Review").extend(review_items)
 
     files_items: List[Dict[str, Any]] = []
-    if is_summary:
+    if is_analyze:
         summary_artifact_id = meta.get("summary_artifact_id")
         if not summary_artifact_id and artifact_entry and artifact_entry.get("type") == "SUMMARY":
             summary_artifact_id = artifact_entry.get("id")

@@ -34,7 +34,7 @@ def collect_provider_chain(provider_chain: Sequence[str], default_chain: Sequenc
 
 
 def _stage_profile_hint(stage_key: str, *, target: str) -> Dict[str, Any] | None:
-    if target == "summary":
+    if target in {"summary", "analyze"}:
         profile = SUMMARIZE_STAGE_PROFILES.get(stage_key)
     elif target == "compose":
         profile = COMPOSE_STAGE_PROFILES.get(stage_key)
@@ -244,7 +244,7 @@ def build_analysis_llm_context(case: Case, *, return_url: str) -> Dict[str, Dict
         }
 
     return {
-        "summary": _build_target("summary"),
+        "analyze": _build_target("analyze"),
         "timeline": _build_target("timeline"),
         "compose": _build_target("compose"),
     }

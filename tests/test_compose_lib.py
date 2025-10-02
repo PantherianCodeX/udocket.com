@@ -3,7 +3,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from packages.udocket_core.agents.compose_lib import ComposeAgent, ComposeConfig, ComposeResult
+from packages.udocket_core.agents.compose_lib import (
+    ComposeAgent,
+    ComposeConfig,
+    ComposeResult,
+    _normalize_graph_payload,
+    _normalize_timeline_payload,
+)
 
 
 def test_compose_agent_creates_artifacts(tmp_path, monkeypatch):
@@ -58,3 +64,62 @@ def test_compose_agent_creates_artifacts(tmp_path, monkeypatch):
     assert result.meta_json.exists()
     assert result.audit_jsonl.exists()
 
+
+def test_normalize_timeline_payload_preserves_uuid():
+    payload = {
+        "events": [
+            {
+                "id": "event-1",
+                "uuid": "seed-uuid-123",
+                "summary": "Seed",
+                "ts_start": 1.23,
+                "ts_end": 4.56,
+                "speaker": "SPK_1",
+                "labels": ["test"],
+            }
+        ]
+    }
+
+    result = _normalize_timeline_payload(payload)
+    assert result["events"], result
+    normalized = result["events"][0]
+    assert normalized["id"] == "event-1"
+    assert normalized["uuid"] == "seed-uuid-123"
+
+
+def test_normalize_graph_payload_preserves_uuid():
+    payload = {
+        "entities": [
+            {
+                "id": "entity-1",
+                "uuid": "entity-uuid-1",
+                "name": "Person A",
+                "type": "PERSON",
+                "aliases": [],
+                "mentions": [],
+            }
+        ],
+        "relationships": [
+            {
+                "id": "rel-1",
+                "uuid": "rel-uuid-1",
+                "source": "entity-1",
+                "target": "entity-2",
+                "type": "ASSOCIATED_WITH",
+                "summary": "Worked together",
+                "evidence": [
+                    {"ts": 12.0, "text": "Reference"},
+                ],
+            }
+        ],
+    }
+
+    result = _normalize_graph_payload(payload)
+    assert result["entities"], result
+    assert result["relationships"], result
+    entity = result["entities"][0]
+    relation = result["relationships"][0]
+    assert entity["uuid"] == "entity-uuid-1"
+    assert entity["id"] == "entity-1"
+    assert relation["uuid"] == "rel-uuid-1"
+    assert relation["id"] == "rel-1"
