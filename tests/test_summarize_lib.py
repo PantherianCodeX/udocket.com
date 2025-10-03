@@ -34,7 +34,7 @@ from packages.udocket_core.llm.config import (
     LLMSettings,
     LLMStageAssignment,
 )
-from packages.udocket_core.llm.runtime import ProviderRuntimeConfig, ChatClientError
+from packages.udocket_core.llm.runtime import ChatClientError
 
 
 FAKE_AZURE_SECRET = {
@@ -586,7 +586,7 @@ def test_analyze_agent_raises_on_stage_failure(monkeypatch, tmp_path):
 
 
 
-def test_stage_model_fallback_uses_provider_default(monkeypatch, tmp_path):
+def test_stage_requires_explicit_model_configuration(monkeypatch, tmp_path):
     azure_provider = LLMProvider(
         name="azure",
         display_name="Azure",
@@ -606,33 +606,6 @@ def test_stage_model_fallback_uses_provider_default(monkeypatch, tmp_path):
     monkeypatch.setattr(analyze_lib, "_llm_settings_cache", settings, raising=False)
     monkeypatch.setattr(analyze_lib, "_load_llm_settings", lambda: settings)
 
-    captured_models: List[str] = []
-
-    def fake_build_provider_runtime_config(
-        *,
-        provider: LLMProvider,
-        model_name: str,
-        credential_payload: Dict[str, Any] | None,
-        options: Dict[str, Any] | None,
-    ) -> ProviderRuntimeConfig:
-        captured_models.append(model_name)
-        payload = credential_payload or {}
-        return ProviderRuntimeConfig(
-            provider=provider,
-            model=provider.models.get(model_name),
-            endpoint=payload.get("endpoint", ""),
-            api_key=payload.get("api_key", ""),
-            options=dict(options or {}),
-            metadata=dict(payload.get("metadata", {})),
-        )
-
-    monkeypatch.setattr(
-        analyze_lib,
-        "build_provider_runtime_config",
-        fake_build_provider_runtime_config,
-    )
-    monkeypatch.setattr(analyze_lib, "build_chat_client", lambda provider_runtime: object())
-
     _install_stage_stubs(monkeypatch)
 
     case_dir = tmp_path / "cases" / "CASE-FALLBACK"
@@ -640,19 +613,18 @@ def test_stage_model_fallback_uses_provider_default(monkeypatch, tmp_path):
     _write_transcript(transcript, "[00:00] Speaker: Hello\n[00:01] Speaker: Again")
 
     agent = AnalyzeAgent(_make_config())
-    result = agent.analyze(
-        case_id="CASE-FALLBACK",
-        case_dir=case_dir,
-        job_id="JOB-FB",
-        provider_credentials={"azure": FAKE_AZURE_SECRET},
-    )
+    with pytest.raises(RuntimeError) as excinfo:
+        agent.analyze(
+            case_id="CASE-FALLBACK",
+            case_dir=case_dir,
+            job_id="JOB-FB",
+            provider_credentials={"azure": FAKE_AZURE_SECRET},
+        )
 
-    assert result.status == "ok"
-    assert captured_models
-    assert all(name == "gpt-4o" for name in captured_models)
+    assert "No model configured" in str(excinfo.value)
 
 
-def test_stage_provider_failover_uses_next_provider(monkeypatch, tmp_path):
+def test_stage_provider_initialization_error(monkeypatch, tmp_path):
     azure_provider = LLMProvider(
         name="azure",
         display_name="Azure",
@@ -667,25 +639,9 @@ def test_stage_provider_failover_uses_next_provider(monkeypatch, tmp_path):
             )
         },
     )
-    fallback_provider = LLMProvider(
-        name="fallback",
-        display_name="Fallback",
-        models={
-            "fb-model": LLMProviderModel(
-                name="fb-model",
-                label="Fallback",
-                cost_tier="standard",
-                default_enabled=True,
-                max_output_tokens=2000,
-                context_window_tokens=8000,
-            )
-        },
-    )
-    settings = _make_llm_settings(["fallback", "azure"], {"fallback": fallback_provider, "azure": azure_provider})
+    settings = _make_llm_settings(["azure"], {"azure": azure_provider})
     monkeypatch.setattr(analyze_lib, "_llm_settings_cache", settings, raising=False)
     monkeypatch.setattr(analyze_lib, "_load_llm_settings", lambda: settings)
-
-    build_attempts: List[tuple[str, str]] = []
 
     def fake_build_provider_runtime_config(
         *,
@@ -694,25 +650,13 @@ def test_stage_provider_failover_uses_next_provider(monkeypatch, tmp_path):
         credential_payload: Dict[str, Any] | None,
         options: Dict[str, Any] | None,
     ) -> ProviderRuntimeConfig:
-        build_attempts.append((provider.name, model_name))
-        if provider.name == "fallback":
-            raise ChatClientError("fallback provider unavailable")
-        payload = credential_payload or {}
-        return ProviderRuntimeConfig(
-            provider=provider,
-            model=provider.models.get(model_name),
-            endpoint=payload.get("endpoint", ""),
-            api_key=payload.get("api_key", ""),
-            options=dict(options or {}),
-            metadata=dict(payload.get("metadata", {})),
-        )
+        raise ChatClientError("Invalid credentials")
 
     monkeypatch.setattr(
         analyze_lib,
         "build_provider_runtime_config",
         fake_build_provider_runtime_config,
     )
-    monkeypatch.setattr(analyze_lib, "build_chat_client", lambda provider_runtime: object())
 
     _install_stage_stubs(monkeypatch)
 
@@ -720,17 +664,22 @@ def test_stage_provider_failover_uses_next_provider(monkeypatch, tmp_path):
     transcript = case_dir / "transcript" / "JOB-FO__transcript.txt"
     _write_transcript(transcript, "[00:00] Speaker: Hello\n[00:01] Speaker: Again")
 
-    agent = AnalyzeAgent(AnalyzeConfig(provider_chain=["fallback", "azure"]))
-    result = agent.analyze(
-        case_id="CASE-FAILOVER",
-        case_dir=case_dir,
-        job_id="JOB-FO",
-        provider_credentials={"azure": FAKE_AZURE_SECRET},
-    )
+    agent = AnalyzeAgent(AnalyzeConfig(provider_chain=["azure"]))
+    with pytest.raises(RuntimeError) as excinfo:
+        agent.analyze(
+            case_id="CASE-FAILOVER",
+            case_dir=case_dir,
+            job_id="JOB-FO",
+            provider_credentials={"azure": FAKE_AZURE_SECRET},
+            stage_map={
+                "analyze.extract_outline": {
+                    "provider": "azure",
+                    "model": "gpt-4o",
+                }
+            },
+        )
 
-    assert result.status == "ok"
-    assert build_attempts[0][0] == "fallback"
-    assert any(name == ("azure", "gpt-4o") for name in build_attempts)
+    assert "Unable to configure provider" in str(excinfo.value)
 
 
 def test_prompt_limits_respect_config_defaults(tmp_path):

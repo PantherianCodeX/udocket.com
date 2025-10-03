@@ -220,7 +220,7 @@ def build_analyze_graph(impl):
   9. `compose.qa_review` → emit JSON QA status (temperature forced to 0 for deterministic checks).
 - Each stage receives Analyze outputs plus the live case intake payload and a `case_metadata` bundle (case id/title, organization, composing job ids) so prompts remain grounded in the current matter context.
 - Timeline summary, entity briefing, and graph visual planner stages emit Markdown/JSON artifacts that downstream writers embed alongside the primary briefs.
-- Azure (Canada regions) is the default provider; org-specific overrides are supplied via `LLMConfiguration` provider chains or stage maps.
+- Azure (Canada regions) is the default provider; org-specific overrides are supplied via `LLMConfiguration` provider chains or stage maps. Stages must not fall back to alternate providers/models—fail fast with a descriptive error that links back to Org Settings so operators can resolve configuration issues quickly.
 - Structured outputs (`timeline_v2`, `graph_v2`, `entities_v2`) must retain incoming `uuid` values when present and derive UUID5 fallbacks otherwise.
 
 

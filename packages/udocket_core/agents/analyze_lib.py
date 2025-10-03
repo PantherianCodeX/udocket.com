@@ -6,7 +6,7 @@ import os
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, cast
+from typing import Any, Callable, Dict, List, Optional, Sequence, cast
 
 from .common import (
     parse_transcript,
@@ -315,65 +315,25 @@ class StageRuntime:
         return "azure"
 
 
-def _credential_model_candidates(credential_payload: Optional[Dict[str, Any]]) -> List[str]:
-    if not credential_payload:
-        return []
-    models_payload = credential_payload.get("models")
-    if not isinstance(models_payload, (list, tuple)):
-        return []
-    enabled: List[str] = []
-    disabled: List[str] = []
-    for entry in models_payload:
-        if not isinstance(entry, Mapping):
-            continue
-        name_value = entry.get("name") or entry.get("id")
-        if not isinstance(name_value, str):
-            continue
-        name = name_value.strip()
-        if not name:
-            continue
-        target = enabled if entry.get("enabled", True) else disabled
-        if name not in target:
-            target.append(name)
-    return enabled + [value for value in disabled if value not in enabled]
-
-
-def _provider_model_candidates(provider_meta: Optional["LLMProvider"]) -> List[str]:
-    if provider_meta is None or not provider_meta.models:
-        return []
-    enabled: List[str] = []
-    fallback: List[str] = []
-    for name, model_meta in provider_meta.models.items():
-        default_enabled = getattr(model_meta, "default_enabled", True)
-        target = enabled if default_enabled else fallback
-        if name not in target:
-            target.append(name)
-    return enabled + [value for value in fallback if value not in enabled]
-
-
-def _model_candidates_for_provider(
+def _stage_error_message(
+    stage_key: str,
     *,
-    provider_meta: Optional["LLMProvider"],
-    preferred_model: Optional[str],
-    credential_payload: Optional[Dict[str, Any]],
-) -> List[str]:
-    candidates: List[str] = []
-
-    def _add(value: Optional[str]) -> None:
-        if not value or not isinstance(value, str):
-            return
-        normalized = value.strip()
-        if not normalized:
-            return
-        if normalized not in candidates:
-            candidates.append(normalized)
-
-    _add(preferred_model)
-    for name in _credential_model_candidates(credential_payload):
-        _add(name)
-    for name in _provider_model_candidates(provider_meta):
-        _add(name)
-    return candidates
+    provider: Optional[str],
+    model: Optional[str],
+    reason: str,
+) -> str:
+    descriptor = []
+    if provider:
+        if model:
+            descriptor.append(f"provider '{provider}' model '{model}'")
+        else:
+            descriptor.append(f"provider '{provider}'")
+    message = f"[{stage_key}] {reason}"
+    if descriptor:
+        message = f"{message} ({', '.join(descriptor)})"
+    return (
+        f"{message}. Review the LLM configuration in Organization Settings and run the live model test before retrying."
+    )
 
 
 PIPELINE_NODE_ORDER = [
@@ -598,9 +558,17 @@ class AnalyzeAgent:
                 assignment.providers if assignment and assignment.providers else provider_chain
             )
             if not providers:
-                providers = list(provider_chain or DEFAULT_PROVIDER_CHAIN)
+                providers = list(provider_chain)
+
             if not providers:
-                providers = list(DEFAULT_PROVIDER_CHAIN)
+                raise RuntimeError(
+                    _stage_error_message(
+                        stage_key,
+                        provider=None,
+                        model=None,
+                        reason="No provider configured",
+                    )
+                )
 
             preferred_model = (
                 str(assignment.model).strip()
@@ -639,180 +607,136 @@ class AnalyzeAgent:
                     except (TypeError, ValueError):
                         override_max_tokens = None
 
-            if not providers:
-                providers = _normalize_providers(self.config.provider_chain)
-            if not providers:
-                providers = list(DEFAULT_PROVIDER_CHAIN)
-            if not providers:
-                providers = ["azure"]
-
             requires_chat = stage_key != "analyze.context_builder"
-            runtime: Optional[StageRuntime] = None
-            errors: List[str] = []
+            provider_name = providers[0]
+            credential_payload = provider_credentials.get(provider_name)
+            provider_meta = settings.provider(provider_name)
+
+            chat_client: Optional[ChatClient] = None
+            model_meta = None
 
             if requires_chat:
-                for provider_name in providers:
-                    provider_meta = settings.provider(provider_name)
-                    if provider_meta is None:
-                        errors.append(
-                            f"{provider_name}: provider not configured"
+                if provider_meta is None:
+                    raise RuntimeError(
+                        _stage_error_message(
+                            stage_key,
+                            provider=provider_name,
+                            model=None,
+                            reason="Provider is not configured",
                         )
-                        continue
-                    credential_payload = provider_credentials.get(provider_name)
-                    model_candidates = _model_candidates_for_provider(
-                        provider_meta=provider_meta,
-                        preferred_model=preferred_model,
+                    )
+                if not preferred_model:
+                    raise RuntimeError(
+                        _stage_error_message(
+                            stage_key,
+                            provider=provider_name,
+                            model=None,
+                            reason="No model configured",
+                        )
+                    )
+                model_meta = provider_meta.models.get(preferred_model)
+                if model_meta is None:
+                    raise RuntimeError(
+                        _stage_error_message(
+                            stage_key,
+                            provider=provider_name,
+                            model=preferred_model,
+                            reason="Model is not registered",
+                        )
+                    )
+                try:
+                    runtime_cfg = build_provider_runtime_config(
+                        provider=provider_meta,
+                        model_name=preferred_model,
                         credential_payload=credential_payload,
+                        options=options,
                     )
-                    if not model_candidates:
-                        errors.append(
-                            f"{provider_name}: no models available"
-                        )
-                        continue
-                    for candidate_model in model_candidates:
-                        resolved_options = dict(options)
-                        try:
-                            provider_runtime = build_provider_runtime_config(
-                                provider=provider_meta,
-                                model_name=candidate_model,
-                                credential_payload=credential_payload,
-                                options=resolved_options,
-                            )
-                            chat_client = build_chat_client(
-                                provider_runtime=provider_runtime
-                            )
-                            candidate_meta = (
-                                provider_runtime.model
-                                if provider_runtime.model is not None
-                                else provider_meta.models.get(candidate_model)
-                            )
-                            stage_max_tokens_base = (
-                                candidate_meta.max_output_tokens
-                                if candidate_meta and candidate_meta.max_output_tokens
-                                else self.config.max_output_tokens
-                            )
-                            if override_max_tokens is not None:
-                                stage_max_tokens_base = override_max_tokens
-                            stage_max_tokens = self.config.stage_max_tokens_for(
-                                stage_key,
-                                candidate_meta.max_output_tokens if candidate_meta else None,
-                                default_limit=stage_max_tokens_base,
-                            )
-                            stage_temperature = (
-                                candidate_meta.default_temperature
-                                if candidate_meta and candidate_meta.default_temperature is not None
-                                else self.config.temperature
-                            )
-                            if "temperature" in resolved_options:
-                                try:
-                                    stage_temperature = float(resolved_options["temperature"])
-                                except (TypeError, ValueError):
-                                    pass
-
-                            context_window_tokens = (
-                                candidate_meta.context_window_tokens
-                                if candidate_meta and candidate_meta.context_window_tokens
-                                else None
-                            )
-
-                            runtime = StageRuntime(
-                                stage_key=stage_key,
-                                providers=providers,
-                                provider=provider_name,
-                                model=candidate_model,
-                                client=chat_client,
-                                max_output_tokens=stage_max_tokens or self.config.max_output_tokens,
-                                context_window_tokens=context_window_tokens,
-                                profile=stage_profile,
-                                temperature=stage_temperature,
-                                options=resolved_options,
-                            )
-                            break
-                        except ChatClientError as exc:
-                            errors.append(
-                                f"{provider_name}:{candidate_model}: {exc}"
-                            )
-                        except Exception as exc:  # noqa: BLE001
-                            errors.append(
-                                f"{provider_name}:{candidate_model}: {exc}"
-                            )
-                    if runtime is not None:
-                        break
-            else:
-                for provider_name in providers:
-                    provider_meta = settings.provider(provider_name)
-                    if provider_meta is None:
-                        errors.append(
-                            f"{provider_name}: provider not configured"
-                        )
-                        continue
-                    credential_payload = provider_credentials.get(provider_name)
-                    model_candidates = _model_candidates_for_provider(
-                        provider_meta=provider_meta,
-                        preferred_model=preferred_model,
-                        credential_payload=credential_payload,
-                    )
-                    if not model_candidates:
-                        errors.append(
-                            f"{provider_name}: no models available"
-                        )
-                        continue
-                    candidate_model = model_candidates[0]
-                    candidate_meta = provider_meta.models.get(candidate_model)
-                    stage_max_tokens_base = (
-                        candidate_meta.max_output_tokens
-                        if candidate_meta and candidate_meta.max_output_tokens
-                        else self.config.max_output_tokens
-                    )
-                    if override_max_tokens is not None:
-                        stage_max_tokens_base = override_max_tokens
-                    stage_max_tokens = self.config.stage_max_tokens_for(
-                        stage_key,
-                        candidate_meta.max_output_tokens if candidate_meta else None,
-                        default_limit=stage_max_tokens_base,
-                    )
-                    stage_temperature = (
-                        candidate_meta.default_temperature
-                        if candidate_meta and candidate_meta.default_temperature is not None
-                        else self.config.temperature
-                    )
-                    if "temperature" in options:
-                        try:
-                            stage_temperature = float(options["temperature"])
-                        except (TypeError, ValueError):
-                            pass
-
-                    context_window_tokens = (
-                        candidate_meta.context_window_tokens
-                        if candidate_meta and candidate_meta.context_window_tokens
-                        else None
-                    )
-
-                    runtime = StageRuntime(
-                        stage_key=stage_key,
-                        providers=providers,
+                except ChatClientError as exc:  # pragma: no cover - configuration errors
+                    self._log(
+                        logging.ERROR,
+                        "stage.config.error",
+                        stage=stage_key,
                         provider=provider_name,
-                        model=candidate_model,
-                        client=None,
-                        max_output_tokens=stage_max_tokens or self.config.max_output_tokens,
-                        context_window_tokens=context_window_tokens,
-                        profile=stage_profile,
-                        temperature=stage_temperature,
-                        options=dict(options),
+                        model=preferred_model,
+                        error=str(exc),
                     )
-                    break
+                    raise RuntimeError(
+                        _stage_error_message(
+                            stage_key,
+                            provider=provider_name,
+                            model=preferred_model,
+                            reason=f"Unable to configure provider: {exc}",
+                        )
+                    ) from exc
 
-            if runtime is None:
-                error_reason = ", ".join(errors) if errors else "no providers available"
-                raise RuntimeError(
-                    f"Unable to initialize providers for stage '{stage_key}': {error_reason}"
-                )
+                try:
+                    chat_client = build_chat_client(provider_runtime=runtime_cfg)
+                    model_meta = runtime_cfg.model or model_meta
+                except ChatClientError as exc:  # pragma: no cover - runtime errors
+                    self._log(
+                        logging.ERROR,
+                        "stage.client.error",
+                        stage=stage_key,
+                        provider=provider_name,
+                        model=preferred_model,
+                        error=str(exc),
+                    )
+                    raise RuntimeError(
+                        _stage_error_message(
+                            stage_key,
+                            provider=provider_name,
+                            model=preferred_model,
+                            reason=f"Provider rejected the connection: {exc}",
+                        )
+                    ) from exc
+            else:
+                if provider_meta and preferred_model:
+                    model_meta = provider_meta.models.get(preferred_model)
+
+            stage_max_tokens_base = (
+                model_meta.max_output_tokens
+                if model_meta and model_meta.max_output_tokens
+                else self.config.max_output_tokens
+            )
+            if override_max_tokens is not None:
+                stage_max_tokens_base = override_max_tokens
+            stage_max_tokens = self.config.stage_max_tokens_for(
+                stage_key,
+                model_meta.max_output_tokens if model_meta else None,
+                default_limit=stage_max_tokens_base,
+            )
+            stage_temperature = (
+                model_meta.default_temperature
+                if model_meta and model_meta.default_temperature is not None
+                else self.config.temperature
+            )
+            if "temperature" in options:
+                try:
+                    stage_temperature = float(options["temperature"])
+                except (TypeError, ValueError):
+                    pass
+
+            context_window_tokens = (
+                model_meta.context_window_tokens if model_meta and model_meta.context_window_tokens else None
+            )
+
+            runtime = StageRuntime(
+                stage_key=stage_key,
+                providers=providers,
+                provider=provider_name,
+                model=preferred_model,
+                client=chat_client,
+                max_output_tokens=stage_max_tokens or self.config.max_output_tokens,
+                context_window_tokens=context_window_tokens,
+                profile=stage_profile,
+                temperature=stage_temperature,
+                options=dict(options),
+            )
 
             stage_runtimes[stage_key] = runtime
 
-            for provider in runtime.providers:
-                if provider not in provider_sequence:
-                    provider_sequence.append(provider)
+            if provider_name not in provider_sequence:
+                provider_sequence.append(provider_name)
 
             self._log(
                 self._log_level,

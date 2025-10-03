@@ -166,7 +166,7 @@ General guidelines:
   - Annotate pytest fixtures and helper lambdas per the typing roadmap; prefer `TypedDict`/`Protocol` for structured payloads.
 - Stub dependencies: install `apps/platform/requirements.txt` (which bundles the Django and DRF stub packages) so Pyright has Django/DRF annotations locally.
 - Dependencies: avoid heavyweight or networked services unless approved; prefer Azure services in Canadian regions.
-- Error handling: fail fast with clear messages; write structured meta and human logs; never raise without logging.
+- Error handling: fail fast with clear messages; write structured meta and human logs; never raise without logging. Never introduce provider/model fallback logic—jobs must use the exact configured provider chain and raise actionable errors if initialization fails.
 - Refactors spanning many files should rely on helper scripts (add them under `scripts/` when reusable) instead of manual editing. Always run `pyright` to surface import/function issues across the tree before finishing a refactor.
 - Version control: keep diffs minimal and focused; avoid unrelated refactors.
 

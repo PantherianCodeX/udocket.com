@@ -177,10 +177,12 @@
         const nextParam = returnUrl ? `&next=${encode(returnUrl)}` : '';
         editLink.href = `${settingsBase}?config=${encode(config.id)}${nextParam}`;
         editLink.classList.remove('pointer-events-none', 'opacity-50');
+        container.dataset.llmSettingsEdit = editLink.href;
       } else {
         const nextParam = returnUrl ? `?next=${encode(returnUrl)}` : '';
         editLink.href = `${settingsBase}${nextParam}`;
         editLink.classList.add('pointer-events-none', 'opacity-50');
+        container.dataset.llmSettingsEdit = editLink.href;
       }
     };
 
@@ -1613,6 +1615,8 @@
     if (!endpointTemplate) return;
     let jobId;
     const payload = {};
+    let llmSettingsHref = null;
+
     if (action === 'analyze') {
       const analyzeContainer = button.closest('[data-analyze]') || button.closest('[data-summary]');
       const select =
@@ -1631,6 +1635,11 @@
       }
       jobId = select.value;
 
+      llmSettingsHref =
+        analyzeContainer?.dataset.llmSettingsEdit ||
+        analyzeContainer?.dataset.llmSettingsBase ||
+        null;
+
       const configId = analyzeContainer?.dataset.llmConfigId || null;
       if (configId) {
         payload.llm_config_id = configId;
@@ -1643,6 +1652,8 @@
         return;
       }
       jobId = transcriptSelect.value;
+      llmSettingsHref =
+        container?.dataset.llmSettingsEdit || container?.dataset.llmSettingsBase || null;
       const summarySelect = container.querySelector('[data-timeline-summary]');
       const artifactSelect = container.querySelector('[data-timeline-artifacts]');
       if (summarySelect && summarySelect.value) {
@@ -1671,6 +1682,8 @@
         return;
       }
       jobId = summarySelect.value;
+      llmSettingsHref =
+        container?.dataset.llmSettingsEdit || container?.dataset.llmSettingsBase || null;
       payload.summary_job_id = jobId;
       const composeConfigId = container?.dataset.llmConfigId || container?.getAttribute('data-llm-config-id');
       if (composeConfigId) {
@@ -1745,7 +1758,21 @@
       const fallbackMessage = 'Unable to queue automation';
       const errorMessage = error instanceof Error && error.message ? error.message.trim() : fallbackMessage;
       if (deps.notify) {
-        deps.notify(toastX, toastY, errorMessage || fallbackMessage);
+        if (llmSettingsHref) {
+          deps.notify({
+            type: 'error',
+            message: errorMessage || fallbackMessage,
+            action: {
+              href: llmSettingsHref,
+              label: 'Review LLM configuration',
+            },
+          });
+        } else {
+          deps.notify({
+            type: 'error',
+            message: errorMessage || fallbackMessage,
+          });
+        }
       }
     } finally {
       button.disabled = false;

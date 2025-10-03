@@ -83,10 +83,78 @@
     return ctx;
   }
 
+  function ensureMessageStack() {
+    let stack = global.document.getElementById('platform-ui-message-stack');
+    if (!stack) {
+      stack = global.document.createElement('div');
+      stack.id = 'platform-ui-message-stack';
+      stack.className = 'pointer-events-none fixed inset-x-0 top-4 z-50 flex flex-col items-center gap-2 px-4 sm:items-end sm:px-8';
+      global.document.body.appendChild(stack);
+    }
+    return stack;
+  }
+
+  function renderMessage(options) {
+    const stack = ensureMessageStack();
+    const variant = options.type || 'info';
+    const message = options.message || '';
+    const action = options.action || null;
+    const card = global.document.createElement('div');
+    const variantClass =
+      variant === 'error'
+        ? 'border-rose-400/40 bg-rose-950/90 text-rose-100'
+        : 'border-white/20 bg-slate-900/90 text-slate-100';
+    card.className = `pointer-events-auto relative w-full max-w-md rounded-xl border px-4 py-3 shadow-xl shadow-black/40 backdrop-blur ${variantClass}`;
+
+    const messageEl = global.document.createElement('p');
+    messageEl.className = 'pr-8 text-sm leading-relaxed';
+    messageEl.textContent = message || 'An unexpected error occurred.';
+    card.appendChild(messageEl);
+
+    if (action && action.href) {
+      const actionBtn = global.document.createElement('a');
+      actionBtn.href = action.href;
+      actionBtn.className = 'mt-3 inline-flex items-center gap-2 rounded-lg border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white transition hover:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-400/60';
+      actionBtn.textContent = action.label || 'Review configuration';
+      if (action.target) actionBtn.target = action.target;
+      card.appendChild(actionBtn);
+    }
+
+    const closeBtn = global.document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'absolute right-2 top-2 rounded-full p-1 text-xs text-white/70 transition hover:text-white focus:outline-none focus:ring-2 focus:ring-white/40';
+    closeBtn.innerHTML = '<span aria-hidden="true">×</span><span class="sr-only">Dismiss</span>';
+    closeBtn.addEventListener('click', () => {
+      card.remove();
+    });
+    card.appendChild(closeBtn);
+
+    stack.appendChild(card);
+
+    if (variant !== 'error') {
+      global.setTimeout(() => {
+        card.classList.add('opacity-0');
+        card.style.transition = 'opacity 150ms ease-in-out';
+        global.setTimeout(() => {
+          card.remove();
+        }, 180);
+      }, options.timeout || 3000);
+    }
+  }
+
   function createNotifier(ctx) {
     const toastAt = ctx.toastAt;
     const toast = ctx.toast;
     return function notify(x, y, text) {
+      if (arguments.length === 1 && typeof x === 'object' && x !== null && !Array.isArray(x)) {
+        renderMessage({
+          type: x.type || 'info',
+          message: x.message || '',
+          action: x.action || null,
+          timeout: x.timeout,
+        });
+        return;
+      }
       if (toastAt) {
         toastAt(x, y, text);
       } else if (toast) {
