@@ -1,27 +1,31 @@
 from __future__ import annotations
 
 import os
-import socket
 from pathlib import Path
+
 import environ
 
+from config.settings import settings
 
 BASE_DIR = Path(__file__).resolve().parents[4]  # repo root (/app)
 env = environ.Env()
 
-# Load .env from repo root, but only if present (avoid noisy log)
-_env_path = BASE_DIR / ".env"
-# Only auto-read .env when explicitly enabled. In Docker, compose already
-# provides env vars via env_file, and in local pytest discovery we avoid
-# binding to container-only values (e.g., Postgres host).
-if os.environ.get("ENV_READ_DOTENV") == "1" and _env_path.exists():
-    environ.Env.read_env(str(_env_path))
+storage_root_path = settings.ensure_storage_root()
+if not storage_root_path.exists():
+    fallback_root = (BASE_DIR / "storage").resolve()
+    try:
+        fallback_root.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
+    else:
+        storage_root_path = fallback_root
+storage_config = settings.storage
+STORAGE_ROOT = str(storage_config.root)
 
+SECRET_KEY = settings.django.secret_key_value()
+DEBUG = settings.django.debug
 
-SECRET_KEY = env("DJANGO_SECRET_KEY", default="dev-insecure-secret-key")
-DEBUG = env.bool("DJANGO_DEBUG", default=True)
-
-ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["*"])
+ALLOWED_HOSTS = list(settings.django.allowed_hosts)
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -90,74 +94,8 @@ WSGI_APPLICATION = None  # ASGI-first
 ASGI_APPLICATION = "apps.platform.config.asgi.application"
 
 
-# Database: honor DATABASE_URL; default to local sqlite under storage root
-default_storage = (BASE_DIR / "storage").resolve()
-sr_env = env("STORAGE_ROOT", default=str(default_storage))
-storage_root = Path(sr_env).resolve()
-# Ensure storage root exists; if not creatable, fall back to repo storage/
-_ok = True
-try:
-    storage_root.mkdir(parents=True, exist_ok=True)
-except Exception:
-    _ok = False
-if not _ok or not storage_root.exists():
-    storage_root = default_storage
-    try:
-        storage_root.mkdir(parents=True, exist_ok=True)
-    except Exception:
-        pass
-STORAGE_ROOT = str(storage_root)
-default_sqlite_path = storage_root / "udocket_django.db"
-
-# Robust DB config with local fallback when DATABASE_URL points to an
-# unavailable path (e.g., host dev using container-oriented /app/storage).
-if os.environ.get("PYTEST_CURRENT_TEST"):
-    test_url = (
-        os.environ.get("TEST_DATABASE_URL")
-        or os.environ.get("DATABASE_URL")
-        or f"sqlite:///{default_sqlite_path}"
-    )
-    if test_url.startswith("sqlite:///"):
-        _sqlite_path = Path(test_url.replace("sqlite:///", "")).resolve()
-        _sqlite_path.parent.mkdir(parents=True, exist_ok=True)
-        DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": str(_sqlite_path)}}
-    else:
-        DATABASES = {"default": environ.Env.db_url_config(test_url)}
-else:
-    _db_url = env("DATABASE_URL", default=f"sqlite:///{default_sqlite_path}")
-    allow_sqlite_fallback = env.bool("ALLOW_SQLITE_DEV_FALLBACK", default=False)
-    if isinstance(_db_url, str) and _db_url.startswith("sqlite:///"):
-        _sqlite_path = Path(_db_url.replace("sqlite:///", "")).resolve()
-        try:
-            _sqlite_path.parent.mkdir(parents=True, exist_ok=True)
-            DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": str(_sqlite_path)}}
-        except Exception:
-            DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": str(default_sqlite_path)}}
-    else:
-        _db_conf = env.db("DATABASE_URL", default=_db_url)
-        should_fallback = False
-        if allow_sqlite_fallback:
-            host = _db_conf.get("HOST")
-            port = _db_conf.get("PORT") or None
-            if host:
-                try:
-                    socket.getaddrinfo(host, int(port) if port else None)
-                except (socket.gaierror, ValueError):
-                    should_fallback = True
-        if allow_sqlite_fallback and should_fallback:
-            fallback_path = default_sqlite_path
-            try:
-                fallback_path.parent.mkdir(parents=True, exist_ok=True)
-            except Exception:
-                pass
-            DATABASES = {
-                "default": {
-                    "ENGINE": "django.db.backends.sqlite3",
-                    "NAME": str(fallback_path),
-                }
-            }
-        else:
-            DATABASES = {"default": _db_conf}
+running_tests = bool(os.environ.get("PYTEST_CURRENT_TEST"))
+DATABASES = settings.database.as_django_config(env_parser=env, running_tests=running_tests)
 
 
 # Password validation
@@ -172,11 +110,11 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 
 # Organization scoping header (used by middleware to set DB session var for RLS)
-ORG_HEADER_NAME = env("ORG_HEADER_NAME", default="HTTP_X_ORGANIZATION_ID")
+ORG_HEADER_NAME = settings.django.org_header_name
 
 
-LANGUAGE_CODE = env("DJANGO_LANGUAGE_CODE", default="en-ca")
-TIME_ZONE = env("DJANGO_TIME_ZONE", default="UTC")
+LANGUAGE_CODE = settings.django.language_code
+TIME_ZONE = settings.django.time_zone
 USE_I18N = True
 USE_TZ = True
 
@@ -185,7 +123,7 @@ STATIC_URL = "/static/"
 STATIC_ROOT = str(BASE_DIR / "static")
 
 MEDIA_URL = "/media/"
-MEDIA_ROOT = str(storage_root / "media")
+MEDIA_ROOT = str(storage_config.media_root())
 
 
 # DRF
@@ -204,12 +142,12 @@ SPECTACULAR_SETTINGS = {"TITLE": "uDocket API", "VERSION": "1.0.0"}
 
 
 # Channels layer: use Redis if REDIS_URL set, else in-memory
-_redis_url = env("REDIS_URL", default=None)
-if _redis_url:
+redis_config = settings.redis
+if redis_config.url:
     CHANNEL_LAYERS = {
         "default": {
             "BACKEND": "channels_redis.core.RedisChannelLayer",
-            "CONFIG": {"hosts": [_redis_url]},
+            "CONFIG": {"hosts": [redis_config.url]},
         }
     }
 else:
@@ -221,21 +159,21 @@ else:
 
 
 # Security defaults (override in prod.py)
-SECURE_SSL_REDIRECT = env.bool("SECURE_SSL_REDIRECT", default=False)
-SESSION_COOKIE_SECURE = env.bool("SESSION_COOKIE_SECURE", default=False)
-CSRF_COOKIE_SECURE = env.bool("CSRF_COOKIE_SECURE", default=False)
-CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
-SECURE_HSTS_SECONDS = env.int("SECURE_HSTS_SECONDS", default=0)
-SECURE_CONTENT_TYPE_NOSNIFF = True
-SECURE_BROWSER_XSS_FILTER = True
+SECURE_SSL_REDIRECT = settings.django.secure_ssl_redirect
+SESSION_COOKIE_SECURE = settings.django.session_cookie_secure
+CSRF_COOKIE_SECURE = settings.django.csrf_cookie_secure
+CSRF_TRUSTED_ORIGINS = list(settings.django.csrf_trusted_origins)
+SECURE_HSTS_SECONDS = settings.django.secure_hsts_seconds
+SECURE_CONTENT_TYPE_NOSNIFF = settings.django.secure_content_type_nosniff
+SECURE_BROWSER_XSS_FILTER = settings.django.secure_browser_xss_filter
 
 
 # Guardian object-perms
 ANONYMOUS_USER_NAME = None
 
 # Guardian backend for object permissions (warning silence)
-# Enable OIDC backend only when OIDC is configured (discovery or explicit endpoints)
-_oidc_enabled = bool(env("OIDC_DISCOVERY_URL", default=None) or env("OIDC_OP_TOKEN_ENDPOINT", default=None))
+oidc_config = settings.oidc
+_oidc_enabled = oidc_config.is_enabled()
 
 AUTHENTICATION_BACKENDS = (
     "django.contrib.auth.backends.ModelBackend",
@@ -244,14 +182,15 @@ AUTHENTICATION_BACKENDS = (
 
 
 # Celery
-CELERY_BROKER_URL = env("CELERY_BROKER_URL", default=env("REDIS_URL", default="redis://localhost:6379/1"))
-CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND", default="django-db")
-CELERY_TASK_ALWAYS_EAGER = env.bool("CELERY_TASK_ALWAYS_EAGER", default=False)
-CELERY_TASK_TIME_LIMIT = env.int("CELERY_TASK_TIME_LIMIT", default=7200)
-CELERY_TASK_SOFT_TIME_LIMIT = env.int("CELERY_TASK_SOFT_TIME_LIMIT", default=7100)
+celery_config = settings.celery
+CELERY_BROKER_URL = celery_config.effective_broker_url()
+CELERY_RESULT_BACKEND = celery_config.result_backend
+CELERY_TASK_ALWAYS_EAGER = celery_config.task_always_eager
+CELERY_TASK_TIME_LIMIT = celery_config.task_time_limit
+CELERY_TASK_SOFT_TIME_LIMIT = celery_config.task_soft_time_limit
 
 # Persist Celery beat schedule under storage/runtime/celery/
-celery_runtime_dir = storage_root / "runtime" / "celery"
+celery_runtime_dir = storage_config.runtime_dir("celery")
 try:
     celery_runtime_dir.mkdir(parents=True, exist_ok=True)
 except Exception:
@@ -259,26 +198,7 @@ except Exception:
 CELERY_BEAT_SCHEDULE_FILENAME = str(celery_runtime_dir / "celerybeat-schedule")
 
 # Logging configuration: rely on propagation so modules inherit handler wiring
-_LOGGER_LEVEL_DEFAULTS = {
-    "apps.platform": ("PLATFORM_LOG_LEVEL", "DEBUG"),
-    "apps.platform.accounts": ("PLATFORM_LOG_LEVEL", "DEBUG"),
-    "apps.platform.accounts.auth": ("AUTH_LOG_LEVEL", "INFO"),
-    "apps.platform.operations": ("PLATFORM_LOG_LEVEL", "DEBUG"),
-    "apps.platform.operations.llm": ("PLATFORM_LOG_LEVEL", "DEBUG"),
-    "apps.platform.jobs": ("PLATFORM_LOG_LEVEL", "DEBUG"),
-    "apps.platform.ui": ("PLATFORM_LOG_LEVEL", "DEBUG"),
-    "udocket": ("PLATFORM_LOG_LEVEL", "DEBUG"),
-    "udocket.azure.client": ("AZURE_LOG_LEVEL", "INFO"),
-    "azure": ("AZURE_LOG_LEVEL", "WARNING"),
-    "langchain": ("LANGCHAIN_LOG_LEVEL", "INFO"),
-    "langchain_core": ("LANGCHAIN_LOG_LEVEL", "INFO"),
-    "langgraph": ("LANGCHAIN_LOG_LEVEL", "INFO"),
-    "django.contrib.auth": ("DJANGO_AUTH_LOG_LEVEL", "INFO"),
-    "mozilla_django_oidc": ("DJANGO_AUTH_LOG_LEVEL", "INFO"),
-    "oauthlib": ("DJANGO_AUTH_LOG_LEVEL", "WARNING"),
-    "django.request": ("DJANGO_REQUEST_LOG_LEVEL", "WARNING"),
-}
-
+logging_config = settings.logging
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -288,97 +208,54 @@ LOGGING = {
     "handlers": {
         "console": {"class": "logging.StreamHandler", "formatter": "simple"},
     },
-    "root": {"handlers": ["console"], "level": env("DJANGO_LOG_LEVEL", default="INFO")},
+    "root": {"handlers": ["console"], "level": logging_config.root_level},
     "loggers": {
-        name: {"level": env(env_key, default=default), "propagate": True}
-        for name, (env_key, default) in _LOGGER_LEVEL_DEFAULTS.items()
+        name: {"level": level, "propagate": True}
+        for name, level in logging_config.logger_levels.items()
     },
 }
 
 # Azure Blob env passthrough (for batch upload convenience)
-AZURE_BLOB_ACCOUNT = env("AZURE_BLOB_ACCOUNT", default=None)
-AZURE_BLOB_KEY = env("AZURE_BLOB_KEY", default=None)
-AZURE_BLOB_CONNECTION_STRING = env("AZURE_BLOB_CONNECTION_STRING", default=None)
-AZURE_BLOB_CONTAINER = env("AZURE_BLOB_CONTAINER", default=None)
-AZURE_BLOB_SAS_TTL_MIN = env.int("AZURE_BLOB_SAS_TTL_MIN", default=120)
+azure_blob = settings.azure.blob
+AZURE_BLOB_ACCOUNT = azure_blob.account
+AZURE_BLOB_KEY = azure_blob.key_value()
+AZURE_BLOB_CONNECTION_STRING = azure_blob.connection_string
+AZURE_BLOB_CONTAINER = azure_blob.container
+AZURE_BLOB_SAS_TTL_MIN = azure_blob.sas_ttl_min
 
 # SimpleJWT (accept Keycloak JWTs via remote JWKS)
-SIMPLE_JWT = {
-    "JWK_URL": env("OIDC_JWKS_URL", default=None),
-    "ALGORITHMS": ["RS256"],
-    "AUDIENCE": env("OIDC_AUDIENCE", default=None),
-    "ISSUER": env("OIDC_ISSUER", default=None),
-}
+SIMPLE_JWT = oidc_config.simple_jwt()
 
 # OIDC for browser SSO (Keycloak)
-OIDC_RP_CLIENT_ID = env("OIDC_CLIENT_ID", default=None)
-OIDC_RP_CLIENT_SECRET = env("OIDC_CLIENT_SECRET", default=None)
-OIDC_OP_DISCOVERY_ENDPOINT = env("OIDC_DISCOVERY_URL", default=None)
-OIDC_RP_SIGN_ALGO = env("OIDC_RP_SIGN_ALGO", default="RS256")
+OIDC_RP_CLIENT_ID = oidc_config.client_id
+OIDC_RP_CLIENT_SECRET = oidc_config.client_secret_value()
+OIDC_OP_DISCOVERY_ENDPOINT = oidc_config.discovery_url
+OIDC_RP_SIGN_ALGO = oidc_config.rp_sign_algo
 # Route login via OIDC only when enabled; otherwise use Django admin/login
 LOGIN_URL = "/oidc/authenticate/" if _oidc_enabled else "/admin/login/"
 LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/"
 # Development/open access toggle (bypasses auth policies when true)
-PLATFORM_DEV_OPEN = env.bool("PLATFORM_DEV_OPEN", default=False)
+PLATFORM_DEV_OPEN = settings.django.platform_dev_open
 
 # UI job table sizing (limits enforce websocket/poll efficiency)
-_job_limit_defaults = env.list("PLATFORM_UI_JOB_LIMIT_CHOICES", default=[25, 50, 100, 200])
-_job_limit_values: list[int] = []
-for raw_value in _job_limit_defaults:
-    try:
-        value = int(str(raw_value).strip())
-    except (TypeError, ValueError):
-        continue
-    if value > 0:
-        _job_limit_values.append(value)
-if not _job_limit_values:
-    _job_limit_values = [25, 50, 100, 200]
-_job_limit_values = sorted(set(_job_limit_values))
-PLATFORM_UI_JOB_LIMIT_CHOICES = tuple(_job_limit_values)
-PLATFORM_UI_JOB_MAX_LIMIT = max(PLATFORM_UI_JOB_LIMIT_CHOICES)
-_job_limit_default = env.int(
-    "PLATFORM_UI_JOB_DEFAULT_LIMIT",
-    default=PLATFORM_UI_JOB_LIMIT_CHOICES[0],
-)
-if _job_limit_default not in PLATFORM_UI_JOB_LIMIT_CHOICES:
-    # Fallback to closest greater-or-equal option, otherwise the largest available.
-    _job_limit_default = next(
-        (value for value in PLATFORM_UI_JOB_LIMIT_CHOICES if value >= _job_limit_default),
-        PLATFORM_UI_JOB_LIMIT_CHOICES[-1],
-    )
-PLATFORM_UI_JOB_DEFAULT_LIMIT = _job_limit_default
+jobs_ui_config = settings.jobs_ui
+PLATFORM_UI_JOB_LIMIT_CHOICES = jobs_ui_config.limit_choices
+PLATFORM_UI_JOB_MAX_LIMIT = jobs_ui_config.max_limit
+PLATFORM_UI_JOB_DEFAULT_LIMIT = jobs_ui_config.default_limit
 
-# If discovery is not set, derive OP endpoints from OIDC_ISSUER when provided
-OIDC_ISSUER = env("OIDC_ISSUER", default=None)
-_op_auth = env("OIDC_OP_AUTHORIZATION_ENDPOINT", default=None)
-_op_token = env("OIDC_OP_TOKEN_ENDPOINT", default=None)
-_op_user = env("OIDC_OP_USER_ENDPOINT", default=None)
-_op_jwks = env("OIDC_OP_JWKS_ENDPOINT", default=None)
-if _op_auth:
-    OIDC_OP_AUTHORIZATION_ENDPOINT = _op_auth
-elif OIDC_ISSUER:
-    OIDC_OP_AUTHORIZATION_ENDPOINT = OIDC_ISSUER.rstrip("/") + "/protocol/openid-connect/auth"
-if _op_token:
-    OIDC_OP_TOKEN_ENDPOINT = _op_token
-elif OIDC_ISSUER:
-    OIDC_OP_TOKEN_ENDPOINT = OIDC_ISSUER.rstrip("/") + "/protocol/openid-connect/token"
-if _op_user:
-    OIDC_OP_USER_ENDPOINT = _op_user
-elif OIDC_ISSUER:
-    OIDC_OP_USER_ENDPOINT = OIDC_ISSUER.rstrip("/") + "/protocol/openid-connect/userinfo"
-if _op_jwks:
-    OIDC_OP_JWKS_ENDPOINT = _op_jwks
-else:
-    jwks_fallback = env("OIDC_JWKS_URL", default=None)
-    if jwks_fallback:
-        OIDC_OP_JWKS_ENDPOINT = jwks_fallback
+# If discovery is not set, derive OP endpoints from issuer when provided
+OIDC_ISSUER = oidc_config.issuer
+OIDC_OP_AUTHORIZATION_ENDPOINT = oidc_config.authorization_endpoint()
+OIDC_OP_TOKEN_ENDPOINT = oidc_config.token_endpoint()
+OIDC_OP_USER_ENDPOINT = oidc_config.userinfo_endpoint()
+OIDC_OP_JWKS_ENDPOINT = oidc_config.jwks_endpoint()
 
 # Default OIDC scopes for browser SSO
-OIDC_RP_SCOPES = env("OIDC_RP_SCOPES", default="openid email profile")
+OIDC_RP_SCOPES = oidc_config.rp_scopes
 
 # Optional: sync case memberships from Keycloak group claims
-OIDC_SYNC_MEMBERSHIPS = env.bool("OIDC_SYNC_MEMBERSHIPS", default=False)
-OIDC_CASE_GROUP_PREFIX = env("OIDC_CASE_GROUP_PREFIX", default="case:")
-OIDC_CASE_GROUP_SEPARATOR = env("OIDC_CASE_GROUP_SEPARATOR", default=":")
-OIDC_CASE_DEFAULT_ROLE = env("OIDC_CASE_DEFAULT_ROLE", default="REVIEWER")
+OIDC_SYNC_MEMBERSHIPS = oidc_config.sync_memberships
+OIDC_CASE_GROUP_PREFIX = oidc_config.case_group_prefix
+OIDC_CASE_GROUP_SEPARATOR = oidc_config.case_group_separator
+OIDC_CASE_DEFAULT_ROLE = oidc_config.case_default_role

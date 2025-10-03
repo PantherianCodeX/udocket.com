@@ -112,14 +112,12 @@ def _normalize_stage_map(
             continue
 
         canonical = _normalize_stage_identifier(key)
-        if not canonical:
-            canonical = key if key in LLM_STAGE_KEYS.values() else None
-        if not canonical:
-            continue
+        normalized_key = canonical or key
         cfg = {str(k): v for k, v in value.items()}
-        normalized[canonical] = cfg
-        attr = canonical.split(".", 1)[1] if "." in canonical else canonical
-        normalized.setdefault(attr, cfg)
+        normalized[normalized_key] = cfg
+        if canonical:
+            attr = canonical.split(".", 1)[1] if "." in canonical else canonical
+            normalized.setdefault(attr, cfg)
 
     if prefix_defaults:
         for stage_key in LLM_STAGE_KEYS.values():
