@@ -1327,6 +1327,7 @@ def analyze_job(
         summary_meta_updates["celery_task_status"] = "succeeded"
 
     artifact_metadata: Dict[str, Any] = {
+        "summary_file": str(result.summary_file),
         "summary_markdown_file": str(result.summary_markdown_file),
         "summary_outline_file": str(result.outline_file) if result.outline_file else None,
         "summary_timeline_file": str(result.timeline_seeds_file) if result.timeline_seeds_file else None,
@@ -1350,7 +1351,7 @@ def analyze_job(
         if value not in (None, "", [], {})
     }
 
-    summary_checksum = summary_sha or ""
+    summary_checksum = summary_markdown_sha or ""
 
     try:
         CaseArtifact.objects.create(
@@ -1360,7 +1361,7 @@ def analyze_job(
             job_id=str(job.id),
             type="SUMMARY",
             title=summary_title,
-            path=str(result.summary_file),
+            path=str(result.summary_markdown_file),
             checksum=summary_checksum,
             schema_version="v1",
             metadata=artifact_metadata,
@@ -1368,7 +1369,7 @@ def analyze_job(
     except Exception:
         log.exception(
             "failed to register summary artifact",
-            extra={"job_id": job_id, "case_id": case_id, "path": str(result.summary_file)},
+            extra={"job_id": job_id, "case_id": case_id, "path": str(result.summary_markdown_file)},
         )
 
     log_message = (
@@ -1626,6 +1627,7 @@ def guardian_review_artifact(self, *, artifact_id: int) -> Dict[str, Any]:
     if job_id:
         job_obj = Job.objects.select_related("case").filter(pk=job_id).first()
 
+    case_id = str(artifact.case_id or "")
     org_id = artifact.organization_id
     if org_id is None and job_obj is not None:
         org_id = job_obj.organization_id
@@ -1639,7 +1641,7 @@ def guardian_review_artifact(self, *, artifact_id: int) -> Dict[str, Any]:
         "artifact_id": artifact.id,
         "artifact_type": artifact.type,
         "job_id": job_id or None,
-        "case_id": artifact.case_id,
+        "case_id": case_id or None,
     }
 
     runtime: Optional[JobRuntimeContext] = None
@@ -1659,8 +1661,6 @@ def guardian_review_artifact(self, *, artifact_id: int) -> Dict[str, Any]:
                 "guardian_status": "running",
             },
         )
-
-    case_id = artifact.case_id
 
     if context is None:
         review_record = {
