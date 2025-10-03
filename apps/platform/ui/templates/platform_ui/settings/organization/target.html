@@ -42,6 +42,11 @@
 
   <section class="lg:col-span-3 space-y-5 rounded-2xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-black/25" data-config-editor>
     <h2 class="text-xl font-semibold text-white">Configuration details</h2>
+    {% if target == "guardian" %}
+    <div class="rounded-xl border border-sky-400/40 bg-sky-500/15 px-4 py-3 text-xs text-sky-100">
+      Guardian reviews always run with the organization's default Guardian configuration. Set the default provider and model here to control every Guardian job.
+    </div>
+    {% endif %}
     <form method="post" class="space-y-5" data-config-form>
       {% csrf_token %}
       <input type="hidden" name="target" value="{{ target }}">

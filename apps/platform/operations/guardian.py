@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import uuid
+import logging
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -23,6 +24,9 @@ from packages.udocket_core.llm import load_llm_settings
 MAX_CONTENT_CHARS = 50000
 MAX_HISTORY_ENTRIES = 10
 GUARDIAN_DEFAULTS_PATH = Path(__file__).resolve().parents[3] / "config" / "guardian_defaults.json"
+
+
+log = logging.getLogger("udocket.guardian")
 
 
 @dataclass(frozen=True)
@@ -141,16 +145,56 @@ def build_guardian_context(organization_id: Optional[str]) -> Optional[GuardianC
     stage_map_raw = config_payload.get("stage_map") or {}
     review_cfg = _extract_guardian_stage(stage_map_raw)
 
-    provider_chain = _normalize_chain(config_payload.get("provider_chain"))
+    configured_chain = _normalize_chain(config_payload.get("provider_chain"))
+    provider_chain = [name for name in configured_chain if llm_settings.provider(name)]
+    if configured_chain and not provider_chain:
+        log.warning(
+            "guardian.provider.unknown_configured",
+            extra={
+                "organization_id": organization_id,
+                "providers": configured_chain,
+            },
+        )
+
     if not provider_chain and review_cfg.get("provider"):
-        provider_chain = _normalize_chain([review_cfg.get("provider")])
+        review_chain = _normalize_chain([review_cfg.get("provider")])
+        review_filtered = [name for name in review_chain if llm_settings.provider(name)]
+        if review_chain and not review_filtered:
+            log.warning(
+                "guardian.provider.unknown_stage",
+                extra={
+                    "organization_id": organization_id,
+                    "providers": review_chain,
+                },
+            )
+        provider_chain = review_filtered
 
     if not provider_chain:
         assignment = llm_settings.stage("guardian.review")
-        provider_chain = _normalize_chain(assignment.providers if assignment else [])
+        assignment_chain = _normalize_chain(assignment.providers if assignment else [])
+        assignment_filtered = [name for name in assignment_chain if llm_settings.provider(name)]
+        if assignment_chain and not assignment_filtered:
+            log.warning(
+                "guardian.provider.unknown_assignment",
+                extra={
+                    "organization_id": organization_id,
+                    "providers": assignment_chain,
+                },
+            )
+        provider_chain = assignment_filtered
 
     if not provider_chain:
-        provider_chain = ["azure"]
+        fallback = llm_settings.provider("azure")
+        if fallback:
+            provider_chain = [fallback.name]
+        elif llm_settings.providers:
+            provider_chain = [next(iter(llm_settings.providers.keys()))]
+
+    if not provider_chain:
+        log.warning(
+            "guardian.provider_chain.empty",
+            extra={"organization_id": organization_id},
+        )
 
     options_raw = review_cfg.get("options") if isinstance(review_cfg.get("options"), dict) else {}
     temperature = 0.0

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Dict
 
 import pytest
 
@@ -14,7 +16,14 @@ from apps.platform.operations.guardian import (
     build_guardian_context,
 )
 from apps.platform.artifacts.models import CaseArtifact
+from packages.udocket_core.agents import guardian_lib
 from packages.udocket_core.agents.guardian_lib import GuardianAgent, GuardianConfig
+from packages.udocket_core.llm.config import (
+    LLMProvider,
+    LLMProviderModel,
+    LLMSettings,
+    LLMStageAssignment,
+)
 
 
 def test_guardian_parse_verdict_includes_citations():
@@ -48,6 +57,74 @@ def test_guardian_parse_verdict_includes_citations():
     assert verdict.violations[0]["citation"] == "paragraph 3"
     assert verdict.violations[0]["recommendation"] == "Rewrite as factual summary"
 
+
+def test_guardian_review_builds_runtime_with_provider_object(monkeypatch):
+    provider = LLMProvider(
+        name="dummy",
+        display_name="Dummy",
+        models={
+            "model-a": LLMProviderModel(
+                name="model-a",
+                label="Model A",
+                cost_tier="standard",
+                default_enabled=True,
+            )
+        },
+        api_kind="openai",
+        default_endpoint="https://api.example.com",
+        requires_api_key=False,
+    )
+    assignment = LLMStageAssignment(
+        stage_key="guardian.review",
+        providers=["dummy"],
+        model="model-a",
+        options={"temperature": "0.0"},
+    )
+    settings = LLMSettings(providers={"dummy": provider}, assignments={"guardian.review": assignment})
+
+    agent = GuardianAgent(GuardianConfig(provider_chain=["dummy"]), settings=settings)
+
+    captured: Dict[str, object] = {}
+
+    def fake_build_provider_runtime_config(*, provider, model_name, credential_payload, options):
+        captured["provider"] = provider
+        captured["model_name"] = model_name
+        captured["options"] = options
+        return SimpleNamespace(
+            provider=provider,
+            model=SimpleNamespace(name=model_name),
+            options=options or {},
+            endpoint="https://api.example.com",
+            api_key="",
+            metadata={},
+        )
+
+    class DummyClient:
+        def chat(self, messages, temperature, max_tokens):
+            captured["messages"] = messages
+            captured["temperature"] = temperature
+            captured["max_tokens"] = max_tokens
+            return json.dumps({"approved": True, "violations": []}), {"total_tokens": 10}
+
+    monkeypatch.setattr(
+        guardian_lib,
+        "build_provider_runtime_config",
+        fake_build_provider_runtime_config,
+    )
+    monkeypatch.setattr(guardian_lib, "build_chat_client", lambda provider_runtime: DummyClient())
+
+    verdict = agent.review(
+        case_id="CASE-1",
+        job_id="JOB-1",
+        artifact_kind="SUMMARY",
+        payload={"content": "ok"},
+    )
+
+    assert verdict.approved is True
+    assert captured["provider"] is provider
+    assert captured["model_name"] == "model-a"
+    assert captured["temperature"] == agent.config.temperature
+    assert captured["max_tokens"] >= agent.config.max_tokens
 
 def test_snapshot_artifact_reads_text(tmp_path):
     text_path = tmp_path / "sample_summary.md"

@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Optional
 
 from packages.udocket_core.llm import LLMSettings, load_llm_settings
+from packages.udocket_core.llm.config import LLMProvider, LLMProviderModel
 from packages.udocket_core.llm.runtime import (
     ChatClient,
     ChatClientError,
@@ -26,6 +27,25 @@ def _normalize_providers(values: Iterable[str]) -> List[str]:
         seen.add(name)
         output.append(name)
     return output
+
+
+def _select_model_name(provider: LLMProvider, preferred: Optional[str]) -> Optional[str]:
+    if preferred:
+        normalized = preferred.strip()
+        if normalized and normalized in provider.models:
+            return normalized
+
+    # Prefer default-enabled models
+    for model in provider.models.values():
+        if isinstance(model, LLMProviderModel) and model.default_enabled:
+            return model.name
+
+    # Fall back to the first declared model if available
+    for model in provider.models.values():
+        if isinstance(model, LLMProviderModel):
+            return model.name
+
+    return None
 
 
 @dataclass
@@ -127,15 +147,29 @@ class GuardianAgent:
             provider_meta = self.settings.provider(provider)
             if provider_meta is None:
                 continue
+
+            provider_model_name = _select_model_name(
+                provider_meta,
+                selected_model or (stage_assignment.model if stage_assignment else None),
+            )
+            if not provider_model_name:
+                self.logger.warning(
+                    "guardian.provider.no_model",
+                    extra={
+                        "provider": provider_meta.name,
+                        "job_id": job_id,
+                        "case_id": case_id,
+                    },
+                )
+                continue
+
             credential_payload = provider_credentials.get(provider)
             runtime = None
             client: Optional[ChatClient] = None
-            provider_model = selected_model or (stage_assignment.model if stage_assignment else None)
             try:
                 runtime = build_provider_runtime_config(
-                    settings=self.settings,
-                    provider=provider,
-                    model=provider_model,
+                    provider=provider_meta,
+                    model_name=provider_model_name,
                     credential_payload=credential_payload,
                     options=default_options or None,
                 )
@@ -144,8 +178,8 @@ class GuardianAgent:
                 self.logger.exception(
                     "guardian.provider.init_failed",
                     extra={
-                        "provider": provider,
-                        "model": provider_model,
+                        "provider": provider_meta.name,
+                        "model": provider_model_name,
                         "job_id": job_id,
                         "case_id": case_id,
                         "error": str(exc),
@@ -197,8 +231,8 @@ class GuardianAgent:
                     self.logger.exception(
                         "guardian.provider.request_failed",
                         extra={
-                            "provider": provider,
-                            "model": provider_model,
+                            "provider": provider_meta.name,
+                            "model": provider_model_name,
                             "job_id": job_id,
                             "case_id": case_id,
                             "error": str(exc),
@@ -209,8 +243,8 @@ class GuardianAgent:
 
                 verdict = self._parse_verdict(
                     raw_response=content,
-                    provider=provider,
-                    model=runtime.model.name if runtime and runtime.model else provider_model,
+                    provider=provider_meta.name,
+                    model=runtime.model.name if runtime and runtime.model else provider_model_name,
                     usage=_usage_dict(usage),
                 )
                 if verdict.approved or attempt == attempts - 1:

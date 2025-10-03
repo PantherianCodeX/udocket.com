@@ -1457,6 +1457,14 @@ def guardian_review_artifact(self, *, artifact_id: int) -> Dict[str, Any]:
         job_obj = Job.objects.select_related("case").filter(pk=job_id).first()
 
     case_id = str(artifact.case_id or "")
+    if not case_id and job_obj is not None:
+        job_case_id = getattr(job_obj, "case_id", None) or getattr(getattr(job_obj, "case", None), "id", None)
+        if job_case_id:
+            case_id = str(job_case_id)
+    if not case_id and artifact.case_fk_id:
+        case_id = str(artifact.case_fk_id)
+    if not case_id and artifact.case_fk:
+        case_id = str(artifact.case_fk.id)
     org_id = artifact.organization_id
     if org_id is None and job_obj is not None:
         org_id = job_obj.organization_id
