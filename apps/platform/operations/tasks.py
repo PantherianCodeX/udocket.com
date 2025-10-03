@@ -36,7 +36,7 @@ from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.operations.blob_upload import upload_with_sas, UploadCancelled
 from apps.platform.cases.models import Case
 from apps.platform.operations.audit import emit as audit_emit
-from apps.platform.operations.storage import ensure_case_dirs, tenant_case_root, ops_dir as storage_ops_dir
+from apps.platform.operations.storage import ensure_case_dirs, ops_dir as storage_ops_dir
 from apps.platform.operations.llm import (
     ensure_default_llm_configuration,
     get_llm_configuration,
@@ -56,12 +56,9 @@ from apps.platform.operations.runtime import (
     _safe_job_meta,
 )
 from apps.platform.operations.services import (
-    case_intake_payload,
     case_paths,
-    collect_requested_providers,
     load_summary_entity_hints,
     load_summary_timeline_events,
-    ops_dir,
     latest_transcript,
     execute_compose_job,
 )
