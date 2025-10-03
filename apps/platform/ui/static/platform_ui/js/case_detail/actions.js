@@ -1347,7 +1347,6 @@
     if (platformUI.llmDebug) {
       console.debug('[LLM] setupAnalysisActions', {
         hasAnalyze: Boolean(analyzeContainer),
-        hasTimeline: Boolean(root.querySelector('[data-timeline]')),
       });
     }
     if (analyzeContainer) {
@@ -1483,24 +1482,6 @@
       }
     }
 
-    const timelineContainer = root.querySelector('[data-timeline]');
-    if (timelineContainer) {
-      setupLLMControls(timelineContainer);
-      const transcriptSelect = timelineContainer.querySelector('[data-timeline-transcript]');
-      const button = timelineContainer.querySelector('[data-analysis-action="timeline"]');
-      const updateDisabled = () => {
-        if (!button) return;
-        if (!transcriptSelect || !transcriptSelect.value || transcriptSelect.selectedOptions[0]?.disabled) {
-          button.disabled = true;
-        } else {
-          button.disabled = false;
-        }
-      };
-      if (transcriptSelect) {
-        transcriptSelect.addEventListener('change', updateDisabled);
-        updateDisabled();
-      }
-    }
   }
 
   async function expandJobRow(jobId) {
@@ -1644,30 +1625,6 @@
       if (configId) {
         payload.llm_config_id = configId;
         if (platformUI.llmDebug) console.debug('[LLM] Queueing with config', configId);
-      }
-    } else if (action === 'timeline') {
-      const container = button.closest('[data-timeline]');
-      const transcriptSelect = container?.querySelector('[data-timeline-transcript]');
-      if (!transcriptSelect || !transcriptSelect.value || transcriptSelect.selectedOptions[0]?.disabled) {
-        return;
-      }
-      jobId = transcriptSelect.value;
-      llmSettingsHref =
-        container?.dataset.llmSettingsEdit || container?.dataset.llmSettingsBase || null;
-      const summarySelect = container.querySelector('[data-timeline-summary]');
-      const artifactSelect = container.querySelector('[data-timeline-artifacts]');
-      if (summarySelect && summarySelect.value) {
-        payload.summary_artifact_id = summarySelect.value;
-      }
-      if (artifactSelect && artifactSelect.selectedOptions.length) {
-        payload.artifact_ids = Array.from(artifactSelect.selectedOptions)
-          .map((opt) => opt.value)
-          .filter(Boolean);
-      }
-      const timelineConfigId = container?.dataset.llmConfigId || null;
-      if (timelineConfigId) {
-        payload.llm_config_id = timelineConfigId;
-        if (platformUI.llmDebug) console.debug('[LLM] Queueing timeline with config', timelineConfigId);
       }
     } else if (action === 'compose') {
       const container = button.closest('[data-compose]');

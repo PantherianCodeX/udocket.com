@@ -6,7 +6,7 @@ import os
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Sequence, cast
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, cast
 
 from .common import (
     parse_transcript,
@@ -91,16 +91,52 @@ def _normalize_stage_map(
 ) -> Dict[str, Dict[str, Any]]:
     if not stage_map:
         return {}
+
     normalized: Dict[str, Dict[str, Any]] = {}
-    for key, value in stage_map.items():
-        canonical = _normalize_stage_identifier(str(key))
+    prefix_defaults: List[Tuple[Optional[str], Dict[str, Any]]] = []
+
+    for raw_key, value in stage_map.items():
+        if not isinstance(value, dict):
+            continue
+        key = str(raw_key or "").strip()
+        if not key:
+            continue
+        lowered = key.lower()
+        if lowered in {"*", "default"}:
+            prefix_defaults.append((None, {str(k): v for k, v in value.items()}))
+            continue
+        if lowered.endswith(".*"):
+            prefix = lowered[:-2].strip()
+            if prefix:
+                prefix_defaults.append((prefix, {str(k): v for k, v in value.items()}))
+            continue
+
+        canonical = _normalize_stage_identifier(key)
         if not canonical:
             canonical = key if key in LLM_STAGE_KEYS.values() else None
         if not canonical:
             continue
-        if not isinstance(value, dict):
-            continue
-        normalized[canonical] = {str(k): v for k, v in value.items()}
+        cfg = {str(k): v for k, v in value.items()}
+        normalized[canonical] = cfg
+        attr = canonical.split(".", 1)[1] if "." in canonical else canonical
+        normalized.setdefault(attr, cfg)
+
+    if prefix_defaults:
+        for stage_key in LLM_STAGE_KEYS.values():
+            if stage_key in normalized:
+                continue
+            stage_lower = stage_key.lower()
+            applied_cfg: Optional[Dict[str, Any]] = None
+            for prefix, default_cfg in prefix_defaults:
+                if prefix is None or stage_lower.startswith(prefix):
+                    applied_cfg = dict(default_cfg)
+                    break
+            if applied_cfg is None:
+                continue
+            normalized[stage_key] = applied_cfg
+            attr = stage_key.split(".", 1)[1]
+            normalized.setdefault(attr, applied_cfg)
+
     return normalized
 
 

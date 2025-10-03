@@ -18,8 +18,9 @@ from packages.udocket_core.agents.analyze_lib import (
     AnalyzePipeline,
     TranscriptParse,
     TranscriptSegment,
-    parse_transcript,
     analyze_defaults,
+    parse_transcript,
+    _normalize_stage_map,
 )
 from packages.udocket_core.agents.analyze.stages import (
     EntityStageResult,
@@ -757,6 +758,71 @@ def test_prompt_limits_respect_config_defaults(tmp_path):
     assert char_limit == config_chars.max_prompt_chars
     assert len(char_chunks) == len(segments)
     assert all(len(chunk.splitlines()) == 1 for chunk in char_chunks)
+
+
+def test_stage_map_wildcard_defaults():
+    stage_map = {
+        "*": {"provider": "azure", "model": "gpt-4o"},
+        "draft_markdown": {"provider": "azure", "model": "gpt-4o-mini"},
+        "analyze.qa_and_finalize": {"provider": "azure", "model": "gpt-4o"},
+    }
+    normalized = _normalize_stage_map(stage_map)
+    assert normalized["analyze.extract_outline"]["provider"] == "azure"
+    assert normalized["extract_outline"]["provider"] == "azure"
+    assert normalized["analyze.draft_markdown"]["model"] == "gpt-4o-mini"
+    assert normalized["qa_and_finalize"]["provider"] == "azure"
+
+    prefixed = {
+        "analyze.*": {"provider": "azure", "model": "gpt-4o"},
+        "compose.context_builder": {"provider": "azure", "model": "gpt-4o-c"},
+    }
+    normalized_prefixed = _normalize_stage_map(prefixed)
+    assert normalized_prefixed["analyze.build_timeline_seeds"]["model"] == "gpt-4o"
+    assert normalized_prefixed["compose.context_builder"]["model"] == "gpt-4o-c"
+
+
+def test_summary_stage_uses_json_mode():
+    class DummyJSONClient:
+        def __init__(self) -> None:
+            self.response_format = None
+
+        def chat(self, *, messages, temperature, max_tokens, response_format=None):
+            self.response_format = response_format
+            sample = {
+                "case_metadata_summary": {
+                    "overview": "Case overview",
+                    "parties": ["Client", "Opposing"],
+                    "jurisdiction": "Ontario",
+                    "key_dates": ["2024-01-01"],
+                },
+                "executive_summary": {"bullets": ["Point"]},
+                "detailed_narrative": [],
+                "claims_and_remedies": [],
+                "procedural_posture": {"status": "Active", "deadlines": [], "orders": []},
+                "risks_gaps_questions": [],
+                "next_step_checklist": [],
+                "supporting_quotes": [],
+            }
+            return json.dumps(sample), {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}
+
+    client = DummyJSONClient()
+    parse = TranscriptParse(header_lines=[], segments=[], body_text="", diarized=False)
+    result = generate_summary_payload(
+        parse=parse,
+        outline={},
+        timeline=[],
+        entities={},
+        intake={},
+        context_snippet="",
+        case_brief={},
+        llm_client=client,
+        temperature=0.1,
+        max_tokens=512,
+    )
+
+    assert client.response_format == {"type": "json_object"}
+    assert result.data["case_metadata_summary"]["overview"] == "Case overview"
+    assert result.usage["total_tokens"] == 2
 
 
 def test_build_analyze_graph_requires_langgraph():

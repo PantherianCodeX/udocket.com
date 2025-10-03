@@ -121,9 +121,11 @@ def generate_summary_payload(
             ],
             temperature=temperature,
             max_tokens=max(512, max_tokens),
+            response_format={"type": "json_object"},
         )
         raw = (content or "").strip()
         data = _extract_json(raw)
+        _validate_summary_schema(data)
         markdown = _render_markdown(data)
         return SummaryStageResult(data=data, markdown=markdown, usage=_usage_dict(usage))
     except Exception as exc:
@@ -146,6 +148,43 @@ def _extract_json(raw: str) -> Dict[str, Any]:
     if not isinstance(payload, dict):
         raise RuntimeError("Summary JSON payload must be an object")
     return payload
+
+
+def _validate_summary_schema(payload: Dict[str, Any]) -> None:
+    required_top_keys = [
+        "case_metadata_summary",
+        "executive_summary",
+        "detailed_narrative",
+        "claims_and_remedies",
+        "procedural_posture",
+        "risks_gaps_questions",
+        "next_step_checklist",
+        "supporting_quotes",
+    ]
+    for key in required_top_keys:
+        if key not in payload:
+            raise RuntimeError(f"Summary JSON missing required field '{key}'")
+
+    cms = payload.get("case_metadata_summary")
+    if not isinstance(cms, dict):
+        raise RuntimeError("case_metadata_summary must be an object")
+
+    exec_summary = payload.get("executive_summary")
+    if not isinstance(exec_summary, dict) or "bullets" not in exec_summary:
+        raise RuntimeError("executive_summary must include a bullets array")
+
+    for array_field in (
+        "detailed_narrative",
+        "claims_and_remedies",
+        "risks_gaps_questions",
+        "next_step_checklist",
+        "supporting_quotes",
+    ):
+        value = payload.get(array_field)
+        if value is None:
+            raise RuntimeError(f"Summary JSON missing required array '{array_field}'")
+        if not isinstance(value, list):
+            raise RuntimeError(f"Summary JSON field '{array_field}' must be an array")
 
 
 def _render_markdown(data: Dict[str, Any]) -> str:

@@ -56,7 +56,7 @@ from apps.platform.operations.tasks import transcribe_job
 from apps.platform.operations.channels import send_job_update
 from apps.platform.operations.audit import emit as audit_emit
 from django.db import transaction
-from apps.platform.operations.tasks import analyze_job, timeline_job, graph_job, compose_job
+from apps.platform.operations.tasks import analyze_job, compose_job
 from apps.platform.tenancy import scope_jobs
 from apps.platform.operations.storage import ensure_case_dirs, ops_dir as storage_ops_dir
 from apps.platform.operations.utils import append_job_log, read_job_meta, update_job_meta
@@ -1253,20 +1253,6 @@ class JobViewSet(viewsets.ModelViewSet):
         )
 
         return Response({"status": "queued", "job_id": str(new_job.id)}, status=status.HTTP_202_ACCEPTED)
-
-    @action(detail=True, methods=["post"], url_path="analyze/timeline")
-    def analyze_timeline(self, request, pk=None):
-        job = self.get_object()
-        timeline_job.delay(case_id=str(job.case_id), job_id=str(job.id))
-        audit_emit(request, case_id=str(job.case_id), event="analysis.timeline.requested", data={"job_id": str(job.id)})
-        return Response({"status": "queued"}, status=status.HTTP_202_ACCEPTED)
-
-    @action(detail=True, methods=["post"], url_path="analyze/graph")
-    def analyze_graph(self, request, pk=None):
-        job = self.get_object()
-        graph_job.delay(case_id=str(job.case_id), job_id=str(job.id))
-        audit_emit(request, case_id=str(job.case_id), event="analysis.graph.requested", data={"job_id": str(job.id)})
-        return Response({"status": "queued"}, status=status.HTTP_202_ACCEPTED)
 
     @action(detail=True, methods=["get"], url_path="download-analysis")
     def download_analysis(self, request, pk=None):
