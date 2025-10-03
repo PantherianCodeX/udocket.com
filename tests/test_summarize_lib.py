@@ -6,6 +6,8 @@ from typing import Any, Dict, List
 
 import pytest
 
+import packages.udocket_core.agents.analyze_lib as analyze_lib
+
 from packages.udocket_core.agents import build_analyze_graph
 from packages.udocket_core.agents.analyze_lib import (
     LLM_STAGE_KEYS,
@@ -26,6 +28,13 @@ from packages.udocket_core.agents.analyze.stages import (
     TimelineStageResult,
 )
 from packages.udocket_core.agents.analyze.stages.outline_stage import generate_outline as outline_generate
+from packages.udocket_core.llm.config import (
+    LLMProvider,
+    LLMProviderModel,
+    LLMSettings,
+    LLMStageAssignment,
+)
+from packages.udocket_core.llm.runtime import ProviderRuntimeConfig, ChatClientError
 
 
 FAKE_AZURE_SECRET = {
@@ -177,6 +186,20 @@ def _install_stage_stubs(monkeypatch: pytest.MonkeyPatch, summary_text: str | No
 
 def _make_config() -> AnalyzeConfig:
     return AnalyzeConfig(provider_chain=["azure"])
+
+
+def _make_llm_settings(
+    provider_order: List[str],
+    providers: Dict[str, LLMProvider],
+) -> LLMSettings:
+    assignments: Dict[str, LLMStageAssignment] = {}
+    for stage_key in LLM_STAGE_KEYS.values():
+        assignments[stage_key] = LLMStageAssignment(
+            stage_key=stage_key,
+            providers=list(provider_order),
+            model="",
+        )
+    return LLMSettings(providers=providers, assignments=assignments)
 
 
 def test_parse_transcript_detects_header_and_segments(tmp_path):
@@ -561,6 +584,230 @@ def test_analyze_agent_raises_on_stage_failure(monkeypatch, tmp_path):
             provider_credentials={"azure": FAKE_AZURE_SECRET},
         )
 
+
+
+def test_stage_model_fallback_uses_provider_default(monkeypatch, tmp_path):
+    azure_provider = LLMProvider(
+        name="azure",
+        display_name="Azure",
+        models={
+            "gpt-4o": LLMProviderModel(
+                name="gpt-4o",
+                label="GPT-4o",
+                cost_tier="standard",
+                default_enabled=True,
+                max_output_tokens=4000,
+                context_window_tokens=16000,
+                default_temperature=0.2,
+            )
+        },
+    )
+    settings = _make_llm_settings(["azure"], {"azure": azure_provider})
+    monkeypatch.setattr(analyze_lib, "_llm_settings_cache", settings, raising=False)
+    monkeypatch.setattr(analyze_lib, "_load_llm_settings", lambda: settings)
+
+    captured_models: List[str] = []
+
+    def fake_build_provider_runtime_config(
+        *,
+        provider: LLMProvider,
+        model_name: str,
+        credential_payload: Dict[str, Any] | None,
+        options: Dict[str, Any] | None,
+    ) -> ProviderRuntimeConfig:
+        captured_models.append(model_name)
+        payload = credential_payload or {}
+        return ProviderRuntimeConfig(
+            provider=provider,
+            model=provider.models.get(model_name),
+            endpoint=payload.get("endpoint", ""),
+            api_key=payload.get("api_key", ""),
+            options=dict(options or {}),
+            metadata=dict(payload.get("metadata", {})),
+        )
+
+    monkeypatch.setattr(
+        analyze_lib,
+        "build_provider_runtime_config",
+        fake_build_provider_runtime_config,
+    )
+    monkeypatch.setattr(analyze_lib, "build_chat_client", lambda provider_runtime: object())
+
+    _install_stage_stubs(monkeypatch)
+
+    case_dir = tmp_path / "cases" / "CASE-FALLBACK"
+    transcript = case_dir / "transcript" / "JOB-FB__transcript.txt"
+    _write_transcript(transcript, "[00:00] Speaker: Hello\n[00:01] Speaker: Again")
+
+    agent = AnalyzeAgent(_make_config())
+    result = agent.analyze(
+        case_id="CASE-FALLBACK",
+        case_dir=case_dir,
+        job_id="JOB-FB",
+        provider_credentials={"azure": FAKE_AZURE_SECRET},
+    )
+
+    assert result.status == "ok"
+    assert captured_models
+    assert all(name == "gpt-4o" for name in captured_models)
+
+
+def test_stage_provider_failover_uses_next_provider(monkeypatch, tmp_path):
+    azure_provider = LLMProvider(
+        name="azure",
+        display_name="Azure",
+        models={
+            "gpt-4o": LLMProviderModel(
+                name="gpt-4o",
+                label="GPT-4o",
+                cost_tier="standard",
+                default_enabled=True,
+                max_output_tokens=4000,
+                context_window_tokens=16000,
+            )
+        },
+    )
+    fallback_provider = LLMProvider(
+        name="fallback",
+        display_name="Fallback",
+        models={
+            "fb-model": LLMProviderModel(
+                name="fb-model",
+                label="Fallback",
+                cost_tier="standard",
+                default_enabled=True,
+                max_output_tokens=2000,
+                context_window_tokens=8000,
+            )
+        },
+    )
+    settings = _make_llm_settings(["fallback", "azure"], {"fallback": fallback_provider, "azure": azure_provider})
+    monkeypatch.setattr(analyze_lib, "_llm_settings_cache", settings, raising=False)
+    monkeypatch.setattr(analyze_lib, "_load_llm_settings", lambda: settings)
+
+    build_attempts: List[tuple[str, str]] = []
+
+    def fake_build_provider_runtime_config(
+        *,
+        provider: LLMProvider,
+        model_name: str,
+        credential_payload: Dict[str, Any] | None,
+        options: Dict[str, Any] | None,
+    ) -> ProviderRuntimeConfig:
+        build_attempts.append((provider.name, model_name))
+        if provider.name == "fallback":
+            raise ChatClientError("fallback provider unavailable")
+        payload = credential_payload or {}
+        return ProviderRuntimeConfig(
+            provider=provider,
+            model=provider.models.get(model_name),
+            endpoint=payload.get("endpoint", ""),
+            api_key=payload.get("api_key", ""),
+            options=dict(options or {}),
+            metadata=dict(payload.get("metadata", {})),
+        )
+
+    monkeypatch.setattr(
+        analyze_lib,
+        "build_provider_runtime_config",
+        fake_build_provider_runtime_config,
+    )
+    monkeypatch.setattr(analyze_lib, "build_chat_client", lambda provider_runtime: object())
+
+    _install_stage_stubs(monkeypatch)
+
+    case_dir = tmp_path / "cases" / "CASE-FAILOVER"
+    transcript = case_dir / "transcript" / "JOB-FO__transcript.txt"
+    _write_transcript(transcript, "[00:00] Speaker: Hello\n[00:01] Speaker: Again")
+
+    agent = AnalyzeAgent(AnalyzeConfig(provider_chain=["fallback", "azure"]))
+    result = agent.analyze(
+        case_id="CASE-FAILOVER",
+        case_dir=case_dir,
+        job_id="JOB-FO",
+        provider_credentials={"azure": FAKE_AZURE_SECRET},
+    )
+
+    assert result.status == "ok"
+    assert build_attempts[0][0] == "fallback"
+    assert any(name == ("azure", "gpt-4o") for name in build_attempts)
+
+
+def test_prompt_limits_respect_config_defaults(tmp_path):
+    stage_profile = SUMMARIZE_STAGE_PROFILES["analyze.draft_markdown"]
+    runtime = StageRuntime(
+        stage_key="analyze.draft_markdown",
+        providers=["azure"],
+        provider="azure",
+        model="gpt-4o",
+        client=None,
+        max_output_tokens=2048,
+        context_window_tokens=16000,
+        profile=stage_profile,
+        temperature=0.1,
+        options={},
+    )
+
+    segments = [
+        TranscriptSegment(ts=float(idx), speaker=f"SPK_{idx}", text=f"Short line {idx}")
+        for idx in range(5)
+    ]
+    parse = TranscriptParse(header_lines=[], segments=segments, body_text="", diarized=True)
+
+    # Segment limit scenario
+    config_segments = AnalyzeConfig(
+        provider_chain=["azure"],
+        max_prompt_segments=2,
+        max_prompt_chars=500,
+    )
+    pipeline_segments = AnalyzePipeline(
+        case_id="CASE-LIMIT",
+        job_id="JOB-LIMIT",
+        case_dir=tmp_path,
+        intake={},
+        transcript_hint=None,
+        config=config_segments,
+        resolve_transcript=lambda input_path, case_dir: Path(input_path) if input_path else Path(),
+        build_context=lambda parse, intake: "",
+        provider_chain=["azure"],
+        stage_runtimes={"analyze.draft_markdown": runtime},
+        default_temperature=0.0,
+        logger=None,
+    )
+    state_segments: Dict[str, Any] = {"parse": parse}
+    state_segments = pipeline_segments.context_builder(state_segments)
+    chunk_lines = state_segments["context_chunks"]["analyze.draft_markdown"]
+    total_lines = sum(len(chunk.splitlines()) for chunk in chunk_lines)
+    assert total_lines == config_segments.max_prompt_segments
+
+    # Character limit scenario
+    config_chars = AnalyzeConfig(
+        provider_chain=["azure"],
+        max_prompt_segments=0,
+        max_prompt_chars=20,
+    )
+    pipeline_chars = AnalyzePipeline(
+        case_id="CASE-LIMIT",
+        job_id="JOB-LIMIT",
+        case_dir=tmp_path,
+        intake={},
+        transcript_hint=None,
+        config=config_chars,
+        resolve_transcript=lambda input_path, case_dir: Path(input_path) if input_path else Path(),
+        build_context=lambda parse, intake: "",
+        provider_chain=["azure"],
+        stage_runtimes={"analyze.draft_markdown": runtime},
+        default_temperature=0.0,
+        logger=None,
+    )
+    state_chars: Dict[str, Any] = {"parse": parse}
+    state_chars = pipeline_chars.context_builder(state_chars)
+    char_chunks = state_chars["context_chunks"]["analyze.draft_markdown"]
+    assert len(char_chunks) > 1
+    char_limit = pipeline_chars._char_limit_for_stage("analyze.draft_markdown")
+    assert char_limit == config_chars.max_prompt_chars
+    assert len(char_chunks) == len(segments)
+    assert all(len(chunk.splitlines()) == 1 for chunk in char_chunks)
 
 
 def test_build_analyze_graph_requires_langgraph():

@@ -1458,6 +1458,8 @@ def timeline_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
 
     meta = read_job_meta(case_id, org_id, job_id)
     events_payload, seeds_path = load_summary_timeline_events(meta, case_dir)
+    if not seeds_path or not events_payload:
+        raise RuntimeError("Summary timeline seeds are required before generating the timeline")
 
     agent = TimelineAgent(TimelineConfig.from_env())
     result = agent.build(
@@ -1527,6 +1529,8 @@ def graph_job(*_args, case_id: str, job_id: str) -> Dict[str, Any]:
 
     meta = read_job_meta(case_id, org_id, job_id)
     hints_data, hints_path = load_summary_entity_hints(meta, case_dir)
+    if not hints_path or not hints_data:
+        raise RuntimeError("Summary entity hints are required before generating entities/graph")
 
     agent = GraphAgent(GraphConfig.from_env())
     result = agent.build(

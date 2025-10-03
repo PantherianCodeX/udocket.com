@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, List, MutableMapping, Optional, cast
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, MutableMapping, Optional, cast
 
 from ..common import (
     AnalysisArtifact,
@@ -27,6 +27,9 @@ from .stages import (
     generate_summary_payload,
     generate_timeline,
 )
+
+if TYPE_CHECKING:  # pragma: no cover - circular import guard
+    from ..analyze_lib import StageRuntime
 
 logger = logging.getLogger("udocket.analyze.pipeline")
 
@@ -75,7 +78,7 @@ class AnalyzePipeline:
         resolve_transcript: Callable[[Optional[Path], Path], Path],
         build_context: Callable[[TranscriptParse, Dict[str, Any]], str],
         provider_chain: Optional[List[str]],
-        stage_runtimes: Dict[str, Any],
+        stage_runtimes: Dict[str, "StageRuntime"],
         default_temperature: float,
         logger: Optional[logging.Logger] = None,
         progress_callback: Optional[
@@ -570,17 +573,25 @@ class AnalyzePipeline:
 
     def _segment_limit(self) -> Optional[int]:
         override = self.prompt_segments_override
-        if override is None or override <= 0:
+        if override is not None and override > 0:
+            return override
+        config_limit = getattr(self.config, "max_prompt_segments", None)
+        if config_limit is None or config_limit <= 0:
             return None
-        return override
+        return config_limit
 
     def _char_limit_for_stage(self, stage_key: str) -> Optional[int]:
         runtime = self.stage_runtimes.get(stage_key)
         manual_limit = self.prompt_chars_override
+        config_limit = getattr(self.config, "max_prompt_chars", None)
+        config_limit = config_limit if config_limit and config_limit > 0 else None
         if runtime is None:
-            if manual_limit is not None and manual_limit > 0:
-                return manual_limit
-            return None
+            limits: List[int] = []
+            if manual_limit and manual_limit > 0:
+                limits.append(manual_limit)
+            if config_limit:
+                limits.append(config_limit)
+            return min(limits) if limits else None
         context_tokens = runtime.context_window_tokens
         if context_tokens is not None:
             available = context_tokens - runtime.profile.output_reserve_tokens
@@ -595,9 +606,16 @@ class AnalyzePipeline:
             if context_tokens
             else None
         )
-        if manual_limit is not None and manual_limit > 0:
-            char_limit = min(char_limit or manual_limit, manual_limit)
-        return char_limit
+        limits: List[int] = []
+        if char_limit and char_limit > 0:
+            limits.append(char_limit)
+        if manual_limit and manual_limit > 0:
+            limits.append(manual_limit)
+        if config_limit:
+            limits.append(config_limit)
+        if not limits:
+            return None
+        return min(limits)
 
     def _record_usage(self, state: MutableMapping[str, Any], stage: str, usage: Dict[str, int]) -> None:
         if not usage:
