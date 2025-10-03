@@ -56,6 +56,7 @@ from apps.platform.operations.runtime import (
     _safe_job_meta,
 )
 from apps.platform.operations.services import (
+    case_intake_payload,
     case_paths,
     load_summary_entity_hints,
     load_summary_timeline_events,
@@ -1001,6 +1002,8 @@ def analyze_job(
         "source_job_id": str(source_job.id),
         "source_transcript_path": transcript_path_str,
     }
+    if llm_config_id:
+        base_meta["requested_llm_config_id"] = llm_config_id
 
     runtime = JobRuntimeContext(
         job=job,
@@ -1101,6 +1104,346 @@ def analyze_job(
             },
         )
         raise
+
+    llm_settings = None
+    try:
+        llm_settings = load_llm_settings()
+    except Exception as exc:  # noqa: BLE001
+        log.error(
+            "load llm settings failed",
+            extra={"job_id": job_id, "case_id": case_id, "error": str(exc)},
+        )
+        failure_meta = {**base_meta, "summary_status": "failed", "summary_error": "llm_settings_unavailable"}
+        if summary_task_id:
+            failure_meta.setdefault("celery_task_id", summary_task_id)
+            failure_meta["celery_task_status"] = "failed"
+        failure_ts = runtime.fail(
+            error="LLM settings unavailable",
+            log_message="Analyze failed: LLM settings unavailable",
+            meta_updates=failure_meta,
+            events=[("analyze.failed", {"llm_config_id": llm_config_id})],
+            task_meta_updates={"stage": "config", "reason": "llm_settings_unavailable"},
+        )
+        _safe_job_meta(
+            case_id,
+            org_id,
+            job_id,
+            {
+                "summary_completed_at": failure_ts.isoformat(),
+                "celery_task_finished_at": failure_ts.isoformat(),
+                "celery_task_status": "failed" if summary_task_id else None,
+            },
+        )
+        raise
+
+    org_id_str = str(org_id) if org_id else None
+    config_payload: Optional[Dict[str, Any]] = None
+    if org_id_str:
+        if llm_config_id:
+            config_payload = get_llm_configuration(
+                organization_id=org_id_str,
+                config_id=llm_config_id,
+                target="analyze",
+            )
+        if not config_payload:
+            config_payload = ensure_default_llm_configuration(
+                organization_id=org_id_str,
+                target="analyze",
+                llm_settings=llm_settings,
+            )
+
+    if not config_payload:
+        log.error(
+            "analyze llm configuration missing",
+            extra={"job_id": job_id, "case_id": case_id, "llm_config_id": llm_config_id},
+        )
+        failure_meta = {**base_meta, "summary_status": "failed", "summary_error": "llm_configuration_missing"}
+        if summary_task_id:
+            failure_meta.setdefault("celery_task_id", summary_task_id)
+            failure_meta["celery_task_status"] = "failed"
+        failure_ts = runtime.fail(
+            error="LLM configuration missing",
+            log_message="Analyze failed: LLM configuration missing",
+            meta_updates=failure_meta,
+            events=[("analyze.failed", {"llm_config_id": llm_config_id})],
+            task_meta_updates={"stage": "config", "reason": "llm_configuration_missing"},
+        )
+        _safe_job_meta(
+            case_id,
+            org_id,
+            job_id,
+            {
+                "summary_completed_at": failure_ts.isoformat(),
+                "celery_task_finished_at": failure_ts.isoformat(),
+                "celery_task_status": "failed" if summary_task_id else None,
+            },
+        )
+        raise RuntimeError("LLM configuration missing for analyze job")
+
+    active_config_id = str(config_payload.get("id")) if config_payload.get("id") else None
+    if active_config_id:
+        base_meta["active_llm_config_id"] = active_config_id
+
+    stage_map_value = config_payload.get("stage_map") if isinstance(config_payload, dict) else None
+    stage_map = stage_map_value if isinstance(stage_map_value, dict) else {}
+    config_chain_value = config_payload.get("provider_chain") if isinstance(config_payload, dict) else []
+    config_chain: List[str] = []
+    if isinstance(config_chain_value, (list, tuple)):
+        config_chain = [str(item) for item in config_chain_value if isinstance(item, str)]
+
+    requested_providers = collect_requested_providers(
+        analyze_config.provider_chain,
+        config_chain,
+        stage_map,
+    )
+
+    provider_credentials: Dict[str, Dict[str, Any]] = {}
+    if org_id_str:
+        for provider_name in requested_providers:
+            secret_payload = get_provider_secret_with_metadata(org_id_str, provider_name)
+            if secret_payload:
+                provider_credentials[provider_name] = secret_payload
+
+    intake_payload = case_intake_payload(job.case)
+    transcript_hint_payload: Optional[Dict[str, Any]] = None
+    existing_hint = existing_meta.get("transcript_hint") if isinstance(existing_meta, dict) else None
+    if isinstance(existing_hint, dict):
+        transcript_hint_payload = {str(key): value for key, value in existing_hint.items()}
+
+    agent = AnalyzeAgent(analyze_config)
+
+    def _sanitize_details(details: Dict[str, Any]) -> Dict[str, Any]:
+        sanitized: Dict[str, Any] = {}
+        for key, value in details.items():
+            if isinstance(value, Path):
+                sanitized[str(key)] = str(value)
+            elif isinstance(value, (str, int, float, bool)) or value is None:
+                sanitized[str(key)] = value
+            elif isinstance(value, dict):
+                sanitized[str(key)] = _sanitize_details(value)
+            elif isinstance(value, (list, tuple)):
+                sanitized[str(key)] = [
+                    str(item) if isinstance(item, Path) else item for item in value
+                ]
+            else:
+                sanitized[str(key)] = str(value)
+        return sanitized
+
+    def _progress(stage: str, stage_event: str, details: Dict[str, Any]) -> None:
+        sanitized_details = _sanitize_details(details) if details else {}
+        runtime.emit(
+            "analyze.progress",
+            stage=stage,
+            stage_event=stage_event,
+            details=sanitized_details,
+        )
+
+    try:
+        result = agent.analyze(
+            input=transcript,
+            case_id=case_id,
+            case_dir=case_dir,
+            job_id=str(job.id),
+            intake=intake_payload,
+            transcript_hint=transcript_hint_payload,
+            provider_chain=config_chain or analyze_config.provider_chain,
+            stage_map=stage_map or None,
+            provider_credentials=provider_credentials or None,
+            progress_callback=_progress,
+        )
+    except Exception as exc:  # noqa: BLE001
+        error_message = str(exc)
+        log.exception(
+            "analyze agent failed",
+            extra={"job_id": job_id, "case_id": case_id, "error": error_message},
+        )
+        failure_meta = {**base_meta, "summary_status": "failed", "summary_error": error_message}
+        if summary_task_id:
+            failure_meta.setdefault("celery_task_id", summary_task_id)
+            failure_meta["celery_task_status"] = "failed"
+        failure_ts = runtime.fail(
+            error=error_message,
+            log_message=f"Analyze failed: {error_message}",
+            meta_updates=failure_meta,
+            events=[("analyze.failed", {"llm_config_id": active_config_id or llm_config_id})],
+            task_meta_updates={"stage": "agent", "reason": error_message},
+        )
+        _safe_job_meta(
+            case_id,
+            org_id,
+            job_id,
+            {
+                "summary_completed_at": failure_ts.isoformat(),
+                "celery_task_finished_at": failure_ts.isoformat(),
+                "celery_task_status": "failed" if summary_task_id else None,
+            },
+        )
+        raise
+
+    summary_sha = sha256_file(result.summary_file)
+    summary_markdown_sha = sha256_file(result.summary_markdown_file)
+    outline_sha = sha256_file(result.outline_file) if result.outline_file else None
+    timeline_sha = sha256_file(result.timeline_seeds_file) if result.timeline_seeds_file else None
+    entity_sha = sha256_file(result.entity_hints_file) if result.entity_hints_file else None
+    case_brief_sha = sha256_file(result.case_brief_file) if result.case_brief_file else None
+
+    token_usage: Optional[Dict[str, Any]] = None
+    meta_payload: Dict[str, Any] = {}
+    try:
+        meta_payload = json.loads(result.meta_json.read_text(encoding="utf-8"))
+    except Exception:
+        meta_payload = {}
+    usage_payload = meta_payload.get("token_usage") if isinstance(meta_payload, dict) else None
+    if isinstance(usage_payload, dict):
+        token_usage = usage_payload
+
+    summary_meta_updates: Dict[str, Any] = {
+        **base_meta,
+        "summary_status": "completed",
+        "summary_file": str(result.summary_file),
+        "summary_markdown_file": str(result.summary_markdown_file),
+        "summary_outline_file": str(result.outline_file) if result.outline_file else None,
+        "summary_timeline_file": str(result.timeline_seeds_file) if result.timeline_seeds_file else None,
+        "summary_entity_file": str(result.entity_hints_file) if result.entity_hints_file else None,
+        "summary_case_brief_file": str(result.case_brief_file) if result.case_brief_file else None,
+        "summary_meta_json": str(result.meta_json),
+        "summary_audit_jsonl": str(result.audit_jsonl),
+        "summary_words": result.words,
+        "summary_provider_chain": list(result.provider_chain),
+        "summary_sha256": summary_sha,
+        "summary_markdown_sha256": summary_markdown_sha,
+        "summary_outline_sha256": outline_sha,
+        "summary_timeline_sha256": timeline_sha,
+        "summary_entity_sha256": entity_sha,
+        "summary_case_brief_sha256": case_brief_sha,
+        "source_transcript_path": transcript_path_str,
+    }
+    if active_config_id:
+        summary_meta_updates["summary_llm_config_id"] = active_config_id
+    if token_usage:
+        summary_meta_updates["token_usage"] = token_usage
+    if summary_task_id:
+        summary_meta_updates.setdefault("celery_task_id", summary_task_id)
+        summary_meta_updates["celery_task_status"] = "succeeded"
+
+    artifact_metadata: Dict[str, Any] = {
+        "summary_markdown_file": str(result.summary_markdown_file),
+        "summary_outline_file": str(result.outline_file) if result.outline_file else None,
+        "summary_timeline_file": str(result.timeline_seeds_file) if result.timeline_seeds_file else None,
+        "summary_entity_file": str(result.entity_hints_file) if result.entity_hints_file else None,
+        "summary_case_brief_file": str(result.case_brief_file) if result.case_brief_file else None,
+        "summary_words": result.words,
+        "summary_provider_chain": list(result.provider_chain),
+        "summary_sha256": summary_sha,
+        "summary_markdown_sha256": summary_markdown_sha,
+        "summary_outline_sha256": outline_sha,
+        "summary_timeline_sha256": timeline_sha,
+        "summary_entity_sha256": entity_sha,
+        "summary_case_brief_sha256": case_brief_sha,
+        "source_transcript_path": transcript_path_str,
+        "token_usage": token_usage,
+        "summary_meta_json": str(result.meta_json),
+    }
+    artifact_metadata = {
+        key: value
+        for key, value in artifact_metadata.items()
+        if value not in (None, "", [], {})
+    }
+
+    summary_checksum = summary_sha or ""
+
+    try:
+        CaseArtifact.objects.create(
+            case_id=str(case_id),
+            case_fk=job.case,
+            organization=job.organization,
+            job_id=str(job.id),
+            type="SUMMARY",
+            title=summary_title,
+            path=str(result.summary_file),
+            checksum=summary_checksum,
+            schema_version="v1",
+            metadata=artifact_metadata,
+        )
+    except Exception:
+        log.exception(
+            "failed to register summary artifact",
+            extra={"job_id": job_id, "case_id": case_id, "path": str(result.summary_file)},
+        )
+
+    log_message = (
+        f"Analyze succeeded: summary={result.summary_file.name} words={result.words}"
+    )
+    job_event_payload = {
+        "summary_file": str(result.summary_file),
+        "summary_markdown_file": str(result.summary_markdown_file),
+        "summary_words": result.words,
+        "title": summary_title,
+    }
+    finished_ts = runtime.succeed(
+        log_message=log_message,
+        meta_updates=summary_meta_updates,
+        job_event_payload=job_event_payload,
+        events=[
+            (
+                "analyze.completed",
+                {
+                    "summary_file": str(result.summary_file),
+                    "summary_markdown_file": str(result.summary_markdown_file),
+                    "summary_words": result.words,
+                },
+            )
+        ],
+        task_meta_updates={"stage": "completed", "summary_words": result.words},
+    )
+
+    _safe_job_meta(
+        case_id,
+        org_id,
+        job_id,
+        {
+            "summary_completed_at": finished_ts.isoformat(),
+            "celery_task_finished_at": finished_ts.isoformat(),
+            "celery_task_status": "succeeded" if summary_task_id else None,
+        },
+    )
+
+    audit_emit(
+        None,
+        case_id=case_id,
+        event="analysis.summary.completed",
+        data={
+            "job_id": str(job.id),
+            "summary_file": str(result.summary_file),
+            "summary_markdown_file": str(result.summary_markdown_file),
+            "words": result.words,
+            "provider_chain": list(result.provider_chain),
+        },
+    )
+
+    try:
+        send_case_update(case_id, event="artifact.created", kind="summary", job_id=str(job.id))
+    except Exception:
+        log.exception(
+            "case artifact update emit failed",
+            extra={"case_id": case_id, "job_id": job_id, "event": "artifact.created"},
+        )
+
+    return {
+        "status": "ok",
+        "job_id": str(job.id),
+        "case_id": case_id,
+        "summary_file": str(result.summary_file),
+        "summary_markdown_file": str(result.summary_markdown_file),
+        "outline_file": str(result.outline_file) if result.outline_file else None,
+        "timeline_file": str(result.timeline_seeds_file) if result.timeline_seeds_file else None,
+        "entity_file": str(result.entity_hints_file) if result.entity_hints_file else None,
+        "case_brief_file": str(result.case_brief_file) if result.case_brief_file else None,
+        "meta_json": str(result.meta_json),
+        "audit_jsonl": str(result.audit_jsonl),
+        "words": result.words,
+        "provider_chain": list(result.provider_chain),
+    }
 
 
 @shared_task(bind=True)
