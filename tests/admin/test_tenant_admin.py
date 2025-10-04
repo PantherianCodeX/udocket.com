@@ -5,7 +5,7 @@ import pytest
 from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.contrib.sessions.middleware import SessionMiddleware
-from django.test import RequestFactory
+from django.test import Client, RequestFactory
 
 from apps.platform.accounts.models import Organization, OrganizationMembership
 from apps.platform.accounts.utils import set_active_admin_org_id
@@ -152,6 +152,21 @@ def test_job_admin_requires_staff(settings):
 
     assert job_admin.has_module_permission(request) is False
     assert job_admin.has_view_permission(request, job) is False
+
+
+@pytest.mark.django_db
+def test_organization_admin_change_view_loads(settings):
+    settings.PLATFORM_DEV_OPEN = False
+    org = Organization.objects.create(name="Org Admin")
+    admin_user = get_user_model().objects.create_superuser(
+        username="orgadmin", email="admin@example.com", password="x"
+    )
+    client = Client()
+    client.force_login(admin_user)
+    response = client.get(f"/admin/accounts/organization/{org.pk}/change/")
+    assert response.status_code == 200
+    html = response.content.decode()
+    assert str(org.id) in html
 
 
 @pytest.mark.django_db

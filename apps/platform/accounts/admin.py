@@ -111,9 +111,9 @@ class OrganizationAdmin(admin.ModelAdmin):
     list_display = ("id", "name", "city", "province", "contact_email", "created_at")
     search_fields = ("id", "name", "display_name", "contact_email")
     ordering = ("name",)
-    readonly_fields = ("uid", "created_at", "updated_at")
+    readonly_fields = ("created_at", "updated_at")
     fieldsets = (
-        (None, {"fields": ("id", "uid", "name", "display_name")}),
+        (None, {"fields": ("id", "name", "display_name")}),
         (_("Contact"), {"fields": ("contact_name", "contact_email", "contact_phone")}),
         (_("Address"), {"fields": ("address_line1", "address_line2", "city", "province", "postal_code", "country")}),
         (_("Notes"), {"fields": ("notes",)}),
