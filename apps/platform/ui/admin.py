@@ -1,3 +1,5 @@
+# pyright: strict
+
 from django.contrib import admin
 
 # Simple branding for admin UI
