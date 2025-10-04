@@ -89,3 +89,46 @@ def test_superuser_membership_sees_all_orgs(settings):
     assert resolved is None
     org_ids = {org.id for org in user_accessible_organizations(user)}
     assert {org_a.id, org_b.id}.issubset(org_ids)
+
+
+@pytest.mark.django_db
+def test_user_accessible_organizations_skips_invalid_ids(monkeypatch, settings):
+    settings.PLATFORM_DEV_OPEN = False
+    org = Organization.objects.create(name="Valid Org")
+    user = get_user_model().objects.create_user(username="member", password="x")
+    OrganizationMembership.objects.create(user=user, organization=org, role=OrganizationMembership.Role.ADMIN)
+
+    original_filter = OrganizationMembership.objects.filter
+
+    class WrappedMembershipQS:
+        def __init__(self, qs):
+            self._qs = qs
+
+        def filter(self, *args, **kwargs):  # type: ignore[override]
+            return WrappedMembershipQS(self._qs.filter(*args, **kwargs))
+
+        def exists(self):  # type: ignore[override]
+            return self._qs.exists()
+
+        def values_list(self, *args, **kwargs):  # type: ignore[override]
+            data = list(self._qs.values_list(*args, **kwargs))
+            if kwargs.get("flat"):
+                data.append("legacy-org")
+                return data
+            data.append(("legacy-org",))
+            return data
+
+        def __iter__(self):
+            return iter(self._qs)
+
+        def __getattr__(self, name):  # pragma: no cover - delegation
+            return getattr(self._qs, name)
+
+    def fake_filter(*args, **kwargs):
+        return WrappedMembershipQS(original_filter(*args, **kwargs))
+
+    monkeypatch.setattr(OrganizationMembership.objects, "filter", fake_filter)
+
+    qs = user_accessible_organizations(user)
+    ids = list(qs.values_list("id", flat=True))
+    assert ids == [org.id]

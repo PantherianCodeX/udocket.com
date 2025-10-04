@@ -32,7 +32,14 @@ def user_accessible_organizations(user: Any) -> models.QuerySet[Organization]:
         .values_list("case__organization_id", flat=True)
         .distinct()
     )
-    org_ids = {uuid.UUID(str(value)) for value in list(direct_ids) + list(case_ids) if value}
+    org_ids: set[uuid.UUID] = set()
+    for raw_value in list(direct_ids) + list(case_ids):
+        if not raw_value:
+            continue
+        try:
+            org_ids.add(uuid.UUID(str(raw_value)))
+        except (ValueError, TypeError, AttributeError):
+            continue
     if not org_ids:
         return Organization.objects.none()
     return Organization.objects.filter(id__in=org_ids).order_by("name")
