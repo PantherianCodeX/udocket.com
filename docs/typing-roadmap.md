@@ -27,6 +27,13 @@
 6. **Gate strict mode**
    - Update CI to fail on Pyright errors only after the above buckets are cleared. Until then, keep strict mode locally but allow warnings so contributors can chip away iteratively.
 
+## March 2025 Progress & New Guidance
+- `packages/udocket_core/agents/common` now runs clean under `pyright` thanks to explicit JSON aliases and payload guards. Reuse the new helpers (`JSONValue`, `_ensure_json_object`, `_content_from_*`) when wiring additional agents so downstream code never handles `Any` payloads from Azure.
+- When normalizing third-party responses, prefer the pattern used in `common/azure_client.py`: convert unknown mappings into concrete `dict[str, object]`, gate every branch with `_is_json_structure`, and coerce payloads via `_coerce_json_value`. This keeps telemetry dictionaries JSON-serialisable without sprinkling `cast` calls across consumers.
+- For append-only storage helpers (`append_jsonl`, audit writers, etc.), accept `Mapping[str, JSONValue]` rather than wide `Dict[str, Any]`. If a caller passes a mutable mapping, materialise it once before serialisation as shown in `common/io.py` to keep write paths deterministic.
+- When updating typing in other agent folders, start by hoisting shared aliases into `packages/udocket_core/agents/common/io.py` (or adding new ones there) so that follow-on modules inherit consistent types without redefining local `TypedDict`s.
+- Manual retries and request fallbacks should stay in the runtime wrapper (`AzureChatClient._chat`). Avoid folding error handling into per-agent code; instead expose structured exceptions with typed payloads so Celery tasks can log without `Any` casts.
+
 ## Patterns Established (2024-03 Typing Pass)
 - **Nullable model fields** – When a Django field uses `null=True`, annotate the descriptor with `Optional[...]` for both the set and get generics (e.g., `models.TextField[Optional[str], Optional[str]]`). This satisfies the mypy-django plugin and prevents the “generic get type parameter is not optional” error.
 - **Manager helpers** – Prefer `QuerySet.as_manager()` or a thin subclass that casts `super().get_queryset()` instead of silencing overrides. This keeps `objects` typed as `Manager[Model]` for Pylance/Pyright while still exposing typed helper methods (see `apps/platform/jobs/models.py` for the pattern).
