@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import socket
 from dataclasses import dataclass
@@ -8,6 +9,7 @@ from typing import Any, Iterable
 
 from pydantic import Field, SecretStr, ValidationInfo, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings.sources import EnvSettingsSource, PydanticBaseSettingsSource
 
 
 def _read_text(path: Path) -> str | None:
@@ -36,8 +38,37 @@ def _split_env_list(value: Any) -> list[str]:
     return [item.strip() for item in text.split(",") if item.strip()]
 
 
-def _split_int_list(value: Any) -> list[int]:
-    items = _split_env_list(value)
+def _json_or_split_str_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple)):
+        result: list[str] = []
+        for item in value:
+            text = str(item).strip()
+            if text:
+                result.append(text)
+        return result
+    text = str(value).strip()
+    if not text:
+        return []
+    try:
+        loaded = json.loads(text)
+    except json.JSONDecodeError:
+        return _split_env_list(text)
+    if isinstance(loaded, str):
+        return _split_env_list(loaded)
+    if isinstance(loaded, Iterable) and not isinstance(loaded, (str, bytes, bytearray)):
+        result: list[str] = []
+        for item in loaded:
+            item_text = str(item).strip()
+            if item_text:
+                result.append(item_text)
+        return result
+    return _split_env_list(text)
+
+
+def _json_or_split_int_list(value: Any) -> list[int]:
+    items = _json_or_split_str_list(value)
     result: list[int] = []
     for item in items:
         try:
@@ -47,6 +78,17 @@ def _split_int_list(value: Any) -> list[int]:
         if parsed > 0:
             result.append(parsed)
     return result
+
+
+def _normalize_redis_url(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    if "://" in text or text.startswith("unix://"):
+        return text
+    return f"redis://{text}"
 
 
 @dataclass(frozen=True)
@@ -263,7 +305,51 @@ class OIDCConfig:
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(extra="ignore", populate_by_name=True)
+    model_config = SettingsConfigDict(extra="ignore", populate_by_name=True, env_ignore_empty=True)
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        class _CsvEnvSource(EnvSettingsSource):
+            _STR_LIST_FIELDS = {"DJANGO_ALLOWED_HOSTS", "CSRF_TRUSTED_ORIGINS"}
+            _INT_LIST_FIELDS = {"PLATFORM_UI_JOB_LIMIT_CHOICES"}
+
+            def __init__(self, settings_cls: type[BaseSettings], **kwargs: Any) -> None:
+                super().__init__(settings_cls, **kwargs)
+
+            def decode_complex_value(self, field_name: str, field: Any, value: str) -> Any:  # type: ignore[override]
+                if field_name in self._STR_LIST_FIELDS:
+                    return _json_or_split_str_list(value)
+                if field_name in self._INT_LIST_FIELDS:
+                    return _json_or_split_int_list(value)
+                return super().decode_complex_value(field_name, field, value)
+
+        env_kwargs: dict[str, Any] = {}
+        for attr in (
+            "case_sensitive",
+            "env_prefix",
+            "env_nested_delimiter",
+            "env_nested_max_split",
+            "env_ignore_empty",
+            "env_parse_none_str",
+            "env_parse_enums",
+        ):
+            attr_value = getattr(env_settings, attr, None)
+            if attr_value is not None:
+                env_kwargs[attr] = attr_value
+
+        return (
+            init_settings,
+            _CsvEnvSource(settings_cls, **env_kwargs),
+            dotenv_settings,
+            file_secret_settings,
+        )
 
     # Azure Speech + Agents
     AZURE_SPEECH_KEY: SecretStr = Field(default=SecretStr("dev-placeholder"))
@@ -359,18 +445,18 @@ class Settings(BaseSettings):
     @field_validator("DJANGO_ALLOWED_HOSTS", mode="before")
     @classmethod
     def parse_allowed_hosts(cls, value: Any) -> list[str]:
-        hosts = _split_env_list(value)
+        hosts = _json_or_split_str_list(value)
         return hosts or ["*"]
 
     @field_validator("CSRF_TRUSTED_ORIGINS", mode="before")
     @classmethod
     def parse_csrf_origins(cls, value: Any) -> list[str]:
-        return _split_env_list(value)
+        return _json_or_split_str_list(value)
 
     @field_validator("PLATFORM_UI_JOB_LIMIT_CHOICES", mode="before")
     @classmethod
     def parse_job_limit_choices(cls, value: Any) -> list[int]:
-        parsed = _split_int_list(value)
+        parsed = _json_or_split_int_list(value)
         return parsed or [25, 50, 100, 200]
 
     @field_validator("PLATFORM_UI_JOB_DEFAULT_LIMIT", mode="before")
@@ -382,6 +468,11 @@ class Settings(BaseSettings):
             return int(value)
         except (TypeError, ValueError):
             return 25
+
+    @field_validator("REDIS_URL", "CELERY_BROKER_URL", mode="before")
+    @classmethod
+    def normalize_redis_urls(cls, value: Any) -> str | None:
+        return _normalize_redis_url(value)
 
     @field_validator(
         "AZURE_BLOB_SAS_TTL_MIN",
@@ -426,6 +517,10 @@ class Settings(BaseSettings):
         self._ensure_sqlite_parent(self.DATABASE_URL)
         if self.TEST_DATABASE_URL:
             self._ensure_sqlite_parent(self.TEST_DATABASE_URL)
+        self.REDIS_URL = _normalize_redis_url(self.REDIS_URL)
+        broker_normalized = _normalize_redis_url(self.CELERY_BROKER_URL)
+        if broker_normalized:
+            self.CELERY_BROKER_URL = broker_normalized
         if not self.DJANGO_DEBUG and self.DJANGO_SECRET_KEY.get_secret_value() == "dev-insecure-secret-key":
             raise ValueError("DJANGO_SECRET_KEY must be set when DJANGO_DEBUG is false")
         return self
@@ -515,17 +610,19 @@ class Settings(BaseSettings):
 
     @property
     def redis(self) -> RedisConfig:
-        return RedisConfig(url=self.REDIS_URL)
+        return RedisConfig(url=_normalize_redis_url(self.REDIS_URL))
 
     @property
     def celery(self) -> CeleryConfig:
+        normalized_broker = _normalize_redis_url(self.CELERY_BROKER_URL)
+        normalized_redis = _normalize_redis_url(self.REDIS_URL)
         return CeleryConfig(
-            broker_url=self.CELERY_BROKER_URL,
+            broker_url=normalized_broker,
             result_backend=self.CELERY_RESULT_BACKEND,
             task_always_eager=self.CELERY_TASK_ALWAYS_EAGER,
             task_time_limit=self.CELERY_TASK_TIME_LIMIT,
             task_soft_time_limit=self.CELERY_TASK_SOFT_TIME_LIMIT,
-            redis_url=self.REDIS_URL,
+            redis_url=normalized_redis,
         )
 
     @property
