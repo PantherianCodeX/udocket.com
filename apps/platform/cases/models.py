@@ -121,7 +121,12 @@ class Case(models.Model):
     updated_at: models.DateTimeField[datetime, datetime] = models.DateTimeField(auto_now=True)
     history: HistoricalRecords["Case"] = HistoricalRecords()
 
-    objects: ClassVar[models.Manager["Case"]] = CaseManager()
+    objects = CaseManager()
+    typed_objects: ClassVar[CaseManager] = objects
+
+    @classmethod
+    def scoped(cls) -> CaseManager:
+        return cls.typed_objects
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return f"{self.id} — {self.title}"

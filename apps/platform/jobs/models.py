@@ -130,7 +130,12 @@ class Job(models.Model):
     class Meta:
         ordering = ["-created_at"]
 
-    objects: ClassVar[models.Manager["Job"]] = JobManager()
+    objects = JobManager()
+    typed_objects: ClassVar[JobManager] = objects
+
+    @classmethod
+    def scoped(cls) -> JobManager:
+        return cls.typed_objects
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return f"{self.id} {self.status}"

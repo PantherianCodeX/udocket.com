@@ -32,7 +32,7 @@ def _organization_artifacts(request: HttpRequest, organization) -> List[Dict[str
     user = getattr(request, "user", None)
     artifacts: List[Dict[str, Any]] = []
     queryset = (
-        CaseArtifact.objects.for_user(user)
+        CaseArtifact.scoped().for_user(user)
         .filter(organization=organization)
         .exclude(type__iexact="AUDIO")
         .select_related("case_fk")

@@ -370,11 +370,11 @@ class Settings(BaseSettings):
             def __init__(self, settings_cls: type[BaseSettings], **kwargs: Any) -> None:
                 super().__init__(settings_cls, **kwargs)
 
-            def decode_complex_value(self, field_name: str, field: Any, value: str) -> Any:  # type: ignore[override]
+            def decode_complex_value(self, field_name: str, field: Any, value: Any) -> Any:
                 if field_name in self.STR_LIST_FIELDS:
-                    return _json_or_split_str_list(value)
+                    return _json_or_split_str_list(str(value))
                 if field_name in self.INT_LIST_FIELDS:
-                    return _json_or_split_int_list(value)
+                    return _json_or_split_int_list(str(value))
                 return super().decode_complex_value(field_name, field, value)
 
         env_kwargs: dict[str, Any] = {}
@@ -398,11 +398,11 @@ class Settings(BaseSettings):
             def __init__(self, settings_cls: type[BaseSettings], **kwargs: Any) -> None:
                 super().__init__(settings_cls, **kwargs)
 
-            def decode_complex_value(self, field_name: str, field: Any, value: str) -> Any:  # type: ignore[override]
+            def decode_complex_value(self, field_name: str, field: Any, value: Any) -> Any:
                 if field_name in self.STR_LIST_FIELDS:
-                    return _json_or_split_str_list(value)
+                    return _json_or_split_str_list(str(value))
                 if field_name in self.INT_LIST_FIELDS:
-                    return _json_or_split_int_list(value)
+                    return _json_or_split_int_list(str(value))
                 return super().decode_complex_value(field_name, field, value)
 
         dotenv_kwargs: dict[str, Any] = {}
@@ -561,7 +561,7 @@ class Settings(BaseSettings):
     @classmethod
     def ensure_int(cls, value: Any, info: ValidationInfo) -> int:
         field_name = info.field_name
-        default_value = cls.model_fields[field_name].default if field_name in cls.model_fields else 0  # type: ignore[index]
+        default_value = cls.model_fields[field_name].default if field_name in cls.model_fields else 0
         try:
             parsed = int(value)
         except (TypeError, ValueError):
@@ -819,4 +819,12 @@ def _build_settings_kwargs() -> dict[str, Any]:
     return env_kwargs
 
 
-settings = Settings(**_collect_secret_file_values(Settings.model_fields.keys()), **_build_settings_kwargs())
+def _load_settings() -> Settings:
+    secret_values = _collect_secret_file_values(Settings.model_fields.keys())
+    env_kwargs = _build_settings_kwargs()
+    combined: dict[str, Any] = {**secret_values}
+    combined.update(env_kwargs)
+    return Settings(**combined)
+
+
+settings = _load_settings()

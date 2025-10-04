@@ -6,6 +6,7 @@ Scope: `apps/platform/jobs/` (Job model, telemetry shaping, serializers, API vie
 - Use `Job.Status` enums for all state transitions; add UI mappings when introducing new statuses.
 - Derived fields like `transcript_path`, `duration_s`, `upload_progress` must be updated only by orchestrators (operations/tasks).
 - `Job.save` auto‑hydrates `organization_id` from the related case when missing (apps/platform/jobs/models.py:74).
+- Use `Job.scoped()` to access the typed manager (e.g., tenancy helpers like `for_user`).
 
 ## Query Scoping
 - Expose `.for_user(user)` on querysets and scope via tenancy helpers in views/serializers.

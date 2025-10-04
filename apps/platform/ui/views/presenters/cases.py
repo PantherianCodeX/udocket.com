@@ -146,7 +146,7 @@ def collect_case_artifacts(
     exclude_audio: bool = True,
 ) -> List[Dict[str, Any]]:
     user = getattr(request, "user", None)
-    qs = CaseArtifact.objects.for_user(user).filter(case_id=str(case.id))
+    qs = CaseArtifact.scoped().for_user(user).filter(case_id=str(case.id))
     if exclude_audio:
         qs = qs.exclude(type__iexact="AUDIO")
     artifacts: List[Dict[str, Any]] = []

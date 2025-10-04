@@ -7,7 +7,7 @@ Scope: `apps/platform/cases/` (Case model, membership, case views/serializers).
 - Memberships (`CaseMembership`) control access; roles gate capabilities (OWNER/CONTRIBUTOR/CLIENT/REVIEWER...).
 
 ## Query Scoping
-- Use `Case.objects.for_user(user)` which delegates to tenancy scoping.
+- Use `Case.scoped().for_user(user)` (classmethod) which delegates to tenancy scoping.
 - Views must resolve `active_org` and restrict to it. See view helpers under `apps.platform.ui.views.contexts` and tenancy.
 
 ## Mutations

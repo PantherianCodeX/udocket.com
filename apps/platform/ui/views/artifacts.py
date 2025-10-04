@@ -69,7 +69,7 @@ def artifacts_index(request: HttpRequest) -> HttpResponse:
 
     user = getattr(request, "user", None)
     queryset = (
-        CaseArtifact.objects.for_user(user)
+        CaseArtifact.scoped().for_user(user)
         .filter(organization=organization)
         .select_related("case_fk")
         .order_by("-created_at")

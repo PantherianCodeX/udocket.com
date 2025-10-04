@@ -6,6 +6,7 @@ Scope: `apps/platform/artifacts/` (artifact model, admin, serializers).
 - `CaseArtifact` is append‑only for content; avoid modifying or reusing physical files. New runs should create new versions and records.
 - Uniqueness: `unique_together = (case_id, type, title)`; use helpers to generate unique titles.
 - Organization ID is auto‑hydrated on save when missing (apps/platform/artifacts/models.py:148).
+- Use `CaseArtifact.scoped()` when you need a typed manager with tenancy helpers (e.g., `CaseArtifact.scoped().for_user(user)`).
 
 -## Types & File Paths
 - Everything the system ingests or produces should be an artifact. Recommended types:
