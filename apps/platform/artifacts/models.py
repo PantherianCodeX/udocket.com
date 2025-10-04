@@ -14,11 +14,19 @@ if TYPE_CHECKING:
     from apps.platform.cases.models import Case
 
 
-class CaseArtifactQuerySet(models.QuerySet[models.Model]):
+class CaseArtifactQuerySet(models.QuerySet["CaseArtifact"]):
     def for_user(self, user: Any) -> "CaseArtifactQuerySet":
         from apps.platform import tenancy
 
         return cast("CaseArtifactQuerySet", tenancy.scope_artifacts(self, user))
+
+
+class CaseArtifactManager(models.Manager["CaseArtifact"]):
+    def get_queryset(self) -> CaseArtifactQuerySet:  # type: ignore[override]
+        return CaseArtifactQuerySet(self.model, using=self._db)
+
+    def for_user(self, user: Any) -> CaseArtifactQuerySet:
+        return self.get_queryset().for_user(user)
 
 
 class CaseArtifact(models.Model):
@@ -50,10 +58,7 @@ class CaseArtifact(models.Model):
     metadata: models.JSONField[dict[str, Any], dict[str, Any]] = models.JSONField(default=dict, blank=True)
     history: HistoricalRecords["CaseArtifact"] = HistoricalRecords()
 
-    objects: ClassVar[models.Manager["CaseArtifact"]] = cast(
-        models.Manager["CaseArtifact"],
-        CaseArtifactQuerySet.as_manager(),
-    )
+    objects: ClassVar[models.Manager["CaseArtifact"]] = CaseArtifactManager()
 
     class Meta:
         indexes = [

@@ -14,11 +14,19 @@ if TYPE_CHECKING:  # pragma: no cover
     from apps.platform.cases.models import Case
 
 
-class JobQuerySet(models.QuerySet[models.Model]):
+class JobQuerySet(models.QuerySet["Job"]):
     def for_user(self, user: Any) -> "JobQuerySet":
         from apps.platform import tenancy
 
         return cast("JobQuerySet", tenancy.scope_jobs(self, user))
+
+
+class JobManager(models.Manager["Job"]):
+    def get_queryset(self) -> JobQuerySet:  # type: ignore[override]
+        return JobQuerySet(self.model, using=self._db)
+
+    def for_user(self, user: Any) -> JobQuerySet:
+        return self.get_queryset().for_user(user)
 
 
 class Job(models.Model):
@@ -122,7 +130,7 @@ class Job(models.Model):
     class Meta:
         ordering = ["-created_at"]
 
-    objects: ClassVar[models.Manager["Job"]] = cast(models.Manager["Job"], JobQuerySet.as_manager())
+    objects: ClassVar[models.Manager["Job"]] = JobManager()
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return f"{self.id} {self.status}"

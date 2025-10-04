@@ -13,14 +13,19 @@ if TYPE_CHECKING:
     from apps.platform.accounts.models import Organization, User
 
 
-class CaseQuerySet(models.QuerySet[models.Model]):
+class CaseQuerySet(models.QuerySet["Case"]):
     def for_user(self, user: Any) -> "CaseQuerySet":
         from apps.platform import tenancy
 
         return cast("CaseQuerySet", tenancy.scope_cases(self, user))
 
 
-CaseManager: models.Manager["Case"] = cast(models.Manager["Case"], CaseQuerySet.as_manager())
+class CaseManager(models.Manager["Case"]):
+    def get_queryset(self) -> CaseQuerySet:  # type: ignore[override]
+        return CaseQuerySet(self.model, using=self._db)
+
+    def for_user(self, user: Any) -> CaseQuerySet:
+        return self.get_queryset().for_user(user)
 
 
 class Case(models.Model):
@@ -117,7 +122,7 @@ class Case(models.Model):
     updated_at: models.DateTimeField[datetime, datetime] = models.DateTimeField(auto_now=True)
     history: HistoricalRecords["Case"] = HistoricalRecords()
 
-    objects: ClassVar[models.Manager["Case"]] = CaseManager
+    objects: ClassVar[models.Manager["Case"]] = CaseManager()
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return f"{self.id} — {self.title}"
