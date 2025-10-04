@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Iterable, Optional
+from typing import Any, Optional
+import uuid
 
 from django.contrib.auth import get_user_model
 from django.db import models
@@ -31,17 +32,19 @@ def user_accessible_organizations(user: Any) -> models.QuerySet[Organization]:
         .values_list("case__organization_id", flat=True)
         .distinct()
     )
-    org_ids = set(direct_ids) | set(case_ids)
+    org_ids = {uuid.UUID(str(value)) for value in list(direct_ids) + list(case_ids) if value}
+    if not org_ids:
+        return Organization.objects.none()
     return Organization.objects.filter(id__in=org_ids).order_by("name")
 
 
 def user_accessible_org_ids(user: Any) -> list[str]:
-    return list(user_accessible_organizations(user).values_list("id", flat=True))
+    return [str(org_id) for org_id in user_accessible_organizations(user).values_list("id", flat=True)]
 
 
 def get_active_admin_org_id(request: HttpRequest) -> Optional[str]:
     org = get_active_admin_org(request)
-    return org.id if org else None
+    return str(org.id) if org else None
 
 
 def get_active_admin_org(request: HttpRequest) -> Optional[Organization]:
@@ -55,14 +58,14 @@ def get_active_admin_org(request: HttpRequest) -> Optional[Organization]:
     orgs_qs = user_accessible_organizations(user)
     accessible = list(orgs_qs)
     stored = session.get(_SESSION_KEY)
-    if stored and stored not in {org.id for org in accessible}:
+    if stored and stored not in {str(org.id) for org in accessible}:
         stored = None
     if not stored and len(accessible) == 1:
-        stored = accessible[0].id
+        stored = str(accessible[0].id)
         session[_SESSION_KEY] = stored
     if stored:
         for org in accessible:
-            if org.id == stored:
+            if str(org.id) == stored:
                 request.admin_active_org = org  # type: ignore[attr-defined]
                 request.admin_active_org_id = stored  # type: ignore[attr-defined]
                 return org
@@ -86,7 +89,7 @@ def set_active_admin_org_id(request: HttpRequest, org_id: Optional[str]) -> None
 
 def admin_org_choices(request: HttpRequest) -> list[AdminOrgChoice]:
     orgs = user_accessible_organizations(getattr(request, "user", None))
-    return [{"id": org.id, "name": org.name} for org in orgs]
+    return [{"id": str(org.id), "name": org.name} for org in orgs]
 
 
 def resolve_request_organization(
@@ -111,7 +114,11 @@ def resolve_request_organization(
     def _get_org(org_id: str | None) -> Optional[Organization]:
         if not org_id:
             return None
-        return Organization.objects.filter(id=org_id).first()
+        try:
+            parsed = uuid.UUID(str(org_id))
+        except (TypeError, ValueError):
+            return None
+        return Organization.objects.filter(id=parsed).first()
 
     if header_org_id:
         org = _get_org(header_org_id)

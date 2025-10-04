@@ -48,8 +48,8 @@ def test_authz_presets_require_auth_when_closed(settings):
 @pytest.mark.django_db
 def test_authz_endpoints_scope_to_user_org(settings):
     settings.PLATFORM_DEV_OPEN = False
-    org_a = Organization.objects.create(id="api-org-a", name="API Org A")
-    org_b = Organization.objects.create(id="api-org-b", name="API Org B")
+    org_a = Organization.objects.create(name="API Org A")
+    org_b = Organization.objects.create(name="API Org B")
 
     preset_a = PermissionPreset.objects.create(name="API Preset A", organization=org_a)
     preset_b = PermissionPreset.objects.create(name="API Preset B", organization=org_b)

@@ -28,7 +28,7 @@ def _is_dev_open(settings, tmp_path):
 
 
 def test_jobs_upload_file_creates_job_and_saves_file(db, settings):
-    org = Organization.objects.create(id="ORG-FLOW1", name="Flow Org 1")
+    org = Organization.objects.create(name="Flow Org 1")
     case = Case.objects.create(id="CASE-T1", title="Upload Test", organization=org)
     client = APIClient()
 
@@ -82,7 +82,7 @@ def _make_transcript(settings, case_id: str, job_id: str) -> Path:
 
 
 def test_analysis_tasks_generate_artifacts(db, settings, monkeypatch):
-    org = Organization.objects.create(id="ORG-FLOW2", name="Flow Org 2")
+    org = Organization.objects.create(name="Flow Org 2")
     case = Case.objects.create(id="CASE-T2", title="Analysis Test", organization=org)
     job = Job.objects.create(case=case, audio_input="/tmp/a.wav")
     LLMConfiguration.objects.create(

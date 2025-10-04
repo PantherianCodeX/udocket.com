@@ -530,8 +530,7 @@ def organization_settings(
             **base_context,
             "general_form": general_form,
             "organization_metadata": {
-                "id": organization.id,
-                "uid": organization.uid,
+                "id": str(organization.id),
                 "created_at": organization.created_at,
                 "updated_at": organization.updated_at,
             },

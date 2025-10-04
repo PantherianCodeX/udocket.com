@@ -35,7 +35,7 @@ def _wav_bytes() -> bytes:
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True, CELERY_TASK_EAGER_PROPAGATES=True)
 def test_ui_job_creation_forces_batch_when_diarization(settings):
     settings.PLATFORM_DEV_OPEN = True
-    org = Organization.objects.create(id="org-ui", name="UI Org")
+    org = Organization.objects.create(name="UI Org")
     case = Case.objects.create(id="case-ui", title="UI Case", organization=org)
     user = User.objects.create_user(username="ui-user", password="pw")
     CaseMembership.objects.create(case=case, user=user, role=CaseMembership.Role.OWNER)
@@ -66,7 +66,7 @@ def test_ui_job_creation_forces_batch_when_diarization(settings):
 @pytest.mark.django_db
 def test_bulk_status_endpoint_returns_multiple_jobs(settings):
     settings.PLATFORM_DEV_OPEN = True
-    org = Organization.objects.create(id="org-status", name="Status Org")
+    org = Organization.objects.create(name="Status Org")
     case_uuid = uuid.uuid4()
     case = Case.objects.create(id=case_uuid, title="Status Case", organization=org)
     user = User.objects.create_user(username="status-user", password="pw")

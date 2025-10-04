@@ -15,7 +15,7 @@ from apps.platform.ui.views.presenters.analysis_modules import analysis_modules_
 def test_analysis_modules_include_notes(settings):
     settings.PLATFORM_DEV_OPEN = True
 
-    org = Organization.objects.create(id="ORG-ANALYSIS", name="Analysis Org")
+    org = Organization.objects.create(name="Analysis Org")
     case = Case.objects.create(id="CASE-ANALYSIS", title="Analysis Case", organization=org)
 
     user_model = get_user_model()
@@ -87,7 +87,7 @@ def test_analysis_modules_include_notes(settings):
 def test_compose_module_lists_extended_deliverables(settings, tmp_path):
     settings.PLATFORM_DEV_OPEN = True
 
-    org = Organization.objects.create(id="ORG-COMPOSE", name="Compose Org")
+    org = Organization.objects.create(name="Compose Org")
     case = Case.objects.create(id="CASE-COMPOSE", title="Compose Case", organization=org)
 
     user_model = get_user_model()

@@ -27,16 +27,16 @@ def _req(user=None, headers=None):
 @pytest.mark.django_db
 def test_resolve_organization_header_requires_membership(settings):
     settings.PLATFORM_DEV_OPEN = False
-    org = Organization.objects.create(id="org-hdr", name="Header Org")
-    other_org = Organization.objects.create(id="org-other", name="Other Org")
+    org = Organization.objects.create(name="Header Org")
+    other_org = Organization.objects.create(name="Other Org")
     user = get_user_model().objects.create_user(username="alice", password="x")
     OrganizationMembership.objects.create(user=user, organization=org)
 
-    request = _req(user=user, headers={"HTTP_X_ORGANIZATION_ID": org.id})
+    request = _req(user=user, headers={"HTTP_X_ORGANIZATION_ID": str(org.id)})
     resolved = resolve_request_organization(request)
     assert resolved == org
 
-    spoofed = _req(user=user, headers={"HTTP_X_ORGANIZATION_ID": other_org.id})
+    spoofed = _req(user=user, headers={"HTTP_X_ORGANIZATION_ID": str(other_org.id)})
     spoofed_org = resolve_request_organization(spoofed)
     assert spoofed_org == org
 
@@ -44,12 +44,12 @@ def test_resolve_organization_header_requires_membership(settings):
 @pytest.mark.django_db
 def test_resolve_organization_uses_admin_selection(settings):
     settings.PLATFORM_DEV_OPEN = False
-    org = Organization.objects.create(id="org-session", name="Session Org")
+    org = Organization.objects.create(name="Session Org")
     user = get_user_model().objects.create_user(username="bob", password="x")
     OrganizationMembership.objects.create(user=user, organization=org)
 
     request = _req(user=user)
-    set_active_admin_org_id(request, org.id)
+    set_active_admin_org_id(request, str(org.id))
     request.session.save()
 
     resolved = resolve_request_organization(request)
@@ -59,7 +59,7 @@ def test_resolve_organization_uses_admin_selection(settings):
 @pytest.mark.django_db
 def test_resolve_organization_superuser_accepts_header(settings):
     settings.PLATFORM_DEV_OPEN = False
-    org = Organization.objects.create(id="org-super", name="Super Org")
+    org = Organization.objects.create(name="Super Org")
     su = get_user_model().objects.create_user(username="root", password="x")
     OrganizationMembership.objects.create(
         user=su,
@@ -67,7 +67,7 @@ def test_resolve_organization_superuser_accepts_header(settings):
         role=OrganizationMembership.Role.SUPERUSER,
     )
 
-    request = _req(user=su, headers={"HTTP_X_ORGANIZATION_ID": org.id})
+    request = _req(user=su, headers={"HTTP_X_ORGANIZATION_ID": str(org.id)})
     resolved = resolve_request_organization(request)
     assert resolved == org
 
@@ -75,8 +75,8 @@ def test_resolve_organization_superuser_accepts_header(settings):
 @pytest.mark.django_db
 def test_superuser_membership_sees_all_orgs(settings):
     settings.PLATFORM_DEV_OPEN = False
-    org_a = Organization.objects.create(id="org-a", name="Org A")
-    org_b = Organization.objects.create(id="org-b", name="Org B")
+    org_a = Organization.objects.create(name="Org A")
+    org_b = Organization.objects.create(name="Org B")
     user = get_user_model().objects.create_user(username="power", password="x")
     OrganizationMembership.objects.create(
         user=user,

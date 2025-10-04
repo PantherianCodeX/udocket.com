@@ -9,8 +9,7 @@ from django.db import models
 
 
 class Organization(models.Model):
-    id = models.CharField(primary_key=True, max_length=64)
-    uid = models.UUIDField(editable=False, unique=True, null=True, blank=True)
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=200)
     display_name = models.CharField(max_length=200, blank=True)
     address_line1 = models.CharField(max_length=200, blank=True)
@@ -32,14 +31,8 @@ class Organization(models.Model):
     def __str__(self) -> str:  # pragma: no cover - trivial
         return self.name
 
-    def save(self, *args, **kwargs):  # type: ignore[override]
-        if not self.uid:
-            self.uid = uuid.uuid4()
-        super().save(*args, **kwargs)
-
     if typing.TYPE_CHECKING:  # pragma: no cover - typing aids
-        id: str
-        uid: uuid.UUID | None
+        id: uuid.UUID
         name: str
 
 

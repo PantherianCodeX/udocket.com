@@ -6,6 +6,7 @@ import django.contrib.auth.validators
 from django.db import migrations, models
 import django.db.models.deletion
 import django.utils.timezone
+import uuid
 
 
 class Migration(migrations.Migration):
@@ -144,12 +145,8 @@ class Migration(migrations.Migration):
             fields=[
                 (
                     "id",
-                    models.CharField(max_length=64, primary_key=True, serialize=False),
-                ),
-                (
-                    "uid",
                     models.UUIDField(
-                        blank=True, editable=False, null=True, unique=True
+                        default=uuid.uuid4, editable=False, primary_key=True, serialize=False
                     ),
                 ),
                 ("name", models.CharField(max_length=200)),

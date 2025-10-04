@@ -24,7 +24,7 @@ def test_job_serializer_field_visibility_by_role(db, settings):
     settings.PLATFORM_DEV_OPEN = False
     factory = APIRequestFactory()
 
-    org = Organization.objects.create(id="ORG-JOBS", name="Jobs Org")
+    org = Organization.objects.create(name="Jobs Org")
     case = Case.objects.create(id="CASE-JOBS", title="Jobs Case", organization=org)
     job = _make_job(case)
 

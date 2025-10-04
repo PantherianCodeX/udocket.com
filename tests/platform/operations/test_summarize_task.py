@@ -20,7 +20,7 @@ def test_analyze_job_rerun_uses_transcript_and_records_markdown(monkeypatch, set
     media_root.mkdir()
     settings.MEDIA_ROOT = str(media_root)
 
-    organization = Organization.objects.create(id="org-1", name="Org One")
+    organization = Organization.objects.create(name="Org One")
     case = Case.objects.create(id="CASE-1", title="Example Case", organization=organization)
     job = Job.objects.create(case=case, organization=organization, audio_input="input.wav")
 

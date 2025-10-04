@@ -11,7 +11,7 @@ from apps.platform.ui.views.presenters import cases as presenters
 
 @pytest.mark.django_db()
 def test_build_tool_panels_appends_return_url(monkeypatch):
-    org = Organization.objects.create(id="ORG-PANELS", name="Panels Org")
+    org = Organization.objects.create(name="Panels Org")
     case = Case.objects.create(id="CASE-PANELS", title="Panels Case", organization=org)
 
     def fake_llm_context(_case: Case, return_url: str):

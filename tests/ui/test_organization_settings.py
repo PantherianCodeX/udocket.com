@@ -11,14 +11,14 @@ from apps.platform.operations.models import LLMConfiguration, LLMProviderCredent
 @pytest.mark.django_db
 def test_organization_settings_renders_and_manages_providers(settings):
     settings.PLATFORM_DEV_OPEN = True
-    org = Organization.objects.create(id="org-settings", name="Settings Org")
+    org = Organization.objects.create(name="Settings Org")
     user = User.objects.create_user(username="settings-user", password="password")
     OrganizationMembership.objects.create(organization=org, user=user, role=OrganizationMembership.Role.ADMIN)
 
     client = Client()
     client.force_login(user)
     session = client.session
-    session["admin_active_org_id"] = org.id
+    session["admin_active_org_id"] = str(org.id)
     session.save()
 
     resp = client.get("/settings/organization/")
@@ -56,14 +56,14 @@ def test_organization_settings_renders_and_manages_providers(settings):
 @pytest.mark.django_db
 def test_general_settings_update_profile(settings):
     settings.PLATFORM_DEV_OPEN = True
-    org = Organization.objects.create(id="org-general", name="General Org")
+    org = Organization.objects.create(name="General Org")
     user = User.objects.create_user(username="general-user", password="password")
     OrganizationMembership.objects.create(organization=org, user=user, role=OrganizationMembership.Role.ADMIN)
 
     client = Client()
     client.force_login(user)
     session = client.session
-    session["admin_active_org_id"] = org.id
+    session["admin_active_org_id"] = str(org.id)
     session.save()
 
     resp = client.post(
@@ -97,14 +97,14 @@ def test_general_settings_update_profile(settings):
 @pytest.mark.django_db
 def test_organization_settings_saves_configuration(settings):
     settings.PLATFORM_DEV_OPEN = True
-    org = Organization.objects.create(id="org-config", name="Config Org")
+    org = Organization.objects.create(name="Config Org")
     user = User.objects.create_user(username="config-user", password="password")
     OrganizationMembership.objects.create(organization=org, user=user, role=OrganizationMembership.Role.ADMIN)
 
     client = Client()
     client.force_login(user)
     session = client.session
-    session["admin_active_org_id"] = org.id
+    session["admin_active_org_id"] = str(org.id)
     session.save()
 
     # Ensure provider credential exists so configuration can reference it
@@ -154,14 +154,14 @@ def test_organization_settings_saves_configuration(settings):
 @pytest.mark.django_db
 def test_organization_settings_config_create_deduplicates_name(settings):
     settings.PLATFORM_DEV_OPEN = True
-    org = Organization.objects.create(id="org-config-copy", name="Config Copy Org")
+    org = Organization.objects.create(name="Config Copy Org")
     user = User.objects.create_user(username="copy-user", password="password")
     OrganizationMembership.objects.create(organization=org, user=user, role=OrganizationMembership.Role.ADMIN)
 
     client = Client()
     client.force_login(user)
     session = client.session
-    session["admin_active_org_id"] = org.id
+    session["admin_active_org_id"] = str(org.id)
     session.save()
 
     client.post(
@@ -201,14 +201,14 @@ def test_organization_settings_config_create_deduplicates_name(settings):
 @pytest.mark.django_db
 def test_provider_test_action_reports_status(settings):
     settings.PLATFORM_DEV_OPEN = True
-    org = Organization.objects.create(id="org-test", name="Test Org")
+    org = Organization.objects.create(name="Test Org")
     user = User.objects.create_user(username="tester", password="password")
     OrganizationMembership.objects.create(organization=org, user=user, role=OrganizationMembership.Role.ADMIN)
 
     client = Client()
     client.force_login(user)
     session = client.session
-    session["admin_active_org_id"] = org.id
+    session["admin_active_org_id"] = str(org.id)
     session.save()
 
     client.post(
@@ -241,14 +241,14 @@ def test_provider_test_action_reports_status(settings):
 @pytest.mark.django_db
 def test_provider_enable_blocked_when_not_configured(settings):
     settings.PLATFORM_DEV_OPEN = True
-    org = Organization.objects.create(id="org-block", name="Block Org")
+    org = Organization.objects.create(name="Block Org")
     user = User.objects.create_user(username="block-user", password="password")
     OrganizationMembership.objects.create(organization=org, user=user, role=OrganizationMembership.Role.ADMIN)
 
     client = Client()
     client.force_login(user)
     session = client.session
-    session["admin_active_org_id"] = org.id
+    session["admin_active_org_id"] = str(org.id)
     session.save()
 
     client.get("/settings/organization/providers/")

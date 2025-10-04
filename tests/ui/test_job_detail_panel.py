@@ -12,7 +12,7 @@ from apps.platform.operations.storage import ops_dir
 
 def _setup_case(settings):
     settings.PLATFORM_DEV_OPEN = False
-    org = Organization.objects.create(id="ORG-PANEL", name="Panel Org")
+    org = Organization.objects.create(name="Panel Org")
     case = Case.objects.create(id="CASE-PANEL", title="Panel Case", organization=org)
     owner = User.objects.create_user(username="panel-owner", password="x")
     outsider = User.objects.create_user(username="panel-outsider", password="x")

@@ -12,7 +12,7 @@ from apps.platform.jobs.models import Job
 
 @pytest.fixture
 def org_case(db):
-    org = Organization.objects.create(id="ORG-AUTHZ", name="Auth Org")
+    org = Organization.objects.create(name="Auth Org")
     case = Case.objects.create(id="CASE-AUTHZ", title="Auth Case", organization=org)
     return org, case
 

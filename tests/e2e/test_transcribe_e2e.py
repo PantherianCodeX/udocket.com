@@ -170,7 +170,7 @@ def test_transcribe_task_on_demand_e2e(tmp_path, settings):
     from apps.platform.jobs.models import Job
     from apps.platform.operations import tasks as op_tasks
 
-    org = Organization.objects.create(id="ORG-E2E", name="E2E Org")
+    org = Organization.objects.create(name="E2E Org")
     case = Case.objects.create(id="CASE-E2E-TASK", title="E2E Transcribe Task", organization=org)
 
     # Place mp3 under the case's audio folder to mirror typical layout
@@ -217,7 +217,7 @@ def test_transcribe_task_batch_diarization_e2e(tmp_path, settings):
     from apps.platform.jobs.models import Job
     from apps.platform.operations import tasks as op_tasks
 
-    org = Organization.objects.create(id="ORG-E2E-BATCH", name="E2E Org Batch")
+    org = Organization.objects.create(name="E2E Org Batch")
     case = Case.objects.create(id="CASE-E2E-BATCH", title="E2E Batch Diarization", organization=org)
 
     variants = _dialogue_variants()
@@ -264,7 +264,7 @@ def test_transcribe_task_batch_convert_and_diarize_e2e(tmp_path, settings):
     from apps.platform.operations import tasks as op_tasks
     from apps.platform.operations.storage import ops_dir
 
-    org = Organization.objects.create(id="ORG-E2E-BATCH2", name="E2E Org Batch 2")
+    org = Organization.objects.create(name="E2E Org Batch 2")
     case = Case.objects.create(id="CASE-E2E-BATCH2", title="E2E Batch Convert+Diarize", organization=org)
 
     variants = _dialogue_variants()

@@ -16,8 +16,8 @@ User = get_user_model()
 
 @pytest.mark.django_db
 def test_scope_helpers_respect_memberships():
-    org_a = Organization.objects.create(id="ORG-A", name="Org A")
-    org_b = Organization.objects.create(id="ORG-B", name="Org B")
+    org_a = Organization.objects.create(name="Org A")
+    org_b = Organization.objects.create(name="Org B")
 
     user_a = User.objects.create_user(username="user_a")
     user_b = User.objects.create_user(username="user_b")

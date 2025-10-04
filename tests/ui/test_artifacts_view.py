@@ -10,7 +10,7 @@ from apps.platform.artifacts.models import CaseArtifact
 
 @pytest.mark.django_db()
 def test_artifacts_index_search_and_pagination(client, django_user_model):
-    org = Organization.objects.create(id="ORG-ART", name="Artifacts Org")
+    org = Organization.objects.create(name="Artifacts Org")
     user: User = django_user_model.objects.create_user(
         username="artifact-user",
         email="artifact@example.com",

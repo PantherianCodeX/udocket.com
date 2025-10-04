@@ -14,7 +14,7 @@ from apps.platform.operations.storage import ops_dir
 
 def _create_case_with_members(settings):
     settings.PLATFORM_DEV_OPEN = False
-    org = Organization.objects.create(id="ORG-TEL", name="Telemetry Org")
+    org = Organization.objects.create(name="Telemetry Org")
     case = Case.objects.create(id="CASE-TEL", title="Telemetry Case", organization=org)
     owner = User.objects.create_user(username="owner_tele", password="x", display_name="Owner Tele")
     reviewer = User.objects.create_user(username="reviewer_tele", password="x", display_name="Reviewer Tele")

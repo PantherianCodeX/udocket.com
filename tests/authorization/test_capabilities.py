@@ -7,17 +7,17 @@ from apps.platform.cases.models import Case, CaseMembership
 
 
 def test_role_capabilities_scoped_by_organization(db):
-    org = Organization.objects.create(id="ORG-CAPS", name="Caps Org")
+    org = Organization.objects.create(name="Caps Org")
     role = Role.objects.create(name="Owner", organization=org)
     RoleCapability.objects.create(role=role, capability="case.share")
 
-    caps_with_org = role_capabilities("OWNER", organization_id=org.id)
+    caps_with_org = role_capabilities("OWNER", organization_id=str(org.id))
     assert "case.share" in caps_with_org
     caps_global = role_capabilities("OWNER")
     assert "case.share" not in caps_global
 
 def test_has_capability_honors_membership_organization(db):
-    org = Organization.objects.create(id="ORG-CAPS3", name="Caps Org 3")
+    org = Organization.objects.create(name="Caps Org 3")
     case = Case.objects.create(id="CASE-CAP", title="Case Cap", organization=org)
     user = User.objects.create_user(username="tenant-user", password="x")
     role = Role.objects.create(name="Contributor", organization=org)

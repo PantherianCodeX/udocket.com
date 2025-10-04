@@ -16,7 +16,7 @@ def _setup_case_with_job(settings, storage_root: Path, *, mismatch: bool = False
     settings.PLATFORM_DEV_OPEN = True
     settings.STORAGE_ROOT = str(storage_root)
 
-    org = Organization.objects.create(id="ORG-VERIFY", name="Verify Org")
+    org = Organization.objects.create(name="Verify Org")
     case = Case.objects.create(id="CASE-VERIFY", title="Verify Case", organization=org)
     user = User.objects.create_user(username="verify_user", password="testpw")
     CaseMembership.objects.create(case=case, user=user, role=CaseMembership.Role.OWNER)

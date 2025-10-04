@@ -43,8 +43,10 @@ def select_organization(request: HttpRequest) -> HttpResponse:
         set_active_admin_org_id(request, None)
         return HttpResponseRedirect(next_url)
 
-    accessible = user_accessible_organizations(user).values_list("id", flat=True)
-    if org_id in accessible or getattr(user, "is_superuser", False):
+    accessible_ids = {
+        str(value) for value in user_accessible_organizations(user).values_list("id", flat=True)
+    }
+    if org_id in accessible_ids or getattr(user, "is_superuser", False):
         set_active_admin_org_id(request, org_id)
 
     return HttpResponseRedirect(next_url)

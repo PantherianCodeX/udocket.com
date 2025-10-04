@@ -14,12 +14,12 @@ from apps.platform.operations.llm import (
 
 class ProviderCredentialUUIDTests(TestCase):
     def setUp(self) -> None:
-        self.org = Organization.objects.create(id="org-test", name="Test Org")
+        self.org = Organization.objects.create(name="Test Org")
 
     def test_uuid_roundtrip_create_update_delete(self):
         # Create via standard upsert (no uuid provided)
         upsert_org_provider_credential(
-            organization_id=self.org.id,
+            organization_id=str(self.org.id),
             provider="custom",
             display_name="Custom Provider",
             endpoint="https://example.invalid",
@@ -29,14 +29,14 @@ class ProviderCredentialUUIDTests(TestCase):
             enabled=True,
         )
 
-        creds = get_org_provider_credentials(self.org.id)
+        creds = get_org_provider_credentials(str(self.org.id))
         assert "custom" in creds
         uid = creds["custom"].get("uid")
         assert uid and len(str(uid)) > 0
 
         # Update via UUID path
         upsert_org_provider_credential_by_uuid(
-            organization_id=self.org.id,
+            organization_id=str(self.org.id),
             provider_uid=uid,
             provider="custom",
             display_name="Custom Provider 2",
@@ -47,12 +47,12 @@ class ProviderCredentialUUIDTests(TestCase):
             enabled=False,
         )
 
-        creds2 = get_org_provider_credentials(self.org.id)
+        creds2 = get_org_provider_credentials(str(self.org.id))
         assert creds2["custom"]["display_name"] == "Custom Provider 2"
         assert creds2["custom"]["is_enabled"] is False
 
         # Delete via UUID
-        delete_org_provider_credential_by_uuid(self.org.id, uid)
-        creds3 = get_org_provider_credentials(self.org.id)
+        delete_org_provider_credential_by_uuid(str(self.org.id), uid)
+        creds3 = get_org_provider_credentials(str(self.org.id))
         assert "custom" not in creds3
 

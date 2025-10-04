@@ -12,7 +12,7 @@ from apps.platform.artifacts.models import CaseArtifact
 @pytest.mark.django_db()
 def test_guardian_overview_page(settings):
     settings.PLATFORM_DEV_OPEN = True
-    org = Organization.objects.create(id="ORG-GA", name="Guardian Audit")
+    org = Organization.objects.create(name="Guardian Audit")
     user = User.objects.create_user("guardian-user", "guardian@example.com", "pass123")
     OrganizationMembership.objects.create(organization=org, user=user, role=OrganizationMembership.Role.MEMBER)
 
@@ -50,7 +50,7 @@ def test_guardian_overview_page(settings):
 @pytest.mark.django_db()
 def test_guardian_report_json(settings):
     settings.PLATFORM_DEV_OPEN = True
-    org = Organization.objects.create(id="ORG-GR", name="Guardian Org")
+    org = Organization.objects.create(name="Guardian Org")
     user = User.objects.create_user("guardian-report", "report@example.com", "pass123")
     OrganizationMembership.objects.create(organization=org, user=user, role=OrganizationMembership.Role.MEMBER)
 

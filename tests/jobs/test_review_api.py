@@ -16,7 +16,7 @@ from apps.platform.operations.tasks import _update_job_meta
 
 def _make_case(settings):
     settings.PLATFORM_DEV_OPEN = False
-    org = Organization.objects.create(id="ORG-REV", name="Review Org")
+    org = Organization.objects.create(name="Review Org")
     case = Case.objects.create(id="CASE-REV", title="Review Case", organization=org)
     owner = User.objects.create_user(username="owner_rev", password="x", display_name="Owner R")
     reviewer = User.objects.create_user(username="reviewer_rev", password="x", display_name="Reviewer R")

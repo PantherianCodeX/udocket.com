@@ -12,7 +12,7 @@ from apps.platform.ui.views.job_tables import build_job_table_state
 @pytest.mark.django_db()
 def test_build_job_table_state_produces_unique_filter_options():
     rf = RequestFactory()
-    org = Organization.objects.create(id="ORG-JOBS", name="Jobs Org")
+    org = Organization.objects.create(name="Jobs Org")
     case = Case.objects.create(id="CASE-JOBS", title="Jobs Case", organization=org)
 
     Job.objects.create(

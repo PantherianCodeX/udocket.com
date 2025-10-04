@@ -74,12 +74,9 @@
         <textarea name="notes" rows="3" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" placeholder="Optional context for teammates">{{ general_form.notes }}</textarea>
       </label>
 
-      <div class="grid gap-4 md:grid-cols-2">
+      <div class="grid gap-4">
         <label class="text-xs font-semibold uppercase tracking-wide text-slate-400">Organization ID
           <input type="text" value="{{ organization_metadata.id }}" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-xs font-mono text-primary-100 focus:border-primary-400 focus:outline-none" readonly>
-        </label>
-        <label class="text-xs font-semibold uppercase tracking-wide text-slate-400">Organization UID
-          <input type="text" value="{{ organization_metadata.uid|default:'—' }}" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-xs font-mono text-primary-100 focus:border-primary-400 focus:outline-none" readonly>
         </label>
       </div>
 

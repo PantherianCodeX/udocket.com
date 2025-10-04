@@ -33,8 +33,8 @@ def _admin_request(user, path: str = "/admin/"):
 @pytest.mark.django_db
 def test_case_admin_queryset_matches_scope(settings):
     settings.PLATFORM_DEV_OPEN = False
-    org_allowed = Organization.objects.create(id="alpha", name="Alpha Org")
-    org_blocked = Organization.objects.create(id="beta", name="Beta Org")
+    org_allowed = Organization.objects.create(name="Alpha Org")
+    org_blocked = Organization.objects.create(name="Beta Org")
 
     user = get_user_model().objects.create_user(
         username="tenant", password="x"
@@ -66,8 +66,8 @@ def test_case_admin_queryset_matches_scope(settings):
 @pytest.mark.django_db
 def test_job_admin_queryset_matches_scope(settings):
     settings.PLATFORM_DEV_OPEN = False
-    org_allowed = Organization.objects.create(id="alpha-jobs", name="Alpha Jobs")
-    org_blocked = Organization.objects.create(id="beta-jobs", name="Beta Jobs")
+    org_allowed = Organization.objects.create(name="Alpha Jobs")
+    org_blocked = Organization.objects.create(name="Beta Jobs")
 
     case_allowed = Case.objects.create(id="case-j1", title="Case One", organization=org_allowed)
     Case.objects.create(id="case-j2", title="Case Two", organization=org_blocked)
@@ -114,7 +114,7 @@ def test_job_admin_queryset_matches_scope(settings):
 @pytest.mark.django_db
 def test_case_admin_requires_staff(settings):
     settings.PLATFORM_DEV_OPEN = False
-    org = Organization.objects.create(id="tenant-org", name="Tenant Org")
+    org = Organization.objects.create(name="Tenant Org")
     user = get_user_model().objects.create_user(
         username="nostaff", password="x", is_staff=False, is_superuser=False
     )
@@ -132,7 +132,7 @@ def test_case_admin_requires_staff(settings):
 @pytest.mark.django_db
 def test_job_admin_requires_staff(settings):
     settings.PLATFORM_DEV_OPEN = False
-    org = Organization.objects.create(id="tenant-job-org", name="Tenant Job Org")
+    org = Organization.objects.create(name="Tenant Job Org")
     case = Case.objects.create(id="case-job-nostaff", title="Job Case", organization=org)
     user = get_user_model().objects.create_user(
         username="jobsnostaff", password="x", is_staff=False, is_superuser=False
@@ -157,8 +157,8 @@ def test_job_admin_requires_staff(settings):
 @pytest.mark.django_db
 def test_artifact_admin_queryset_matches_scope(settings):
     settings.PLATFORM_DEV_OPEN = False
-    org_allowed = Organization.objects.create(id="artifact-alpha", name="Artifact Alpha")
-    org_blocked = Organization.objects.create(id="artifact-beta", name="Artifact Beta")
+    org_allowed = Organization.objects.create(name="Artifact Alpha")
+    org_blocked = Organization.objects.create(name="Artifact Beta")
 
     case_allowed = Case.objects.create(id="artifact-case-1", title="Artifact One", organization=org_allowed)
     case_blocked = Case.objects.create(id="artifact-case-2", title="Artifact Two", organization=org_blocked)
@@ -208,8 +208,8 @@ def test_artifact_admin_queryset_matches_scope(settings):
 @pytest.mark.django_db
 def test_audit_event_admin_queryset_matches_scope(settings):
     settings.PLATFORM_DEV_OPEN = False
-    org_allowed = Organization.objects.create(id="audit-alpha", name="Audit Alpha")
-    org_blocked = Organization.objects.create(id="audit-beta", name="Audit Beta")
+    org_allowed = Organization.objects.create(name="Audit Alpha")
+    org_blocked = Organization.objects.create(name="Audit Beta")
 
     case_allowed = Case.objects.create(id="audit-case-1", title="Audit One", organization=org_allowed)
     Case.objects.create(id="audit-case-2", title="Audit Two", organization=org_blocked)
@@ -242,8 +242,8 @@ def test_audit_event_admin_queryset_matches_scope(settings):
 @pytest.mark.django_db
 def test_operations_admin_respects_superuser_active_org(settings):
     settings.PLATFORM_DEV_OPEN = False
-    org_allowed = Organization.objects.create(id="ops-alpha", name="Ops Alpha")
-    org_other = Organization.objects.create(id="ops-beta", name="Ops Beta")
+    org_allowed = Organization.objects.create(name="Ops Alpha")
+    org_other = Organization.objects.create(name="Ops Beta")
 
     case_allowed = Case.objects.create(id="ops-case-1", title="Ops One", organization=org_allowed)
     case_other = Case.objects.create(id="ops-case-2", title="Ops Two", organization=org_other)

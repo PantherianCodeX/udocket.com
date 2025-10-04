@@ -19,7 +19,7 @@ def test_download_analysis_returns_file(settings, tmp_path):
     settings.MEDIA_ROOT = str(tmp_path)
     settings.PLATFORM_DEV_OPEN = True
 
-    org = Organization.objects.create(id="ORG-DL1", name="Org Download")
+    org = Organization.objects.create(name="Org Download")
     case = Case.objects.create(id="CASE-DL1", title="Case Download", organization=org)
 
     user_model = get_user_model()
@@ -56,7 +56,7 @@ def test_download_analysis_missing_artifact(settings, tmp_path):
     settings.MEDIA_ROOT = str(tmp_path)
     settings.PLATFORM_DEV_OPEN = True
 
-    org = Organization.objects.create(id="ORG-DL2", name="Org Missing")
+    org = Organization.objects.create(name="Org Missing")
     case = Case.objects.create(id="CASE-DL2", title="Case Missing", organization=org)
 
     user_model = get_user_model()

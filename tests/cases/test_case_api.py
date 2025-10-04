@@ -11,7 +11,7 @@ from apps.platform.cases.models import Case, CaseMembership
 @pytest.mark.django_db
 def test_case_create_uses_user_organization(settings):
     settings.PLATFORM_DEV_OPEN = False
-    org = Organization.objects.create(id="org-api", name="API Org")
+    org = Organization.objects.create(name="API Org")
     user = User.objects.create_user(username="creator", password="x")
     OrganizationMembership.objects.create(user=user, organization=org)
 
@@ -30,8 +30,8 @@ def test_case_create_uses_user_organization(settings):
 @pytest.mark.django_db
 def test_case_update_cannot_change_organization(settings):
     settings.PLATFORM_DEV_OPEN = False
-    org = Organization.objects.create(id="org-stable", name="Stable Org")
-    other = Organization.objects.create(id="org-new", name="New Org")
+    org = Organization.objects.create(name="Stable Org")
+    other = Organization.objects.create(name="New Org")
     user = User.objects.create_user(username="maintainer", password="x")
     OrganizationMembership.objects.create(user=user, organization=org)
     case = Case.objects.create(id="case-stable", title="Stable", organization=org)

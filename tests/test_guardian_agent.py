@@ -149,7 +149,7 @@ def test_snapshot_artifact_reads_text(tmp_path):
 
 @pytest.mark.django_db
 def test_guardian_instructions_defaults():
-    org = Organization.objects.create(id="guardian-org", name="Guardian Org")
+    org = Organization.objects.create(name="Guardian Org")
 
     instructions = get_guardian_instructions(str(org.id))
 
@@ -174,7 +174,7 @@ def test_guardian_instructions_defaults():
 
 @pytest.mark.django_db
 def test_build_guardian_context_includes_instructions():
-    org = Organization.objects.create(id="context-org", name="Context Org")
+    org = Organization.objects.create(name="Context Org")
 
     context = build_guardian_context(str(org.id))
 

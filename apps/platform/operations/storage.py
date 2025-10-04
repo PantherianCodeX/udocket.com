@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Optional
+from uuid import UUID
 
 from django.conf import settings
 
@@ -19,18 +20,17 @@ def _case_org(case_id: str, fallback: Optional[str] = None) -> str:
     return str(value or fallback or _DEFAULT_ORG_SLUG)
 
 
-def tenant_case_root(case_id: str, organization_id: Optional[str] = None) -> Path:
-    org = organization_id or _case_org(case_id)
-    return Path(settings.MEDIA_ROOT) / "tenants" / org / "cases" / case_id
+def tenant_case_root(case_id: str, organization_id: Optional[str | UUID] = None) -> Path:
+    org_value = str(organization_id) if organization_id else _case_org(case_id)
+    return Path(settings.MEDIA_ROOT) / "tenants" / org_value / "cases" / case_id
 
 
-def ensure_case_dirs(case_id: str, organization_id: Optional[str] = None) -> Path:
+def ensure_case_dirs(case_id: str, organization_id: Optional[str | UUID] = None) -> Path:
     base = tenant_case_root(case_id, organization_id)
     for sub in ("audio", "transcript", "analysis", "ops"):
         (base / sub).mkdir(parents=True, exist_ok=True)
     return base
 
 
-def ops_dir(case_id: str, organization_id: Optional[str] = None) -> Path:
+def ops_dir(case_id: str, organization_id: Optional[str | UUID] = None) -> Path:
     return (tenant_case_root(case_id, organization_id) / "ops").resolve()
-

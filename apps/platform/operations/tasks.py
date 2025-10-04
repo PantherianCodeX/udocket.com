@@ -62,13 +62,13 @@ from apps.platform.operations.services import (
 from apps.platform.operations.services.files import sha256_file
 
 # Backwards compatibility for tests importing _update_job_meta
-def _update_job_meta(case_id: str, organization_id: Optional[str], job_id: str, updates: Dict[str, Any]) -> None:  # pragma: no cover - shim
+def _update_job_meta(case_id: str, organization_id: Optional[str | uuid.UUID], job_id: str, updates: Dict[str, Any]) -> None:  # pragma: no cover - shim
     return update_job_meta(case_id, organization_id, job_id, updates)
 from apps.platform.jobs.utils import unique_title
 
 log = logging.getLogger("apps.platform.operations.tasks")
 
-def _unique_conversion_title(case_id: str, organization_id: Optional[str], source_job_id: str) -> str:
+def _unique_conversion_title(case_id: str, organization_id: Optional[str | uuid.UUID], source_job_id: str) -> str:
     existing: set[str] = set()
     ops_dir = storage_ops_dir(case_id, organization_id)
     if ops_dir.exists():

@@ -19,7 +19,7 @@ def test_guardian_review_artifact_initializes_case_id(monkeypatch, settings, tmp
     media_root.mkdir()
     settings.MEDIA_ROOT = str(media_root)
 
-    organization = Organization.objects.create(id="org-1", name="Org One")
+    organization = Organization.objects.create(name="Org One")
     case = Case.objects.create(id="CASE-1", title="Example Case", organization=organization)
     job = Job.objects.create(case=case, organization=organization, audio_input="input.wav")
 
@@ -91,7 +91,7 @@ def test_guardian_review_artifact_falls_back_to_job_case(monkeypatch, settings, 
     media_root.mkdir()
     settings.MEDIA_ROOT = str(media_root)
 
-    organization = Organization.objects.create(id="org-2", name="Org Two")
+    organization = Organization.objects.create(name="Org Two")
     case = Case.objects.create(id="CASE-2", title="Second Case", organization=organization)
     job = Job.objects.create(case=case, organization=organization, audio_input="input.wav")
 

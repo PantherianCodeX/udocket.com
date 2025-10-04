@@ -13,8 +13,8 @@ from apps.platform.authorization.models import PermissionPreset, PresetCapabilit
 def test_permissions_overview_scopes_by_organization(client, settings):
     settings.PLATFORM_DEV_OPEN = False
 
-    org_a = Organization.objects.create(id="org-a", name="Org A")
-    org_b = Organization.objects.create(id="org-b", name="Org B")
+    org_a = Organization.objects.create(name="Org A")
+    org_b = Organization.objects.create(name="Org B")
 
     preset_a = PermissionPreset.objects.create(name="Demo Preset", organization=org_a)
     PresetCapability.objects.create(preset=preset_a, capability="case.view")

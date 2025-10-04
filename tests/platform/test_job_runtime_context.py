@@ -14,7 +14,7 @@ from apps.platform.operations import runtime
 
 @pytest.mark.django_db()
 def test_job_runtime_context_lifecycle(monkeypatch):
-    org = Organization.objects.create(id="ORG-RUNTIME", name="Runtime Org")
+    org = Organization.objects.create(name="Runtime Org")
     case = Case.objects.create(id="CASE-RUNTIME", title="Runtime Case", organization=org)
     job = Job.objects.create(case=case, audio_input="/tmp/source.wav")
 
@@ -110,7 +110,7 @@ def test_job_runtime_context_lifecycle(monkeypatch):
 
 @pytest.mark.django_db()
 def test_job_runtime_emit_sanitizes_reserved_keys(monkeypatch):
-    org = Organization.objects.create(id="ORG-RUNTIME-EMIT", name="Runtime Org Emit")
+    org = Organization.objects.create(name="Runtime Org Emit")
     case = Case.objects.create(id="CASE-RUNTIME-EMIT", title="Runtime Case Emit", organization=org)
     job = Job.objects.create(case=case, audio_input="/tmp/source3.wav")
 
@@ -141,7 +141,7 @@ def test_job_runtime_emit_sanitizes_reserved_keys(monkeypatch):
 
 @pytest.mark.django_db()
 def test_job_runtime_context_fail_and_cancel(monkeypatch):
-    org = Organization.objects.create(id="ORG-RUNTIME2", name="Runtime Org 2")
+    org = Organization.objects.create(name="Runtime Org 2")
     case = Case.objects.create(id="CASE-RUNTIME2", title="Runtime Case 2", organization=org)
     job = Job.objects.create(case=case, audio_input="/tmp/source2.wav")
 

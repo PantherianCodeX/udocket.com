@@ -13,7 +13,7 @@ from apps.platform.operations.models import LLMConfiguration
 @pytest.mark.django_db
 def test_case_llm_settings_updates_summary_defaults(settings):
     settings.PLATFORM_DEV_OPEN = True
-    org = Organization.objects.create(id="org-llm", name="LLM Org")
+    org = Organization.objects.create(name="LLM Org")
     case = Case.objects.create(id="case-llm", title="LLM Case", organization=org)
     user = User.objects.create_user(username="llm-user", password="pw")
     CaseMembership.objects.create(case=case, user=user, role=CaseMembership.Role.OWNER)

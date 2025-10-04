@@ -13,7 +13,7 @@ from apps.platform.artifacts.models import CaseArtifact
 def test_case_guardian_report_json(settings):
     settings.PLATFORM_DEV_OPEN = True
 
-    org = Organization.objects.create(id="ORG-GRD", name="Guardian Org")
+    org = Organization.objects.create(name="Guardian Org")
     case = Case.objects.create(id="CASE-GRD", title="Guardian Case", organization=org)
     user = User.objects.create_user(username="guardian-user", email="guardian@example.com", password="pass123")
     CaseMembership.objects.create(case=case, user=user, role=CaseMembership.Role.OWNER)

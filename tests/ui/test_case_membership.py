@@ -9,7 +9,7 @@ from apps.platform.ui.views.cases.membership import reconcile_case_memberships
 
 @pytest.mark.django_db
 def test_reconcile_case_memberships_assigns_roles():
-    org = Organization.objects.create(id="org-mem", name="Org")
+    org = Organization.objects.create(name="Org")
     case = Case.objects.create(id="case-mem", title="Case", organization=org)
 
     owner = User.objects.create_user(username="owner", password="pw")
@@ -40,7 +40,7 @@ def test_reconcile_case_memberships_assigns_roles():
 
 @pytest.mark.django_db
 def test_reconcile_case_memberships_removes_roles():
-    org = Organization.objects.create(id="org-rem", name="Org")
+    org = Organization.objects.create(name="Org")
     case = Case.objects.create(id="case-rem", title="Case", organization=org)
 
     reviewer = User.objects.create_user(username="reviewer-rem", password="pw")

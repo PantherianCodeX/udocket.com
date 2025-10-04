@@ -9,7 +9,7 @@ from apps.platform.ui.views.presenters import jobs as presenters
 
 
 def _make_case_with_job() -> tuple[Case, Job]:
-    org = Organization.objects.create(id="ORG-JOBS", name="Jobs Org")
+    org = Organization.objects.create(name="Jobs Org")
     case = Case.objects.create(id="CASE-JOBS", title="Jobs Case", organization=org)
     job = Job.objects.create(
         case=case,

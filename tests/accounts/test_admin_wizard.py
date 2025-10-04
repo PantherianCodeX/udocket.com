@@ -9,7 +9,7 @@ from apps.platform.accounts.models import Organization, OrganizationMembership, 
 
 
 def test_user_creation_wizard_form_creates_membership(db):
-    org = Organization.objects.create(id="ORG-WIZ", name="Wizard Org")
+    org = Organization.objects.create(name="Wizard Org")
     data = {
         "username": "wizard",
         "password1": "Supersafe123!",
@@ -32,7 +32,7 @@ def test_user_creation_wizard_form_creates_membership(db):
 
 
 def test_user_creation_superuser_role_sets_flags(db):
-    org = Organization.objects.create(id="ORG-SUP", name="Super Org")
+    org = Organization.objects.create(name="Super Org")
     data = {
         "username": "supreme",
         "password1": "Supersafe123!",
@@ -52,7 +52,7 @@ def test_user_creation_superuser_role_sets_flags(db):
 
 
 def test_user_admin_add_form_uses_wizard(db):
-    org = Organization.objects.create(id="ORG-WIZ2", name="Wizard Org 2")
+    org = Organization.objects.create(name="Wizard Org 2")
     site = AdminSite()
     admin = UserAdmin(User, site)
     request = RequestFactory().get("/admin/auth/user/add/")
@@ -76,7 +76,7 @@ def test_user_admin_add_form_uses_wizard(db):
 
 
 def test_membership_signal_updates_staff_flags(db):
-    org = Organization.objects.create(id="ORG-SIGNAL", name="Signal Org")
+    org = Organization.objects.create(name="Signal Org")
     user = User.objects.create_user(username="signal-user", password="pw", email="sig@example.com")
     OrganizationMembership.objects.create(organization=org, user=user, role=OrganizationMembership.Role.ADMIN)
     user.refresh_from_db()
