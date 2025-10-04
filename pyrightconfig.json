@@ -13,6 +13,7 @@
   "reportArgumentType": "warning",
   "pythonVersion": "3.11",
   "venvPath": ".",
+  "venv": ".venv",
   "exclude": [
     "**/migrations",
     "**/.venv",
