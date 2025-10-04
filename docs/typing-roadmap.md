@@ -33,6 +33,8 @@
 - For append-only storage helpers (`append_jsonl`, audit writers, etc.), accept `Mapping[str, JSONValue]` rather than wide `Dict[str, Any]`. If a caller passes a mutable mapping, materialise it once before serialisation as shown in `common/io.py` to keep write paths deterministic.
 - When updating typing in other agent folders, start by hoisting shared aliases into `packages/udocket_core/agents/common/io.py` (or adding new ones there) so that follow-on modules inherit consistent types without redefining local `TypedDict`s.
 - Manual retries and request fallbacks should stay in the runtime wrapper (`AzureChatClient._chat`). Avoid folding error handling into per-agent code; instead expose structured exceptions with typed payloads so Celery tasks can log without `Any` casts.
+- `packages/udocket_core/agents/analyze_lib.py` now uses shared helpers (`_coerce_object_dict`, `_normalize_providers`) and typed `StageModelInfo`/`StageCatalogEntry` structures. Stage configuration inputs are normalised to `dict[str, object]`, so future contributors should preserve that pattern when adding new stage options or provider overrides.
+- When reading organization defaults (`config/analyze_defaults.json`), call `_coerce_int`/`_coerce_float` rather than sprinkling `int(...)`/`float(...)` coercions. This keeps environment overrides predictable and Pyright-friendly.
 
 ## Patterns Established (2024-03 Typing Pass)
 - **Nullable model fields** – When a Django field uses `null=True`, annotate the descriptor with `Optional[...]` for both the set and get generics (e.g., `models.TextField[Optional[str], Optional[str]]`). This satisfies the mypy-django plugin and prevents the “generic get type parameter is not optional” error.

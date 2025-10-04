@@ -3,16 +3,14 @@ from __future__ import annotations
 import json
 import logging
 import os
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, cast
+from typing import Optional, TypedDict, cast
 
-from .common import (
-    parse_transcript,
-    TranscriptParse,
-)
-from .common.io import TranscriptSegment  # re-export for legacy imports
+from .common import parse_transcript, TranscriptParse
+from .common.io import TranscriptSegment
 from .langgraph_orchestrator import build_analyze_graph, enable_langgraph_debug_logging
 from .analyze.utils import FinalizedOutputs, AnalyzePipeline
 from ..llm import LLMSettings, load_llm_settings
@@ -26,44 +24,126 @@ from ..llm.runtime import (
 BASE_DIR = Path(__file__).resolve().parents[3]
 ANALYZE_DEFAULTS_PATH = BASE_DIR / "config" / "analyze_defaults.json"
 
+StageOptions = dict[str, object]
+StageMap = dict[str, StageOptions]
+ProviderCredentials = Mapping[str, Mapping[str, object]]
+
+
+class StageModelInfo(TypedDict):
+    provider: str
+    model: str
+    context_window_tokens: int | None
+    max_output_tokens: int | None
+    deployment_env: str | None
+
+
+class StageCatalogEntry(TypedDict):
+    label: str
+    description: str
+    min_context_tokens: int
+    recommended_context_tokens: int
+    target_chunk_tokens: int
+    output_reserve_tokens: int
+    resource_notes: str
+    recommended_models: list[StageModelInfo]
+    eligible_models: list[StageModelInfo]
+
+
+def _coerce_object_dict(payload: object) -> dict[str, object]:
+    if isinstance(payload, Mapping):
+        source = cast(Mapping[object, object], payload)
+        return {str(key): value for key, value in source.items()}
+    return {}
+
+
+def _coerce_string_list(values: object) -> list[str]:
+    if isinstance(values, Sequence) and not isinstance(values, (str, bytes, bytearray)):
+        result: list[str] = []
+        sequence = cast(Sequence[object], values)
+        for entry in sequence:
+            text = str(entry or "").strip()
+            if text:
+                result.append(text)
+        return result
+    return []
+
+
+def _coerce_int(value: object, fallback: int) -> int:
+    try:
+        parsed = int(str(value).strip())
+    except (TypeError, ValueError, AttributeError):
+        try:
+            parsed = int(float(str(value)))
+        except (TypeError, ValueError, AttributeError):
+            return fallback
+    return parsed if parsed > 0 else fallback
+
+
+def _coerce_float(value: object, fallback: float) -> float:
+    try:
+        parsed = float(str(value).strip())
+    except (TypeError, ValueError, AttributeError):
+        return fallback
+    return parsed
+
+
+def _normalize_providers(values: Sequence[str]) -> list[str]:
+    seen: set[str] = set()
+    normalized: list[str] = []
+    for raw in values:
+        name = (raw or "").strip().lower()
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        normalized.append(name)
+    return normalized
 
 @lru_cache(maxsize=1)
-def load_analyze_defaults() -> Dict[str, Any]:
+def load_analyze_defaults() -> dict[str, object]:
     try:
         payload = json.loads(ANALYZE_DEFAULTS_PATH.read_text(encoding="utf-8"))
-        return payload if isinstance(payload, dict) else {}
-    except FileNotFoundError:
+    except (FileNotFoundError, json.JSONDecodeError):
         return {}
-    except json.JSONDecodeError:
-        return {}
+    return _coerce_object_dict(payload)
 
 
-def analyze_defaults() -> Dict[str, Any]:
+def analyze_defaults() -> dict[str, object]:
     return dict(load_analyze_defaults())
 
 
-_DEFAULTS = load_analyze_defaults()
+_DEFAULTS: dict[str, object] = load_analyze_defaults()
 
-MAX_PROMPT_SEGMENTS = int(_DEFAULTS.get("max_prompt_segments", 250))
-MAX_PROMPT_CHARS = int(_DEFAULTS.get("max_prompt_chars", 32000))
-DEFAULT_TOKENS_TO_CHAR_RATIO = float(_DEFAULTS.get("chars_per_token", 4.0))
-DEFAULT_TEMPERATURE = float(_DEFAULTS.get("temperature", 1.0))
-DEFAULT_MAX_OUTPUT_TOKENS = int(_DEFAULTS.get("max_output_tokens", 24000))
 
-_DEFAULT_CHAIN = [
-    str(value).strip().lower()
-    for value in _DEFAULTS.get("default_provider_chain", ["azure"])
-    if str(value).strip()
-]
-DEFAULT_PROVIDER_CHAIN: List[str] = _DEFAULT_CHAIN or ["azure"]
+def _int_default(key: str, fallback: int) -> int:
+    return _coerce_int(_DEFAULTS.get(key), fallback)
 
-_STAGE_LIMITS_DEFAULT = _DEFAULTS.get("stage_token_limits") or {}
-DEFAULT_STAGE_TOKEN_LIMITS: Dict[str, int] = {
-    "analyze.extract_outline": int(_STAGE_LIMITS_DEFAULT.get("analyze.extract_outline", 12000)),
-    "analyze.build_timeline_seeds": int(_STAGE_LIMITS_DEFAULT.get("analyze.build_timeline_seeds", 8000)),
-    "analyze.build_entity_hints": int(_STAGE_LIMITS_DEFAULT.get("analyze.build_entity_hints", 8000)),
-    "analyze.draft_markdown": int(_STAGE_LIMITS_DEFAULT.get("analyze.draft_markdown", 12000)),
-    "analyze.qa_and_finalize": int(_STAGE_LIMITS_DEFAULT.get("analyze.qa_and_finalize", 6000)),
+
+def _float_default(key: str, fallback: float) -> float:
+    return _coerce_float(_DEFAULTS.get(key), fallback)
+
+
+MAX_PROMPT_SEGMENTS = _int_default("max_prompt_segments", 250)
+MAX_PROMPT_CHARS = _int_default("max_prompt_chars", 32000)
+DEFAULT_TOKENS_TO_CHAR_RATIO = _float_default("chars_per_token", 4.0)
+DEFAULT_TEMPERATURE = _float_default("temperature", 1.0)
+DEFAULT_MAX_OUTPUT_TOKENS = _int_default("max_output_tokens", 24000)
+
+_DEFAULT_CHAIN = _coerce_string_list(_DEFAULTS.get("default_provider_chain"))
+DEFAULT_PROVIDER_CHAIN: list[str] = _normalize_providers(_DEFAULT_CHAIN) or ["azure"]
+
+_STAGE_LIMITS_DEFAULT = _coerce_object_dict(_DEFAULTS.get("stage_token_limits"))
+
+
+def _stage_limit(key: str, fallback: int) -> int:
+    return _coerce_int(_STAGE_LIMITS_DEFAULT.get(key), fallback)
+
+
+DEFAULT_STAGE_TOKEN_LIMITS: dict[str, int] = {
+    "analyze.extract_outline": _stage_limit("analyze.extract_outline", 12000),
+    "analyze.build_timeline_seeds": _stage_limit("analyze.build_timeline_seeds", 8000),
+    "analyze.build_entity_hints": _stage_limit("analyze.build_entity_hints", 8000),
+    "analyze.draft_markdown": _stage_limit("analyze.draft_markdown", 12000),
+    "analyze.qa_and_finalize": _stage_limit("analyze.qa_and_finalize", 6000),
 }
 LLM_STAGE_KEYS = {
     "context_builder": "analyze.context_builder",
@@ -75,7 +155,7 @@ LLM_STAGE_KEYS = {
 }
 _llm_settings_cache: Optional[LLMSettings] = None
 
-_STAGE_ALIAS_LOOKUP: Dict[str, str] = {}
+_STAGE_ALIAS_LOOKUP: dict[str, str] = {}
 for _attr, _stage_key in LLM_STAGE_KEYS.items():
     _STAGE_ALIAS_LOOKUP[_attr.lower()] = _stage_key
     _STAGE_ALIAS_LOOKUP[_stage_key.lower()] = _stage_key
@@ -87,44 +167,45 @@ DISALLOWED_PROVIDERS: set[str] = set()
 
 
 def _normalize_stage_map(
-    stage_map: Optional[Dict[str, Dict[str, Any]]],
-) -> Dict[str, Dict[str, Any]]:
+    stage_map: Mapping[str, Mapping[str, object]] | None,
+) -> StageMap:
     if not stage_map:
         return {}
 
-    normalized: Dict[str, Dict[str, Any]] = {}
-    prefix_defaults: List[Tuple[Optional[str], Dict[str, Any]]] = []
+    normalized: StageMap = {}
+    prefix_defaults: list[tuple[str | None, StageOptions]] = []
 
     for raw_key, value in stage_map.items():
-        if not isinstance(value, dict):
+        value_dict = _coerce_object_dict(value)
+        if not value_dict:
             continue
         key = str(raw_key or "").strip()
         if not key:
             continue
         lowered = key.lower()
         if lowered in {"*", "default"}:
-            prefix_defaults.append((None, {str(k): v for k, v in value.items()}))
+            prefix_defaults.append((None, dict(value_dict)))
             continue
         if lowered.endswith(".*"):
             prefix = lowered[:-2].strip()
             if prefix:
-                prefix_defaults.append((prefix, {str(k): v for k, v in value.items()}))
+                prefix_defaults.append((prefix, dict(value_dict)))
             continue
 
         canonical = _normalize_stage_identifier(key)
         normalized_key = canonical or key
-        cfg = {str(k): v for k, v in value.items()}
+        cfg = dict(value_dict)
         normalized[normalized_key] = cfg
         if canonical:
             attr = canonical.split(".", 1)[1] if "." in canonical else canonical
-            normalized.setdefault(attr, cfg)
+            normalized.setdefault(attr, dict(cfg))
 
     if prefix_defaults:
         for stage_key in LLM_STAGE_KEYS.values():
             if stage_key in normalized:
                 continue
             stage_lower = stage_key.lower()
-            applied_cfg: Optional[Dict[str, Any]] = None
+            applied_cfg: StageOptions | None = None
             for prefix, default_cfg in prefix_defaults:
                 if prefix is None or stage_lower.startswith(prefix):
                     applied_cfg = dict(default_cfg)
@@ -133,7 +214,7 @@ def _normalize_stage_map(
                 continue
             normalized[stage_key] = applied_cfg
             attr = stage_key.split(".", 1)[1]
-            normalized.setdefault(attr, applied_cfg)
+            normalized.setdefault(attr, dict(applied_cfg))
 
     return normalized
 
@@ -143,89 +224,6 @@ def _normalize_stage_identifier(value: str) -> Optional[str]:
     if not key:
         return None
     return _STAGE_ALIAS_LOOKUP.get(key)
-
-
-def _parse_stage_mapping(
-    raw: str,
-    value_parser: Callable[[str], Optional[Any]],
-) -> Dict[str, Any]:
-    if not raw:
-        return {}
-
-    mapping: Dict[str, Any] = {}
-    entries: List[tuple[str, str]] = []
-
-    payload: Any = None
-    try:
-        payload = json.loads(raw)
-    except (TypeError, json.JSONDecodeError):
-        payload = None
-
-    if isinstance(payload, dict):
-        entries.extend((str(key), str(value)) for key, value in payload.items())
-    elif isinstance(payload, list):
-        for item in payload:
-            if not isinstance(item, (list, tuple)) or len(item) != 2:
-                continue
-            stage_name, stage_value = item
-            entries.append((str(stage_name), str(stage_value)))
-
-    if not entries:
-        parts = [part.strip() for part in raw.split(",") if part.strip()]
-        for part in parts:
-            if "=" in part:
-                stage_name, stage_value = part.split("=", 1)
-            elif ":" in part:
-                stage_name, stage_value = part.split(":", 1)
-            else:
-                continue
-            entries.append((stage_name.strip(), stage_value.strip()))
-
-    for stage_name, stage_value in entries:
-        if not stage_name:
-            continue
-        normalized = None
-        if stage_name in {"*", "default"}:
-            normalized = "*"
-        else:
-            normalized = _normalize_stage_identifier(stage_name)
-        if not normalized and stage_name != "*":
-            continue
-        parsed_value = value_parser(stage_value)
-        if parsed_value is None:
-            continue
-        target_key = normalized if normalized else "*"
-        mapping[target_key] = parsed_value
-    return mapping
-
-
-def _parse_positive_int(value: str) -> Optional[int]:
-    try:
-        parsed = int(str(value).strip())
-    except (TypeError, ValueError):
-        return None
-    if parsed <= 0:
-        return None
-    return parsed
-
-
-def _parse_non_empty_str(value: str) -> Optional[str]:
-    string_value = str(value).strip()
-    return string_value or None
-
-
-def _normalize_providers(values: Sequence[str]) -> List[str]:
-    seen: set[str] = set()
-    normalized: List[str] = []
-    for raw in values:
-        name = (raw or "").strip().lower()
-        if not name or name in seen:
-            continue
-        seen.add(name)
-        normalized.append(name)
-    return normalized
-
-
 @dataclass(frozen=True)
 class StageProfile:
     stage_key: str
@@ -238,7 +236,7 @@ class StageProfile:
     resource_notes: str
 
 
-SUMMARIZE_STAGE_PROFILES: Dict[str, StageProfile] = {
+SUMMARIZE_STAGE_PROFILES: dict[str, StageProfile] = {
     "analyze.context_builder": StageProfile(
         stage_key="analyze.context_builder",
         label="Context Builder",
@@ -330,7 +328,7 @@ def _load_llm_settings() -> LLMSettings:
 @dataclass
 class StageRuntime:
     stage_key: str
-    providers: List[str]
+    providers: list[str]
     provider: str
     model: str
     client: Optional[ChatClient]
@@ -338,7 +336,7 @@ class StageRuntime:
     context_window_tokens: Optional[int]
     profile: StageProfile
     temperature: float
-    options: Dict[str, Any] = field(default_factory=dict)
+    options: dict[str, object] = field(default_factory=dict)
 
     @property
     def primary_provider(self) -> str:
@@ -356,7 +354,7 @@ def _stage_error_message(
     model: Optional[str],
     reason: str,
 ) -> str:
-    descriptor = []
+    descriptor: list[str] = []
     if provider:
         if model:
             descriptor.append(f"provider '{provider}' model '{model}'")
@@ -389,7 +387,7 @@ class AnalyzeConfig:
     temperature: float = DEFAULT_TEMPERATURE
     max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS
     debug: bool = False
-    provider_chain: List[str] = field(
+    provider_chain: list[str] = field(
         default_factory=lambda: list(DEFAULT_PROVIDER_CHAIN)
     )
     max_prompt_segments: int = MAX_PROMPT_SEGMENTS
@@ -461,7 +459,7 @@ class AnalyzeResult:
     source_transcript: Path
     meta_json: Path
     audit_jsonl: Path
-    provider_chain: List[str]
+    provider_chain: list[str]
 
 
 class AnalyzeAgent:
@@ -472,45 +470,45 @@ class AnalyzeAgent:
         self._log_level = logging.INFO
         enable_langgraph_debug_logging(force=self.config.debug)
 
-    def stage_catalog(self) -> Dict[str, Any]:
+    def stage_catalog(self) -> dict[str, StageCatalogEntry]:
         settings = _load_llm_settings()
-        catalog: Dict[str, Any] = {}
+        catalog: dict[str, StageCatalogEntry] = {}
         for stage_key, profile in SUMMARIZE_STAGE_PROFILES.items():
-            eligible_models: List[Dict[str, Any]] = []
+            eligible_models: list[StageModelInfo] = []
             for provider_name, provider in settings.providers.items():
                 for model_name, model in provider.models.items():
                     context_tokens = model.context_window_tokens
                     if context_tokens and context_tokens < profile.min_context_tokens:
                         continue
                     eligible_models.append(
-                        {
-                            "provider": provider_name,
-                            "model": model_name,
-                            "context_window_tokens": context_tokens,
-                            "max_output_tokens": model.max_output_tokens,
-                            "deployment_env": model.deployment_env,
-                        }
+                        StageModelInfo(
+                            provider=provider_name,
+                            model=model_name,
+                            context_window_tokens=context_tokens,
+                            max_output_tokens=model.max_output_tokens,
+                            deployment_env=model.deployment_env,
+                        )
                     )
-            recommended_models = [
+            recommended_models: list[StageModelInfo] = [
                 entry
                 for entry in eligible_models
                 if entry["context_window_tokens"]
                 and entry["context_window_tokens"] >= profile.recommended_context_tokens
             ]
-            catalog[stage_key] = {
-                "label": profile.label,
-                "description": profile.description,
-                "min_context_tokens": profile.min_context_tokens,
-                "recommended_context_tokens": profile.recommended_context_tokens,
-                "target_chunk_tokens": profile.target_chunk_tokens,
-                "output_reserve_tokens": profile.output_reserve_tokens,
-                "resource_notes": profile.resource_notes,
-                "recommended_models": recommended_models,
-                "eligible_models": eligible_models,
-            }
+            catalog[stage_key] = StageCatalogEntry(
+                label=profile.label,
+                description=profile.description,
+                min_context_tokens=profile.min_context_tokens,
+                recommended_context_tokens=profile.recommended_context_tokens,
+                target_chunk_tokens=profile.target_chunk_tokens,
+                output_reserve_tokens=profile.output_reserve_tokens,
+                resource_notes=profile.resource_notes,
+                recommended_models=recommended_models,
+                eligible_models=eligible_models,
+            )
         return catalog
 
-    def _log(self, level: int, message: str, **meta: Any) -> None:
+    def _log(self, level: int, message: str, **meta: object) -> None:
         if not self._log_enabled:
             return
         details = " ".join(
@@ -528,17 +526,16 @@ class AnalyzeAgent:
         case_id: str,
         case_dir: Path,
         job_id: str,
-        intake: Optional[Dict[str, Any]] = None,
-        transcript_hint: Optional[Dict[str, Any]] = None,
-        provider_chain: Optional[List[str]] = None,
-        stage_map: Optional[Dict[str, Dict[str, Any]]] = None,
-        provider_credentials: Optional[Dict[str, Dict[str, Any]]] = None,
-        progress_callback: Optional[
-            Callable[[str, str, Dict[str, Any]], None]
-        ] = None,
+        intake: Mapping[str, object] | None = None,
+        transcript_hint: Mapping[str, object] | None = None,
+        provider_chain: Sequence[str] | None = None,
+        stage_map: Mapping[str, Mapping[str, object]] | None = None,
+        provider_credentials: ProviderCredentials | None = None,
+        progress_callback: Callable[[str, str, Mapping[str, object]], None]
+        | None = None,
     ) -> AnalyzeResult:
         case_dir = Path(case_dir)
-        state: Dict[str, Any] = {
+        state: dict[str, object] = {
             "case_id": case_id,
             "job_id": job_id,
             "case_dir": case_dir,
@@ -559,15 +556,26 @@ class AnalyzeAgent:
 
         settings = _load_llm_settings()
         stage_map = _normalize_stage_map(stage_map)
-        intake = dict(intake or {})
+        intake_mapping = intake or {}
+        intake_data: dict[str, object] = {
+            str(key): value for key, value in intake_mapping.items()
+        }
+        intake = intake_data
+        transcript_hint_mapping = transcript_hint or {}
+        transcript_hint_data: dict[str, object] = {
+            str(key): value for key, value in transcript_hint_mapping.items()
+        }
+        transcript_hint = transcript_hint_data
 
         if provider_chain is None:
-            derived_chain: List[str] = []
+            derived_chain: list[str] = []
             for config in stage_map.values():
                 provider_value = config.get("provider")
                 providers_value = config.get("providers")
-                if isinstance(providers_value, list):
-                    for entry in providers_value:
+                if isinstance(providers_value, Sequence) and not isinstance(
+                    providers_value, (str, bytes, bytearray)
+                ):
+                    for entry in cast(Sequence[object], providers_value):
                         name = str(entry or "").strip().lower()
                         if name and name not in derived_chain:
                             derived_chain.append(name)
@@ -580,10 +588,13 @@ class AnalyzeAgent:
         if not provider_chain:
             provider_chain = list(DEFAULT_PROVIDER_CHAIN)
 
-        provider_credentials = provider_credentials or {}
+        provider_credentials = {
+            str(key): dict(value)
+            for key, value in (provider_credentials or {}).items()
+        }
 
-        stage_runtimes: Dict[str, StageRuntime] = {}
-        provider_sequence: List[str] = []
+        stage_runtimes: dict[str, StageRuntime] = {}
+        provider_sequence: list[str] = []
 
         for stage_attr, stage_key in LLM_STAGE_KEYS.items():
             stage_profile = _stage_profile(stage_key)
@@ -609,17 +620,22 @@ class AnalyzeAgent:
                 if assignment and assignment.model
                 else ""
             )
-            options: Dict[str, Any] = {}
+            options: dict[str, object] = {}
             if assignment and assignment.options:
                 options.update(dict(assignment.options))
 
             stage_config = stage_map.get(stage_key) or stage_map.get(stage_attr)
             override_max_tokens = None
             if stage_config:
-                override_providers: Optional[List[str]] = None
+                override_providers: list[str] | None = None
                 providers_payload = stage_config.get("providers")
-                if isinstance(providers_payload, list):
-                    override_providers = [str(value) for value in providers_payload]
+                if isinstance(providers_payload, Sequence) and not isinstance(
+                    providers_payload, (str, bytes, bytearray)
+                ):
+                    override_providers = [
+                        str(value)
+                        for value in cast(Sequence[object], providers_payload)
+                    ]
                 elif stage_config.get("provider"):
                     override_providers = [str(stage_config["provider"])]
                 if override_providers is not None:
@@ -629,17 +645,17 @@ class AnalyzeAgent:
                 if stage_config.get("model"):
                     preferred_model = str(stage_config["model"]).strip()
                 stage_options = stage_config.get("options")
-                if isinstance(stage_options, dict):
-                    for key, value in stage_options.items():
+                if isinstance(stage_options, Mapping):
+                    option_items = cast(Mapping[object, object], stage_options)
+                    for key, value in option_items.items():
                         if key is None:
                             continue
                         options[str(key)] = value
                 max_tokens_override = stage_config.get("max_tokens")
-                if isinstance(max_tokens_override, (int, float, str)):
-                    try:
-                        override_max_tokens = max(1, int(float(str(max_tokens_override))))
-                    except (TypeError, ValueError):
-                        override_max_tokens = None
+                if max_tokens_override is not None:
+                    override_candidate = _coerce_int(max_tokens_override, 0)
+                    if override_candidate > 0:
+                        override_max_tokens = override_candidate
 
             requires_chat = stage_key != "analyze.context_builder"
             provider_name = providers[0]
@@ -744,11 +760,9 @@ class AnalyzeAgent:
                 if model_meta and model_meta.default_temperature is not None
                 else self.config.temperature
             )
-            if "temperature" in options:
-                try:
-                    stage_temperature = float(options["temperature"])
-                except (TypeError, ValueError):
-                    pass
+            temperature_override = options.get("temperature")
+            if temperature_override is not None:
+                stage_temperature = _coerce_float(temperature_override, stage_temperature)
 
             context_window_tokens = (
                 model_meta.context_window_tokens if model_meta and model_meta.context_window_tokens else None
@@ -807,23 +821,28 @@ class AnalyzeAgent:
 
         transcript_path = final_state.get("transcript_path")
         if not isinstance(transcript_path, Path):
+            input_path_obj = state.get("input_path")
+            input_path = input_path_obj if isinstance(input_path_obj, Path) else None
             transcript_path = self._resolve_transcript(
-                state.get("input_path"), case_dir
+                input_path, case_dir
             )
+
+        status_value = final_state.get("status", "ok")
+        status = status_value if isinstance(status_value, str) else "ok"
 
         pipeline.emit_pipeline_event(
             "complete",
-            status=final_state.get("status", "ok"),
+            status=status,
         )
         self._log(
             self._log_level,
             "analyze.completed",
-            status=final_state.get("status", "ok"),
+            status=status,
             summary=str(final_outputs.summary_path),
             outline=str(final_outputs.outline_path),
         )
         return AnalyzeResult(
-            status=final_state.get("status", "ok"),
+            status=status,
             summary_file=final_outputs.summary_path,
             summary_markdown_file=final_outputs.summary_markdown_path,
             outline_file=final_outputs.outline_path,
@@ -838,9 +857,9 @@ class AnalyzeAgent:
         )
 
     def _execute_pipeline(
-        self, pipeline: AnalyzePipeline, state: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        current_state: Dict[str, Any] = dict(state)
+        self, pipeline: AnalyzePipeline, state: Mapping[str, object]
+    ) -> dict[str, object]:
+        current_state: dict[str, object] = dict(state)
         graph = None
         try:
             graph = build_analyze_graph(pipeline)
@@ -849,7 +868,11 @@ class AnalyzeAgent:
         if graph is not None:
             self._log(logging.DEBUG, "langgraph.invoke.start", entry=graph.entry)
             graph_result = graph.invoke(current_state)
-            self._log(logging.DEBUG, "langgraph.invoke.complete", state_keys=list(graph_result.keys()))
+            self._log(
+                logging.DEBUG,
+                "langgraph.invoke.complete",
+                state_keys=list(graph_result.keys()),
+            )
             return dict(graph_result)
         for node_name in PIPELINE_NODE_ORDER:
             node = getattr(pipeline, node_name)
@@ -858,13 +881,12 @@ class AnalyzeAgent:
 
     def _build_progress_dispatch(
         self,
-        external_callback: Optional[
-            Callable[[str, str, Dict[str, Any]], None]
-        ],
+        external_callback: Callable[[str, str, Mapping[str, object]], None]
+        | None,
         case_id: str,
         job_id: str,
-    ) -> Callable[[str, str, Dict[str, Any]], None]:
-        def dispatch(stage: str, event: str, payload: Dict[str, Any]) -> None:
+    ) -> Callable[[str, str, Mapping[str, object]], None]:
+        def dispatch(stage: str, event: str, payload: Mapping[str, object]) -> None:
             log_level = logging.INFO if self.config.debug else logging.DEBUG
             self._log(log_level, f"stage.{stage}.{event}", **payload)
             if external_callback is not None:
@@ -910,9 +932,9 @@ class AnalyzeAgent:
         return candidates[0]
 
     def _build_context(
-        self, parse: TranscriptParse, intake: Dict[str, Any]
+        self, parse: TranscriptParse, intake: Mapping[str, object]
     ) -> str:
-        snippets: List[str] = []
+        snippets: list[str] = []
         chars = 0
         segment_limit = getattr(self.config, "max_prompt_segments", MAX_PROMPT_SEGMENTS)
         char_limit = getattr(self.config, "max_prompt_chars", MAX_PROMPT_CHARS)
