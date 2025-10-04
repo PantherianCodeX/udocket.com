@@ -7,6 +7,7 @@
     <p class="text-sm text-slate-300">Save credentials once and reuse them across every analysis tool.</p>
     <form method="post" class="space-y-4" data-provider-form>
       {% csrf_token %}
+      <input type="hidden" name="section" value="providers">
       <input type="hidden" name="models_payload_compiled" value="" data-provider-models-compiled>
       <input type="hidden" name="model_test_payload" data-provider-model-test-payload>
       <div class="grid gap-4">

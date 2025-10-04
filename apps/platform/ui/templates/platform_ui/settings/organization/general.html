@@ -1,0 +1,123 @@
+{% extends "platform_ui/settings/organization/base.html" %}
+
+{% block organization_body %}
+<div class="space-y-6">
+  <section class="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-black/25">
+    <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <h2 class="text-xl font-semibold text-white">Organization profile</h2>
+        <p class="text-sm text-slate-300">Update the shared contact information and address details seen by teammates and client-facing exports.</p>
+      </div>
+      <div class="text-xs text-slate-400">
+        <span class="uppercase tracking-wide">Last updated</span>
+        {% if organization_metadata.updated_at %}
+          <time data-ts="{{ organization_metadata.updated_at }}" data-ts-format="datetime">{{ organization_metadata.updated_at }}</time>
+        {% else %}
+          —
+        {% endif %}
+      </div>
+    </div>
+
+    <form method="post" class="mt-6 space-y-6">
+      {% csrf_token %}
+      <input type="hidden" name="section" value="general">
+
+      <div class="grid gap-4 md:grid-cols-2">
+        <label class="text-sm text-slate-200">Organization name
+          <input type="text" name="name" value="{{ general_form.name }}" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" required>
+        </label>
+        <label class="text-sm text-slate-200">Display name
+          <input type="text" name="display_name" value="{{ general_form.display_name }}" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" placeholder="Shown in emails and exports">
+        </label>
+      </div>
+
+      <div class="grid gap-4 md:grid-cols-2">
+        <label class="text-sm text-slate-200">Primary contact name
+          <input type="text" name="contact_name" value="{{ general_form.contact_name }}" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" placeholder="Team lead or coordinator">
+        </label>
+        <label class="text-sm text-slate-200">Primary contact email
+          <input type="email" name="contact_email" value="{{ general_form.contact_email }}" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" placeholder="name@example.com">
+        </label>
+      </div>
+
+      <div class="grid gap-4 md:grid-cols-2">
+        <label class="text-sm text-slate-200">Primary contact phone
+          <input type="text" name="contact_phone" value="{{ general_form.contact_phone }}" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" placeholder="+1 (555) 123-4567">
+        </label>
+        <label class="text-sm text-slate-200">Address line 1
+          <input type="text" name="address_line1" value="{{ general_form.address_line1 }}" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" placeholder="Suite, street, or PO box">
+        </label>
+      </div>
+
+      <div class="grid gap-4 md:grid-cols-2">
+        <label class="text-sm text-slate-200">Address line 2
+          <input type="text" name="address_line2" value="{{ general_form.address_line2 }}" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none">
+        </label>
+        <div class="grid gap-4 sm:grid-cols-3">
+          <label class="text-sm text-slate-200">City
+            <input type="text" name="city" value="{{ general_form.city }}" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none">
+          </label>
+          <label class="text-sm text-slate-200">Province / State
+            <input type="text" name="province" value="{{ general_form.province }}" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none">
+          </label>
+          <label class="text-sm text-slate-200">Postal code
+            <input type="text" name="postal_code" value="{{ general_form.postal_code }}" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none">
+          </label>
+        </div>
+      </div>
+
+      <label class="text-sm text-slate-200">Country
+        <input type="text" name="country" value="{{ general_form.country }}" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none">
+      </label>
+
+      <label class="block text-sm text-slate-200">Internal notes
+        <textarea name="notes" rows="3" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-400 focus:outline-none" placeholder="Optional context for teammates">{{ general_form.notes }}</textarea>
+      </label>
+
+      <div class="grid gap-4 md:grid-cols-2">
+        <label class="text-xs font-semibold uppercase tracking-wide text-slate-400">Organization ID
+          <input type="text" value="{{ organization_metadata.id }}" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-xs font-mono text-primary-100 focus:border-primary-400 focus:outline-none" readonly>
+        </label>
+        <label class="text-xs font-semibold uppercase tracking-wide text-slate-400">Organization UID
+          <input type="text" value="{{ organization_metadata.uid|default:'—' }}" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-xs font-mono text-primary-100 focus:border-primary-400 focus:outline-none" readonly>
+        </label>
+      </div>
+
+      <div class="flex flex-col gap-3 border-t border-white/10 pt-4 sm:flex-row sm:items-center sm:justify-between">
+        <p class="text-xs text-slate-400">Changes apply immediately across the platform. Contact fields appear in outbound emails and exports.</p>
+        <button type="submit" class="inline-flex items-center gap-2 rounded-lg bg-primary-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-primary-500/30 transition hover:bg-primary-400">Save changes</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-black/25">
+    <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <h2 class="text-xl font-semibold text-white">Configuration snapshot</h2>
+        <p class="text-sm text-slate-300">A read-only view of the centralized settings loader so admins can confirm the active runtime profile.</p>
+      </div>
+    </div>
+
+    <div class="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      {% for group in system_overview %}
+      <div class="space-y-4 rounded-2xl border border-white/10 bg-slate-900/55 p-4">
+        <div>
+          <h3 class="text-sm font-semibold text-white">{{ group.title }}</h3>
+          {% if group.description %}
+            <p class="mt-1 text-xs text-slate-400">{{ group.description }}</p>
+          {% endif %}
+        </div>
+        <dl class="space-y-2 text-sm">
+          {% for item in group.items %}
+          <div class="flex items-baseline justify-between gap-3">
+            <dt class="text-slate-400">{{ item.label }}</dt>
+            <dd class="text-right {% if item.mono %}font-mono text-xs text-primary-100{% else %}text-slate-100{% endif %}">{{ item.value }}</dd>
+          </div>
+          {% endfor %}
+        </dl>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+</div>
+{% endblock %}

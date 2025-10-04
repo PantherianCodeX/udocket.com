@@ -23,11 +23,16 @@ def test_organization_settings_renders_and_manages_providers(settings):
 
     resp = client.get("/settings/organization/")
     assert resp.status_code == 200
+    assert b"Organization profile" in resp.content
+
+    resp = client.get("/settings/organization/providers/")
+    assert resp.status_code == 200
     assert b"LLM providers" in resp.content
 
     resp = client.post(
-        "/settings/organization/",
+        "/settings/organization/providers/",
         data={
+            "section": "providers",
             "action": "provider-upsert",
             "provider": "azure",
             "display_name": "Azure Canada",
@@ -49,6 +54,47 @@ def test_organization_settings_renders_and_manages_providers(settings):
 
 
 @pytest.mark.django_db
+def test_general_settings_update_profile(settings):
+    settings.PLATFORM_DEV_OPEN = True
+    org = Organization.objects.create(id="org-general", name="General Org")
+    user = User.objects.create_user(username="general-user", password="password")
+    OrganizationMembership.objects.create(organization=org, user=user, role=OrganizationMembership.Role.ADMIN)
+
+    client = Client()
+    client.force_login(user)
+    session = client.session
+    session["admin_active_org_id"] = org.id
+    session.save()
+
+    resp = client.post(
+        "/settings/organization/",
+        data={
+            "section": "general",
+            "name": "General Org Updated",
+            "display_name": "General Org Display",
+            "contact_name": "Jordan Admin",
+            "contact_email": "admin@example.com",
+            "contact_phone": "+1-555-0100",
+            "address_line1": "123 Example Street",
+            "address_line2": "Suite 200",
+            "city": "Toronto",
+            "province": "ON",
+            "postal_code": "M5V 2T6",
+            "country": "Canada",
+            "notes": "Updated via automated test.",
+        },
+        follow=True,
+    )
+    assert resp.status_code == 200
+    org.refresh_from_db()
+    assert org.name == "General Org Updated"
+    assert org.display_name == "General Org Display"
+    assert org.contact_email == "admin@example.com"
+    assert org.city == "Toronto"
+    assert org.notes == "Updated via automated test."
+
+
+@pytest.mark.django_db
 def test_organization_settings_saves_configuration(settings):
     settings.PLATFORM_DEV_OPEN = True
     org = Organization.objects.create(id="org-config", name="Config Org")
@@ -63,8 +109,9 @@ def test_organization_settings_saves_configuration(settings):
 
     # Ensure provider credential exists so configuration can reference it
     client.post(
-        "/settings/organization/",
+        "/settings/organization/providers/",
         data={
+            "section": "providers",
             "action": "provider-upsert",
             "provider": "azure",
             "display_name": "Azure",
@@ -165,8 +212,9 @@ def test_provider_test_action_reports_status(settings):
     session.save()
 
     client.post(
-        "/settings/organization/",
+        "/settings/organization/providers/",
         data={
+            "section": "providers",
             "action": "provider-upsert",
             "provider": "azure",
             "display_name": "Azure",
@@ -178,8 +226,9 @@ def test_provider_test_action_reports_status(settings):
     )
 
     resp = client.post(
-        "/settings/organization/",
+        "/settings/organization/providers/",
         data={
+            "section": "providers",
             "action": "provider-test",
             "provider": "azure",
         },
@@ -202,11 +251,12 @@ def test_provider_enable_blocked_when_not_configured(settings):
     session["admin_active_org_id"] = org.id
     session.save()
 
-    client.get("/settings/organization/")
+    client.get("/settings/organization/providers/")
 
     resp = client.post(
-        "/settings/organization/",
+        "/settings/organization/providers/",
         data={
+            "section": "providers",
             "action": "provider-toggle",
             "provider": "azure",
             "enabled": "1",

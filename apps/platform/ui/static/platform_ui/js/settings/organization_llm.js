@@ -975,8 +975,52 @@
     });
   }
 
+  function setupSettingsSidebar() {
+    const sidebar = doc.querySelector('[data-settings-sidebar]');
+    const toggle = doc.querySelector('[data-settings-sidebar-toggle]');
+    if (!sidebar || !toggle) {
+      return;
+    }
+
+    const closeSidebar = () => {
+      sidebar.setAttribute('data-open', 'false');
+    };
+
+    toggle.addEventListener('click', () => {
+      const isOpen = sidebar.getAttribute('data-open') === 'true';
+      sidebar.setAttribute('data-open', isOpen ? 'false' : 'true');
+    });
+
+    sidebar.querySelectorAll('[data-settings-sidebar-link]').forEach((link) => {
+      link.addEventListener('click', () => {
+        if (window.matchMedia('(max-width: 1023px)').matches) {
+          closeSidebar();
+        }
+      });
+    });
+
+    doc.addEventListener('click', (event) => {
+      if (event.target === toggle || toggle.contains(event.target)) {
+        return;
+      }
+      if (sidebar.contains(event.target)) {
+        return;
+      }
+      if (window.matchMedia('(max-width: 1023px)').matches) {
+        closeSidebar();
+      }
+    });
+
+    doc.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        closeSidebar();
+      }
+    });
+  }
+
   setupProviderPanel();
   setupStagePanel();
   setupGuardianPanel();
   setupNavDropdowns();
+  setupSettingsSidebar();
 })();

@@ -4,10 +4,10 @@
 {% block content %}
 <section class="space-y-6">
   <header class="rounded-2xl border border-white/10 bg-white/10 p-6 shadow-lg shadow-black/30">
-    <h1 class="text-3xl font-semibold text-white">Organization settings</h1>
+    <h1 class="text-3xl font-semibold text-white">{{ page_meta.title|default:"Organization settings" }}</h1>
     <p class="mt-2 text-sm text-slate-300">
-      Configure shared LLM providers and analysis defaults for
-      <span class="font-semibold text-slate-100">{{ organization.name }}</span>.
+      {{ page_meta.description|default:"Configure shared organization settings." }}
+      <span class="font-semibold text-slate-100">{{ organization.name }}</span>
     </p>
   </header>
 
@@ -21,51 +21,49 @@
   </div>
   {% endif %}
 
-  {% if nav_groups %}
-  <nav class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 shadow-lg shadow-black/25">
-    <div class="flex flex-wrap items-center gap-2">
-      {% if nav_primary %}
-      <a href="{{ nav_primary.url }}"
-         class="inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-sm font-medium transition {% if active_section == nav_primary.key %}border-primary-400/40 bg-primary-500/20 text-primary-100{% else %}border-white/10 bg-slate-900/60 text-slate-200 hover:border-primary-400 hover:text-white{% endif %}">
-        {{ nav_primary.label }}
-      </a>
-      {% endif %}
-      {% for pill in nav_pills %}
-        <a href="{{ pill.url }}"
-           class="inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-sm transition {% if active_section == pill.key %}border-primary-400/40 bg-primary-500/20 text-primary-100{% else %}border-white/10 bg-slate-900/60 text-slate-200 hover:border-primary-400 hover:text-white{% endif %}">
-          {{ pill.label }}
-        </a>
-      {% endfor %}
-    </div>
-    {% for group in nav_groups %}
-    <div class="relative" data-nav-group>
-      <button type="button" class="inline-flex items-center gap-2 rounded-full border border-white/10 bg-slate-900/60 px-4 py-1.5 text-sm text-slate-200 transition hover:border-primary-400 hover:text-white" data-nav-group-trigger>
-        {{ group.label }}
+  <div class="lg:grid lg:grid-cols-[17rem,1fr] lg:items-start lg:gap-6">
+    <aside class="space-y-4">
+      <button type="button" class="flex w-full items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-200 shadow-lg shadow-black/25 transition hover:border-primary-400 hover:text-white lg:hidden" data-settings-sidebar-toggle>
+        <span>Settings sections</span>
         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.094l3.71-3.86a.75.75 0 111.08 1.04l-4.247 4.41a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z" clip-rule="evenodd" /></svg>
       </button>
-      <div class="invisible absolute right-0 z-10 mt-1 min-w-[14rem] origin-top-right scale-95 transform rounded-2xl border border-white/10 bg-slate-900/95 p-2 text-sm text-slate-100 opacity-0 shadow-xl shadow-black/40 transition data-[open=true]:visible data-[open=true]:scale-100 data-[open=true]:opacity-100" data-nav-group-panel>
-        {% for item in group.items %}
-        <a href="{{ item.url }}" class="flex items-center justify-between rounded-lg px-3 py-2 text-sm transition hover:bg-white/10 {% if active_section == item.key %}bg-primary-500/10 text-primary-100{% endif %}">
-          <span>{{ item.label }}</span>
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white/60" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/></svg>
-        </a>
+      <nav class="hidden flex-col gap-4 rounded-2xl border border-white/10 bg-white/5 p-4 shadow-lg shadow-black/25 data-[open=true]:flex lg:flex" data-settings-sidebar data-open="false">
+        {% for section in sidebar_sections %}
+          {% if section.label %}
+            <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">{{ section.label }}</p>
+          {% endif %}
+          <ul class="space-y-1">
+            {% for item in section.items %}
+              <li>
+                <a href="{{ item.url }}" data-settings-sidebar-link
+                   class="flex items-center justify-between rounded-lg border px-3 py-2 text-sm transition {% if active_section == item.key %}border-primary-400/40 bg-primary-500/15 text-primary-100{% else %}border-white/10 bg-slate-900/60 text-slate-200 hover:border-primary-400 hover:text-white{% endif %}"
+                   {% if active_section == item.key %}aria-current="page"{% endif %}>
+                  <span>{{ item.label }}</span>
+                  {% if active_section == item.key %}
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-primary-200" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 5.29a1 1 0 010 1.415l-7.25 7.25a1 1 0 01-1.414 0l-3.25-3.25a1 1 0 111.414-1.414l2.543 2.543 6.543-6.543a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                  {% endif %}
+                </a>
+              </li>
+            {% endfor %}
+          </ul>
+        {% empty %}
+          <ul class="space-y-1">
+            {% for item in nav_items %}
+              <li>
+                <a href="{{ item.url }}" class="flex items-center justify-between rounded-lg border px-3 py-2 text-sm transition {% if active_section == item.key %}border-primary-400/40 bg-primary-500/15 text-primary-100{% else %}border-white/10 bg-slate-900/60 text-slate-200 hover:border-primary-400 hover:text-white{% endif %}">
+                  <span>{{ item.label }}</span>
+                </a>
+              </li>
+            {% endfor %}
+          </ul>
         {% endfor %}
-      </div>
-    </div>
-    {% endfor %}
-  </nav>
-  {% else %}
-  <nav class="flex flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-white/5 p-3 shadow-lg shadow-black/25">
-    {% for item in nav_items %}
-      <a href="{{ item.url }}"
-         class="inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm transition {% if active_section == item.key %}bg-primary-500/20 text-primary-100 border border-primary-400/40{% else %}bg-slate-900/60 text-slate-200 border border-white/10 hover:border-primary-400 hover:text-white{% endif %}">
-        {{ item.label }}
-      </a>
-    {% endfor %}
-  </nav>
-  {% endif %}
+      </nav>
+    </aside>
 
-  {% block organization_body %}{% endblock %}
+    <div class="mt-6 min-w-0 lg:mt-0">
+      {% block organization_body %}{% endblock %}
+    </div>
+  </div>
 </section>
 {% endblock %}
 

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import json
+from urllib.parse import urlparse
 from typing import Any, Dict, List
 
 from django.contrib import messages
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
@@ -41,6 +42,7 @@ from packages.udocket_core.llm import LLMSettings, load_llm_settings
 from packages.udocket_core.llm.runtime import ChatClientError
 
 from .auth import ensure_authenticated
+from config.settings import settings as app_settings
 
 
 def _stage_slug(stage_key: str) -> str:
@@ -66,11 +68,12 @@ def _gather_stage_targets(llm_settings: LLMSettings) -> Dict[str, List[str]]:
 
 
 def _normalize_section(section: str | None, stage_targets: Dict[str, List[str]]) -> str:
-    valid: set[str] = {"providers", *stage_targets.keys()}
+    valid: set[str] = {"general", "providers", *stage_targets.keys()}
+    default_section = "general"
     if not section:
-        return "providers"
+        return default_section
     normalized = section.strip().lower()
-    return normalized if normalized in valid else "providers"
+    return normalized if normalized in valid else default_section
 
 
 def _provider_models_from_post(request: HttpRequest) -> List[dict]:
@@ -311,19 +314,73 @@ def organization_settings(
         provider_credentials=provider_credentials,
     )
 
-    nav_items = [
+    target_label_overrides = {
+        "analyze": "Analyze",
+        "compose": "Compose",
+        "guardian": "Guardian",
+    }
+    stage_descriptions = {
+        "analyze": "Choose providers and models for Analyze pipelines, including outlines, timelines, and staff reports.",
+        "compose": "Manage Compose deliverable generation defaults, including timelines and graph builders.",
+        "guardian": "Control Guardian review model selection and author the compliance instructions applied to every run.",
+    }
+
+    primary_nav = [
+        {
+            "key": "general",
+            "label": "General",
+            "url": reverse("ui-organization-settings-section", args=["general"]),
+        },
         {
             "key": "providers",
             "label": "LLM providers",
             "url": reverse("ui-organization-settings-section", args=["providers"]),
-        }
+        },
     ]
+
+    tool_nav: List[Dict[str, Any]] = []
+    section_metadata: Dict[str, Dict[str, str]] = {
+        "general": {
+            "title": "General settings",
+            "description": (
+                f"Manage organization profile, contact details, and high-level defaults for {organization.name}."
+            ),
+        },
+        "providers": {
+            "title": "LLM providers",
+            "description": "Configure organization-wide LLM credentials, deployments, and test connections.",
+        },
+    }
+
     for target_key in sorted(stage_targets.keys()):
-        nav_items.append(
+        display_label = target_label_overrides.get(
+            target_key, target_key.replace("_", " ").title()
+        )
+        tool_nav.append(
             {
                 "key": target_key,
-                "label": f"{target_key.title()} config",
+                "label": f"{display_label} settings",
                 "url": reverse("ui-organization-settings-section", args=[target_key]),
+            }
+        )
+        section_metadata[target_key] = {
+            "title": f"{display_label} configuration",
+            "description": stage_descriptions.get(
+                target_key,
+                f"Configure stage defaults for {display_label.lower()} jobs across the platform.",
+            ),
+        }
+
+    nav_items = [*primary_nav, *tool_nav]
+
+    sidebar_sections: List[Dict[str, Any]] = []
+    if primary_nav:
+        sidebar_sections.append({"label": None, "items": primary_nav})
+    if tool_nav:
+        sidebar_sections.append(
+            {
+                "label": "Tool configurations",
+                "items": tool_nav,
             }
         )
 
@@ -336,13 +393,7 @@ def organization_settings(
     ]
 
     nav_primary = nav_items[0] if nav_items else None
-    tool_items = [item for item in nav_items if item["key"] != "providers"]
     nav_groups: List[Dict[str, object]] = []
-    if tool_items:
-        nav_groups.append({
-            "label": "Tool configurations",
-            "items": tool_items,
-        })
 
     base_context = {
         "organization": organization,
@@ -354,7 +405,143 @@ def organization_settings(
         "selected_provider": selected_provider_key,
         "selected_provider_uuid": selected_provider_uuid,
         "provider_template_options": template_options,
+        "sidebar_sections": sidebar_sections,
+        "page_meta": section_metadata.get(
+            active_section,
+            {
+                "title": "Organization settings",
+                "description": f"Manage shared settings for {organization.name}.",
+            },
+        ),
     }
+
+    if request.method == "POST" and active_section == "general":
+        fields = [
+            "name",
+            "display_name",
+            "contact_name",
+            "contact_email",
+            "contact_phone",
+            "address_line1",
+            "address_line2",
+            "city",
+            "province",
+            "postal_code",
+            "country",
+            "notes",
+        ]
+        original_values = {field: getattr(organization, field) for field in fields}
+        normalized_values: Dict[str, str] = {}
+        for field in fields:
+            raw_value = request.POST.get(field, "")
+            normalized_values[field] = raw_value if field == "notes" else raw_value.strip()
+
+        name_value = normalized_values.get("name", "").strip() or organization.name
+        if not name_value:
+            messages.error(request, "Organization name cannot be blank.")
+            return redirect(reverse("ui-organization-settings-section", args=["general"]))
+        normalized_values["name"] = name_value
+
+        updated_fields: List[str] = []
+        for field, value in normalized_values.items():
+            if getattr(organization, field) != value:
+                setattr(organization, field, value)
+                updated_fields.append(field)
+
+        if updated_fields:
+            try:
+                organization.full_clean()
+            except ValidationError as exc:
+                for field in updated_fields:
+                    setattr(organization, field, original_values[field])
+                for message_text in exc.messages:
+                    messages.error(request, message_text)
+            else:
+                organization.save()
+                messages.success(request, "Organization details updated.")
+
+        return redirect(reverse("ui-organization-settings-section", args=["general"]))
+
+    if active_section == "general":
+        general_fields = [
+            "name",
+            "display_name",
+            "contact_name",
+            "contact_email",
+            "contact_phone",
+            "address_line1",
+            "address_line2",
+            "city",
+            "province",
+            "postal_code",
+            "country",
+            "notes",
+        ]
+        general_form = {field: getattr(organization, field) or "" for field in general_fields}
+        storage_config = app_settings.storage
+        storage_root = storage_config.root
+        media_root = storage_config.media_root()
+        db_url = app_settings.DATABASE_URL
+        parsed = urlparse(db_url)
+        if parsed.scheme.startswith("sqlite"):
+            db_display = f"SQLite • {parsed.path or 'file'}"
+        else:
+            host = parsed.hostname or "localhost"
+            port = f":{parsed.port}" if parsed.port else ""
+            db_display = f"{parsed.scheme.upper()} • {host}{port}"
+        system_overview = [
+            {
+                "title": "Platform defaults",
+                "description": "Key read-only values sourced from the centralized settings loader.",
+                "items": [
+                    {"label": "Default language", "value": app_settings.LANGUAGE},
+                    {"label": "Azure speech region", "value": app_settings.AZURE_SPEECH_REGION},
+                    {
+                        "label": "Max upload size",
+                        "value": f"{app_settings.MAX_UPLOAD_MB} MB",
+                    },
+                ],
+            },
+            {
+                "title": "Storage & data",
+                "items": [
+                    {"label": "Storage root", "value": str(storage_root), "mono": True},
+                    {"label": "Media root", "value": str(media_root), "mono": True},
+                    {"label": "Database", "value": db_display},
+                ],
+            },
+            {
+                "title": "Runtime flags",
+                "items": [
+                    {
+                        "label": "Debug mode",
+                        "value": "Enabled" if app_settings.DJANGO_DEBUG else "Disabled",
+                    },
+                    {
+                        "label": "SQLite fallback",
+                        "value": "Enabled"
+                        if app_settings.ALLOW_SQLITE_DEV_FALLBACK
+                        else "Disabled",
+                    },
+                ],
+            },
+        ]
+        general_context = {
+            **base_context,
+            "general_form": general_form,
+            "organization_metadata": {
+                "id": organization.id,
+                "uid": organization.uid,
+                "created_at": organization.created_at,
+                "updated_at": organization.updated_at,
+            },
+            "system_overview": system_overview,
+        }
+        return render(
+            request,
+            "platform_ui/settings/organization/general.html",
+            general_context,
+        )
 
     if request.method == "POST" and active_section == "providers":
         action = (request.POST.get("action") or "").strip()
@@ -1099,10 +1286,14 @@ def organization_settings(
                 }
             )
 
+    target_display_label = target_label_overrides.get(
+        target_key, target_key.replace("_", " ").title()
+    )
+
     context = {
         **base_context,
         "target": target_key,
-        "target_label": target_key.title(),
+        "target_label": target_display_label,
         "configurations": configurations,
         "active_config": active_config,
         # Provider chain removed from UI; chain is per-stage
