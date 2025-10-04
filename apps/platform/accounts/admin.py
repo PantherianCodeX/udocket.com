@@ -1,7 +1,16 @@
+from __future__ import annotations
+
+from typing import Any, Callable, Iterable, cast
+from types import MethodType
+
+from django import forms
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
-from django.urls import path, reverse
+from django.db.models import QuerySet
+from django.forms.models import BaseInlineFormSet, ModelChoiceField
+from django.http import HttpRequest, HttpResponseRedirect
 from django.shortcuts import redirect
+from django.urls import URLPattern, URLResolver, path, reverse
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.http import require_POST
 
@@ -19,26 +28,30 @@ from .utils import (
 )
 
 
-class OrganizationMembershipInline(admin.TabularInline):
+def _is_user_superuser(user: User) -> bool:
+    return bool(getattr(user, "is_superuser", False))
+
+
+class OrganizationMembershipInline(admin.TabularInline[OrganizationMembership, User]):
     model = OrganizationMembership
     extra = 1
     autocomplete_fields = ["organization"]
 
 
-class OrganizationMembershipUserInline(admin.TabularInline):
+class OrganizationMembershipUserInline(admin.TabularInline[OrganizationMembership, Organization]):
     model = OrganizationMembership
     extra = 1
     autocomplete_fields = ["user"]
 
 
-class CaseMembershipInline(admin.TabularInline):
+class CaseMembershipInline(admin.TabularInline[CaseMembership, User]):
     model = CaseMembership
     extra = 1
     autocomplete_fields = ["case"]
 
 
 @admin.register(User)
-class UserAdmin(DjangoUserAdmin):
+class UserAdmin(DjangoUserAdmin[User]):
     list_display = ("username", "email", "display_name", "primary_membership_roles", "last_login")
     search_fields = ("username", "email", "display_name", "kc_sub")
     ordering = ("username",)
@@ -58,44 +71,77 @@ class UserAdmin(DjangoUserAdmin):
         (_("Important dates"), {"fields": ("last_login", "date_joined")}),
     )
     readonly_fields = ("last_login", "date_joined")
-    inlines = [OrganizationMembershipInline, CaseMembershipInline]
+    inlines = (OrganizationMembershipInline, CaseMembershipInline)
 
     @admin.display(description="Roles")
     def primary_membership_roles(self, obj: User) -> str:
-        memberships = list(obj.org_memberships.select_related("organization").all())
+        memberships = list(
+            OrganizationMembership.objects.select_related("organization").filter(user=obj)
+        )
         if not memberships:
             return "—"
-        labels = [f"{m.organization_id}:{m.get_role_display()}" for m in memberships[:3]]
+        labels: list[str] = []
+        for membership in memberships[:3]:
+            org_id = cast(str | None, getattr(membership, "organization_id", None))
+            role_label = str(OrganizationMembership.Role(membership.role).label)
+            label = f"{org_id}:{role_label}" if org_id else role_label
+            labels.append(label)
         more = len(memberships) - len(labels)
         if more > 0:
             labels.append(f"(+{more})")
         return ", ".join(labels)
 
-    def get_form(self, request, obj=None, **kwargs):  # type: ignore[override]
+    def get_form(
+        self,
+        request: HttpRequest,
+        obj: User | None = None,
+        change: bool = False,
+        **kwargs: Any,
+    ) -> type[forms.ModelForm[User]]:
         if obj is None:
-            base_form = self.add_form
+            base_form: type[forms.ModelForm[User]] = self.add_form
 
             class RequestScopedUserCreationForm(base_form):
-                def __init__(self_inner, *args, **inner_kwargs):
+                def __init__(self, *args: Any, **inner_kwargs: Any) -> None:
                     super().__init__(*args, **inner_kwargs)
-                    org_qs = user_accessible_organizations(request.user)
-                    if not request.user.is_superuser:
-                        self_inner.fields["organization"].queryset = org_qs
+                    raw_user = request.user
+                    if isinstance(raw_user, User):
+                        user_instance = raw_user
+                    else:
+                        user_instance = None
+                    if user_instance is not None:
+                        org_qs = user_accessible_organizations(user_instance)
+                        if not _is_user_superuser(user_instance):
+                            field = self.fields.get("organization")
+                            if isinstance(field, ModelChoiceField):
+                                field.queryset = org_qs
                     active_org_id = get_active_admin_org_id(request)
-                    if active_org_id and "organization" in self_inner.fields:
-                        self_inner.fields["organization"].initial = active_org_id
+                    if active_org_id and "organization" in self.fields:
+                        self.fields["organization"].initial = active_org_id
 
             kwargs["form"] = RequestScopedUserCreationForm
         else:
             kwargs["form"] = kwargs.get("form", self.form)
-        return super().get_form(request, obj, **kwargs)
+        return super().get_form(request, obj, change=change, **kwargs)
 
-    def save_model(self, request, obj, form, change):  # type: ignore[override]
+    def save_model(
+        self,
+        request: HttpRequest,
+        obj: User,
+        form: forms.ModelForm[User],
+        change: bool,
+    ) -> None:
         super().save_model(request, obj, form, change)
         sync_user_access_flags(obj)
 
-    def save_formset(self, request, form, formset, change):  # type: ignore[override]
-        instances = formset.save()
+    def save_formset(
+        self,
+        request: HttpRequest,
+        form: forms.ModelForm[User] | None,
+        formset: BaseInlineFormSet[Any, Any, forms.ModelForm[Any]],
+        change: bool,
+    ) -> None:
+        instances = cast(Iterable[object], formset.save())
         for instance in instances:
             if isinstance(instance, OrganizationMembership):
                 sync_user_access_flags(instance.user)
@@ -107,7 +153,7 @@ class UserAdmin(DjangoUserAdmin):
 
 
 @admin.register(Organization)
-class OrganizationAdmin(admin.ModelAdmin):
+class OrganizationAdmin(admin.ModelAdmin[Organization]):
     list_display = ("id", "name", "city", "province", "contact_email", "created_at")
     search_fields = ("id", "name", "display_name", "contact_email")
     ordering = ("name",)
@@ -119,9 +165,13 @@ class OrganizationAdmin(admin.ModelAdmin):
         (_("Notes"), {"fields": ("notes",)}),
         (_("Timestamps"), {"fields": ("created_at", "updated_at")}),
     )
-    inlines = [OrganizationMembershipUserInline]
+    inlines = (OrganizationMembershipUserInline,)
 
-    def get_readonly_fields(self, request, obj=None):  # type: ignore[override]
+    def get_readonly_fields(
+        self,
+        request: HttpRequest,
+        obj: Organization | None = None,
+    ) -> list[str]:
         ro = list(super().get_readonly_fields(request, obj))
         if obj and "id" not in ro:
             ro.append("id")
@@ -129,61 +179,101 @@ class OrganizationAdmin(admin.ModelAdmin):
 
 
 @admin.register(OrganizationMembership)
-class OrganizationMembershipAdmin(admin.ModelAdmin):
+class OrganizationMembershipAdmin(admin.ModelAdmin[OrganizationMembership]):
     list_display = ("organization", "user", "role", "created_at")
     list_filter = ("role", "organization")
     search_fields = ("organization__id", "organization__name", "user__username", "user__email")
     autocomplete_fields = ("organization", "user")
 
-    def get_queryset(self, request):  # type: ignore[override]
+    def get_queryset(self, request: HttpRequest) -> QuerySet[OrganizationMembership]:
         qs = super().get_queryset(request)
         active_org_id = get_active_admin_org_id(request)
         if active_org_id:
             return qs.filter(organization_id=active_org_id)
-        if request.user.is_superuser:
+        raw_user = request.user
+        if isinstance(raw_user, User):
+            user_instance = raw_user
+        else:
+            user_instance = None
+        if user_instance is not None and _is_user_superuser(user_instance):
             return qs
-        accessible_ids = user_accessible_organizations(request.user).values_list("id", flat=True)
+        if user_instance is None:
+            return qs.none()
+        accessible_ids = user_accessible_organizations(user_instance).values_list("id", flat=True)
         return qs.filter(organization_id__in=accessible_ids)
 
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):  # type: ignore[override]
-        if db_field.name == "organization" and not request.user.is_superuser:
-            kwargs["queryset"] = user_accessible_organizations(request.user)
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+    def get_form(
+        self,
+        request: HttpRequest,
+        obj: OrganizationMembership | None = None,
+        change: bool = False,
+        **kwargs: Any,
+    ) -> type[forms.ModelForm[OrganizationMembership]]:
+        base_form = super().get_form(request, obj, change=change, **kwargs)
+        raw_user = request.user
+        if not isinstance(raw_user, User) or _is_user_superuser(raw_user):
+            return base_form
+
+        class RequestScopedMembershipForm(base_form):
+            def __init__(self, *args: Any, **inner_kwargs: Any) -> None:
+                super().__init__(*args, **inner_kwargs)
+                field = self.fields.get("organization")
+                if isinstance(field, ModelChoiceField):
+                    field.queryset = user_accessible_organizations(raw_user)
+
+        return RequestScopedMembershipForm
+
+UrlList = list[URLResolver | URLPattern]
+_UrlGetter = Callable[[], UrlList]
+_EachContextCallable = Callable[[HttpRequest], dict[str, Any]]
 
 
 @require_POST
-def select_admin_organization(request):
-    if not request.user or not request.user.is_authenticated:
+def select_admin_organization(request: HttpRequest) -> HttpResponseRedirect:
+    raw_user = request.user
+    if isinstance(raw_user, User):
+        user_instance = raw_user
+    else:
+        user_instance = None
+    if user_instance is None or not user_instance.is_authenticated:
         return redirect("admin:login")
-    next_url = request.POST.get("next") or request.META.get("HTTP_REFERER") or reverse("admin:index")
+    next_url = (
+        request.POST.get("next")
+        or request.META.get("HTTP_REFERER")
+        or reverse("admin:index")
+    )
     choice = request.POST.get("organization")
-    if choice == "__all__" and request.user.is_superuser:
+    if choice == "__all__" and _is_user_superuser(user_instance):
         set_active_admin_org_id(request, None)
     else:
-        org_qs = user_accessible_organizations(request.user)
+        org_qs = user_accessible_organizations(user_instance)
         if choice and org_qs.filter(id=choice).exists():
             set_active_admin_org_id(request, choice)
     return redirect(next_url)
 
 
-_original_get_urls = admin.site.get_urls
+_original_get_urls: _UrlGetter = admin.site.get_urls
 
 
-def tenant_admin_urls():
+def tenant_admin_urls(self: admin.AdminSite) -> UrlList:
     urls = _original_get_urls()
-    custom = [
-        path("select-organization/", admin.site.admin_view(select_admin_organization), name="select_organization"),
+    custom: UrlList = [
+        path(
+            "select-organization/",
+            self.admin_view(select_admin_organization),
+            name="select_organization",
+        ),
     ]
     return custom + urls
 
 
-admin.site.get_urls = tenant_admin_urls  # type: ignore[assignment]
+admin.site.get_urls = MethodType(tenant_admin_urls, admin.site)
 
 
-_original_each_context = admin.site.each_context
+_original_each_context: _EachContextCallable = admin.site.each_context
 
 
-def tenant_each_context(request):
+def tenant_each_context(self: admin.AdminSite, request: HttpRequest) -> dict[str, Any]:
     ctx = _original_each_context(request)
     org_choices = admin_org_choices(request)
     active_org = get_active_admin_org(request)
@@ -198,4 +288,4 @@ def tenant_each_context(request):
     return ctx
 
 
-admin.site.each_context = tenant_each_context  # type: ignore[assignment]
+admin.site.each_context = MethodType(tenant_each_context, admin.site)
