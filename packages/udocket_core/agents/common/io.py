@@ -3,22 +3,26 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Mapping, MutableMapping, TypeAlias
+
+JSONPrimitive: TypeAlias = int | float | bool | str | None
+JSONValue: TypeAlias = JSONPrimitive | "JSONObject" | "JSONArray"
+JSONObject: TypeAlias = dict[str, JSONValue]
+JSONArray: TypeAlias = list[JSONValue]
 
 
 @dataclass
 class TranscriptSegment:
-    ts: Optional[float]
-    speaker: Optional[str]
+    ts: float | None
+    speaker: str | None
     text: str
 
 
 @dataclass
 class TranscriptParse:
-    header_lines: List[str]
-    segments: List[TranscriptSegment]
+    header_lines: list[str]
+    segments: list[TranscriptSegment]
     body_text: str
     diarized: bool
 
@@ -28,7 +32,7 @@ class AnalysisArtifact:
     kind: str
     path: Path
     checksum: str
-    metadata: Dict[str, Any]
+    metadata: JSONObject
 
 
 TIMESTAMP_RE = re.compile(
@@ -60,10 +64,14 @@ def next_versioned(path: Path) -> Path:
             return candidate
 
 
-def append_jsonl(path: Path, obj: Dict[str, Any]) -> None:
+def append_jsonl(path: Path, obj: Mapping[str, JSONValue]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(obj, ensure_ascii=False) + "\n")
+        if isinstance(obj, MutableMapping):
+            payload: JSONObject = dict(obj.items())
+        else:
+            payload = {key: value for key, value in obj.items()}
+        handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
 
 def sha256_file(path: Path) -> str:
@@ -80,8 +88,8 @@ def parse_transcript(path: Path) -> TranscriptParse:
     contents = path.read_text(encoding="utf-8", errors="ignore")
     lines = contents.splitlines()
 
-    header: List[str] = []
-    body_lines: List[str] = []
+    header: list[str] = []
+    body_lines: list[str] = []
     in_body = False
     for line in lines:
         if not in_body and HEADER_DIVIDER_RE.match(line.strip()):
@@ -95,7 +103,7 @@ def parse_transcript(path: Path) -> TranscriptParse:
         body_lines = lines
         header = []
 
-    segments: List[TranscriptSegment] = []
+    segments: list[TranscriptSegment] = []
     diarized = False
     for raw in body_lines:
         raw = raw.rstrip()
