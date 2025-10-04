@@ -126,6 +126,8 @@ def parse_transcript(path: Path) -> TranscriptParse:
 
 
 __all__ = [
+    "JSONValue",
+    "JSONObject",
     "TranscriptSegment",
     "TranscriptParse",
     "AnalysisArtifact",
