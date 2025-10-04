@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, date
-from typing import Any, TYPE_CHECKING, ClassVar, cast
+from typing import Any, TYPE_CHECKING, ClassVar, Optional, cast
 
 from django.conf import settings
 from django.db import models
@@ -21,12 +21,11 @@ class CaseQuerySet(models.QuerySet["Case"]):
 
 
 class CaseManager(models.Manager["Case"]):
-    def get_queryset(self) -> CaseQuerySet:  # type: ignore[override]
-        return CaseQuerySet(self.model, using=self._db)
+    def get_queryset(self) -> CaseQuerySet:
+        return cast(CaseQuerySet, super().get_queryset())
 
     def for_user(self, user: Any) -> CaseQuerySet:
         return self.get_queryset().for_user(user)
-
 
 class Case(models.Model):
     class ClientPosition(models.TextChoices):
@@ -95,23 +94,23 @@ class Case(models.Model):
     )
     legal_aid: models.BooleanField[bool, bool] = models.BooleanField(default=False)
     pro_bono: models.BooleanField[bool, bool] = models.BooleanField(default=False)
-    court_date: models.DateTimeField[datetime | None, datetime | None] = models.DateTimeField(
+    court_date: models.DateTimeField[Optional[datetime], Optional[datetime]] = models.DateTimeField(
         null=True,
         blank=True,
     )
-    filing_deadline: models.DateField[date | None, date | None] = models.DateField(
+    filing_deadline: models.DateField[Optional[date], Optional[date]] = models.DateField(
         null=True,
         blank=True,
     )
     notes: models.TextField[str, str] = models.TextField(blank=True)
-    reviewer: models.ForeignKey["User", "User"] = models.ForeignKey(
+    reviewer: models.ForeignKey["User", Optional["User"]] = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
         related_name="cases_reviewing",
     )
-    client_user: models.ForeignKey["User", "User"] = models.ForeignKey(
+    client_user: models.ForeignKey["User", Optional["User"]] = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
         blank=True,

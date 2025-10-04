@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import uuid
-from typing import cast
+from typing import Optional, cast
 
 from django.contrib.auth.models import AbstractUser
 from django.db import models
@@ -43,13 +43,13 @@ class User(AbstractUser):
     For SSO, we map Keycloak 'sub' to kc_sub.
     """
 
-    kc_sub: models.CharField[str | None, str | None] = models.CharField(
+    kc_sub: models.CharField[Optional[str], Optional[str]] = models.CharField(
         max_length=64,
         unique=True,
         null=True,
         blank=True,
     )
-    display_name: models.CharField[str | None, str | None] = models.CharField(
+    display_name: models.CharField[Optional[str], Optional[str]] = models.CharField(
         max_length=200,
         null=True,
         blank=True,

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any, TYPE_CHECKING, ClassVar, cast
+from typing import Any, TYPE_CHECKING, ClassVar, Optional, cast
 
 from django.conf import settings
 from django.db import models
@@ -22,8 +22,8 @@ class JobQuerySet(models.QuerySet["Job"]):
 
 
 class JobManager(models.Manager["Job"]):
-    def get_queryset(self) -> JobQuerySet:  # type: ignore[override]
-        return JobQuerySet(self.model, using=self._db)
+    def get_queryset(self) -> JobQuerySet:
+        return cast(JobQuerySet, super().get_queryset())
 
     def for_user(self, user: Any) -> JobQuerySet:
         return self.get_queryset().for_user(user)
@@ -80,14 +80,14 @@ class Job(models.Model):
         default=Status.PENDING,
         db_index=True,
     )
-    error_message: models.TextField[str | None, str | None] = models.TextField(null=True, blank=True)
-    transcript_path: models.TextField[str | None, str | None] = models.TextField(null=True, blank=True)
-    duration_s: models.FloatField[float | None, float | None] = models.FloatField(null=True, blank=True)
+    error_message: models.TextField[Optional[str], Optional[str]] = models.TextField(null=True, blank=True)
+    transcript_path: models.TextField[Optional[str], Optional[str]] = models.TextField(null=True, blank=True)
+    duration_s: models.FloatField[Optional[float], Optional[float]] = models.FloatField(null=True, blank=True)
     display_title: models.CharField[str, str] = models.CharField(max_length=255, blank=True)
     agent_type: models.CharField[str, str] = models.CharField(max_length=64, blank=True, db_index=True)
     agent_label: models.CharField[str, str] = models.CharField(max_length=128, blank=True)
     job_kind: models.CharField[str, str] = models.CharField(max_length=64, blank=True, db_index=True)
-    source_job: models.ForeignKey["Job", "Job"] = models.ForeignKey(
+    source_job: models.ForeignKey["Job", Optional["Job"]] = models.ForeignKey(
         "self",
         null=True,
         blank=True,
@@ -95,25 +95,25 @@ class Job(models.Model):
         related_name="child_jobs",
     )
     created_at: models.DateTimeField[datetime, datetime] = models.DateTimeField(auto_now_add=True)
-    started_at: models.DateTimeField[datetime | None, datetime | None] = models.DateTimeField(
+    started_at: models.DateTimeField[Optional[datetime], Optional[datetime]] = models.DateTimeField(
         null=True,
         blank=True,
         db_index=True,
     )
-    finished_at: models.DateTimeField[datetime | None, datetime | None] = models.DateTimeField(
+    finished_at: models.DateTimeField[Optional[datetime], Optional[datetime]] = models.DateTimeField(
         null=True,
         blank=True,
         db_index=True,
     )
-    upload_progress: models.FloatField[float | None, float | None] = models.FloatField(null=True, blank=True)
+    upload_progress: models.FloatField[Optional[float], Optional[float]] = models.FloatField(null=True, blank=True)
     review_status: models.CharField[str, str] = models.CharField(
         max_length=16,
         choices=ReviewStatus.choices,
         default=ReviewStatus.PENDING,
         db_index=True,
     )
-    reviewed_at: models.DateTimeField[datetime | None, datetime | None] = models.DateTimeField(null=True, blank=True)
-    reviewed_by: models.ForeignKey["User", "User"] = models.ForeignKey(
+    reviewed_at: models.DateTimeField[Optional[datetime], Optional[datetime]] = models.DateTimeField(null=True, blank=True)
+    reviewed_by: models.ForeignKey["User", Optional["User"]] = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
         blank=True,
@@ -121,7 +121,7 @@ class Job(models.Model):
         related_name="reviewed_jobs",
     )
     review_comment: models.TextField[str, str] = models.TextField(blank=True)
-    review_activity_id: models.UUIDField[uuid.UUID | None, uuid.UUID | None] = models.UUIDField(
+    review_activity_id: models.UUIDField[Optional[uuid.UUID], Optional[uuid.UUID]] = models.UUIDField(
         null=True,
         blank=True,
         editable=False,
@@ -157,7 +157,7 @@ class JobNote(models.Model):
         related_name="notes",
     )
     text: models.TextField[str, str] = models.TextField()
-    created_by: models.ForeignKey["User", "User"] = models.ForeignKey(
+    created_by: models.ForeignKey["User", Optional["User"]] = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
         blank=True,

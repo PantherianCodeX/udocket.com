@@ -27,6 +27,12 @@
 6. **Gate strict mode**
    - Update CI to fail on Pyright errors only after the above buckets are cleared. Until then, keep strict mode locally but allow warnings so contributors can chip away iteratively.
 
+## Patterns Established (2024-03 Typing Pass)
+- **Nullable model fields** – When a Django field uses `null=True`, annotate the descriptor with `Optional[...]` for both the set and get generics (e.g., `models.TextField[Optional[str], Optional[str]]`). This satisfies the mypy-django plugin and prevents the “generic get type parameter is not optional” error.
+- **Manager helpers** – Prefer `QuerySet.as_manager()` or a thin subclass that casts `super().get_queryset()` instead of silencing overrides. This keeps `objects` typed as `Manager[Model]` for Pylance/Pyright while still exposing typed helper methods (see `apps/platform/jobs/models.py` for the pattern).
+- **Stub overlays** – Project stubs live under `typings/`. Only include files that need overriding (e.g., `typings/django/db/models/base.pyi`) and avoid empty `__init__.pyi` files that would shadow upstream stubs. Ensure `pyrightconfig.json`’s `stubPath` points to this directory so both CLI and Pylance pick it up.
+- **Tooling parity** – The devcontainer and VS Code recommendations now install `ms-python.mypy-type-checker`. Keep per-editor settings aligned with `pyrightconfig.json` so pyright and pylance share the same strict configuration.
+
 ## Prompt for Refactoring With Strong Typing in Mind
 Use the following prompt with reviewers or AI assistants to ensure we refactor rather than silence diagnostics:
 

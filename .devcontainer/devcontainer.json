@@ -36,7 +36,8 @@
         "ms-python.vscode-python-envs",
         "ms-vscode-remote.remote-containers",
         "openai.chatgpt",
-        "slightc.pip-manager"
+        "slightc.pip-manager",
+        "ms-python.mypy-type-checker"
       ],
       "settings": {
         "python.defaultInterpreterPath": "/usr/local/bin/python"

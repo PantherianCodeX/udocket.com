@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import uuid
-from typing import Any, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING, Optional
 
 from django.db import models
 
@@ -19,7 +19,7 @@ class Role(models.Model):
     These roles can be mapped to external IAM roles or CaseMemberships.
     """
 
-    uuid: models.UUIDField[uuid.UUID | None, uuid.UUID | None] = models.UUIDField(
+    uuid: models.UUIDField[Optional[uuid.UUID], Optional[uuid.UUID]] = models.UUIDField(
         editable=False,
         unique=True,
         null=True,
@@ -29,7 +29,7 @@ class Role(models.Model):
     description: models.TextField[str, str] = models.TextField(blank=True)
     system: models.BooleanField[bool, bool] = models.BooleanField(default=False)
     created_at: models.DateTimeField[datetime, datetime] = models.DateTimeField(auto_now_add=True)
-    organization: models.ForeignKey["Organization", "Organization"] = models.ForeignKey(
+    organization: models.ForeignKey["Organization", Optional["Organization"]] = models.ForeignKey(
         "accounts.Organization",
         on_delete=models.CASCADE,
         related_name="authorization_roles",
@@ -88,7 +88,7 @@ class RoleCapability(models.Model):
 
 
 class PermissionPreset(models.Model):
-    uuid: models.UUIDField[uuid.UUID | None, uuid.UUID | None] = models.UUIDField(
+    uuid: models.UUIDField[Optional[uuid.UUID], Optional[uuid.UUID]] = models.UUIDField(
         editable=False,
         unique=True,
         null=True,
@@ -98,7 +98,7 @@ class PermissionPreset(models.Model):
     description: models.TextField[str, str] = models.TextField(blank=True)
     system: models.BooleanField[bool, bool] = models.BooleanField(default=False)
     created_at: models.DateTimeField[datetime, datetime] = models.DateTimeField(auto_now_add=True)
-    organization: models.ForeignKey["Organization", "Organization"] = models.ForeignKey(
+    organization: models.ForeignKey["Organization", Optional["Organization"]] = models.ForeignKey(
         "accounts.Organization",
         on_delete=models.CASCADE,
         related_name="authorization_presets",

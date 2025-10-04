@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import uuid
-from typing import Any, TYPE_CHECKING, ClassVar, cast
+from typing import Any, TYPE_CHECKING, ClassVar, Optional, cast
 
 from django.db import models
 from simple_history.models import HistoricalRecords
@@ -22,8 +22,8 @@ class CaseArtifactQuerySet(models.QuerySet["CaseArtifact"]):
 
 
 class CaseArtifactManager(models.Manager["CaseArtifact"]):
-    def get_queryset(self) -> CaseArtifactQuerySet:  # type: ignore[override]
-        return CaseArtifactQuerySet(self.model, using=self._db)
+    def get_queryset(self) -> CaseArtifactQuerySet:
+        return cast(CaseArtifactQuerySet, super().get_queryset())
 
     def for_user(self, user: Any) -> CaseArtifactQuerySet:
         return self.get_queryset().for_user(user)
@@ -35,7 +35,7 @@ class CaseArtifact(models.Model):
     id: models.BigAutoField[int, int] = models.BigAutoField(primary_key=True)
     case_id: models.CharField[str, str] = models.CharField(max_length=36)
     # Optional FK for normalization; kept nullable for backcompat while migrating
-    case_fk: models.ForeignKey["Case", "Case"] = models.ForeignKey(
+    case_fk: models.ForeignKey["Case", Optional["Case"]] = models.ForeignKey(
         "cases.Case",
         on_delete=models.PROTECT,
         related_name="artifacts",
@@ -48,7 +48,7 @@ class CaseArtifact(models.Model):
         related_name="artifacts",
         editable=False,
     )
-    job_id: models.CharField[str | None, str | None] = models.CharField(max_length=36, null=True, blank=True)
+    job_id: models.CharField[Optional[str], Optional[str]] = models.CharField(max_length=36, null=True, blank=True)
     type: models.CharField[str, str] = models.CharField(max_length=32)
     title: models.CharField[str, str] = models.CharField(max_length=200, blank=True)
     path: models.TextField[str, str] = models.TextField()
