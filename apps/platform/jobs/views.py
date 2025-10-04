@@ -258,14 +258,19 @@ class JobViewSet(viewsets.ModelViewSet):
         constraints through ``scope_jobs``.
         """
 
-        ids_param = (request.query_params.get("ids") or "").strip()
+        ids_param = request.query_params.get("ids")
         if not ids_param:
             return Response({"detail": "Parameter 'ids' is required."}, status=status.HTTP_400_BAD_REQUEST)
 
-        try:
-            job_ids = [uuid.UUID(part.strip()) for part in ids_param.split(",") if part.strip()]
-        except (ValueError, AttributeError):
-            return Response({"detail": "Parameter 'ids' must contain valid UUIDs."}, status=status.HTTP_400_BAD_REQUEST)
+        job_ids: list[uuid.UUID] = []
+        for raw_part in ids_param.split(","):
+            part = (raw_part or "").strip()
+            if not part:
+                continue
+            try:
+                job_ids.append(uuid.UUID(part))
+            except ValueError:
+                continue
 
         if not job_ids:
             return Response([], status=status.HTTP_200_OK)

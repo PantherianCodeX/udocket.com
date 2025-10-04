@@ -237,7 +237,7 @@ class JobAccessPolicy(_MembershipMixin, AccessPolicy):
     statements = [
         {"action": ["list", "retrieve", "telemetry"], "principal": "*", "effect": "allow", "condition": "is_case_member"},
         {"action": ["create", "upload", "analyze_summary", "analyze_timeline", "analyze_graph"], "principal": "*", "effect": "allow", "condition": "can_manage_jobs"},
-        {"action": ["status"], "principal": "*", "effect": "allow", "condition": "is_case_member"},
+        {"action": ["status", "bulk_status"], "principal": "*", "effect": "allow", "condition": "is_case_member"},
         {"action": ["notes"], "principal": "*", "effect": "allow", "condition": "can_review_job"},
         {"action": ["download", "logs"], "principal": "*", "effect": "allow", "condition": "can_download_artifacts"},
         {"action": ["approve", "reject"], "principal": "*", "effect": "allow", "condition": "is_case_member"},

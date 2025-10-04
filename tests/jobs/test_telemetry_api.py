@@ -3,10 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from apps.platform.accounts.models import Organization, User
+from apps.platform.accounts.models import Organization, OrganizationMembership, User
 from apps.platform.cases.models import Case, CaseMembership
 from apps.platform.jobs.models import Job
 from apps.platform.operations.storage import ops_dir
@@ -19,6 +20,8 @@ def _create_case_with_members(settings):
     owner = User.objects.create_user(username="owner_tele", password="x", display_name="Owner Tele")
     reviewer = User.objects.create_user(username="reviewer_tele", password="x", display_name="Reviewer Tele")
     outsider = User.objects.create_user(username="outsider_tele", password="x")
+    OrganizationMembership.objects.create(user=owner, organization=org, role=OrganizationMembership.Role.ADMIN)
+    OrganizationMembership.objects.create(user=reviewer, organization=org, role=OrganizationMembership.Role.MEMBER)
     CaseMembership.objects.create(case=case, user=owner, role=CaseMembership.Role.OWNER)
     CaseMembership.objects.create(case=case, user=reviewer, role=CaseMembership.Role.REVIEWER)
     return case, owner, reviewer, outsider
@@ -142,3 +145,21 @@ def test_case_jobs_summary_and_detail_endpoints(db, settings):
     client.force_authenticate(user=outsider)
     forbidden = client.get(f"/api/v1/cases/{case.id}/jobs/summary/")
     assert forbidden.status_code == 403
+
+
+@pytest.mark.django_db
+def test_bulk_status_ignores_invalid_ids(db, settings):
+    case, owner, _, _ = _create_case_with_members(settings)
+    job = _create_job(case, status=Job.Status.SUCCEEDED)
+
+    client = APIClient()
+    client.force_authenticate(user=owner)
+
+    resp = client.get("/api/v1/jobs/status/bulk/", {"ids": f"new,{job.id},not-a-uuid"})
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert {entry["id"] for entry in payload} == {str(job.id)}
+
+    resp_empty = client.get("/api/v1/jobs/status/bulk/", {"ids": "invalid"})
+    assert resp_empty.status_code == 200
+    assert resp_empty.json() == []
