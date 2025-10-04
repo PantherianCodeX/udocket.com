@@ -9,7 +9,7 @@ from typing import Any, Iterable
 
 from pydantic import Field, SecretStr, ValidationInfo, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic_settings.sources import EnvSettingsSource, PydanticBaseSettingsSource
+from pydantic_settings.sources import DotEnvSettingsSource, EnvSettingsSource, PydanticBaseSettingsSource
 
 
 def _read_text(path: Path) -> str | None:
@@ -344,10 +344,39 @@ class Settings(BaseSettings):
             if attr_value is not None:
                 env_kwargs[attr] = attr_value
 
+        class _CsvDotenvSource(DotEnvSettingsSource):
+            _STR_LIST_FIELDS = _CsvEnvSource._STR_LIST_FIELDS
+            _INT_LIST_FIELDS = _CsvEnvSource._INT_LIST_FIELDS
+
+            def __init__(self, settings_cls: type[BaseSettings], **kwargs: Any) -> None:
+                super().__init__(settings_cls, **kwargs)
+
+            def decode_complex_value(self, field_name: str, field: Any, value: str) -> Any:  # type: ignore[override]
+                if field_name in self._STR_LIST_FIELDS:
+                    return _json_or_split_str_list(value)
+                if field_name in self._INT_LIST_FIELDS:
+                    return _json_or_split_int_list(value)
+                return super().decode_complex_value(field_name, field, value)
+
+        dotenv_kwargs: dict[str, Any] = {}
+        for attr in (
+            "env_file",
+            "env_file_encoding",
+            "case_sensitive",
+            "env_prefix",
+            "env_nested_delimiter",
+            "env_ignore_empty",
+            "env_parse_none_str",
+            "env_parse_enums",
+        ):
+            attr_value = getattr(dotenv_settings, attr, None)
+            if attr_value is not None:
+                dotenv_kwargs[attr] = attr_value
+
         return (
             init_settings,
             _CsvEnvSource(settings_cls, **env_kwargs),
-            dotenv_settings,
+            _CsvDotenvSource(settings_cls, **dotenv_kwargs),
             file_secret_settings,
         )
 
