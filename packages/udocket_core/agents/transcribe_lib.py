@@ -9,13 +9,13 @@ import shutil
 import threading
 import time
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, Optional, Tuple
 
 import requests
 
 from ..audio import probe_audio_metadata
+from ..time_utils import format_utc
 
 TARGET_SAMPLE_RATE_HZ = 16000
 TARGET_AUDIO_CODEC = "pcm_s16le"
@@ -36,7 +36,7 @@ class AudioNormalizationResult:
 
 
 def _now_utc() -> str:
-    return datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    return format_utc(timespec="seconds")
 
 
 def _sha256sum(fp: Path) -> str:

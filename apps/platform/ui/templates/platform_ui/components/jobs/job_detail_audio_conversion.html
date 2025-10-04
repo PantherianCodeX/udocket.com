@@ -11,25 +11,19 @@
         <div>
           <span class="uppercase tracking-wide text-slate-500">Created</span>
           <div class="mt-1 text-slate-100">
-            {% if job.created_at %}
-              <time data-ts="{{ job.created_at|date:'c' }}" data-ts-format="datetime-seconds">{{ job.created_at|date:'M d, Y h:i:s A' }}</time>
-            {% else %}—{% endif %}
+            {% include "platform_ui/components/common/_timestamp_block.html" with value=job.created_at show_seconds=True wrapper_class='leading-tight' time_row_class='text-[11px] text-slate-400' empty_html='—' only %}
           </div>
         </div>
         <div>
           <span class="uppercase tracking-wide text-slate-500">Started</span>
           <div class="mt-1 text-slate-100">
-            {% if job.started_at %}
-              <time data-ts="{{ job.started_at|date:'c' }}" data-ts-format="datetime-seconds">{{ job.started_at|date:'M d, Y h:i:s A' }}</time>
-            {% else %}—{% endif %}
+            {% include "platform_ui/components/common/_timestamp_block.html" with value=job.started_at show_seconds=True wrapper_class='leading-tight' time_row_class='text-[11px] text-slate-400' empty_html='—' only %}
           </div>
         </div>
         <div>
           <span class="uppercase tracking-wide text-slate-500">Finished</span>
           <div class="mt-1 text-slate-100">
-            {% if job.finished_at %}
-              <time data-ts="{{ job.finished_at|date:'c' }}" data-ts-format="datetime-seconds">{{ job.finished_at|date:'M d, Y h:i:s A' }}</time>
-            {% else %}—{% endif %}
+            {% include "platform_ui/components/common/_timestamp_block.html" with value=job.finished_at show_seconds=True wrapper_class='leading-tight' time_row_class='text-[11px] text-slate-400' empty_html='—' only %}
           </div>
         </div>
       </div>

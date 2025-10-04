@@ -94,28 +94,12 @@
           </td>
         {% elif column.id == 'created' %}
           <td data-table-cell="{{ column.id }}" class="px-4 py-3 text-slate-300{% if column.default_hidden %} hidden{% endif %}">
-            {% if created_dt %}
-              {# Standard datetime block: keep date on top, hh:mm AM/PM below. Reuse this snippet when rendering datetimes. #}
-              <div class="leading-tight">
-                {# Timestamp layout: keep date on first line, time on second. Update renderLocalTimes when changing this structure. #}
-                <div><time data-ts="{{ created_dt|date:'c' }}" data-ts-format="date">{{ created_dt|date:'M d, Y' }}</time></div>
-                <div class="text-[11px] text-slate-400"><time data-ts="{{ created_dt|date:'c' }}" data-ts-format="time">{{ created_dt|date:'h:i A' }}</time></div>
-              </div>
-            {% else %}
-              <span>—</span>
-            {% endif %}
+            {% include "platform_ui/components/common/_timestamp_block.html" with value=created_dt wrapper_class='leading-tight' time_row_class='text-[11px] text-slate-400' empty_html='<span>—</span>' only %}
           </td>
         {% elif column.id == 'modified' %}
           <td data-table-cell="{{ column.id }}" class="px-4 py-3 text-slate-300{% if column.default_hidden %} hidden{% endif %}">
             {% with modified_dt=table_meta.modified_at %}
-              {% if modified_dt %}
-                <div class="leading-tight">
-                  <div><time data-ts="{{ modified_dt|date:'c' }}" data-ts-format="date">{{ modified_dt|date:'M d, Y' }}</time></div>
-                  <div class="text-[11px] text-slate-400"><time data-ts="{{ modified_dt|date:'c' }}" data-ts-format="time">{{ modified_dt|date:'h:i A' }}</time></div>
-                </div>
-              {% else %}
-                <span>—</span>
-              {% endif %}
+              {% include "platform_ui/components/common/_timestamp_block.html" with value=modified_dt wrapper_class='leading-tight' time_row_class='text-[11px] text-slate-400' empty_html='<span>—</span>' only %}
             {% endwith %}
           </td>
         {% elif column.id == 'notes' %}

@@ -1,14 +1,17 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 from pathlib import Path
-from typing import Optional, Callable
+from typing import Callable, Optional
 import base64
 from urllib.parse import quote
 import re
 
-from django.conf import settings
 import logging
+
+from django.conf import settings
+
+from packages.udocket_core.time_utils import utc_now
 
 log = logging.getLogger("apps.platform.operations.blob")
 
@@ -165,7 +168,7 @@ def upload_with_sas(
         blob_name=blob_name,
         account_key=key,
         permission=BlobSasPermissions(read=True),
-        expiry=datetime.utcnow() + timedelta(minutes=int(getattr(settings, "AZURE_BLOB_SAS_TTL_MIN", 120))),
+        expiry=utc_now() + timedelta(minutes=int(getattr(settings, "AZURE_BLOB_SAS_TTL_MIN", 120))),
     )
     base = blob_endpoint or f"https://{account_name}.{endpoint_suffix}"
     safe_blob = quote(blob_name, safe="/:")

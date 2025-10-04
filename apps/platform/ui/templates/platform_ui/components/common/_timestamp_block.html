@@ -1,0 +1,30 @@
+{#
+  Reusable timestamp presenter that keeps server-rendered date/time markup
+  consistent with client-side `renderLocalTimes`. We render the ISO timestamp
+  once and expose it via `data-ts` on both lines so repeated conversions remain
+  idempotent.
+#}
+{% if value %}
+  {% with iso=value|date:'c' %}
+    {% with date_fmt=date_format|default:'M d, Y' %}
+      {% with time_mode=show_seconds|yesno:'time-seconds,time,time' %}
+        {% with time_fmt=show_seconds|yesno:'h:i:s A,h:i A,h:i A' %}
+          <div class="{{ wrapper_class|default:'leading-tight' }}" data-timestamp-block>
+            <div>
+              <time data-ts="{{ iso }}" data-ts-format="date">{{ value|date:date_fmt }}</time>
+            </div>
+            <div class="{{ time_row_class|default:'text-[11px] text-slate-400' }}">
+              <time data-ts="{{ iso }}" data-ts-format="{{ time_mode }}">{{ value|date:time_fmt }}</time>
+            </div>
+          </div>
+        {% endwith %}
+      {% endwith %}
+    {% endwith %}
+  {% endwith %}
+{% else %}
+  {% if empty_html %}
+    {{ empty_html|safe }}
+  {% else %}
+    <span class="{{ empty_class|default:'text-slate-400' }}">{{ empty_text|default:'—' }}</span>
+  {% endif %}
+{% endif %}

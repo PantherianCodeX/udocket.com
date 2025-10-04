@@ -1,12 +1,13 @@
 """Minimal helpers for writing DOCX files without heavy dependencies."""
 from __future__ import annotations
 
-from datetime import datetime
 from pathlib import Path
 from typing import Iterable, Sequence
 from xml.sax.saxutils import escape
 
 import zipfile
+
+from ...time_utils import format_utc
 
 
 _CONTENT_TYPES = """<?xml version="1.0" encoding="UTF-8"?>
@@ -74,7 +75,7 @@ def write_basic_docx(
     """
 
     para_list = [str(p or "").strip("\r") for p in paragraphs]
-    timestamp = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+    timestamp = format_utc(timespec="seconds")
     core_props = _CORE_PROPS_TEMPLATE.format(title=escape(title), created=timestamp, modified=timestamp)
     document_xml = _document_xml(para_list)
 
@@ -88,4 +89,3 @@ def write_basic_docx(
 
 
 __all__ = ["write_basic_docx"]
-
