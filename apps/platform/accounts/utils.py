@@ -1,9 +1,10 @@
+# pyright: strict
+
 from __future__ import annotations
 
 from typing import Any, Optional
 import uuid
 
-from django.contrib.auth import get_user_model
 from django.db import models
 from django.core.exceptions import PermissionDenied
 from django.http import HttpRequest

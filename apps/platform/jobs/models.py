@@ -1,21 +1,24 @@
+# pyright: strict
+
 from __future__ import annotations
 
-import typing
 import uuid
+from datetime import datetime
+from typing import Any, TYPE_CHECKING, ClassVar, cast
 
 from django.conf import settings
 from django.db import models
-from typing import Any
 
-if typing.TYPE_CHECKING:  # pragma: no cover
+if TYPE_CHECKING:  # pragma: no cover
+    from apps.platform.accounts.models import Organization, User
     from apps.platform.cases.models import Case
 
 
-class JobQuerySet(models.QuerySet["Job"]):
+class JobQuerySet(models.QuerySet[models.Model]):
     def for_user(self, user: Any) -> "JobQuerySet":
         from apps.platform import tenancy
 
-        return typing.cast("JobQuerySet", tenancy.scope_jobs(self, user))
+        return cast("JobQuerySet", tenancy.scope_jobs(self, user))
 
 
 class Job(models.Model):
@@ -39,104 +42,128 @@ class Job(models.Model):
         APPROVED = "APPROVED", "Approved"
         REJECTED = "REJECTED", "Rejected"
 
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    case = models.ForeignKey("cases.Case", on_delete=models.PROTECT, related_name="jobs")
-    organization = models.ForeignKey(
+    id: models.UUIDField[uuid.UUID, uuid.UUID] = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+    case: models.ForeignKey["Case", "Case"] = models.ForeignKey(
+        "cases.Case",
+        on_delete=models.PROTECT,
+        related_name="jobs",
+    )
+    organization: models.ForeignKey["Organization", "Organization"] = models.ForeignKey(
         "accounts.Organization",
         on_delete=models.PROTECT,
         related_name="jobs",
         editable=False,
     )
-    audio_input = models.TextField()
-    mode = models.CharField(max_length=16, choices=Mode.choices, default=Mode.ON_DEMAND)
-    diarization = models.BooleanField(default=False)
-    language = models.CharField(max_length=16, default="en-CA")
-    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING, db_index=True)
-    error_message = models.TextField(null=True, blank=True)
-    transcript_path = models.TextField(null=True, blank=True)
-    duration_s = models.FloatField(null=True, blank=True)
-    display_title = models.CharField(max_length=255, blank=True)
-    agent_type = models.CharField(max_length=64, blank=True, db_index=True)
-    agent_label = models.CharField(max_length=128, blank=True)
-    job_kind = models.CharField(max_length=64, blank=True, db_index=True)
-    source_job = models.ForeignKey(
+    audio_input: models.TextField[str, str] = models.TextField()
+    mode: models.CharField[str, str] = models.CharField(
+        max_length=16,
+        choices=Mode.choices,
+        default=Mode.ON_DEMAND,
+    )
+    diarization: models.BooleanField[bool, bool] = models.BooleanField(default=False)
+    language: models.CharField[str, str] = models.CharField(max_length=16, default="en-CA")
+    status: models.CharField[str, str] = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.PENDING,
+        db_index=True,
+    )
+    error_message: models.TextField[str | None, str | None] = models.TextField(null=True, blank=True)
+    transcript_path: models.TextField[str | None, str | None] = models.TextField(null=True, blank=True)
+    duration_s: models.FloatField[float | None, float | None] = models.FloatField(null=True, blank=True)
+    display_title: models.CharField[str, str] = models.CharField(max_length=255, blank=True)
+    agent_type: models.CharField[str, str] = models.CharField(max_length=64, blank=True, db_index=True)
+    agent_label: models.CharField[str, str] = models.CharField(max_length=128, blank=True)
+    job_kind: models.CharField[str, str] = models.CharField(max_length=64, blank=True, db_index=True)
+    source_job: models.ForeignKey["Job", "Job"] = models.ForeignKey(
         "self",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
         related_name="child_jobs",
     )
-    created_at = models.DateTimeField(auto_now_add=True)
-    started_at = models.DateTimeField(null=True, blank=True, db_index=True)
-    finished_at = models.DateTimeField(null=True, blank=True, db_index=True)
-    upload_progress = models.FloatField(null=True, blank=True)
-    review_status = models.CharField(
+    created_at: models.DateTimeField[datetime, datetime] = models.DateTimeField(auto_now_add=True)
+    started_at: models.DateTimeField[datetime | None, datetime | None] = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+    )
+    finished_at: models.DateTimeField[datetime | None, datetime | None] = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+    )
+    upload_progress: models.FloatField[float | None, float | None] = models.FloatField(null=True, blank=True)
+    review_status: models.CharField[str, str] = models.CharField(
         max_length=16,
         choices=ReviewStatus.choices,
         default=ReviewStatus.PENDING,
         db_index=True,
     )
-    reviewed_at = models.DateTimeField(null=True, blank=True)
-    reviewed_by = models.ForeignKey(
+    reviewed_at: models.DateTimeField[datetime | None, datetime | None] = models.DateTimeField(null=True, blank=True)
+    reviewed_by: models.ForeignKey["User", "User"] = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
         related_name="reviewed_jobs",
     )
-    review_comment = models.TextField(blank=True)
-    review_activity_id = models.UUIDField(null=True, blank=True, editable=False)
+    review_comment: models.TextField[str, str] = models.TextField(blank=True)
+    review_activity_id: models.UUIDField[uuid.UUID | None, uuid.UUID | None] = models.UUIDField(
+        null=True,
+        blank=True,
+        editable=False,
+    )
 
     class Meta:
         ordering = ["-created_at"]
 
-    objects = JobQuerySet.as_manager()
-
-    if typing.TYPE_CHECKING:  # pragma: no cover - typing aids
-        from datetime import datetime
-
-        id: uuid.UUID
-        case_id: uuid.UUID
-        organization_id: uuid.UUID | None
-        case: "Case"
-        mode: str
-        status: str
-        transcript_path: str | None
-        finished_at: datetime | None
-        started_at: datetime | None
-        created_at: datetime
-        review_status: str
+    objects: ClassVar[models.Manager["Job"]] = cast(models.Manager["Job"], JobQuerySet.as_manager())
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return f"{self.id} {self.status}"
 
-    def save(self, *args, **kwargs):  # type: ignore[override]
-        if self.case_id and self.organization_id is None:
-            try:
-                self.organization_id = self.case.organization_id
-            except Exception:
-                pass
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        case_id_value = cast(uuid.UUID | None, getattr(self, "case_id", None))
+        organization_id_value = cast(uuid.UUID | None, getattr(self, "organization_id", None))
+        if case_id_value is not None and organization_id_value is None:
+            case_org_id = cast(uuid.UUID | None, getattr(self.case, "organization_id", None))
+            if case_org_id is not None:
+                self.organization_id = case_org_id
         super().save(*args, **kwargs)
 
 
 class JobNote(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    job = models.ForeignKey("jobs.Job", on_delete=models.CASCADE, related_name="notes")
-    text = models.TextField()
-    created_by = models.ForeignKey(
+    id: models.UUIDField[uuid.UUID, uuid.UUID] = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+    job: models.ForeignKey[Job, Job] = models.ForeignKey(
+        "jobs.Job",
+        on_delete=models.CASCADE,
+        related_name="notes",
+    )
+    text: models.TextField[str, str] = models.TextField()
+    created_by: models.ForeignKey["User", "User"] = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
         related_name="job_notes",
     )
-    created_by_name = models.CharField(max_length=255, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    created_by_name: models.CharField[str, str] = models.CharField(max_length=255, blank=True)
+    created_at: models.DateTimeField[datetime, datetime] = models.DateTimeField(auto_now_add=True)
+    updated_at: models.DateTimeField[datetime, datetime] = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["-created_at"]
         indexes = [models.Index(fields=["job", "-created_at"])]
 
     def __str__(self) -> str:  # pragma: no cover - simple repr
-        return f"JobNote(job={self.job_id})"
+        job_id = cast(str | None, getattr(self, "job_id", None))
+        return f"JobNote(job={job_id})"

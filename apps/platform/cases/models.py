@@ -1,21 +1,26 @@
-import typing
-from datetime import datetime, date
-from typing import Any
+# pyright: strict
 
-from django.db import models
+from __future__ import annotations
+
+from datetime import datetime, date
+from typing import Any, TYPE_CHECKING, ClassVar, cast
+
 from django.conf import settings
-from django.contrib.auth import get_user_model
+from django.db import models
 from simple_history.models import HistoricalRecords
 
+if TYPE_CHECKING:
+    from apps.platform.accounts.models import Organization, User
 
-class CaseQuerySet(models.QuerySet["Case"]):
+
+class CaseQuerySet(models.QuerySet[models.Model]):
     def for_user(self, user: Any) -> "CaseQuerySet":
         from apps.platform import tenancy
 
-        return typing.cast("CaseQuerySet", tenancy.scope_cases(self, user))
+        return cast("CaseQuerySet", tenancy.scope_cases(self, user))
 
 
-CaseManager = CaseQuerySet.as_manager()
+CaseManager: models.Manager["Case"] = cast(models.Manager["Case"], CaseQuerySet.as_manager())
 
 
 class Case(models.Model):
@@ -52,58 +57,67 @@ class Case(models.Model):
         ADVOCATE = "ADVOCATE", "Advocate / Representative"
         OTHER = "OTHER", "Other"
 
-    id = models.CharField(primary_key=True, max_length=36)
-    title = models.CharField(max_length=200)
-    organization = models.ForeignKey(
-        "accounts.Organization", on_delete=models.PROTECT, related_name="cases"
+    id: models.CharField[str, str] = models.CharField(primary_key=True, max_length=36)
+    title: models.CharField[str, str] = models.CharField(max_length=200)
+    organization: models.ForeignKey["Organization", "Organization"] = models.ForeignKey(
+        "accounts.Organization",
+        on_delete=models.PROTECT,
+        related_name="cases",
     )
-    client_name = models.CharField(max_length=200, blank=True)
-    opposing_party = models.CharField(max_length=200, blank=True)
-    client_position = models.CharField(max_length=20, choices=ClientPosition.choices, blank=True)
-    court_location = models.CharField(max_length=200, blank=True)
-    court_level = models.CharField(max_length=20, choices=CourtLevel.choices, blank=True)
-    court_division = models.CharField(max_length=20, choices=CourtDivision.choices, blank=True)
-    court_case_number = models.CharField(max_length=100, blank=True)
-    representation = models.CharField(max_length=20, choices=Representation.choices, blank=True)
-    legal_aid = models.BooleanField(default=False)
-    pro_bono = models.BooleanField(default=False)
-    court_date = models.DateTimeField(null=True, blank=True)
-    filing_deadline = models.DateField(null=True, blank=True)
-    notes = models.TextField(blank=True)
-    reviewer = models.ForeignKey(
+    client_name: models.CharField[str, str] = models.CharField(max_length=200, blank=True)
+    opposing_party: models.CharField[str, str] = models.CharField(max_length=200, blank=True)
+    client_position: models.CharField[str, str] = models.CharField(
+        max_length=20,
+        choices=ClientPosition.choices,
+        blank=True,
+    )
+    court_location: models.CharField[str, str] = models.CharField(max_length=200, blank=True)
+    court_level: models.CharField[str, str] = models.CharField(
+        max_length=20,
+        choices=CourtLevel.choices,
+        blank=True,
+    )
+    court_division: models.CharField[str, str] = models.CharField(
+        max_length=20,
+        choices=CourtDivision.choices,
+        blank=True,
+    )
+    court_case_number: models.CharField[str, str] = models.CharField(max_length=100, blank=True)
+    representation: models.CharField[str, str] = models.CharField(
+        max_length=20,
+        choices=Representation.choices,
+        blank=True,
+    )
+    legal_aid: models.BooleanField[bool, bool] = models.BooleanField(default=False)
+    pro_bono: models.BooleanField[bool, bool] = models.BooleanField(default=False)
+    court_date: models.DateTimeField[datetime | None, datetime | None] = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+    filing_deadline: models.DateField[date | None, date | None] = models.DateField(
+        null=True,
+        blank=True,
+    )
+    notes: models.TextField[str, str] = models.TextField(blank=True)
+    reviewer: models.ForeignKey["User", "User"] = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
         related_name="cases_reviewing",
     )
-    client_user = models.ForeignKey(
+    client_user: models.ForeignKey["User", "User"] = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
         related_name="cases_as_client",
     )
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    history = HistoricalRecords()
+    created_at: models.DateTimeField[datetime, datetime] = models.DateTimeField(auto_now_add=True)
+    updated_at: models.DateTimeField[datetime, datetime] = models.DateTimeField(auto_now=True)
+    history: HistoricalRecords["Case"] = HistoricalRecords()
 
-    objects = CaseManager
-
-    if typing.TYPE_CHECKING:  # pragma: no cover - typing aids
-        id: str
-        title: str
-        organization_id: str
-        organization: "Organization"
-        reviewer_id: str | None
-        client_user_id: str | None
-        reviewer: "User | None"
-        client_user: "User | None"
-        created_at: datetime
-        updated_at: datetime
-        court_date: datetime | None
-        filing_deadline: date | None
-        objects: CaseQuerySet
+    objects: ClassVar[models.Manager["Case"]] = CaseManager
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return f"{self.id} — {self.title}"
@@ -120,10 +134,22 @@ class CaseMembership(models.Model):
         EXTERNAL = "EXTERNAL", "External"
         CLIENT = "CLIENT", "Client"
 
-    case = models.ForeignKey(Case, on_delete=models.CASCADE, related_name="memberships")
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="case_memberships")
-    role = models.CharField(max_length=16, choices=Role.choices, default=Role.CONTRIBUTOR)
-    created_at = models.DateTimeField(auto_now_add=True)
+    case: models.ForeignKey[Case, Case] = models.ForeignKey(
+        Case,
+        on_delete=models.CASCADE,
+        related_name="memberships",
+    )
+    user: models.ForeignKey["User", "User"] = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="case_memberships",
+    )
+    role: models.CharField[str, str] = models.CharField(
+        max_length=16,
+        choices=Role.choices,
+        default=Role.CONTRIBUTOR,
+    )
+    created_at: models.DateTimeField[datetime, datetime] = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         unique_together = ("case", "user")
@@ -131,13 +157,7 @@ class CaseMembership(models.Model):
         verbose_name_plural = "Case memberships"
 
     def __str__(self) -> str:  # pragma: no cover - trivial
-        return f"{self.case_id}:{self.user_id}:{self.role}"
-
-    if typing.TYPE_CHECKING:  # pragma: no cover - typing aids
-        from apps.platform.cases.models import Case
-        from apps.platform.accounts.models import User
-
-        case: Case
-        case_id: str
-        user: User
-        user_id: int
+        case_id = cast(str | None, getattr(self, "case_id", None))
+        user_id = cast(int | None, getattr(self, "user_id", None))
+        role = cast(str | None, getattr(self, "role", None))
+        return f"{case_id}:{user_id}:{role}"

@@ -1,10 +1,15 @@
+# pyright: strict
+
 from __future__ import annotations
 
+from datetime import datetime
 import uuid
-
-import typing
+from typing import Any, TYPE_CHECKING
 
 from django.db import models
+
+if TYPE_CHECKING:
+    from apps.platform.accounts.models import Organization
 
 
 class Role(models.Model):
@@ -14,12 +19,17 @@ class Role(models.Model):
     These roles can be mapped to external IAM roles or CaseMemberships.
     """
 
-    uuid = models.UUIDField(editable=False, unique=True, null=True, blank=True)
-    name = models.CharField(max_length=100)
-    description = models.TextField(blank=True)
-    system = models.BooleanField(default=False)
-    created_at = models.DateTimeField(auto_now_add=True)
-    organization = models.ForeignKey(
+    uuid: models.UUIDField[uuid.UUID | None, uuid.UUID | None] = models.UUIDField(
+        editable=False,
+        unique=True,
+        null=True,
+        blank=True,
+    )
+    name: models.CharField[str, str] = models.CharField(max_length=100)
+    description: models.TextField[str, str] = models.TextField(blank=True)
+    system: models.BooleanField[bool, bool] = models.BooleanField(default=False)
+    created_at: models.DateTimeField[datetime, datetime] = models.DateTimeField(auto_now_add=True)
+    organization: models.ForeignKey["Organization", "Organization"] = models.ForeignKey(
         "accounts.Organization",
         on_delete=models.CASCADE,
         related_name="authorization_roles",
@@ -28,7 +38,11 @@ class Role(models.Model):
     )
     # Attach preset bundles to roles
     # Defined below but string-referenced to avoid ordering issues
-    presets = models.ManyToManyField("authorization.PermissionPreset", blank=True, related_name="roles")
+    presets: models.ManyToManyField["PermissionPreset", "PermissionPreset"] = models.ManyToManyField(
+        "authorization.PermissionPreset",
+        blank=True,
+        related_name="roles",
+    )
 
     class Meta:
         ordering = ["name"]
@@ -36,24 +50,15 @@ class Role(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         label = self.name or str(self.uuid)
-        if self.organization_id:
-            return f"{label} ({self.organization_id})"
+        organization_identifier = getattr(self, "organization_id", None)
+        if organization_identifier:
+            return f"{label} ({organization_identifier})"
         return label
 
-    def save(self, *args, **kwargs):  # type: ignore[override]
+    def save(self, *args: Any, **kwargs: Any) -> None:
         if not self.uuid:
             self.uuid = uuid.uuid4()
         super().save(*args, **kwargs)
-
-    if typing.TYPE_CHECKING:  # pragma: no cover - typing aids
-        from django.db.models.manager import BaseManager
-        from apps.platform.accounts.models import Organization
-
-        uuid: uuid.UUID | None
-        organization_id: str | None
-        organization: Organization | None
-        presets: BaseManager["PermissionPreset"]
-        capabilities: BaseManager["RoleCapability"]
 
 
 class RoleCapability(models.Model):
@@ -66,9 +71,13 @@ class RoleCapability(models.Model):
       - artifact.field.path.view
     """
 
-    role = models.ForeignKey(Role, on_delete=models.CASCADE, related_name="capabilities")
-    capability = models.CharField(max_length=100, db_index=True)
-    created_at = models.DateTimeField(auto_now_add=True)
+    role: models.ForeignKey[Role, Role] = models.ForeignKey(
+        Role,
+        on_delete=models.CASCADE,
+        related_name="capabilities",
+    )
+    capability: models.CharField[str, str] = models.CharField(max_length=100, db_index=True)
+    created_at: models.DateTimeField[datetime, datetime] = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         unique_together = ("role", "capability")
@@ -79,12 +88,17 @@ class RoleCapability(models.Model):
 
 
 class PermissionPreset(models.Model):
-    uuid = models.UUIDField(editable=False, unique=True, null=True, blank=True)
-    name = models.CharField(max_length=120)
-    description = models.TextField(blank=True)
-    system = models.BooleanField(default=False)
-    created_at = models.DateTimeField(auto_now_add=True)
-    organization = models.ForeignKey(
+    uuid: models.UUIDField[uuid.UUID | None, uuid.UUID | None] = models.UUIDField(
+        editable=False,
+        unique=True,
+        null=True,
+        blank=True,
+    )
+    name: models.CharField[str, str] = models.CharField(max_length=120)
+    description: models.TextField[str, str] = models.TextField(blank=True)
+    system: models.BooleanField[bool, bool] = models.BooleanField(default=False)
+    created_at: models.DateTimeField[datetime, datetime] = models.DateTimeField(auto_now_add=True)
+    organization: models.ForeignKey["Organization", "Organization"] = models.ForeignKey(
         "accounts.Organization",
         on_delete=models.CASCADE,
         related_name="authorization_presets",
@@ -99,24 +113,19 @@ class PermissionPreset(models.Model):
     def __str__(self) -> str:  # pragma: no cover - trivial
         return self.name or str(self.uuid)
 
-    def save(self, *args, **kwargs):  # type: ignore[override]
+    def save(self, *args: Any, **kwargs: Any) -> None:
         if not self.uuid:
             self.uuid = uuid.uuid4()
         super().save(*args, **kwargs)
 
-    if typing.TYPE_CHECKING:  # pragma: no cover - typing aids
-        from django.db.models.manager import BaseManager
-        from apps.platform.accounts.models import Organization
-
-        uuid: uuid.UUID | None
-        organization_id: str | None
-        organization: Organization | None
-        capabilities: BaseManager["PresetCapability"]
-
 
 class PresetCapability(models.Model):
-    preset = models.ForeignKey(PermissionPreset, on_delete=models.CASCADE, related_name="capabilities")
-    capability = models.CharField(max_length=100, db_index=True)
+    preset: models.ForeignKey[PermissionPreset, PermissionPreset] = models.ForeignKey(
+        PermissionPreset,
+        on_delete=models.CASCADE,
+        related_name="capabilities",
+    )
+    capability: models.CharField[str, str] = models.CharField(max_length=100, db_index=True)
 
     class Meta:
         unique_together = ("preset", "capability")
@@ -124,6 +133,3 @@ class PresetCapability(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return f"{self.preset.name}:{self.capability}"
-
-    if typing.TYPE_CHECKING:  # pragma: no cover - typing aids
-        preset: PermissionPreset

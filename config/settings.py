@@ -1,15 +1,21 @@
+# pyright: strict
+
 from __future__ import annotations
 
 import json
 import os
 import socket
+from collections.abc import Iterable as IterableABC, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, ClassVar, cast
 
 from pydantic import Field, SecretStr, ValidationInfo, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic_settings.sources import DotEnvSettingsSource, EnvSettingsSource, PydanticBaseSettingsSource
+
+
+FALLBACK_STORAGE_ROOT = Path(__file__).resolve().parents[2] / "storage"
 
 
 def _read_text(path: Path) -> str | None:
@@ -22,32 +28,33 @@ def _read_text(path: Path) -> str | None:
     return data.strip()
 
 
-def _split_env_list(value: Any) -> list[str]:
+def _collect_iter_items(value: IterableABC[object]) -> list[str]:
+    result: list[str] = []
+    for item in value:
+        text = str(item).strip()
+        if text:
+            result.append(text)
+    return result
+
+
+def _split_env_list(value: object) -> list[str]:
     if value is None:
         return []
-    if isinstance(value, (list, tuple)):
-        result: list[str] = []
-        for item in value:
-            text = str(item).strip()
-            if text:
-                result.append(text)
-        return result
+    if isinstance(value, IterableABC) and not isinstance(value, (str, bytes, bytearray)):
+        iterable_value = cast(IterableABC[object], value)
+        return _collect_iter_items(iterable_value)
     text = str(value).strip()
     if not text:
         return []
     return [item.strip() for item in text.split(",") if item.strip()]
 
 
-def _json_or_split_str_list(value: Any) -> list[str]:
+def _json_or_split_str_list(value: object) -> list[str]:
     if value is None:
         return []
-    if isinstance(value, (list, tuple)):
-        result: list[str] = []
-        for item in value:
-            text = str(item).strip()
-            if text:
-                result.append(text)
-        return result
+    if isinstance(value, IterableABC) and not isinstance(value, (str, bytes, bytearray)):
+        iterable_value = cast(IterableABC[object], value)
+        return _collect_iter_items(iterable_value)
     text = str(value).strip()
     if not text:
         return []
@@ -57,17 +64,13 @@ def _json_or_split_str_list(value: Any) -> list[str]:
         return _split_env_list(text)
     if isinstance(loaded, str):
         return _split_env_list(loaded)
-    if isinstance(loaded, Iterable) and not isinstance(loaded, (str, bytes, bytearray)):
-        result: list[str] = []
-        for item in loaded:
-            item_text = str(item).strip()
-            if item_text:
-                result.append(item_text)
-        return result
+    if isinstance(loaded, IterableABC) and not isinstance(loaded, (str, bytes, bytearray)):
+        iterable_loaded = cast(IterableABC[object], loaded)
+        return _collect_iter_items(iterable_loaded)
     return _split_env_list(text)
 
 
-def _json_or_split_int_list(value: Any) -> list[int]:
+def _json_or_split_int_list(value: object) -> list[int]:
     items = _json_or_split_str_list(value)
     result: list[int] = []
     for item in items:
@@ -80,7 +83,7 @@ def _json_or_split_int_list(value: Any) -> list[int]:
     return result
 
 
-def _normalize_redis_url(value: Any) -> str | None:
+def _normalize_redis_url(value: object) -> str | None:
     if value is None:
         return None
     text = str(value).strip()
@@ -89,6 +92,50 @@ def _normalize_redis_url(value: Any) -> str | None:
     if "://" in text or text.startswith("unix://"):
         return text
     return f"redis://{text}"
+
+
+def _safe_mkdir(path: Path) -> bool:
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        return False
+    return path.exists()
+
+
+def _normalize_storage_values(
+    storage_root: Path,
+    database_url: str,
+    test_database_url: str | None,
+) -> tuple[Path, str, str | None]:
+    normalized_root = storage_root
+    normalized_db = database_url
+    normalized_test_db = test_database_url
+
+    if not _safe_mkdir(normalized_root):
+        fallback_root = FALLBACK_STORAGE_ROOT
+        if _safe_mkdir(fallback_root):
+            normalized_root = fallback_root
+            if database_url.startswith("sqlite:///"):
+                db_name = Path(database_url.replace("sqlite:///", "", 1)).name or "udocket.db"
+                normalized_db = f"sqlite:///{fallback_root / db_name}"
+            if test_database_url and test_database_url.startswith("sqlite:///"):
+                test_name = Path(test_database_url.replace("sqlite:///", "", 1)).name or "test_udocket.db"
+                normalized_test_db = f"sqlite:///{fallback_root / test_name}"
+
+    return normalized_root, normalized_db, normalized_test_db
+
+
+def _ensure_sqlite_parent(db_url: str) -> None:
+    if not db_url.startswith("sqlite:///"):
+        return
+    path_str = db_url.replace("sqlite:///", "", 1)
+    path = Path(path_str)
+    if not path.is_absolute():
+        path = Path.cwd() / path
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        return
 
 
 @dataclass(frozen=True)
@@ -317,16 +364,16 @@ class Settings(BaseSettings):
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
         class _CsvEnvSource(EnvSettingsSource):
-            _STR_LIST_FIELDS = {"DJANGO_ALLOWED_HOSTS", "CSRF_TRUSTED_ORIGINS"}
-            _INT_LIST_FIELDS = {"PLATFORM_UI_JOB_LIMIT_CHOICES"}
+            STR_LIST_FIELDS: ClassVar[set[str]] = {"DJANGO_ALLOWED_HOSTS", "CSRF_TRUSTED_ORIGINS"}
+            INT_LIST_FIELDS: ClassVar[set[str]] = {"PLATFORM_UI_JOB_LIMIT_CHOICES"}
 
             def __init__(self, settings_cls: type[BaseSettings], **kwargs: Any) -> None:
                 super().__init__(settings_cls, **kwargs)
 
             def decode_complex_value(self, field_name: str, field: Any, value: str) -> Any:  # type: ignore[override]
-                if field_name in self._STR_LIST_FIELDS:
+                if field_name in self.STR_LIST_FIELDS:
                     return _json_or_split_str_list(value)
-                if field_name in self._INT_LIST_FIELDS:
+                if field_name in self.INT_LIST_FIELDS:
                     return _json_or_split_int_list(value)
                 return super().decode_complex_value(field_name, field, value)
 
@@ -345,16 +392,16 @@ class Settings(BaseSettings):
                 env_kwargs[attr] = attr_value
 
         class _CsvDotenvSource(DotEnvSettingsSource):
-            _STR_LIST_FIELDS = _CsvEnvSource._STR_LIST_FIELDS
-            _INT_LIST_FIELDS = _CsvEnvSource._INT_LIST_FIELDS
+            STR_LIST_FIELDS: ClassVar[set[str]] = _CsvEnvSource.STR_LIST_FIELDS
+            INT_LIST_FIELDS: ClassVar[set[str]] = _CsvEnvSource.INT_LIST_FIELDS
 
             def __init__(self, settings_cls: type[BaseSettings], **kwargs: Any) -> None:
                 super().__init__(settings_cls, **kwargs)
 
             def decode_complex_value(self, field_name: str, field: Any, value: str) -> Any:  # type: ignore[override]
-                if field_name in self._STR_LIST_FIELDS:
+                if field_name in self.STR_LIST_FIELDS:
                     return _json_or_split_str_list(value)
-                if field_name in self._INT_LIST_FIELDS:
+                if field_name in self.INT_LIST_FIELDS:
                     return _json_or_split_int_list(value)
                 return super().decode_complex_value(field_name, field, value)
 
@@ -525,68 +572,81 @@ class Settings(BaseSettings):
 
     @model_validator(mode="before")
     @classmethod
-    def apply_secret_files(cls, data: Any) -> Any:
-        if not isinstance(data, dict):
-            data = dict(data or {})
-        field_names = cls.model_fields.keys()
-        file_values = _collect_secret_file_values(field_names)
+    def apply_secret_files(cls, data: Any) -> dict[str, Any]:
+        if data is None:
+            data_dict: dict[str, Any] = {}
+        elif isinstance(data, Mapping):
+            mapping_data = cast(Mapping[str, Any], data)
+            data_dict = dict(mapping_data)
+        else:
+            data_iter = cast(IterableABC[tuple[str, Any]], data)
+            data_dict = dict(data_iter)
+
+        file_values = _collect_secret_file_values(cls.model_fields.keys())
         for key, value in file_values.items():
-            data.setdefault(key, value)
-        storage_root = data.get("STORAGE_ROOT", Path("/app/storage"))
-        if isinstance(storage_root, str):
-            storage_root = Path(storage_root)
-        db_url = data.get("DATABASE_URL", "sqlite:///__AUTO__")
+            data_dict.setdefault(key, value)
+
+        storage_root_value = data_dict.get("STORAGE_ROOT")
+        if isinstance(storage_root_value, Path):
+            storage_root = storage_root_value
+        elif isinstance(storage_root_value, str) and storage_root_value:
+            storage_root = Path(storage_root_value)
+        else:
+            storage_root = Path("/app/storage")
+        data_dict["STORAGE_ROOT"] = storage_root
+
+        db_url_value = data_dict.get("DATABASE_URL")
+        if isinstance(db_url_value, str):
+            db_url = db_url_value
+        else:
+            db_url = "sqlite:///__AUTO__"
         if db_url == "sqlite:///__AUTO__":
-            data["DATABASE_URL"] = f"sqlite:///{Path(storage_root) / 'udocket.db'}"
-        return data
+            data_dict["DATABASE_URL"] = f"sqlite:///{storage_root / 'udocket.db'}"
+        return data_dict
 
     @model_validator(mode="after")
     def ensure_paths(self) -> "Settings":
-        self.ensure_storage_root()
-        self._ensure_sqlite_parent(self.DATABASE_URL)
-        if self.TEST_DATABASE_URL:
-            self._ensure_sqlite_parent(self.TEST_DATABASE_URL)
-        self.REDIS_URL = _normalize_redis_url(self.REDIS_URL)
-        broker_normalized = _normalize_redis_url(self.CELERY_BROKER_URL)
-        if broker_normalized:
-            self.CELERY_BROKER_URL = broker_normalized
-        if not self.DJANGO_DEBUG and self.DJANGO_SECRET_KEY.get_secret_value() == "dev-insecure-secret-key":
+        updates: dict[str, Any] = {}
+
+        normalized_redis = _normalize_redis_url(self.REDIS_URL)
+        if normalized_redis != self.REDIS_URL:
+            updates["REDIS_URL"] = normalized_redis
+
+        normalized_broker = _normalize_redis_url(self.CELERY_BROKER_URL)
+        if normalized_broker != self.CELERY_BROKER_URL:
+            updates["CELERY_BROKER_URL"] = normalized_broker
+
+        normalized_root, normalized_db, normalized_test_db = _normalize_storage_values(
+            self.STORAGE_ROOT,
+            self.DATABASE_URL,
+            self.TEST_DATABASE_URL,
+        )
+
+        if normalized_root != self.STORAGE_ROOT:
+            updates["STORAGE_ROOT"] = normalized_root
+        if normalized_db != self.DATABASE_URL:
+            updates["DATABASE_URL"] = normalized_db
+        if normalized_test_db != self.TEST_DATABASE_URL:
+            updates["TEST_DATABASE_URL"] = normalized_test_db
+
+        updated = self.model_copy(update=updates) if updates else self
+
+        updated.ensure_storage_root()
+        _ensure_sqlite_parent(updated.DATABASE_URL)
+        if updated.TEST_DATABASE_URL:
+            _ensure_sqlite_parent(updated.TEST_DATABASE_URL)
+
+        if not updated.DJANGO_DEBUG and updated.DJANGO_SECRET_KEY.get_secret_value() == "dev-insecure-secret-key":
             raise ValueError("DJANGO_SECRET_KEY must be set when DJANGO_DEBUG is false")
-        return self
+        return updated
 
     def ensure_storage_root(self) -> Path:
         root = self.STORAGE_ROOT
-        try:
-            root.mkdir(parents=True, exist_ok=True)
-        except Exception:
-            pass
+        _safe_mkdir(root)
         if root.exists():
             return root
-        fallback_root = Path(__file__).resolve().parents[2] / "storage"
-        try:
-            fallback_root.mkdir(parents=True, exist_ok=True)
-        except Exception:
-            return root
-        self.STORAGE_ROOT = fallback_root
-        if self.DATABASE_URL.startswith("sqlite:///"):
-            db_name = Path(self.DATABASE_URL.replace("sqlite:///", "", 1)).name or "udocket.db"
-            self.DATABASE_URL = f"sqlite:///{fallback_root / db_name}"
-        if self.TEST_DATABASE_URL and self.TEST_DATABASE_URL.startswith("sqlite:///"):
-            test_name = Path(self.TEST_DATABASE_URL.replace("sqlite:///", "", 1)).name or "test_udocket.db"
-            self.TEST_DATABASE_URL = f"sqlite:///{fallback_root / test_name}"
-        return fallback_root
-
-    def _ensure_sqlite_parent(self, db_url: str) -> None:
-        if not db_url.startswith("sqlite:///"):
-            return
-        path_str = db_url.replace("sqlite:///", "", 1)
-        path = Path(path_str)
-        if not path.is_absolute():
-            path = Path.cwd() / path
-        try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-        except Exception:
-            pass
+        _safe_mkdir(FALLBACK_STORAGE_ROOT)
+        return root
 
     @property
     def azure(self) -> AzureConfig:
@@ -709,7 +769,7 @@ class Settings(BaseSettings):
         )
 
 
-def _collect_secret_file_values(field_names: Iterable[str]) -> dict[str, str]:
+def _collect_secret_file_values(field_names: IterableABC[str]) -> dict[str, str]:
     values: dict[str, str] = {}
     env_map = os.environ
     for name in field_names:
