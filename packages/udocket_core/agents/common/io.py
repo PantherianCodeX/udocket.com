@@ -6,7 +6,7 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping, MutableMapping, TypeAlias
+from typing import Mapping, TypeAlias
 
 JSONPrimitive: TypeAlias = int | float | bool | str | None
 JSONValue: TypeAlias = JSONPrimitive | "JSONObject" | "JSONArray"
@@ -69,10 +69,7 @@ def next_versioned(path: Path) -> Path:
 def append_jsonl(path: Path, obj: Mapping[str, JSONValue]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:
-        if isinstance(obj, MutableMapping):
-            payload: JSONObject = dict(obj.items())
-        else:
-            payload = {key: value for key, value in obj.items()}
+        payload: JSONObject = {key: value for key, value in obj.items()}
         handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
 

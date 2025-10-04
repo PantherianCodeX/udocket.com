@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
 
 from .io import AnalysisArtifact
 
@@ -10,7 +9,7 @@ from .io import AnalysisArtifact
 @dataclass
 class AnalysisResult:
     status: str
-    artifacts: List[AnalysisArtifact]
+    artifacts: list[AnalysisArtifact]
     meta_path: Path
     audit_path: Path
 
