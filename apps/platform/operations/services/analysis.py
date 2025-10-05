@@ -10,6 +10,12 @@ from typing import Any, TypedDict, cast
 
 from apps.platform.cases.models import Case
 from apps.platform.operations.storage import ensure_case_dirs, ops_dir as storage_ops_dir
+from packages.udocket_core.json_utils import (
+    JSONObject,
+    coerce_json_object,
+    coerce_object_list,
+    coerce_str_list,
+)
 
 
 def case_paths(case_id: str, organization_id: str | None = None) -> tuple[Path, Path, Path]:
@@ -39,21 +45,12 @@ class SummaryTimelineEvent(TypedDict, total=False):
     labels: list[str]
 
 
-def _coerce_event_mappings(payload: object) -> list[Mapping[str, object]]:
-    events: list[Mapping[str, object]] = []
+def _timeline_event_objects(payload: object) -> list[JSONObject]:
     if isinstance(payload, Mapping):
-        payload_mapping = cast(Mapping[str, object], payload)
+        payload_mapping = coerce_json_object(cast(Mapping[object, object], payload))
         events_value = payload_mapping.get("events")
-        if isinstance(events_value, Sequence) and not isinstance(events_value, (str, bytes)):
-            for candidate in cast(Sequence[object], events_value):
-                if isinstance(candidate, Mapping):
-                    events.append(cast(Mapping[str, object], candidate))
-        return events
-    if isinstance(payload, Sequence) and not isinstance(payload, (str, bytes)):
-        for candidate in cast(Sequence[object], payload):
-            if isinstance(candidate, Mapping):
-                events.append(cast(Mapping[str, object], candidate))
-    return events
+        return [coerce_json_object(item) for item in coerce_object_list(events_value)]
+    return [coerce_json_object(item) for item in coerce_object_list(payload)]
 
 
 def _normalize_timestamp(value: object) -> float | int | str | None:
@@ -63,12 +60,7 @@ def _normalize_timestamp(value: object) -> float | int | str | None:
 
 
 def _extract_labels(value: object) -> list[str]:
-    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
-        return []
-    labels: list[str] = []
-    for raw_label in cast(Sequence[object], value):
-        labels.append(str(raw_label))
-    return labels
+    return coerce_str_list(value, unique=False)
 
 
 def load_summary_timeline_events(
@@ -85,7 +77,7 @@ def load_summary_timeline_events(
         payload: object = json.loads(seeds_path.read_text(encoding="utf-8"))
     except Exception:  # pragma: no cover - malformed file
         return [], None
-    raw_events = _coerce_event_mappings(payload)
+    raw_events = _timeline_event_objects(payload)
     events: list[SummaryTimelineEvent] = []
     for event_map in raw_events:
         speaker_value = event_map.get("speaker")
@@ -106,7 +98,7 @@ def load_summary_timeline_events(
 def load_summary_entity_hints(
     meta: Mapping[str, object],
     case_dir: Path,
-) -> tuple[dict[str, Any] | None, Path | None]:
+) -> tuple[JSONObject | None, Path | None]:
     file_value = meta.get("summary_entity_file")
     if not isinstance(file_value, str) or not file_value:
         return None, None
@@ -119,10 +111,7 @@ def load_summary_entity_hints(
         return None, None
     if not isinstance(payload, Mapping):
         return None, None
-    payload_mapping = cast(Mapping[str, object], payload)
-    payload_dict: dict[str, Any] = {}
-    for key_obj, value in payload_mapping.items():
-        payload_dict[key_obj] = value
+    payload_dict = coerce_json_object(cast(Mapping[object, object], payload))
     return payload_dict, hints_path
 
 
@@ -194,14 +183,10 @@ def collect_requested_providers(
 
     if stage_map:
         for payload in stage_map.values():
-            raw_providers = payload.get("providers")
-            if isinstance(raw_providers, Sequence):
-                for provider in cast(Sequence[object], raw_providers):
-                    if isinstance(provider, str):
-                        _add(provider)
-            provider_value = payload.get("provider")
-            if isinstance(provider_value, str):
-                _add(provider_value)
+            for provider in coerce_str_list(payload.get("providers"), unique=False):
+                _add(provider)
+            for provider in coerce_str_list(payload.get("provider"), unique=False):
+                _add(provider)
 
     if provider_chain:
         for provider in provider_chain:
