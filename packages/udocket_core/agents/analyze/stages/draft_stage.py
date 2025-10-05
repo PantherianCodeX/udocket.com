@@ -5,9 +5,9 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import cast
 
 from ...common.io import TranscriptParse
+from ...common.normalization import coerce_sequence
 from packages.udocket_core.json_utils import (
     JSONObject,
     JSONValue,
@@ -39,13 +39,10 @@ def _usage_dict(usage: Mapping[str, object]) -> dict[str, int]:
 def _normalize_snippet(snippet: object) -> str:
     if isinstance(snippet, str):
         return snippet
-    if isinstance(snippet, Sequence) and not isinstance(snippet, (bytes, bytearray)):
-        sequence = cast(Sequence[object], snippet)
-        for item in sequence:
-            text = item if isinstance(item, str) else str(item)
-            if text.strip():
-                return text
-        return ""
+    for item in coerce_sequence(snippet) or []:
+        text = item if isinstance(item, str) else str(item)
+        if text.strip():
+            return text
     if snippet is None:
         return ""
     return str(snippet)
@@ -121,7 +118,8 @@ def generate_summary_payload(
         intake_payload = coerce_json_object(intake)
         outline_payload = coerce_json_object(outline)
         timeline_payload: list[JSONValue] = [
-            dict(item) for item in coerce_object_list(timeline)
+            coerce_json_object(mapping)
+            for mapping in timeline
         ]
         entities_payload = coerce_json_object(entities)
         case_brief_payload = coerce_json_object(case_brief)
