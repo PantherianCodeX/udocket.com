@@ -47,10 +47,10 @@ For day-to-day execution status, see `docs/typing/typing_progress_log.md`, which
 
 ## November 2025 Tooling Discipline
 - Always start a typing pass with the combined checker: `python scripts/typing/check_strict.py --tool both`. This reports deltas for pyright and mypy together so we do not lose ground on modules that were previously clean in only one tool.
-- Follow up with targeted runs (`--tool pyright` / `--tool mypy` plus `--module` selectors) when iterating on fixes. The focused mode keeps output short and guards against regressions if we pause mid-refactor.
+- Follow up with targeted runs (`--tool pyright` / `--tool mypy` plus `--module` selectors) when iterating on fixes. The focused mode keeps output short and guards against regressions if we pause mid-refactor. Do not re-run repo-wide checks during confirmations unless you explicitly note the broader scope.
 - When a module needs heavier reshaping, lean on the automation helpers in `scripts/typing/` first (for example, `strictify.py`, `manager_codemod.py`, `annotate_fixtures.py`) to keep refactors idempotent. Only fall back to manual edits if the helpers cannot express the change yet, and remember to extend the helper afterward.
 - Document any newly-required helper combinations (e.g., bootstrap + strictify) in the PR description and update the playbook so future contributors can rerun the same sequence without guesswork.
-- Pair the typing sweeps with targeted pytest runs (`pytest <path/to/test>.py`) so we validate behaviour without hammering the entire suite between edits; keep the full run for profiling or release checkpoints.
+- Pair the typing sweeps with targeted pytest runs (`pytest <path/to/test>.py`) so we validate behaviour without hammering the entire suite between edits; keep the full run for profiling or release checkpoints. Capture the exact commands in the PR body for reproducibility.
 
 ## Patterns Established (2024-03 Typing Pass)
 - **Nullable model fields** – When a Django field uses `null=True`, annotate the descriptor with `Optional[...]` for both the set and get generics (e.g., `models.TextField[Optional[str], Optional[str]]`). This satisfies the mypy-django plugin and prevents the “generic get type parameter is not optional” error.

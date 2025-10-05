@@ -6,10 +6,11 @@ import json
 import logging
 from collections import deque
 from dataclasses import dataclass
-from typing import Any, Deque, Dict, List, Mapping, Optional, Sequence, Set, cast
+from typing import Any, Deque, Dict, List, Optional, Sequence, Set, cast
 from uuid import NAMESPACE_URL, uuid5
 
 from ...common.io import TranscriptParse
+from ...common.normalization import coerce_mapping, coerce_mapping_list, coerce_sequence
 from ...common.chunking import (
     ChunkSplitConfig,
     should_retry_for_json,
@@ -215,52 +216,41 @@ def _merge_entity_payload(target: Dict[str, Any], update: Dict[str, Any]) -> Non
 
         aliases_value = existing.setdefault("aliases", [])
         alias_list: List[str] = []
-        if isinstance(aliases_value, list):
-            for existing_alias in cast(List[object], aliases_value):
-                if isinstance(existing_alias, str):
-                    alias_list.append(existing_alias)
+        for existing_alias in coerce_sequence(aliases_value) or []:
+            if isinstance(existing_alias, str):
+                alias_list.append(existing_alias)
         existing["aliases"] = alias_list
         alias_seen: Set[str] = set(alias_list)
-        normalized_aliases = normalized_entity.get("aliases")
-        if isinstance(normalized_aliases, list):
-            for raw_alias in cast(List[object], normalized_aliases):
-                if not isinstance(raw_alias, str):
-                    continue
-                alias = raw_alias.strip()
-                if not alias or alias in alias_seen:
-                    continue
-                alias_list.append(alias)
-                alias_seen.add(alias)
+        normalized_aliases = coerce_sequence(normalized_entity.get("aliases")) or []
+        for raw_alias in normalized_aliases:
+            if not isinstance(raw_alias, str):
+                continue
+            alias = raw_alias.strip()
+            if not alias or alias in alias_seen:
+                continue
+            alias_list.append(alias)
+            alias_seen.add(alias)
 
         mentions_value = existing.setdefault("mentions", [])
         mentions_list: List[Dict[str, Any]] = []
-        if isinstance(mentions_value, list):
-            for existing_mention in cast(List[object], mentions_value):
-                if isinstance(existing_mention, Mapping):
-                    mention_mapping = cast(Mapping[object, object], existing_mention)
-                    mention_dict: Dict[str, Any] = {
-                        str(key): value for key, value in mention_mapping.items()
-                    }
-                    mentions_list.append(mention_dict)
+        for existing_mention in coerce_sequence(mentions_value) or []:
+            mention_dict = coerce_mapping(existing_mention)
+            if not mention_dict:
+                continue
+            mentions_list.append(mention_dict)
         existing["mentions"] = mentions_list
         mention_seen: Set[str] = {
             json.dumps(mention, sort_keys=True)
             for mention in mentions_list
         }
-        normalized_mentions = normalized_entity.get("mentions")
-        if isinstance(normalized_mentions, list):
-            for raw_mention in cast(List[object], normalized_mentions):
-                if not isinstance(raw_mention, Mapping):
-                    continue
-                mention_mapping = cast(Mapping[object, object], raw_mention)
-                mention: Dict[str, Any] = {
-                    str(key): value for key, value in mention_mapping.items()
-                }
-                signature = json.dumps(mention, sort_keys=True)
-                if signature in mention_seen:
-                    continue
-                mentions_list.append(mention)
-                mention_seen.add(signature)
+        for mention in coerce_mapping_list(normalized_entity.get("mentions")):
+            if not mention:
+                continue
+            signature = json.dumps(mention, sort_keys=True)
+            if signature in mention_seen:
+                continue
+            mentions_list.append(mention)
+            mention_seen.add(signature)
 
     relations: List[Dict[str, Any]] = [
         _assign_relation_defaults(json_object_to_dict(candidate))

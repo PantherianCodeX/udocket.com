@@ -10,6 +10,7 @@ from typing import Any, Deque, Dict, List, Mapping, Optional, Sequence, Set, Tup
 from uuid import NAMESPACE_URL, uuid5
 
 from ...common.io import TranscriptParse
+from ...common.normalization import coerce_mapping_list
 from ...common.chunking import (
     ChunkSplitConfig,
     should_retry_for_json,
@@ -219,11 +220,7 @@ def generate_timeline(
             events_raw = payload.get("events")
             if not isinstance(events_raw, list):
                 continue
-            event_dicts: List[Dict[str, Any]] = []
-            for raw_item in events_raw:
-                if isinstance(raw_item, Mapping):
-                    event_dicts.append({str(key): value for key, value in raw_item.items()})
-            for event_dict in event_dicts:
+            for event_dict in coerce_mapping_list(events_raw):
                 normalized = _normalize_event(event_dict)
                 if normalized is None:
                     continue
