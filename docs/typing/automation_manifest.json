@@ -7,6 +7,12 @@
       "version": "0.1.0"
     },
     {
+      "lastRun": "2025-10-05T00:00:00Z",
+      "name": "normalize_json_object_adoption",
+      "status": "planned",
+      "version": "0.1.0"
+    },
+    {
       "lastRun": "2025-10-05T15:51:45.333494+00:00",
       "name": "bootstrap_env",
       "status": "ok",
