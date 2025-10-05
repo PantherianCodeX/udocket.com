@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+from typing import Any
+
 from celery import Celery
 
 
@@ -22,5 +24,5 @@ app.conf.worker_hijack_root_logger = False
 
 
 @app.task(bind=True)
-def ping(self):  # pragma: no cover - trivial
+def ping(self: Any) -> str:  # pragma: no cover - trivial
     return "pong"

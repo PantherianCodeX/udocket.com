@@ -286,7 +286,7 @@ def new_instruction_template() -> JSONDict:
 
 
 def snapshot_artifact_for_guardian(artifact: CaseArtifact) -> JSONDict:
-    metadata = coerce_json_object(artifact.metadata or {})
+    metadata = normalize_json_object(artifact.metadata or {})
     payload: JSONDict = {
         "id": artifact.id,
         "case_id": artifact.case_id,
@@ -342,7 +342,7 @@ def snapshot_artifact_for_guardian(artifact: CaseArtifact) -> JSONDict:
 
 
 def store_guardian_review(artifact: CaseArtifact, review: JSONDict) -> None:
-    metadata = coerce_json_object(artifact.metadata or {})
+    metadata = normalize_json_object(artifact.metadata or {})
     history = coerce_object_list(metadata.get("guardian_history"))
     history.append(dict(review))
     if len(history) > MAX_HISTORY_ENTRIES:
