@@ -15,6 +15,7 @@ from typing import Any, Callable, Dict, Iterable, Optional, Tuple
 import requests
 
 from ..audio import probe_audio_metadata
+from ..json_utils import read_json_object, write_json_object
 from ..time_utils import format_utc
 
 TARGET_SAMPLE_RATE_HZ = 16000
@@ -257,14 +258,11 @@ def _record_batch_location(
     for name in (f"{case_id}_transcription_log.json", f"{job_id}_transcription_log.json"):
         path = ops_dir / name
         try:
-            if path.exists():
-                current = json.loads(path.read_text(encoding="utf-8"))
-            else:
-                current = {}
+            current = read_json_object(path)
             if current.get("azure_transcription_url") and current["azure_transcription_url"] != location:
                 current["previous_azure_transcription_url"] = current["azure_transcription_url"]
             current.update(partial)
-            path.write_text(json.dumps(current, ensure_ascii=False, indent=2), encoding="utf-8")
+            write_json_object(path, current)
         except Exception:
             pass
     try:
