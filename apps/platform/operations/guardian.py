@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -22,6 +22,17 @@ from apps.platform.operations.llm import (
 )
 from packages.udocket_core.agents.guardian_lib import GuardianAgent, GuardianConfig, GuardianVerdict
 from packages.udocket_core.llm import LLMSettings, LLMStageAssignment, load_llm_settings
+from packages.udocket_core.json_utils import (
+    JSONObject,
+    JSONValue,
+    coerce_float,
+    coerce_int,
+    coerce_json_object,
+    coerce_json_value,
+    coerce_object_list,
+    coerce_str,
+    coerce_str_list,
+)
 
 
 MAX_CONTENT_CHARS: Final = 50000
@@ -31,7 +42,7 @@ GUARDIAN_DEFAULTS_PATH: Final = Path(__file__).resolve().parents[3] / "config" /
 
 log = logging.getLogger("udocket.guardian")
 
-JSONDict = dict[str, object]
+JSONDict = JSONObject
 CredentialsMap = dict[str, JSONDict]
 InstructionList = list[JSONDict]
 
@@ -41,94 +52,9 @@ _ENSURE_DEFAULT_LLM_CONFIGURATION = cast(
 )
 
 
-def _coerce_json_dict(value: object) -> JSONDict:
-    if isinstance(value, Mapping):
-        mapping = cast(Mapping[object, object], value)
-        result: JSONDict = {}
-        for key, val in mapping.items():
-            result[str(key)] = val
-        return result
-    return {}
-
-
 class _GuardianReviewTask(Protocol):
     def delay(self, *, artifact_id: int) -> object:
         ...
-
-
-def _coerce_instruction_list(value: object) -> InstructionList:
-    if isinstance(value, str):
-        return []
-    if not isinstance(value, Sequence):
-        return []
-    sequence = cast(Sequence[object], value)
-    result: InstructionList = []
-    for entry in sequence:
-        if isinstance(entry, Mapping):
-            mapping = cast(Mapping[object, object], entry)
-            normalized: JSONDict = {}
-            for key, val in mapping.items():
-                normalized[str(key)] = val
-            result.append(normalized)
-    return result
-
-
-def _coerce_str_iterable(value: object) -> list[str]:
-    if value is None:
-        return []
-    if isinstance(value, str):
-        normalized = value.strip()
-        return [normalized] if normalized else []
-    if isinstance(value, Iterable):
-        iterable = cast(Iterable[object], value)
-        result: list[str] = []
-        for item in iterable:
-            if item is None:
-                continue
-            item_str = str(item).strip()
-            if item_str:
-                result.append(item_str)
-        return result
-    return []
-
-
-def _coerce_float(value: object, *, default: float = 0.0) -> float:
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, str):
-        try:
-            return float(value)
-        except ValueError:
-            return default
-    return default
-
-
-def _coerce_int(value: object, *, default: int, minimum: int | None = None) -> int:
-    candidate = default
-    if isinstance(value, int):
-        candidate = value
-    elif isinstance(value, float):
-        candidate = int(value)
-    elif isinstance(value, str):
-        try:
-            candidate = int(value.strip())
-        except ValueError:
-            candidate = default
-    if minimum is not None and candidate < minimum:
-        return max(minimum, default)
-    return candidate
-
-
-def _coerce_optional_str(value: object) -> str | None:
-    if value is None:
-        return None
-    if isinstance(value, str):
-        stripped = value.strip()
-        return stripped or None
-    if isinstance(value, (int, float, uuid.UUID)):
-        text = str(value).strip()
-        return text or None
-    return None
 
 
 @dataclass(frozen=True)
@@ -156,12 +82,12 @@ def _normalize_chain(values: Iterable[str]) -> list[str]:
 def _extract_guardian_stage(stage_map: Mapping[str, object]) -> JSONDict:
     for key in ("review", "policy", "guardian", "default"):
         value = stage_map.get(key)
-        candidate = _coerce_json_dict(value)
+        candidate = coerce_json_object(value)
         if candidate:
             return candidate
     # fall back to the first dict entry
     for value in stage_map.values():
-        candidate = _coerce_json_dict(value)
+        candidate = coerce_json_object(value)
         if candidate:
             return candidate
     return {}
@@ -171,7 +97,7 @@ def _extract_guardian_stage(stage_map: Mapping[str, object]) -> JSONDict:
 def _load_guardian_defaults() -> JSONDict:
     try:
         payload = json.loads(GUARDIAN_DEFAULTS_PATH.read_text(encoding="utf-8"))
-        return _coerce_json_dict(payload)
+        return coerce_json_object(payload)
     except FileNotFoundError:
         return {}
     except json.JSONDecodeError:
@@ -180,11 +106,11 @@ def _load_guardian_defaults() -> JSONDict:
 
 def _default_instructions() -> InstructionList:
     defaults = _load_guardian_defaults()
-    return _coerce_instruction_list(defaults.get("instructions"))
+    return coerce_object_list(defaults.get("instructions"))
 
 
 def _fetch_guardian_configuration(organization_id: str) -> JSONDict:
-    return _coerce_json_dict(
+    return coerce_json_object(
         get_llm_configuration(
             organization_id=organization_id,
             config_id=None,
@@ -198,7 +124,7 @@ def _ensure_guardian_configuration(
     *,
     llm_settings: LLMSettings,
 ) -> JSONDict:
-    return _coerce_json_dict(
+    return coerce_json_object(
         _ENSURE_DEFAULT_LLM_CONFIGURATION(
             organization_id=organization_id,
             target="guardian",
@@ -222,7 +148,7 @@ def get_guardian_instructions(organization_id: str | None) -> InstructionList:
     if not settings_obj:
         return _default_instructions()
     instructions_value: object = settings_obj.instructions or []
-    normalized = _coerce_instruction_list(instructions_value)
+    normalized = coerce_object_list(instructions_value)
     return normalized or _default_instructions()
 
 
@@ -251,10 +177,12 @@ def build_guardian_context(organization_id: str | None) -> GuardianContext | Non
     if not config_payload:
         return None
 
-    stage_map_raw = _coerce_json_dict(config_payload.get("stage_map"))
+    stage_map_raw = coerce_json_object(config_payload.get("stage_map"))
     review_cfg = _extract_guardian_stage(stage_map_raw)
 
-    configured_chain = _normalize_chain(_coerce_str_iterable(config_payload.get("provider_chain")))
+    configured_chain = _normalize_chain(
+        coerce_str_list(config_payload.get("provider_chain"), unique=False)
+    )
     provider_chain = [name for name in configured_chain if llm_settings.provider(name)]
     if configured_chain and not provider_chain:
         log.warning(
@@ -266,7 +194,9 @@ def build_guardian_context(organization_id: str | None) -> GuardianContext | Non
         )
 
     if not provider_chain:
-        review_chain = _normalize_chain(_coerce_str_iterable(review_cfg.get("provider")))
+        review_chain = _normalize_chain(
+            coerce_str_list(review_cfg.get("provider"), unique=False)
+        )
         review_filtered = [name for name in review_chain if llm_settings.provider(name)]
         if review_chain and not review_filtered:
             log.warning(
@@ -305,14 +235,14 @@ def build_guardian_context(organization_id: str | None) -> GuardianContext | Non
             extra={"organization_id": organization_id},
         )
 
-    options_raw = _coerce_json_dict(review_cfg.get("options"))
-    temperature = _coerce_float(options_raw.get("temperature"), default=0.0)
+    options_raw = coerce_json_object(review_cfg.get("options"))
+    temperature = coerce_float(options_raw.get("temperature"), default=0.0) or 0.0
 
-    max_tokens_value = _coerce_int(review_cfg.get("max_tokens"), default=2048, minimum=1)
+    max_tokens_value = coerce_int(review_cfg.get("max_tokens"), default=2048, minimum=1) or 2048
 
     guardian_config = GuardianConfig(
         provider_chain=list(provider_chain),
-        model=_coerce_optional_str(review_cfg.get("model")),
+        model=coerce_str(review_cfg.get("model")),
         temperature=temperature,
         max_tokens=max_tokens_value,
     )
@@ -321,7 +251,7 @@ def build_guardian_context(organization_id: str | None) -> GuardianContext | Non
 
     credentials: CredentialsMap = {}
     for provider in guardian_config.provider_chain:
-        secret = _coerce_json_dict(
+        secret = coerce_json_object(
             get_provider_secret_with_metadata(organization_id, provider)
         )
         if secret:
@@ -332,8 +262,8 @@ def build_guardian_context(organization_id: str | None) -> GuardianContext | Non
     return GuardianContext(
         agent=agent,
         credentials=credentials,
-        configuration_id=_coerce_optional_str(config_payload.get("id")),
-        configuration_name=_coerce_optional_str(config_payload.get("name")),
+        configuration_id=coerce_str(config_payload.get("id")),
+        configuration_name=coerce_str(config_payload.get("name")),
         provider_chain=list(guardian_config.provider_chain),
         model=guardian_config.model,
         max_tokens=guardian_config.max_tokens,
@@ -353,7 +283,7 @@ def new_instruction_template() -> JSONDict:
 
 
 def snapshot_artifact_for_guardian(artifact: CaseArtifact) -> JSONDict:
-    metadata = _coerce_json_dict(artifact.metadata or {})
+    metadata = coerce_json_object(artifact.metadata or {})
     payload: JSONDict = {
         "id": artifact.id,
         "case_id": artifact.case_id,
@@ -401,14 +331,15 @@ def snapshot_artifact_for_guardian(artifact: CaseArtifact) -> JSONDict:
 
 
 def store_guardian_review(artifact: CaseArtifact, review: JSONDict) -> None:
-    metadata = _coerce_json_dict(artifact.metadata or {})
-    history = _coerce_instruction_list(metadata.get("guardian_history"))
+    metadata = coerce_json_object(artifact.metadata or {})
+    history = coerce_object_list(metadata.get("guardian_history"))
     history.append(dict(review))
     if len(history) > MAX_HISTORY_ENTRIES:
         history = history[-MAX_HISTORY_ENTRIES:]
-    metadata["guardian_history"] = history
+    history_payload = [dict(entry) for entry in history]
+    metadata["guardian_history"] = cast(list[JSONValue], history_payload)
     metadata["guardian_status"] = review.get("status")
-    metadata["guardian_last_review"] = review
+    metadata["guardian_last_review"] = cast(JSONValue, dict(review))
     CaseArtifact.objects.filter(pk=artifact.pk).update(metadata=metadata)
     artifact.metadata = metadata
 
@@ -427,13 +358,13 @@ def build_guardian_review_record(
         "provider": verdict.provider,
         "model": verdict.model,
         "notes": verdict.notes,
-        "violations": verdict.violations,
-        "usage": verdict.usage,
+        "violations": coerce_json_value(verdict.violations),
+        "usage": coerce_json_object(verdict.usage),
         "configuration_id": context.configuration_id,
         "configuration_name": context.configuration_name,
         "artifact_id": artifact.id,
         "artifact_type": artifact.type,
-        "remediation": verdict.remediation,
+        "remediation": coerce_json_value(verdict.remediation),
     }
     if extra:
         record.update(extra)

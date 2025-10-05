@@ -50,6 +50,18 @@ def coerce_json_array(value: object) -> JSONArray:
     return []
 
 
+def coerce_object_list(value: object) -> list[JSONObject]:
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        sequence_value = cast(Sequence[object], value)
+        result: list[JSONObject] = []
+        for item in sequence_value:
+            if isinstance(item, Mapping):
+                mapping_item = cast(Mapping[object, object], item)
+                result.append(coerce_json_object(mapping_item))
+        return result
+    return []
+
+
 def coerce_str(value: object) -> str | None:
     if value is None:
         return None
@@ -171,6 +183,7 @@ __all__ = [
     "coerce_json_object",
     "ensure_json_object",
     "coerce_json_array",
+    "coerce_object_list",
     "coerce_str",
     "coerce_str_list",
     "coerce_int",

@@ -20,6 +20,7 @@ from packages.udocket_core.llm.runtime import (
     build_chat_client,
     build_provider_runtime_config,
 )
+from packages.udocket_core.json_utils import coerce_float, coerce_int
 
 try:
     from packages.udocket_core.agents.analyze_lib import (
@@ -194,36 +195,6 @@ def _model_options_dict(
     if isinstance(options_value, Mapping):
         return _as_json_dict(cast(TypingMapping[Any, Any], options_value))
     return {}
-
-
-def _coerce_int(value: object) -> int | None:
-    if value in (None, ""):
-        return None
-    if isinstance(value, bool):
-        return int(value)
-    if isinstance(value, (int, float)):
-        return int(value)
-    if isinstance(value, str):
-        try:
-            return int(float(value.strip()))
-        except ValueError:
-            return None
-    return None
-
-
-def _coerce_float(value: object) -> float | None:
-    if value in (None, ""):
-        return None
-    if isinstance(value, bool):
-        return float(int(value))
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, str):
-        try:
-            return float(value.strip())
-        except ValueError:
-            return None
-    return None
 
 
 def _is_truthy_flag(value: object) -> bool:
@@ -500,14 +471,14 @@ def _catalog_models_to_options(
     for model_name, model_meta in models.items():
         label_raw = _model_attr(model_meta, "label")
         cost_tier_raw = _model_attr(model_meta, "cost_tier")
-        max_output = _coerce_int(_model_attr(model_meta, "max_output_tokens"))
-        context_window = _coerce_int(_model_attr(model_meta, "context_window_tokens"))
-        max_input_tokens = _coerce_int(_model_attr(model_meta, "max_input_tokens"))
-        max_chunk_chars = _coerce_int(_model_attr(model_meta, "max_chunk_chars"))
-        chunk_overlap_tokens = _coerce_int(_model_attr(model_meta, "chunk_overlap_tokens"))
-        max_prompt_chars = _coerce_int(_model_attr(model_meta, "max_prompt_chars"))
-        max_prompt_segments = _coerce_int(_model_attr(model_meta, "max_prompt_segments"))
-        default_temp = _coerce_float(_model_attr(model_meta, "default_temperature"))
+        max_output = coerce_int(_model_attr(model_meta, "max_output_tokens"))
+        context_window = coerce_int(_model_attr(model_meta, "context_window_tokens"))
+        max_input_tokens = coerce_int(_model_attr(model_meta, "max_input_tokens"))
+        max_chunk_chars = coerce_int(_model_attr(model_meta, "max_chunk_chars"))
+        chunk_overlap_tokens = coerce_int(_model_attr(model_meta, "chunk_overlap_tokens"))
+        max_prompt_chars = coerce_int(_model_attr(model_meta, "max_prompt_chars"))
+        max_prompt_segments = coerce_int(_model_attr(model_meta, "max_prompt_segments"))
+        default_temp = coerce_float(_model_attr(model_meta, "default_temperature"))
         origin_raw = _model_attr(model_meta, "origin")
         deployment_env_raw = _model_attr(model_meta, "deployment_env")
         default_enabled_raw = _model_attr(model_meta, "default_enabled")
@@ -588,35 +559,35 @@ def _credential_models_to_options(
             "options": options_dict,
         }
 
-        max_output_tokens = _coerce_int(item.get("max_output_tokens"))
+        max_output_tokens = coerce_int(item.get("max_output_tokens"))
         if max_output_tokens is not None:
             entry["max_output_tokens"] = max_output_tokens
 
-        context_window_tokens = _coerce_int(item.get("context_window_tokens"))
+        context_window_tokens = coerce_int(item.get("context_window_tokens"))
         if context_window_tokens is not None:
             entry["context_window_tokens"] = context_window_tokens
 
-        max_input_tokens = _coerce_int(item.get("max_input_tokens"))
+        max_input_tokens = coerce_int(item.get("max_input_tokens"))
         if max_input_tokens is not None:
             entry["max_input_tokens"] = max_input_tokens
 
-        max_chunk_chars = _coerce_int(item.get("max_chunk_chars"))
+        max_chunk_chars = coerce_int(item.get("max_chunk_chars"))
         if max_chunk_chars is not None:
             entry["max_chunk_chars"] = max_chunk_chars
 
-        chunk_overlap_tokens = _coerce_int(item.get("chunk_overlap_tokens"))
+        chunk_overlap_tokens = coerce_int(item.get("chunk_overlap_tokens"))
         if chunk_overlap_tokens is not None:
             entry["chunk_overlap_tokens"] = chunk_overlap_tokens
 
-        max_prompt_chars = _coerce_int(item.get("max_prompt_chars"))
+        max_prompt_chars = coerce_int(item.get("max_prompt_chars"))
         if max_prompt_chars is not None:
             entry["max_prompt_chars"] = max_prompt_chars
 
-        max_prompt_segments = _coerce_int(item.get("max_prompt_segments"))
+        max_prompt_segments = coerce_int(item.get("max_prompt_segments"))
         if max_prompt_segments is not None:
             entry["max_prompt_segments"] = max_prompt_segments
 
-        default_temp = _coerce_float(item.get("default_temperature"))
+        default_temp = coerce_float(item.get("default_temperature"))
         if default_temp is not None:
             entry["default_temperature"] = default_temp
 
@@ -986,35 +957,35 @@ def _normalize_models(
             "cost_tier": cost_tier,
         }
 
-        max_output_tokens = _coerce_int(item.get("max_output_tokens"))
+        max_output_tokens = coerce_int(item.get("max_output_tokens"))
         if max_output_tokens is not None:
             payload["max_output_tokens"] = max_output_tokens
 
-        context_window_tokens = _coerce_int(item.get("context_window_tokens"))
+        context_window_tokens = coerce_int(item.get("context_window_tokens"))
         if context_window_tokens is not None:
             payload["context_window_tokens"] = context_window_tokens
 
-        max_input_tokens = _coerce_int(item.get("max_input_tokens"))
+        max_input_tokens = coerce_int(item.get("max_input_tokens"))
         if max_input_tokens is not None:
             payload["max_input_tokens"] = max_input_tokens
 
-        max_chunk_chars = _coerce_int(item.get("max_chunk_chars"))
+        max_chunk_chars = coerce_int(item.get("max_chunk_chars"))
         if max_chunk_chars is not None:
             payload["max_chunk_chars"] = max_chunk_chars
 
-        chunk_overlap_tokens = _coerce_int(item.get("chunk_overlap_tokens"))
+        chunk_overlap_tokens = coerce_int(item.get("chunk_overlap_tokens"))
         if chunk_overlap_tokens is not None:
             payload["chunk_overlap_tokens"] = chunk_overlap_tokens
 
-        max_prompt_chars = _coerce_int(item.get("max_prompt_chars"))
+        max_prompt_chars = coerce_int(item.get("max_prompt_chars"))
         if max_prompt_chars is not None:
             payload["max_prompt_chars"] = max_prompt_chars
 
-        max_prompt_segments = _coerce_int(item.get("max_prompt_segments"))
+        max_prompt_segments = coerce_int(item.get("max_prompt_segments"))
         if max_prompt_segments is not None:
             payload["max_prompt_segments"] = max_prompt_segments
 
-        default_temperature = _coerce_float(item.get("default_temperature"))
+        default_temperature = coerce_float(item.get("default_temperature"))
         if default_temperature is not None:
             payload["default_temperature"] = default_temperature
 
