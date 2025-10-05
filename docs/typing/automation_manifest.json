@@ -13,7 +13,7 @@
       "version": "0.1.0"
     },
     {
-      "lastRun": "2025-10-05T01:07:16.551582+00:00",
+      "lastRun": "2025-10-05T01:12:14.502402+00:00",
       "name": "manager_codemod",
       "status": "ok",
       "version": "0.1.0"
@@ -21,6 +21,23 @@
   ],
   "notes": [],
   "pyrightStats": null,
-  "recordedAt": "2025-10-05T00:53:57.885184+00:00",
-  "strictModules": []
+  "recordedAt": "2025-10-05T01:38:29.453711+00:00",
+  "strictModules": [
+    {
+      "path": "apps/platform/accounts/models.py",
+      "verifiedAt": "2025-10-05T01:15:32.314640+00:00"
+    },
+    {
+      "path": "apps/platform/authorization/models.py",
+      "verifiedAt": "2025-10-05T01:15:32.314640+00:00"
+    },
+    {
+      "path": "apps/platform/operations/models.py",
+      "verifiedAt": "2025-10-05T01:15:32.314640+00:00"
+    },
+    {
+      "path": "apps/platform/operations/consumers.py",
+      "verifiedAt": "2025-10-05T01:38:29.453711+00:00"
+    }
+  ]
 }

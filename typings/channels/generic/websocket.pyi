@@ -1,0 +1,19 @@
+from __future__ import annotations
+
+from typing import Mapping, MutableMapping
+
+from channels.layers import ChannelLayerProtocol
+
+class AsyncWebsocketConsumer:
+    channel_name: str
+    scope: MutableMapping[str, object]
+    channel_layer: ChannelLayerProtocol | None
+
+    async def accept(self, subprotocol: str | None = ...) -> None: ...
+    async def close(self, code: int | None = ... , reason: str | None = ...) -> None: ...
+    async def disconnect(self, code: int) -> None: ...
+    async def send(self, text_data: str | None = ..., bytes_data: bytes | None = ...) -> None: ...
+
+class AsyncJsonWebsocketConsumer(AsyncWebsocketConsumer):
+    async def receive_json(self, content: Mapping[str, object], **kwargs: object) -> None: ...
+    async def send_json(self, content: Mapping[str, object], close: bool = ...) -> None: ...

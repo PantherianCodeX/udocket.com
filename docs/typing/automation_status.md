@@ -1,6 +1,6 @@
 # Typing Automation Status
 
-Last updated: 2025-10-05T00:53:57.885184+00:00
+Last updated: 2025-10-05T01:38:29.453711+00:00
 
 ## Pyright Snapshot
 
@@ -14,8 +14,11 @@ _No pyright output recorded._
 | --- | --- | --- | --- |
 | annotate_fixtures | 0.1.0 | noop | 2025-10-05T00:48:27.852541+00:00 |
 | check_stubs | 0.1.0 | ok | 2025-10-05T00:50:48.275330+00:00 |
-| manager_codemod | 0.1.0 | ok | 2025-10-05T01:07:16.551582+00:00 |
+| manager_codemod | 0.1.0 | ok | 2025-10-05T01:12:14.502402+00:00 |
 
 ## Strict Modules
 
-_No modules recorded._
+- `apps/platform/accounts/models.py` (verified 2025-10-05T01:15:32.314640+00:00)
+- `apps/platform/authorization/models.py` (verified 2025-10-05T01:15:32.314640+00:00)
+- `apps/platform/operations/models.py` (verified 2025-10-05T01:15:32.314640+00:00)
+- `apps/platform/operations/consumers.py` (verified 2025-10-05T01:38:29.453711+00:00)
