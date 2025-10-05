@@ -11,14 +11,14 @@ from apps.platform.operations.models import AuditEvent
 
 
 def emit(
-    request: HttpRequest,
+    request: HttpRequest | None,
     *,
     case_id: str | None,
     event: str,
     data: Mapping[str, object] | None = None,
 ) -> None:
     try:
-        user = getattr(request, "user", None)
+        user = getattr(request, "user", None) if request is not None else None
         actor = (
             getattr(user, "username", None)
             or getattr(user, "email", None)

@@ -64,6 +64,43 @@ def _emit_job_update(
         pass
 
 
+def safe_job_meta(
+    case_id: str,
+    organization_id: str | None,
+    job_id: str,
+    updates: Mapping[str, object] | None,
+) -> None:
+    """Public wrapper around ``_safe_job_meta`` for external modules."""
+
+    _safe_job_meta(case_id, organization_id, job_id, updates)
+
+
+def safe_job_log(
+    case_id: str,
+    organization_id: str | None,
+    job_id: str,
+    message: str,
+    *,
+    level: str = "INFO",
+) -> None:
+    """Public wrapper around ``_safe_job_log`` for external modules."""
+
+    _safe_job_log(case_id, organization_id, job_id, message, level=level)
+
+
+def emit_job_update(
+    job_id: str,
+    *,
+    case_id: str,
+    event: str,
+    status: str | None = None,
+    payload: Mapping[str, object] | None = None,
+) -> None:
+    """Public wrapper around ``_emit_job_update`` for external modules."""
+
+    _emit_job_update(job_id, case_id=case_id, event=event, status=status, payload=payload)
+
+
 def _resolve_status(payload: dict[str, object], fallback: str | None) -> str | None:
     raw_status = payload.pop("status", None)
     if isinstance(raw_status, str):
@@ -404,7 +441,7 @@ class JobRuntimeContext:
 
 __all__ = [
     "JobRuntimeContext",
-    "_safe_job_meta",
-    "_safe_job_log",
-    "_emit_job_update",
+    "safe_job_meta",
+    "safe_job_log",
+    "emit_job_update",
 ]
