@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import logging
 import os
 from collections.abc import Callable, Mapping, Sequence
@@ -14,6 +13,7 @@ from .common import parse_transcript, TranscriptParse
 from .common.io import TranscriptSegment
 from .langgraph_orchestrator import build_analyze_graph, enable_langgraph_debug_logging
 from .analyze.utils import FinalizedOutputs, AnalyzePipeline
+from ..json_utils import read_json_object
 from ..llm import LLMSettings, load_llm_settings
 from ..llm.runtime import (
     ChatClient,
@@ -105,10 +105,7 @@ def _normalize_providers(values: Sequence[str]) -> list[str]:
 
 @lru_cache(maxsize=1)
 def load_analyze_defaults() -> dict[str, object]:
-    try:
-        payload = json.loads(ANALYZE_DEFAULTS_PATH.read_text(encoding="utf-8"))
-    except (FileNotFoundError, json.JSONDecodeError):
-        return {}
+    payload = read_json_object(ANALYZE_DEFAULTS_PATH)
     return _coerce_object_dict(payload)
 
 
