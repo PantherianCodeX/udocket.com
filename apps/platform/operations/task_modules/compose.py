@@ -1,5 +1,3 @@
-# pyright: strict
-
 from __future__ import annotations
 
 from celery import TaskProtocol, shared_task

@@ -56,6 +56,10 @@
       "verifiedAt": "2025-10-05T01:44:10.645472+00:00"
     },
     {
+      "path": "apps/platform/operations",
+      "verifiedAt": "2025-10-05T09:59:21.344981+00:00"
+    },
+    {
       "path": "apps/platform/operations/audit.py",
       "verifiedAt": "2025-10-05T02:35:51.158148+00:00"
     },
@@ -90,26 +94,6 @@
     {
       "path": "apps/platform/operations/storage.py",
       "verifiedAt": "2025-10-05T02:30:08.369351+00:00"
-    },
-    {
-      "path": "apps/platform/operations/task_modules/analyze.py",
-      "verifiedAt": "2025-10-05T09:52:17.627043+00:00"
-    },
-    {
-      "path": "apps/platform/operations/task_modules/compose.py",
-      "verifiedAt": "2025-10-05T09:52:17.627043+00:00"
-    },
-    {
-      "path": "apps/platform/operations/task_modules/guardian.py",
-      "verifiedAt": "2025-10-05T09:52:17.627043+00:00"
-    },
-    {
-      "path": "apps/platform/operations/task_modules/transcribe.py",
-      "verifiedAt": "2025-10-05T09:52:17.627043+00:00"
-    },
-    {
-      "path": "apps/platform/operations/tasks.py",
-      "verifiedAt": "2025-10-05T09:52:17.627043+00:00"
     },
     {
       "path": "apps/platform/operations/utils.py",
