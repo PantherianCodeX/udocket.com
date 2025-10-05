@@ -14,7 +14,12 @@ try:  # pragma: no cover - optional dependency guard
 except Exception:  # pragma: no cover
     requests = None  # type: ignore[assignment]
 
-from .io import JSONObject, JSONValue
+from packages.udocket_core.json_utils import (
+    JSONObject,
+    JSONValue,
+    coerce_json_value,
+    ensure_json_object,
+)
 CANADIAN_REGIONS = {"canadacentral", "canadaeast"}
 
 
@@ -54,6 +59,13 @@ def _is_json_structure(value: object) -> bool:
         isinstance(value, Sequence)
         and not isinstance(value, (str, bytes, bytearray))
     )
+
+
+def _require_json_object(value: object, *, context: str) -> JSONObject:
+    try:
+        return ensure_json_object(value, context=context)
+    except ValueError as exc:  # pragma: no cover - network failure path
+        raise RuntimeError(f"Azure OpenAI returned a non-object payload for {context}") from exc
 
 
 def _content_from_tool_calls(tool_calls: object) -> str:
@@ -186,28 +198,6 @@ def _content_from_delta(delta_payload: object) -> str:
     return ""
 
 
-def _coerce_json_value(value: object) -> JSONValue:
-    if isinstance(value, (str, int, float, bool)) or value is None:
-        return value
-    if isinstance(value, Mapping):
-        mapping_value = cast(Mapping[str, object], value)
-        return {str(key): _coerce_json_value(val) for key, val in mapping_value.items()}
-    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
-        sequence_value = cast(Sequence[object], value)
-        return [_coerce_json_value(item) for item in sequence_value]
-    return str(value)
-
-
-def _ensure_json_object(value: object, *, context: str) -> JSONObject:
-    if not isinstance(value, Mapping):
-        raise RuntimeError(f"Azure OpenAI returned a non-object payload for {context}")
-    mapping_value = cast(Mapping[str, object], value)
-    result: JSONObject = {}
-    for key, val in mapping_value.items():
-        result[str(key)] = _coerce_json_value(val)
-    return result
-
-
 @dataclass
 class AzureClientConfig:
     endpoint: str
@@ -274,7 +264,7 @@ class AzureChatClient:
             + f"/openai/deployments/{self.config.deployment}/chat/completions"
         )
         params = {"api-version": self.config.api_version}
-        message_payloads = [_coerce_json_value(message) for message in messages]
+        message_payloads = [coerce_json_value(message) for message in messages]
         payload: JSONObject = {
             "messages": message_payloads,
             "temperature": temperature,
@@ -375,7 +365,7 @@ class AzureChatClient:
             )
 
         try:
-            data = _ensure_json_object(response.json(), context="chat response")
+            data = _require_json_object(response.json(), context="chat response")
         except ValueError as exc:
             preview = (response_text or "")[:500]
             preview_single_line = preview.replace("\n", "\\n").replace("\r", "\\r")
@@ -411,7 +401,7 @@ class AzureChatClient:
         choice0 = choices[0]
         message_value = choice0.get("message")
         if isinstance(message_value, Mapping):
-            message = _ensure_json_object(message_value, context="chat message")
+            message = _require_json_object(message_value, context="chat message")
         else:
             message = {}
 
@@ -482,7 +472,7 @@ class AzureChatClient:
 
         usage_value = data.get("usage")
         if isinstance(usage_value, Mapping):
-            usage = _ensure_json_object(usage_value, context="usage metadata")
+            usage = _require_json_object(usage_value, context="usage metadata")
         else:
             usage = {}
 

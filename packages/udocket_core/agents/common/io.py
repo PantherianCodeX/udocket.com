@@ -6,12 +6,9 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping, TypeAlias
+from typing import Mapping
 
-JSONPrimitive: TypeAlias = int | float | bool | str | None
-JSONValue: TypeAlias = JSONPrimitive | dict[str, "JSONValue"] | list["JSONValue"]
-JSONObject: TypeAlias = dict[str, JSONValue]
-JSONArray: TypeAlias = list[JSONValue]
+from packages.udocket_core.json_utils import JSONObject, JSONValue
 
 
 @dataclass
