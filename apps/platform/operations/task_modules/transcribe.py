@@ -68,7 +68,7 @@ def _unique_conversion_title(
                 title_candidate = title_val.strip()
                 if title_candidate:
                     existing.add(title_candidate)
-    return unique_title("Conversion", existing)
+    return cast(str, unique_title("Conversion", existing))
 
 
 @shared_task(bind=True)
@@ -635,10 +635,10 @@ def transcribe_job(
                 )
 
             def _cancel_check() -> bool:
-                return Job.typed_objects().filter(
+                return bool(Job.typed_objects().filter(
                     pk=job_id,
                     status__in=(Job.Status.CANCELLING, Job.Status.CANCELLED),
-                ).exists()
+                ).exists())
 
             try:
                 _progress_cb(0.0)

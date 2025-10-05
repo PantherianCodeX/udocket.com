@@ -3,5 +3,6 @@
 
 from .decorators import action
 from . import viewsets
+from . import serializers
 
-__all__ = ["action", "viewsets"]
+__all__ = ["action", "viewsets", "serializers"]
