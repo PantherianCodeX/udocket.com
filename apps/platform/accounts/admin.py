@@ -10,7 +10,8 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from django.db.models import QuerySet
 from django.forms.models import BaseInlineFormSet, ModelChoiceField
-from django.http import HttpRequest, HttpResponseRedirect
+from django.http import HttpRequest
+from django.http.response import HttpResponseRedirect
 from django.shortcuts import redirect
 from django.urls import URLPattern, URLResolver, path, reverse
 from django.utils.translation import gettext_lazy as _
@@ -34,12 +35,12 @@ if TYPE_CHECKING:
     from django.contrib.admin import TabularInline as _TabularInline
     from django.contrib.auth.admin import UserAdmin as _UserAdmin
 
-    OrganizationMembershipInlineBase = _TabularInline[OrganizationMembership, User]
-    OrganizationMembershipUserInlineBase = _TabularInline[OrganizationMembership, Organization]
-    CaseMembershipInlineBase = _TabularInline[CaseMembership, User]
-    UserAdminBase = _UserAdmin[User]
-    OrganizationAdminBase = _ModelAdmin[Organization]
-    OrganizationMembershipAdminBase = _ModelAdmin[OrganizationMembership]
+    OrganizationMembershipInlineBase = _TabularInline
+    OrganizationMembershipUserInlineBase = _TabularInline
+    CaseMembershipInlineBase = _TabularInline
+    UserAdminBase = _UserAdmin
+    OrganizationAdminBase = _ModelAdmin
+    OrganizationMembershipAdminBase = _ModelAdmin
 else:
     OrganizationMembershipInlineBase = admin.TabularInline
     OrganizationMembershipUserInlineBase = admin.TabularInline
@@ -122,25 +123,34 @@ class UserAdmin(UserAdminBase):
         if obj is None:
             base_form: type[forms.ModelForm[User]] = self.add_form
 
-            class RequestScopedUserCreationForm(base_form):
-                def __init__(self, *args: Any, **inner_kwargs: Any) -> None:
-                    super().__init__(*args, **inner_kwargs)
-                    raw_user = request.user
-                    if isinstance(raw_user, User):
-                        user_instance = raw_user
-                    else:
-                        user_instance = None
-                    if user_instance is not None:
-                        org_qs = user_accessible_organizations(user_instance)
-                        if not _is_user_superuser(user_instance):
-                            field = self.fields.get("organization")
-                            if isinstance(field, ModelChoiceField):
-                                field.queryset = org_qs
-                    active_org_id = get_active_admin_org_id(request)
-                    if active_org_id and "organization" in self.fields:
-                        self.fields["organization"].initial = active_org_id
+            def _init(
+                self: forms.ModelForm[User],
+                *args: Any,
+                **inner_kwargs: Any,
+            ) -> None:
+                base_form.__init__(self, *args, **inner_kwargs)
+                raw_user = request.user
+                user_instance = raw_user if isinstance(raw_user, User) else None
+                if user_instance is not None:
+                    org_qs = user_accessible_organizations(user_instance)
+                    if not _is_user_superuser(user_instance):
+                        field = self.fields.get("organization")
+                        if isinstance(field, ModelChoiceField):
+                            field.queryset = org_qs
+                active_org_id = get_active_admin_org_id(request)
+                if active_org_id and "organization" in self.fields:
+                    self.fields["organization"].initial = active_org_id
 
-            kwargs["form"] = RequestScopedUserCreationForm
+            request_scoped_form = cast(
+                type[forms.ModelForm[User]],
+                type(
+                    "RequestScopedUserCreationForm",
+                    (base_form,),
+                    {"__init__": _init},
+                ),
+            )
+
+            kwargs["form"] = request_scoped_form
         else:
             kwargs["form"] = kwargs.get("form", self.form)
         return super().get_form(request, obj, change=change, **kwargs)
@@ -235,17 +245,29 @@ class OrganizationMembershipAdmin(OrganizationMembershipAdminBase):
         if not isinstance(raw_user, User) or _is_user_superuser(raw_user):
             return base_form
 
-        class RequestScopedMembershipForm(base_form):
-            def __init__(self, *args: Any, **inner_kwargs: Any) -> None:
-                super().__init__(*args, **inner_kwargs)
-                field = self.fields.get("organization")
-                if isinstance(field, ModelChoiceField):
-                    field.queryset = user_accessible_organizations(raw_user)
+        def _init(
+            self: forms.ModelForm[OrganizationMembership],
+            *args: Any,
+            **inner_kwargs: Any,
+        ) -> None:
+            base_form.__init__(self, *args, **inner_kwargs)
+            field = self.fields.get("organization")
+            if isinstance(field, ModelChoiceField):
+                field.queryset = user_accessible_organizations(raw_user)
 
-        return RequestScopedMembershipForm
+        request_scoped_form = cast(
+            type[forms.ModelForm[OrganizationMembership]],
+            type(
+                "RequestScopedMembershipForm",
+                (base_form,),
+                {"__init__": _init},
+            ),
+        )
+
+        return request_scoped_form
 
 UrlList = list[URLResolver | URLPattern]
-_UrlGetter = Callable[[], UrlList]
+_UrlGetter = Callable[[], Iterable[URLResolver | URLPattern]]
 _EachContextCallable = Callable[[HttpRequest], dict[str, Any]]
 
 
@@ -277,7 +299,7 @@ _original_get_urls: _UrlGetter = admin.site.get_urls
 
 
 def tenant_admin_urls(self: admin.AdminSite) -> UrlList:
-    urls = _original_get_urls()
+    urls = list(_original_get_urls())
     custom: UrlList = [
         path(
             "select-organization/",
@@ -288,7 +310,7 @@ def tenant_admin_urls(self: admin.AdminSite) -> UrlList:
     return custom + urls
 
 
-admin.site.get_urls = MethodType(tenant_admin_urls, admin.site)
+setattr(admin.site, "get_urls", MethodType(tenant_admin_urls, admin.site))
 
 
 _original_each_context: _EachContextCallable = admin.site.each_context
@@ -309,4 +331,4 @@ def tenant_each_context(self: admin.AdminSite, request: HttpRequest) -> dict[str
     return ctx
 
 
-admin.site.each_context = MethodType(tenant_each_context, admin.site)
+setattr(admin.site, "each_context", MethodType(tenant_each_context, admin.site))

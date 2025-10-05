@@ -31,7 +31,6 @@ from packages.udocket_core.json_utils import (
     coerce_int,
     coerce_json_object,
     coerce_json_value,
-    coerce_object_dict,
     coerce_object_list,
     coerce_str,
     coerce_str_list,
@@ -56,6 +55,17 @@ from .models import LLMConfiguration, LLMProviderCredential
 JSONDict: TypeAlias = dict[str, JSONValue]
 
 StageMap: TypeAlias = dict[str, JSONDict]
+
+
+def _normalize_metadata(metadata: Mapping[str, object] | None) -> JSONDict:
+    raw = coerce_json_object(metadata)
+    normalized: JSONDict = {}
+    for key, value in raw.items():
+        stripped = key.strip()
+        if not stripped:
+            continue
+        normalized[stripped] = value
+    return normalized
 
 
 class ProviderModelOption(TypedDict, total=False):
@@ -664,11 +674,7 @@ def evaluate_provider_setup(
     models: Iterable[Mapping[str, object]] | None,
 ) -> JSONDict:
     issues: list[str] = []
-    metadata_dict = coerce_object_dict(
-        metadata,
-        key_transform=lambda text: text.strip(),
-        drop_empty_keys=True,
-    )
+    metadata_dict = _normalize_metadata(metadata)
     endpoint_value = (endpoint or "").strip()
     if not endpoint_value:
         endpoint_value = (provider.default_endpoint or "").strip()
@@ -1015,7 +1021,8 @@ def _normalize_models(
 
 
 def _prepare_live_model_entry(model: SanitizedModel) -> JSONDict:
-    entry: JSONDict = dict(model)
+    mapping_model = cast(Mapping[str, JSONValue], model)
+    entry: JSONDict = {key: value for key, value in mapping_model.items()}
     options_value = entry.get("options")
     options = coerce_json_object(options_value)
     deployment_env = entry.get("deployment_env")
@@ -1038,16 +1045,12 @@ def run_live_model_probe(
         raise ChatClientError("Configure an API key before running a live test")
     if not endpoint:
         endpoint = provider.default_endpoint or ""
-    metadata_dict = coerce_object_dict(
-        metadata,
-        key_transform=lambda text: text.strip(),
-        drop_empty_keys=True,
-    )
+    metadata_dict = _normalize_metadata(metadata)
     prepared = _prepare_live_model_entry(model_payload)
     model_name_value = prepared.get("name")
     model_name = str(model_name_value) if isinstance(model_name_value, str) else ""
     options_value = prepared.get("options")
-    options_payload = coerce_object_dict(options_value)
+    options_payload = coerce_json_object(options_value)
     credential_payload: dict[str, Any] = {
         "endpoint": endpoint,
         "api_key": api_key,
@@ -1158,11 +1161,7 @@ def upsert_org_provider_credential(
     models_serialized = _serialize_models_payload(models_payload)
     encrypted_key = encrypt_secret(api_key)
     enabled_value = bool(enabled) if enabled is not None else True
-    metadata_payload = coerce_object_dict(
-        metadata,
-        key_transform=lambda text: text.strip(),
-        drop_empty_keys=True,
-    )
+    metadata_payload = _normalize_metadata(metadata)
 
     record, _created = LLMProviderCredential.typed_objects().get_or_create(
         organization_id=organization_id,
@@ -1237,11 +1236,7 @@ def upsert_org_provider_credential_by_uuid(
     models_serialized = _serialize_models_payload(models_payload)
     encrypted_key = encrypt_secret(api_key)
     enabled_value = bool(enabled) if enabled is not None else True
-    metadata_payload = coerce_object_dict(
-        metadata,
-        key_transform=lambda text: text.strip(),
-        drop_empty_keys=True,
-    )
+    metadata_payload = _normalize_metadata(metadata)
     try:
         record = LLMProviderCredential.typed_objects().get(
             organization_id=organization_id,

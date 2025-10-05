@@ -49,9 +49,13 @@ class HttpRequest:
     def readlines(self) -> list[bytes]: ...
 
 
+
 class HttpResponse:
     ...
 
 
-__all__ = ["HttpRequest", "HttpHeaders", "QueryDict", "HttpResponse"]
+class HttpResponseRedirect(HttpResponse):
+    ...
 
+
+__all__ = ["HttpRequest", "HttpHeaders", "QueryDict", "HttpResponse", "HttpResponseRedirect"]
