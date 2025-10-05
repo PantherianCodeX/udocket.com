@@ -1,6 +1,6 @@
 # Typing Progress Log
 
-Last updated: 2025-10-05T15:41:06Z (UTC).
+Last updated: 2025-10-05T15:52:47Z (UTC).
 
 This log tracks the multi-wave typing rollout so work can resume from any context window. Update this file whenever a wave changes state or new blockers surface.
 
@@ -8,7 +8,7 @@ This log tracks the multi-wave typing rollout so work can resume from any contex
 
 | Wave | Focus | Status | Notes |
 | --- | --- | --- | --- |
-| Wave 0 | Environment bootstrap, pyright snapshots, automation manifest hygiene | In progress | `just` missing; `bootstrap_env.py` failed on unavailable `pytest-stubs`; captured fresh `pyright --stats` (879 errors / 1914 warnings) |
+| Wave 0 | Environment bootstrap, pyright snapshots, automation manifest hygiene | In progress | Bootstrap helper now reports `ok`; optional pytest stubs skipped with warning, latest `pyright --stats` still 879 errors / 1914 warnings |
 | Wave 1 | Shared core libs (`packages/udocket_core` JSON/time/audio/llm, storage helpers) | Planned | Define shared typing aliases module; target strict promotion per module |
 | Wave 2 | Agent orchestration (`agents/analyze`, `compose`, `guardian`, `langgraph`) | Planned | Replace ad-hoc dict payloads with frozen dataclasses/TypedDicts |
 | Wave 3 | Operations runtime/tasks/payload protocols | Planned | Introduce `apps/platform/operations/typing.py` and typed websocket payloads |
@@ -17,7 +17,7 @@ This log tracks the multi-wave typing rollout so work can resume from any contex
 
 ## Immediate Next Steps
 
-1. Resolve stub bootstrap failure (skip or replace `pytest-stubs`, or adjust helper) so Wave 0 can finish cleanly.
+1. Decide on long-term pytest typing strategy (vend local stubs vs keep optional skip) ahead of Wave 5 test cleanup.
 2. Draft shared typing alias modules (`packages/udocket_core/typing.py`, `apps/platform/typing.py`).
 3. Schedule Wave 1 strictify work, starting with `packages/udocket_core/json_utils.py` and `time_utils.py` once Wave 0 wraps.
 
@@ -31,3 +31,5 @@ This log tracks the multi-wave typing rollout so work can resume from any contex
 
 - 2025-10-05: Established five-wave rollout plan and logged focus areas.
 - 2025-10-05: Attempted bootstrap (`just typing-bootstrap` missing, `bootstrap_env.py` failed on `pytest-stubs`); recorded pyright snapshot (879 errors / 1914 warnings).
+- 2025-10-05: Updated bootstrap helper to skip missing pytest stub packages; run completes with warnings and records stub gap.
+- 2025-10-05: Re-ran bootstrap with optional skips ignored for hashing; helper now records status `ok` without reattempting missing packages.

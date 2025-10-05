@@ -10,6 +10,7 @@ Last updated: 2025-10-05.
 - **Automation state**: populate `docs/typing/automation_manifest.json` using the template and keep it in sync via `scripts/typing/sync_docs.py` so this document always reflects the latest helper runs.
 
 ### Latest Pyright Run
+- 2025-10-05T15:46Z — `pyright --stats` → 879 errors, 1914 warnings (bootstrap now skips missing `types-pytest`/`pytest-stubs`; remaining counts unchanged).
 - 2025-10-05T15:41Z — `pyright --stats` → 879 errors, 1914 warnings (bootstrap script failed to install `pytest-stubs`; run executed without refreshed stubs).
 
 ## Hotspots to Tackle Next
@@ -36,5 +37,6 @@ Last updated: 2025-10-05.
 - `tests/_typing.py` now exposes shared fixture protocols; run `scripts/typing/annotate_fixtures.py --apply` to keep pytest modules annotated automatically.
 - Operations websocket consumers now run with `# pyright: strict`, using channel-layer protocols to remove the remaining `Any` fallthroughs.
 - Guardian configuration helpers now run under `# pyright: strict`, with JSON coercion utilities to sanitise provider chains and instruction lists for Celery tasks.
+- Typing bootstrapper now treats missing pytest stub packages as optional so the helper records `ok` status without manual intervention.
 
 Keeping this document current helps the team understand where typing debt still lives and which areas should be prioritised in upcoming sprints.
