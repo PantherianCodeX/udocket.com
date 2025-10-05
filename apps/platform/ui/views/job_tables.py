@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+# pyright: strict
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional, Tuple
 

@@ -1,3 +1,4 @@
+# pyright: strict
 """Helpers for presenting case membership assignments."""
 from __future__ import annotations
 

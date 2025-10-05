@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+# pyright: strict
 import base64
 import logging
 from typing import Any, Dict

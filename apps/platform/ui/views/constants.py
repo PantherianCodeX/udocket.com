@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+# pyright: strict
 from typing import Any, Dict, Tuple
 
 STATUS_CLASS_MAP: Dict[str, str] = {

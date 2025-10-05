@@ -15,7 +15,13 @@ DEFAULT_MANIFEST = Path("docs/typing/automation_manifest.json")
 def _load_strict_paths(manifest_path: Path) -> list[str]:
     data = json.loads(manifest_path.read_text(encoding="utf-8"))
     entries = data.get("strictModules", [])
-    paths = [entry.get("path") for entry in entries if entry.get("path")]
+    paths = []
+    for entry in entries:
+        path = entry.get("path")
+        verified_at = entry.get("verifiedAt")
+        if not path or not verified_at:
+            continue
+        paths.append(path)
     unique = sorted(dict.fromkeys(paths))
     return unique
 
@@ -56,9 +62,21 @@ def main() -> int:
         print("No strict modules recorded in manifest.")
         return 0
 
-    command = ["pyright", *paths, *args.pyright_args]
-    result = subprocess.run(command, check=False)
-    return result.returncode
+    exit_code = 0
+    for path in paths:
+        pyright_cmd = ["pyright", path, *args.pyright_args]
+        print(f"→ pyright {path}")
+        result = subprocess.run(pyright_cmd, check=False)
+        if result.returncode != 0:
+            exit_code = result.returncode
+
+        mypy_cmd = [sys.executable, "-m", "mypy", path]
+        print(f"→ mypy {path}")
+        result = subprocess.run(mypy_cmd, check=False)
+        if result.returncode != 0:
+            exit_code = result.returncode
+
+    return exit_code
 
 
 if __name__ == "__main__":

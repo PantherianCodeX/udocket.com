@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+# pyright: strict
 from typing import List, Optional
 
 from django.db.utils import IntegrityError

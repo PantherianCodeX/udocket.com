@@ -1,3 +1,4 @@
+# pyright: strict
 """Case tool panel presenter helpers."""
 from __future__ import annotations
 

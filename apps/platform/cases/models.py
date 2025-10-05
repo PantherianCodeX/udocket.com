@@ -17,7 +17,7 @@ class CaseQuerySet(models.QuerySet["Case"]):
     def for_user(self, user: Any) -> "CaseQuerySet":
         from apps.platform import tenancy
 
-        return cast("CaseQuerySet", tenancy.scope_cases(self, user))
+        return tenancy.scope_cases(self, user)
 
 
 class CaseManager(models.Manager["Case"]):
@@ -28,9 +28,14 @@ class CaseManager(models.Manager["Case"]):
         return self.get_queryset().for_user(user)
 
 class Case(models.Model):
+    objects = CaseManager()
+
     @classmethod
     def typed_objects(cls) -> CaseManager:
-        return cast(CaseManager, cls.objects)
+        manager = cls.objects
+        if not isinstance(manager, CaseManager):  # pragma: no cover - defensive
+            raise TypeError("Case.objects is not a CaseManager")
+        return manager
 
     class ClientPosition(models.TextChoices):
         PLAINTIFF = "PLAINTIFF", "Plaintiff"

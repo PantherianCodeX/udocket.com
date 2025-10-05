@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+# pyright: strict
 import json
 from typing import Any, Dict, Optional, cast
 from uuid import UUID

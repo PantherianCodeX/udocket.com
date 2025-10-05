@@ -1,3 +1,4 @@
+# pyright: strict
 from django.apps import AppConfig
 
 

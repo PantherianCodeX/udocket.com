@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+# pyright: strict
 from collections import Counter
 from typing import Any, Dict, List
 

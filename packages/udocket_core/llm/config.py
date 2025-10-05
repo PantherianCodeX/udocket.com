@@ -24,6 +24,20 @@ PROVIDERS_PATH = BASE_DIR / "config" / "llm_providers.json"
 ASSIGNMENTS_PATH = BASE_DIR / "config" / "llm_assignments.json"
 
 
+def _empty_json_mapping() -> dict[str, JSONValue]:
+    """Return an empty JSON object with a precise type for default factories."""
+
+    return {}
+
+
+def _empty_str_list() -> list[str]:
+    return []
+
+
+def _empty_str_dict() -> dict[str, str]:
+    return {}
+
+
 @dataclass(frozen=True)
 class LLMProviderModel:
     name: str
@@ -40,7 +54,7 @@ class LLMProviderModel:
     deployment_env: Optional[str] = None
     origin: Optional[str] = None
     default_enabled: bool = True
-    options: dict[str, JSONValue] = field(default_factory=dict)
+    options: dict[str, JSONValue] = field(default_factory=_empty_json_mapping)
 
 
 @dataclass(frozen=True)
@@ -48,13 +62,13 @@ class LLMProvider:
     name: str
     display_name: str
     models: dict[str, LLMProviderModel]
-    env_requirements: list[str] = field(default_factory=list)
+    env_requirements: list[str] = field(default_factory=_empty_str_list)
     api_kind: str = "openai"
     default_endpoint: str = ""
     requires_api_key: bool = True
     description: str = ""
     category: str = "creator"
-    hosted_creators: list[str] = field(default_factory=list)
+    hosted_creators: list[str] = field(default_factory=_empty_str_list)
 
     def is_available(self) -> bool:
         return all(os.getenv(key) for key in self.env_requirements)
@@ -65,7 +79,7 @@ class LLMStageAssignment:
     stage_key: str
     providers: list[str]
     model: str
-    options: dict[str, str] = field(default_factory=dict)
+    options: dict[str, str] = field(default_factory=_empty_str_dict)
     target: str = ""
     label: str = ""
     description: str = ""
@@ -105,6 +119,7 @@ class LLMSettings:
             return []
         return list(self.stage_targets().get(normalized, []))
 
+
 def _load_json(path: Path) -> JSONObject:
     if not path.exists():
         return {}
@@ -125,7 +140,9 @@ def load_llm_settings(
         for model_name, model_cfg_raw in models_payload.items():
             model_cfg = coerce_json_object(model_cfg_raw)
             options_payload = coerce_json_object(model_cfg.get("options"))
-            model_options: dict[str, JSONValue] = dict(options_payload.items())
+            model_options: dict[str, JSONValue] = {
+                str(key): value for key, value in options_payload.items()
+            }
             default_enabled_value = coerce_bool(model_cfg.get("default_enabled"), default=True)
             default_enabled = True if default_enabled_value is None else default_enabled_value
             models[model_name] = LLMProviderModel(
@@ -168,7 +185,7 @@ def load_llm_settings(
     assignment_map: dict[str, LLMStageAssignment] = {}
     for stage_key, assignment_payload_raw in assignments_root.items():
         assignment_payload = coerce_json_object(assignment_payload_raw)
-        providers = coerce_str_list(assignment_payload.get("providers"))
+        providers: list[str] = coerce_str_list(assignment_payload.get("providers"))
         model = coerce_str(assignment_payload.get("model")) or ""
         options_payload = coerce_json_object(assignment_payload.get("options"))
         options: dict[str, str] = {key: str(value) for key, value in options_payload.items()}

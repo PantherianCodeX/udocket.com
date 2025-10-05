@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+# pyright: strict
 from collections import Counter
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Sequence

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+# pyright: strict
 import uuid
 from datetime import datetime
 from django.http import HttpRequest, HttpResponse

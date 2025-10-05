@@ -167,6 +167,7 @@ def coerce_int(
     minimum: int | None = None,
     maximum: int | None = None,
 ) -> int | None:
+    candidate: int | None
     if isinstance(value, bool):
         candidate = int(value)
     elif isinstance(value, int):
@@ -182,11 +183,12 @@ def coerce_int(
         candidate = default
     if candidate is None:
         return None
-    if minimum is not None and candidate < minimum:
-        candidate = minimum
-    if maximum is not None and candidate > maximum:
-        candidate = maximum
-    return candidate
+    result = candidate
+    if minimum is not None and result < minimum:
+        result = minimum
+    if maximum is not None and result > maximum:
+        result = maximum
+    return result
 
 
 def coerce_float(

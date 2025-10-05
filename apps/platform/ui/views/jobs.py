@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+# pyright: strict
 import logging
 from uuid import UUID
 from typing import Dict, Optional, cast

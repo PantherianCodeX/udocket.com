@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+# pyright: strict
 # pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false, reportAttributeAccessIssue=false
 
 from typing import Dict

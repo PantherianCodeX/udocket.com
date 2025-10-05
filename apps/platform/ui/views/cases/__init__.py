@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+# pyright: strict
 from .analysis import case_analysis_module
 from .assignments import case_assign_client, case_assign_reviewer
 from .detail import case_detail, case_tool_panel

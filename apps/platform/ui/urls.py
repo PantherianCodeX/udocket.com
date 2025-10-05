@@ -1,3 +1,4 @@
+# pyright: strict
 from django.urls import path
 from apps.platform.ui import views
 

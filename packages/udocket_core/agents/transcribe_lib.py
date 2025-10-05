@@ -411,10 +411,15 @@ def _analyze_batch_error(payload: JSONValue) -> str:
                     return "; ".join(parts)
             if isinstance(errors_val, Mapping) and errors_val:
                 code = errors_val.get("code")
-                message = errors_val.get("message") or errors_val.get("description")
+                message_val = errors_val.get("message") or errors_val.get("description")
+                message_text = (
+                    str(message_val)
+                    if isinstance(message_val, (str, int, float))
+                    else None
+                )
                 segment_parts = [
                     f"code={code}" if isinstance(code, (str, int, float)) and str(code) else None,
-                    str(message) if isinstance(message, (str, int, float)) else None,
+                    message_text,
                 ]
                 segment = " | ".join(item for item in segment_parts if item)
                 if segment:
@@ -422,10 +427,15 @@ def _analyze_batch_error(payload: JSONValue) -> str:
             error_obj = payload.get("error")
             if isinstance(error_obj, Mapping):
                 code = error_obj.get("code")
-                message = error_obj.get("message") or error_obj.get("description")
+                message_val = error_obj.get("message") or error_obj.get("description")
+                message_text = (
+                    str(message_val)
+                    if isinstance(message_val, (str, int, float))
+                    else None
+                )
                 segment_parts = [
                     f"code={code}" if isinstance(code, (str, int, float)) and str(code) else None,
-                    str(message) if isinstance(message, (str, int, float)) else None,
+                    message_text,
                 ]
                 segment = " | ".join(item for item in segment_parts if item)
                 if segment:

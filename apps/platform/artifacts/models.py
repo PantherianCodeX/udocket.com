@@ -18,7 +18,7 @@ class CaseArtifactQuerySet(models.QuerySet["CaseArtifact"]):
     def for_user(self, user: Any) -> "CaseArtifactQuerySet":
         from apps.platform import tenancy
 
-        return cast("CaseArtifactQuerySet", tenancy.scope_artifacts(self, user))
+        return tenancy.scope_artifacts(self, user)
 
 
 class CaseArtifactManager(models.Manager["CaseArtifact"]):
@@ -30,9 +30,14 @@ class CaseArtifactManager(models.Manager["CaseArtifact"]):
 
 
 class CaseArtifact(models.Model):
+    objects = CaseArtifactManager()
+
     @classmethod
     def typed_objects(cls) -> CaseArtifactManager:
-        return cast(CaseArtifactManager, cls.objects)
+        manager = cls.objects
+        if not isinstance(manager, CaseArtifactManager):  # pragma: no cover - defensive
+            raise TypeError("CaseArtifact.objects is not a CaseArtifactManager")
+        return manager
     """Generic artifact record; full schema to follow in Step 4."""
 
     id: models.BigAutoField[int, int] = models.BigAutoField(primary_key=True)
@@ -60,8 +65,6 @@ class CaseArtifact(models.Model):
     created_at: models.DateTimeField[datetime, datetime] = models.DateTimeField(auto_now_add=True)
     metadata: models.JSONField[dict[str, Any], dict[str, Any]] = models.JSONField(default=dict, blank=True)
     history: HistoricalRecords["CaseArtifact"] = HistoricalRecords()
-
-    objects = CaseArtifactManager()
 
     @classmethod
     def scoped(cls) -> CaseArtifactManager:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+# pyright: strict
 from typing import Any, Dict, List
 
 from django.utils import timezone

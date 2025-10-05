@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+# pyright: strict
 import re
 from typing import Any, Dict, Iterable, Mapping
 

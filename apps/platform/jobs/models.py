@@ -18,21 +18,26 @@ class JobQuerySet(models.QuerySet["Job"]):
     def for_user(self, user: Any) -> "JobQuerySet":
         from apps.platform import tenancy
 
-        return cast("JobQuerySet", tenancy.scope_jobs(self, user))
+        return tenancy.scope_jobs(self, user)
 
 
 class JobManager(models.Manager["Job"]):
     def get_queryset(self) -> JobQuerySet:
-        return cast(JobQuerySet, super().get_queryset())
+        return JobQuerySet(self.model, using=self._db)
 
     def for_user(self, user: Any) -> JobQuerySet:
         return self.get_queryset().for_user(user)
 
 
 class Job(models.Model):
+    objects = JobManager()
+
     @classmethod
     def typed_objects(cls) -> JobManager:
-        return cast(JobManager, cls.objects)
+        manager = cls.objects
+        if not isinstance(manager, JobManager):  # pragma: no cover - defensive
+            raise TypeError("Job.objects is not a JobManager")
+        return manager
     class Status(models.TextChoices):
         PENDING = "PENDING"
         RUNNING = "RUNNING"

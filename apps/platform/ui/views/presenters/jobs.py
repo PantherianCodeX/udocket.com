@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+# pyright: strict
 # pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false, reportUnknownParameterType=false
 
 from datetime import datetime

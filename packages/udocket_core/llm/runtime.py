@@ -55,16 +55,15 @@ class _RequestsProtocol(Protocol):
     ) -> _ResponseProtocol: ...
 
 
+_requests_module: _RequestsProtocol | None
 try:  # pragma: no cover - optional dependency guard
-    import requests as _requests  # type: ignore[import-not-found]
+    import requests as _imported_requests
 except Exception:  # pragma: no cover
-    _requests = None
-
-requests: _RequestsProtocol | None
-if _requests is not None:
-    requests = cast(_RequestsProtocol, _requests)
+    _requests_module = None
 else:
-    requests = None
+    _requests_module = cast(_RequestsProtocol, _imported_requests)
+
+requests: _RequestsProtocol | None = _requests_module
 
 
 class ChatClient(Protocol):
@@ -475,12 +474,16 @@ def build_chat_client(
         allow_non_ca = coerce_bool(options.get("allow_non_ca_region"))
         if allow_non_ca is None and metadata:
             allow_non_ca = coerce_bool(metadata.get("allow_non_ca_region"))
+        api_version_value = (
+            _string_option(options, "api_version")
+            or os.getenv("AZURE_OPENAI_API_VERSION", "2024-10-21")
+            or "2024-10-21"
+        )
         cfg = AzureClientConfig(
             endpoint=endpoint,
             key=api_key,
             deployment=deployment,
-            api_version=_string_option(options, "api_version")
-            or os.getenv("AZURE_OPENAI_API_VERSION", "2024-10-21"),
+            api_version=api_version_value,
             allow_non_ca_region=bool(allow_non_ca),
         )
         return _AzureChatAdapter(AzureChatClient(cfg))

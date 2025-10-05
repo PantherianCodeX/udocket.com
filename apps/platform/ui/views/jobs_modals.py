@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+# pyright: strict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, cast
 from uuid import UUID

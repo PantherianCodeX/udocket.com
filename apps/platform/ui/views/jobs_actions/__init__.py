@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+# pyright: strict
 from .artifacts import case_job_create_artifact
 from .create import create_job
 from .rows import case_job_row

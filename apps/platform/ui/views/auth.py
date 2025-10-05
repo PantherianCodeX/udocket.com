@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+# pyright: strict
 from django.conf import settings
 from django.contrib.auth import logout
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect

@@ -260,10 +260,11 @@ def _merge_outline_sections(target: JSONObject, update: Mapping[str, JSONValue])
         if not additions:
             return
         existing_value = target.get(key)
+        existing_list: list[JSONValue]
         if isinstance(existing_value, list):
-            existing_list = cast(list[JSONValue], existing_value)
+            existing_list = existing_value
         else:
-            existing_list = cast(list[JSONValue], [])
+            existing_list = []
             target[key] = existing_list
         seen = {
             json.dumps(item, sort_keys=True)
@@ -300,10 +301,11 @@ def _merge_outline_sections(target: JSONObject, update: Mapping[str, JSONValue])
         for attr_key, attr_value in payload_obj.items():
             if isinstance(attr_value, list):
                 existing_value = existing_payload.get(attr_key)
+                existing_list: list[JSONValue]
                 if isinstance(existing_value, list):
-                    existing_list = cast(list[JSONValue], existing_value)
+                    existing_list = existing_value
                 else:
-                    existing_list = cast(list[JSONValue], [])
+                    existing_list = []
                     existing_payload[attr_key] = existing_list
                 seen_aliases = {
                     json.dumps(item, sort_keys=True)

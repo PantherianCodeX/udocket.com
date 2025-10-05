@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+# pyright: strict
 from apps.platform.operations.tasks import transcribe_job
 
 from .auth import ensure_authenticated, logout_view, select_organization

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 """Shared helpers for tenant-aware filtering."""
 
-from typing import Any, Sequence
+from typing import Any, Sequence, TypeVar
 
 from django.apps import apps
 from django.conf import settings
@@ -16,6 +16,9 @@ __all__ = [
     "scope_artifacts",
     "accessible_organization_ids",
 ]
+
+
+QuerySetT = TypeVar("QuerySetT", bound=QuerySet[Any])
 
 
 def _is_dev_open() -> bool:
@@ -38,13 +41,15 @@ def case_ids_for_user(user: Any) -> Sequence[str]:
     return list(CaseMembership.objects.filter(user=user).values_list("case_id", flat=True))
 
 
-def _return_when_unauthenticated(qs: QuerySet[Any], user: Any) -> QuerySet[Any]:
+def _return_when_unauthenticated(qs: QuerySetT, user: Any) -> QuerySetT:
     if user and getattr(user, "is_authenticated", False):
         return qs
-    return qs if _is_dev_open() else qs.none()
+    if _is_dev_open():
+        return qs
+    return qs.none()
 
 
-def scope_cases(qs: QuerySet[Any], user: Any) -> QuerySet[Any]:
+def scope_cases(qs: QuerySetT, user: Any) -> QuerySetT:
     qs = _return_when_unauthenticated(qs, user)
     if not user or not getattr(user, "is_authenticated", False):
         return qs
@@ -60,7 +65,7 @@ def scope_cases(qs: QuerySet[Any], user: Any) -> QuerySet[Any]:
     return qs.filter(filters).distinct()
 
 
-def scope_jobs(qs: QuerySet[Any], user: Any) -> QuerySet[Any]:
+def scope_jobs(qs: QuerySetT, user: Any) -> QuerySetT:
     qs = _return_when_unauthenticated(qs, user)
     if not user or not getattr(user, "is_authenticated", False):
         return qs
@@ -77,7 +82,7 @@ def scope_jobs(qs: QuerySet[Any], user: Any) -> QuerySet[Any]:
     return qs.filter(filters).distinct()
 
 
-def scope_artifacts(qs: QuerySet[Any], user: Any) -> QuerySet[Any]:
+def scope_artifacts(qs: QuerySetT, user: Any) -> QuerySetT:
     qs = _return_when_unauthenticated(qs, user)
     if not user or not getattr(user, "is_authenticated", False):
         return qs

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+# pyright: strict
 # pyright: reportUnknownArgumentType=false, reportUnknownVariableType=false
 
 from typing import Any, Dict, Mapping

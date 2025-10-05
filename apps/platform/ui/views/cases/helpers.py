@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+# pyright: strict
 import json
 from typing import Dict, Iterable, Mapping, MutableMapping, Tuple
 

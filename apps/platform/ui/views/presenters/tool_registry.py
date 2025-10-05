@@ -1,3 +1,4 @@
+# pyright: strict
 """Tool panel definitions for case view presenters.
 
 This module centralizes static metadata about interactive case tools so the

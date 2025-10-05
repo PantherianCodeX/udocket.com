@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+# pyright: strict
 import os
 import subprocess
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TypedDict, cast
 
 from django.core.exceptions import PermissionDenied
 from django.http import HttpRequest
@@ -13,6 +14,35 @@ from apps.platform.accounts.utils import (
     resolve_request_organization,
     user_accessible_organizations,
 )
+
+
+class NavChild(TypedDict, total=False):
+    key: str
+    label: str
+    href: str
+    patterns: List[str]
+    active: bool
+
+
+class NavItem(TypedDict, total=False):
+    key: str
+    label: str
+    href: str
+    patterns: List[str]
+    children: List[NavChild]
+    active: bool
+
+
+def _normalize_patterns(raw: Any) -> List[str]:
+    if isinstance(raw, list):
+        patterns: List[str] = []
+        for candidate_obj in cast(List[object], raw):
+            if isinstance(candidate_obj, (str, bytes)):
+                patterns.append(str(candidate_obj))
+        return patterns
+    if isinstance(raw, (str, bytes)):
+        return [str(raw)]
+    return []
 
 
 def ui_context(request: HttpRequest) -> Dict[str, Any]:
@@ -31,7 +61,7 @@ def ui_context(request: HttpRequest) -> Dict[str, Any]:
 
     path = getattr(request, "path", "") or ""
 
-    nav_items: List[Dict[str, Any]] = [
+    nav_items: List[NavItem] = [
         {
             "key": "cases",
             "label": "Cases",
@@ -73,15 +103,20 @@ def ui_context(request: HttpRequest) -> Dict[str, Any]:
     ]
 
     for item in nav_items:
-        patterns = item.get("patterns", [])
+        patterns = _normalize_patterns(item.get("patterns"))
         active = any(re.search(pattern, path) for pattern in patterns)
         children = item.get("children") or []
+        normalized_children: List[NavChild] = []
         for child in children:
-            child_patterns = child.get("patterns", [])
+            child_patterns = _normalize_patterns(child.get("patterns"))
             child_active = any(re.search(pattern, path) for pattern in child_patterns)
+            child["patterns"] = child_patterns
             child["active"] = child_active
+            normalized_children.append(child)
             if child_active:
                 active = True
+        item["children"] = normalized_children
+        item["patterns"] = patterns
         item["active"] = active
 
     return {

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+# pyright: strict
 import re
 import shutil
 import uuid

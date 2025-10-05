@@ -7,12 +7,46 @@ import logging
 import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Optional, cast
+from typing import Any, Optional, Protocol, cast
 
+
+class _ResponseProtocol(Protocol):
+    status_code: int
+    text: str
+    headers: Mapping[str, Any] | None
+
+    def json(self) -> object: ...
+
+    def raise_for_status(self) -> None: ...
+
+
+class _RequestsExceptionsProtocol(Protocol):
+    HTTPError: type[Exception]
+
+
+class _RequestsProtocol(Protocol):
+    exceptions: _RequestsExceptionsProtocol
+
+    def post(
+        self,
+        url: str,
+        *,
+        params: Mapping[str, object] | None = None,
+        headers: Mapping[str, str] | None = None,
+        json: object | None = None,
+        timeout: int | float | None = None,
+    ) -> _ResponseProtocol: ...
+
+
+_requests_module: _RequestsProtocol | None
 try:  # pragma: no cover - optional dependency guard
-    import requests
+    import requests as _imported_requests
 except Exception:  # pragma: no cover
-    requests = None  # type: ignore[assignment]
+    _requests_module = None
+else:
+    _requests_module = cast(_RequestsProtocol, _imported_requests)
+
+requests: _RequestsProtocol | None = _requests_module
 
 from packages.udocket_core.json_utils import (
     JSONObject,
@@ -29,6 +63,12 @@ logger = logging.getLogger("udocket.azure.client")
 def _endpoint_is_canadian(endpoint: str) -> bool:
     endpoint_lower = endpoint.lower()
     return any(region in endpoint_lower for region in CANADIAN_REGIONS)
+
+
+def _require_requests() -> _RequestsProtocol:
+    if requests is None:  # pragma: no cover - dependency missing
+        raise RuntimeError("requests library is required for Azure OpenAI calls")
+    return requests
 
 
 def _extract_json_candidate(text: str) -> str:
@@ -220,8 +260,7 @@ class AzureClientConfig:
             raise ValueError("Missing Azure OpenAI API key")
         if not self.deployment:
             raise ValueError("Missing Azure OpenAI deployment name")
-        if requests is None:  # pragma: no cover - dependency missing
-            raise RuntimeError("requests library is required for Azure OpenAI calls")
+        _require_requests()
 
 
 class AzureChatClient:
@@ -256,8 +295,7 @@ class AzureChatClient:
         response_format: Optional[Mapping[str, JSONValue]],
         include_max_output_tokens: bool,
     ) -> tuple[str, JSONObject]:
-        if requests is None:  # pragma: no cover - defensive guard
-            raise RuntimeError("requests library is required for Azure OpenAI calls")
+        requests_client = _require_requests()
 
         url = (
             self.config.endpoint.rstrip("/")
@@ -282,7 +320,7 @@ class AzureChatClient:
         }
 
         try:
-            response = requests.post(
+            response = requests_client.post(
                 url,
                 params=params,
                 headers=headers,
@@ -298,12 +336,13 @@ class AzureChatClient:
                 },
             )
             response.raise_for_status()
-        except requests.exceptions.HTTPError as exc:  # type: ignore[attr-defined]
-            detail = exc.response.text if exc.response is not None else ""
+        except requests_client.exceptions.HTTPError as exc:
+            response_obj = getattr(exc, "response", None)
+            detail = cast(str, getattr(response_obj, "text", "") or "")
             if (
                 include_max_output_tokens
-                and exc.response is not None
-                and exc.response.status_code == 400
+                and response_obj is not None
+                and getattr(response_obj, "status_code", None) == 400
                 and detail
                 and "max_output_tokens" in detail
             ):
@@ -312,7 +351,7 @@ class AzureChatClient:
                     extra={
                         "endpoint": url,
                         "deployment": self.config.deployment,
-                        "status_code": exc.response.status_code,
+                        "status_code": getattr(response_obj, "status_code", None),
                     },
                 )
                 return self._chat(
@@ -322,19 +361,19 @@ class AzureChatClient:
                     response_format=response_format,
                     include_max_output_tokens=False,
                 )
-            message = (
+            error_message = (
                 f"Azure OpenAI request failed: {exc}" + (f"\n{detail}" if detail else "")
             )
             logger.error(
                 "azure request failed",
                 extra={
-                    "endpoint": url,
-                    "deployment": self.config.deployment,
-                    "status_code": getattr(exc.response, "status_code", None),
-                    "body": detail,
-                },
-            )
-            raise RuntimeError(message) from exc
+                        "endpoint": url,
+                        "deployment": self.config.deployment,
+                        "status_code": getattr(response_obj, "status_code", None),
+                        "body": detail,
+                    },
+                )
+            raise RuntimeError(error_message) from exc
 
         response_text = response.text
         headers_obj = getattr(response, "headers", None)
