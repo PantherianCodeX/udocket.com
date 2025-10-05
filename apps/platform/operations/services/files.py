@@ -1,11 +1,12 @@
+# pyright: strict
+
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Optional
 import hashlib
+from pathlib import Path
 
 
-def sha256_file(path: Path) -> Optional[str]:
+def sha256_file(path: Path) -> str | None:
     try:
         digest = hashlib.sha256()
         with path.open("rb") as handle:

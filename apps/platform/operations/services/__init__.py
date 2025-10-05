@@ -1,3 +1,5 @@
+# pyright: strict
+
 """Operations service helpers exposed for Celery tasks and views."""
 
 from .analysis import (

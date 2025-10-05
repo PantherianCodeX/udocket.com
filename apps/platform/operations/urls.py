@@ -1,3 +1,5 @@
+# pyright: strict
+
 from rest_framework.routers import DefaultRouter
 from django.urls import include, path
 
@@ -10,4 +12,3 @@ router.register(r"diagnostics", DiagnosticsViewSet, basename="diagnostics")
 urlpatterns = [
     path("", include(router.urls)),
 ]
-

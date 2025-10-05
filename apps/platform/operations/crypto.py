@@ -1,10 +1,11 @@
+# pyright: strict
+
 from __future__ import annotations
 
 """Lightweight helpers for encrypting secrets tied to the Django SECRET_KEY."""
 
 import base64
 import hashlib
-from typing import Optional
 
 from cryptography.fernet import Fernet, InvalidToken
 from django.conf import settings
@@ -17,14 +18,14 @@ def _fernet() -> Fernet:
     return Fernet(key)
 
 
-def encrypt_secret(value: Optional[str]) -> str:
+def encrypt_secret(value: str | None) -> str:
     if value in (None, ""):
         return ""
     token = _fernet().encrypt(value.encode("utf-8"))
     return token.decode("utf-8")
 
 
-def decrypt_secret(token: Optional[str]) -> str:
+def decrypt_secret(token: str | None) -> str:
     if not token:
         return ""
     try:

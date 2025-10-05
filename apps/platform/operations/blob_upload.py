@@ -1,13 +1,14 @@
+# pyright: strict
+
 from __future__ import annotations
 
+import base64
+import logging
+import re
+from collections.abc import Callable
 from datetime import timedelta
 from pathlib import Path
-from typing import Callable, Optional
-import base64
 from urllib.parse import quote
-import re
-
-import logging
 
 from django.conf import settings
 
@@ -18,16 +19,17 @@ log = logging.getLogger("apps.platform.operations.blob")
 
 class UploadCancelled(RuntimeError):
     """Raised when an upload is cancelled mid-transfer."""
+
     pass
 
 
 def _parse_conn_string(cs: str) -> dict[str, str]:
-    parts = [p for p in cs.split(";") if p]
+    parts = [segment for segment in cs.split(";") if segment]
     kv: dict[str, str] = {}
-    for p in parts:
-        if "=" in p:
-            k, v = p.split("=", 1)
-            kv[k.strip()] = v.strip()
+    for segment in parts:
+        if "=" in segment:
+            key, value = segment.split("=", 1)
+            kv[key.strip()] = value.strip()
     return kv
 
 
@@ -36,10 +38,10 @@ def upload_with_sas(
     case_id: str,
     job_id: str,
     *,
-    organization_id: Optional[str] = None,
-    original_name: Optional[str] = None,
-    cancel_check: Optional[Callable[[], bool]] = None,
-    progress_cb: Optional[Callable[[float], None]] = None,
+    organization_id: str | None = None,
+    original_name: str | None = None,
+    cancel_check: Callable[[], bool] | None = None,
+    progress_cb: Callable[[float], None] | None = None,
 ) -> str:
     from azure.storage.blob import (
         BlobServiceClient,
@@ -148,7 +150,7 @@ def upload_with_sas(
 
     # Else sign a SAS
     endpoint_suffix = "blob.core.windows.net"
-    blob_endpoint = None
+    blob_endpoint: str | None = None
     if conn_str:
         kv = _parse_conn_string(conn_str)
         account_name = kv.get("AccountName") or account

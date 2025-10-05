@@ -1,15 +1,19 @@
+# pyright: strict
+
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
 import json
 import logging
+from collections.abc import Iterable, Mapping, Sequence
+from pathlib import Path
+from typing import Any, cast
 
 from packages.udocket_core.agents import ComposeAgent, ComposeConfig
 from packages.udocket_core.llm.config import LLMSettings, load_llm_settings
 from apps.platform.jobs.models import Job
 from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.operations.llm import (
+    LLMConfigurationPayload,
     ensure_default_llm_configuration,
     get_llm_configuration,
     get_provider_secret_with_metadata,
@@ -28,7 +32,7 @@ from .files import sha256_file
 log = logging.getLogger("apps.platform.operations.compose_service")
 
 
-def _resolve_path(value: Optional[str], case_dir: Path) -> Optional[Path]:
+def _resolve_path(value: str | None, case_dir: Path) -> Path | None:
     if not value:
         return None
     path_obj = Path(value)
@@ -38,12 +42,26 @@ def _resolve_path(value: Optional[str], case_dir: Path) -> Optional[Path]:
     return candidate if candidate.exists() else None
 
 
+def _extract_str(value: object) -> str | None:
+    return value if isinstance(value, str) and value else None
+
+
+def _extract_mapping(value: object) -> dict[str, Any] | None:
+    if isinstance(value, Mapping):
+        result: dict[str, Any] = {}
+        for key_obj, item in cast(Iterable[tuple[object, object]], value.items()):
+            if isinstance(key_obj, str):
+                result[key_obj] = item
+        return result
+    return None
+
+
 def _summary_search_dirs(
     *,
     analysis_dir: Path,
     summary_job_case_dir: Path,
-) -> List[Path]:
-    dirs: List[Path] = []
+) -> list[Path]:
+    dirs: list[Path] = []
     for directory in (analysis_dir, summary_job_case_dir / "analysis"):
         if directory.exists() and directory not in dirs:
             dirs.append(directory)
@@ -56,7 +74,7 @@ def _find_fallback_file(
     extension: str,
     search_dirs: Sequence[Path],
     summary_job_id: str,
-) -> Optional[Path]:
+) -> Path | None:
     for directory in search_dirs:
         candidate = directory / f"{summary_job_id}__{stem}.{extension}"
         if candidate.exists():
@@ -71,35 +89,47 @@ def execute_compose_job(
     job: Job,
     summary_job: Job,
     case_id: str,
-    llm_config_id: Optional[str],
-) -> Dict[str, Any]:
-    org_value = job.organization_id or job.case.organization_id
-    org_id: Optional[str] = str(org_value) if org_value else None
+    llm_config_id: str | None,
+) -> dict[str, Any]:
+    job_case = getattr(job, "case", None)
+    org_value = job.organization_id
+    if org_value is None and job_case is not None:
+        org_value = getattr(job_case, "organization_id", None)
+    org_id: str | None = str(org_value) if org_value else None
     case_dir, _, _ = case_paths(case_id, org_id)
 
     summary_meta = read_job_meta(case_id, org_id, str(summary_job.id))
-    summary_json_path = summary_meta.get("summary_file") or summary_meta.get("summary_json_file")
-    summary_markdown_path = summary_meta.get("summary_markdown_file") or summary_meta.get("summary_markdown")
-    timeline_seed_path = summary_meta.get("summary_timeline_file")
-    entity_hint_path = summary_meta.get("summary_entity_file")
-    staff_report_path = summary_meta.get("summary_case_brief_file") or summary_meta.get("summary_staff_report_file")
-    transcript_path = summary_meta.get("source_transcript_path") or summary_job.transcript_path
 
-    summary_json_path = _resolve_path(summary_json_path, case_dir)
-    summary_markdown_path = _resolve_path(summary_markdown_path, case_dir)
-    timeline_seed_path = _resolve_path(timeline_seed_path, case_dir)
-    entity_hint_path = _resolve_path(entity_hint_path, case_dir)
-    staff_report_path = _resolve_path(staff_report_path, case_dir)
-    transcript_path = _resolve_path(transcript_path, case_dir)
+    def _meta_path(*keys: str) -> Path | None:
+        for key in keys:
+            raw_value = _extract_str(summary_meta.get(key))
+            if raw_value:
+                resolved = _resolve_path(raw_value, case_dir)
+                if resolved:
+                    return resolved
+        return None
+
+    summary_json_path = _meta_path("summary_file", "summary_json_file")
+    summary_markdown_path = _meta_path("summary_markdown_file", "summary_markdown")
+    timeline_seed_path = _meta_path("summary_timeline_file")
+    entity_hint_path = _meta_path("summary_entity_file")
+    staff_report_path = _meta_path("summary_case_brief_file", "summary_staff_report_file")
+
+    transcript_raw = _extract_str(summary_meta.get("source_transcript_path"))
+    transcript_raw = transcript_raw or _extract_str(getattr(summary_job, "transcript_path", None))
+    transcript_path = _resolve_path(transcript_raw, case_dir)
 
     analysis_dir = case_dir / "analysis"
-    summary_org_value = summary_job.organization_id or summary_job.case.organization_id
+    summary_case = getattr(summary_job, "case", None)
+    summary_org_value = summary_job.organization_id
+    if summary_org_value is None and summary_case is not None:
+        summary_org_value = getattr(summary_case, "organization_id", None)
     search_dirs = _summary_search_dirs(
         analysis_dir=analysis_dir,
         summary_job_case_dir=case_paths(case_id, str(summary_org_value) if summary_org_value else None)[0],
     )
 
-    def _lookup_or_fallback(current: Optional[Path], stem: str, ext: str) -> Optional[Path]:
+    def _lookup_or_fallback(current: Path | None, stem: str, ext: str) -> Path | None:
         if current and current.exists():
             return current
         return _find_fallback_file(stem=stem, extension=ext, search_dirs=search_dirs, summary_job_id=str(summary_job.id))
@@ -142,92 +172,93 @@ def execute_compose_job(
     )
 
     llm_settings: LLMSettings = load_llm_settings()
-    organization_id_str = str(job.organization_id or summary_job.organization_id or "")
+    summary_org_str = str(summary_org_value) if summary_org_value else ""
+    job_org_str = str(org_value) if org_value else ""
+    organization_id_str = job_org_str or summary_org_str
 
-    def _config_dict(payload: Any) -> Optional[Dict[str, Any]]:
-        if isinstance(payload, dict):
-            typed_dict: Dict[str, Any] = {str(key): value for key, value in payload.items()}
-            return typed_dict
-        return None
+    active_config: dict[str, Any] = {}
 
-    active_config: Dict[str, Any] = {}
+    def _assign_config(payload: LLMConfigurationPayload | None) -> bool:
+        nonlocal active_config
+        if payload is None:
+            return False
+        active_config = dict(payload)
+        return True
+
     if llm_config_id:
-        candidate = _config_dict(
+        if _assign_config(
             get_llm_configuration(
                 organization_id=organization_id_str,
                 config_id=llm_config_id,
                 target="compose",
             )
-        )
-        if candidate:
-            active_config = candidate
+        ):
+            pass
     if not active_config:
-        candidate = _config_dict(
+        _assign_config(
             get_llm_configuration(
                 organization_id=organization_id_str,
                 config_id=None,
                 target="compose",
             )
         )
-        if candidate:
-            active_config = candidate
     if not active_config:
-        candidate = _config_dict(
+        _assign_config(
             ensure_default_llm_configuration(
                 organization_id=organization_id_str,
                 target="compose",
                 llm_settings=llm_settings,
             )
         )
-        if candidate:
-            active_config = candidate
 
-    stage_map: Dict[str, Dict[str, Any]] = {}
-    raw_stage_map = active_config.get("stage_map", {})
-    if isinstance(raw_stage_map, dict):
+    stage_map: dict[str, dict[str, Any]] = {}
+    raw_stage_map = _extract_mapping(active_config.get("stage_map"))
+    if raw_stage_map:
         for key, value in raw_stage_map.items():
-            if isinstance(key, str) and isinstance(value, dict):
-                stage_map[key] = {str(inner_key): inner_value for inner_key, inner_value in value.items()}
+            nested = _extract_mapping(value)
+            if nested is not None:
+                stage_map[key] = nested
 
-    provider_chain_values: List[str] = []
+    provider_chain_values: list[str] = []
     raw_chain = active_config.get("provider_chain")
-    if isinstance(raw_chain, (list, tuple)):
-        for entry in raw_chain:
+    if isinstance(raw_chain, Sequence) and not isinstance(raw_chain, (str, bytes)):
+        for entry in cast(Sequence[object], raw_chain):
             if isinstance(entry, str):
                 provider_chain_values.append(entry)
     if not provider_chain_values:
         provider_chain_values = list(compose_config.provider_chain)
     provider_chain = provider_chain_values
 
-    provider_credentials: Dict[str, Dict[str, Any]] = {}
+    provider_credentials: dict[str, dict[str, Any]] = {}
     if organization_id_str:
         requested_providers = collect_requested_providers(list(compose_config.provider_chain), provider_chain, stage_map)
 
         for provider in requested_providers:
             secret_payload = get_provider_secret_with_metadata(organization_id_str, provider)
             if secret_payload:
-                provider_credentials[provider] = secret_payload
+                provider_credentials[provider] = dict(secret_payload)
 
     try:
-        intake_raw = summary_meta.get("intake") if isinstance(summary_meta.get("intake"), dict) else None
-        intake_payload = (
-            {str(key): value for key, value in intake_raw.items()} if isinstance(intake_raw, dict) else None
-        )
-        if not intake_payload:
-            intake_payload = case_intake_payload(job.case)
+        intake_payload = _extract_mapping(summary_meta.get("intake"))
+        if intake_payload is None:
+            intake_payload = case_intake_payload(job_case)
 
-        case_metadata: Dict[str, Any] = {
+        case_metadata: dict[str, Any] = {
             "case_id": case_id,
-            "case_title": job.case.title,
             "compose_job_id": str(job.id),
             "summary_job_id": str(summary_job.id),
-            "job_display_title": getattr(job, "display_title", "") or "",
+            "job_display_title": str(getattr(job, "display_title", "") or ""),
         }
-        case_organization = getattr(job.case, "organization", None)
+        case_title = _extract_str(getattr(job_case, "title", None))
+        if case_title:
+            case_metadata["case_title"] = case_title
+        case_org_value = getattr(job_case, "organization_id", None)
+        if case_org_value:
+            case_metadata["organization_id"] = str(case_org_value)
+        case_organization = getattr(job_case, "organization", None)
         if case_organization is not None:
-            case_metadata["organization_id"] = str(job.case.organization_id)
-            org_name = getattr(case_organization, "name", None)
-            if isinstance(org_name, str) and org_name:
+            org_name = _extract_str(getattr(case_organization, "name", None))
+            if org_name:
                 case_metadata["organization_name"] = org_name
         if summary_markdown_path:
             case_metadata["summary_markdown_file"] = summary_markdown_path.name
@@ -236,7 +267,7 @@ def execute_compose_job(
 
         compose_agent = ComposeAgent(compose_config)
 
-        def _progress(stage: str, stage_event: str, details: Dict[str, Any]) -> None:
+        def _progress(stage: str, stage_event: str, details: dict[str, Any]) -> None:
             runtime.emit(
                 "compose.progress",
                 stage=stage,
@@ -274,7 +305,7 @@ def execute_compose_job(
 
     artifacts = result.artifacts
 
-    meta_updates: Dict[str, Any] = {
+    meta_updates: dict[str, Any] = {
         "compose_status": "completed",
         "compose_meta_json": str(result.meta_json),
         "compose_provider_chain": result.provider_chain,
@@ -304,7 +335,7 @@ def execute_compose_job(
 
     update_job_meta(case_id, org_id, str(job.id), meta_updates)
 
-    created_titles = {
+    created_titles: dict[str, set[str]] = {
         kind: set(
             CaseArtifact.objects.filter(case_id=case_id, type=kind).values_list("title", flat=True)
         )
@@ -314,12 +345,12 @@ def execute_compose_job(
     def _create_artifact(
         *,
         kind: str,
-        path: Optional[Path],
+        path: Path | None,
         title_hint: str,
-        metadata: Dict[str, Any],
+        metadata: dict[str, Any],
         schema_version: str = "v1",
     ) -> None:
-        if path is None or not path.exists():
+        if path is None or not path.exists() or job_case is None:
             return
         checksum = sha256_file(path)
         titles = created_titles.setdefault(kind, set())
@@ -327,8 +358,8 @@ def execute_compose_job(
         titles.add(title)
         CaseArtifact.objects.create(
             case_id=case_id,
-            case_fk=job.case,
-            organization=job.organization or summary_job.organization,
+            case_fk=job_case,
+            organization=job.organization or getattr(summary_job, "organization", None),
             job_id=str(job.id),
             type=kind,
             title=title,

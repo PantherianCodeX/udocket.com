@@ -1,4 +1,8 @@
+# pyright: strict
+
 from __future__ import annotations
+
+from typing import Any
 
 from django.core.management.base import BaseCommand
 from django.db import connection, transaction
@@ -42,7 +46,7 @@ POLICIES = (
 class Command(BaseCommand):
     help = "Enable and configure Postgres row-level security for multi-tenancy."
 
-    def handle(self, *args, **options):  # type: ignore[override]
+    def handle(self, *args: Any, **options: Any) -> None:
         vendor = connection.vendor
         if vendor != "postgresql":
             self.stdout.write(self.style.WARNING("RLS not applied: database is not PostgreSQL."))

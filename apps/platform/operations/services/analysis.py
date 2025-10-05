@@ -1,24 +1,27 @@
+# pyright: strict
+
 from __future__ import annotations
 
+import json
+from collections.abc import Mapping, Sequence
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, cast
-import json
+from typing import Any, cast
 
 from apps.platform.cases.models import Case
 from apps.platform.operations.storage import ensure_case_dirs, ops_dir as storage_ops_dir
 
 
-def case_paths(case_id: str, organization_id: Optional[str] = None) -> Tuple[Path, Path, Path]:
+def case_paths(case_id: str, organization_id: str | None = None) -> tuple[Path, Path, Path]:
     base = ensure_case_dirs(case_id, organization_id)
     return base, base / "transcript", base / "analysis"
 
 
-def ops_dir(case_id: str, organization_id: Optional[str] = None) -> Path:
+def ops_dir(case_id: str, organization_id: str | None = None) -> Path:
     return storage_ops_dir(case_id, organization_id)
 
 
-def resolve_case_relative(path_str: str, case_dir: Path) -> Optional[Path]:
+def resolve_case_relative(path_str: str, case_dir: Path) -> Path | None:
     candidate = Path(path_str)
     if candidate.exists():
         return candidate
@@ -29,35 +32,42 @@ def resolve_case_relative(path_str: str, case_dir: Path) -> Optional[Path]:
 
 
 def load_summary_timeline_events(
-    meta: Mapping[str, Any],
+    meta: Mapping[str, object],
     case_dir: Path,
-) -> Tuple[List[Dict[str, Any]], Optional[Path]]:
-    file_value = cast(Optional[str], meta.get("summary_timeline_file"))
-    if not file_value:
+) -> tuple[list[dict[str, Any]], Path | None]:
+    file_value = meta.get("summary_timeline_file")
+    if not isinstance(file_value, str) or not file_value:
         return [], None
     seeds_path = resolve_case_relative(file_value, case_dir)
     if not seeds_path:
         return [], None
     try:
-        payload: Any = json.loads(seeds_path.read_text(encoding="utf-8"))
+        payload: object = json.loads(seeds_path.read_text(encoding="utf-8"))
     except Exception:  # pragma: no cover - malformed file
         return [], None
-    events_candidate: Sequence[Any]
+    events_candidate: Sequence[object]
     if isinstance(payload, dict):
-        events_value = payload.get("events")
-        events_candidate = cast(Sequence[Any], events_value) if isinstance(events_value, list) else ()
+        payload_mapping = cast(Mapping[str, object], payload)
+        events_value = payload_mapping.get("events")
+        if isinstance(events_value, list):
+            events_candidate = events_value
+        else:
+            events_candidate = ()
     elif isinstance(payload, list):
         events_candidate = payload
     else:
         events_candidate = ()
-    events: List[Dict[str, Any]] = []
-    raw_events: Sequence[Any] = events_candidate
+    events: list[dict[str, Any]] = []
+    raw_events: Sequence[object] = events_candidate
     for item in raw_events:
         if not isinstance(item, dict):
             continue
-        event_map = cast(Mapping[str, Any], item)
+        event_map = cast(Mapping[str, object], item)
         labels_value = event_map.get("labels")
-        labels_list = [str(label) for label in labels_value] if isinstance(labels_value, (list, tuple)) else []
+        labels_list: list[str] = []
+        if isinstance(labels_value, Sequence) and not isinstance(labels_value, (str, bytes)):
+            for raw_label in cast(Sequence[object], labels_value):
+                labels_list.append(str(raw_label))
         events.append(
             {
                 "ts_start": event_map.get("ts_start"),
@@ -73,26 +83,27 @@ def load_summary_timeline_events(
 
 
 def load_summary_entity_hints(
-    meta: Mapping[str, Any],
+    meta: Mapping[str, object],
     case_dir: Path,
-) -> Tuple[Optional[Dict[str, Any]], Optional[Path]]:
-    file_value = cast(Optional[str], meta.get("summary_entity_file"))
-    if not file_value:
+) -> tuple[dict[str, Any] | None, Path | None]:
+    file_value = meta.get("summary_entity_file")
+    if not isinstance(file_value, str) or not file_value:
         return None, None
     hints_path = resolve_case_relative(file_value, case_dir)
     if not hints_path:
         return None, None
     try:
-        payload: Any = json.loads(hints_path.read_text(encoding="utf-8"))
+        payload: object = json.loads(hints_path.read_text(encoding="utf-8"))
     except Exception:  # pragma: no cover - malformed file
         return None, None
     if not isinstance(payload, dict):
         return None, None
-    payload_dict: Dict[str, Any] = {str(key): value for key, value in payload.items()}
+    payload_mapping = cast(Mapping[str, object], payload)
+    payload_dict: dict[str, Any] = {str(key): value for key, value in payload_mapping.items()}
     return payload_dict, hints_path
 
 
-def latest_transcript(case_id: str, organization_id: Optional[str] = None) -> Optional[Path]:
+def latest_transcript(case_id: str, organization_id: str | None = None) -> Path | None:
     _, transcript_dir, _ = case_paths(case_id, organization_id)
     if not transcript_dir.exists():
         return None
@@ -104,7 +115,7 @@ def latest_transcript(case_id: str, organization_id: Optional[str] = None) -> Op
     return files[0] if files else None
 
 
-def case_intake_payload(case: Optional[Case]) -> Dict[str, Any]:
+def case_intake_payload(case: Case | None) -> dict[str, Any]:
     if case is None:
         return {}
     fields = [
@@ -118,7 +129,7 @@ def case_intake_payload(case: Optional[Case]) -> Dict[str, Any]:
         "client_name",
         "opposing_party",
     ]
-    payload: Dict[str, Any] = {}
+    payload: dict[str, Any] = {}
     for field in fields:
         value = getattr(case, field, None)
         if value in (None, ""):
@@ -129,11 +140,17 @@ def case_intake_payload(case: Optional[Case]) -> Dict[str, Any]:
             payload[field] = value.isoformat()
         else:
             payload[field] = value
-    payload.setdefault("case_id", str(case.id))
-    payload.setdefault("case_title", case.title)
+    case_id_value = getattr(case, "id", None)
+    if case_id_value is not None:
+        payload.setdefault("case_id", str(case_id_value))
+    title_value = getattr(case, "title", None)
+    if isinstance(title_value, str) and title_value:
+        payload.setdefault("case_title", title_value)
     organization = getattr(case, "organization", None)
+    organization_id_value = getattr(case, "organization_id", None)
+    if organization_id_value is not None:
+        payload.setdefault("organization_id", str(organization_id_value))
     if organization is not None:
-        payload.setdefault("organization_id", str(case.organization_id))
         name = getattr(organization, "name", None)
         if isinstance(name, str) and name:
             payload.setdefault("organization_name", name)
@@ -142,14 +159,12 @@ def case_intake_payload(case: Optional[Case]) -> Dict[str, Any]:
 
 def collect_requested_providers(
     config_chain: Sequence[str],
-    provider_chain: Optional[Sequence[str]],
-    stage_map: Optional[Mapping[str, Mapping[str, Any]]] = None,
-) -> List[str]:
-    sequence: List[str] = []
+    provider_chain: Sequence[str] | None,
+    stage_map: Mapping[str, Mapping[str, Any]] | None = None,
+) -> list[str]:
+    sequence: list[str] = []
 
-    def _add(value: Any) -> None:
-        if not value or not isinstance(value, str):
-            return
+    def _add(value: str) -> None:
         lowered = value.strip().lower()
         if lowered and lowered not in sequence:
             sequence.append(lowered)
@@ -157,20 +172,19 @@ def collect_requested_providers(
     if stage_map:
         for payload in stage_map.values():
             raw_providers = payload.get("providers")
-            if isinstance(raw_providers, (list, tuple)):
-                for item in raw_providers:
-                    if isinstance(item, str):
-                        _add(item)
+            if isinstance(raw_providers, Sequence):
+                for provider in cast(Sequence[object], raw_providers):
+                    if isinstance(provider, str):
+                        _add(provider)
             provider_value = payload.get("provider")
             if isinstance(provider_value, str):
                 _add(provider_value)
 
     if provider_chain:
-        for item in provider_chain:
-            if isinstance(item, str):
-                _add(item)
+        for provider in provider_chain:
+            _add(provider)
 
-    for item in config_chain:
-        _add(item)
+    for provider in config_chain:
+        _add(provider)
 
     return sequence
