@@ -1,11 +1,20 @@
 from __future__ import annotations
 
 from typing import Any
+
+from django.http import HttpRequest
 from django.utils import timezone
+
 from apps.platform.operations.models import AuditEvent
 
 
-def emit(request, *, case_id: str | None, event: str, data: dict[str, Any] | None = None) -> None:
+def emit(
+    request: HttpRequest,
+    *,
+    case_id: str | None,
+    event: str,
+    data: dict[str, Any] | None = None,
+) -> None:
     try:
         user = getattr(request, "user", None)
         actor = getattr(user, "username", None) or getattr(user, "email", None) or "anonymous"
@@ -19,4 +28,3 @@ def emit(request, *, case_id: str | None, event: str, data: dict[str, Any] | Non
     except Exception:
         # Never raise from audit
         return
-

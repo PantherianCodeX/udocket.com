@@ -11,6 +11,13 @@ from django.db import models
 
 
 class Organization(models.Model):
+    @classmethod
+    def typed_objects(cls) -> models.Manager["Organization"]:
+        return cast(models.Manager["Organization"], cls.objects)
+
+    @classmethod
+    def scoped(cls) -> models.Manager["Organization"]:
+        return cls.typed_objects()
     id: models.UUIDField[uuid.UUID, uuid.UUID] = models.UUIDField(
         primary_key=True,
         default=uuid.uuid4,
@@ -66,6 +73,13 @@ class User(AbstractUser):
 
 
 class OrganizationMembership(models.Model):
+    @classmethod
+    def typed_objects(cls) -> models.Manager["OrganizationMembership"]:
+        return cast(models.Manager["OrganizationMembership"], cls.objects)
+
+    @classmethod
+    def scoped(cls) -> models.Manager["OrganizationMembership"]:
+        return cls.typed_objects()
     class Role(models.TextChoices):
         ADMIN = "ADMIN", "Admin"
         MANAGER = "MANAGER", "Manager"

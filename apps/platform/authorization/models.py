@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import uuid
-from typing import Any, TYPE_CHECKING, Optional
-
+from typing import Any, TYPE_CHECKING, Optional, cast
 from django.db import models
 
 if TYPE_CHECKING:
@@ -13,6 +12,13 @@ if TYPE_CHECKING:
 
 
 class Role(models.Model):
+    @classmethod
+    def typed_objects(cls) -> models.Manager["Role"]:
+        return cast(models.Manager["Role"], cls.objects)
+
+    @classmethod
+    def scoped(cls) -> models.Manager["Role"]:
+        return cls.typed_objects()
 
     """Global role catalog for configurable RBAC.
 
@@ -62,6 +68,13 @@ class Role(models.Model):
 
 
 class RoleCapability(models.Model):
+    @classmethod
+    def typed_objects(cls) -> models.Manager["RoleCapability"]:
+        return cast(models.Manager["RoleCapability"], cls.objects)
+
+    @classmethod
+    def scoped(cls) -> models.Manager["RoleCapability"]:
+        return cls.typed_objects()
     """Assigns capabilities (string keys) to roles.
 
     Capabilities are strings constrained by application code, e.g.:
@@ -88,6 +101,13 @@ class RoleCapability(models.Model):
 
 
 class PermissionPreset(models.Model):
+    @classmethod
+    def typed_objects(cls) -> models.Manager["PermissionPreset"]:
+        return cast(models.Manager["PermissionPreset"], cls.objects)
+
+    @classmethod
+    def scoped(cls) -> models.Manager["PermissionPreset"]:
+        return cls.typed_objects()
     uuid: models.UUIDField[Optional[uuid.UUID], Optional[uuid.UUID]] = models.UUIDField(
         editable=False,
         unique=True,
@@ -120,6 +140,13 @@ class PermissionPreset(models.Model):
 
 
 class PresetCapability(models.Model):
+    @classmethod
+    def typed_objects(cls) -> models.Manager["PresetCapability"]:
+        return cast(models.Manager["PresetCapability"], cls.objects)
+
+    @classmethod
+    def scoped(cls) -> models.Manager["PresetCapability"]:
+        return cls.typed_objects()
     preset: models.ForeignKey[PermissionPreset, PermissionPreset] = models.ForeignKey(
         PermissionPreset,
         on_delete=models.CASCADE,

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from typing import Iterable
+from typing import Any, Iterable
 
 from django.contrib import admin
 from django.db.models import QuerySet
+from django.http import HttpRequest
 
 from apps.platform.admin import TenantScopedAdminMixin
 from apps.platform.operations.models import AuditEvent
@@ -11,12 +12,12 @@ from apps.platform.tenancy import scope_cases
 from apps.platform.cases.models import Case
 
 
-def _to_str_set(values: Iterable) -> set[str]:
+def _to_str_set(values: Iterable[Any]) -> set[str]:
     return {str(v) for v in values if v is not None}
 
 
 @admin.register(AuditEvent)
-class AuditEventAdmin(TenantScopedAdminMixin, admin.ModelAdmin):
+class AuditEventAdmin(TenantScopedAdminMixin, admin.ModelAdmin[AuditEvent]):
     tenant_field = None
     list_display = ("id", "ts", "actor", "case_id", "event")
     list_filter = ("event", "ts")
@@ -24,7 +25,11 @@ class AuditEventAdmin(TenantScopedAdminMixin, admin.ModelAdmin):
     ordering = ("-ts",)
     search_fields = ("actor", "case_id", "event")
 
-    def scope_queryset(self, request, queryset: QuerySet[AuditEvent]):  # type: ignore[override]
+    def scope_queryset(
+        self,
+        request: HttpRequest,
+        queryset: QuerySet[AuditEvent],
+    ) -> QuerySet[AuditEvent]:
         user = getattr(request, "user", None)
         if not user or not getattr(user, "is_authenticated", False):
             return queryset.none()
