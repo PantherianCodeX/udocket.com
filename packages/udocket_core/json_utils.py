@@ -1,5 +1,7 @@
 # pyright: strict
 
+"""Shared helpers for normalising JSON input/output across the project."""
+
 from __future__ import annotations
 
 import json
@@ -14,10 +16,12 @@ JSONArray: TypeAlias = list[JSONValue]
 
 
 def is_json_scalar(value: object) -> bool:
+    """Return ``True`` when ``value`` is already JSON-serialisable as a scalar."""
     return isinstance(value, (str, int, float, bool)) or value is None
 
 
 def coerce_json_value(value: object) -> JSONValue:
+    """Coerce ``value`` into a JSON-compatible structure."""
     if is_json_scalar(value):
         return cast(JSONPrimitive, value)
     if isinstance(value, Mapping):
@@ -30,6 +34,7 @@ def coerce_json_value(value: object) -> JSONValue:
 
 
 def coerce_json_object(value: object, *, default: JSONObject | None = None) -> JSONObject:
+    """Return a JSON object derived from ``value`` or ``default`` when absent."""
     if isinstance(value, Mapping):
         mapping_value = cast(Mapping[object, object], value)
         return {str(key): coerce_json_value(item) for key, item in mapping_value.items()}
@@ -37,6 +42,7 @@ def coerce_json_object(value: object, *, default: JSONObject | None = None) -> J
 
 
 def ensure_json_object(value: object, *, context: str | None = None) -> JSONObject:
+    """Return a JSON object or raise a ``ValueError`` with optional context."""
     if not isinstance(value, Mapping):
         if context:
             raise ValueError(f"Expected mapping for {context}, received {type(value)!r}")
@@ -46,6 +52,7 @@ def ensure_json_object(value: object, *, context: str | None = None) -> JSONObje
 
 
 def coerce_json_array(value: object) -> JSONArray:
+    """Return a JSON array derived from ``value`` (falling back to ``[]``)."""
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
         sequence_value = cast(Sequence[object], value)
         return [coerce_json_value(item) for item in sequence_value]
@@ -53,6 +60,7 @@ def coerce_json_array(value: object) -> JSONArray:
 
 
 def coerce_object_list(value: object) -> list[JSONObject]:
+    """Return list of JSON objects extracted from ``value`` when iterable."""
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
         sequence_value = cast(Sequence[object], value)
         result: list[JSONObject] = []
@@ -65,6 +73,7 @@ def coerce_object_list(value: object) -> list[JSONObject]:
 
 
 def coerce_str(value: object) -> str | None:
+    """Coerce ``value`` into a trimmed string when possible."""
     if value is None:
         return None
     if isinstance(value, str):
@@ -162,6 +171,7 @@ def coerce_float(
 
 
 def coerce_bool(value: object, *, default: bool | None = None) -> bool | None:
+    """Coerce ``value`` into a boolean when possible."""
     if isinstance(value, bool):
         return value
     if isinstance(value, int):
@@ -176,6 +186,7 @@ def coerce_bool(value: object, *, default: bool | None = None) -> bool | None:
 
 
 def read_json_value(path: Path) -> JSONValue | None:
+    """Read ``path`` and return a coerced ``JSONValue`` or ``None`` on failure."""
     try:
         text = path.read_text(encoding="utf-8")
     except FileNotFoundError:
@@ -190,6 +201,7 @@ def read_json_value(path: Path) -> JSONValue | None:
 
 
 def read_json_object(path: Path, *, default: JSONObject | None = None) -> JSONObject:
+    """Read ``path`` and return a JSON object, falling back to ``default``."""
     value = read_json_value(path)
     if isinstance(value, dict):
         return value
@@ -202,6 +214,8 @@ def write_json_object(
     *,
     indent: int = 2,
 ) -> None:
+    """Serialise ``payload`` to ``path`` ensuring parent directories exist."""
+    path.parent.mkdir(parents=True, exist_ok=True)
     normalized: JSONObject = {
         str(key): coerce_json_value(value) for key, value in payload.items()
     }
@@ -209,11 +223,29 @@ def write_json_object(
 
 
 def parse_json_value(data: str) -> JSONValue | None:
+    """Parse ``data`` into a ``JSONValue`` or return ``None`` on failure."""
     try:
         raw = json.loads(data)
     except json.JSONDecodeError:
         return None
     return coerce_json_value(raw)
+
+
+def write_json_value(
+    path: Path,
+    value: JSONValue,
+    *,
+    indent: int = 2,
+) -> None:
+    """Serialise ``value`` to ``path`` ensuring parent directories exist."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if isinstance(value, (dict, list)):
+        path.write_text(
+            json.dumps(value, ensure_ascii=False, indent=indent),
+            encoding="utf-8",
+        )
+    else:
+        path.write_text(json.dumps(value, ensure_ascii=False), encoding="utf-8")
 
 
 __all__ = [
@@ -236,4 +268,5 @@ __all__ = [
     "read_json_object",
     "write_json_object",
     "parse_json_value",
+    "write_json_value",
 ]
