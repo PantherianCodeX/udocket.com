@@ -1,6 +1,6 @@
 # Typing Automation Status
 
-Last updated: 2025-10-05T01:44:10.645472+00:00
+Last updated: 2025-10-05T02:01:56.432469+00:00
 
 ## Pyright Snapshot
 
@@ -32,3 +32,4 @@ _No pyright output recorded._
 - `config/settings.py` (verified 2025-10-05T01:44:10.645472+00:00)
 - `packages/udocket_core/agents/common/azure_client.py` (verified 2025-10-05T01:44:10.645472+00:00)
 - `packages/udocket_core/agents/common/io.py` (verified 2025-10-05T01:44:10.645472+00:00)
+- `apps/platform/operations/guardian.py` (verified 2025-10-05T02:01:56.432469+00:00)

@@ -32,5 +32,6 @@ Last updated: 2025-10-05.
 - The automation helper specs in `docs/typing/automation_helper_specs.md` capture the CLI contract for every fixer so contributors can script their cleanup instead of editing files manually.
 - `tests/_typing.py` now exposes shared fixture protocols; run `scripts/typing/annotate_fixtures.py --apply` to keep pytest modules annotated automatically.
 - Operations websocket consumers now run with `# pyright: strict`, using channel-layer protocols to remove the remaining `Any` fallthroughs.
+- Guardian configuration helpers now run under `# pyright: strict`, with JSON coercion utilities to sanitise provider chains and instruction lists for Celery tasks.
 
 Keeping this document current helps the team understand where typing debt still lives and which areas should be prioritised in upcoming sprints.

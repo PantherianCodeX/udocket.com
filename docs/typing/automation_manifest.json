@@ -21,7 +21,7 @@
   ],
   "notes": [],
   "pyrightStats": null,
-  "recordedAt": "2025-10-05T01:44:10.645472+00:00",
+  "recordedAt": "2025-10-05T02:01:56.432469+00:00",
   "strictModules": [
     {
       "path": "apps/platform/accounts/admin.py",
@@ -78,6 +78,10 @@
     {
       "path": "packages/udocket_core/agents/common/io.py",
       "verifiedAt": "2025-10-05T01:44:10.645472+00:00"
+    },
+    {
+      "path": "apps/platform/operations/guardian.py",
+      "verifiedAt": "2025-10-05T02:01:56.432469+00:00"
     }
   ]
 }

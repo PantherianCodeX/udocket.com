@@ -5,7 +5,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 from django.db import transaction
 
-from packages.udocket_core.llm.config import PROVIDERS_PATH, load_llm_settings
+from packages.udocket_core.llm.config import LLMSettings, PROVIDERS_PATH, load_llm_settings
 from packages.udocket_core.llm.runtime import (
     ChatClientError,
     build_chat_client,
@@ -197,7 +197,7 @@ def ensure_default_llm_configuration(
     target: str,
     stage_map: Dict[str, Dict[str, object]] | None = None,
     provider_chain: Iterable[str] | None = None,
-    llm_settings=None,
+    llm_settings: LLMSettings | None = None,
 ) -> Dict[str, object] | None:
     existing = LLMConfiguration.objects.filter(
         organization_id=organization_id,

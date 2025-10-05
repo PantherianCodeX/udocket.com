@@ -1,12 +1,15 @@
+# pyright: strict
+
 from __future__ import annotations
 
 import json
-import uuid
 import logging
+import uuid
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Callable, Final, Protocol, cast
 
 from django.utils import timezone
 
@@ -18,134 +21,240 @@ from apps.platform.operations.llm import (
     get_provider_secret_with_metadata,
 )
 from packages.udocket_core.agents.guardian_lib import GuardianAgent, GuardianConfig, GuardianVerdict
-from packages.udocket_core.llm import load_llm_settings
+from packages.udocket_core.llm import LLMSettings, LLMStageAssignment, load_llm_settings
 
 
-MAX_CONTENT_CHARS = 50000
-MAX_HISTORY_ENTRIES = 10
-GUARDIAN_DEFAULTS_PATH = Path(__file__).resolve().parents[3] / "config" / "guardian_defaults.json"
+MAX_CONTENT_CHARS: Final = 50000
+MAX_HISTORY_ENTRIES: Final = 10
+GUARDIAN_DEFAULTS_PATH: Final = Path(__file__).resolve().parents[3] / "config" / "guardian_defaults.json"
 
 
 log = logging.getLogger("udocket.guardian")
+
+JSONDict = dict[str, object]
+CredentialsMap = dict[str, JSONDict]
+InstructionList = list[JSONDict]
+
+_ENSURE_DEFAULT_LLM_CONFIGURATION = cast(
+    Callable[..., dict[str, object] | None],
+    ensure_default_llm_configuration,
+)
+
+
+def _coerce_json_dict(value: object) -> JSONDict:
+    if isinstance(value, Mapping):
+        mapping = cast(Mapping[object, object], value)
+        result: JSONDict = {}
+        for key, val in mapping.items():
+            result[str(key)] = val
+        return result
+    return {}
+
+
+class _GuardianReviewTask(Protocol):
+    def delay(self, *, artifact_id: int) -> object:
+        ...
+
+
+def _coerce_instruction_list(value: object) -> InstructionList:
+    if isinstance(value, str):
+        return []
+    if not isinstance(value, Sequence):
+        return []
+    sequence = cast(Sequence[object], value)
+    result: InstructionList = []
+    for entry in sequence:
+        if isinstance(entry, Mapping):
+            mapping = cast(Mapping[object, object], entry)
+            normalized: JSONDict = {}
+            for key, val in mapping.items():
+                normalized[str(key)] = val
+            result.append(normalized)
+    return result
+
+
+def _coerce_str_iterable(value: object) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        normalized = value.strip()
+        return [normalized] if normalized else []
+    if isinstance(value, Iterable):
+        iterable = cast(Iterable[object], value)
+        result: list[str] = []
+        for item in iterable:
+            if item is None:
+                continue
+            item_str = str(item).strip()
+            if item_str:
+                result.append(item_str)
+        return result
+    return []
+
+
+def _coerce_float(value: object, *, default: float = 0.0) -> float:
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return default
+    return default
+
+
+def _coerce_int(value: object, *, default: int, minimum: int | None = None) -> int:
+    candidate = default
+    if isinstance(value, int):
+        candidate = value
+    elif isinstance(value, float):
+        candidate = int(value)
+    elif isinstance(value, str):
+        try:
+            candidate = int(value.strip())
+        except ValueError:
+            candidate = default
+    if minimum is not None and candidate < minimum:
+        return max(minimum, default)
+    return candidate
+
+
+def _coerce_optional_str(value: object) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        stripped = value.strip()
+        return stripped or None
+    if isinstance(value, (int, float, uuid.UUID)):
+        text = str(value).strip()
+        return text or None
+    return None
 
 
 @dataclass(frozen=True)
 class GuardianContext:
     agent: GuardianAgent
-    credentials: Dict[str, Dict[str, Any]]
-    configuration_id: Optional[str]
-    configuration_name: Optional[str]
-    provider_chain: List[str]
-    model: Optional[str]
+    credentials: CredentialsMap
+    configuration_id: str | None
+    configuration_name: str | None
+    provider_chain: list[str]
+    model: str | None
     max_tokens: int
     temperature: float
-    instructions: List[Dict[str, Any]]
+    instructions: InstructionList
 
-
-def _normalize_chain(values: Iterable[str] | None) -> List[str]:
-    result: List[str] = []
-    if not values:
-        return result
+def _normalize_chain(values: Iterable[str]) -> list[str]:
+    result: list[str] = []
     for raw in values:
-        name = (raw or "").strip().lower()
+        name = raw.strip().lower()
         if not name or name in result:
             continue
         result.append(name)
     return result
 
 
-def _extract_guardian_stage(stage_map: Dict[str, Any]) -> Dict[str, Any]:
+def _extract_guardian_stage(stage_map: Mapping[str, object]) -> JSONDict:
     for key in ("review", "policy", "guardian", "default"):
         value = stage_map.get(key)
-        if isinstance(value, dict):
-            return value
+        candidate = _coerce_json_dict(value)
+        if candidate:
+            return candidate
     # fall back to the first dict entry
     for value in stage_map.values():
-        if isinstance(value, dict):
-            return value
+        candidate = _coerce_json_dict(value)
+        if candidate:
+            return candidate
     return {}
 
 
 @lru_cache(maxsize=1)
-def _load_guardian_defaults() -> Dict[str, Any]:
+def _load_guardian_defaults() -> JSONDict:
     try:
         payload = json.loads(GUARDIAN_DEFAULTS_PATH.read_text(encoding="utf-8"))
-        return payload if isinstance(payload, dict) else {}
+        return _coerce_json_dict(payload)
     except FileNotFoundError:
         return {}
     except json.JSONDecodeError:
         return {}
 
 
-def _default_instructions() -> List[Dict[str, Any]]:
+def _default_instructions() -> InstructionList:
     defaults = _load_guardian_defaults()
-    instructions = defaults.get("instructions")
-    if isinstance(instructions, list):
-        normalized: List[Dict[str, Any]] = []
-        for entry in instructions:
-            if isinstance(entry, dict):
-                normalized.append(dict(entry))
-        return normalized
-    return []
+    return _coerce_instruction_list(defaults.get("instructions"))
 
 
-def ensure_guardian_settings(organization_id: Optional[str]) -> GuardianSettings | None:
+def _fetch_guardian_configuration(organization_id: str) -> JSONDict:
+    return _coerce_json_dict(
+        get_llm_configuration(
+            organization_id=organization_id,
+            config_id=None,
+            target="guardian",
+        )
+    )
+
+
+def _ensure_guardian_configuration(
+    organization_id: str,
+    *,
+    llm_settings: LLMSettings,
+) -> JSONDict:
+    return _coerce_json_dict(
+        _ENSURE_DEFAULT_LLM_CONFIGURATION(
+            organization_id=organization_id,
+            target="guardian",
+            llm_settings=llm_settings,
+        )
+    )
+
+
+def ensure_guardian_settings(organization_id: str | None) -> GuardianSettings | None:
     if not organization_id:
         return None
     settings_obj, _created = GuardianSettings.objects.get_or_create(
         organization_id=organization_id,
-        defaults={"instructions": _default_instructions()},
+        defaults={"instructions": list(_default_instructions())},
     )
     return settings_obj
 
 
-def get_guardian_instructions(organization_id: Optional[str]) -> List[Dict[str, Any]]:
+def get_guardian_instructions(organization_id: str | None) -> InstructionList:
     settings_obj = ensure_guardian_settings(organization_id)
     if not settings_obj:
         return _default_instructions()
-    payload = settings_obj.instructions or []
-    if not isinstance(payload, list):
-        return _default_instructions()
-    normalized: List[Dict[str, Any]] = []
-    for entry in payload:
-        if isinstance(entry, dict):
-            normalized.append(dict(entry))
+    instructions_value: object = settings_obj.instructions or []
+    normalized = _coerce_instruction_list(instructions_value)
     return normalized or _default_instructions()
 
 
-def save_guardian_instructions(organization_id: Optional[str], instructions: List[Dict[str, Any]]) -> None:
+def save_guardian_instructions(organization_id: str | None, instructions: InstructionList) -> None:
     if not organization_id:
         return
     settings_obj = ensure_guardian_settings(organization_id)
     if settings_obj is None:
         return
-    settings_obj.instructions = instructions
+    settings_obj.instructions = [dict(entry) for entry in instructions]
     settings_obj.save(update_fields=["instructions", "updated_at"])
 
 
-def build_guardian_context(organization_id: Optional[str]) -> Optional[GuardianContext]:
+def build_guardian_context(organization_id: str | None) -> GuardianContext | None:
     if not organization_id:
         return None
 
-    llm_settings = load_llm_settings()
-    config_payload = get_llm_configuration(
-        organization_id=organization_id,
-        config_id=None,
-        target="guardian",
-    )
+    llm_settings: LLMSettings = load_llm_settings()
+
+    config_payload = _fetch_guardian_configuration(organization_id)
     if not config_payload:
-        config_payload = ensure_default_llm_configuration(
-            organization_id=organization_id,
-            target="guardian",
+        config_payload = _ensure_guardian_configuration(
+            organization_id,
             llm_settings=llm_settings,
         )
     if not config_payload:
         return None
 
-    stage_map_raw = config_payload.get("stage_map") or {}
+    stage_map_raw = _coerce_json_dict(config_payload.get("stage_map"))
     review_cfg = _extract_guardian_stage(stage_map_raw)
 
-    configured_chain = _normalize_chain(config_payload.get("provider_chain"))
+    configured_chain = _normalize_chain(_coerce_str_iterable(config_payload.get("provider_chain")))
     provider_chain = [name for name in configured_chain if llm_settings.provider(name)]
     if configured_chain and not provider_chain:
         log.warning(
@@ -156,8 +265,8 @@ def build_guardian_context(organization_id: Optional[str]) -> Optional[GuardianC
             },
         )
 
-    if not provider_chain and review_cfg.get("provider"):
-        review_chain = _normalize_chain([review_cfg.get("provider")])
+    if not provider_chain:
+        review_chain = _normalize_chain(_coerce_str_iterable(review_cfg.get("provider")))
         review_filtered = [name for name in review_chain if llm_settings.provider(name)]
         if review_chain and not review_filtered:
             log.warning(
@@ -170,8 +279,8 @@ def build_guardian_context(organization_id: Optional[str]) -> Optional[GuardianC
         provider_chain = review_filtered
 
     if not provider_chain:
-        assignment = llm_settings.stage("guardian.review")
-        assignment_chain = _normalize_chain(assignment.providers if assignment else [])
+        assignment: LLMStageAssignment | None = llm_settings.stage("guardian.review")
+        assignment_chain = _normalize_chain(assignment.providers) if assignment else []
         assignment_filtered = [name for name in assignment_chain if llm_settings.provider(name)]
         if assignment_chain and not assignment_filtered:
             log.warning(
@@ -196,33 +305,25 @@ def build_guardian_context(organization_id: Optional[str]) -> Optional[GuardianC
             extra={"organization_id": organization_id},
         )
 
-    options_raw = review_cfg.get("options") if isinstance(review_cfg.get("options"), dict) else {}
-    temperature = 0.0
-    if "temperature" in options_raw:
-        try:
-            temperature = float(options_raw["temperature"])
-        except (TypeError, ValueError):
-            temperature = 0.0
+    options_raw = _coerce_json_dict(review_cfg.get("options"))
+    temperature = _coerce_float(options_raw.get("temperature"), default=0.0)
 
-    try:
-        max_tokens_value = int(review_cfg.get("max_tokens"))
-    except (TypeError, ValueError):
-        max_tokens_value = 2048
-    if max_tokens_value <= 0:
-        max_tokens_value = 2048
+    max_tokens_value = _coerce_int(review_cfg.get("max_tokens"), default=2048, minimum=1)
 
     guardian_config = GuardianConfig(
         provider_chain=list(provider_chain),
-        model=str(review_cfg.get("model") or "") or None,
+        model=_coerce_optional_str(review_cfg.get("model")),
         temperature=temperature,
         max_tokens=max_tokens_value,
     )
 
     agent = GuardianAgent(guardian_config, settings=llm_settings)
 
-    credentials: Dict[str, Dict[str, Any]] = {}
+    credentials: CredentialsMap = {}
     for provider in guardian_config.provider_chain:
-        secret = get_provider_secret_with_metadata(organization_id, provider)
+        secret = _coerce_json_dict(
+            get_provider_secret_with_metadata(organization_id, provider)
+        )
         if secret:
             credentials[provider] = secret
 
@@ -231,8 +332,8 @@ def build_guardian_context(organization_id: Optional[str]) -> Optional[GuardianC
     return GuardianContext(
         agent=agent,
         credentials=credentials,
-        configuration_id=config_payload.get("id"),
-        configuration_name=config_payload.get("name"),
+        configuration_id=_coerce_optional_str(config_payload.get("id")),
+        configuration_name=_coerce_optional_str(config_payload.get("name")),
         provider_chain=list(guardian_config.provider_chain),
         model=guardian_config.model,
         max_tokens=guardian_config.max_tokens,
@@ -241,7 +342,7 @@ def build_guardian_context(organization_id: Optional[str]) -> Optional[GuardianC
     )
 
 
-def new_instruction_template() -> Dict[str, Any]:
+def new_instruction_template() -> JSONDict:
     return {
         "id": uuid.uuid4().hex,
         "title": "",
@@ -251,8 +352,9 @@ def new_instruction_template() -> Dict[str, Any]:
     }
 
 
-def snapshot_artifact_for_guardian(artifact: CaseArtifact) -> Dict[str, Any]:
-    payload: Dict[str, Any] = {
+def snapshot_artifact_for_guardian(artifact: CaseArtifact) -> JSONDict:
+    metadata = _coerce_json_dict(artifact.metadata or {})
+    payload: JSONDict = {
         "id": artifact.id,
         "case_id": artifact.case_id,
         "job_id": artifact.job_id,
@@ -260,10 +362,10 @@ def snapshot_artifact_for_guardian(artifact: CaseArtifact) -> Dict[str, Any]:
         "title": artifact.title,
         "path": artifact.path,
         "checksum": artifact.checksum,
-        "metadata": artifact.metadata or {},
-        "source_kind": (artifact.metadata or {}).get("source_kind"),
-        "source_label": (artifact.metadata or {}).get("source_label"),
+        "metadata": metadata,
     }
+    payload["source_kind"] = metadata.get("source_kind")
+    payload["source_label"] = metadata.get("source_label")
 
     path_value = artifact.path
     if not path_value:
@@ -298,10 +400,10 @@ def snapshot_artifact_for_guardian(artifact: CaseArtifact) -> Dict[str, Any]:
     return payload
 
 
-def store_guardian_review(artifact: CaseArtifact, review: Dict[str, Any]) -> None:
-    metadata = dict(artifact.metadata or {})
-    history: List[Dict[str, Any]] = list(metadata.get("guardian_history") or [])
-    history.append(review)
+def store_guardian_review(artifact: CaseArtifact, review: JSONDict) -> None:
+    metadata = _coerce_json_dict(artifact.metadata or {})
+    history = _coerce_instruction_list(metadata.get("guardian_history"))
+    history.append(dict(review))
     if len(history) > MAX_HISTORY_ENTRIES:
         history = history[-MAX_HISTORY_ENTRIES:]
     metadata["guardian_history"] = history
@@ -317,9 +419,9 @@ def build_guardian_review_record(
     status: str,
     artifact: CaseArtifact,
     context: GuardianContext,
-    extra: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    record: Dict[str, Any] = {
+    extra: JSONDict | None = None,
+) -> JSONDict:
+    record: JSONDict = {
         "status": status,
         "reviewed_at": timezone.now().isoformat(),
         "provider": verdict.provider,
@@ -341,7 +443,8 @@ def build_guardian_review_record(
 def enqueue_guardian_review(artifact_id: int) -> None:
     from apps.platform.operations.tasks import guardian_review_artifact
 
-    guardian_review_artifact.delay(artifact_id=artifact_id)
+    task = cast(_GuardianReviewTask, guardian_review_artifact)
+    task.delay(artifact_id=artifact_id)
 
 
 __all__ = [
