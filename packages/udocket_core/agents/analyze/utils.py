@@ -6,15 +6,19 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, MutableMapping, Optional, cast
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, MutableMapping, Optional
 
 from ..common import (
     AnalysisArtifact,
     TranscriptParse,
+    coerce_mapping,
+    coerce_mapping_list,
+    coerce_sequence,
     append_jsonl,
     ensure_dir,
     next_versioned,
     parse_transcript,
+    sequence_length,
     sha256_file,
 )
 from .stages import (
@@ -269,18 +273,8 @@ class AnalyzePipeline:
         state["outline_result"] = outline_result
         self._record_usage(state, "outline", outline_result.usage)
         outline_map: Dict[str, Any] = outline_result.outline
-        issues_list = outline_map.get("issues")
-        facts_list = outline_map.get("facts")
-        issue_count = (
-            len(cast(List[Any], issues_list))
-            if isinstance(issues_list, list)
-            else None
-        )
-        fact_count = (
-            len(cast(List[Any], facts_list))
-            if isinstance(facts_list, list)
-            else None
-        )
+        issue_count = sequence_length(outline_map.get("issues"))
+        fact_count = sequence_length(outline_map.get("facts"))
         self._notify_stage(
             "extract_outline",
             "complete",
@@ -309,11 +303,8 @@ class AnalyzePipeline:
             client_available=bool(llm_client),
         )
         try:
-            outline_issues_obj = outline_result.outline.get("issues")
-            outline_issues = (
-                cast(List[Dict[str, Any]], outline_issues_obj)
-                if isinstance(outline_issues_obj, list)
-                else []
+            outline_issues: List[Dict[str, Any]] = coerce_mapping_list(
+                outline_result.outline.get("issues")
             )
             timeline_result = generate_timeline(
                 parse=parse,
@@ -361,11 +352,8 @@ class AnalyzePipeline:
             client_available=bool(llm_client),
         )
         try:
-            outline_parties_obj = outline_result.outline.get("parties")
-            outline_parties = (
-                cast(Dict[str, Any], outline_parties_obj)
-                if isinstance(outline_parties_obj, dict)
-                else {}
+            outline_parties: Dict[str, Any] = coerce_mapping(
+                outline_result.outline.get("parties")
             )
             entity_result = generate_entities(
                 parse=parse,
@@ -386,18 +374,8 @@ class AnalyzePipeline:
         state["entity_result"] = entity_result
         self._record_usage(state, "entities", entity_result.usage)
         entity_map: Dict[str, Any] = entity_result.hints
-        entities_value = entity_map.get("entities")
-        relations_value = entity_map.get("relations")
-        entities_count = (
-            len(cast(List[Any], entities_value))
-            if isinstance(entities_value, list)
-            else None
-        )
-        relations_count = (
-            len(cast(List[Any], relations_value))
-            if isinstance(relations_value, list)
-            else None
-        )
+        entities_count = sequence_length(entity_map.get("entities"))
+        relations_count = sequence_length(entity_map.get("relations"))
         self._notify_stage(
             "build_entity_hints",
             "complete",
@@ -583,51 +561,72 @@ class AnalyzePipeline:
             chunks.append("\n".join(current))
         return chunks or ["\n".join(usable_lines)]
 
-    def _segment_limit(self) -> Optional[int]:
-        override = self.prompt_segments_override
-        if override is not None and override > 0:
-            return override
-        config_limit = getattr(self.config, "max_prompt_segments", None)
-        if config_limit is None or config_limit <= 0:
+    @staticmethod
+    def _positive_int(value: object | None) -> Optional[int]:
+        if value is None:
             return None
+        candidate: int
+        if isinstance(value, bool):
+            candidate = int(value)
+        elif isinstance(value, int):
+            candidate = value
+        elif isinstance(value, float):
+            candidate = int(value)
+        elif isinstance(value, str):
+            text = value.strip()
+            if not text:
+                return None
+            try:
+                candidate = int(text)
+            except ValueError:
+                return None
+        else:
+            text = str(value).strip()
+            if not text:
+                return None
+            try:
+                candidate = int(text)
+            except ValueError:
+                return None
+        return candidate if candidate > 0 else None
+
+    def _segment_limit(self) -> Optional[int]:
+        override = self._positive_int(self.prompt_segments_override)
+        if override is not None:
+            return override
+        config_limit = self._positive_int(getattr(self.config, "max_prompt_segments", None))
         return config_limit
 
     def _char_limit_for_stage(self, stage_key: str) -> Optional[int]:
         runtime = self.stage_runtimes.get(stage_key)
-        manual_limit = self.prompt_chars_override
-        config_limit = getattr(self.config, "max_prompt_chars", None)
-        config_limit = config_limit if config_limit and config_limit > 0 else None
+        manual_limit = self._positive_int(self.prompt_chars_override)
+        config_limit = self._positive_int(getattr(self.config, "max_prompt_chars", None))
+
+        candidates: list[int] = []
+        if manual_limit is not None:
+            candidates.append(manual_limit)
+        if config_limit is not None:
+            candidates.append(config_limit)
+
         if runtime is None:
-            limits: List[int] = []
-            if manual_limit and manual_limit > 0:
-                limits.append(manual_limit)
-            if config_limit:
-                limits.append(config_limit)
-            return min(limits) if limits else None
+            return min(candidates) if candidates else None
+
         context_tokens = runtime.context_window_tokens
         if context_tokens is not None:
             available = context_tokens - runtime.profile.output_reserve_tokens
-            context_tokens = max(available, runtime.profile.min_context_tokens)
+            bounded = max(available, runtime.profile.min_context_tokens)
         else:
-            context_tokens = runtime.profile.recommended_context_tokens
+            bounded = runtime.profile.recommended_context_tokens
+
         chunk_target = runtime.profile.target_chunk_tokens
         if chunk_target:
-            context_tokens = min(context_tokens, chunk_target)
-        char_limit = (
-            int(context_tokens * self.chars_per_token)
-            if context_tokens
-            else None
-        )
-        limits: List[int] = []
-        if char_limit and char_limit > 0:
-            limits.append(char_limit)
-        if manual_limit and manual_limit > 0:
-            limits.append(manual_limit)
-        if config_limit:
-            limits.append(config_limit)
-        if not limits:
-            return None
-        return min(limits)
+            bounded = min(bounded, chunk_target)
+
+        char_limit = int(bounded * self.chars_per_token) if bounded else None
+        if char_limit is not None and char_limit > 0:
+            candidates.append(char_limit)
+
+        return min(candidates) if candidates else None
 
     def _record_usage(self, state: MutableMapping[str, Any], stage: str, usage: Dict[str, int]) -> None:
         if not usage:
@@ -736,6 +735,9 @@ def finalize_outputs(
         .replace("+00:00", "Z")
     )
 
+    facts_sequence = coerce_sequence(outline_result.outline.get("facts"))
+    entities_sequence = coerce_sequence(entity_result.hints.get("entities"))
+
     meta: Dict[str, Any] = {
         "case_id": case_id,
         "job_id": job_id,
@@ -757,9 +759,11 @@ def finalize_outputs(
         "status": "ok",
         "words": words,
         "diarized": parse_diarized,
-        "facts": len(cast(List[Any], outline_result.outline.get("facts", []))),
+        "facts": len(facts_sequence) if facts_sequence is not None else 0,
         "timeline_events": len(timeline_result.events),
-        "entity_count": len(cast(List[Any], entity_result.hints.get("entities", []))),
+        "entity_count": len(entities_sequence)
+        if entities_sequence is not None
+        else 0,
     }
     if provider_chain:
         meta["provider_chain"] = list(provider_chain)

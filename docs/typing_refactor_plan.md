@@ -11,6 +11,9 @@ This document lays out the baseline rules for strengthening static typing across
 
 ## Workflow Checklist
 
+- Run the combined typing sweep before touching code: `python scripts/typing/check_strict.py --tool both`. This keeps mypy and pyright in lockstep and prevents regressions in modules that were previously pyright-clean only.
+- After the sweep, use `python scripts/typing/check_strict.py --tool pyright --module ...` and `--tool mypy --module ...` for focused repairs so each tool can be driven independently without losing context.
+- Exercise the smallest relevant pytest slice (for example, `pytest tests/ui/test_llm_settings.py`) while iterating. Save full-suite runs for profiling or release candidates so typing passes stay fast.
 - Run `just lint-types` (or the equivalent mypy/pyright commands) before submitting.
 - Replace loose `dict`/`list` usage with typed containers (`dict[str, object]`, `list[JobRow]`, etc.).
 - Share common shape definitions from `typing` modules rather than inlining anonymous dictionaries.

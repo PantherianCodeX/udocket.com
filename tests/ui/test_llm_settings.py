@@ -21,6 +21,9 @@ def test_case_llm_settings_updates_summary_defaults(settings: SettingsFixture):
 
     client = Client()
     client.force_login(user)
+    session = client.session
+    session["admin_active_org_id"] = str(org.id)
+    session.save()
 
     payload = {
         "target": "analyze",

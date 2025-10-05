@@ -14,6 +14,12 @@ from .io import (
     sha256_file,
 )
 from .base import AnalysisAgent, AnalysisResult
+from .normalization import (
+    coerce_mapping,
+    coerce_mapping_list,
+    coerce_sequence,
+    sequence_length,
+)
 
 __all__: list[str] = [
     "AzureChatClient",
@@ -28,4 +34,8 @@ __all__: list[str] = [
     "sha256_file",
     "TranscriptParse",
     "TranscriptSegment",
+    "coerce_sequence",
+    "sequence_length",
+    "coerce_mapping",
+    "coerce_mapping_list",
 ]

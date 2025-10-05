@@ -31,7 +31,7 @@ StageMap = dict[str, StageOptions]
 ProviderCredentials = Mapping[str, Mapping[str, object]]
 
 
-def _empty_mapping_proxy() -> Mapping[str, object]:
+def _empty_mapping_proxy() -> MappingProxyType[str, object]:
     return MappingProxyType({})
 
 
@@ -294,8 +294,11 @@ def _normalize_stage_map(
                 continue
             stage_lower = stage_key.lower()
             applied_cfg: StageOptions | None = None
-            for prefix, default_cfg in prefix_defaults:
-                if prefix is None or stage_lower.startswith(prefix):
+            for prefix_key, default_cfg in prefix_defaults:
+                if prefix_key is None:
+                    applied_cfg = dict(default_cfg)
+                    break
+                if stage_lower.startswith(prefix_key):
                     applied_cfg = dict(default_cfg)
                     break
             if applied_cfg is None:
