@@ -16,7 +16,7 @@ from ...common.chunking import (
     should_retry_for_length,
     split_for_retry,
 )
-from packages.udocket_core.json_utils import parse_json_value
+from packages.udocket_core.json_utils import parse_json_object
 from packages.udocket_core.llm.runtime import ChatClient
 
 logger = logging.getLogger("udocket.analyze.entity_stage")
@@ -322,8 +322,8 @@ def generate_entities(
                 )
                 continue
             try:
-                payload = json.loads(content_str)
-            except json.JSONDecodeError as exc:
+                payload = parse_json_object(content_str, context="entity stage payload")
+            except ValueError as exc:
                 logger.warning(
                     "Entity stage produced non-JSON payload; attempting to split chunk",
                 )
@@ -333,8 +333,6 @@ def generate_entities(
                         chunk_queue.appendleft(halves[1])
                         chunk_queue.appendleft(halves[0])
                         continue
-                continue
-            if not isinstance(payload, dict):
                 continue
             entities = payload.get("entities")
             if not isinstance(entities, list) or not entities:

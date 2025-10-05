@@ -13,6 +13,7 @@ from .common.docx import write_basic_docx
 from .compose import COMPOSE_STAGE_PROFILES
 from ..llm import LLMSettings, load_llm_settings
 from ..llm.runtime import ChatClient, ChatClientError, build_chat_client, build_provider_runtime_config
+from packages.udocket_core.json_utils import load_json_object, load_json_value, parse_json_value_strict
 
 
 logger = logging.getLogger("udocket.compose.agent")
@@ -402,35 +403,36 @@ class ComposeAgent:
         ensure_dir(analysis_dir)
         ensure_dir(ops_dir)
 
-        summary_data: Dict[str, Any] = {}
         summary_markdown = _load_text_file(summary_markdown_path)
+        summary_data: Dict[str, Any] = {}
         if summary_json_path and summary_json_path.exists():
             try:
-                summary_data = json.loads(summary_json_path.read_text(encoding="utf-8"))
-            except json.JSONDecodeError as exc:
-                raise ComposeStageError("compose.context_builder", f"Summary JSON invalid: {exc}") from exc
+                summary_data = load_json_object(summary_json_path, context="summary data")
+            except ValueError as exc:
+                raise ComposeStageError("compose.context_builder", str(exc)) from exc
 
         timeline_seeds: List[Dict[str, Any]] = []
         if timeline_seed_path and timeline_seed_path.exists():
             try:
-                payload = json.loads(timeline_seed_path.read_text(encoding="utf-8"))
-                if isinstance(payload, dict) and "events" in payload:
-                    events = payload.get("events")
-                else:
-                    events = payload
-                if isinstance(events, list):
-                    timeline_seeds = [item for item in events if isinstance(item, dict)]
-            except json.JSONDecodeError:
-                timeline_seeds = []
+                payload = load_json_value(timeline_seed_path, context="timeline seeds")
+            except ValueError as exc:
+                raise ComposeStageError("compose.timeline_builder", str(exc)) from exc
+
+            if isinstance(payload, dict) and "events" in payload:
+                candidate = payload.get("events")
+                events = candidate if isinstance(candidate, Sequence) else []
+            elif isinstance(payload, Sequence):
+                events = payload
+            else:
+                events = []
+            timeline_seeds = [item for item in events if isinstance(item, dict)]
 
         entity_hints: Dict[str, Any] = {}
         if entity_hint_path and entity_hint_path.exists():
             try:
-                payload = json.loads(entity_hint_path.read_text(encoding="utf-8"))
-                if isinstance(payload, dict):
-                    entity_hints = payload
-            except json.JSONDecodeError:
-                entity_hints = {}
+                entity_hints = load_json_object(entity_hint_path, context="entity hints")
+            except ValueError as exc:
+                raise ComposeStageError("compose.entity_brief", str(exc)) from exc
 
         staff_report = _load_text_file(staff_report_path)
         transcript_text = _load_text_file(transcript_path)
@@ -1141,17 +1143,17 @@ class ComposeAgent:
             "compose.qa_review",
         }:
             try:
-                parsed = json.loads(content)
-            except json.JSONDecodeError as exc:
-                raise ComposeStageError(stage_key, f"Invalid JSON: {exc}")
-            if stage_key == "compose.timeline_builder" and not isinstance(parsed, Mapping):
-                raise ComposeStageError(stage_key, "Timeline response must be an object")
-            if stage_key == "compose.graph_builder" and not isinstance(parsed, Mapping):
-                raise ComposeStageError(stage_key, "Graph response must be an object")
-            if stage_key == "compose.context_builder" and not isinstance(parsed, Mapping):
-                raise ComposeStageError(stage_key, "Context response must be an object")
-            if stage_key == "compose.graph_visual" and not isinstance(parsed, Mapping):
-                raise ComposeStageError(stage_key, "Graph visual response must be an object")
+                parsed = parse_json_value_strict(content, context=f"{stage_key} response")
+            except ValueError as exc:
+                raise ComposeStageError(stage_key, str(exc))
+            if stage_key in {
+                "compose.timeline_builder",
+                "compose.graph_builder",
+                "compose.context_builder",
+                "compose.graph_visual",
+                "compose.qa_review",
+            } and not isinstance(parsed, Mapping):
+                raise ComposeStageError(stage_key, "Stage response must be a JSON object")
             return parsed
 
         if stage_key in {"compose.client_brief", "compose.lawyer_brief"}:

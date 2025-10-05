@@ -7,6 +7,7 @@ import json
 
 from ...common.io import TranscriptParse
 from packages.udocket_core.llm.runtime import ChatClient
+from packages.udocket_core.json_utils import parse_json_object
 
 
 @dataclass
@@ -142,12 +143,9 @@ def _extract_json(raw: str) -> Dict[str, Any]:
     end = buffer.rfind("}")
     candidate = buffer[start : end + 1]
     try:
-        payload = json.loads(candidate)
-    except json.JSONDecodeError as exc:
+        return parse_json_object(candidate, context="summary stage response")
+    except ValueError as exc:
         raise RuntimeError(f"Unable to parse summary JSON: {exc}") from exc
-    if not isinstance(payload, dict):
-        raise RuntimeError("Summary JSON payload must be an object")
-    return payload
 
 
 def _validate_summary_schema(payload: Dict[str, Any]) -> None:

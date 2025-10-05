@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-import json
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, cast
+
+from packages.udocket_core.json_utils import load_json_object
 
 BASE_DIR = Path(__file__).resolve().parents[3]
 PROVIDERS_PATH = BASE_DIR / "config" / "llm_providers.json"
@@ -96,7 +97,8 @@ class LLMSettings:
 def _load_json(path: Path) -> Dict[str, object]:
     if not path.exists():
         return {}
-    return json.loads(path.read_text(encoding="utf-8"))
+    payload = load_json_object(path, context=str(path))
+    return {str(key): value for key, value in payload.items()}
 
 
 def _as_dict(value: object) -> Dict[str, Any]:

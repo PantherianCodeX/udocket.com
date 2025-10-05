@@ -15,6 +15,7 @@ from ...common.chunking import (
     split_for_retry,
 )
 from packages.udocket_core.llm.runtime import ChatClient
+from packages.udocket_core.json_utils import parse_json_object
 
 OUTLINE_SCHEMA = {
     "type": "object",
@@ -358,8 +359,8 @@ def generate_outline(
                         continue
                 raise
             try:
-                outline_payload = json.loads(content)
-            except json.JSONDecodeError as exc:
+                outline_payload = parse_json_object(content, context="outline stage payload")
+            except ValueError as exc:
                 if should_retry_for_json(str(exc)) or should_retry_for_length(str(exc)):
                     halves = split_for_retry(chunk_text, config=OUTLINE_SPLIT_CONFIG)
                     if halves:

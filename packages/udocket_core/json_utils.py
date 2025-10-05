@@ -223,12 +223,58 @@ def write_json_object(
 
 
 def parse_json_value(data: str) -> JSONValue | None:
-    """Parse ``data`` into a ``JSONValue`` or return ``None`` on failure."""
+    """Parse ``data`` into a ``JSONValue`` or return ``None`` when invalid."""
+
     try:
         raw = json.loads(data)
     except json.JSONDecodeError:
         return None
     return coerce_json_value(raw)
+
+
+def parse_json_value_strict(data: str, *, context: str | None = None) -> JSONValue:
+    """Parse ``data`` and raise ``ValueError`` when the payload is invalid."""
+
+    try:
+        raw = json.loads(data)
+    except json.JSONDecodeError as exc:  # pragma: no cover - pass-through
+        label = context or "JSON payload"
+        raise ValueError(f"Invalid {label}: {exc}") from exc
+    return coerce_json_value(raw)
+
+
+def parse_json_object(data: str, *, context: str | None = None) -> JSONObject:
+    """Parse ``data`` and return a JSON object, raising ``ValueError`` when invalid."""
+
+    value = parse_json_value_strict(data, context=context)
+    if not isinstance(value, dict):
+        label = context or "JSON payload"
+        raise ValueError(f"Expected JSON object for {label}")
+    return value
+
+
+def load_json_object(path: Path, *, context: str | None = None) -> JSONObject:
+    """Read ``path`` and return a JSON object, raising when parsing fails."""
+
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:  # pragma: no cover - pass-through
+        label = context or str(path)
+        raise ValueError(f"Unable to read JSON file {label}: {exc}") from exc
+    label = context or str(path)
+    return parse_json_object(text, context=label)
+
+
+def load_json_value(path: Path, *, context: str | None = None) -> JSONValue:
+    """Read ``path`` and return a JSON value, raising ``ValueError`` when invalid."""
+
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:  # pragma: no cover - pass-through
+        label = context or str(path)
+        raise ValueError(f"Unable to read JSON file {label}: {exc}") from exc
+    label = context or str(path)
+    return parse_json_value_strict(text, context=label)
 
 
 def write_json_value(
@@ -268,5 +314,9 @@ __all__ = [
     "read_json_object",
     "write_json_object",
     "parse_json_value",
+    "parse_json_value_strict",
+    "parse_json_object",
+    "load_json_value",
+    "load_json_object",
     "write_json_value",
 ]

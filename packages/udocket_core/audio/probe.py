@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-import json
 import shutil
 import subprocess
 from pathlib import Path
 from typing import Any, Dict, Optional
+
+from packages.udocket_core.json_utils import parse_json_object
 
 
 def _parse_float(value: Any) -> Optional[float]:
@@ -60,12 +61,20 @@ def probe_audio_metadata(source: str | Path) -> Dict[str, Optional[Any]]:
 
     try:
         out = subprocess.check_output(cmd, stderr=subprocess.STDOUT, text=True)
-        data = json.loads(out)
+        data = parse_json_object(out, context="ffprobe output")
     except Exception:
         return {}
 
-    stream = (data.get("streams") or [{}])[0]
-    fmt = data.get("format") or {}
+    streams_value = data.get("streams")
+    if not isinstance(streams_value, list) or not streams_value:
+        return {}
+    stream_candidate = streams_value[0]
+    if not isinstance(stream_candidate, dict):
+        return {}
+    stream = stream_candidate
+
+    fmt_value = data.get("format")
+    fmt = fmt_value if isinstance(fmt_value, dict) else {}
 
     duration = _parse_float(stream.get("duration")) or _parse_float(fmt.get("duration"))
     bitrate = _parse_int(stream.get("bit_rate") or fmt.get("bit_rate"))

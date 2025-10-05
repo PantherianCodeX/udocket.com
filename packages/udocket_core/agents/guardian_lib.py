@@ -5,6 +5,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Optional
 
+from packages.udocket_core.json_utils import parse_json_value_strict
 from packages.udocket_core.llm import LLMSettings, load_llm_settings
 from packages.udocket_core.llm.config import LLMProvider, LLMProviderModel
 from packages.udocket_core.llm.runtime import (
@@ -268,7 +269,12 @@ class GuardianAgent:
         if start == -1 or end == -1:
             raise RuntimeError("Guardian response was not JSON")
         try:
-            payload = json.loads(raw_response[start : end + 1])
+            payload = parse_json_value_strict(
+                raw_response[start : end + 1],
+                context="guardian agent response",
+            )
+            if not isinstance(payload, dict):
+                raise ValueError("Guardian response must be a JSON object")
         except json.JSONDecodeError as exc:
             raise RuntimeError(f"Guardian response parse error: {exc}") from exc
 
