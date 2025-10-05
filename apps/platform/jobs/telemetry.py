@@ -3,7 +3,6 @@ from __future__ import annotations
 """Helpers to derive enriched job telemetry for UI and API consumers."""
 
 from dataclasses import dataclass
-import json
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional
 import hashlib
@@ -12,6 +11,7 @@ from django.utils.functional import cached_property
 
 from apps.platform.jobs.models import Job
 from apps.platform.operations.storage import ops_dir as storage_ops_dir
+from packages.udocket_core.json_utils import read_json_object
 
 
 def _ops_json_path(job: Job) -> Path:
@@ -23,12 +23,7 @@ def _ops_log_path(job: Job) -> Path:
 
 
 def _safe_json_load(path: Path) -> Dict[str, Any]:
-    if not path.exists():
-        return {}
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
+    return read_json_object(path)
 
 
 def _safe_text_load(path: Path) -> Optional[str]:
