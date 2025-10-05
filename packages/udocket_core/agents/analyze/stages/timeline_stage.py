@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# pyright: strict
+
 from collections import deque
 from dataclasses import dataclass
 import json
