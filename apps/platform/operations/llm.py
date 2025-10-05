@@ -539,7 +539,7 @@ def _credential_models_to_options(
             else None
         )
         options_value = item.get("options")
-        options_dict = coerce_json_object(options_value)
+        options_dict = normalize_json_object(options_value, drop_empty_keys=True, drop_nullish_values=True)
         if deployment_env and "azure_deployment" not in options_dict:
             options_dict["azure_deployment"] = deployment_env
 
@@ -1001,7 +1001,9 @@ def _normalize_models(
             payload["enabled"] = True
 
         options_value = item.get("options")
-        options_dict = coerce_json_object(options_value)
+        options_dict = normalize_json_object(
+            options_value, drop_empty_keys=True, drop_nullish_values=True
+        )
         if options_dict:
             payload["options"] = options_dict
 
@@ -1013,7 +1015,7 @@ def _prepare_live_model_entry(model: SanitizedModel) -> JSONDict:
     mapping_model = cast(Mapping[str, JSONValue], model)
     entry: JSONDict = {key: value for key, value in mapping_model.items()}
     options_value = entry.get("options")
-    options = coerce_json_object(options_value)
+    options = normalize_json_object(options_value, drop_empty_keys=True, drop_nullish_values=True)
     deployment_env = entry.get("deployment_env")
     if isinstance(deployment_env, str) and deployment_env:
         if "azure_deployment" not in options:
@@ -1039,7 +1041,7 @@ def run_live_model_probe(
     model_name_value = prepared.get("name")
     model_name = str(model_name_value) if isinstance(model_name_value, str) else ""
     options_value = prepared.get("options")
-    options_payload = coerce_json_object(options_value)
+    options_payload = normalize_json_object(options_value, drop_empty_keys=True, drop_nullish_values=True)
     credential_payload: dict[str, Any] = {
         "endpoint": endpoint,
         "api_key": api_key,
@@ -1084,7 +1086,7 @@ def run_live_model_probe(
         raise
     except Exception as exc:  # pragma: no cover - network failures
         raise ChatClientError(f"Live request failed: {exc}") from exc
-    usage_payload = coerce_json_object(usage)
+    usage_payload = normalize_json_object(usage, drop_empty_keys=True)
     model_value = coerce_str(prepared.get("name"))
     result: LiveProbeResult = {
         "model": model_value,

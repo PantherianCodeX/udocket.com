@@ -37,6 +37,7 @@ from packages.udocket_core.json_utils import (
     coerce_json_value,
     coerce_str,
     merge_json_objects,
+    normalize_json_object,
     read_json_object,
 )
 
@@ -135,7 +136,7 @@ def transcribe_job(
     if job_obj is None:
         job_obj = Job.typed_objects().select_related("case").get(pk=job_id)
 
-    base_meta: JSONObject = coerce_json_object(
+    base_meta: JSONObject = normalize_json_object(
         {
             "job_kind": "transcription",
             "agent_type": "transcription",
@@ -143,7 +144,9 @@ def transcribe_job(
             "transcription_mode": mode,
             "requested_language": language or getattr(job_obj, "language", None),
             "transcription_status": str(getattr(job_obj, "status", "") or Job.Status.PENDING),
-        }
+        },
+        drop_empty_keys=True,
+        drop_nullish_values=True,
     )
     safe_job_meta(case_id, org_id, job_id, base_meta)
 
@@ -167,12 +170,14 @@ def transcribe_job(
         if audio_input and not audio_input.startswith("http"):
             audio_path = Path(audio_input)
             if audio_path.exists():
-                audio_meta_updates = coerce_json_object(
+                audio_meta_updates = normalize_json_object(
                     {
                         "audio_sha256": sha256_file(audio_path),
                         "audio_size_bytes": audio_path.stat().st_size,
                         "audio_mime": mimetypes.guess_type(audio_path.name)[0],
-                    }
+                    },
+                    drop_empty_keys=True,
+                    drop_nullish_values=True,
                 )
                 audio_meta_updates = merge_json_objects(audio_meta_updates, probe_audio_metadata(audio_path))
                 job_meta_target = job_obj
@@ -475,7 +480,7 @@ def transcribe_job(
                             converted_job_obj.save()
                         converted_job_id = str(converted_job_obj.id)
 
-                        converted_meta_updates: JSONObject = coerce_json_object(
+                        converted_meta_updates: JSONObject = normalize_json_object(
                             {
                                 "job_kind": "audio_conversion",
                                 "agent_type": "Audio Conversion",
@@ -489,7 +494,8 @@ def transcribe_job(
                                 "source_audio_file": original_display,
                                 "conversion_source_extension": source_path.suffix.lower(),
                                 "conversion_completed_at": now_ts.isoformat(),
-                            }
+                            },
+                            drop_empty_keys=True,
                         )
                         for key, value in (source_audio_meta or {}).items():
                             if key.startswith("audio_") and value is not None:
