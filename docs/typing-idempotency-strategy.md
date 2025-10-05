@@ -52,6 +52,7 @@ The full automation specifications live in `docs/typing/automation_helper_specs.
 - [x] Ship `scripts/typing/bootstrap_env.py` and expose it via `just typing-bootstrap`.
 - [x] Seed `docs/typing/automation_manifest.json` from the template and wire `scripts/typing/sync_docs.py` into CI.
 - [x] Add `tests/_typing.py` and run the fixture annotator across the loudest suites.
+- [x] Vendor upstream stub packages via `scripts/typing/vendor_stubs.py` so pyright does not depend on the virtualenv at analysis time.
 - [ ] Promote clean modules to strict, capturing entries in `docs/typing/strict_manifest.json`.
 - [ ] Run the manager codemod on operations/jobs/apps so querysets inherit typed managers before enabling stricter analysis.
 

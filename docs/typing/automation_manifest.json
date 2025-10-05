@@ -23,6 +23,12 @@
       "name": "manager_codemod",
       "status": "ok",
       "version": "0.1.0"
+    },
+    {
+      "lastRun": "2025-10-05T16:19:23.987129+00:00",
+      "name": "vendor_stubs",
+      "status": "ok",
+      "version": "0.1.0"
     }
   ],
   "notes": [

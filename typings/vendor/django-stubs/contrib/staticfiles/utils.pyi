@@ -1,0 +1,9 @@
+# pyright: reportMissingParameterType=false, reportUnknownParameterType=false, reportUnknownVariableType=false, reportUnknownMemberType=false, reportAttributeAccessIssue=false, reportPrivateUsage=false, reportIncompatibleVariableOverride=false, reportUntypedClassDecorator=false, reportMissingTypeArgument=false, reportOverlappingOverload=false, reportInvalidTypeVarUse=false, reportIncompatibleMethodOverride=false, reportUntypedBaseClass=false, reportGeneralTypeIssues=false
+
+from collections.abc import Iterable, Iterator
+
+from django.core.files.storage import Storage
+
+def matches_patterns(path: str, patterns: Iterable[str]) -> bool: ...
+def get_files(storage: Storage, ignore_patterns: Iterable[str] | None = None, location: str = "") -> Iterator[str]: ...
+def check_settings(base_url: str | None = None) -> None: ...

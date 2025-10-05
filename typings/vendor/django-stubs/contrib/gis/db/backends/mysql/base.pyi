@@ -1,0 +1,11 @@
+# pyright: reportMissingParameterType=false, reportUnknownParameterType=false, reportUnknownVariableType=false, reportUnknownMemberType=false, reportAttributeAccessIssue=false, reportPrivateUsage=false, reportIncompatibleVariableOverride=false, reportUntypedClassDecorator=false, reportMissingTypeArgument=false, reportOverlappingOverload=false, reportInvalidTypeVarUse=false, reportIncompatibleMethodOverride=false, reportUntypedBaseClass=false, reportGeneralTypeIssues=false
+
+from typing import Any
+
+from django.db.backends.mysql.base import DatabaseWrapper as MySQLDatabaseWrapper
+
+class DatabaseWrapper(MySQLDatabaseWrapper):
+    SchemaEditorClass: Any
+    features_class: Any
+    introspection_class: Any
+    ops_class: Any

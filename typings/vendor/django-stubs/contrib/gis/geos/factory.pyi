@@ -1,0 +1,12 @@
+# pyright: reportMissingParameterType=false, reportUnknownParameterType=false, reportUnknownVariableType=false, reportUnknownMemberType=false, reportAttributeAccessIssue=false, reportPrivateUsage=false, reportIncompatibleVariableOverride=false, reportUntypedClassDecorator=false, reportMissingTypeArgument=false, reportOverlappingOverload=false, reportInvalidTypeVarUse=false, reportIncompatibleMethodOverride=false, reportUntypedBaseClass=false, reportGeneralTypeIssues=false
+
+from typing import Any, Protocol, type_check_only
+
+from django.contrib.gis.geos.geometry import GEOSGeometry
+
+@type_check_only
+class _Reader(Protocol):
+    def read(self) -> str | bytes: ...
+
+def fromfile(file_h: str | _Reader) -> GEOSGeometry: ...
+def fromstr(string: str, **kwargs: Any) -> GEOSGeometry: ...

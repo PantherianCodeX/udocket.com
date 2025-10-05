@@ -1,0 +1,15 @@
+# pyright: reportMissingParameterType=false, reportUnknownParameterType=false, reportUnknownVariableType=false, reportUnknownMemberType=false, reportAttributeAccessIssue=false, reportPrivateUsage=false, reportIncompatibleVariableOverride=false, reportUntypedClassDecorator=false, reportMissingTypeArgument=false, reportOverlappingOverload=false, reportInvalidTypeVarUse=false, reportIncompatibleMethodOverride=false, reportUntypedBaseClass=false, reportGeneralTypeIssues=false
+
+from typing import Any
+
+from django.contrib.gis.gdal.base import GDALBase
+
+class Driver(GDALBase):
+    ptr: Any
+    def __init__(self, dr_input: Any) -> None: ...
+    @classmethod
+    def ensure_registered(cls) -> None: ...
+    @classmethod
+    def driver_count(cls) -> int: ...
+    @property
+    def name(self) -> str: ...

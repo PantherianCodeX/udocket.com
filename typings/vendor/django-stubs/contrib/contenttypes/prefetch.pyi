@@ -1,0 +1,11 @@
+# pyright: reportMissingParameterType=false, reportUnknownParameterType=false, reportUnknownVariableType=false, reportUnknownMemberType=false, reportAttributeAccessIssue=false, reportPrivateUsage=false, reportIncompatibleVariableOverride=false, reportUntypedClassDecorator=false, reportMissingTypeArgument=false, reportOverlappingOverload=false, reportInvalidTypeVarUse=false, reportIncompatibleMethodOverride=false, reportUntypedBaseClass=false, reportGeneralTypeIssues=false
+
+from typing import Any
+
+from django.db.models import Prefetch
+from django.db.models.query import QuerySet
+
+class GenericPrefetch(Prefetch):
+    def __init__(self, lookup: str, querysets: list[QuerySet], to_attr: str | None = None) -> None: ...
+    def __getstate__(self) -> dict[str, Any]: ...
+    def get_current_querysets(self, level: int) -> list[QuerySet] | None: ...

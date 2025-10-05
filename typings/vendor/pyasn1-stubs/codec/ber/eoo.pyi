@@ -1,0 +1,13 @@
+# pyright: reportMissingParameterType=false, reportUnknownParameterType=false, reportUnknownVariableType=false, reportUnknownMemberType=false, reportAttributeAccessIssue=false, reportPrivateUsage=false, reportIncompatibleVariableOverride=false, reportUntypedClassDecorator=false, reportMissingTypeArgument=false, reportOverlappingOverload=false, reportInvalidTypeVarUse=false, reportIncompatibleMethodOverride=false, reportUntypedBaseClass=false, reportGeneralTypeIssues=false
+
+from pyasn1.type import base
+from pyasn1.type.tag import TagSet
+
+__all__ = ["endOfOctets"]
+
+class EndOfOctets(base.SimpleAsn1Type):
+    defaultValue: int
+    tagSet: TagSet
+    def __new__(cls, *args, **kwargs): ...
+
+endOfOctets: EndOfOctets
