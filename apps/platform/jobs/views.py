@@ -59,6 +59,7 @@ from django.db import transaction
 from apps.platform.operations.tasks import analyze_job, compose_job
 from apps.platform.tenancy import scope_jobs
 from apps.platform.operations.storage import ensure_case_dirs, ops_dir as storage_ops_dir
+from packages.udocket_core.json_utils import read_json_object
 from apps.platform.operations.utils import append_job_log, read_job_meta, update_job_meta
 from apps.platform.operations.services import case_paths, resolve_case_relative
 from apps.platform.operations.services.files import sha256_file
@@ -487,10 +488,7 @@ class JobViewSet(viewsets.ModelViewSet):
         if org_id is not None:
             job_meta_path = storage_ops_dir(str(job.case_id), org_id) / f"{job.id}_transcription_log.json"
             if job_meta_path.exists():
-                try:
-                    job_meta = json.loads(job_meta_path.read_text(encoding="utf-8"))
-                except Exception:
-                    job_meta = {}
+                job_meta = read_json_object(job_meta_path)
         path_obj: Optional[Path] = None
         active_meta: Dict[str, Any] = job_meta
         if converted:
@@ -515,10 +513,7 @@ class JobViewSet(viewsets.ModelViewSet):
                     if org_id is not None:
                         converted_meta_path = storage_ops_dir(str(job.case_id), org_id) / f"{converted_job_id}_transcription_log.json"
                         if converted_meta_path.exists():
-                            try:
-                                converted_meta = json.loads(converted_meta_path.read_text(encoding="utf-8"))
-                            except Exception:
-                                converted_meta = {}
+                            converted_meta = read_json_object(converted_meta_path)
                 except Job.DoesNotExist:
                     path_obj = None
             if path_obj is None:
@@ -946,10 +941,7 @@ class JobViewSet(viewsets.ModelViewSet):
         ops_path = storage_ops_dir(str(job.case_id), job.case.organization_id) / f"{job.id}_transcription_log.json"
         if not ops_path.exists():
             return
-        try:
-            meta = json.loads(ops_path.read_text(encoding="utf-8"))
-        except Exception:
-            return
+        meta = read_json_object(ops_path)
         loc = meta.get("azure_transcription_url")
         if not loc:
             return
