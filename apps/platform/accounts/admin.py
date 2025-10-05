@@ -142,7 +142,7 @@ class UserAdmin(UserAdminBase):
                     self.fields["organization"].initial = active_org_id
 
             request_scoped_form = cast(
-                type[forms.ModelForm[User]],
+                type[forms.ModelForm],
                 type(
                     "RequestScopedUserCreationForm",
                     (base_form,),
@@ -256,7 +256,7 @@ class OrganizationMembershipAdmin(OrganizationMembershipAdminBase):
                 field.queryset = user_accessible_organizations(raw_user)
 
         request_scoped_form = cast(
-            type[forms.ModelForm[OrganizationMembership]],
+            type[forms.ModelForm],
             type(
                 "RequestScopedMembershipForm",
                 (base_form,),

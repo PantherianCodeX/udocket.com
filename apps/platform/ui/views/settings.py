@@ -220,18 +220,22 @@ def _extract_provider_form_data(
     )
 
     data = normalize_json_object(
-        "provider_uuid": provider_uuid,
-        "provider": provider_key,
-        "display_name": display_name,
-        "endpoint": endpoint,
-        "models": models_payload,
-        "metadata": metadata_payload,
-        "enabled": enabled_value,
-        "api_action": api_action,
-        "api_key": api_key_raw,
-        "clear_flag": clear_flag,
-        "existing_has_api_key": bool(existing.get("has_api_key")) if existing else False,
-    , drop_empty_keys=True, drop_nullish_values=True)
+        {
+            "provider_uuid": provider_uuid,
+            "provider": provider_key,
+            "display_name": display_name,
+            "endpoint": endpoint,
+            "models": models_payload,
+            "metadata": metadata_payload,
+            "enabled": enabled_value,
+            "api_action": api_action,
+            "api_key": api_key_raw,
+            "clear_flag": clear_flag,
+            "existing_has_api_key": bool(existing.get("has_api_key")) if existing else False,
+        },
+        drop_empty_keys=True,
+        drop_nullish_values=True,
+    )
     return data, errors
 
 
@@ -579,9 +583,9 @@ def organization_settings(
                             display_name=form_data["display_name"],
                             endpoint=form_data["endpoint"],
                             api_key=api_key_value,
-                            models=form_data["models"],
-                            metadata=form_data["metadata"],
-                            enabled=form_data["enabled"],
+                            models=form_data.get("models") or [],
+                            metadata=form_data.get("metadata") or {},
+                            enabled=bool(form_data.get("enabled")),
                         )
                     else:
                         upsert_org_provider_credential(
@@ -590,9 +594,9 @@ def organization_settings(
                             display_name=form_data["display_name"],
                             endpoint=form_data["endpoint"],
                             api_key=api_key_value,
-                            models=form_data["models"],
-                            metadata=form_data["metadata"],
-                            enabled=form_data["enabled"],
+                            models=form_data.get("models") or [],
+                            metadata=form_data.get("metadata") or {},
+                            enabled=bool(form_data.get("enabled")),
                         )
                     messages.success(request, f"Provider '{provider_key}' saved.")
                 except ValueError as exc:
@@ -670,15 +674,14 @@ def organization_settings(
                     secret_details.get("metadata") if secret_details else {}
                 )
                 effective_endpoint = (
-                    form_data["endpoint"]
+                    form_data.get("endpoint") or ""
                     or cred.get("endpoint")
                     or provider_obj.default_endpoint
                     or ""
                 )
+                current_meta = form_data.get("metadata")
                 metadata_override = (
-                    form_data["metadata"]
-                    if isinstance(form_data["metadata"], dict) and form_data["metadata"]
-                    else None
+                    current_meta if isinstance(current_meta, dict) and current_meta else None
                 )
                 if metadata_override is not None:
                     effective_metadata = metadata_override
@@ -696,10 +699,10 @@ def organization_settings(
                 )
                 if not effective_models:
                     effective_models = default_models_payload(provider_obj)
-                if form_data["api_action"] == "clear":
+                if form_data.get("api_action") == "clear":
                     effective_api_key = ""
-                elif form_data["api_action"] == "update":
-                    effective_api_key = form_data["api_key"].strip()
+                elif form_data.get("api_action") == "update":
+                    effective_api_key = (form_data.get("api_key") or "").strip()
                 else:
                     effective_api_key = stored_api_key
                 analysis = evaluate_provider_setup(
@@ -768,15 +771,14 @@ def organization_settings(
                         secret_details.get("metadata") if secret_details else {}
                     )
                     effective_endpoint = (
-                        form_data["endpoint"]
+                        form_data.get("endpoint") or ""
                         or cred.get("endpoint")
                         or provider_obj.default_endpoint
                         or ""
                     )
+                    current_meta = form_data.get("metadata")
                     metadata_override = (
-                        form_data["metadata"]
-                        if isinstance(form_data["metadata"], dict) and form_data["metadata"]
-                        else None
+                        current_meta if isinstance(current_meta, dict) and current_meta else None
                     )
                     if metadata_override is not None:
                         effective_metadata = metadata_override
@@ -794,10 +796,10 @@ def organization_settings(
                     )
                     if not effective_models:
                         effective_models = default_models_payload(provider_obj)
-                    if form_data["api_action"] == "clear":
+                    if form_data.get("api_action") == "clear":
                         effective_api_key = ""
-                    elif form_data["api_action"] == "update":
-                        effective_api_key = form_data["api_key"].strip()
+                    elif form_data.get("api_action") == "update":
+                        effective_api_key = (form_data.get("api_key") or "").strip()
                     else:
                         effective_api_key = stored_api_key
                     analysis = evaluate_provider_setup(

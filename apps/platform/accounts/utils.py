@@ -142,6 +142,18 @@ def resolve_request_organization(
     if active is not None:
         return active
 
+    # Fallback: when user has exactly one accessible organization, prefer it.
+    if user and getattr(user, "is_authenticated", False):
+        orgs_qs = user_accessible_organizations(user)
+        try:
+            count = orgs_qs.count()
+        except Exception:  # pragma: no cover - defensive
+            count = 0
+        if count == 1:
+            only_org = next(iter(orgs_qs), None)
+            if isinstance(only_org, Organization):
+                return only_org
+
     if required:
         raise PermissionDenied("Organization context is required for this action.")
     return None

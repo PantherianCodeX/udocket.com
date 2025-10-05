@@ -257,7 +257,7 @@ def _normalize_stage_map(
     prefix_defaults: list[tuple[str | None, StageOptions]] = []
 
     for raw_key, value in stage_map.items():
-        value_dict = _coerce_object_dict(value)
+        value_dict = coerce_object_dict(value)
         if not value_dict:
             continue
         key = str(raw_key or "").strip()

@@ -259,15 +259,32 @@ def guardian_review_artifact(self: TaskProtocol, *, artifact_id: int) -> dict[st
 
     status = "approved" if verdict.approved else "rejected"
     review_record = normalize_json_object(
-        verdict=verdict,
-        status=status,
-        artifact=artifact,
-        context=context,
-        extra={
-            "retry_attempts": context.agent.config.retry_attempts,
-            "instructions_used": len(applicable_instructions),
+        {
+            "status": status,
+            "reviewed_at": timezone.now().isoformat(),
+            "artifact_id": int(artifact.id),
+            "artifact_type": str(getattr(artifact, "type", "")),
+            "provider": verdict.provider,
+            "model": verdict.model,
+            "approved": verdict.approved,
+            "notes": verdict.notes,
+            "violations": verdict.violations,
+            "remediation": verdict.remediation,
+            "usage": verdict.usage,
+            "context": {
+                "configuration_id": getattr(context, "configuration_id", ""),
+                "configuration_name": getattr(context, "configuration_name", ""),
+                "providers": getattr(context, "provider_chain", []),
+                "max_tokens": getattr(context, "max_tokens", None),
+                "temperature": getattr(context, "temperature", None),
+            },
+            "extra": {
+                "retry_attempts": getattr(getattr(getattr(context, "agent", None), "config", None), "retry_attempts", None),
+                "instructions_used": len(applicable_instructions),
+            },
         },
         drop_empty_keys=True,
+        drop_nullish_values=True,
     )
     store_guardian_review(artifact, review_record)
     if job_id:
