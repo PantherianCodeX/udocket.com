@@ -1,11 +1,20 @@
 from __future__ import annotations
 
+# pyright: strict
+
 import json
-from typing import Any, Dict, Iterable, List, Optional, Sequence
+from collections.abc import Iterable, Mapping, Sequence
+from typing import Any, Mapping as TypingMapping, NotRequired, Required, TypedDict, cast
 
 from django.db import transaction
 
-from packages.udocket_core.llm.config import LLMSettings, PROVIDERS_PATH, load_llm_settings
+from packages.udocket_core.llm.config import (
+    LLMProvider,
+    LLMProviderModel,
+    LLMSettings,
+    PROVIDERS_PATH,
+    load_llm_settings,
+)
 from packages.udocket_core.llm.runtime import (
     ChatClientError,
     build_chat_client,
@@ -13,34 +22,142 @@ from packages.udocket_core.llm.runtime import (
 )
 
 try:
-    from packages.udocket_core.agents.analyze_lib import DISALLOWED_PROVIDERS as _ANALYZE_DISALLOWED_PROVIDERS
+    from packages.udocket_core.agents.analyze_lib import (
+        DISALLOWED_PROVIDERS as _analyze_disallowed_providers_source,
+    )
 except Exception:  # pragma: no cover - fallback when analyzer unavailable
-    _ANALYZE_DISALLOWED_PROVIDERS = set()
+    _analyze_disallowed_providers_source: set[str] = set()
+
+_ANALYZE_DISALLOWED_PROVIDERS: set[str] = {
+    str(name)
+    for name in _analyze_disallowed_providers_source
+}
 
 from .crypto import decrypt_secret, encrypt_secret
-from .models import LLMProviderCredential, LLMConfiguration
+from .models import LLMConfiguration, LLMProviderCredential
 
 
-def _clean_stage_map(payload: Dict[str, Dict[str, object]] | None) -> Dict[str, Dict[str, object]]:
-    if not isinstance(payload, dict):
+JSONDict = dict[str, Any]
+
+StageMap = dict[str, JSONDict]
+
+
+class ProviderModelOption(TypedDict, total=False):
+    name: Required[str]
+    value: Required[str]
+    label: Required[str]
+    cost_tier: Required[str]
+    max_output_tokens: NotRequired[int]
+    context_window_tokens: NotRequired[int]
+    max_input_tokens: NotRequired[int]
+    max_chunk_chars: NotRequired[int]
+    chunk_overlap_tokens: NotRequired[int]
+    max_prompt_chars: NotRequired[int]
+    max_prompt_segments: NotRequired[int]
+    default_temperature: NotRequired[float]
+    origin: NotRequired[str]
+    deployment_env: NotRequired[str]
+    enabled: NotRequired[bool]
+    options: NotRequired[JSONDict]
+
+
+class SanitizedModel(TypedDict, total=False):
+    name: Required[str]
+    label: Required[str]
+    cost_tier: Required[str]
+    max_output_tokens: NotRequired[int]
+    context_window_tokens: NotRequired[int]
+    max_input_tokens: NotRequired[int]
+    max_chunk_chars: NotRequired[int]
+    chunk_overlap_tokens: NotRequired[int]
+    max_prompt_chars: NotRequired[int]
+    max_prompt_segments: NotRequired[int]
+    default_temperature: NotRequired[float]
+    deployment_env: NotRequired[str]
+    origin: NotRequired[str]
+    enabled: NotRequired[bool]
+    options: NotRequired[JSONDict]
+
+
+class ProviderCredentialDetails(TypedDict, total=False):
+    uid: NotRequired[str]
+    provider: str
+    display_name: NotRequired[str]
+    endpoint: NotRequired[str]
+    models: NotRequired[list[JSONDict]]
+    has_api_key: NotRequired[bool]
+    metadata: NotRequired[JSONDict]
+    is_enabled: NotRequired[bool]
+    default_endpoint: NotRequired[str]
+    api_kind: NotRequired[str]
+    description: NotRequired[str]
+    category: NotRequired[str]
+    hosted_creators: NotRequired[Sequence[str]]
+
+
+class LLMConfigurationPayload(TypedDict):
+    id: str
+    name: str
+    description: str
+    target: str
+    stage_map: StageMap
+    provider_chain: list[str]
+    is_default: bool
+    updated_at: str | None
+
+
+class LiveProbeResult(TypedDict):
+    model: str | None
+    content: str
+    usage: JSONDict
+
+
+def _serialize_models_payload(models: Iterable[SanitizedModel]) -> list[dict[str, Any]]:
+    serialized: list[dict[str, Any]] = []
+    for model in models:
+        serialized.append(cast(dict[str, Any], dict(model)))
+    return serialized
+
+
+def _as_json_dict(value: TypingMapping[Any, Any] | None) -> JSONDict:
+    if value is None:
         return {}
-    cleaned: Dict[str, Dict[str, object]] = {}
-    for stage_key, cfg in payload.items():
-        if not isinstance(cfg, dict):
+    return {str(key): item for key, item in value.items()}
+
+
+def _as_mapping_sequence(value: object) -> Sequence[Mapping[str, Any]]:
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        return cast(Sequence[Mapping[str, Any]], value)
+    return ()
+
+
+def _clean_stage_map(payload: Mapping[str, Any] | None) -> StageMap:
+    if not payload:
+        return {}
+    cleaned: StageMap = {}
+    for stage_name, cfg in payload.items():
+        if not stage_name:
             continue
-        provider = str(cfg.get("provider") or "").strip().lower()
-        model = str(cfg.get("model") or "").strip()
-        entry: Dict[str, object] = {}
-        options_raw = cfg.get("options") if isinstance(cfg.get("options"), dict) else {}
-        options: Dict[str, object] = {}
-        for opt_key, opt_value in (options_raw or {}).items():
-            key_str = str(opt_key or "").strip()
-            if not key_str:
-                continue
-            if opt_value is None or opt_value == "":
-                continue
-            options[key_str] = opt_value
-        max_tokens_value = cfg.get("max_tokens")
+        if not isinstance(cfg, Mapping):
+            continue
+        cfg_dict = _as_json_dict(cast(TypingMapping[Any, Any], cfg))
+        provider = str(cfg_dict.get("provider") or "").strip().lower()
+        model = str(cfg_dict.get("model") or "").strip()
+        entry: JSONDict = {}
+
+        options_value = cfg_dict.get("options")
+        raw_options = (
+            _as_json_dict(cast(TypingMapping[Any, Any], options_value))
+            if isinstance(options_value, Mapping)
+            else {}
+        )
+        options = {
+            key: value
+            for key, value in raw_options.items()
+            if value not in (None, "")
+        }
+
+        max_tokens_value = cfg_dict.get("max_tokens")
         if isinstance(max_tokens_value, (int, float, str)):
             try:
                 parsed_max = int(float(str(max_tokens_value).strip()))
@@ -48,19 +165,77 @@ def _clean_stage_map(payload: Dict[str, Dict[str, object]] | None) -> Dict[str, 
                 parsed_max = 0
             if parsed_max > 0:
                 entry["max_tokens"] = parsed_max
+
         if provider:
             entry["provider"] = provider
         if model:
             entry["model"] = model
         if options:
             entry["options"] = options
+
         if entry:
-            cleaned[stage_key] = entry
+            cleaned[stage_name] = entry
     return cleaned
 
 
-def _normalize_provider_chain(provider_chain: Iterable[str] | None) -> List[str]:
-    chain: List[str] = []
+def _model_attr(
+    model_meta: LLMProviderModel | Mapping[str, Any],
+    attr: str,
+) -> object:
+    if isinstance(model_meta, LLMProviderModel):
+        return getattr(model_meta, attr)
+    return model_meta.get(attr)
+
+
+def _model_options_dict(
+    model_meta: LLMProviderModel | Mapping[str, Any]
+) -> JSONDict:
+    options_value = _model_attr(model_meta, "options")
+    if isinstance(options_value, Mapping):
+        return _as_json_dict(cast(TypingMapping[Any, Any], options_value))
+    return {}
+
+
+def _coerce_int(value: object) -> int | None:
+    if value in (None, ""):
+        return None
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, (int, float)):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(float(value.strip()))
+        except ValueError:
+            return None
+    return None
+
+
+def _coerce_float(value: object) -> float | None:
+    if value in (None, ""):
+        return None
+    if isinstance(value, bool):
+        return float(int(value))
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value.strip())
+        except ValueError:
+            return None
+    return None
+
+
+def _is_truthy_flag(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.lower() not in {"false", "0", "no"}
+    return bool(value)
+
+
+def _normalize_provider_chain(provider_chain: Iterable[str] | None) -> list[str]:
+    chain: list[str] = []
     if not provider_chain:
         return chain
     for value in provider_chain:
@@ -71,16 +246,26 @@ def _normalize_provider_chain(provider_chain: Iterable[str] | None) -> List[str]
     return chain
 
 
-def serialize_llm_configuration(config: LLMConfiguration) -> Dict[str, object]:
+def serialize_llm_configuration(config: LLMConfiguration) -> LLMConfigurationPayload:
+    raw_stage_map = config.stage_map or {}
+    stage_map = _clean_stage_map(
+        cast(Mapping[str, Mapping[str, object]] | None, raw_stage_map)
+    )
+    provider_chain = [
+        provider.strip().lower()
+        for provider in (config.provider_chain or [])
+        if provider.strip()
+    ]
+    updated_at = config.updated_at.isoformat() if config.updated_at else None
     return {
         "id": str(config.id),
         "name": config.name,
         "description": config.description,
         "target": config.target,
-        "stage_map": dict(config.stage_map or {}),
-        "provider_chain": list(config.provider_chain or []),
+        "stage_map": stage_map,
+        "provider_chain": provider_chain,
         "is_default": bool(config.is_default),
-        "updated_at": config.updated_at.isoformat() if config.updated_at else None,
+        "updated_at": updated_at,
     }
 
 
@@ -88,10 +273,10 @@ def get_org_llm_configurations(
     organization_id: str | None,
     *,
     target: str | None = None,
-) -> List[Dict[str, object]]:
+) -> list[LLMConfigurationPayload]:
     if not organization_id:
         return []
-    queryset = LLMConfiguration.objects.filter(organization_id=organization_id)
+    queryset = LLMConfiguration.typed_objects().filter(organization_id=organization_id)
     if target:
         queryset = queryset.filter(target=target)
     queryset = queryset.order_by("-is_default", "name")
@@ -103,17 +288,17 @@ def get_llm_configuration(
     organization_id: str | None,
     config_id: str | None,
     target: str | None = None,
-) -> Dict[str, object] | None:
+) -> LLMConfigurationPayload | None:
     if not organization_id:
         return None
     if not config_id:
-        qs = LLMConfiguration.objects.filter(organization_id=organization_id)
+        qs = LLMConfiguration.typed_objects().filter(organization_id=organization_id)
         if target:
             qs = qs.filter(target=target)
         config = qs.order_by("-is_default", "name").first()
         return serialize_llm_configuration(config) if config else None
     try:
-        config = LLMConfiguration.objects.get(
+        config = LLMConfiguration.typed_objects().get(
             organization_id=organization_id, id=config_id
         )
     except LLMConfiguration.DoesNotExist:
@@ -128,18 +313,18 @@ def upsert_llm_configuration(
     organization_id: str,
     name: str,
     target: str,
-    stage_map: Dict[str, Dict[str, object]] | None,
+    stage_map: Mapping[str, Mapping[str, object]] | None,
     provider_chain: Iterable[str] | None,
     description: str | None = None,
     config_id: str | None = None,
     set_default: bool = False,
-) -> Dict[str, object]:
+) -> LLMConfigurationPayload:
     cleaned_map = _clean_stage_map(stage_map)
     chain = _normalize_provider_chain(provider_chain)
 
     if config_id:
         try:
-            config = LLMConfiguration.objects.get(
+            config = LLMConfiguration.typed_objects().get(
                 organization_id=organization_id, id=config_id
             )
         except LLMConfiguration.DoesNotExist:
@@ -151,7 +336,7 @@ def upsert_llm_configuration(
             config.stage_map = cleaned_map
             config.provider_chain = chain
             if set_default:
-                LLMConfiguration.objects.filter(
+                LLMConfiguration.typed_objects().filter(
                     organization_id=organization_id,
                     target=target,
                 ).update(is_default=False)
@@ -168,12 +353,12 @@ def upsert_llm_configuration(
             return serialize_llm_configuration(config)
 
     if set_default:
-        LLMConfiguration.objects.filter(
+        LLMConfiguration.typed_objects().filter(
             organization_id=organization_id,
             target=target,
         ).update(is_default=False)
 
-    config = LLMConfiguration.objects.create(
+    config = LLMConfiguration.typed_objects().create(
         organization_id=organization_id,
         name=name,
         description=description or "",
@@ -186,7 +371,7 @@ def upsert_llm_configuration(
 
 
 def delete_llm_configuration(*, organization_id: str, config_id: str) -> None:
-    LLMConfiguration.objects.filter(
+    LLMConfiguration.typed_objects().filter(
         organization_id=organization_id, id=config_id
     ).delete()
 
@@ -195,11 +380,11 @@ def ensure_default_llm_configuration(
     *,
     organization_id: str,
     target: str,
-    stage_map: Dict[str, Dict[str, object]] | None = None,
+    stage_map: Mapping[str, Mapping[str, object]] | None = None,
     provider_chain: Iterable[str] | None = None,
     llm_settings: LLMSettings | None = None,
-) -> Dict[str, object] | None:
-    existing = LLMConfiguration.objects.filter(
+) -> LLMConfigurationPayload | None:
+    existing = LLMConfiguration.typed_objects().filter(
         organization_id=organization_id,
         target=target,
         is_default=True,
@@ -207,7 +392,7 @@ def ensure_default_llm_configuration(
     if existing:
         return serialize_llm_configuration(existing)
 
-    candidate = LLMConfiguration.objects.filter(
+    candidate = LLMConfiguration.typed_objects().filter(
         organization_id=organization_id,
         target=target,
     ).order_by("name").first()
@@ -217,7 +402,7 @@ def ensure_default_llm_configuration(
         return serialize_llm_configuration(candidate)
 
     if stage_map is None and llm_settings is not None:
-        generated: Dict[str, Dict[str, object]] = {}
+        generated: StageMap = {}
         for assignment in llm_settings.assignments.values():
             primary = assignment.providers[0] if assignment.providers else ""
             generated[assignment.stage_key] = {
@@ -237,7 +422,7 @@ def ensure_default_llm_configuration(
     if not cleaned_map and not chain:
         return None
 
-    config = LLMConfiguration.objects.create(
+    config = LLMConfiguration.typed_objects().create(
         organization_id=organization_id,
         name=f"{target.title()} default",
         description="Automatically generated default LLM configuration",
@@ -249,7 +434,7 @@ def ensure_default_llm_configuration(
     return serialize_llm_configuration(config)
 
 
-def _provider_catalog() -> Dict[str, dict]:
+def _provider_catalog() -> dict[str, JSONDict]:
     try:
         data = PROVIDERS_PATH.read_text(encoding="utf-8")
     except FileNotFoundError:
@@ -258,214 +443,249 @@ def _provider_catalog() -> Dict[str, dict]:
         payload = json.loads(data)
     except json.JSONDecodeError:
         return {}
-    return payload.get("providers", {})
+    providers_payload = payload.get("providers")
+    if not isinstance(providers_payload, Mapping):
+        return {}
+    catalog: dict[str, JSONDict] = {}
+    providers_mapping = cast(Mapping[object, object], providers_payload)
+    for provider_name_obj, provider_cfg in providers_mapping.items():
+        if not isinstance(provider_name_obj, str):
+            continue
+        if isinstance(provider_cfg, Mapping):
+            catalog[provider_name_obj] = _as_json_dict(
+                cast(TypingMapping[Any, Any], provider_cfg)
+            )
+        else:
+            catalog[provider_name_obj] = {}
+    return catalog
 
 
-def load_provider_catalog() -> Dict[str, dict]:
+def load_provider_catalog() -> dict[str, JSONDict]:
     return _provider_catalog()
 
 
-def get_org_provider_credentials(organization_id: str | None) -> Dict[str, Dict[str, object]]:
+def get_org_provider_credentials(
+    organization_id: str | None,
+) -> dict[str, ProviderCredentialDetails]:
     if not organization_id:
         return {}
-    creds: Dict[str, Dict[str, object]] = {}
-    qs = LLMProviderCredential.objects.filter(organization_id=organization_id)
+    creds: dict[str, ProviderCredentialDetails] = {}
+    qs = LLMProviderCredential.typed_objects().filter(organization_id=organization_id)
     for record in qs.iterator():
+        raw_models = record.models_payload or []
+        models_payload = [
+            _as_json_dict(cast(TypingMapping[Any, Any], model_entry))
+            for model_entry in raw_models
+        ]
+        metadata_payload = _as_json_dict(
+            cast(TypingMapping[Any, Any], record.metadata)
+        )
         creds[record.provider] = {
             "uid": str(record.uid),
             "provider": record.provider,
             "display_name": record.display_name,
             "endpoint": record.endpoint,
-            "models": list(record.models_payload or []),
-            "has_api_key": bool(record.api_key_encrypted),
-            "metadata": record.metadata or {},
-            "is_enabled": record.is_enabled,
-        }
+        "models": models_payload,
+        "has_api_key": bool(record.api_key_encrypted),
+        "metadata": metadata_payload,
+        "is_enabled": record.is_enabled,
+    }
     return creds
 
 
-def _catalog_models_to_options(models) -> List[Dict[str, object]]:
-    options: List[Dict[str, object]] = []
+def _catalog_models_to_options(
+    models: Mapping[str, LLMProviderModel | Mapping[str, Any]]
+) -> list[ProviderModelOption]:
+    options: list[ProviderModelOption] = []
     for model_name, model_meta in models.items():
-        label = getattr(model_meta, "label", None) or (
-            model_meta.get("label") if isinstance(model_meta, dict) else None
-        )
-        cost_tier = getattr(model_meta, "cost_tier", None) or (
-            model_meta.get("cost_tier") if isinstance(model_meta, dict) else None
-        )
-        max_output = getattr(model_meta, "max_output_tokens", None) or (
-            model_meta.get("max_output_tokens") if isinstance(model_meta, dict) else None
-        )
-        context_window = getattr(model_meta, "context_window_tokens", None) or (
-            model_meta.get("context_window_tokens") if isinstance(model_meta, dict) else None
-        )
-        max_input_tokens = getattr(model_meta, "max_input_tokens", None) or (
-            model_meta.get("max_input_tokens") if isinstance(model_meta, dict) else None
-        )
-        max_chunk_chars = getattr(model_meta, "max_chunk_chars", None) or (
-            model_meta.get("max_chunk_chars") if isinstance(model_meta, dict) else None
-        )
-        chunk_overlap_tokens = getattr(model_meta, "chunk_overlap_tokens", None) or (
-            model_meta.get("chunk_overlap_tokens") if isinstance(model_meta, dict) else None
-        )
-        max_prompt_chars = getattr(model_meta, "max_prompt_chars", None) or (
-            model_meta.get("max_prompt_chars") if isinstance(model_meta, dict) else None
-        )
-        max_prompt_segments = getattr(model_meta, "max_prompt_segments", None) or (
-            model_meta.get("max_prompt_segments") if isinstance(model_meta, dict) else None
-        )
-        default_temp = getattr(model_meta, "default_temperature", None) or (
-            model_meta.get("default_temperature") if isinstance(model_meta, dict) else None
-        )
-        origin = getattr(model_meta, "origin", None) or (
-            model_meta.get("origin") if isinstance(model_meta, dict) else None
-        )
-        deployment_env = getattr(model_meta, "deployment_env", None) or (
-            model_meta.get("deployment_env") if isinstance(model_meta, dict) else None
-        )
-        default_enabled = getattr(model_meta, "default_enabled", None)
-        if default_enabled is None and isinstance(model_meta, dict):
-            default_enabled = model_meta.get("default_enabled")
-        options_payload = getattr(model_meta, "options", None) or (
-            model_meta.get("options") if isinstance(model_meta, dict) else None
-        )
-        options_dict = dict(options_payload) if isinstance(options_payload, dict) else {}
+        label_raw = _model_attr(model_meta, "label")
+        cost_tier_raw = _model_attr(model_meta, "cost_tier")
+        max_output = _coerce_int(_model_attr(model_meta, "max_output_tokens"))
+        context_window = _coerce_int(_model_attr(model_meta, "context_window_tokens"))
+        max_input_tokens = _coerce_int(_model_attr(model_meta, "max_input_tokens"))
+        max_chunk_chars = _coerce_int(_model_attr(model_meta, "max_chunk_chars"))
+        chunk_overlap_tokens = _coerce_int(_model_attr(model_meta, "chunk_overlap_tokens"))
+        max_prompt_chars = _coerce_int(_model_attr(model_meta, "max_prompt_chars"))
+        max_prompt_segments = _coerce_int(_model_attr(model_meta, "max_prompt_segments"))
+        default_temp = _coerce_float(_model_attr(model_meta, "default_temperature"))
+        origin_raw = _model_attr(model_meta, "origin")
+        deployment_env_raw = _model_attr(model_meta, "deployment_env")
+        default_enabled_raw = _model_attr(model_meta, "default_enabled")
+        options_dict = _model_options_dict(model_meta)
+        deployment_env = str(deployment_env_raw) if isinstance(deployment_env_raw, str) else None
         if deployment_env and "azure_deployment" not in options_dict:
             options_dict["azure_deployment"] = deployment_env
-        options.append(
-            {
-                "name": model_name,
-                "value": model_name,
-                "label": label or model_name,
-                "cost_tier": cost_tier or "standard",
-                "max_output_tokens": max_output,
-                "context_window_tokens": context_window,
-                "max_input_tokens": max_input_tokens,
-                "max_chunk_chars": max_chunk_chars,
-                "chunk_overlap_tokens": chunk_overlap_tokens,
-                "max_prompt_chars": max_prompt_chars,
-                "max_prompt_segments": max_prompt_segments,
-                "default_temperature": default_temp,
-                "origin": origin,
-                "deployment_env": deployment_env,
-                "enabled": bool(default_enabled) if default_enabled is not None else True,
-                "options": options_dict,
-            }
-        )
+
+        entry: ProviderModelOption = {
+            "name": model_name,
+            "value": model_name,
+            "label": str(label_raw) if isinstance(label_raw, str) and label_raw else model_name,
+            "cost_tier": str(cost_tier_raw) if isinstance(cost_tier_raw, str) and cost_tier_raw else "standard",
+            "options": options_dict,
+        }
+
+        if max_output is not None:
+            entry["max_output_tokens"] = max_output
+        if context_window is not None:
+            entry["context_window_tokens"] = context_window
+        if max_input_tokens is not None:
+            entry["max_input_tokens"] = max_input_tokens
+        if max_chunk_chars is not None:
+            entry["max_chunk_chars"] = max_chunk_chars
+        if chunk_overlap_tokens is not None:
+            entry["chunk_overlap_tokens"] = chunk_overlap_tokens
+        if max_prompt_chars is not None:
+            entry["max_prompt_chars"] = max_prompt_chars
+        if max_prompt_segments is not None:
+            entry["max_prompt_segments"] = max_prompt_segments
+        if default_temp is not None:
+            entry["default_temperature"] = default_temp
+        if isinstance(origin_raw, str) and origin_raw:
+            entry["origin"] = origin_raw
+        if deployment_env:
+            entry["deployment_env"] = deployment_env
+
+        if isinstance(default_enabled_raw, bool):
+            entry["enabled"] = default_enabled_raw
+        elif isinstance(default_enabled_raw, str):
+            entry["enabled"] = default_enabled_raw.lower() not in {"false", "0", "no"}
+        else:
+            entry["enabled"] = True
+
+        options.append(entry)
     return options
 
 
-def _credential_models_to_options(models: Sequence[dict]) -> List[Dict[str, object]]:
-    options: List[Dict[str, object]] = []
+def _credential_models_to_options(
+    models: Sequence[Mapping[str, Any]]
+) -> list[ProviderModelOption]:
+    options: list[ProviderModelOption] = []
     for item in models:
-        if not isinstance(item, dict):
-            continue
-        name = str(item.get("name") or item.get("id") or "").strip()
+        name_value = item.get("name") or item.get("id")
+        name = str(name_value).strip() if isinstance(name_value, str) else ""
         if not name:
             continue
-        deployment_env = item.get("deployment_env")
-        options_payload = item.get("options") if isinstance(item.get("options"), dict) else {}
-        options_dict = dict(options_payload)
+        deployment_env_value = item.get("deployment_env")
+        deployment_env = (
+            str(deployment_env_value)
+            if isinstance(deployment_env_value, str)
+            else None
+        )
+        options_value = item.get("options")
+        options_dict = (
+            _as_json_dict(cast(TypingMapping[Any, Any], options_value))
+            if isinstance(options_value, Mapping)
+            else {}
+        )
         if deployment_env and "azure_deployment" not in options_dict:
             options_dict["azure_deployment"] = deployment_env
-        options.append(
-            {
-                "name": name,
-                "value": name,
-                "label": item.get("label") or name,
-                "cost_tier": item.get("cost_tier") or "standard",
-                "max_output_tokens": item.get("max_output_tokens"),
-                "context_window_tokens": item.get("context_window_tokens"),
-                "max_input_tokens": item.get("max_input_tokens"),
-                "max_chunk_chars": item.get("max_chunk_chars"),
-                "chunk_overlap_tokens": item.get("chunk_overlap_tokens"),
-                "max_prompt_chars": item.get("max_prompt_chars"),
-                "max_prompt_segments": item.get("max_prompt_segments"),
-                "default_temperature": item.get("default_temperature"),
-                "origin": item.get("origin"),
-                "enabled": item.get("enabled", True),
-                "deployment_env": deployment_env,
-                "options": options_dict,
-            }
-        )
+
+        entry: ProviderModelOption = {
+            "name": name,
+            "value": name,
+            "label": str(item.get("label")) if isinstance(item.get("label"), str) else name,
+            "cost_tier": str(item.get("cost_tier")) if isinstance(item.get("cost_tier"), str) else "standard",
+            "options": options_dict,
+        }
+
+        max_output_tokens = _coerce_int(item.get("max_output_tokens"))
+        if max_output_tokens is not None:
+            entry["max_output_tokens"] = max_output_tokens
+
+        context_window_tokens = _coerce_int(item.get("context_window_tokens"))
+        if context_window_tokens is not None:
+            entry["context_window_tokens"] = context_window_tokens
+
+        max_input_tokens = _coerce_int(item.get("max_input_tokens"))
+        if max_input_tokens is not None:
+            entry["max_input_tokens"] = max_input_tokens
+
+        max_chunk_chars = _coerce_int(item.get("max_chunk_chars"))
+        if max_chunk_chars is not None:
+            entry["max_chunk_chars"] = max_chunk_chars
+
+        chunk_overlap_tokens = _coerce_int(item.get("chunk_overlap_tokens"))
+        if chunk_overlap_tokens is not None:
+            entry["chunk_overlap_tokens"] = chunk_overlap_tokens
+
+        max_prompt_chars = _coerce_int(item.get("max_prompt_chars"))
+        if max_prompt_chars is not None:
+            entry["max_prompt_chars"] = max_prompt_chars
+
+        max_prompt_segments = _coerce_int(item.get("max_prompt_segments"))
+        if max_prompt_segments is not None:
+            entry["max_prompt_segments"] = max_prompt_segments
+
+        default_temp = _coerce_float(item.get("default_temperature"))
+        if default_temp is not None:
+            entry["default_temperature"] = default_temp
+
+        origin_value = item.get("origin")
+        if isinstance(origin_value, str) and origin_value:
+            entry["origin"] = origin_value
+        if deployment_env:
+            entry["deployment_env"] = deployment_env
+
+        enabled_value = item.get("enabled")
+        if isinstance(enabled_value, bool):
+            entry["enabled"] = enabled_value
+        elif isinstance(enabled_value, str):
+            entry["enabled"] = enabled_value.lower() not in {"false", "0", "no"}
+        else:
+            entry["enabled"] = True
+
+        options.append(entry)
     return options
 
 
-def default_models_payload(provider) -> List[dict]:
-    payload: List[dict] = []
-    models = getattr(provider, "models", {}) or {}
+def default_models_payload(provider: LLMProvider) -> list[SanitizedModel]:
+    payload: list[SanitizedModel] = []
+    models = provider.models or {}
     for model_name, model_meta in models.items():
-        label = getattr(model_meta, "label", None) or (
-            model_meta.get("label") if isinstance(model_meta, dict) else None
-        )
-        cost_tier = getattr(model_meta, "cost_tier", None) or (
-            model_meta.get("cost_tier") if isinstance(model_meta, dict) else None
-        )
-        max_output = getattr(model_meta, "max_output_tokens", None) or (
-            model_meta.get("max_output_tokens") if isinstance(model_meta, dict) else None
-        )
-        context_window = getattr(model_meta, "context_window_tokens", None) or (
-            model_meta.get("context_window_tokens") if isinstance(model_meta, dict) else None
-        )
-        default_temp = getattr(model_meta, "default_temperature", None) or (
-            model_meta.get("default_temperature") if isinstance(model_meta, dict) else None
-        )
-        origin = getattr(model_meta, "origin", None) or (
-            model_meta.get("origin") if isinstance(model_meta, dict) else None
-        )
-        max_input_tokens = getattr(model_meta, "max_input_tokens", None) or (
-            model_meta.get("max_input_tokens") if isinstance(model_meta, dict) else None
-        )
-        max_chunk_chars = getattr(model_meta, "max_chunk_chars", None) or (
-            model_meta.get("max_chunk_chars") if isinstance(model_meta, dict) else None
-        )
-        chunk_overlap_tokens = getattr(model_meta, "chunk_overlap_tokens", None) or (
-            model_meta.get("chunk_overlap_tokens") if isinstance(model_meta, dict) else None
-        )
-        max_prompt_chars = getattr(model_meta, "max_prompt_chars", None) or (
-            model_meta.get("max_prompt_chars") if isinstance(model_meta, dict) else None
-        )
-        max_prompt_segments = getattr(model_meta, "max_prompt_segments", None) or (
-            model_meta.get("max_prompt_segments") if isinstance(model_meta, dict) else None
-        )
-        default_enabled = getattr(model_meta, "default_enabled", None)
-        if default_enabled is None and isinstance(model_meta, dict):
-            default_enabled = model_meta.get("default_enabled")
-        deployment_env = getattr(model_meta, "deployment_env", None) or (
-            model_meta.get("deployment_env") if isinstance(model_meta, dict) else None
-        )
-        options_payload = getattr(model_meta, "options", None) or (
-            model_meta.get("options") if isinstance(model_meta, dict) else None
-        )
-        options_dict = dict(options_payload) if isinstance(options_payload, dict) else {}
-        if deployment_env and "azure_deployment" not in options_dict:
-            options_dict["azure_deployment"] = deployment_env
-        payload.append(
-            {
-                "name": model_name,
-                "label": label or model_name,
-                "cost_tier": cost_tier or "standard",
-                "max_output_tokens": max_output,
-                "context_window_tokens": context_window,
-                "max_input_tokens": max_input_tokens,
-                "max_chunk_chars": max_chunk_chars,
-                "chunk_overlap_tokens": chunk_overlap_tokens,
-                "max_prompt_chars": max_prompt_chars,
-                "max_prompt_segments": max_prompt_segments,
-                "default_temperature": default_temp,
-                "origin": origin,
-                "deployment_env": deployment_env,
-                "enabled": bool(default_enabled) if default_enabled is not None else True,
-                "options": options_dict,
-            }
-        )
+        label = model_meta.label or model_name
+        cost_tier = model_meta.cost_tier or "standard"
+        entry: SanitizedModel = {
+            "name": model_name,
+            "label": label,
+            "cost_tier": cost_tier,
+        }
+
+        if model_meta.max_output_tokens is not None:
+            entry["max_output_tokens"] = model_meta.max_output_tokens
+        if model_meta.context_window_tokens is not None:
+            entry["context_window_tokens"] = model_meta.context_window_tokens
+        if model_meta.max_input_tokens is not None:
+            entry["max_input_tokens"] = model_meta.max_input_tokens
+        if model_meta.max_chunk_chars is not None:
+            entry["max_chunk_chars"] = model_meta.max_chunk_chars
+        if model_meta.chunk_overlap_tokens is not None:
+            entry["chunk_overlap_tokens"] = model_meta.chunk_overlap_tokens
+        if model_meta.max_prompt_chars is not None:
+            entry["max_prompt_chars"] = model_meta.max_prompt_chars
+        if model_meta.max_prompt_segments is not None:
+            entry["max_prompt_segments"] = model_meta.max_prompt_segments
+        if model_meta.default_temperature is not None:
+            entry["default_temperature"] = model_meta.default_temperature
+        if model_meta.origin:
+            entry["origin"] = model_meta.origin
+        if model_meta.deployment_env:
+            entry["deployment_env"] = model_meta.deployment_env
+
+        options_dict = _model_options_dict(model_meta)
+        if model_meta.deployment_env and "azure_deployment" not in options_dict:
+            options_dict["azure_deployment"] = model_meta.deployment_env
+        if options_dict:
+            entry["options"] = options_dict
+
+        entry["enabled"] = bool(model_meta.default_enabled)
+        payload.append(entry)
     return payload
 
 
 def ensure_provider_templates(
     *,
     organization_id: str | None,
-    llm_settings=None,
+    llm_settings: LLMSettings | None = None,
 ) -> None:
     """Previously ensured provider credentials existed; now a no-op."""
     return
@@ -473,16 +693,16 @@ def ensure_provider_templates(
 
 def evaluate_provider_setup(
     *,
-    provider,
+    provider: LLMProvider,
     endpoint: str | None,
     has_api_key: bool,
-    metadata: Optional[dict],
-    models: Optional[Iterable[dict]],
-) -> Dict[str, object]:
-    issues: List[str] = []
-    metadata_dict: Dict[str, object] = {}
-    if isinstance(metadata, dict):
-        metadata_dict = {str(k): v for k, v in metadata.items()}
+    metadata: Mapping[str, object] | None,
+    models: Iterable[Mapping[str, object]] | None,
+) -> JSONDict:
+    issues: list[str] = []
+    metadata_dict = _as_json_dict(
+        cast(TypingMapping[Any, Any], metadata) if metadata else None
+    )
     endpoint_value = (endpoint or "").strip()
     if not endpoint_value:
         endpoint_value = (provider.default_endpoint or "").strip()
@@ -500,14 +720,23 @@ def evaluate_provider_setup(
                 candidate_models = _normalize_models(models)
             except Exception:
                 candidate_models = []
-            for m in candidate_models:
-                if not isinstance(m, dict):
+            for model_entry in candidate_models:
+                if not _is_truthy_flag(model_entry.get("enabled", True)):
                     continue
-                if m.get("enabled", True) is False:
-                    continue
-                opts = m.get("options") if isinstance(m.get("options"), dict) else {}
-                if (opts.get("azure_deployment") or m.get("deployment_env")):
-                    deployment = opts.get("azure_deployment") or m.get("deployment_env")
+                options_entry = model_entry.get("options")
+                options_mapping = (
+                    cast(Mapping[str, object], options_entry)
+                    if isinstance(options_entry, Mapping)
+                    else None
+                )
+                if options_mapping:
+                    azure_option = options_mapping.get("azure_deployment")
+                    if isinstance(azure_option, str) and azure_option.strip():
+                        deployment = azure_option.strip()
+                        break
+                deployment_env = model_entry.get("deployment_env")
+                if isinstance(deployment_env, str) and deployment_env.strip():
+                    deployment = deployment_env.strip()
                     break
         if not deployment:
             issues.append("Add an Azure deployment name in provider metadata or model options")
@@ -521,7 +750,7 @@ def evaluate_provider_setup(
         issues.append("Add at least one model before enabling this provider")
     else:
         any_enabled = any(
-            m.get("enabled", True) for m in sanitized_models if isinstance(m, dict)
+            _is_truthy_flag(model.get("enabled", True)) for model in sanitized_models
         )
         if not any_enabled:
             issues.append("Enable at least one model before enabling this provider")
@@ -537,24 +766,24 @@ def evaluate_provider_setup(
 def build_provider_registry(
     *,
     organization_id: str | None,
-    llm_settings=None,
-    provider_catalog: Optional[Dict[str, Dict[str, object]]] = None,
-    provider_credentials: Optional[Dict[str, Dict[str, object]]] = None,
-    supported_providers: Optional[Sequence[str]] = None,
-) -> Dict[str, Dict[str, object]]:
+    llm_settings: LLMSettings | None = None,
+    provider_catalog: Mapping[str, JSONDict] | None = None,
+    provider_credentials: Mapping[str, ProviderCredentialDetails] | None = None,
+    supported_providers: Sequence[str] | None = None,
+) -> dict[str, JSONDict]:
     """Return a merged view of catalog + credential providers for UI/runtime.
 
     The resulting mapping is keyed by provider name and includes availability
     metadata so callers do not need to duplicate the merge logic.
     """
 
-    llm_settings = llm_settings or load_llm_settings()
-    provider_catalog = provider_catalog or load_provider_catalog()
-    provider_credentials = provider_credentials or get_org_provider_credentials(organization_id)
+    settings = llm_settings or load_llm_settings()
+    catalog = provider_catalog or load_provider_catalog()
+    credentials_map = provider_credentials or get_org_provider_credentials(organization_id)
     if supported_providers is None:
         supported_set = {
             name
-            for name in llm_settings.providers.keys()
+            for name in settings.providers.keys()
             if name not in _ANALYZE_DISALLOWED_PROVIDERS
         }
     else:
@@ -564,11 +793,11 @@ def build_provider_registry(
             if name not in _ANALYZE_DISALLOWED_PROVIDERS
         }
 
-    registry: Dict[str, Dict[str, object]] = {}
+    registry: dict[str, JSONDict] = {}
 
-    for provider_name, provider in llm_settings.providers.items():
-        catalog_entry = provider_catalog.get(provider_name, {})
-        credential_entry = provider_credentials.get(provider_name, {})
+    for provider_name, provider in settings.providers.items():
+        catalog_entry = catalog.get(provider_name, {})
+        credential_entry = credentials_map.get(provider_name, {})
         analysis = evaluate_provider_setup(
             provider=provider,
             endpoint=credential_entry.get("endpoint"),
@@ -594,11 +823,21 @@ def build_provider_registry(
         elif not base_available:
             reason = "Configure runtime credentials"
         elif status == "not_configured":
-            reason = "; ".join(str(msg) for msg in analysis.get("issues") or [])
+            issues_list = analysis.get("issues")
+            if isinstance(issues_list, Sequence) and not isinstance(issues_list, (str, bytes)):
+                issues_sequence = cast(Sequence[object], issues_list)
+                reason = "; ".join(str(msg) for msg in issues_sequence)
         elif status == "disabled":
             reason = "Disabled"
         if available:
             reason = ""
+
+        issues_payload = analysis.get("issues")
+        if isinstance(issues_payload, Sequence) and not isinstance(issues_payload, (str, bytes)):
+            issues_sequence = cast(Sequence[object], issues_payload)
+            analysis_issues = [str(msg) for msg in issues_sequence]
+        else:
+            analysis_issues = []
 
         registry[provider_name] = {
             "value": provider_name,
@@ -608,7 +847,8 @@ def build_provider_registry(
             "configured": is_ready,
             "enabled": enabled,
             "status": status,
-            "default_endpoint": provider.default_endpoint or catalog_entry.get("default_endpoint"),
+            "default_endpoint": provider.default_endpoint
+            or catalog_entry.get("default_endpoint"),
             "requires_api_key": bool(
                 catalog_entry.get("requires_api_key")
                 if "requires_api_key" in catalog_entry
@@ -621,40 +861,46 @@ def build_provider_registry(
             "api_kind": provider.api_kind,
             "description": provider.description or catalog_entry.get("description", ""),
             "can_enable": is_ready,
-            "issues": analysis.get("issues") or [],
+            "issues": analysis_issues,
             "category": getattr(provider, "category", "creator"),
             "hosted_creators": list(getattr(provider, "hosted_creators", [])),
         }
 
-    for provider_name, credential in provider_credentials.items():
+    for provider_name, credential in credentials_map.items():
         if provider_name in registry:
             existing = registry[provider_name]
-            existing_models = existing.get("models") or []
-            merged_models: Dict[str, Dict[str, object]] = {}
-            for item in existing_models:
-                value = str(item.get("value") or "") if isinstance(item, dict) else ""
-                if value:
-                    merged_models[value] = dict(item)
-            for item in _credential_models_to_options(credential.get("models") or []):
+            existing_models_seq = _as_mapping_sequence(existing.get("models"))
+            merged_models: dict[str, JSONDict] = {}
+            for item in existing_models_seq:
                 value = str(item.get("value") or "")
                 if value:
-                    merged_models[value] = item
+                    merged_models[value] = dict(item)
+            credential_models_seq = _as_mapping_sequence(credential.get("models"))
+            for option in _credential_models_to_options(credential_models_seq):
+                value = option.get("value")
+                if value:
+                    merged_models[value] = dict(option)
             if merged_models:
                 existing["models"] = list(merged_models.values())
-            if credential.get("endpoint"):
-                existing["endpoint"] = credential.get("endpoint")
-            existing["enabled"] = bool(credential.get("is_enabled")) and existing.get("configured", False)
-            if not existing.get("configured"):
+            endpoint_override = credential.get("endpoint")
+            if isinstance(endpoint_override, str) and endpoint_override:
+                existing["endpoint"] = endpoint_override
+            configured = bool(existing.get("configured"))
+            existing["enabled"] = bool(credential.get("is_enabled")) and configured
+            if not configured:
                 existing["status"] = "not_configured"
             else:
                 existing["status"] = "enabled" if existing["enabled"] else "disabled"
-            existing["available"] = (
-                existing.get("available", False)
-                or (existing["enabled"] and existing.get("supported", False))
+            supported = bool(existing.get("supported"))
+            existing["available"] = bool(existing.get("available")) or (
+                existing["enabled"] and supported
             )
             if existing["status"] == "disabled":
                 existing["unavailable_reason"] = "Disabled"
             continue
+
+        credential_models_seq = _as_mapping_sequence(credential.get("models"))
+        credential_models_options = _credential_models_to_options(credential_models_seq)
 
         registry[provider_name] = {
             "value": provider_name,
@@ -668,7 +914,7 @@ def build_provider_registry(
             "requires_api_key": True,
             "unavailable_reason": "",
             "endpoint": credential.get("endpoint"),
-            "models": _credential_models_to_options(credential.get("models") or []),
+            "models": credential_models_options,
             "source": "credential",
             "api_kind": credential.get("api_kind") or "custom",
             "description": credential.get("description") or "",
@@ -683,158 +929,178 @@ def build_provider_registry(
 
 def get_provider_secret_with_metadata(
     organization_id: str, provider: str
-) -> Optional[Dict[str, object]]:
+) -> JSONDict | None:
     try:
-        record = LLMProviderCredential.objects.get(organization_id=organization_id, provider=provider)
+        record = LLMProviderCredential.typed_objects().get(
+            organization_id=organization_id, provider=provider
+        )
     except LLMProviderCredential.DoesNotExist:
         return None
     return {
         "endpoint": record.endpoint,
         "api_key": decrypt_secret(record.api_key_encrypted),
-        "models": list(record.models_payload or []),
-        "metadata": dict(record.metadata or {}),
+        "models": [
+            _as_json_dict(cast(TypingMapping[Any, Any], model_entry))
+            for model_entry in (record.models_payload or [])
+        ],
+        "metadata": _as_json_dict(cast(TypingMapping[Any, Any], record.metadata)),
     }
 
 
-def get_provider_secret(organization_id: str, provider: str) -> Optional[Dict[str, str]]:
+def get_provider_secret(organization_id: str, provider: str) -> dict[str, str] | None:
     details = get_provider_secret_with_metadata(organization_id, provider)
     if not details:
         return None
+    endpoint_value = details.get("endpoint")
+    api_key_value = details.get("api_key")
+    endpoint_str = endpoint_value if isinstance(endpoint_value, str) else ""
+    api_key_str = api_key_value if isinstance(api_key_value, str) else ""
     return {
-        "endpoint": details.get("endpoint", ""),
-        "api_key": details.get("api_key", ""),
+        "endpoint": endpoint_str,
+        "api_key": api_key_str,
     }
 
 
-def _normalize_models(models: Optional[Iterable[dict]]) -> List[dict]:
-    sanitized: List[dict] = []
+def _normalize_models(
+    models: Iterable[Mapping[str, Any]] | None,
+) -> list[SanitizedModel]:
+    sanitized: list[SanitizedModel] = []
     if not models:
         return sanitized
     for item in models:
-        if not isinstance(item, dict):
-            continue
-        name = str(item.get("name") or item.get("id") or "").strip()
+        name_source = item.get("name") or item.get("id")
+        name = str(name_source).strip() if isinstance(name_source, str) else ""
         if not name:
             continue
-        payload: Dict[str, object] = {
+        label_value = item.get("label")
+        label = str(label_value) if isinstance(label_value, str) and label_value else name
+        cost_tier_value = item.get("cost_tier")
+        cost_tier = (
+            str(cost_tier_value)
+            if isinstance(cost_tier_value, str) and cost_tier_value
+            else "standard"
+        )
+        payload: SanitizedModel = {
             "name": name,
-            "label": str(item.get("label") or name),
-            "cost_tier": str(item.get("cost_tier") or "standard"),
+            "label": label,
+            "cost_tier": cost_tier,
         }
 
-        def _int_field(source_key: str) -> int | None:
-            raw = item.get(source_key)
-            if raw in (None, ""):
-                return None
-            try:
-                return int(raw)
-            except (TypeError, ValueError):
-                return None
+        max_output_tokens = _coerce_int(item.get("max_output_tokens"))
+        if max_output_tokens is not None:
+            payload["max_output_tokens"] = max_output_tokens
 
-        def _float_field(source_key: str) -> float | None:
-            raw = item.get(source_key)
-            if raw in (None, ""):
-                return None
-            try:
-                return float(raw)
-            except (TypeError, ValueError):
-                return None
+        context_window_tokens = _coerce_int(item.get("context_window_tokens"))
+        if context_window_tokens is not None:
+            payload["context_window_tokens"] = context_window_tokens
 
-        max_tokens = _int_field("max_output_tokens")
-        if max_tokens is not None:
-            payload["max_output_tokens"] = max_tokens
+        max_input_tokens = _coerce_int(item.get("max_input_tokens"))
+        if max_input_tokens is not None:
+            payload["max_input_tokens"] = max_input_tokens
 
-        ctx_tokens = _int_field("context_window_tokens")
-        if ctx_tokens is not None:
-            payload["context_window_tokens"] = ctx_tokens
+        max_chunk_chars = _coerce_int(item.get("max_chunk_chars"))
+        if max_chunk_chars is not None:
+            payload["max_chunk_chars"] = max_chunk_chars
 
-        input_tokens = _int_field("max_input_tokens")
-        if input_tokens is not None:
-            payload["max_input_tokens"] = input_tokens
+        chunk_overlap_tokens = _coerce_int(item.get("chunk_overlap_tokens"))
+        if chunk_overlap_tokens is not None:
+            payload["chunk_overlap_tokens"] = chunk_overlap_tokens
 
-        chunk_chars = _int_field("max_chunk_chars")
-        if chunk_chars is not None:
-            payload["max_chunk_chars"] = chunk_chars
+        max_prompt_chars = _coerce_int(item.get("max_prompt_chars"))
+        if max_prompt_chars is not None:
+            payload["max_prompt_chars"] = max_prompt_chars
 
-        chunk_overlap = _int_field("chunk_overlap_tokens")
-        if chunk_overlap is not None:
-            payload["chunk_overlap_tokens"] = chunk_overlap
+        max_prompt_segments = _coerce_int(item.get("max_prompt_segments"))
+        if max_prompt_segments is not None:
+            payload["max_prompt_segments"] = max_prompt_segments
 
-        prompt_chars = _int_field("max_prompt_chars")
-        if prompt_chars is not None:
-            payload["max_prompt_chars"] = prompt_chars
+        default_temperature = _coerce_float(item.get("default_temperature"))
+        if default_temperature is not None:
+            payload["default_temperature"] = default_temperature
 
-        prompt_segments = _int_field("max_prompt_segments")
-        if prompt_segments is not None:
-            payload["max_prompt_segments"] = prompt_segments
+        deployment_env_value = item.get("deployment_env")
+        if isinstance(deployment_env_value, str) and deployment_env_value:
+            payload["deployment_env"] = deployment_env_value
 
-        default_temp = _float_field("default_temperature")
-        if default_temp is not None:
-            payload["default_temperature"] = default_temp
+        origin_value = item.get("origin")
+        if isinstance(origin_value, str) and origin_value:
+            payload["origin"] = origin_value
 
-        deployment = item.get("deployment_env")
-        if deployment:
-            payload["deployment_env"] = str(deployment)
-
-        origin = item.get("origin")
-        if origin:
-            payload["origin"] = str(origin)
-
-        enabled = item.get("enabled")
-        if isinstance(enabled, bool):
-            payload["enabled"] = enabled
-        elif isinstance(enabled, str):
-            payload["enabled"] = enabled.lower() not in {"false", "0", "no"}
+        enabled_value = item.get("enabled")
+        if isinstance(enabled_value, bool):
+            payload["enabled"] = enabled_value
+        elif isinstance(enabled_value, str):
+            payload["enabled"] = enabled_value.lower() not in {"false", "0", "no"}
         else:
             payload["enabled"] = True
 
-        options = item.get("options")
-        if isinstance(options, dict):
-            payload["options"] = options
+        options_value = item.get("options")
+        options_dict = (
+            _as_json_dict(cast(TypingMapping[Any, Any], options_value))
+            if isinstance(options_value, Mapping)
+            else {}
+        )
+        if options_dict:
+            payload["options"] = options_dict
 
         sanitized.append(payload)
     return sanitized
 
 
-def _prepare_live_model_entry(model: dict) -> dict:
-    entry = dict(model)
-    options = dict(entry.get("options") or {})
+def _prepare_live_model_entry(model: SanitizedModel) -> JSONDict:
+    entry: JSONDict = dict(model)
+    options_value = entry.get("options")
+    options = (
+        _as_json_dict(cast(TypingMapping[Any, Any], options_value))
+        if isinstance(options_value, Mapping)
+        else {}
+    )
     deployment_env = entry.get("deployment_env")
-    if deployment_env and "azure_deployment" not in options:
-        options["azure_deployment"] = deployment_env
+    if isinstance(deployment_env, str) and deployment_env:
+        if "azure_deployment" not in options:
+            options["azure_deployment"] = deployment_env
     entry["options"] = options
     return entry
 
 
 def run_live_model_probe(
     *,
-    provider,
+    provider: LLMProvider,
     endpoint: str,
     api_key: str,
-    metadata: Optional[Dict[str, Any]],
-    model_payload: dict,
-) -> Dict[str, Any]:
+    metadata: Mapping[str, object] | None,
+    model_payload: SanitizedModel,
+) -> LiveProbeResult:
     if not api_key:
         raise ChatClientError("Configure an API key before running a live test")
     if not endpoint:
         endpoint = provider.default_endpoint or ""
-    metadata_dict: Dict[str, Any] = dict(metadata or {})
+    metadata_dict: JSONDict = _as_json_dict(metadata)
     prepared = _prepare_live_model_entry(model_payload)
+    model_name_value = prepared.get("name")
+    model_name = str(model_name_value) if isinstance(model_name_value, str) else ""
+    options_value = prepared.get("options")
+    options_payload = (
+        cast(dict[str, Any], options_value)
+        if isinstance(options_value, dict)
+        else {}
+    )
+    credential_payload: dict[str, Any] = {
+        "endpoint": endpoint,
+        "api_key": api_key,
+        "metadata": metadata_dict,
+    }
     runtime_cfg = build_provider_runtime_config(
         provider=provider,
-        model_name=prepared.get("name", ""),
-        credential_payload={
-            "endpoint": endpoint,
-            "api_key": api_key,
-            "metadata": metadata_dict,
-        },
-        options=prepared.get("options") or {},
+        model_name=model_name,
+        credential_payload=credential_payload,
+        options=options_payload,
     )
     client = build_chat_client(provider_runtime=runtime_cfg)
     # Choose a safe temperature: prefer explicit option, then model default, else 1.0
     test_temperature = 1.0
     try:
-        opt_temp = prepared.get("options", {}).get("temperature")
+        opt_temp = options_payload.get("temperature")
         if isinstance(opt_temp, (int, float)):
             test_temperature = float(opt_temp)
         else:
@@ -863,22 +1129,26 @@ def run_live_model_probe(
         raise
     except Exception as exc:  # pragma: no cover - network failures
         raise ChatClientError(f"Live request failed: {exc}") from exc
-    return {
-        "model": prepared.get("name"),
+    usage_payload = _as_json_dict(cast(TypingMapping[Any, Any], usage))
+    model_name = prepared.get("name")
+    model_value = str(model_name) if isinstance(model_name, str) else None
+    result: LiveProbeResult = {
+        "model": model_value,
         "content": content.strip(),
-        "usage": usage,
+        "usage": usage_payload,
     }
+    return result
 
 
 def run_provider_live_test(
     *,
-    provider,
+    provider: LLMProvider,
     endpoint: str,
     api_key: str,
-    metadata: Optional[Dict[str, Any]],
-    models: Optional[Iterable[dict]],
-    preferred_model: Optional[str] = None,
-) -> Dict[str, Any]:
+    metadata: Mapping[str, object] | None,
+    models: Iterable[Mapping[str, object]] | None,
+    preferred_model: str | None = None,
+) -> LiveProbeResult:
     sanitized = _normalize_models(models)
     if not sanitized:
         sanitized = _normalize_models(default_models_payload(provider))
@@ -913,28 +1183,34 @@ def upsert_org_provider_credential(
     provider: str,
     display_name: str,
     endpoint: str,
-    api_key: Optional[str],
-    models: Optional[Iterable[dict]] = None,
-    metadata: Optional[dict] = None,
-    enabled: Optional[bool] = None,
-) -> Dict[str, object]:
+    api_key: str | None,
+    models: Iterable[Mapping[str, object]] | None = None,
+    metadata: Mapping[str, object] | None = None,
+    enabled: bool | None = None,
+) -> ProviderCredentialDetails:
     provider = provider.strip().lower()
     if not provider:
         raise ValueError("Provider key is required")
 
     models_payload = _normalize_models(models)
+    models_serialized = _serialize_models_payload(models_payload)
+    models_serialized = _serialize_models_payload(models_payload)
+    models_serialized = _serialize_models_payload(models_payload)
+    models_serialized = _serialize_models_payload(models_payload)
+    models_serialized = _serialize_models_payload(models_payload)
     encrypted_key = encrypt_secret(api_key)
     enabled_value = bool(enabled) if enabled is not None else True
+    metadata_payload = _as_json_dict(metadata)
 
-    record, _created = LLMProviderCredential.objects.get_or_create(
+    record, _created = LLMProviderCredential.typed_objects().get_or_create(
         organization_id=organization_id,
         provider=provider,
         defaults={
             "display_name": display_name,
             "endpoint": endpoint,
             "api_key_encrypted": encrypted_key,
-            "models_payload": models_payload,
-            "metadata": metadata or {},
+            "models_payload": models_serialized,
+            "metadata": metadata_payload,
             "is_enabled": enabled_value,
         },
     )
@@ -944,8 +1220,8 @@ def upsert_org_provider_credential(
         record.endpoint = endpoint
         if api_key is not None:
             record.api_key_encrypted = encrypted_key
-        record.models_payload = models_payload
-        record.metadata = metadata or {}
+        record.models_payload = models_serialized
+        record.metadata = metadata_payload
         if enabled is not None:
             record.is_enabled = enabled_value
         update_fields = ["display_name", "endpoint", "models_payload", "metadata", "updated_at"]
@@ -959,16 +1235,19 @@ def upsert_org_provider_credential(
         "provider": record.provider,
         "display_name": record.display_name,
         "endpoint": record.endpoint,
-        "models": record.models_payload,
+        "models": [
+            _as_json_dict(cast(TypingMapping[Any, Any], entry))
+            for entry in (record.models_payload or [])
+        ],
         "has_api_key": bool(record.api_key_encrypted),
-        "metadata": record.metadata,
+        "metadata": _as_json_dict(cast(TypingMapping[Any, Any], record.metadata)),
         "is_enabled": record.is_enabled,
     }
 
 
 @transaction.atomic
 def delete_org_provider_credential(organization_id: str, provider: str) -> None:
-    LLMProviderCredential.objects.filter(
+    LLMProviderCredential.typed_objects().filter(
         organization_id=organization_id,
         provider=provider.strip().lower(),
     ).delete()
@@ -976,7 +1255,7 @@ def delete_org_provider_credential(organization_id: str, provider: str) -> None:
 
 @transaction.atomic
 def delete_org_provider_credential_by_uuid(organization_id: str, provider_uid: str) -> None:
-    LLMProviderCredential.objects.filter(
+    LLMProviderCredential.typed_objects().filter(
         organization_id=organization_id,
         uid=provider_uid,
     ).delete()
@@ -990,16 +1269,18 @@ def upsert_org_provider_credential_by_uuid(
     provider: str,
     display_name: str,
     endpoint: str,
-    api_key: Optional[str],
-    models: Optional[Iterable[dict]] = None,
-    metadata: Optional[dict] = None,
-    enabled: Optional[bool] = None,
-) -> Dict[str, object]:
+    api_key: str | None,
+    models: Iterable[Mapping[str, object]] | None = None,
+    metadata: Mapping[str, object] | None = None,
+    enabled: bool | None = None,
+) -> ProviderCredentialDetails:
     models_payload = _normalize_models(models)
+    models_serialized = _serialize_models_payload(models_payload)
     encrypted_key = encrypt_secret(api_key)
     enabled_value = bool(enabled) if enabled is not None else True
+    metadata_payload = _as_json_dict(metadata)
     try:
-        record = LLMProviderCredential.objects.get(
+        record = LLMProviderCredential.typed_objects().get(
             organization_id=organization_id,
             uid=provider_uid,
         )
@@ -1011,7 +1292,7 @@ def upsert_org_provider_credential_by_uuid(
             endpoint=endpoint,
             api_key=api_key,
             models=models_payload,
-            metadata=metadata,
+            metadata=metadata_payload,
             enabled=enabled,
         )
     record.provider = provider.strip().lower() or record.provider
@@ -1019,8 +1300,8 @@ def upsert_org_provider_credential_by_uuid(
     record.endpoint = endpoint
     if api_key is not None:
         record.api_key_encrypted = encrypted_key
-    record.models_payload = models_payload
-    record.metadata = metadata or {}
+    record.models_payload = models_serialized
+    record.metadata = metadata_payload
     if enabled is not None:
         record.is_enabled = enabled_value
     update_fields = [
@@ -1040,8 +1321,11 @@ def upsert_org_provider_credential_by_uuid(
         "provider": record.provider,
         "display_name": record.display_name,
         "endpoint": record.endpoint,
-        "models": record.models_payload,
+        "models": [
+            _as_json_dict(cast(TypingMapping[Any, Any], entry))
+            for entry in (record.models_payload or [])
+        ],
         "has_api_key": bool(record.api_key_encrypted),
-        "metadata": record.metadata,
+        "metadata": _as_json_dict(cast(TypingMapping[Any, Any], record.metadata)),
         "is_enabled": record.is_enabled,
     }
