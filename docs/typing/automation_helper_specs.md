@@ -85,6 +85,18 @@ This document spells out the automation we rely on to keep typing passes repeata
 - **Idempotency**: The command only reads repository metadata; repeated runs have no side effects beyond the pyright invocation.
 - **Integration**: Wire into CI or local pre-push hooks to ensure strict modules stay clean before merges.
 
+## 9. Stub Vendor (`scripts/typing/vendor_stubs.py`)
+- **Purpose**: Copy third-party typing stubs into `typings/vendor/` and generate docstring-aware fallbacks when upstream packages do not ship them.
+- **CLI**: `python scripts/typing/vendor_stubs.py [--dist PKG ...] [--scan-installed] [--no-stubgen]`
+- **Behaviour**:
+  - Seeds the run with curated distributions (Django, DRF, redis, etc.) and any extra `--dist` arguments.
+  - When `--scan-installed` is supplied, auto-discovers every installed distribution that already exposes `*-stubs` resources and vendors them too.
+  - Copies bundled stubs verbatim and applies pyright directive headers to silence known third-party issues.
+  - For packages lacking bundled stubs, infers top-level modules (or uses a curated mapping) and runs `stubgen --include-docstrings` so generated `.pyi` files retain runtime docstrings when available.
+  - Records results in `typings/vendor/VENDORED_STUBS.json` and updates the automation manifest helper record for traceability.
+- **Idempotency**: Each run replaces the vendored directories atomically; repeated executions with unchanged inputs produce identical trees and metadata timestamps.
+- **Integration**: Re-run after dependency upgrades or when adding new runtime packages so local type checking never depends on the virtualenv contents.
+
 ## CI & Tooling Integration
 - Add a `just typing-bootstrap` recipe that wraps the bootstrapper and re-runs `pyright --stats`.
 - Introduce `just typing-strictify MODULE=<path>` to promote clean modules to strict mode.

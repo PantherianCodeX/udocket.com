@@ -98,6 +98,42 @@ def _stub_directories(dist_name: str) -> tuple[str, ...]:
     return tuple(sorted(directories))
 
 
+def _discover_installed_stub_dists() -> set[str]:
+    discovered: set[str] = set()
+    for dist in metadata.distributions():
+        if any(
+            path.parts and path.parts[0].endswith("-stubs")
+            for path in (dist.files or [])
+        ):
+            discovered.add(dist.metadata["Name"])
+    return discovered
+
+
+def _top_level_modules(dist: metadata.Distribution) -> tuple[str, ...]:
+    top_level_raw = dist.read_text("top_level.txt")
+    if top_level_raw:
+        modules = [
+            line.strip()
+            for line in top_level_raw.splitlines()
+            if line.strip() and not line.startswith("#")
+        ]
+        if modules:
+            return tuple(modules)
+
+    candidates: set[str] = set()
+    for file in dist.files or []:
+        if not file.parts:
+            continue
+        head = file.parts[0]
+        if head.endswith(".dist-info") or head.endswith(".data"):
+            continue
+        if head in {"__pycache__", "tests", "docs"}:
+            continue
+        candidates.add(head.replace("/", "."))
+    ordered = sorted(candidates)
+    return tuple(ordered)
+
+
 def _run_stubgen(modules: tuple[str, ...], destination_root: Path, search_path: Path) -> tuple[str, ...]:
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp_path = Path(tmpdir)
@@ -180,32 +216,61 @@ def _apply_pyright_directives(path: Path) -> None:
         stub_file.write_text(directive_block + text, encoding="utf-8")
 
 
-def vendor_stubs(dist_names: Iterable[str]) -> list[VendoredStub]:
+def vendor_stubs(
+    dist_names: Iterable[str],
+    *,
+    stubgen_missing: bool = True,
+) -> list[VendoredStub]:
     site_packages = _site_packages()
     vendored: list[VendoredStub] = []
 
     STUB_VENDOR_DIR.mkdir(parents=True, exist_ok=True)
 
     for dist_name in dist_names:
+        try:
+            dist = metadata.distribution(dist_name)
+        except metadata.PackageNotFoundError:
+            print(f"warning: distribution '{dist_name}' is not installed; skipping.")
+            continue
+
         stub_dirs = _stub_directories(dist_name)
         generated_dirs: tuple[str, ...] = tuple()
-        if not stub_dirs and dist_name in STUBGEN_MODULES:
-            generated_dirs = _run_stubgen(STUBGEN_MODULES[dist_name], STUB_VENDOR_DIR, site_packages)
-            if generated_dirs:
-                stub_dirs = generated_dirs
-        if not stub_dirs:
-            # Some helper dists (e.g. django-stubs-ext) only contain runtime helpers.
-            continue
-        version = metadata.version(dist_name)
-        for directory in stub_dirs:
-            if directory in generated_dirs:
+
+        if stub_dirs:
+            print(f"{dist_name}: found packaged stubs -> {', '.join(stub_dirs)}")
+            for directory in stub_dirs:
+                dest_dir = _copy_stub_dir(site_packages, directory, STUB_VENDOR_DIR)
+                _apply_pyright_directives(dest_dir)
+        elif stubgen_missing:
+            module_targets: tuple[str, ...]
+            if dist_name in STUBGEN_MODULES:
+                module_targets = STUBGEN_MODULES[dist_name]
+            else:
+                module_targets = _top_level_modules(dist)
+            if not module_targets:
+                print(f"{dist_name}: no stub package and unable to infer modules; skipping stubgen")
+                continue
+            print(
+                f"{dist_name}: no packaged stubs; generating via stubgen for modules: "
+                + ", ".join(module_targets)
+            )
+            generated_dirs = _run_stubgen(module_targets, STUB_VENDOR_DIR, site_packages)
+            stub_dirs = generated_dirs
+            for directory in generated_dirs:
                 dest_path = STUB_VENDOR_DIR / directory
                 if dest_path.exists():
                     _apply_pyright_directives(dest_path)
-                continue
-            dest_dir = _copy_stub_dir(site_packages, directory, STUB_VENDOR_DIR)
-            _apply_pyright_directives(dest_dir)
-        vendored.append(VendoredStub(dist_name=dist_name, version=version, stub_dirs=stub_dirs))
+        else:
+            print(f"{dist_name}: missing stubs and stubgen disabled; reporting only")
+            stub_dirs = ()
+
+        if not stub_dirs:
+            continue
+
+        version = dist.version
+        vendored.append(
+            VendoredStub(dist_name=dist_name, version=version, stub_dirs=stub_dirs)
+        )
     return vendored
 
 
@@ -224,10 +289,26 @@ def main() -> int:
         action="append",
         help="Additional distribution names to vendor",
     )
+    parser.add_argument(
+        "--scan-installed",
+        action="store_true",
+        help="Include any installed distributions that already ship -stubs packages",
+    )
+    parser.add_argument(
+        "--no-stubgen",
+        action="store_true",
+        help="Skip stubgen fallback for distributions without packaged stubs",
+    )
     args = parser.parse_args()
 
-    dist_names = list(dict.fromkeys(DIST_NAMES + tuple(args.dist or ())))
-    vendored = vendor_stubs(dist_names)
+    requested: list[str] = list(DIST_NAMES)
+    if args.dist:
+        requested.extend(args.dist)
+    if args.scan_installed:
+        requested.extend(sorted(_discover_installed_stub_dists()))
+
+    dist_names = list(dict.fromkeys(requested))
+    vendored = vendor_stubs(dist_names, stubgen_missing=not args.no_stubgen)
     write_metadata(vendored)
 
     manifest = load_manifest()

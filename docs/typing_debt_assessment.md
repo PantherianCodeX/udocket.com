@@ -43,7 +43,7 @@ Last updated: 2025-10-05.
 - Operations websocket consumers now run with `# pyright: strict`, using channel-layer protocols to remove the remaining `Any` fallthroughs.
 - Guardian configuration helpers now run under `# pyright: strict`, with JSON coercion utilities to sanitise provider chains and instruction lists for Celery tasks.
 - Vendored stubs live under `typings/vendor` with helper headers that suppress Pyright diagnostics stemming from upstream stub quirks; re-run `scripts/typing/vendor_stubs.py` after updating pip packages to refresh the copies.
-- `scripts/typing/vendor_stubs.py` now emits docstring-aware stubs for `mozilla_django_oidc` so pyright/mypy can see local helpers even without first-party hints.
+- `scripts/typing/vendor_stubs.py` now auto-discovers installed `*-stubs` distributions, reports gaps, and falls back to docstring-aware `stubgen` output for packages missing bundled stubs so pyright/mypy stay self-contained as dependencies change.
 - `scripts/typing/check_strict.py` supports manifest filtering, single-module focus, and independent pyright/mypy runs so teams can clear diagnostics iteratively without rerunning the whole tree.
 - Typing bootstrapper now treats missing pytest stub packages as optional so the helper records `ok` status without manual intervention.
 
