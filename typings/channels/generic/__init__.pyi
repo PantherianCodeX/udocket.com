@@ -3,4 +3,6 @@
 
 from __future__ import annotations
 
+from . import websocket as websocket
+
 __all__ = ["websocket"]
