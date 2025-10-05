@@ -92,6 +92,40 @@ def coerce_object_dict(
     return result
 
 
+def normalize_json_object(
+    value: object,
+    *,
+    strip_keys: bool = True,
+    drop_empty_keys: bool = False,
+    drop_nullish_values: bool = False,
+) -> JSONObject:
+    """Return a JSON object with optional key/value normalisation.
+
+    Args:
+        value: Mapping-like object to normalise.
+        strip_keys: Trim whitespace around keys when ``True``.
+        drop_empty_keys: Skip keys that become empty after optional stripping.
+        drop_nullish_values: Skip entries whose value is ``None`` or an empty
+            string/collection.
+    """
+
+    payload = coerce_json_object(value)
+    result: JSONObject = {}
+    for key, raw in payload.items():
+        normalised_key = key.strip() if strip_keys else key
+        if drop_empty_keys and not normalised_key:
+            continue
+        if drop_nullish_values:
+            if raw is None:
+                continue
+            if isinstance(raw, (str, bytes)) and raw == "":
+                continue
+            if isinstance(raw, (list, dict)) and not raw:
+                continue
+        result[normalised_key] = raw
+    return result
+
+
 def ensure_json_object(value: object, *, context: str | None = None) -> JSONObject:
     """Return a JSON object or raise a ``ValueError`` with optional context."""
     if not isinstance(value, Mapping):

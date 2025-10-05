@@ -36,6 +36,7 @@ For day-to-day execution status, see `docs/typing/typing_progress_log.md`, which
 - Manual retries and request fallbacks should stay in the runtime wrapper (`AzureChatClient._chat`). Avoid folding error handling into per-agent code; instead expose structured exceptions with typed payloads so Celery tasks can log without `Any` casts.
 - `packages/udocket_core/agents/analyze_lib.py` now uses shared helpers (`coerce_object_dict`, `_normalize_providers`) and typed `StageModelInfo`/`StageCatalogEntry` structures. Stage configuration inputs are normalised to `dict[str, object]`, so future contributors should preserve that pattern when adding new stage options or provider overrides.
 - Core JSON helpers now expose `coerce_object_dict` in `packages/udocket_core/json_utils.py`; prefer this when normalising metadata or provider payloads so every consumer shares the same str-key conversion instead of duplicating casts.
+- Use `normalize_json_object` when you need stricter key/value hygiene (trim blanks, drop nullish entries) without hand-written loops. LLM admin metadata normalisation relies on it, so mirror the helper instead of rolling bespoke filters.
 - When reading organization defaults (`config/analyze_defaults.json`), call `_coerce_int`/`_coerce_float` rather than sprinkling `int(...)`/`float(...)` coercions. This keeps environment overrides predictable and Pyright-friendly.
 
 ## October 2025 Idempotency & Automation Focus
