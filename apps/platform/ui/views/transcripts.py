@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from typing import List, Optional
 
 from django.db.utils import IntegrityError
@@ -10,6 +9,7 @@ from apps.platform.cases.models import Case
 from apps.platform.jobs.models import Job
 from apps.platform.jobs.utils import unique_title
 from apps.platform.operations.storage import ops_dir as storage_ops_dir
+from packages.udocket_core.json_utils import read_json_object
 
 from .common import JobTelemetryPayload, as_dict
 from .presenters.jobs import friendly_job_title  # lazy usage inside helpers
@@ -48,10 +48,7 @@ def unique_transcript_title(case_id: str, base_title: str, organization_id: Opti
         ops_dir = storage_ops_dir(case_id, organization_id)
         if ops_dir.exists():
             for meta_path in ops_dir.glob("*_transcription_log.json"):
-                try:
-                    payload = json.loads(meta_path.read_text(encoding="utf-8"))
-                except Exception:
-                    continue
+                payload = read_json_object(meta_path)
                 title_value = payload.get("job_title") or payload.get("transcript_title")
                 if isinstance(title_value, str) and title_value.strip():
                     titles.add(title_value.strip())

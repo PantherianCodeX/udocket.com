@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from urllib.parse import urlparse
 from typing import Any, Dict, List
 
@@ -40,6 +39,7 @@ from apps.platform.operations.guardian import (
 )
 from packages.udocket_core.llm import LLMSettings, load_llm_settings
 from packages.udocket_core.llm.runtime import ChatClientError
+from packages.udocket_core.json_utils import parse_json_value
 
 from .auth import ensure_authenticated
 from config.settings import settings as app_settings
@@ -56,11 +56,11 @@ def _stage_field(stage_key: str, suffix: str) -> str:
 def _parse_json_field(raw_value: str, default: Any, errors: List[str], label: str) -> Any:
     if not raw_value:
         return default
-    try:
-        return json.loads(raw_value)
-    except json.JSONDecodeError as exc:  # pragma: no cover - defensive
-        errors.append(f"{label}: {exc}")
+    parsed = parse_json_value(raw_value)
+    if parsed is None:
+        errors.append(f"{label}: invalid JSON")
         return default
+    return parsed
 
 
 def _gather_stage_targets(llm_settings: LLMSettings) -> Dict[str, List[str]]:
@@ -152,12 +152,9 @@ def _provider_models_from_post(request: HttpRequest) -> List[dict]:
 
         options_raw = options_json[index] if index < len(options_json) else ""
         if options_raw:
-            try:
-                parsed_options = json.loads(options_raw)
-                if isinstance(parsed_options, dict):
-                    options_payload.update(parsed_options)
-            except json.JSONDecodeError:
-                pass
+            parsed_options = parse_json_value(options_raw)
+            if isinstance(parsed_options, dict):
+                options_payload.update(parsed_options)
 
         if options_payload:
             payload["options"] = options_payload
@@ -745,10 +742,14 @@ def organization_settings(
                 errors.append("Unknown provider selected. Use the 'Load template' menu to set a provider type.")
             else:
                 payload_raw = (request.POST.get("model_test_payload") or "").strip()
-                try:
-                    model_payload = json.loads(payload_raw) if payload_raw else {}
-                except json.JSONDecodeError:
-                    errors.append("Invalid model payload provided for testing.")
+                if payload_raw:
+                    parsed_model_payload = parse_json_value(payload_raw)
+                    if isinstance(parsed_model_payload, dict):
+                        model_payload = parsed_model_payload
+                    else:
+                        errors.append("Invalid model payload provided for testing.")
+                        model_payload = {}
+                else:
                     model_payload = {}
                 if not model_payload.get("name"):
                     errors.append("Model payload is missing an identifier.")

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import base64
-import json
 import logging
 from typing import Any, Dict
 
@@ -9,6 +8,7 @@ from django.http import HttpRequest, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 
 log = logging.getLogger("apps.platform.ui")
+from packages.udocket_core.json_utils import parse_json_value
 
 
 def favicon(request: HttpRequest) -> HttpResponse:
@@ -25,7 +25,12 @@ def favicon(request: HttpRequest) -> HttpResponse:
 def ui_log(request: HttpRequest) -> HttpResponse:
     try:
         body = request.body.decode("utf-8") if request.body else "{}"
-        payload: Dict[str, Any] = json.loads(body)
+        parsed = parse_json_value(body)
+        payload: Dict[str, Any]
+        if isinstance(parsed, dict):
+            payload = {str(key): value for key, value in parsed.items()}
+        else:
+            raise ValueError("Invalid JSON payload")
     except Exception:
         payload = {"raw": request.body.decode("utf-8", errors="ignore") if request.body else ""}
 
