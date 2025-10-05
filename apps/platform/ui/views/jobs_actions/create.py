@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import uuid
 from typing import Iterable, Optional, cast
 
@@ -17,6 +16,7 @@ from apps.platform.jobs.models import Job
 from apps.platform.jobs.utils import unique_title
 from apps.platform.operations.storage import ensure_case_dirs, ops_dir as storage_ops_dir
 from apps.platform.operations.utils import update_job_meta
+from packages.udocket_core.json_utils import read_json_object
 
 from ..auth import ensure_authenticated
 from ..common import JobRow
@@ -95,10 +95,7 @@ def create_job(request: HttpRequest, case_id: str) -> HttpResponse:
     try:
         if ops_dir.exists():
             for meta_path in ops_dir.glob("*_transcription_log.json"):
-                try:
-                    payload = json.loads(meta_path.read_text(encoding="utf-8"))
-                except Exception:
-                    continue
+                payload = read_json_object(meta_path)
                 title_value = payload.get("job_title") or payload.get("transcript_title")
                 if isinstance(title_value, str) and title_value.strip():
                     existing_titles.add(title_value.strip())
