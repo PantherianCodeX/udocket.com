@@ -19,7 +19,9 @@
     "**/.venv",
     "**/.tox",
     "**/.pytest_cache",
-    "**/__pycache__"
+    "**/__pycache__",
+    "typings/vendor",
+    "typings/external_stubs"
   ],
   "djangoSettingsModule": "apps.platform.config.settings.dev",
   "executionEnvironments": [

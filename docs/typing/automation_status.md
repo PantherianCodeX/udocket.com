@@ -2,6 +2,8 @@
 
 Last updated: 2025-10-05T15:52:04.935222+00:00
 
+_Note_: Vendored third-party stubs are no longer tracked in git. Run `python scripts/typing/vendor_stubs.py` (or `--force` to regenerate populated directories) before capturing fresh snapshots so `typings/vendor/` exists locally.
+
 ## Pyright Snapshot
 
 Command: `pyright --stats`

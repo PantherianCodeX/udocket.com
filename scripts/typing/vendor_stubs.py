@@ -299,6 +299,11 @@ def main() -> int:
         action="store_true",
         help="Skip stubgen fallback for distributions without packaged stubs",
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Regenerate vendored stubs even if the destination directory is already populated",
+    )
     args = parser.parse_args()
 
     requested: list[str] = list(DIST_NAMES)
@@ -308,8 +313,16 @@ def main() -> int:
         requested.extend(sorted(_discover_installed_stub_dists()))
 
     dist_names = list(dict.fromkeys(requested))
-    vendored = vendor_stubs(dist_names, stubgen_missing=not args.no_stubgen)
-    write_metadata(vendored)
+
+    if STUB_VENDOR_DIR.exists() and any(STUB_VENDOR_DIR.iterdir()) and not args.force:
+        print(
+            "Vendored stubs directory already populated; skipping generation. Use --force to regenerate."
+        )
+        vendored: list[VendoredStub] = []
+    else:
+        vendored = vendor_stubs(dist_names, stubgen_missing=not args.no_stubgen)
+        if vendored:
+            write_metadata(vendored)
 
     manifest = load_manifest()
     upsert_helper_record(

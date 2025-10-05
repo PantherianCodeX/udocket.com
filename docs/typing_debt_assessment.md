@@ -42,7 +42,7 @@ Last updated: 2025-10-05.
 - `tests/_typing.py` now exposes shared fixture protocols; run `scripts/typing/annotate_fixtures.py --apply` to keep pytest modules annotated automatically.
 - Operations websocket consumers now run with `# pyright: strict`, using channel-layer protocols to remove the remaining `Any` fallthroughs.
 - Guardian configuration helpers now run under `# pyright: strict`, with JSON coercion utilities to sanitise provider chains and instruction lists for Celery tasks.
-- Vendored stubs live under `typings/vendor` with helper headers that suppress Pyright diagnostics stemming from upstream stub quirks; re-run `scripts/typing/vendor_stubs.py` after updating pip packages to refresh the copies.
+- Vendored stubs are generated into the git-ignored `typings/vendor/` directory on-demand; the helper skips work when the directory already contains files, so compose/dev environments can regenerate with `python scripts/typing/vendor_stubs.py --force` after dependency upgrades.
 - `scripts/typing/vendor_stubs.py` now auto-discovers installed `*-stubs` distributions, reports gaps, and falls back to docstring-aware `stubgen` output for packages missing bundled stubs so pyright/mypy stay self-contained as dependencies change.
 - `scripts/typing/check_strict.py` supports manifest filtering, single-module focus, and independent pyright/mypy runs so teams can clear diagnostics iteratively without rerunning the whole tree.
 - Typing bootstrapper now treats missing pytest stub packages as optional so the helper records `ok` status without manual intervention.

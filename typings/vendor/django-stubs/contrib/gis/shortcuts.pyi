@@ -1,9 +1,0 @@
-# pyright: reportMissingParameterType=false, reportUnknownParameterType=false, reportUnknownVariableType=false, reportUnknownMemberType=false, reportAttributeAccessIssue=false, reportPrivateUsage=false, reportIncompatibleVariableOverride=false, reportUntypedClassDecorator=false, reportMissingTypeArgument=false, reportOverlappingOverload=false, reportInvalidTypeVarUse=false, reportIncompatibleMethodOverride=false, reportUntypedBaseClass=false, reportGeneralTypeIssues=false
-
-from typing import Any
-
-from django.http.response import HttpResponse
-
-def compress_kml(kml: str) -> bytes: ...
-def render_to_kml(*args: Any, **kwargs: Any) -> HttpResponse: ...
-def render_to_kmz(*args: Any, **kwargs: Any) -> HttpResponse: ...

@@ -9,3 +9,5 @@ storage/
 *.patch
 *.zip
 celerybeat-schedule
+typings/external_stubs/
+typings/vendor/
