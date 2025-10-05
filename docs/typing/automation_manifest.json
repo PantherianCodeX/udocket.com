@@ -21,23 +21,63 @@
   ],
   "notes": [],
   "pyrightStats": null,
-  "recordedAt": "2025-10-05T01:38:29.453711+00:00",
+  "recordedAt": "2025-10-05T01:44:10.645472+00:00",
   "strictModules": [
     {
+      "path": "apps/platform/accounts/admin.py",
+      "verifiedAt": "2025-10-05T01:44:10.645472+00:00"
+    },
+    {
       "path": "apps/platform/accounts/models.py",
-      "verifiedAt": "2025-10-05T01:15:32.314640+00:00"
+      "verifiedAt": "2025-10-05T01:44:10.645472+00:00"
+    },
+    {
+      "path": "apps/platform/accounts/utils.py",
+      "verifiedAt": "2025-10-05T01:44:10.645472+00:00"
+    },
+    {
+      "path": "apps/platform/artifacts/models.py",
+      "verifiedAt": "2025-10-05T01:44:10.645472+00:00"
     },
     {
       "path": "apps/platform/authorization/models.py",
-      "verifiedAt": "2025-10-05T01:15:32.314640+00:00"
+      "verifiedAt": "2025-10-05T01:44:10.645472+00:00"
     },
     {
-      "path": "apps/platform/operations/models.py",
-      "verifiedAt": "2025-10-05T01:15:32.314640+00:00"
+      "path": "apps/platform/cases/models.py",
+      "verifiedAt": "2025-10-05T01:44:10.645472+00:00"
+    },
+    {
+      "path": "apps/platform/cases/urls.py",
+      "verifiedAt": "2025-10-05T01:44:10.645472+00:00"
+    },
+    {
+      "path": "apps/platform/jobs/models.py",
+      "verifiedAt": "2025-10-05T01:44:10.645472+00:00"
     },
     {
       "path": "apps/platform/operations/consumers.py",
-      "verifiedAt": "2025-10-05T01:38:29.453711+00:00"
+      "verifiedAt": "2025-10-05T01:44:10.645472+00:00"
+    },
+    {
+      "path": "apps/platform/operations/models.py",
+      "verifiedAt": "2025-10-05T01:44:10.645472+00:00"
+    },
+    {
+      "path": "apps/platform/ui/admin.py",
+      "verifiedAt": "2025-10-05T01:44:10.645472+00:00"
+    },
+    {
+      "path": "config/settings.py",
+      "verifiedAt": "2025-10-05T01:44:10.645472+00:00"
+    },
+    {
+      "path": "packages/udocket_core/agents/common/azure_client.py",
+      "verifiedAt": "2025-10-05T01:44:10.645472+00:00"
+    },
+    {
+      "path": "packages/udocket_core/agents/common/io.py",
+      "verifiedAt": "2025-10-05T01:44:10.645472+00:00"
     }
   ]
 }

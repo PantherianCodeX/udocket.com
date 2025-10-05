@@ -1,6 +1,6 @@
 # Typing Automation Status
 
-Last updated: 2025-10-05T01:38:29.453711+00:00
+Last updated: 2025-10-05T01:44:10.645472+00:00
 
 ## Pyright Snapshot
 
@@ -18,7 +18,17 @@ _No pyright output recorded._
 
 ## Strict Modules
 
-- `apps/platform/accounts/models.py` (verified 2025-10-05T01:15:32.314640+00:00)
-- `apps/platform/authorization/models.py` (verified 2025-10-05T01:15:32.314640+00:00)
-- `apps/platform/operations/models.py` (verified 2025-10-05T01:15:32.314640+00:00)
-- `apps/platform/operations/consumers.py` (verified 2025-10-05T01:38:29.453711+00:00)
+- `apps/platform/accounts/admin.py` (verified 2025-10-05T01:44:10.645472+00:00)
+- `apps/platform/accounts/models.py` (verified 2025-10-05T01:44:10.645472+00:00)
+- `apps/platform/accounts/utils.py` (verified 2025-10-05T01:44:10.645472+00:00)
+- `apps/platform/artifacts/models.py` (verified 2025-10-05T01:44:10.645472+00:00)
+- `apps/platform/authorization/models.py` (verified 2025-10-05T01:44:10.645472+00:00)
+- `apps/platform/cases/models.py` (verified 2025-10-05T01:44:10.645472+00:00)
+- `apps/platform/cases/urls.py` (verified 2025-10-05T01:44:10.645472+00:00)
+- `apps/platform/jobs/models.py` (verified 2025-10-05T01:44:10.645472+00:00)
+- `apps/platform/operations/consumers.py` (verified 2025-10-05T01:44:10.645472+00:00)
+- `apps/platform/operations/models.py` (verified 2025-10-05T01:44:10.645472+00:00)
+- `apps/platform/ui/admin.py` (verified 2025-10-05T01:44:10.645472+00:00)
+- `config/settings.py` (verified 2025-10-05T01:44:10.645472+00:00)
+- `packages/udocket_core/agents/common/azure_client.py` (verified 2025-10-05T01:44:10.645472+00:00)
+- `packages/udocket_core/agents/common/io.py` (verified 2025-10-05T01:44:10.645472+00:00)
