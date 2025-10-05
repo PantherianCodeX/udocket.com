@@ -3,7 +3,7 @@ from __future__ import annotations
 # pyright: strict
 
 from collections.abc import Iterable, Mapping, Sequence
-from typing import Any, Mapping as TypingMapping, cast
+from typing import Any, TypeAlias, cast
 
 try:  # pragma: no cover - Python < 3.11 fallback
     from typing import NotRequired, Required, TypedDict
@@ -24,27 +24,38 @@ from packages.udocket_core.llm.runtime import (
     build_chat_client,
     build_provider_runtime_config,
 )
-from packages.udocket_core.json_utils import coerce_float, coerce_int, read_json_object
+from packages.udocket_core.json_utils import (
+    JSONObject,
+    JSONValue,
+    coerce_float,
+    coerce_int,
+    coerce_json_object,
+    coerce_json_value,
+    coerce_object_dict,
+    coerce_object_list,
+    coerce_str,
+    coerce_str_list,
+    read_json_object,
+)
 
 try:
     from packages.udocket_core.agents.analyze_lib import (
         DISALLOWED_PROVIDERS as _analyze_disallowed_providers_source,
     )
 except Exception:  # pragma: no cover - fallback when analyzer unavailable
-    _analyze_disallowed_providers_source: set[str] = set()
+    _ANALYZE_DISALLOWED_PROVIDERS_SOURCE: Iterable[str] = ()
+else:
+    _ANALYZE_DISALLOWED_PROVIDERS_SOURCE = _analyze_disallowed_providers_source
 
-_ANALYZE_DISALLOWED_PROVIDERS: set[str] = {
-    str(name)
-    for name in _analyze_disallowed_providers_source
-}
+_ANALYZE_DISALLOWED_PROVIDERS: set[str] = {str(name) for name in _ANALYZE_DISALLOWED_PROVIDERS_SOURCE}
 
 from .crypto import decrypt_secret, encrypt_secret
 from .models import LLMConfiguration, LLMProviderCredential
 
 
-JSONDict = dict[str, Any]
+JSONDict: TypeAlias = dict[str, JSONValue]
 
-StageMap = dict[str, JSONDict]
+StageMap: TypeAlias = dict[str, JSONDict]
 
 
 class ProviderModelOption(TypedDict, total=False):
@@ -124,12 +135,6 @@ def _serialize_models_payload(models: Iterable[SanitizedModel]) -> list[dict[str
     return serialized
 
 
-def _as_json_dict(value: TypingMapping[Any, Any] | None) -> JSONDict:
-    if value is None:
-        return {}
-    return {str(key): item for key, item in value.items()}
-
-
 def _as_mapping_sequence(value: object) -> Sequence[Mapping[str, Any]]:
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
         return cast(Sequence[Mapping[str, Any]], value)
@@ -140,39 +145,36 @@ def _clean_stage_map(payload: Mapping[str, Any] | None) -> StageMap:
     if not payload:
         return {}
     cleaned: StageMap = {}
-    for stage_name, cfg in payload.items():
+    for stage_name_raw, cfg in payload.items():
+        stage_name = coerce_str(stage_name_raw)
         if not stage_name:
             continue
         if not isinstance(cfg, Mapping):
             continue
-        cfg_dict = _as_json_dict(cast(TypingMapping[Any, Any], cfg))
-        provider = str(cfg_dict.get("provider") or "").strip().lower()
-        model = str(cfg_dict.get("model") or "").strip()
-        entry: JSONDict = {}
+        cfg_dict = coerce_json_object(cfg)
+
+        provider_raw = cfg_dict.get("provider")
+        provider = coerce_str(provider_raw)
+        model_raw = cfg_dict.get("model")
+        model = coerce_str(model_raw)
+
+        entry: JSONObject = {}
 
         options_value = cfg_dict.get("options")
-        raw_options = (
-            _as_json_dict(cast(TypingMapping[Any, Any], options_value))
-            if isinstance(options_value, Mapping)
-            else {}
-        )
+        options_payload = coerce_json_object(options_value)
         options = {
             key: value
-            for key, value in raw_options.items()
-            if value not in (None, "")
+            for key, value in options_payload.items()
+            if value not in (None, "", [])
         }
 
         max_tokens_value = cfg_dict.get("max_tokens")
-        if isinstance(max_tokens_value, (int, float, str)):
-            try:
-                parsed_max = int(float(str(max_tokens_value).strip()))
-            except (TypeError, ValueError):
-                parsed_max = 0
-            if parsed_max > 0:
-                entry["max_tokens"] = parsed_max
+        max_tokens = coerce_int(max_tokens_value)
+        if max_tokens is not None and max_tokens > 0:
+            entry["max_tokens"] = max_tokens
 
         if provider:
-            entry["provider"] = provider
+            entry["provider"] = provider.lower()
         if model:
             entry["model"] = model
         if options:
@@ -197,7 +199,11 @@ def _model_options_dict(
 ) -> JSONDict:
     options_value = _model_attr(model_meta, "options")
     if isinstance(options_value, Mapping):
-        return _as_json_dict(cast(TypingMapping[Any, Any], options_value))
+        mapping_value = cast(Mapping[object, object], options_value)
+        options_dict: JSONDict = {}
+        for key, value in mapping_value.items():
+            options_dict[str(key)] = coerce_json_value(value)
+        return options_dict
     return {}
 
 
@@ -222,10 +228,9 @@ def _normalize_provider_chain(provider_chain: Iterable[str] | None) -> list[str]
 
 
 def serialize_llm_configuration(config: LLMConfiguration) -> LLMConfigurationPayload:
-    raw_stage_map = config.stage_map or {}
-    stage_map = _clean_stage_map(
-        cast(Mapping[str, Mapping[str, object]] | None, raw_stage_map)
-    )
+    raw_stage_map = config.stage_map
+    stage_map_input = raw_stage_map if isinstance(raw_stage_map, Mapping) else None
+    stage_map = _clean_stage_map(stage_map_input)
     provider_chain = [
         provider.strip().lower()
         for provider in (config.provider_chain or [])
@@ -418,14 +423,11 @@ def _provider_catalog() -> dict[str, JSONDict]:
     if not isinstance(providers_payload, Mapping):
         return {}
     catalog: dict[str, JSONDict] = {}
-    providers_mapping = cast(Mapping[object, object], providers_payload)
-    for provider_name_obj, provider_cfg in providers_mapping.items():
+    for provider_name_obj, provider_cfg in providers_payload.items():
         if not isinstance(provider_name_obj, str):
             continue
         if isinstance(provider_cfg, Mapping):
-            catalog[provider_name_obj] = _as_json_dict(
-                cast(TypingMapping[Any, Any], provider_cfg)
-            )
+            catalog[provider_name_obj] = coerce_json_object(provider_cfg)
         else:
             catalog[provider_name_obj] = {}
     return catalog
@@ -444,13 +446,8 @@ def get_org_provider_credentials(
     qs = LLMProviderCredential.typed_objects().filter(organization_id=organization_id)
     for record in qs.iterator():
         raw_models = record.models_payload or []
-        models_payload = [
-            _as_json_dict(cast(TypingMapping[Any, Any], model_entry))
-            for model_entry in raw_models
-        ]
-        metadata_payload = _as_json_dict(
-            cast(TypingMapping[Any, Any], record.metadata)
-        )
+        models_payload = coerce_object_list(raw_models)
+        metadata_payload = coerce_json_object(record.metadata)
         creds[record.provider] = {
             "uid": str(record.uid),
             "provider": record.provider,
@@ -543,11 +540,7 @@ def _credential_models_to_options(
             else None
         )
         options_value = item.get("options")
-        options_dict = (
-            _as_json_dict(cast(TypingMapping[Any, Any], options_value))
-            if isinstance(options_value, Mapping)
-            else {}
-        )
+        options_dict = coerce_json_object(options_value)
         if deployment_env and "azure_deployment" not in options_dict:
             options_dict["azure_deployment"] = deployment_env
 
@@ -671,8 +664,10 @@ def evaluate_provider_setup(
     models: Iterable[Mapping[str, object]] | None,
 ) -> JSONDict:
     issues: list[str] = []
-    metadata_dict = _as_json_dict(
-        cast(TypingMapping[Any, Any], metadata) if metadata else None
+    metadata_dict = coerce_object_dict(
+        metadata,
+        key_transform=lambda text: text.strip(),
+        drop_empty_keys=True,
     )
     endpoint_value = (endpoint or "").strip()
     if not endpoint_value:
@@ -695,13 +690,8 @@ def evaluate_provider_setup(
                 if not _is_truthy_flag(model_entry.get("enabled", True)):
                     continue
                 options_entry = model_entry.get("options")
-                options_mapping = (
-                    cast(Mapping[str, object], options_entry)
-                    if isinstance(options_entry, Mapping)
-                    else None
-                )
-                if options_mapping:
-                    azure_option = options_mapping.get("azure_deployment")
+                if isinstance(options_entry, Mapping):
+                    azure_option = options_entry.get("azure_deployment")
                     if isinstance(azure_option, str) and azure_option.strip():
                         deployment = azure_option.strip()
                         break
@@ -796,8 +786,7 @@ def build_provider_registry(
         elif status == "not_configured":
             issues_list = analysis.get("issues")
             if isinstance(issues_list, Sequence) and not isinstance(issues_list, (str, bytes)):
-                issues_sequence = cast(Sequence[object], issues_list)
-                reason = "; ".join(str(msg) for msg in issues_sequence)
+                reason = "; ".join(str(msg) for msg in issues_list)
         elif status == "disabled":
             reason = "Disabled"
         if available:
@@ -805,8 +794,7 @@ def build_provider_registry(
 
         issues_payload = analysis.get("issues")
         if isinstance(issues_payload, Sequence) and not isinstance(issues_payload, (str, bytes)):
-            issues_sequence = cast(Sequence[object], issues_payload)
-            analysis_issues = [str(msg) for msg in issues_sequence]
+            analysis_issues = [str(msg) for msg in issues_payload]
         else:
             analysis_issues = []
 
@@ -848,9 +836,9 @@ def build_provider_registry(
                     merged_models[value] = dict(item)
             credential_models_seq = _as_mapping_sequence(credential.get("models"))
             for option in _credential_models_to_options(credential_models_seq):
-                value = option.get("value")
-                if value:
-                    merged_models[value] = dict(option)
+                option_value = option["value"]
+                if option_value:
+                    merged_models[option_value] = dict(option)
             if merged_models:
                 existing["models"] = list(merged_models.values())
             endpoint_override = credential.get("endpoint")
@@ -872,28 +860,41 @@ def build_provider_registry(
 
         credential_models_seq = _as_mapping_sequence(credential.get("models"))
         credential_models_options = _credential_models_to_options(credential_models_seq)
+        display_name = coerce_str(credential.get("display_name")) or provider_name
+        endpoint_override = coerce_str(credential.get("endpoint"))
+        default_endpoint = endpoint_override or coerce_str(credential.get("default_endpoint"))
+        api_kind = coerce_str(credential.get("api_kind")) or "custom"
+        description = coerce_str(credential.get("description")) or ""
+        category = coerce_str(credential.get("category")) or "custom"
+        hosted_creators = coerce_str_list(credential.get("hosted_creators") or [])
+        has_api_key = bool(credential.get("has_api_key"))
+        enabled_flag = bool(credential.get("is_enabled"))
 
-        registry[provider_name] = {
+        entry: dict[str, object] = {
             "value": provider_name,
-            "label": credential.get("display_name") or provider_name,
+            "label": display_name,
             "available": True,
             "supported": True,
-            "configured": bool(credential.get("is_enabled")),
-            "enabled": bool(credential.get("is_enabled")),
-            "status": "enabled" if credential.get("is_enabled") else "disabled",
-            "default_endpoint": credential.get("endpoint") or credential.get("default_endpoint"),
+            "configured": enabled_flag,
+            "enabled": enabled_flag,
+            "status": "enabled" if enabled_flag else "disabled",
             "requires_api_key": True,
             "unavailable_reason": "",
-            "endpoint": credential.get("endpoint"),
             "models": credential_models_options,
             "source": "credential",
-            "api_kind": credential.get("api_kind") or "custom",
-            "description": credential.get("description") or "",
-            "can_enable": bool(credential.get("has_api_key")),
+            "api_kind": api_kind,
+            "description": description,
+            "can_enable": has_api_key,
             "issues": [],
-            "category": credential.get("category") or "custom",
-            "hosted_creators": credential.get("hosted_creators") or [],
+            "category": category,
+            "hosted_creators": hosted_creators,
         }
+        if default_endpoint:
+            entry["default_endpoint"] = default_endpoint
+        if endpoint_override:
+            entry["endpoint"] = endpoint_override
+
+        registry[provider_name] = entry
 
     return registry
 
@@ -907,14 +908,13 @@ def get_provider_secret_with_metadata(
         )
     except LLMProviderCredential.DoesNotExist:
         return None
+    models_payload = coerce_object_list(record.models_payload or [])
+    metadata_payload = coerce_json_object(record.metadata)
     return {
         "endpoint": record.endpoint,
         "api_key": decrypt_secret(record.api_key_encrypted),
-        "models": [
-            _as_json_dict(cast(TypingMapping[Any, Any], model_entry))
-            for model_entry in (record.models_payload or [])
-        ],
-        "metadata": _as_json_dict(cast(TypingMapping[Any, Any], record.metadata)),
+        "models": models_payload,
+        "metadata": metadata_payload,
     }
 
 
@@ -1006,11 +1006,7 @@ def _normalize_models(
             payload["enabled"] = True
 
         options_value = item.get("options")
-        options_dict = (
-            _as_json_dict(cast(TypingMapping[Any, Any], options_value))
-            if isinstance(options_value, Mapping)
-            else {}
-        )
+        options_dict = coerce_json_object(options_value)
         if options_dict:
             payload["options"] = options_dict
 
@@ -1021,11 +1017,7 @@ def _normalize_models(
 def _prepare_live_model_entry(model: SanitizedModel) -> JSONDict:
     entry: JSONDict = dict(model)
     options_value = entry.get("options")
-    options = (
-        _as_json_dict(cast(TypingMapping[Any, Any], options_value))
-        if isinstance(options_value, Mapping)
-        else {}
-    )
+    options = coerce_json_object(options_value)
     deployment_env = entry.get("deployment_env")
     if isinstance(deployment_env, str) and deployment_env:
         if "azure_deployment" not in options:
@@ -1046,16 +1038,16 @@ def run_live_model_probe(
         raise ChatClientError("Configure an API key before running a live test")
     if not endpoint:
         endpoint = provider.default_endpoint or ""
-    metadata_dict: JSONDict = _as_json_dict(metadata)
+    metadata_dict = coerce_object_dict(
+        metadata,
+        key_transform=lambda text: text.strip(),
+        drop_empty_keys=True,
+    )
     prepared = _prepare_live_model_entry(model_payload)
     model_name_value = prepared.get("name")
     model_name = str(model_name_value) if isinstance(model_name_value, str) else ""
     options_value = prepared.get("options")
-    options_payload = (
-        cast(dict[str, Any], options_value)
-        if isinstance(options_value, dict)
-        else {}
-    )
+    options_payload = coerce_object_dict(options_value)
     credential_payload: dict[str, Any] = {
         "endpoint": endpoint,
         "api_key": api_key,
@@ -1100,9 +1092,8 @@ def run_live_model_probe(
         raise
     except Exception as exc:  # pragma: no cover - network failures
         raise ChatClientError(f"Live request failed: {exc}") from exc
-    usage_payload = _as_json_dict(cast(TypingMapping[Any, Any], usage))
-    model_name = prepared.get("name")
-    model_value = str(model_name) if isinstance(model_name, str) else None
+    usage_payload = coerce_json_object(usage)
+    model_value = coerce_str(prepared.get("name"))
     result: LiveProbeResult = {
         "model": model_value,
         "content": content.strip(),
@@ -1165,13 +1156,13 @@ def upsert_org_provider_credential(
 
     models_payload = _normalize_models(models)
     models_serialized = _serialize_models_payload(models_payload)
-    models_serialized = _serialize_models_payload(models_payload)
-    models_serialized = _serialize_models_payload(models_payload)
-    models_serialized = _serialize_models_payload(models_payload)
-    models_serialized = _serialize_models_payload(models_payload)
     encrypted_key = encrypt_secret(api_key)
     enabled_value = bool(enabled) if enabled is not None else True
-    metadata_payload = _as_json_dict(metadata)
+    metadata_payload = coerce_object_dict(
+        metadata,
+        key_transform=lambda text: text.strip(),
+        drop_empty_keys=True,
+    )
 
     record, _created = LLMProviderCredential.typed_objects().get_or_create(
         organization_id=organization_id,
@@ -1206,12 +1197,9 @@ def upsert_org_provider_credential(
         "provider": record.provider,
         "display_name": record.display_name,
         "endpoint": record.endpoint,
-        "models": [
-            _as_json_dict(cast(TypingMapping[Any, Any], entry))
-            for entry in (record.models_payload or [])
-        ],
+        "models": coerce_object_list(record.models_payload or []),
         "has_api_key": bool(record.api_key_encrypted),
-        "metadata": _as_json_dict(cast(TypingMapping[Any, Any], record.metadata)),
+        "metadata": coerce_json_object(record.metadata),
         "is_enabled": record.is_enabled,
     }
 
@@ -1249,7 +1237,11 @@ def upsert_org_provider_credential_by_uuid(
     models_serialized = _serialize_models_payload(models_payload)
     encrypted_key = encrypt_secret(api_key)
     enabled_value = bool(enabled) if enabled is not None else True
-    metadata_payload = _as_json_dict(metadata)
+    metadata_payload = coerce_object_dict(
+        metadata,
+        key_transform=lambda text: text.strip(),
+        drop_empty_keys=True,
+    )
     try:
         record = LLMProviderCredential.typed_objects().get(
             organization_id=organization_id,
@@ -1292,11 +1284,8 @@ def upsert_org_provider_credential_by_uuid(
         "provider": record.provider,
         "display_name": record.display_name,
         "endpoint": record.endpoint,
-        "models": [
-            _as_json_dict(cast(TypingMapping[Any, Any], entry))
-            for entry in (record.models_payload or [])
-        ],
+        "models": coerce_object_list(record.models_payload or []),
         "has_api_key": bool(record.api_key_encrypted),
-        "metadata": _as_json_dict(cast(TypingMapping[Any, Any], record.metadata)),
+        "metadata": coerce_json_object(record.metadata),
         "is_enabled": record.is_enabled,
     }

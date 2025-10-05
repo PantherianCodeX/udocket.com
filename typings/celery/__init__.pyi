@@ -1,3 +1,6 @@
+# pyright: reportUnusedImport=false, reportUnusedClass=false, reportUnusedFunction=false, reportUnusedVariable=false
+# mypy: ignore-errors
+
 from typing import Any, Callable, Protocol, TypeVar, overload
 
 _T = TypeVar("_T", bound=Callable[..., Any])

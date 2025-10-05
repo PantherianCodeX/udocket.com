@@ -14,7 +14,7 @@ from .common import parse_transcript, TranscriptParse
 from .common.io import TranscriptSegment
 from .langgraph_orchestrator import build_analyze_graph, enable_langgraph_debug_logging
 from .analyze.utils import FinalizedOutputs, AnalyzePipeline
-from ..json_utils import coerce_json_object, read_json_object
+from ..json_utils import coerce_json_object, coerce_object_dict, read_json_object
 from ..llm import LLMSettings, load_llm_settings
 from ..llm.runtime import (
     ChatClient,
@@ -53,13 +53,6 @@ class StageCatalogEntry(TypedDict):
     resource_notes: str
     recommended_models: list[StageModelInfo]
     eligible_models: list[StageModelInfo]
-
-
-def _coerce_object_dict(payload: object) -> dict[str, object]:
-    if isinstance(payload, Mapping):
-        source = cast(Mapping[object, object], payload)
-        return {str(key): value for key, value in source.items()}
-    return {}
 
 
 def _coerce_string_list(values: object) -> list[str]:
@@ -107,7 +100,7 @@ def _normalize_providers(values: Sequence[str]) -> list[str]:
 @lru_cache(maxsize=1)
 def load_analyze_defaults() -> dict[str, object]:
     payload = read_json_object(ANALYZE_DEFAULTS_PATH)
-    return _coerce_object_dict(payload)
+    return coerce_object_dict(payload)
 
 
 def analyze_defaults() -> dict[str, object]:
@@ -134,7 +127,7 @@ DEFAULT_MAX_OUTPUT_TOKENS = _int_default("max_output_tokens", 24000)
 _DEFAULT_CHAIN = _coerce_string_list(_DEFAULTS.get("default_provider_chain"))
 DEFAULT_PROVIDER_CHAIN: list[str] = _normalize_providers(_DEFAULT_CHAIN) or ["azure"]
 
-_STAGE_LIMITS_DEFAULT = _coerce_object_dict(_DEFAULTS.get("stage_token_limits"))
+_STAGE_LIMITS_DEFAULT = coerce_object_dict(_DEFAULTS.get("stage_token_limits"))
 
 
 def _stage_limit(key: str, fallback: int) -> int:

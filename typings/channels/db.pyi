@@ -1,3 +1,6 @@
+# pyright: reportUnusedImport=false, reportUnusedClass=false, reportUnusedFunction=false, reportUnusedVariable=false
+# mypy: ignore-errors
+
 from __future__ import annotations
 
 from typing import Awaitable, Callable, ParamSpec, TypeVar

@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from collections.abc import Iterable, Mapping, Sequence
-from typing import Any, TypeAlias, cast
+from typing import Any, Callable, TypeAlias, cast
 
 JSONPrimitive: TypeAlias = int | float | bool | str | None
 JSONValue: TypeAlias = JSONPrimitive | dict[str, "JSONValue"] | list["JSONValue"]
@@ -58,6 +58,38 @@ def json_object_to_dict(payload: JSONObject) -> dict[str, Any]:
     """Convert a ``JSONObject`` into a plain ``dict`` with ``Any`` values."""
 
     return {key: cast(Any, value) for key, value in payload.items()}
+
+
+def coerce_object_dict(
+    value: object,
+    *,
+    key_transform: Callable[[str], str] | None = None,
+    drop_empty_keys: bool = False,
+    drop_none_values: bool = False,
+) -> dict[str, object]:
+    """Return a ``dict[str, object]`` representation of ``value`` when possible.
+
+    ``key_transform`` is applied to every key after coercion to ``str``. When
+    ``drop_empty_keys`` is provided, blank keys are removed after the
+    transformation step. ``drop_none_values`` removes entries whose value is
+    ``None``.
+    """
+
+    if not isinstance(value, Mapping):
+        return {}
+
+    mapping_value = cast(Mapping[object, object], value)
+    transform = key_transform or (lambda text: text)
+
+    result: dict[str, object] = {}
+    for raw_key, raw_value in mapping_value.items():
+        key = transform(str(raw_key))
+        if drop_empty_keys and not key:
+            continue
+        if drop_none_values and raw_value is None:
+            continue
+        result[key] = raw_value
+    return result
 
 
 def ensure_json_object(value: object, *, context: str | None = None) -> JSONObject:
