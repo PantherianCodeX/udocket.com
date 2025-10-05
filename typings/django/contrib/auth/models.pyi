@@ -48,12 +48,22 @@ class User(AbstractBaseUser):
 def get_user_model() -> type[AbstractBaseUser]: ...
 
 
+class AbstractUser(AbstractBaseUser):
+    first_name: str
+    last_name: str
+    is_staff: bool
+    is_superuser: bool
+    is_active: bool
+    email: str
+    username: str
+
+
 __all__ = [
     "AbstractBaseUser",
+    "AbstractUser",
     "AnonymousUser",
     "Group",
     "Permission",
     "User",
     "get_user_model",
 ]
-

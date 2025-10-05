@@ -2,6 +2,6 @@
 # mypy: ignore-errors
 
 from .decorators import action
+from . import viewsets
 
-__all__ = ["action"]
-
+__all__ = ["action", "viewsets"]
