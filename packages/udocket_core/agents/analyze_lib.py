@@ -417,6 +417,10 @@ def _load_llm_settings() -> LLMSettings:
     return _llm_settings_cache
 
 
+def _empty_options() -> dict[str, object]:
+    return {}
+
+
 @dataclass
 class StageRuntime:
     stage_key: str
@@ -428,7 +432,7 @@ class StageRuntime:
     context_window_tokens: Optional[int]
     profile: StageProfile
     temperature: float
-    options: dict[str, object] = field(default_factory=dict)
+    options: dict[str, object] = field(default_factory=_empty_options)
 
     @property
     def primary_provider(self) -> str:

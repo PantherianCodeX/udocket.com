@@ -80,6 +80,14 @@
       "verifiedAt": "2025-10-05T03:11:31.320806+00:00"
     },
     {
+      "path": "apps/platform/operations/services/analysis.py",
+      "verifiedAt": "2025-10-05T04:59:48.388129+00:00"
+    },
+    {
+      "path": "apps/platform/operations/services/compose.py",
+      "verifiedAt": "2025-10-05T04:59:48.388129+00:00"
+    },
+    {
       "path": "apps/platform/operations/storage.py",
       "verifiedAt": "2025-10-05T02:30:08.369351+00:00"
     },
@@ -98,6 +106,10 @@
     {
       "path": "config/settings.py",
       "verifiedAt": "2025-10-05T01:44:10.645472+00:00"
+    },
+    {
+      "path": "packages/udocket_core/agents/analyze_lib.py",
+      "verifiedAt": "2025-10-05T04:59:48.388129+00:00"
     },
     {
       "path": "packages/udocket_core/agents/common/azure_client.py",

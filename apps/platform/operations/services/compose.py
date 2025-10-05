@@ -7,6 +7,7 @@ import logging
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Any, cast
+from uuid import UUID
 
 from packages.udocket_core.agents import ComposeAgent, ComposeConfig
 from packages.udocket_core.llm.config import LLMSettings, load_llm_settings
@@ -92,10 +93,12 @@ def execute_compose_job(
     llm_config_id: str | None,
 ) -> dict[str, Any]:
     job_case = getattr(job, "case", None)
-    org_value = job.organization_id
+    org_value = cast(UUID | None, getattr(job, "organization_id", None))
     if org_value is None and job_case is not None:
-        org_value = getattr(job_case, "organization_id", None)
-    org_id: str | None = str(org_value) if org_value else None
+        org_value = cast(UUID | None, getattr(job_case, "organization_id", None))
+    if org_value is None:
+        raise ValueError("Compose job requires an organization id")
+    org_id = str(org_value)
     case_dir, _, _ = case_paths(case_id, org_id)
 
     summary_meta = read_job_meta(case_id, org_id, str(summary_job.id))
@@ -121,12 +124,16 @@ def execute_compose_job(
 
     analysis_dir = case_dir / "analysis"
     summary_case = getattr(summary_job, "case", None)
-    summary_org_value = summary_job.organization_id
+    summary_org_value = cast(UUID | None, getattr(summary_job, "organization_id", None))
     if summary_org_value is None and summary_case is not None:
-        summary_org_value = getattr(summary_case, "organization_id", None)
+        summary_org_value = cast(UUID | None, getattr(summary_case, "organization_id", None))
+    if summary_org_value is None:
+        summary_org_str = org_id
+    else:
+        summary_org_str = str(summary_org_value)
     search_dirs = _summary_search_dirs(
         analysis_dir=analysis_dir,
-        summary_job_case_dir=case_paths(case_id, str(summary_org_value) if summary_org_value else None)[0],
+        summary_job_case_dir=case_paths(case_id, summary_org_str)[0],
     )
 
     def _lookup_or_fallback(current: Path | None, stem: str, ext: str) -> Path | None:
@@ -172,9 +179,7 @@ def execute_compose_job(
     )
 
     llm_settings: LLMSettings = load_llm_settings()
-    summary_org_str = str(summary_org_value) if summary_org_value else ""
-    job_org_str = str(org_value) if org_value else ""
-    organization_id_str = job_org_str or summary_org_str
+    organization_id_str = org_id or summary_org_str
 
     active_config: dict[str, Any] = {}
 

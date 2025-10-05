@@ -6,7 +6,7 @@ import json
 from collections.abc import Mapping, Sequence
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, TypedDict, cast
 
 from apps.platform.cases.models import Case
 from apps.platform.operations.storage import ensure_case_dirs, ops_dir as storage_ops_dir
@@ -31,10 +31,50 @@ def resolve_case_relative(path_str: str, case_dir: Path) -> Path | None:
     return None
 
 
+class SummaryTimelineEvent(TypedDict, total=False):
+    ts_start: float | int | str | None
+    ts_end: float | int | str | None
+    speaker: str | None
+    text: str
+    labels: list[str]
+
+
+def _coerce_event_mappings(payload: object) -> list[Mapping[str, object]]:
+    events: list[Mapping[str, object]] = []
+    if isinstance(payload, Mapping):
+        payload_mapping = cast(Mapping[str, object], payload)
+        events_value = payload_mapping.get("events")
+        if isinstance(events_value, Sequence) and not isinstance(events_value, (str, bytes)):
+            for candidate in cast(Sequence[object], events_value):
+                if isinstance(candidate, Mapping):
+                    events.append(cast(Mapping[str, object], candidate))
+        return events
+    if isinstance(payload, Sequence) and not isinstance(payload, (str, bytes)):
+        for candidate in cast(Sequence[object], payload):
+            if isinstance(candidate, Mapping):
+                events.append(cast(Mapping[str, object], candidate))
+    return events
+
+
+def _normalize_timestamp(value: object) -> float | int | str | None:
+    if isinstance(value, (float, int, str)):
+        return value
+    return None
+
+
+def _extract_labels(value: object) -> list[str]:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        return []
+    labels: list[str] = []
+    for raw_label in cast(Sequence[object], value):
+        labels.append(str(raw_label))
+    return labels
+
+
 def load_summary_timeline_events(
     meta: Mapping[str, object],
     case_dir: Path,
-) -> tuple[list[dict[str, Any]], Path | None]:
+) -> tuple[list[SummaryTimelineEvent], Path | None]:
     file_value = meta.get("summary_timeline_file")
     if not isinstance(file_value, str) or not file_value:
         return [], None
@@ -45,36 +85,17 @@ def load_summary_timeline_events(
         payload: object = json.loads(seeds_path.read_text(encoding="utf-8"))
     except Exception:  # pragma: no cover - malformed file
         return [], None
-    events_candidate: Sequence[object]
-    if isinstance(payload, dict):
-        payload_mapping = cast(Mapping[str, object], payload)
-        events_value = payload_mapping.get("events")
-        if isinstance(events_value, list):
-            events_candidate = events_value
-        else:
-            events_candidate = ()
-    elif isinstance(payload, list):
-        events_candidate = payload
-    else:
-        events_candidate = ()
-    events: list[dict[str, Any]] = []
-    raw_events: Sequence[object] = events_candidate
-    for item in raw_events:
-        if not isinstance(item, dict):
-            continue
-        event_map = cast(Mapping[str, object], item)
-        labels_value = event_map.get("labels")
-        labels_list: list[str] = []
-        if isinstance(labels_value, Sequence) and not isinstance(labels_value, (str, bytes)):
-            for raw_label in cast(Sequence[object], labels_value):
-                labels_list.append(str(raw_label))
+    raw_events = _coerce_event_mappings(payload)
+    events: list[SummaryTimelineEvent] = []
+    for event_map in raw_events:
+        speaker_value = event_map.get("speaker")
         events.append(
             {
-                "ts_start": event_map.get("ts_start"),
-                "ts_end": event_map.get("ts_end"),
-                "speaker": event_map.get("speaker"),
+                "ts_start": _normalize_timestamp(event_map.get("ts_start")),
+                "ts_end": _normalize_timestamp(event_map.get("ts_end")),
+                "speaker": str(speaker_value) if speaker_value is not None else None,
                 "text": str(event_map.get("text") or ""),
-                "labels": labels_list,
+                "labels": _extract_labels(event_map.get("labels")),
             }
         )
     if not events:
@@ -96,10 +117,12 @@ def load_summary_entity_hints(
         payload: object = json.loads(hints_path.read_text(encoding="utf-8"))
     except Exception:  # pragma: no cover - malformed file
         return None, None
-    if not isinstance(payload, dict):
+    if not isinstance(payload, Mapping):
         return None, None
     payload_mapping = cast(Mapping[str, object], payload)
-    payload_dict: dict[str, Any] = {str(key): value for key, value in payload_mapping.items()}
+    payload_dict: dict[str, Any] = {}
+    for key_obj, value in payload_mapping.items():
+        payload_dict[key_obj] = value
     return payload_dict, hints_path
 
 
