@@ -1,6 +1,8 @@
+# pyright: strict
+
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Mapping
 
 from django.http import HttpRequest
 from django.utils import timezone
@@ -13,17 +15,22 @@ def emit(
     *,
     case_id: str | None,
     event: str,
-    data: dict[str, Any] | None = None,
+    data: Mapping[str, object] | None = None,
 ) -> None:
     try:
         user = getattr(request, "user", None)
-        actor = getattr(user, "username", None) or getattr(user, "email", None) or "anonymous"
-        AuditEvent.objects.create(
+        actor = (
+            getattr(user, "username", None)
+            or getattr(user, "email", None)
+            or "anonymous"
+        )
+        payload = dict(data) if data is not None else {}
+        AuditEvent.typed_objects().create(
             ts=timezone.now(),
             actor=str(actor),
             case_id=case_id or "",
             event=event,
-            data=data or {},
+            data=payload,
         )
     except Exception:
         # Never raise from audit

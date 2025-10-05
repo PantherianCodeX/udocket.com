@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Mapping, TypeAlias
 
 JSONPrimitive: TypeAlias = int | float | bool | str | None
-JSONValue: TypeAlias = JSONPrimitive | "JSONObject" | "JSONArray"
+JSONValue: TypeAlias = JSONPrimitive | dict[str, "JSONValue"] | list["JSONValue"]
 JSONObject: TypeAlias = dict[str, JSONValue]
 JSONArray: TypeAlias = list[JSONValue]
 

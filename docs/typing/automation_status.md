@@ -1,6 +1,6 @@
 # Typing Automation Status
 
-Last updated: 2025-10-05T02:30:08.369351+00:00
+Last updated: 2025-10-05T02:35:51.158148+00:00
 
 ## Pyright Snapshot
 
@@ -26,6 +26,7 @@ _No pyright output recorded._
 - `apps/platform/cases/models.py` (verified 2025-10-05T01:44:10.645472+00:00)
 - `apps/platform/cases/urls.py` (verified 2025-10-05T01:44:10.645472+00:00)
 - `apps/platform/jobs/models.py` (verified 2025-10-05T01:44:10.645472+00:00)
+- `apps/platform/operations/audit.py` (verified 2025-10-05T02:35:51.158148+00:00)
 - `apps/platform/operations/consumers.py` (verified 2025-10-05T01:44:10.645472+00:00)
 - `apps/platform/operations/guardian.py` (verified 2025-10-05T02:01:56.432469+00:00)
 - `apps/platform/operations/models.py` (verified 2025-10-05T01:44:10.645472+00:00)
