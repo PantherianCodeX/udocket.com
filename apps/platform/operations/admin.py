@@ -16,7 +16,8 @@ from apps.platform.cases.models import Case
 if TYPE_CHECKING:
     from django.contrib.admin import ModelAdmin as _ModelAdmin
 
-    AuditEventAdminBase = _ModelAdmin[AuditEvent]
+    class AuditEventAdminBase(_ModelAdmin):
+        ...
 else:
     AuditEventAdminBase = admin.ModelAdmin
 
@@ -43,7 +44,8 @@ class AuditEventAdmin(TenantScopedAdminMixin, AuditEventAdminBase):
         if not user or not getattr(user, "is_authenticated", False):
             return queryset.none()
 
-        active_org_id = self._active_org_id(request)
+        active_org_getter = getattr(self, "_active_org_id", None)
+        active_org_id = active_org_getter(request) if callable(active_org_getter) else None
         if getattr(user, "is_superuser", False):
             if not active_org_id:
                 return queryset
