@@ -31,7 +31,7 @@ from apps.platform.operations.runtime import (
 )
 from apps.platform.operations.utils import read_job_meta
 from packages.udocket_core.agents.guardian_lib import GuardianVerdict
-from packages.udocket_core.json_utils import JSONObject, coerce_json_object
+from packages.udocket_core.json_utils import JSONObject, normalize_json_object
 
 log = logging.getLogger("apps.platform.operations.tasks.guardian")
 
@@ -107,14 +107,16 @@ def guardian_review_artifact(self: TaskProtocol, *, artifact_id: int) -> dict[st
         )
 
     if context is None:
-        review_record = coerce_json_object(
+        review_record = normalize_json_object(
             {
                 "status": "skipped",
                 "reason": "guardian_not_configured",
                 "reviewed_at": timezone.now().isoformat(),
                 "artifact_id": int(artifact.id),
                 "artifact_type": str(getattr(artifact, "type", "")),
-            }
+            },
+            drop_empty_keys=True,
+            drop_nullish_values=True,
         )
         store_guardian_review(artifact, review_record)
         if runtime:
@@ -130,14 +132,16 @@ def guardian_review_artifact(self: TaskProtocol, *, artifact_id: int) -> dict[st
 
     artifact_payload = snapshot_artifact_for_guardian(artifact)
     if "content" not in artifact_payload and "parsed" not in artifact_payload:
-        review_record = coerce_json_object(
+        review_record = normalize_json_object(
             {
                 "status": "skipped",
                 "reason": "unreadable_artifact",
                 "reviewed_at": timezone.now().isoformat(),
                 "artifact_id": int(artifact.id),
                 "artifact_type": str(getattr(artifact, "type", "")),
-            }
+            },
+            drop_empty_keys=True,
+            drop_nullish_values=True,
         )
         store_guardian_review(artifact, review_record)
         if runtime:
@@ -156,14 +160,17 @@ def guardian_review_artifact(self: TaskProtocol, *, artifact_id: int) -> dict[st
         job_metadata: JSONObject = {}
         if job_id and org_id_str:
             try:
-                job_metadata = coerce_json_object(read_job_meta(case_id, org_id_str, job_id))
+                job_metadata = normalize_json_object(
+                    read_job_meta(case_id, org_id_str, job_id),
+                    drop_empty_keys=True,
+                )
             except Exception:
                 job_metadata = {}
 
         artifact_type_upper = str(getattr(artifact, "type", "") or "").upper()
         applicable_instructions: list[JSONObject] = []
         for instruction in context.instructions:
-            instruction_payload = coerce_json_object(instruction)
+            instruction_payload = normalize_json_object(instruction)
             applies_to = instruction_payload.get("applies_to")
             if not applies_to:
                 applicable_instructions.append(instruction_payload)
@@ -184,17 +191,18 @@ def guardian_review_artifact(self: TaskProtocol, *, artifact_id: int) -> dict[st
         if case_obj is None and case_id:
             case_obj = Case.typed_objects().filter(pk=case_id).first()
         if case_obj is not None:
-            case_data = coerce_json_object(
+            case_data = normalize_json_object(
                 {
                     "id": str(getattr(case_obj, "id", "")),
                     "title": getattr(case_obj, "title", "") or "",
                     "client_name": getattr(case_obj, "client_name", "") or "",
                     "representation": getattr(case_obj, "representation", "") or "",
-                }
+                },
+                drop_empty_keys=True,
             )
 
-        artifact_meta_payload = coerce_json_object(getattr(artifact, "metadata", {}))
-        guardian_context_payload = coerce_json_object(
+        artifact_meta_payload = normalize_json_object(getattr(artifact, "metadata", {}))
+        guardian_context_payload = normalize_json_object(
             {
                 "artifact_metadata": artifact_meta_payload,
                 "job_metadata": job_metadata,
@@ -204,7 +212,8 @@ def guardian_review_artifact(self: TaskProtocol, *, artifact_id: int) -> dict[st
                 "instructions": applicable_instructions,
                 "all_instructions": context.instructions,
                 "case": case_data,
-            }
+            },
+            drop_empty_keys=True,
         )
 
         review_options = {"temperature": context.temperature}
@@ -222,14 +231,16 @@ def guardian_review_artifact(self: TaskProtocol, *, artifact_id: int) -> dict[st
             temperature=context.temperature,
         )
     except Exception as exc:
-        review_record = coerce_json_object(
+        review_record = normalize_json_object(
             {
                 "status": "error",
                 "error": str(exc),
                 "reviewed_at": timezone.now().isoformat(),
                 "artifact_id": int(artifact.id),
                 "artifact_type": str(getattr(artifact, "type", "")),
-            }
+            },
+            drop_empty_keys=True,
+            drop_nullish_values=True,
         )
         store_guardian_review(artifact, review_record)
         if job_id:
@@ -247,7 +258,7 @@ def guardian_review_artifact(self: TaskProtocol, *, artifact_id: int) -> dict[st
         raise
 
     status = "approved" if verdict.approved else "rejected"
-    review_record = build_guardian_review_record(
+    review_record = normalize_json_object(
         verdict=verdict,
         status=status,
         artifact=artifact,
@@ -256,10 +267,11 @@ def guardian_review_artifact(self: TaskProtocol, *, artifact_id: int) -> dict[st
             "retry_attempts": context.agent.config.retry_attempts,
             "instructions_used": len(applicable_instructions),
         },
+        drop_empty_keys=True,
     )
     store_guardian_review(artifact, review_record)
     if job_id:
-        reduced_record = coerce_json_object(review_record)
+        reduced_record = normalize_json_object(review_record, drop_empty_keys=True)
         reduced_record.pop("artifact_id", None)
         reduced_record.pop("artifact_type", None)
         safe_job_meta(case_id, org_id_str, job_id, {"guardian_last_review": reduced_record})

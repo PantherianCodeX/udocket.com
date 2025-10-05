@@ -8,7 +8,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Callable, Final, Protocol, cast
+from typing import Callable, Final, Protocol, TypeAlias, cast
 
 from django.utils import timezone
 
@@ -31,6 +31,7 @@ from packages.udocket_core.json_utils import (
     coerce_object_list,
     coerce_str,
     coerce_str_list,
+    normalize_json_object,
     parse_json_value,
     read_json_object,
 )
@@ -43,9 +44,9 @@ GUARDIAN_DEFAULTS_PATH: Final = Path(__file__).resolve().parents[3] / "config" /
 
 log = logging.getLogger("udocket.guardian")
 
-JSONDict = JSONObject
-CredentialsMap = dict[str, JSONDict]
-InstructionList = list[JSONDict]
+JSONDict: TypeAlias = JSONObject
+CredentialsMap: TypeAlias = dict[str, JSONDict]
+InstructionList: TypeAlias = list[JSONDict]
 
 _ENSURE_DEFAULT_LLM_CONFIGURATION = cast(
     Callable[..., dict[str, object] | None],
@@ -104,7 +105,7 @@ def _load_guardian_defaults() -> JSONDict:
 
 def _default_instructions() -> InstructionList:
     defaults = _load_guardian_defaults()
-    return coerce_object_list(defaults.get("instructions"))
+    return cast(InstructionList, coerce_object_list(defaults.get("instructions")))
 
 
 def _fetch_guardian_configuration(organization_id: str) -> JSONDict:
@@ -233,7 +234,11 @@ def build_guardian_context(organization_id: str | None) -> GuardianContext | Non
             extra={"organization_id": organization_id},
         )
 
-    options_raw = coerce_json_object(review_cfg.get("options"))
+    options_raw = normalize_json_object(
+        review_cfg.get("options"),
+        drop_empty_keys=True,
+        drop_nullish_values=True,
+    )
     temperature = coerce_float(options_raw.get("temperature"), default=0.0) or 0.0
 
     max_tokens_value = coerce_int(review_cfg.get("max_tokens"), default=2048, minimum=1) or 2048
@@ -249,7 +254,7 @@ def build_guardian_context(organization_id: str | None) -> GuardianContext | Non
 
     credentials: CredentialsMap = {}
     for provider in guardian_config.provider_chain:
-        secret = coerce_json_object(
+        secret = normalize_json_object(
             get_provider_secret_with_metadata(organization_id, provider)
         )
         if secret:
