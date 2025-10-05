@@ -9,6 +9,12 @@ from mozilla_django_oidc.utils import absolutify as absolutify, add_state_and_ve
 LOGGER: Incomplete
 
 class SessionRefresh(MiddlewareMixin):
+    """Refreshes the session with the OIDC RP after expiry seconds
+
+    For users authenticated with the OIDC RP, verify tokens are still valid and
+    if not, force the user to re-authenticate silently.
+
+    """
     OIDC_EXEMPT_URLS: Incomplete
     OIDC_OP_AUTHORIZATION_ENDPOINT: Incomplete
     OIDC_RP_CLIENT_ID: Incomplete
@@ -21,8 +27,32 @@ class SessionRefresh(MiddlewareMixin):
     @staticmethod
     def get_settings(attr, *args): ...
     @cached_property
-    def exempt_urls(self): ...
+    def exempt_urls(self):
+        '''Generate and return a set of url paths to exempt from SessionRefresh
+
+        This takes the value of ``settings.OIDC_EXEMPT_URLS`` and appends three
+        urls that mozilla-django-oidc uses. These values can be view names or
+        absolute url paths.
+
+        :returns: list of url paths (for example "/oidc/callback/")
+
+        '''
     @cached_property
-    def exempt_url_patterns(self): ...
-    def is_refreshable_url(self, request): ...
+    def exempt_url_patterns(self):
+        '''Generate and return a set of url patterns to exempt from SessionRefresh
+
+        This takes the value of ``settings.OIDC_EXEMPT_URLS`` and returns the
+        values that are compiled regular expression patterns.
+
+        :returns: list of url patterns (for example,
+            ``re.compile(r"/user/[0-9]+/image")``)
+        '''
+    def is_refreshable_url(self, request):
+        """Takes a request and returns whether it triggers a refresh examination
+
+        :arg HttpRequest request:
+
+        :returns: boolean
+
+        """
     def process_request(self, request): ...

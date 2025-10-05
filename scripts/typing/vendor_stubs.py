@@ -108,6 +108,7 @@ def _run_stubgen(modules: tuple[str, ...], destination_root: Path, search_path: 
             "--search-path",
             search_paths,
             "--ignore-errors",
+            "--include-docstrings",
         ]
         for module in modules:
             args.extend(["-p", module])
