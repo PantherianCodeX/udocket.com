@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2025-10-05T16:19:23.981293+00:00",
+  "generatedAt": "2025-10-05T16:36:47.151682+00:00",
   "entries": [
     {
       "dist": "django-stubs",
@@ -106,6 +106,13 @@
       "version": "0.6.0.20250914",
       "stubDirs": [
         "pyasn1-stubs"
+      ]
+    },
+    {
+      "dist": "mozilla-django-oidc",
+      "version": "4.0.1",
+      "stubDirs": [
+        "mozilla_django_oidc-stubs"
       ]
     }
   ]

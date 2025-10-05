@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
+import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -24,7 +26,9 @@ else:
     from .common import PROJECT_ROOT, load_manifest, save_manifest, upsert_helper_record
 
 import importlib.metadata as metadata
+import sys
 import sysconfig
+import tempfile
 
 
 TYPINGS_ROOT = PROJECT_ROOT / "typings"
@@ -48,7 +52,12 @@ DIST_NAMES: tuple[str, ...] = (
     "types-oauthlib",
     "types-python-dateutil",
     "types-pyasn1",
+    "mozilla-django-oidc",
 )
+
+STUBGEN_MODULES: dict[str, tuple[str, ...]] = {
+    "mozilla-django-oidc": ("mozilla_django_oidc",),
+}
 
 
 @dataclass(frozen=True)
@@ -89,6 +98,44 @@ def _stub_directories(dist_name: str) -> tuple[str, ...]:
     return tuple(sorted(directories))
 
 
+def _run_stubgen(modules: tuple[str, ...], destination_root: Path, search_path: Path) -> tuple[str, ...]:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir)
+        stubgen_exe = Path(sys.executable).with_name("stubgen")
+        search_paths = os.pathsep.join([str(search_path), str(PROJECT_ROOT)])
+        args = [
+            str(stubgen_exe),
+            "--search-path",
+            search_paths,
+            "--ignore-errors",
+        ]
+        for module in modules:
+            args.extend(["-p", module])
+        args.extend(["-o", str(tmp_path)])
+        subprocess.run(args, check=True)
+
+        generated_dirs: list[str] = []
+        for module in modules:
+            module_path = Path(module.replace(".", "/"))
+            source_dir = tmp_path / module_path
+            target_stub_dir = destination_root / f"{module.replace('.', '_')}-stubs"
+            if target_stub_dir.exists():
+                shutil.rmtree(target_stub_dir)
+            if source_dir.is_dir():
+                target_module_dir = target_stub_dir / module_path
+                target_module_dir.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copytree(source_dir, target_module_dir)
+            else:
+                stub_file = source_dir.with_suffix(".pyi")
+                if not stub_file.exists():
+                    continue
+                target_file = target_stub_dir / module_path.with_suffix(".pyi")
+                target_file.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(stub_file, target_file)
+            generated_dirs.append(target_stub_dir.name)
+        return tuple(generated_dirs)
+
+
 def _copy_stub_dir(source_root: Path, subdir: str, destination_root: Path) -> Path:
     source = source_root / subdir
     if not source.exists():
@@ -118,7 +165,14 @@ def _apply_pyright_directives(path: Path) -> None:
         "reportGeneralTypeIssues=false",
     )
     directive_block = "# pyright: " + ", ".join(directives) + "\n\n"
-    for stub_file in path.rglob("*.pyi"):
+    files: Iterable[Path]
+    if path.is_file():
+        files = (path,)
+    else:
+        files = path.rglob("*.pyi")
+    for stub_file in files:
+        if stub_file.suffix != ".pyi":
+            continue
         text = stub_file.read_text(encoding="utf-8")
         if text.startswith("# pyright: reportMissingParameterType=false"):
             continue
@@ -133,11 +187,21 @@ def vendor_stubs(dist_names: Iterable[str]) -> list[VendoredStub]:
 
     for dist_name in dist_names:
         stub_dirs = _stub_directories(dist_name)
+        generated_dirs: tuple[str, ...] = tuple()
+        if not stub_dirs and dist_name in STUBGEN_MODULES:
+            generated_dirs = _run_stubgen(STUBGEN_MODULES[dist_name], STUB_VENDOR_DIR, site_packages)
+            if generated_dirs:
+                stub_dirs = generated_dirs
         if not stub_dirs:
             # Some helper dists (e.g. django-stubs-ext) only contain runtime helpers.
             continue
         version = metadata.version(dist_name)
         for directory in stub_dirs:
+            if directory in generated_dirs:
+                dest_path = STUB_VENDOR_DIR / directory
+                if dest_path.exists():
+                    _apply_pyright_directives(dest_path)
+                continue
             dest_dir = _copy_stub_dir(site_packages, directory, STUB_VENDOR_DIR)
             _apply_pyright_directives(dest_dir)
         vendored.append(VendoredStub(dist_name=dist_name, version=version, stub_dirs=stub_dirs))

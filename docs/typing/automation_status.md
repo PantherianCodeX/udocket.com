@@ -9,7 +9,7 @@ Command: `pyright --stats`
 ```
 Loading configuration file at /home/user/Code/uDocket/udocket.com/pyrightconfig.json
 No include entries specified; assuming /home/user/Code/uDocket/udocket.com
-Found 245 source files
+Found 1390 source files
 pyright 1.1.392
 /home/user/Code/uDocket/udocket.com/apps/platform/accounts/apps.py
   /home/user/Code/uDocket/udocket.com/apps/platform/accounts/apps.py:10:23 - error: Import "signals" is not accessed (reportUnusedImport)
@@ -1014,10 +1014,6 @@ pyright 1.1.392
 /home/user/Code/uDocket/udocket.com/apps/platform/config/__init__.py
   /home/user/Code/uDocket/udocket.com/apps/platform/config/__init__.py:1:28 - error: Import "celery_app" is not accessed (reportUnusedImport)
 /home/user/Code/uDocket/udocket.com/apps/platform/config/asgi.py
-  /home/user/Code/uDocket/udocket.com/apps/platform/config/asgi.py:12:10 - warning: Stub file not found for "channels.routing" (reportMissingTypeStubs)
-  /home/user/Code/uDocket/udocket.com/apps/platform/config/asgi.py:13:10 - warning: Stub file not found for "channels.auth" (reportMissingTypeStubs)
-  /home/user/Code/uDocket/udocket.com/apps/platform/config/asgi.py:13:31 - warning: Type of "AuthMiddlewareStack" is partially unknown
-    Type of "AuthMiddlewareStack" is "(inner: Unknown) -> CookieMiddleware" (reportUnknownVariableType)
   /home/user/Code/uDocket/udocket.com/apps/platform/config/asgi.py:14:46 - warning: Type of "websocket_urlpatterns" is partially unknown
     Type of "websocket_urlpatterns" is "list[Unknown]" (reportUnknownVariableType)
   /home/user/Code/uDocket/udocket.com/apps/platform/config/asgi.py:27:52 - warning: Argument type is partially unknown
@@ -4620,21 +4616,106 @@ pyright 1.1.392
   /home/user/Code/uDocket/udocket.com/typings/channels/__init__.pyi:3:33 - error: "db" is specified in __all__ but is not present in module (reportUnsupportedDunderAll)
 /home/user/Code/uDocket/udocket.com/typings/channels/generic/__init__.pyi
   /home/user/Code/uDocket/udocket.com/typings/channels/generic/__init__.pyi:3:12 - error: "websocket" is specified in __all__ but is not present in module (reportUnsupportedDunderAll)
-879 errors, 1914 warnings, 0 informations 
-Completed in 19.037sec
+/home/user/Code/uDocket/udocket.com/typings/vendor/OpenSSL-stubs/crypto.pyi
+  /home/user/Code/uDocket/udocket.com/typings/vendor/OpenSSL-stubs/crypto.pyi:60:51 - error: The class "X509Extension" is deprecated
+    X509Extension support in pyOpenSSL is deprecated. You should use the APIs in cryptography. (reportDeprecated)
+  /home/user/Code/uDocket/udocket.com/typings/vendor/OpenSSL-stubs/crypto.pyi:64:44 - error: The class "X509Extension" is deprecated
+    X509Extension support in pyOpenSSL is deprecated. You should use the APIs in cryptography. (reportDeprecated)
+  /home/user/Code/uDocket/udocket.com/typings/vendor/OpenSSL-stubs/crypto.pyi:90:51 - error: The class "X509Extension" is deprecated
+    X509Extension support in pyOpenSSL is deprecated. You should use the APIs in cryptography. (reportDeprecated)
+  /home/user/Code/uDocket/udocket.com/typings/vendor/OpenSSL-stubs/crypto.pyi:93:38 - error: The class "X509Extension" is deprecated
+    X509Extension support in pyOpenSSL is deprecated. You should use the APIs in cryptography. (reportDeprecated)
+  /home/user/Code/uDocket/udocket.com/typings/vendor/OpenSSL-stubs/crypto.pyi:126:36 - error: The class "Revoked" is deprecated
+    CRL support in pyOpenSSL is deprecated. You should use the APIs in cryptography. (reportDeprecated)
+  /home/user/Code/uDocket/udocket.com/typings/vendor/OpenSSL-stubs/crypto.pyi:129:74 - error: The class "CRL" is deprecated
+    CRL support in pyOpenSSL is deprecated. You should use the APIs in cryptography. (reportDeprecated)
+  /home/user/Code/uDocket/udocket.com/typings/vendor/OpenSSL-stubs/crypto.pyi:131:36 - error: The class "Revoked" is deprecated
+    CRL support in pyOpenSSL is deprecated. You should use the APIs in cryptography. (reportDeprecated)
+  /home/user/Code/uDocket/udocket.com/typings/vendor/OpenSSL-stubs/crypto.pyi:141:28 - error: The class "CRL" is deprecated
+    CRL support in pyOpenSSL is deprecated. You should use the APIs in cryptography. (reportDeprecated)
+  /home/user/Code/uDocket/udocket.com/typings/vendor/OpenSSL-stubs/crypto.pyi:188:30 - error: The class "CRL" is deprecated
+    CRL support in pyOpenSSL is deprecated. You should use the APIs in cryptography. (reportDeprecated)
+  /home/user/Code/uDocket/udocket.com/typings/vendor/OpenSSL-stubs/crypto.pyi:190:49 - error: The class "CRL" is deprecated
+    CRL support in pyOpenSSL is deprecated. You should use the APIs in cryptography. (reportDeprecated)
+/home/user/Code/uDocket/udocket.com/typings/vendor/django-stubs/conf/__init__.pyi
+  /home/user/Code/uDocket/udocket.com/typings/vendor/django-stubs/conf/__init__.pyi:9:15 - error: Import "global_settings" is not accessed (reportUnusedImport)
+  /home/user/Code/uDocket/udocket.com/typings/vendor/django-stubs/conf/__init__.pyi:45:17 - error: __new__ override should take a "cls" parameter (reportSelfClsParameterName)
+/home/user/Code/uDocket/udocket.com/typings/vendor/django-stubs/core/handlers/asgi.pyi
+  /home/user/Code/uDocket/udocket.com/typings/vendor/django-stubs/core/handlers/asgi.pyi:32:9 - error: Mismatch between signature of __new__ and __init__ in class "ASGIRequest"
+    Signature of __init__ is "(scope: Mapping[str, Any], body_file: IO[bytes]) -> None"
+    Signature of __new__ is "() -> _MutableHttpRequest" (reportInconsistentConstructor)
+/home/user/Code/uDocket/udocket.com/typings/vendor/django-stubs/core/handlers/wsgi.pyi
+  /home/user/Code/uDocket/udocket.com/typings/vendor/django-stubs/core/handlers/wsgi.pyi:28:9 - error: Mismatch between signature of __new__ and __init__ in class "WSGIRequest"
+    Signature of __init__ is "(environ: WSGIEnvironment) -> None"
+    Signature of __new__ is "() -> _MutableHttpRequest" (reportInconsistentConstructor)
+/home/user/Code/uDocket/udocket.com/typings/vendor/django-stubs/core/serializers/xml_serializer.pyi
+  /home/user/Code/uDocket/udocket.com/typings/vendor/django-stubs/core/serializers/xml_serializer.pyi:4:6 - error: Import "xml.sax.expatreader" could not be resolved (reportMissingImports)
+/home/user/Code/uDocket/udocket.com/typings/vendor/django-stubs/db/models/base.pyi
+  /home/user/Code/uDocket/udocket.com/typings/vendor/django-stubs/db/models/base.pyi:47:31 - error: Type "Self@Model" cannot be assigned to type variable "_T@Manager"
+    Type "Model*" is not assignable to upper bound "Model" for type variable "_T@Manager"
+      "Model*" is not assignable to "Model" (reportInvalidTypeArguments)
+  /home/user/Code/uDocket/udocket.com/typings/vendor/django-stubs/db/models/base.pyi:49:29 - error: Type "Self@Model" cannot be assigned to type variable "_M@Options"
+    Type "Model*" is not assignable to upper bound "Model" for type variable "_M@Options"
+      "Model*" is not assignable to "Model" (reportInvalidTypeArguments)
+  /home/user/Code/uDocket/udocket.com/typings/vendor/django-stubs/db/models/base.pyi:59:27 - error: Type "Self@Model" cannot be assigned to type variable "_Model@QuerySet"
+    Type "Model*" is not assignable to upper bound "Model" for type variable "_Model@QuerySet"
+      "Model*" is not assignable to "Model" (reportInvalidTypeArguments)
+  /home/user/Code/uDocket/udocket.com/typings/vendor/django-stubs/db/models/base.pyi:106:33 - error: Type "Self@Model" cannot be assigned to type variable "_Model@QuerySet"
+    Type "Model*" is not assignable to upper bound "Model" for type variable "_Model@QuerySet"
+      "Model*" is not assignable to "Model" (reportInvalidTypeArguments)
+  /home/user/Code/uDocket/udocket.com/typings/vendor/django-stubs/db/models/base.pyi:112:33 - error: Type "Self@Model" cannot be assigned to type variable "_Model@QuerySet"
+    Type "Model*" is not assignable to upper bound "Model" for type variable "_Model@QuerySet"
+      "Model*" is not assignable to "Model" (reportInvalidTypeArguments)
+  /home/user/Code/uDocket/udocket.com/typings/vendor/django-stubs/db/models/base.pyi:120:41 - error: Type "Self@Model" cannot be assigned to type variable "_M@Options"
+    Type "Model*" is not assignable to upper bound "Model" for type variable "_M@Options"
+      "Model*" is not assignable to "Model" (reportInvalidTypeArguments)
+/home/user/Code/uDocket/udocket.com/typings/vendor/django-stubs/utils/deconstruct.pyi
+  /home/user/Code/uDocket/udocket.com/typings/vendor/django-stubs/utils/deconstruct.pyi:12:21 - error: Instance methods should take a "self" parameter (reportSelfClsParameterName)
+/home/user/Code/uDocket/udocket.com/typings/vendor/mozilla_django_oidc-stubs/mozilla_django_oidc/auth.pyi
+  /home/user/Code/uDocket/udocket.com/typings/vendor/mozilla_django_oidc-stubs/mozilla_django_oidc/auth.pyi:5:6 - warning: Stub file not found for "mozilla_django_oidc.utils" (reportMissingTypeStubs)
+/home/user/Code/uDocket/udocket.com/typings/vendor/mozilla_django_oidc-stubs/mozilla_django_oidc/middleware.pyi
+  /home/user/Code/uDocket/udocket.com/typings/vendor/mozilla_django_oidc-stubs/mozilla_django_oidc/middleware.pyi:6:6 - warning: Stub file not found for "mozilla_django_oidc.auth" (reportMissingTypeStubs)
+  /home/user/Code/uDocket/udocket.com/typings/vendor/mozilla_django_oidc-stubs/mozilla_django_oidc/middleware.pyi:7:6 - warning: Stub file not found for "mozilla_django_oidc.utils" (reportMissingTypeStubs)
+/home/user/Code/uDocket/udocket.com/typings/vendor/mozilla_django_oidc-stubs/mozilla_django_oidc/urls.pyi
+  /home/user/Code/uDocket/udocket.com/typings/vendor/mozilla_django_oidc-stubs/mozilla_django_oidc/urls.pyi:4:6 - warning: Stub file not found for "mozilla_django_oidc" (reportMissingTypeStubs)
+  /home/user/Code/uDocket/udocket.com/typings/vendor/mozilla_django_oidc-stubs/mozilla_django_oidc/urls.pyi:5:6 - warning: Stub file not found for "mozilla_django_oidc.utils" (reportMissingTypeStubs)
+/home/user/Code/uDocket/udocket.com/typings/vendor/mozilla_django_oidc-stubs/mozilla_django_oidc/views.pyi
+  /home/user/Code/uDocket/udocket.com/typings/vendor/mozilla_django_oidc-stubs/mozilla_django_oidc/views.pyi:5:6 - warning: Stub file not found for "mozilla_django_oidc.utils" (reportMissingTypeStubs)
+/home/user/Code/uDocket/udocket.com/typings/vendor/mozilla_django_oidc-stubs/mozilla_django_oidc/contrib/drf.pyi
+  /home/user/Code/uDocket/udocket.com/typings/vendor/mozilla_django_oidc-stubs/mozilla_django_oidc/contrib/drf.pyi:4:6 - warning: Stub file not found for "mozilla_django_oidc.auth" (reportMissingTypeStubs)
+  /home/user/Code/uDocket/udocket.com/typings/vendor/mozilla_django_oidc-stubs/mozilla_django_oidc/contrib/drf.pyi:5:6 - warning: Stub file not found for "mozilla_django_oidc.utils" (reportMissingTypeStubs)
+/home/user/Code/uDocket/udocket.com/typings/vendor/rest_framework-stubs/compat.pyi
+  /home/user/Code/uDocket/udocket.com/typings/vendor/rest_framework-stubs/compat.pyi:8:41 - error: "postgres_fields" is declared as a TypeAlias and can be assigned only once (reportRedeclaration)
+  /home/user/Code/uDocket/udocket.com/typings/vendor/rest_framework-stubs/compat.pyi:16:12 - error: "uritemplate" is declared as a TypeAlias and can be assigned only once (reportRedeclaration)
+  /home/user/Code/uDocket/udocket.com/typings/vendor/rest_framework-stubs/compat.pyi:24:12 - error: "yaml" is declared as a TypeAlias and can be assigned only once (reportRedeclaration)
+  /home/user/Code/uDocket/udocket.com/typings/vendor/rest_framework-stubs/compat.pyi:32:12 - error: "requests" is declared as a TypeAlias and can be assigned only once (reportRedeclaration)
+  /home/user/Code/uDocket/udocket.com/typings/vendor/rest_framework-stubs/compat.pyi:36:12 - error: "pygments" is declared as a TypeAlias and can be assigned only once (reportRedeclaration)
+  /home/user/Code/uDocket/udocket.com/typings/vendor/rest_framework-stubs/compat.pyi:41:12 - error: "markdown" is declared as a TypeAlias and can be assigned only once (reportRedeclaration)
+  /home/user/Code/uDocket/udocket.com/typings/vendor/rest_framework-stubs/compat.pyi:43:5 - error: "apply_markdown" is declared as a TypeAlias and can be assigned only once (reportRedeclaration)
+  /home/user/Code/uDocket/udocket.com/typings/vendor/rest_framework-stubs/compat.pyi:43:9 - error: Function declaration "apply_markdown" is obscured by a declaration of the same name (reportRedeclaration)
+/home/user/Code/uDocket/udocket.com/typings/vendor/rest_framework-stubs/decorators.pyi
+  /home/user/Code/uDocket/udocket.com/typings/vendor/rest_framework-stubs/decorators.pyi:16:34 - error: Import "APIView" is not accessed (reportUnusedImport)
+/home/user/Code/uDocket/udocket.com/typings/vendor/rest_framework-stubs/fields.pyi
+  /home/user/Code/uDocket/udocket.com/typings/vendor/rest_framework-stubs/fields.pyi:15:40 - error: Import "DjangoImageField" is not accessed (reportUnusedImport)
+/home/user/Code/uDocket/udocket.com/typings/vendor/rest_framework-stubs/request.pyi
+  /home/user/Code/uDocket/udocket.com/typings/vendor/rest_framework-stubs/request.pyi:59:9 - error: Mismatch between signature of __new__ and __init__ in class "Request"
+    Signature of __init__ is "(request: HttpRequest, parsers: Sequence[BaseParser] | None = ..., authenticators: Sequence[BaseAuthentication] | None = ..., negotiator: BaseContentNegotiation | None = ..., parser_context: dict[str, Any] | None = ...) -> None"
+    Signature of __new__ is "() -> _MutableHttpRequest" (reportInconsistentConstructor)
+912 errors, 1919 warnings, 0 informations 
+Completed in 31.192sec
 
 Analysis stats
-Total files parsed and bound: 1035
-Total files checked: 245
+Total files parsed and bound: 2645
+Total files checked: 1390
 
 Timing stats
-Find Source Files:    0.15sec
-Read Source Files:    0.39sec
-Tokenize:             0.99sec
-Parse:                1.49sec
-Resolve Imports:      0.75sec
-Bind:                 1.59sec
-Check:                13.24sec
+Find Source Files:    0.43sec
+Read Source Files:    0.77sec
+Tokenize:             1.64sec
+Parse:                2.48sec
+Resolve Imports:      1.38sec
+Bind:                 2.79sec
+Check:                19.91sec
 Detect Cycles:        0sec
 WARNING: there is a new pyright version available (v1.1.392 -> v1.1.406).
 Please install the new version or set PYRIGHT_PYTHON_FORCE_VERSION to `latest`
@@ -4648,7 +4729,7 @@ Please install the new version or set PYRIGHT_PYTHON_FORCE_VERSION to `latest`
 | bootstrap_env | 0.1.0 | ok | 2025-10-05T15:51:45.333494+00:00 |
 | check_stubs | 0.1.0 | ok | 2025-10-05T00:50:48.275330+00:00 |
 | manager_codemod | 0.1.0 | ok | 2025-10-05T01:12:14.502402+00:00 |
-| vendor_stubs | 0.1.0 | ok | 2025-10-05T16:19:23.987129+00:00 |
+| vendor_stubs | 0.1.0 | ok | 2025-10-05T16:36:47.163829+00:00 |
 
 ## Strict Modules
 
