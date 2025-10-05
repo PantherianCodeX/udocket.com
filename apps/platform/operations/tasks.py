@@ -4,7 +4,6 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Mapping, cast
 import uuid
-import json
 import logging
 import mimetypes
 import shutil
@@ -26,7 +25,7 @@ from packages.udocket_core.agents import (
 from packages.udocket_core.agents.guardian_lib import GuardianVerdict
 from packages.udocket_core.llm.config import load_llm_settings
 from packages.udocket_core.audio import probe_audio_metadata
-from packages.udocket_core.json_utils import coerce_json_object
+from packages.udocket_core.json_utils import coerce_json_object, read_json_object
 from apps.platform.operations.channels import send_job_update, send_case_update
 from apps.platform.jobs.models import Job
 from apps.platform.artifacts.models import CaseArtifact
@@ -71,16 +70,8 @@ log = logging.getLogger("apps.platform.operations.tasks")
 
 
 def _load_json_dict(path: Path) -> Dict[str, Any]:
-    if not path.exists():
-        return {}
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
-    if isinstance(raw, Mapping):
-        coerced = coerce_json_object(cast(Mapping[object, object], raw))
-        return {key: cast(Any, value) for key, value in coerced.items()}
-    return {}
+    raw = coerce_json_object(read_json_object(path))
+    return {key: cast(Any, value) for key, value in raw.items()}
 
 
 def _unique_conversion_title(case_id: str, organization_id: Optional[str | uuid.UUID], source_job_id: str) -> str:

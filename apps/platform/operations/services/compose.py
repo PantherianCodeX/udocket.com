@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -33,6 +32,7 @@ from packages.udocket_core.json_utils import (
     coerce_json_object,
     coerce_str,
     coerce_str_list,
+    write_json_object,
 )
 
 log = logging.getLogger("apps.platform.operations.compose_service")
@@ -148,14 +148,18 @@ def execute_compose_job(
     if summary_json_path is None or not summary_json_path.exists():
         if summary_markdown_path and summary_markdown_path.exists():
             placeholder = analysis_dir / f"{summary_job.id}__summary_fallback_v1.json"
-            placeholder.write_text(
-                json.dumps({"markdown": summary_markdown_path.read_text(encoding="utf-8")}, ensure_ascii=False, indent=2),
-                encoding="utf-8",
+            placeholder.parent.mkdir(parents=True, exist_ok=True)
+            write_json_object(
+                placeholder,
+                {
+                    "markdown": summary_markdown_path.read_text(encoding="utf-8"),
+                },
             )
             summary_json_path = placeholder
         else:
             placeholder = analysis_dir / f"{summary_job.id}__summary_autogen_v1.json"
-            placeholder.write_text(json.dumps({"sections": []}, ensure_ascii=False, indent=2), encoding="utf-8")
+            placeholder.parent.mkdir(parents=True, exist_ok=True)
+            write_json_object(placeholder, {"sections": []})
             summary_json_path = placeholder
 
     if summary_markdown_path is None or not summary_markdown_path.exists():

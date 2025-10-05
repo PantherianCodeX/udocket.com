@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Mapping, Sequence
 from datetime import date, datetime
 from pathlib import Path
@@ -15,6 +14,7 @@ from packages.udocket_core.json_utils import (
     coerce_json_object,
     coerce_object_list,
     coerce_str_list,
+    read_json_value,
 )
 
 
@@ -73,9 +73,8 @@ def load_summary_timeline_events(
     seeds_path = resolve_case_relative(file_value, case_dir)
     if not seeds_path:
         return [], None
-    try:
-        payload: object = json.loads(seeds_path.read_text(encoding="utf-8"))
-    except Exception:  # pragma: no cover - malformed file
+    payload = read_json_value(seeds_path)
+    if payload is None:
         return [], None
     raw_events = _timeline_event_objects(payload)
     events: list[SummaryTimelineEvent] = []
@@ -105,10 +104,7 @@ def load_summary_entity_hints(
     hints_path = resolve_case_relative(file_value, case_dir)
     if not hints_path:
         return None, None
-    try:
-        payload: object = json.loads(hints_path.read_text(encoding="utf-8"))
-    except Exception:  # pragma: no cover - malformed file
-        return None, None
+    payload = read_json_value(hints_path)
     if not isinstance(payload, Mapping):
         return None, None
     payload_dict = coerce_json_object(cast(Mapping[object, object], payload))

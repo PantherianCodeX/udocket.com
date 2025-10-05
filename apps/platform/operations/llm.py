@@ -2,7 +2,6 @@ from __future__ import annotations
 
 # pyright: strict
 
-import json
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any, Mapping as TypingMapping, NotRequired, Required, TypedDict, cast
 
@@ -20,7 +19,7 @@ from packages.udocket_core.llm.runtime import (
     build_chat_client,
     build_provider_runtime_config,
 )
-from packages.udocket_core.json_utils import coerce_float, coerce_int
+from packages.udocket_core.json_utils import coerce_float, coerce_int, read_json_object
 
 try:
     from packages.udocket_core.agents.analyze_lib import (
@@ -407,12 +406,8 @@ def ensure_default_llm_configuration(
 
 def _provider_catalog() -> dict[str, JSONDict]:
     try:
-        data = PROVIDERS_PATH.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        return {}
-    try:
-        payload = json.loads(data)
-    except json.JSONDecodeError:
+        payload = read_json_object(PROVIDERS_PATH)
+    except OSError:
         return {}
     providers_payload = payload.get("providers")
     if not isinstance(providers_payload, Mapping):

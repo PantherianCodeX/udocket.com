@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import uuid
 from collections.abc import Iterable, Mapping
@@ -32,6 +31,8 @@ from packages.udocket_core.json_utils import (
     coerce_object_list,
     coerce_str,
     coerce_str_list,
+    parse_json_value,
+    read_json_object,
 )
 
 
@@ -96,11 +97,8 @@ def _extract_guardian_stage(stage_map: Mapping[str, object]) -> JSONDict:
 @lru_cache(maxsize=1)
 def _load_guardian_defaults() -> JSONDict:
     try:
-        payload = json.loads(GUARDIAN_DEFAULTS_PATH.read_text(encoding="utf-8"))
-        return coerce_json_object(payload)
-    except FileNotFoundError:
-        return {}
-    except json.JSONDecodeError:
+        return read_json_object(GUARDIAN_DEFAULTS_PATH)
+    except OSError:
         return {}
 
 
@@ -312,12 +310,20 @@ def snapshot_artifact_for_guardian(artifact: CaseArtifact) -> JSONDict:
         if suffix in {".json", ".jsonl"}:
             text = path.read_text(encoding="utf-8")
             payload["content"] = text[:MAX_CONTENT_CHARS]
-            try:
-                payload["parsed"] = json.loads(text)
-            except json.JSONDecodeError:
-                # fall back to structured lines for JSONL
-                if suffix == ".jsonl":
-                    payload["parsed"] = [json.loads(line) for line in text.splitlines() if line.strip()]
+            parsed = parse_json_value(text)
+            if parsed is not None:
+                payload["parsed"] = parsed
+            elif suffix == ".jsonl":
+                line_items: list[JSONValue] = []
+                for line in text.splitlines():
+                    stripped = line.strip()
+                    if not stripped:
+                        continue
+                    line_payload = parse_json_value(stripped)
+                    if line_payload is not None:
+                        line_items.append(line_payload)
+                if line_items:
+                    payload["parsed"] = line_items
         elif suffix in {".txt", ".md", ".markdown"}:
             text = path.read_text(encoding="utf-8", errors="ignore")
             payload["content"] = text[:MAX_CONTENT_CHARS]

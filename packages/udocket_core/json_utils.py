@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from collections.abc import Iterable, Mapping, Sequence
 from typing import TypeAlias, cast
 
@@ -173,6 +175,47 @@ def coerce_bool(value: object, *, default: bool | None = None) -> bool | None:
     return default
 
 
+def read_json_value(path: Path) -> JSONValue | None:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
+    except OSError:
+        return None
+    try:
+        raw = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+    return coerce_json_value(raw)
+
+
+def read_json_object(path: Path, *, default: JSONObject | None = None) -> JSONObject:
+    value = read_json_value(path)
+    if isinstance(value, dict):
+        return value
+    return {} if default is None else dict(default)
+
+
+def write_json_object(
+    path: Path,
+    payload: Mapping[str, object],
+    *,
+    indent: int = 2,
+) -> None:
+    normalized: JSONObject = {
+        str(key): coerce_json_value(value) for key, value in payload.items()
+    }
+    path.write_text(json.dumps(normalized, ensure_ascii=False, indent=indent), encoding="utf-8")
+
+
+def parse_json_value(data: str) -> JSONValue | None:
+    try:
+        raw = json.loads(data)
+    except json.JSONDecodeError:
+        return None
+    return coerce_json_value(raw)
+
+
 __all__ = [
     "JSONPrimitive",
     "JSONValue",
@@ -189,4 +232,8 @@ __all__ = [
     "coerce_int",
     "coerce_float",
     "coerce_bool",
+    "read_json_value",
+    "read_json_object",
+    "write_json_object",
+    "parse_json_value",
 ]
