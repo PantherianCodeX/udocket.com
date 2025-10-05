@@ -35,3 +35,4 @@ This log tracks the multi-wave typing rollout so work can resume from any contex
 - 2025-10-05: Re-ran bootstrap with optional skips ignored for hashing; helper now records status `ok` without reattempting missing packages.
 - 2025-10-05: Added `scripts/typing/vendor_stubs.py` and vendored pip stubs into `typings/vendor` with pyright-suppression headers.
 - 2025-10-05: Vendor helper now pulls docstring-inclusive stubs for `mozilla_django_oidc`; captured `mypy .` (1185 errors) and `pyright --stats` (982 errors / 2051 warnings) snapshots for tracking.
+- 2025-10-05: Expanded `scripts/typing/check_strict.py` to target manifest modules, focus on single-module diagnostics, and run pyright/mypy independently.
