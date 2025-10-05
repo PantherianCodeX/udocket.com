@@ -36,13 +36,23 @@ Local `pyright` runs without the typed virtualenv still report thousands of miss
 
 5. **Document synchroniser**
    - Track strict-mode adoption, helper coverage, and error counts in a machine-readable manifest (JSON or YAML).
-   - Regenerate human-readable sections in `typing-roadmap.md` from that manifest to keep guidance current.
+   - Regenerate human-readable sections in `typing-roadmap.md`, `typing_debt_assessment.md`, and `typing-idempotency-playbook.md` from that manifest to keep guidance current.
+
+The full automation specifications live in `docs/typing/automation_helper_specs.md`. Reference that file for CLI flags, exit codes, and idempotency guarantees when implementing or updating any helper.
 
 ## Reporting Plan
 
 - After each typing PR, append the latest `pyright --stats` summary (with command, date, and environment notes) to `docs/typing_debt_assessment.md`.
 - Link roadmap updates directly to the helpers or manifests that drove the change so reviewers can verify evidence quickly.
 - Review the manifest quarterly to decide whether new automation is needed or if manual clean-up is acceptable for the remaining modules.
+- Regenerate `docs/typing/automation_status.md` via `scripts/typing/sync_docs.py` so the helper and strict manifest tables stay current.
+
+### Implementation Checklist
+- [x] Ship `scripts/typing/bootstrap_env.py` and expose it via `just typing-bootstrap`.
+- [x] Seed `docs/typing/automation_manifest.json` from the template and wire `scripts/typing/sync_docs.py` into CI.
+- [x] Add `tests/_typing.py` and run the fixture annotator across the loudest suites.
+- [ ] Promote clean modules to strict, capturing entries in `docs/typing/strict_manifest.json`.
+- [ ] Run the manager codemod on operations/jobs/apps so querysets inherit typed managers before enabling stricter analysis.
 
 ## Upcoming Focus Areas
 

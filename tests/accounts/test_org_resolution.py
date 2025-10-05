@@ -12,6 +12,7 @@ from apps.platform.accounts.utils import (
     set_active_admin_org_id,
     user_accessible_organizations,
 )
+from tests._typing import MonkeyPatch, SettingsFixture
 
 
 def _req(user=None, headers=None):
@@ -25,7 +26,7 @@ def _req(user=None, headers=None):
 
 
 @pytest.mark.django_db
-def test_resolve_organization_header_requires_membership(settings):
+def test_resolve_organization_header_requires_membership(settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = False
     org = Organization.objects.create(name="Header Org")
     other_org = Organization.objects.create(name="Other Org")
@@ -42,7 +43,7 @@ def test_resolve_organization_header_requires_membership(settings):
 
 
 @pytest.mark.django_db
-def test_resolve_organization_uses_admin_selection(settings):
+def test_resolve_organization_uses_admin_selection(settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = False
     org = Organization.objects.create(name="Session Org")
     user = get_user_model().objects.create_user(username="bob", password="x")
@@ -57,7 +58,7 @@ def test_resolve_organization_uses_admin_selection(settings):
 
 
 @pytest.mark.django_db
-def test_resolve_organization_superuser_accepts_header(settings):
+def test_resolve_organization_superuser_accepts_header(settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = False
     org = Organization.objects.create(name="Super Org")
     su = get_user_model().objects.create_user(username="root", password="x")
@@ -73,7 +74,7 @@ def test_resolve_organization_superuser_accepts_header(settings):
 
 
 @pytest.mark.django_db
-def test_superuser_membership_sees_all_orgs(settings):
+def test_superuser_membership_sees_all_orgs(settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = False
     org_a = Organization.objects.create(name="Org A")
     org_b = Organization.objects.create(name="Org B")
@@ -92,7 +93,7 @@ def test_superuser_membership_sees_all_orgs(settings):
 
 
 @pytest.mark.django_db
-def test_user_accessible_organizations_skips_invalid_ids(monkeypatch, settings):
+def test_user_accessible_organizations_skips_invalid_ids(monkeypatch: MonkeyPatch, settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = False
     org = Organization.objects.create(name="Valid Org")
     user = get_user_model().objects.create_user(username="member", password="x")

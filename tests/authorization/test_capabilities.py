@@ -4,9 +4,10 @@ from apps.platform.accounts.models import Organization, User
 from apps.platform.authorization.capabilities import has_capability, role_capabilities
 from apps.platform.authorization.models import Role, RoleCapability
 from apps.platform.cases.models import Case, CaseMembership
+from tests._typing import DatabaseFixture
 
 
-def test_role_capabilities_scoped_by_organization(db):
+def test_role_capabilities_scoped_by_organization(db: DatabaseFixture):
     org = Organization.objects.create(name="Caps Org")
     role = Role.objects.create(name="Owner", organization=org)
     RoleCapability.objects.create(role=role, capability="case.share")
@@ -16,7 +17,7 @@ def test_role_capabilities_scoped_by_organization(db):
     caps_global = role_capabilities("OWNER")
     assert "case.share" not in caps_global
 
-def test_has_capability_honors_membership_organization(db):
+def test_has_capability_honors_membership_organization(db: DatabaseFixture):
     org = Organization.objects.create(name="Caps Org 3")
     case = Case.objects.create(id="CASE-CAP", title="Case Cap", organization=org)
     user = User.objects.create_user(username="tenant-user", password="x")

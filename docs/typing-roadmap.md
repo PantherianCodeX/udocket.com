@@ -41,6 +41,8 @@
 - The new **Typing Idempotency Playbook** (`docs/typing-idempotency-playbook.md`) captures helper patterns and a backlog of automation ideas (bootstrap script, manager codemods, fixture shims) so contributors reach for tooling first.
 - The companion **Typing Idempotency Strategy** memo (`docs/typing-idempotency-strategy.md`) records recent typing commits, error snapshots, and the helper roadmap. Reference it when planning new automation work before touching high-churn modules.
 - When introducing new structured payloads, prefer frozen dataclasses or mapping proxies to guarantee that repeated normalisation yields identical output. This keeps diffs stable even when automation rewrites configs multiple times.
+- Detailed CLI contracts for every helper live in `docs/typing/automation_helper_specs.md`; wire them up via `just` aliases so onboarding boils down to running `just typing-bootstrap`, `just typing-strictify MODULE=...`, and `just typing-sync-docs`.
+- Track automation state in `docs/typing/automation_manifest.json` (template in `docs/typing/automation_manifest_template.json`) and regenerate this roadmap with `scripts/typing/sync_docs.py` whenever the manifest changes.
 
 ## Patterns Established (2024-03 Typing Pass)
 - **Nullable model fields** – When a Django field uses `null=True`, annotate the descriptor with `Optional[...]` for both the set and get generics (e.g., `models.TextField[Optional[str], Optional[str]]`). This satisfies the mypy-django plugin and prevents the “generic get type parameter is not optional” error.

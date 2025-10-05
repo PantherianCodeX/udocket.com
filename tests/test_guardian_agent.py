@@ -24,6 +24,7 @@ from packages.udocket_core.llm.config import (
     LLMSettings,
     LLMStageAssignment,
 )
+from tests._typing import MonkeyPatch
 
 
 def test_guardian_parse_verdict_includes_citations():
@@ -58,7 +59,7 @@ def test_guardian_parse_verdict_includes_citations():
     assert verdict.violations[0]["recommendation"] == "Rewrite as factual summary"
 
 
-def test_guardian_review_builds_runtime_with_provider_object(monkeypatch):
+def test_guardian_review_builds_runtime_with_provider_object(monkeypatch: MonkeyPatch):
     provider = LLMProvider(
         name="dummy",
         display_name="Dummy",

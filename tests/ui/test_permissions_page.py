@@ -7,10 +7,11 @@ from django.urls import reverse
 
 from apps.platform.accounts.models import Organization, OrganizationMembership
 from apps.platform.authorization.models import PermissionPreset, PresetCapability, Role
+from tests._typing import ClientFixture, SettingsFixture
 
 
 @pytest.mark.django_db
-def test_permissions_overview_scopes_by_organization(client, settings):
+def test_permissions_overview_scopes_by_organization(client: ClientFixture, settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = False
 
     org_a = Organization.objects.create(name="Org A")
@@ -42,7 +43,7 @@ def test_permissions_overview_scopes_by_organization(client, settings):
 
 
 @pytest.mark.django_db
-def test_permissions_overview_requires_auth_when_closed(client, settings):
+def test_permissions_overview_requires_auth_when_closed(client: ClientFixture, settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = False
     resp = client.get(reverse("ui-permissions"))
     assert resp.status_code == 302

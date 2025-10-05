@@ -7,10 +7,11 @@ from django.test import Client
 from apps.platform.accounts.models import Organization, OrganizationMembership, User
 from apps.platform.cases.models import Case
 from apps.platform.artifacts.models import CaseArtifact
+from tests._typing import SettingsFixture
 
 
 @pytest.mark.django_db()
-def test_guardian_overview_page(settings):
+def test_guardian_overview_page(settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = True
     org = Organization.objects.create(name="Guardian Audit")
     user = User.objects.create_user("guardian-user", "guardian@example.com", "pass123")
@@ -48,7 +49,7 @@ def test_guardian_overview_page(settings):
 
 
 @pytest.mark.django_db()
-def test_guardian_report_json(settings):
+def test_guardian_report_json(settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = True
     org = Organization.objects.create(name="Guardian Org")
     user = User.objects.create_user("guardian-report", "report@example.com", "pass123")

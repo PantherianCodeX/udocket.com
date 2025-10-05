@@ -1,0 +1,26 @@
+{
+  "helpers": [
+    {
+      "lastRun": "2025-10-05T00:48:27.852541+00:00",
+      "name": "annotate_fixtures",
+      "status": "noop",
+      "version": "0.1.0"
+    },
+    {
+      "lastRun": "2025-10-05T00:50:48.275330+00:00",
+      "name": "check_stubs",
+      "status": "ok",
+      "version": "0.1.0"
+    },
+    {
+      "lastRun": "2025-10-05T01:07:16.551582+00:00",
+      "name": "manager_codemod",
+      "status": "ok",
+      "version": "0.1.0"
+    }
+  ],
+  "notes": [],
+  "pyrightStats": null,
+  "recordedAt": "2025-10-05T00:53:57.885184+00:00",
+  "strictModules": []
+}

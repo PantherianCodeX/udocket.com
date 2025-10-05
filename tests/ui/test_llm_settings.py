@@ -8,10 +8,11 @@ from django.test import Client
 from apps.platform.accounts.models import Organization, User
 from apps.platform.cases.models import Case, CaseMembership
 from apps.platform.operations.models import LLMConfiguration
+from tests._typing import SettingsFixture
 
 
 @pytest.mark.django_db
-def test_case_llm_settings_updates_summary_defaults(settings):
+def test_case_llm_settings_updates_summary_defaults(settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = True
     org = Organization.objects.create(name="LLM Org")
     case = Case.objects.create(id="case-llm", title="LLM Case", organization=org)

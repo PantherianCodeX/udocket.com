@@ -12,9 +12,10 @@ from apps.platform.jobs.models import Job, JobNote
 from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.operations.storage import ensure_case_dirs, ops_dir
 from apps.platform.operations.tasks import _update_job_meta
+from tests._typing import DatabaseFixture, SettingsFixture
 
 
-def _make_case(settings):
+def _make_case(settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = False
     org = Organization.objects.create(name="Review Org")
     case = Case.objects.create(id="CASE-REV", title="Review Case", organization=org)
@@ -46,7 +47,7 @@ def _make_job(case: Case, *, status: str = Job.Status.SUCCEEDED) -> Job:
     return job
 
 
-def test_reviewer_can_approve_and_creates_artifact(db, settings):
+def test_reviewer_can_approve_and_creates_artifact(db: DatabaseFixture, settings: SettingsFixture):
     case, owner, reviewer, _ = _make_case(settings)
     job = _make_job(case)
     client = APIClient()
@@ -63,7 +64,7 @@ def test_reviewer_can_approve_and_creates_artifact(db, settings):
     assert payload["reviewed_by"] == reviewer.display_name
 
 
-def test_reviewer_can_reject_and_removes_artifact(db, settings):
+def test_reviewer_can_reject_and_removes_artifact(db: DatabaseFixture, settings: SettingsFixture):
     case, owner, reviewer, _ = _make_case(settings)
     job = _make_job(case)
     CaseArtifact.objects.create(
@@ -92,7 +93,7 @@ def test_reviewer_can_reject_and_removes_artifact(db, settings):
     assert not CaseArtifact.objects.filter(case_id=str(case.id), type="TRANSCRIPT_APPROVED", job_id=str(job.id)).exists()
 
 
-def test_approve_requires_permission(db, settings):
+def test_approve_requires_permission(db: DatabaseFixture, settings: SettingsFixture):
     case, owner, reviewer, outsider = _make_case(settings)
     job = _make_job(case)
     client = APIClient()
@@ -101,7 +102,7 @@ def test_approve_requires_permission(db, settings):
     assert resp.status_code in {403, 404}
 
 
-def test_approve_requires_succeeded_job(db, settings):
+def test_approve_requires_succeeded_job(db: DatabaseFixture, settings: SettingsFixture):
     case, owner, reviewer, _ = _make_case(settings)
     job = _make_job(case, status=Job.Status.RUNNING)
     client = APIClient()
@@ -110,7 +111,7 @@ def test_approve_requires_succeeded_job(db, settings):
     assert resp.status_code == 400
 
 
-def test_status_endpoint_includes_review_fields(db, settings):
+def test_status_endpoint_includes_review_fields(db: DatabaseFixture, settings: SettingsFixture):
     case, owner, reviewer, _ = _make_case(settings)
     job = _make_job(case)
     job.review_status = Job.ReviewStatus.APPROVED
@@ -131,7 +132,7 @@ def test_status_endpoint_includes_review_fields(db, settings):
     assert data["review_activity_id"] == str(job.review_activity_id)
 
 
-def test_update_job_meta_merges(db, settings):
+def test_update_job_meta_merges(db: DatabaseFixture, settings: SettingsFixture):
     case, owner, reviewer, _ = _make_case(settings)
     job = _make_job(case)
     ops_directory = ops_dir(str(case.id), case.organization_id)
@@ -147,7 +148,7 @@ def test_update_job_meta_merges(db, settings):
     assert "audio_channels" not in updated  # None filtered out
 
 
-def test_notes_endpoint_updates_metadata(db, settings):
+def test_notes_endpoint_updates_metadata(db: DatabaseFixture, settings: SettingsFixture):
     case, owner, reviewer, _ = _make_case(settings)
     ensure_case_dirs(str(case.id), case.organization_id)
     job = _make_job(case)
@@ -180,7 +181,7 @@ def test_notes_endpoint_updates_metadata(db, settings):
     assert {"Team note", "Follow-up"}.issubset(stored_texts)
 
 
-def test_notes_endpoint_requires_permission(db, settings):
+def test_notes_endpoint_requires_permission(db: DatabaseFixture, settings: SettingsFixture):
     case, owner, reviewer, outsider = _make_case(settings)
     ensure_case_dirs(str(case.id), case.organization_id)
     job = _make_job(case)

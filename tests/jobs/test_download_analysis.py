@@ -11,10 +11,11 @@ from apps.platform.cases.models import Case, CaseMembership
 from apps.platform.jobs.models import Job
 from apps.platform.operations.utils import update_job_meta
 from apps.platform.operations.services import case_paths
+from tests._typing import SettingsFixture
 
 
 @pytest.mark.django_db()
-def test_download_analysis_returns_file(settings, tmp_path):
+def test_download_analysis_returns_file(settings: SettingsFixture, tmp_path):
     settings.STORAGE_ROOT = str(tmp_path)
     settings.MEDIA_ROOT = str(tmp_path)
     settings.PLATFORM_DEV_OPEN = True
@@ -51,7 +52,7 @@ def test_download_analysis_returns_file(settings, tmp_path):
 
 
 @pytest.mark.django_db()
-def test_download_analysis_missing_artifact(settings, tmp_path):
+def test_download_analysis_missing_artifact(settings: SettingsFixture, tmp_path):
     settings.STORAGE_ROOT = str(tmp_path)
     settings.MEDIA_ROOT = str(tmp_path)
     settings.PLATFORM_DEV_OPEN = True

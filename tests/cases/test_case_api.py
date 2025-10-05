@@ -6,10 +6,11 @@ from rest_framework.test import APIClient
 
 from apps.platform.accounts.models import Organization, User, OrganizationMembership
 from apps.platform.cases.models import Case, CaseMembership
+from tests._typing import SettingsFixture
 
 
 @pytest.mark.django_db
-def test_case_create_uses_user_organization(settings):
+def test_case_create_uses_user_organization(settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = False
     org = Organization.objects.create(name="API Org")
     user = User.objects.create_user(username="creator", password="x")
@@ -28,7 +29,7 @@ def test_case_create_uses_user_organization(settings):
 
 
 @pytest.mark.django_db
-def test_case_update_cannot_change_organization(settings):
+def test_case_update_cannot_change_organization(settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = False
     org = Organization.objects.create(name="Stable Org")
     other = Organization.objects.create(name="New Org")

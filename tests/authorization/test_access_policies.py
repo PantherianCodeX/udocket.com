@@ -8,16 +8,17 @@ from rest_framework.test import APIClient
 from apps.platform.accounts.models import Organization, User
 from apps.platform.cases.models import Case, CaseMembership
 from apps.platform.jobs.models import Job
+from tests._typing import DatabaseFixture, SettingsFixture
 
 
 @pytest.fixture
-def org_case(db):
+def org_case(db: DatabaseFixture):
     org = Organization.objects.create(name="Auth Org")
     case = Case.objects.create(id="CASE-AUTHZ", title="Auth Case", organization=org)
     return org, case
 
 
-def test_contributor_cannot_update_case(org_case, settings):
+def test_contributor_cannot_update_case(org_case, settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = False
     _, case = org_case
     owner = User.objects.create_user(username="owner", password="x")
@@ -38,7 +39,7 @@ def test_contributor_cannot_update_case(org_case, settings):
     assert case.title == "Updated"
 
 
-def test_reviewer_cannot_download_transcript(org_case, settings, tmp_path):
+def test_reviewer_cannot_download_transcript(org_case, settings: SettingsFixture, tmp_path):
     settings.PLATFORM_DEV_OPEN = False
     _, case = org_case
     owner = User.objects.create_user(username="owner2", password="x")

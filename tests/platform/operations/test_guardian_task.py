@@ -11,10 +11,11 @@ from apps.platform.cases.models import Case
 from apps.platform.jobs.models import Job
 from apps.platform.operations.storage import ensure_case_dirs
 from apps.platform.operations import tasks
+from tests._typing import MonkeyPatch, SettingsFixture
 
 
 @pytest.mark.django_db
-def test_guardian_review_artifact_initializes_case_id(monkeypatch, settings, tmp_path):
+def test_guardian_review_artifact_initializes_case_id(monkeypatch: MonkeyPatch, settings: SettingsFixture, tmp_path):
     media_root = tmp_path / "media"
     media_root.mkdir()
     settings.MEDIA_ROOT = str(media_root)
@@ -86,7 +87,7 @@ def test_guardian_review_artifact_initializes_case_id(monkeypatch, settings, tmp
 
 
 @pytest.mark.django_db
-def test_guardian_review_artifact_falls_back_to_job_case(monkeypatch, settings, tmp_path):
+def test_guardian_review_artifact_falls_back_to_job_case(monkeypatch: MonkeyPatch, settings: SettingsFixture, tmp_path):
     media_root = tmp_path / "media"
     media_root.mkdir()
     settings.MEDIA_ROOT = str(media_root)

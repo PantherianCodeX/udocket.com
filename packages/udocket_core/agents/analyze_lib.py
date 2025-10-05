@@ -179,7 +179,7 @@ class StageOverride:
     def from_mapping(
         cls,
         payload: Mapping[str, object] | None,
-    ) -> "StageOverride" | None:
+    ) -> StageOverride | None:
         if not payload:
             return None
 

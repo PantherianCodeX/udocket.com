@@ -7,9 +7,10 @@ from rest_framework.test import APIClient
 
 from apps.platform.accounts.models import Organization, OrganizationMembership
 from apps.platform.authorization.models import PermissionPreset, Role
+from tests._typing import DatabaseFixture, SettingsFixture
 
 
-def test_authz_registry_endpoint(db, settings):
+def test_authz_registry_endpoint(db: DatabaseFixture, settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = True
     c = APIClient()
     r = c.get("/api/v1/authz/registry/")
@@ -19,7 +20,7 @@ def test_authz_registry_endpoint(db, settings):
     assert "TRANSCRIPT" in data and "path" in data["TRANSCRIPT"]
 
 
-def test_authz_presets_and_roles_endpoints(db, settings):
+def test_authz_presets_and_roles_endpoints(db: DatabaseFixture, settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = True
     c = APIClient()
     rp = c.get("/api/v1/authz/presets/")
@@ -38,7 +39,7 @@ def test_authz_presets_and_roles_endpoints(db, settings):
 
 
 @pytest.mark.django_db
-def test_authz_presets_require_auth_when_closed(settings):
+def test_authz_presets_require_auth_when_closed(settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = False
     c = APIClient()
     resp = c.get("/api/v1/authz/presets/")
@@ -46,7 +47,7 @@ def test_authz_presets_require_auth_when_closed(settings):
 
 
 @pytest.mark.django_db
-def test_authz_endpoints_scope_to_user_org(settings):
+def test_authz_endpoints_scope_to_user_org(settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = False
     org_a = Organization.objects.create(name="API Org A")
     org_b = Organization.objects.create(name="API Org B")

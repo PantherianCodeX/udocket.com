@@ -8,9 +8,10 @@ from apps.platform.accounts.models import Organization, User
 from apps.platform.cases.models import Case, CaseMembership
 from apps.platform.jobs.models import Job
 from apps.platform.operations.storage import ops_dir
+from tests._typing import DatabaseFixture, SettingsFixture
 
 
-def _setup_case(settings):
+def _setup_case(settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = False
     org = Organization.objects.create(name="Panel Org")
     case = Case.objects.create(id="CASE-PANEL", title="Panel Case", organization=org)
@@ -35,7 +36,7 @@ def _seed_job(case: Case) -> Job:
     return job
 
 
-def test_job_detail_panel_renders_for_member(db, settings):
+def test_job_detail_panel_renders_for_member(db: DatabaseFixture, settings: SettingsFixture):
     case, owner, _ = _setup_case(settings)
     job = _seed_job(case)
 
@@ -48,7 +49,7 @@ def test_job_detail_panel_renders_for_member(db, settings):
     assert "Audio" in content
 
 
-def test_job_detail_panel_denies_non_member(db, settings):
+def test_job_detail_panel_denies_non_member(db: DatabaseFixture, settings: SettingsFixture):
     case, _, outsider = _setup_case(settings)
     job = _seed_job(case)
 

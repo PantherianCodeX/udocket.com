@@ -37,6 +37,7 @@ from packages.udocket_core.llm.config import (
     LLMStageAssignment,
 )
 from packages.udocket_core.llm.runtime import ChatClientError
+from tests._typing import MonkeyPatch
 
 
 FAKE_AZURE_SECRET = {
@@ -230,7 +231,7 @@ def test_parse_transcript_handles_missing_divider(tmp_path):
     assert parsed.segments[0].ts == 10
 
 
-def test_analyze_agent_writes_artifacts(monkeypatch, tmp_path):
+def test_analyze_agent_writes_artifacts(monkeypatch: MonkeyPatch, tmp_path):
     case_dir = tmp_path / "cases" / "CASE-1"
     transcript_dir = case_dir / "transcript"
     transcript_path = transcript_dir / "JOB-1__transcript.txt"
@@ -278,7 +279,7 @@ def test_analyze_agent_writes_artifacts(monkeypatch, tmp_path):
         assert heading in markdown_text
 
 
-def test_analyze_agent_versioned_outputs(monkeypatch, tmp_path):
+def test_analyze_agent_versioned_outputs(monkeypatch: MonkeyPatch, tmp_path):
     case_dir = tmp_path / "cases" / "CASE-2"
     transcript_dir = case_dir / "transcript"
     transcript_path = transcript_dir / "JOB-2__transcript.txt"
@@ -334,7 +335,7 @@ def test_analyze_agent_requires_azure_configuration(tmp_path):
         )
 
 
-def test_analyze_agent_adds_default_header(monkeypatch, tmp_path):
+def test_analyze_agent_adds_default_header(monkeypatch: MonkeyPatch, tmp_path):
     case_dir = tmp_path / "cases" / "CASE-3"
     transcript_dir = case_dir / "transcript"
     transcript_path = transcript_dir / "JOB-3__transcript.txt"
@@ -384,7 +385,7 @@ def test_analyze_config_uses_defaults_file():
 
 
 
-def test_stage_temperature_and_max_tokens_override(monkeypatch, tmp_path):
+def test_stage_temperature_and_max_tokens_override(monkeypatch: MonkeyPatch, tmp_path):
     case_dir = tmp_path / "cases" / "CASE-OVR"
     transcript = case_dir / "transcript" / "JOB-OVR__transcript.txt"
     _write_transcript(transcript, "[00:00] Speaker: Hello world")
@@ -557,7 +558,7 @@ def test_build_context_respects_config_limits(tmp_path):
     assert total_chars <= cfg.prompt_chars_override + max_line
 
 
-def test_analyze_agent_raises_on_stage_failure(monkeypatch, tmp_path):
+def test_analyze_agent_raises_on_stage_failure(monkeypatch: MonkeyPatch, tmp_path):
     _install_stage_stubs(monkeypatch)
 
     def boom(**_: Any) -> OutlineStageResult:
@@ -588,7 +589,7 @@ def test_analyze_agent_raises_on_stage_failure(monkeypatch, tmp_path):
 
 
 
-def test_stage_requires_explicit_model_configuration(monkeypatch, tmp_path):
+def test_stage_requires_explicit_model_configuration(monkeypatch: MonkeyPatch, tmp_path):
     azure_provider = LLMProvider(
         name="azure",
         display_name="Azure",
@@ -626,7 +627,7 @@ def test_stage_requires_explicit_model_configuration(monkeypatch, tmp_path):
     assert "No model configured" in str(excinfo.value)
 
 
-def test_stage_provider_initialization_error(monkeypatch, tmp_path):
+def test_stage_provider_initialization_error(monkeypatch: MonkeyPatch, tmp_path):
     azure_provider = LLMProvider(
         name="azure",
         display_name="Azure",

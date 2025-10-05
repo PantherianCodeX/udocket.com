@@ -5,6 +5,7 @@ import shutil
 from pathlib import Path
 import pytest
 import os
+from tests._typing import SettingsFixture
 
 # E2E tests are expensive; skip entire module unless explicitly enabled
 pytestmark = pytest.mark.e2e_transcribe
@@ -154,7 +155,7 @@ def test_transcription_agent_on_demand_e2e(tmp_path):
 
 
 @pytest.mark.django_db
-def test_transcribe_task_on_demand_e2e(tmp_path, settings):
+def test_transcribe_task_on_demand_e2e(tmp_path, settings: SettingsFixture):
     _require_azure()
     _require_on_demand_sdk()
     _ensure_ffmpeg()
@@ -192,7 +193,7 @@ def test_transcribe_task_on_demand_e2e(tmp_path, settings):
 
 
 @pytest.mark.django_db
-def test_transcribe_task_batch_diarization_e2e(tmp_path, settings):
+def test_transcribe_task_batch_diarization_e2e(tmp_path, settings: SettingsFixture):
     _require_azure()
     # Blob requirements for batch mode
     try:
@@ -239,7 +240,7 @@ def test_transcribe_task_batch_diarization_e2e(tmp_path, settings):
 
 
 @pytest.mark.django_db
-def test_transcribe_task_batch_convert_and_diarize_e2e(tmp_path, settings):
+def test_transcribe_task_batch_convert_and_diarize_e2e(tmp_path, settings: SettingsFixture):
     _require_azure()
     try:
         __import__("azure.storage.blob")

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import uuid
-from typing import Any, TYPE_CHECKING, ClassVar, Optional, cast
+from typing import Any, TYPE_CHECKING, Optional, cast
 
 from django.db import models
 from simple_history.models import HistoricalRecords
@@ -30,6 +30,9 @@ class CaseArtifactManager(models.Manager["CaseArtifact"]):
 
 
 class CaseArtifact(models.Model):
+    @classmethod
+    def typed_objects(cls) -> CaseArtifactManager:
+        return cast(CaseArtifactManager, cls.objects)
     """Generic artifact record; full schema to follow in Step 4."""
 
     id: models.BigAutoField[int, int] = models.BigAutoField(primary_key=True)
@@ -59,11 +62,10 @@ class CaseArtifact(models.Model):
     history: HistoricalRecords["CaseArtifact"] = HistoricalRecords()
 
     objects = CaseArtifactManager()
-    typed_objects: ClassVar[CaseArtifactManager] = objects
 
     @classmethod
     def scoped(cls) -> CaseArtifactManager:
-        return cls.typed_objects
+        return cls.typed_objects()
 
     class Meta:
         indexes = [

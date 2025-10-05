@@ -6,6 +6,7 @@ import pytest
 
 from packages.udocket_core.llm.config import LLMProvider, LLMProviderModel
 from packages.udocket_core.llm.runtime import build_provider_runtime_config
+from tests._typing import MonkeyPatch
 
 
 def _azure_provider(model: LLMProviderModel) -> LLMProvider:
@@ -56,7 +57,7 @@ def test_build_provider_runtime_config_prefers_credential_model_options() -> Non
 
 
 @pytest.mark.parametrize("env_value", ["", "actual-deployment"])
-def test_build_provider_runtime_config_uses_model_deployment_env(monkeypatch, env_value: str) -> None:
+def test_build_provider_runtime_config_uses_model_deployment_env(monkeypatch: MonkeyPatch, env_value: str) -> None:
     monkeypatch.delenv("AZURE_OPENAI_DEPLOYMENT_TEST", raising=False)
     if env_value:
         monkeypatch.setenv("AZURE_OPENAI_DEPLOYMENT_TEST", env_value)

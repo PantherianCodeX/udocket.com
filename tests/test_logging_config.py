@@ -2,6 +2,7 @@ import logging
 
 from apps.platform.config.settings.base import LOGGING
 from packages.udocket_core.agents import langgraph_orchestrator
+from tests._typing import MonkeyPatch
 
 
 def test_auth_logger_inherits_console_handler():
@@ -24,7 +25,7 @@ def test_langchain_logger_uses_inheritance():
     assert "handlers" not in logger_cfg
 
 
-def test_enable_langgraph_debug_logging_sets_debug(monkeypatch):
+def test_enable_langgraph_debug_logging_sets_debug(monkeypatch: MonkeyPatch):
     monkeypatch.setattr(langgraph_orchestrator, "_LANGGRAPH_DEBUG_INITIALIZED", False)
     root_logger = logging.getLogger()
     original_root_level = root_logger.level

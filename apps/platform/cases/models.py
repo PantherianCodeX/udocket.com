@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, date
-from typing import Any, TYPE_CHECKING, ClassVar, Optional, cast
+from typing import Any, TYPE_CHECKING, Optional, cast
 
 from django.conf import settings
 from django.db import models
@@ -28,6 +28,10 @@ class CaseManager(models.Manager["Case"]):
         return self.get_queryset().for_user(user)
 
 class Case(models.Model):
+    @classmethod
+    def typed_objects(cls) -> CaseManager:
+        return cast(CaseManager, cls.objects)
+
     class ClientPosition(models.TextChoices):
         PLAINTIFF = "PLAINTIFF", "Plaintiff"
         DEFENDANT = "DEFENDANT", "Defendant"
@@ -122,17 +126,24 @@ class Case(models.Model):
     history: HistoricalRecords["Case"] = HistoricalRecords()
 
     objects = CaseManager()
-    typed_objects: ClassVar[CaseManager] = objects
 
     @classmethod
     def scoped(cls) -> CaseManager:
-        return cls.typed_objects
+        return cls.typed_objects()
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return f"{self.id} — {self.title}"
 
 
 class CaseMembership(models.Model):
+    @classmethod
+    def typed_objects(cls) -> models.Manager["CaseMembership"]:
+        return cast(models.Manager["CaseMembership"], cls.objects)
+
+    @classmethod
+    def scoped(cls) -> models.Manager["CaseMembership"]:
+        return cls.typed_objects()
+
     class Role(models.TextChoices):
         OWNER = "OWNER", "Owner"
         CONTRIBUTOR = "CONTRIBUTOR", "Contributor"

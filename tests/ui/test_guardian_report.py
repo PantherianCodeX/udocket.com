@@ -7,10 +7,11 @@ from django.urls import reverse
 from apps.platform.accounts.models import Organization, User
 from apps.platform.cases.models import Case, CaseMembership
 from apps.platform.artifacts.models import CaseArtifact
+from tests._typing import SettingsFixture
 
 
 @pytest.mark.django_db()
-def test_case_guardian_report_json(settings):
+def test_case_guardian_report_json(settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = True
 
     org = Organization.objects.create(name="Guardian Org")

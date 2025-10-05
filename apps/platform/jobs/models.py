@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any, TYPE_CHECKING, ClassVar, Optional, cast
+from typing import Any, TYPE_CHECKING, Optional, cast
 
 from django.conf import settings
 from django.db import models
@@ -30,6 +30,9 @@ class JobManager(models.Manager["Job"]):
 
 
 class Job(models.Model):
+    @classmethod
+    def typed_objects(cls) -> JobManager:
+        return cast(JobManager, cls.objects)
     class Status(models.TextChoices):
         PENDING = "PENDING"
         RUNNING = "RUNNING"
@@ -131,11 +134,10 @@ class Job(models.Model):
         ordering = ["-created_at"]
 
     objects = JobManager()
-    typed_objects: ClassVar[JobManager] = objects
 
     @classmethod
     def scoped(cls) -> JobManager:
-        return cls.typed_objects
+        return cls.typed_objects()
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return f"{self.id} {self.status}"
@@ -151,6 +153,13 @@ class Job(models.Model):
 
 
 class JobNote(models.Model):
+    @classmethod
+    def typed_objects(cls) -> models.Manager["JobNote"]:
+        return cast(models.Manager["JobNote"], cls.objects)
+
+    @classmethod
+    def scoped(cls) -> models.Manager["JobNote"]:
+        return cls.typed_objects()
     id: models.UUIDField[uuid.UUID, uuid.UUID] = models.UUIDField(
         primary_key=True,
         default=uuid.uuid4,

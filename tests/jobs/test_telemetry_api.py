@@ -11,9 +11,10 @@ from apps.platform.accounts.models import Organization, OrganizationMembership, 
 from apps.platform.cases.models import Case, CaseMembership
 from apps.platform.jobs.models import Job
 from apps.platform.operations.storage import ops_dir
+from tests._typing import DatabaseFixture, SettingsFixture
 
 
-def _create_case_with_members(settings):
+def _create_case_with_members(settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = False
     org = Organization.objects.create(name="Telemetry Org")
     case = Case.objects.create(id="CASE-TEL", title="Telemetry Case", organization=org)
@@ -80,7 +81,7 @@ def _create_job(case: Case, *, status: str = Job.Status.SUCCEEDED) -> Job:
     return job
 
 
-def test_job_detail_endpoint_returns_full_telemetry(db, settings):
+def test_job_detail_endpoint_returns_full_telemetry(db: DatabaseFixture, settings: SettingsFixture):
     case, owner, reviewer, _ = _create_case_with_members(settings)
     job = _create_job(case)
     job.review_status = Job.ReviewStatus.APPROVED
@@ -105,7 +106,7 @@ def test_job_detail_endpoint_returns_full_telemetry(db, settings):
     assert data["reviewed_by"]["label"] == "Reviewer Tele"
 
 
-def test_job_detail_endpoint_hides_paths_without_download_cap(db, settings):
+def test_job_detail_endpoint_hides_paths_without_download_cap(db: DatabaseFixture, settings: SettingsFixture):
     case, owner, reviewer, _ = _create_case_with_members(settings)
     job = _create_job(case)
 
@@ -119,7 +120,7 @@ def test_job_detail_endpoint_hides_paths_without_download_cap(db, settings):
     assert not any((artifact.get("download_url") for artifact in data.get("artifacts", [])))
 
 
-def test_case_jobs_summary_and_detail_endpoints(db, settings):
+def test_case_jobs_summary_and_detail_endpoints(db: DatabaseFixture, settings: SettingsFixture):
     case, owner, reviewer, outsider = _create_case_with_members(settings)
     succeeded = _create_job(case, status=Job.Status.SUCCEEDED)
     running = _create_job(case, status=Job.Status.RUNNING)
@@ -148,7 +149,7 @@ def test_case_jobs_summary_and_detail_endpoints(db, settings):
 
 
 @pytest.mark.django_db
-def test_bulk_status_ignores_invalid_ids(db, settings):
+def test_bulk_status_ignores_invalid_ids(db: DatabaseFixture, settings: SettingsFixture):
     case, owner, _, _ = _create_case_with_members(settings)
     job = _create_job(case, status=Job.Status.SUCCEEDED)
 

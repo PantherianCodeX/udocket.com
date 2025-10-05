@@ -7,6 +7,7 @@ from apps.platform.accounts.models import Organization, User
 from apps.platform.cases.models import Case, CaseMembership
 from apps.platform.jobs.models import Job
 from apps.platform.jobs.serializers import JobSerializer
+from tests._typing import DatabaseFixture, SettingsFixture
 
 
 def _make_job(case: Case) -> Job:
@@ -20,7 +21,7 @@ def _make_job(case: Case) -> Job:
     return job
 
 
-def test_job_serializer_field_visibility_by_role(db, settings):
+def test_job_serializer_field_visibility_by_role(db: DatabaseFixture, settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = False
     factory = APIRequestFactory()
 

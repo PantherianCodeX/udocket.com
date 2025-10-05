@@ -6,10 +6,11 @@ from django.urls import reverse
 from apps.platform.accounts.models import Organization, OrganizationMembership, User
 from apps.platform.cases.models import Case
 from apps.platform.artifacts.models import CaseArtifact
+from tests._typing import ClientFixture
 
 
 @pytest.mark.django_db()
-def test_artifacts_index_search_and_pagination(client, django_user_model):
+def test_artifacts_index_search_and_pagination(client: ClientFixture, django_user_model):
     org = Organization.objects.create(name="Artifacts Org")
     user: User = django_user_model.objects.create_user(
         username="artifact-user",

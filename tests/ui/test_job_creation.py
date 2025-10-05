@@ -13,6 +13,7 @@ from django.test import Client
 from apps.platform.accounts.models import Organization, User
 from apps.platform.cases.models import Case, CaseMembership
 from apps.platform.jobs.models import Job
+from tests._typing import SettingsFixture
 
 def _wav_bytes() -> bytes:
     # Tiny PCM WAV header with silence (44-byte header + 4 bytes payload)
@@ -33,7 +34,7 @@ def _wav_bytes() -> bytes:
 
 @pytest.mark.django_db
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True, CELERY_TASK_EAGER_PROPAGATES=True)
-def test_ui_job_creation_forces_batch_when_diarization(settings):
+def test_ui_job_creation_forces_batch_when_diarization(settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = True
     org = Organization.objects.create(name="UI Org")
     case = Case.objects.create(id="case-ui", title="UI Case", organization=org)
@@ -64,7 +65,7 @@ def test_ui_job_creation_forces_batch_when_diarization(settings):
 
 
 @pytest.mark.django_db
-def test_bulk_status_endpoint_returns_multiple_jobs(settings):
+def test_bulk_status_endpoint_returns_multiple_jobs(settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = True
     org = Organization.objects.create(name="Status Org")
     case_uuid = uuid.uuid4()

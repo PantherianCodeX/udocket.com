@@ -10,9 +10,10 @@ from apps.platform.accounts.models import Organization, User
 from apps.platform.cases.models import Case, CaseMembership
 from apps.platform.jobs.models import Job
 from apps.platform.operations.storage import ops_dir
+from tests._typing import DatabaseFixture, SettingsFixture
 
 
-def _setup_case_with_job(settings, storage_root: Path, *, mismatch: bool = False) -> tuple[Job, User, str]:
+def _setup_case_with_job(settings: SettingsFixture, storage_root: Path, *, mismatch: bool = False) -> tuple[Job, User, str]:
     settings.PLATFORM_DEV_OPEN = True
     settings.STORAGE_ROOT = str(storage_root)
 
@@ -49,7 +50,7 @@ def _setup_case_with_job(settings, storage_root: Path, *, mismatch: bool = False
     return job, user, observed_hash
 
 
-def test_verify_hash_audio_match(db, settings, tmp_path):
+def test_verify_hash_audio_match(db: DatabaseFixture, settings: SettingsFixture, tmp_path):
     job, user, observed_hash = _setup_case_with_job(settings, tmp_path / "storage-verify", mismatch=False)
 
     client = APIClient()
@@ -62,7 +63,7 @@ def test_verify_hash_audio_match(db, settings, tmp_path):
     assert data["observed"] == observed_hash
 
 
-def test_verify_hash_audio_mismatch(db, settings, tmp_path):
+def test_verify_hash_audio_mismatch(db: DatabaseFixture, settings: SettingsFixture, tmp_path):
     job, user, _ = _setup_case_with_job(settings, tmp_path / "storage-mismatch", mismatch=True)
 
     client = APIClient()
@@ -76,7 +77,7 @@ def test_verify_hash_audio_mismatch(db, settings, tmp_path):
     assert data["observed"] != data["expected"]
 
 
-def test_refresh_audio_metadata_endpoint(db, settings, tmp_path):
+def test_refresh_audio_metadata_endpoint(db: DatabaseFixture, settings: SettingsFixture, tmp_path):
     job, user, observed_hash = _setup_case_with_job(settings, tmp_path / "storage-refresh", mismatch=False)
 
     client = APIClient()

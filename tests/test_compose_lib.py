@@ -10,9 +10,10 @@ from packages.udocket_core.agents.compose_lib import (
     _normalize_graph_payload,
     _normalize_timeline_payload,
 )
+from tests._typing import MonkeyPatch
 
 
-def test_compose_agent_creates_artifacts(tmp_path, monkeypatch):
+def test_compose_agent_creates_artifacts(tmp_path, monkeypatch: MonkeyPatch):
     case_dir = tmp_path / "case"
     analysis_dir = case_dir / "analysis"
     ops_dir = case_dir / "ops"

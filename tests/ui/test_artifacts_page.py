@@ -7,10 +7,11 @@ from django.urls import reverse
 from apps.platform.accounts.models import Organization, OrganizationMembership, User
 from apps.platform.cases.models import Case
 from apps.platform.artifacts.models import CaseArtifact
+from tests._typing import SettingsFixture
 
 
 @pytest.mark.django_db()
-def test_artifacts_page_lists_artifacts(settings):
+def test_artifacts_page_lists_artifacts(settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = True
     org = Organization.objects.create(name="Artifacts Org")
     user = User.objects.create_user("artifact-user", "artifact@example.com", "pass123")

@@ -8,9 +8,10 @@ from rest_framework.test import APIClient
 from apps.platform.accounts.models import Organization, OrganizationMembership
 from apps.platform.cases.models import Case
 from apps.platform.jobs.models import Job
+from tests._typing import DatabaseFixture, SettingsFixture
 
 
-def test_cases_list_anonymous(db, settings):
+def test_cases_list_anonymous(db: DatabaseFixture, settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = True
     org = Organization.objects.create(name="Anon Org")
     Case.objects.create(id="CASE-1", title="Demo", organization=org)
@@ -21,7 +22,7 @@ def test_cases_list_anonymous(db, settings):
     assert any(item["id"] == "CASE-1" for item in data)
 
 
-def test_job_status_minimal(db, settings):
+def test_job_status_minimal(db: DatabaseFixture, settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = True
     org = Organization.objects.create(name="Status Org")
     case = Case.objects.create(id="CASE-2", title="Demo2", organization=org)
@@ -35,7 +36,7 @@ def test_job_status_minimal(db, settings):
 
 
 @pytest.mark.django_db
-def test_case_create_requires_org_membership(db, settings):
+def test_case_create_requires_org_membership(db: DatabaseFixture, settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = False
     User = get_user_model()
     user = User.objects.create_user(username="creator")
@@ -56,7 +57,7 @@ def test_case_create_requires_org_membership(db, settings):
 
 
 @pytest.mark.django_db
-def test_case_create_rejects_non_member(db, settings):
+def test_case_create_rejects_non_member(db: DatabaseFixture, settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = False
     User = get_user_model()
     user = User.objects.create_user(username="outsider")

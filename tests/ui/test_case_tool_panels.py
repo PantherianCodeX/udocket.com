@@ -7,10 +7,11 @@ import pytest
 from apps.platform.accounts.models import Organization
 from apps.platform.cases.models import Case
 from apps.platform.ui.views.presenters import cases as presenters
+from tests._typing import MonkeyPatch
 
 
 @pytest.mark.django_db()
-def test_build_tool_panels_appends_return_url(monkeypatch):
+def test_build_tool_panels_appends_return_url(monkeypatch: MonkeyPatch):
     org = Organization.objects.create(name="Panels Org")
     case = Case.objects.create(id="CASE-PANELS", title="Panels Case", organization=org)
 

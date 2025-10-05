@@ -6,9 +6,10 @@ from django.test import RequestFactory
 from apps.platform.accounts.admin import UserAdmin
 from apps.platform.accounts.forms import UserCreationWizardForm
 from apps.platform.accounts.models import Organization, OrganizationMembership, User
+from tests._typing import DatabaseFixture
 
 
-def test_user_creation_wizard_form_creates_membership(db):
+def test_user_creation_wizard_form_creates_membership(db: DatabaseFixture):
     org = Organization.objects.create(name="Wizard Org")
     data = {
         "username": "wizard",
@@ -31,7 +32,7 @@ def test_user_creation_wizard_form_creates_membership(db):
     assert user.is_superuser is False
 
 
-def test_user_creation_superuser_role_sets_flags(db):
+def test_user_creation_superuser_role_sets_flags(db: DatabaseFixture):
     org = Organization.objects.create(name="Super Org")
     data = {
         "username": "supreme",
@@ -51,7 +52,7 @@ def test_user_creation_superuser_role_sets_flags(db):
     assert user.is_superuser is True
 
 
-def test_user_admin_add_form_uses_wizard(db):
+def test_user_admin_add_form_uses_wizard(db: DatabaseFixture):
     org = Organization.objects.create(name="Wizard Org 2")
     site = AdminSite()
     admin = UserAdmin(User, site)
@@ -75,7 +76,7 @@ def test_user_admin_add_form_uses_wizard(db):
     assert user.org_memberships.filter(organization=org, role="ADMIN").exists()
 
 
-def test_membership_signal_updates_staff_flags(db):
+def test_membership_signal_updates_staff_flags(db: DatabaseFixture):
     org = Organization.objects.create(name="Signal Org")
     user = User.objects.create_user(username="signal-user", password="pw", email="sig@example.com")
     OrganizationMembership.objects.create(organization=org, user=user, role=OrganizationMembership.Role.ADMIN)

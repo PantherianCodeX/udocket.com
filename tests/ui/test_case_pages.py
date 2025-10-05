@@ -6,10 +6,11 @@ from django.test import Client
 
 from apps.platform.accounts.models import Organization, User
 from apps.platform.cases.models import Case, CaseMembership
+from tests._typing import SettingsFixture
 
 
 @pytest.mark.django_db
-def test_case_detail_renders_modern_layout(settings):
+def test_case_detail_renders_modern_layout(settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = True
     org = Organization.objects.create(name="Layout Org")
     case = Case.objects.create(id="case-layout", title="Layout Case", organization=org)
@@ -27,7 +28,7 @@ def test_case_detail_renders_modern_layout(settings):
 
 
 @pytest.mark.django_db
-def test_jobs_page_smoke_test(settings):
+def test_jobs_page_smoke_test(settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = True
     org = Organization.objects.create(name="Jobs Org")
     case = Case.objects.create(id="jobs-case", title="Jobs Case", organization=org)
@@ -42,7 +43,7 @@ def test_jobs_page_smoke_test(settings):
 
 
 @pytest.mark.django_db
-def test_organization_switch_filters_cases(settings):
+def test_organization_switch_filters_cases(settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = True
     org_a = Organization.objects.create(name="Alpha Org")
     org_b = Organization.objects.create(name="Beta Org")

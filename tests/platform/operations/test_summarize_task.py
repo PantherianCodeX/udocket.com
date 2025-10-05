@@ -12,10 +12,11 @@ from apps.platform.jobs.models import Job
 from apps.platform.operations.storage import ensure_case_dirs
 from apps.platform.operations import tasks
 from packages.udocket_core.agents.analyze_lib import AnalyzeResult
+from tests._typing import MonkeyPatch, SettingsFixture
 
 
 @pytest.mark.django_db
-def test_analyze_job_rerun_uses_transcript_and_records_markdown(monkeypatch, settings, tmp_path):
+def test_analyze_job_rerun_uses_transcript_and_records_markdown(monkeypatch: MonkeyPatch, settings: SettingsFixture, tmp_path):
     media_root = tmp_path / "media"
     media_root.mkdir()
     settings.MEDIA_ROOT = str(media_root)

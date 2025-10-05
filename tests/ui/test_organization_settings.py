@@ -6,10 +6,11 @@ from django.test import Client
 
 from apps.platform.accounts.models import Organization, OrganizationMembership, User
 from apps.platform.operations.models import LLMConfiguration, LLMProviderCredential
+from tests._typing import SettingsFixture
 
 
 @pytest.mark.django_db
-def test_organization_settings_renders_and_manages_providers(settings):
+def test_organization_settings_renders_and_manages_providers(settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = True
     org = Organization.objects.create(name="Settings Org")
     user = User.objects.create_user(username="settings-user", password="password")
@@ -54,7 +55,7 @@ def test_organization_settings_renders_and_manages_providers(settings):
 
 
 @pytest.mark.django_db
-def test_general_settings_update_profile(settings):
+def test_general_settings_update_profile(settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = True
     org = Organization.objects.create(name="General Org")
     user = User.objects.create_user(username="general-user", password="password")
@@ -95,7 +96,7 @@ def test_general_settings_update_profile(settings):
 
 
 @pytest.mark.django_db
-def test_organization_settings_saves_configuration(settings):
+def test_organization_settings_saves_configuration(settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = True
     org = Organization.objects.create(name="Config Org")
     user = User.objects.create_user(username="config-user", password="password")
@@ -152,7 +153,7 @@ def test_organization_settings_saves_configuration(settings):
 
 
 @pytest.mark.django_db
-def test_organization_settings_config_create_deduplicates_name(settings):
+def test_organization_settings_config_create_deduplicates_name(settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = True
     org = Organization.objects.create(name="Config Copy Org")
     user = User.objects.create_user(username="copy-user", password="password")
@@ -199,7 +200,7 @@ def test_organization_settings_config_create_deduplicates_name(settings):
     assert any(name != "Test Config" for name in names)
 
 @pytest.mark.django_db
-def test_provider_test_action_reports_status(settings):
+def test_provider_test_action_reports_status(settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = True
     org = Organization.objects.create(name="Test Org")
     user = User.objects.create_user(username="tester", password="password")
@@ -239,7 +240,7 @@ def test_provider_test_action_reports_status(settings):
 
 
 @pytest.mark.django_db
-def test_provider_enable_blocked_when_not_configured(settings):
+def test_provider_enable_blocked_when_not_configured(settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = True
     org = Organization.objects.create(name="Block Org")
     user = User.objects.create_user(username="block-user", password="password")

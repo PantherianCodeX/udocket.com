@@ -18,16 +18,17 @@ from apps.platform.operations.utils import read_job_meta, update_job_meta
 from apps.platform.operations.models import LLMConfiguration
 from packages.udocket_core.agents.analyze_lib import AnalyzeResult
 from apps.platform.operations.storage import tenant_case_root
+from tests._typing import DatabaseFixture, MonkeyPatch, SettingsFixture
 
 
 @pytest.fixture(autouse=True)
-def _is_dev_open(settings, tmp_path):
+def _is_dev_open(settings: SettingsFixture, tmp_path):
     settings.PLATFORM_DEV_OPEN = True
     settings.MEDIA_ROOT = str(tmp_path / "media")
     return settings
 
 
-def test_jobs_upload_file_creates_job_and_saves_file(db, settings):
+def test_jobs_upload_file_creates_job_and_saves_file(db: DatabaseFixture, settings: SettingsFixture):
     org = Organization.objects.create(name="Flow Org 1")
     case = Case.objects.create(id="CASE-T1", title="Upload Test", organization=org)
     client = APIClient()
@@ -63,7 +64,7 @@ def test_jobs_upload_file_creates_job_and_saves_file(db, settings):
     assert called["n"] == 1
 
 
-def _make_transcript(settings, case_id: str, job_id: str) -> Path:
+def _make_transcript(settings: SettingsFixture, case_id: str, job_id: str) -> Path:
     base = tenant_case_root(case_id)
     tdir = base / "transcript"
     tdir.mkdir(parents=True, exist_ok=True)
@@ -81,7 +82,7 @@ def _make_transcript(settings, case_id: str, job_id: str) -> Path:
     return p
 
 
-def test_analysis_tasks_generate_artifacts(db, settings, monkeypatch):
+def test_analysis_tasks_generate_artifacts(db: DatabaseFixture, settings: SettingsFixture, monkeypatch: MonkeyPatch):
     org = Organization.objects.create(name="Flow Org 2")
     case = Case.objects.create(id="CASE-T2", title="Analysis Test", organization=org)
     job = Job.objects.create(case=case, audio_input="/tmp/a.wav")

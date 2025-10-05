@@ -9,10 +9,11 @@ from apps.platform.cases.models import Case, CaseMembership
 from apps.platform.jobs.models import Job, JobNote
 from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.ui.views.presenters.analysis_modules import analysis_modules_context
+from tests._typing import SettingsFixture
 
 
 @pytest.mark.django_db()
-def test_analysis_modules_include_notes(settings):
+def test_analysis_modules_include_notes(settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = True
 
     org = Organization.objects.create(name="Analysis Org")
@@ -84,7 +85,7 @@ def test_analysis_modules_include_notes(settings):
 
 
 @pytest.mark.django_db()
-def test_compose_module_lists_extended_deliverables(settings, tmp_path):
+def test_compose_module_lists_extended_deliverables(settings: SettingsFixture, tmp_path):
     settings.PLATFORM_DEV_OPEN = True
 
     org = Organization.objects.create(name="Compose Org")

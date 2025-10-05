@@ -11,6 +11,7 @@ from packages.udocket_core.llm.config import (
 
 from apps.platform.ui.views.presenters import analysis_llm
 from apps.platform.operations.llm import build_provider_registry
+from tests._typing import MonkeyPatch
 
 
 def _build_settings() -> LLMSettings:
@@ -72,7 +73,7 @@ def _build_settings() -> LLMSettings:
 
 
 @pytest.fixture()
-def llm_settings(monkeypatch) -> LLMSettings:
+def llm_settings(monkeypatch: MonkeyPatch) -> LLMSettings:
     # Ensure supported providers report as available for the cache when env vars exist.
     monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://example.canadacentral.azure.com")
     monkeypatch.setenv("AZURE_OPENAI_API_KEY", "test-key")

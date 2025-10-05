@@ -18,6 +18,7 @@ from apps.platform.jobs.models import Job
 from apps.platform.operations.admin import AuditEventAdmin
 from apps.platform.operations.models import AuditEvent
 from apps.platform.tenancy import scope_cases, scope_jobs
+from tests._typing import SettingsFixture
 
 
 def _admin_request(user, path: str = "/admin/"):
@@ -31,7 +32,7 @@ def _admin_request(user, path: str = "/admin/"):
 
 
 @pytest.mark.django_db
-def test_case_admin_queryset_matches_scope(settings):
+def test_case_admin_queryset_matches_scope(settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = False
     org_allowed = Organization.objects.create(name="Alpha Org")
     org_blocked = Organization.objects.create(name="Beta Org")
@@ -64,7 +65,7 @@ def test_case_admin_queryset_matches_scope(settings):
 
 
 @pytest.mark.django_db
-def test_job_admin_queryset_matches_scope(settings):
+def test_job_admin_queryset_matches_scope(settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = False
     org_allowed = Organization.objects.create(name="Alpha Jobs")
     org_blocked = Organization.objects.create(name="Beta Jobs")
@@ -112,7 +113,7 @@ def test_job_admin_queryset_matches_scope(settings):
 
 
 @pytest.mark.django_db
-def test_case_admin_requires_staff(settings):
+def test_case_admin_requires_staff(settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = False
     org = Organization.objects.create(name="Tenant Org")
     user = get_user_model().objects.create_user(
@@ -130,7 +131,7 @@ def test_case_admin_requires_staff(settings):
 
 
 @pytest.mark.django_db
-def test_job_admin_requires_staff(settings):
+def test_job_admin_requires_staff(settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = False
     org = Organization.objects.create(name="Tenant Job Org")
     case = Case.objects.create(id="case-job-nostaff", title="Job Case", organization=org)
@@ -155,7 +156,7 @@ def test_job_admin_requires_staff(settings):
 
 
 @pytest.mark.django_db
-def test_organization_admin_change_view_loads(settings):
+def test_organization_admin_change_view_loads(settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = False
     org = Organization.objects.create(name="Org Admin")
     admin_user = get_user_model().objects.create_superuser(
@@ -170,7 +171,7 @@ def test_organization_admin_change_view_loads(settings):
 
 
 @pytest.mark.django_db
-def test_artifact_admin_queryset_matches_scope(settings):
+def test_artifact_admin_queryset_matches_scope(settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = False
     org_allowed = Organization.objects.create(name="Artifact Alpha")
     org_blocked = Organization.objects.create(name="Artifact Beta")
@@ -221,7 +222,7 @@ def test_artifact_admin_queryset_matches_scope(settings):
 
 
 @pytest.mark.django_db
-def test_audit_event_admin_queryset_matches_scope(settings):
+def test_audit_event_admin_queryset_matches_scope(settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = False
     org_allowed = Organization.objects.create(name="Audit Alpha")
     org_blocked = Organization.objects.create(name="Audit Beta")
@@ -255,7 +256,7 @@ def test_audit_event_admin_queryset_matches_scope(settings):
 
 
 @pytest.mark.django_db
-def test_operations_admin_respects_superuser_active_org(settings):
+def test_operations_admin_respects_superuser_active_org(settings: SettingsFixture):
     settings.PLATFORM_DEV_OPEN = False
     org_allowed = Organization.objects.create(name="Ops Alpha")
     org_other = Organization.objects.create(name="Ops Beta")

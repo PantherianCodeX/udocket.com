@@ -4,10 +4,11 @@ import pytest
 
 from apps.platform.accounts.auth import KeycloakOIDCBackend
 from apps.platform.accounts.models import User
+from tests._typing import DatabaseFixture, SettingsFixture
 
 
 @pytest.mark.django_db
-def test_get_username_prefers_email(db, settings):
+def test_get_username_prefers_email(db: DatabaseFixture, settings: SettingsFixture):
     # minimal endpoints so backend can initialize
     settings.OIDC_OP_TOKEN_ENDPOINT = "http://test/token"
     settings.OIDC_OP_AUTHORIZATION_ENDPOINT = "http://test/auth"
@@ -19,7 +20,7 @@ def test_get_username_prefers_email(db, settings):
 
 
 @pytest.mark.django_db
-def test_filter_users_by_claims_matches_kc_sub(db, settings):
+def test_filter_users_by_claims_matches_kc_sub(db: DatabaseFixture, settings: SettingsFixture):
     settings.OIDC_OP_TOKEN_ENDPOINT = "http://test/token"
     settings.OIDC_OP_AUTHORIZATION_ENDPOINT = "http://test/auth"
     settings.OIDC_OP_USER_ENDPOINT = "http://test/userinfo"
