@@ -16,7 +16,7 @@ if __package__ in {None, ""}:
     from pathlib import Path as _Path
 
     sys.path.append(str(_Path(__file__).resolve().parents[2]))
-    from scripts.typing.common import (  # type: ignore[import-not-found]
+    from scripts.typing.common import (
         PROJECT_ROOT,
         load_manifest,
         save_manifest,
