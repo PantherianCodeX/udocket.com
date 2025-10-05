@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Mapping, cast
 import uuid
 import json
 import logging
@@ -26,6 +26,7 @@ from packages.udocket_core.agents import (
 from packages.udocket_core.agents.guardian_lib import GuardianVerdict
 from packages.udocket_core.llm.config import load_llm_settings
 from packages.udocket_core.audio import probe_audio_metadata
+from packages.udocket_core.json_utils import coerce_json_object
 from apps.platform.operations.channels import send_job_update, send_case_update
 from apps.platform.jobs.models import Job
 from apps.platform.artifacts.models import CaseArtifact
@@ -68,18 +69,28 @@ from apps.platform.jobs.utils import unique_title
 
 log = logging.getLogger("apps.platform.operations.tasks")
 
+
+def _load_json_dict(path: Path) -> Dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    if isinstance(raw, Mapping):
+        coerced = coerce_json_object(cast(Mapping[object, object], raw))
+        return {key: cast(Any, value) for key, value in coerced.items()}
+    return {}
+
+
 def _unique_conversion_title(case_id: str, organization_id: Optional[str | uuid.UUID], source_job_id: str) -> str:
     existing: set[str] = set()
     ops_dir = storage_ops_dir(case_id, organization_id)
     if ops_dir.exists():
         for meta_path in ops_dir.glob("*_transcription_log.json"):
-            try:
-                payload = json.loads(meta_path.read_text(encoding="utf-8"))
-            except Exception:
-                continue
+            payload = _load_json_dict(meta_path)
             if (
-                isinstance(payload, dict)
-                and payload.get("job_kind") == "audio_conversion"
+                payload.get("job_kind") == "audio_conversion"
                 and str(payload.get("source_job_id")) == str(source_job_id)
             ):
                 title_val = payload.get("job_title")
@@ -345,7 +356,7 @@ def transcribe_job(
                     src_meta_path = storage_ops_dir(case_id, org_id) / f"{job_id}_transcription_log.json"
                     if src_meta_path.exists():
                         try:
-                            existing_meta = json.loads(src_meta_path.read_text(encoding="utf-8"))
+                    existing_meta = _load_json_dict(src_meta_path)
                         except Exception:
                             existing_meta = {}
 
@@ -680,9 +691,9 @@ def transcribe_job(
         )
         try:
             if result.meta_json.exists():
-                meta_payload = json.loads(result.meta_json.read_text(encoding="utf-8"))
+                meta_payload = _load_json_dict(result.meta_json)
                 azure_url = meta_payload.get("azure_transcription_url")
-                if azure_url:
+                if isinstance(azure_url, str) and azure_url:
                     append_job_log(case_id, org_id, job_id, f"Azure transcription created: {azure_url}")
                     update_job_meta(case_id, org_id, job_id, {"azure_transcription_url": azure_url})
         except Exception as exc:
@@ -819,13 +830,10 @@ def transcribe_job(
         ).values_list("title", flat=True)
         job_meta_path = storage_ops_dir(case_id, org_id) / f"{job_id}_transcription_log.json"
         if job_meta_path.exists():
-            try:
-                job_meta_payload = json.loads(job_meta_path.read_text(encoding="utf-8"))
-                title_candidate = job_meta_payload.get("job_title")
-                if isinstance(title_candidate, str) and title_candidate.strip():
-                    job_meta_title = title_candidate.strip()
-            except Exception:
-                job_meta_title = None
+            job_meta_payload = _load_json_dict(job_meta_path)
+            title_candidate = job_meta_payload.get("job_title")
+            if isinstance(title_candidate, str) and title_candidate.strip():
+                job_meta_title = title_candidate.strip()
         artifact_title = job_meta_title or unique_title("Transcript", existing_titles)
         CaseArtifact.objects.create(
             case_id=str(case_id),
@@ -1284,14 +1292,10 @@ def analyze_job(
     case_brief_sha = sha256_file(result.case_brief_file) if result.case_brief_file else None
 
     token_usage: Optional[Dict[str, Any]] = None
-    meta_payload: Dict[str, Any] = {}
-    try:
-        meta_payload = json.loads(result.meta_json.read_text(encoding="utf-8"))
-    except Exception:
-        meta_payload = {}
-    usage_payload = meta_payload.get("token_usage") if isinstance(meta_payload, dict) else None
+    meta_payload = _load_json_dict(result.meta_json)
+    usage_payload = meta_payload.get("token_usage")
     if isinstance(usage_payload, dict):
-        token_usage = usage_payload
+        token_usage = dict(usage_payload)
 
     summary_meta_updates: Dict[str, Any] = {
         **base_meta,
