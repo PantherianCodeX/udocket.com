@@ -12,7 +12,10 @@ from django.conf import settings
 
 
 def _fernet() -> Fernet:
-    secret_key = settings.SECRET_KEY.encode("utf-8")
+    secret_raw = getattr(settings, "SECRET_KEY", None)
+    if not isinstance(secret_raw, str) or not secret_raw:
+        raise RuntimeError("SECRET_KEY must be configured for encryption helpers")
+    secret_key = secret_raw.encode("utf-8")
     digest = hashlib.sha256(secret_key).digest()
     key = base64.urlsafe_b64encode(digest)
     return Fernet(key)

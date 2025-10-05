@@ -21,7 +21,8 @@
     "**/.pytest_cache",
     "**/__pycache__",
     "typings/vendor",
-    "typings/external_stubs"
+    "typings/external_stubs",
+    "scripts"
   ],
   "djangoSettingsModule": "apps.platform.config.settings.dev",
   "executionEnvironments": [
