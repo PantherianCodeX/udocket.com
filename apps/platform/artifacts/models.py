@@ -23,7 +23,7 @@ class CaseArtifactQuerySet(models.QuerySet["CaseArtifact"]):
 
 class CaseArtifactManager(models.Manager["CaseArtifact"]):
     def get_queryset(self) -> CaseArtifactQuerySet:
-        return cast(CaseArtifactQuerySet, super().get_queryset())
+        return CaseArtifactQuerySet(self.model, using=self._db)
 
     def for_user(self, user: Any) -> CaseArtifactQuerySet:
         return self.get_queryset().for_user(user)

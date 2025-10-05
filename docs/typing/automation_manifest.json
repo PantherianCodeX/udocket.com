@@ -122,6 +122,22 @@
     {
       "path": "packages/udocket_core/agents/common/io.py",
       "verifiedAt": "2025-10-05T01:44:10.645472+00:00"
+    },
+    {
+      "path": "packages/udocket_core/agents/compose_lib.py",
+      "verifiedAt": "2025-10-05T12:29:14.118682+00:00"
+    },
+    {
+      "path": "packages/udocket_core/agents/transcribe_lib.py",
+      "verifiedAt": "2025-10-05T12:29:14.118682+00:00"
+    },
+    {
+      "path": "apps/platform/operations/task_modules/guardian.py",
+      "verifiedAt": "2025-10-05T12:29:14.118682+00:00"
+    },
+    {
+      "path": "apps/platform/operations/task_modules/transcribe.py",
+      "verifiedAt": "2025-10-05T12:29:14.118682+00:00"
     }
   ]
 }

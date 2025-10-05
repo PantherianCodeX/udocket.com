@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Iterable
+from typing import TYPE_CHECKING, Any, Iterable
 
 from django.contrib import admin
 from django.db.models import QuerySet
@@ -13,13 +13,20 @@ from apps.platform.operations.models import AuditEvent
 from apps.platform.tenancy import scope_cases
 from apps.platform.cases.models import Case
 
+if TYPE_CHECKING:
+    from django.contrib.admin import ModelAdmin as _ModelAdmin
+
+    AuditEventAdminBase = _ModelAdmin[AuditEvent]
+else:
+    AuditEventAdminBase = admin.ModelAdmin
+
 
 def _to_str_set(values: Iterable[Any]) -> set[str]:
     return {str(v) for v in values if v is not None}
 
 
 @admin.register(AuditEvent)
-class AuditEventAdmin(TenantScopedAdminMixin, admin.ModelAdmin[AuditEvent]):
+class AuditEventAdmin(TenantScopedAdminMixin, AuditEventAdminBase):
     tenant_field = None
     list_display = ("id", "ts", "actor", "case_id", "event")
     list_filter = ("event", "ts")

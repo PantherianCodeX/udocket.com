@@ -29,6 +29,7 @@ from .analysis import (
 )
 from .files import sha256_file
 from packages.udocket_core.json_utils import (
+    JSONValue,
     coerce_json_object,
     coerce_str,
     coerce_str_list,
@@ -270,13 +271,13 @@ def execute_compose_job(
 
         compose_agent = ComposeAgent(compose_config)
 
-        def _progress(stage: str, stage_event: str, details: dict[str, Any]) -> None:
+        def _progress(stage: str, stage_event: str, details: Mapping[str, JSONValue]) -> None:
             runtime.emit(
                 "compose.progress",
                 stage=stage,
                 stage_event=stage_event,
                 summary_job_id=str(summary_job.id),
-                details=details,
+                details={key: cast(Any, value) for key, value in details.items()},
             )
 
         result = compose_agent.compose(

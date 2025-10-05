@@ -10,12 +10,12 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, MutableMapping, Opt
 
 from ..common import (
     AnalysisArtifact,
+    TranscriptParse,
     append_jsonl,
     ensure_dir,
     next_versioned,
     parse_transcript,
     sha256_file,
-    TranscriptParse,
 )
 from .stages import (
     EntityStageResult,
@@ -309,9 +309,15 @@ class AnalyzePipeline:
             client_available=bool(llm_client),
         )
         try:
+            outline_issues_obj = outline_result.outline.get("issues")
+            outline_issues = (
+                cast(List[Dict[str, Any]], outline_issues_obj)
+                if isinstance(outline_issues_obj, list)
+                else []
+            )
             timeline_result = generate_timeline(
                 parse=parse,
-                outline_issues=outline_result.outline.get("issues", []),
+                outline_issues=outline_issues,
                 context_snippet=context_snippet,
                 case_brief=case_brief,
                 llm_client=llm_client,
@@ -355,9 +361,15 @@ class AnalyzePipeline:
             client_available=bool(llm_client),
         )
         try:
+            outline_parties_obj = outline_result.outline.get("parties")
+            outline_parties = (
+                cast(Dict[str, Any], outline_parties_obj)
+                if isinstance(outline_parties_obj, dict)
+                else {}
+            )
             entity_result = generate_entities(
                 parse=parse,
-                outline_parties=outline_result.outline.get("parties", {}),
+                outline_parties=outline_parties,
                 context_snippet=context_snippet,
                 case_brief=case_brief,
                 llm_client=llm_client,
@@ -745,9 +757,9 @@ def finalize_outputs(
         "status": "ok",
         "words": words,
         "diarized": parse_diarized,
-        "facts": len(outline_result.outline.get("facts", [])),
+        "facts": len(cast(List[Any], outline_result.outline.get("facts", []))),
         "timeline_events": len(timeline_result.events),
-        "entity_count": len(entity_result.hints.get("entities", [])),
+        "entity_count": len(cast(List[Any], entity_result.hints.get("entities", []))),
     }
     if provider_chain:
         meta["provider_chain"] = list(provider_chain)
@@ -776,7 +788,7 @@ def finalize_outputs(
             "entity_file": str(entity_path),
             "case_brief_file": str(case_brief_path),
             "words": words,
-            "providers": provider_chain or [],
+            "providers": list(provider_chain or []),
         },
     )
 

@@ -1,3 +1,4 @@
+# pyright: strict
 from django.db import migrations, models
 import uuid
 

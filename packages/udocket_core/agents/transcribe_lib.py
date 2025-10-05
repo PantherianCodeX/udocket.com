@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# pyright: strict
+
 import hashlib
 import json
 import os
@@ -8,15 +10,26 @@ import re
 import shutil
 import threading
 import time
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, Optional, Tuple
+from typing import Any, Optional, cast
 
 import requests
 
 from ..audio import probe_audio_metadata
-from ..json_utils import read_json_object, write_json_object
+from ..json_utils import (
+    JSONObject,
+    JSONValue,
+    coerce_json_object,
+    coerce_json_value,
+    coerce_str,
+    merge_json_objects,
+    read_json_object,
+    write_json_object,
+)
 from ..time_utils import format_utc
+from .common import append_jsonl
 
 TARGET_SAMPLE_RATE_HZ = 16000
 TARGET_AUDIO_CODEC = "pcm_s16le"
@@ -27,13 +40,17 @@ TARGET_AUDIO_MIME = "audio/wav"
 TARGET_SAMPLE_FMTS = {"s16", "s16p", "s16le"}
 
 
+def _json_payload(**items: object) -> JSONObject:
+    return {key: coerce_json_value(value) for key, value in items.items()}
+
+
 @dataclass
 class AudioNormalizationResult:
     path: Path
     converted: bool
-    metadata: Dict[str, Any]
+    metadata: JSONObject
     reasons: list[str]
-    original_metadata: Optional[Dict[str, Any]] = None
+    original_metadata: JSONObject | None = None
 
 
 def _now_utc() -> str:
@@ -54,14 +71,14 @@ def _have_ffmpeg() -> bool:
 
 def _analyze_audio_conversion(
     input_path: Path,
-    metadata: Optional[Dict[str, Any]] = None,
+    metadata: JSONObject | None = None,
     *,
     diarization: bool = False,
-) -> tuple[list[str], Dict[str, Any]]:
-    meta: Dict[str, Any] = dict(metadata or {})
+) -> tuple[list[str], JSONObject]:
+    meta: JSONObject = dict(metadata) if metadata else {}
     if not meta:
         try:
-            meta = probe_audio_metadata(input_path)
+            meta = coerce_json_object(probe_audio_metadata(input_path))
         except Exception:
             meta = {}
 
@@ -71,11 +88,13 @@ def _analyze_audio_conversion(
     if suffix != ".wav":
         reasons.append("format")
 
-    codec = (meta.get("audio_codec") or "").lower()
+    codec_value = meta.get("audio_codec")
+    codec = codec_value.lower() if isinstance(codec_value, str) else ""
     if codec and codec != TARGET_AUDIO_CODEC:
         reasons.append("codec")
 
-    sample_fmt = (meta.get("audio_sample_fmt") or "").lower()
+    sample_fmt_val = meta.get("audio_sample_fmt")
+    sample_fmt = sample_fmt_val.lower() if isinstance(sample_fmt_val, str) else ""
     if sample_fmt and sample_fmt not in TARGET_SAMPLE_FMTS:
         reasons.append("sample_format")
 
@@ -102,7 +121,7 @@ def normalize_audio(
     out_dir: Path,
     case_id: str,
     *,
-    metadata: Optional[Dict[str, Any]] = None,
+    metadata: JSONObject | None = None,
     diarization: bool = False,
     force: bool = False,
 ) -> AudioNormalizationResult:
@@ -115,7 +134,7 @@ def normalize_audio(
         return AudioNormalizationResult(
             path=input_path,
             converted=False,
-            metadata=meta,
+            metadata=dict(meta),
             reasons=[],
             original_metadata=original_meta,
         )
@@ -162,21 +181,21 @@ def normalize_audio(
     original_meta = dict(meta)
 
     meta.update(
-        {
-            "audio_codec": TARGET_AUDIO_CODEC,
-            "audio_sample_rate_hz": TARGET_SAMPLE_RATE_HZ,
-            "audio_channels": TARGET_AUDIO_CHANNELS,
-            "audio_sample_fmt": TARGET_SAMPLE_FMT,
-            "audio_bits_per_sample": TARGET_BITS_PER_SAMPLE,
-            "audio_mime": TARGET_AUDIO_MIME,
-            "audio_conversion_reasons": reasons,
-        }
+        _json_payload(
+            audio_codec=TARGET_AUDIO_CODEC,
+            audio_sample_rate_hz=TARGET_SAMPLE_RATE_HZ,
+            audio_channels=TARGET_AUDIO_CHANNELS,
+            audio_sample_fmt=TARGET_SAMPLE_FMT,
+            audio_bits_per_sample=TARGET_BITS_PER_SAMPLE,
+            audio_mime=TARGET_AUDIO_MIME,
+            audio_conversion_reasons=reasons,
+        )
     )
 
     return AudioNormalizationResult(
         path=out,
         converted=True,
-        metadata=meta,
+        metadata=dict(meta),
         reasons=reasons,
         original_metadata=original_meta,
     )
@@ -232,12 +251,6 @@ def _insert_timestamps(text: str, interval: int) -> str:
     return "\n".join(parts)
 
 
-def _append_jsonl(p: Path, obj: dict) -> None:
-    p.parent.mkdir(parents=True, exist_ok=True)
-    with p.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(obj, ensure_ascii=False) + "\n")
-
-
 def _record_batch_location(
     case_dir: Path,
     case_id: str,
@@ -246,34 +259,35 @@ def _record_batch_location(
     region: str,
     language: str,
 ) -> None:
-    partial = {
-        "case_id": case_id,
-        "azure_transcription_url": location,
-        "azure_region": region,
-        "language": language,
-        "status": "starting",
-        "timestamp_utc": _now_utc(),
-    }
+    partial = _json_payload(
+        case_id=case_id,
+        azure_transcription_url=location,
+        azure_region=region,
+        language=language,
+        status="starting",
+        timestamp_utc=_now_utc(),
+    )
     ops_dir = case_dir / "ops"
     for name in (f"{case_id}_transcription_log.json", f"{job_id}_transcription_log.json"):
         path = ops_dir / name
         try:
             current = read_json_object(path)
-            if current.get("azure_transcription_url") and current["azure_transcription_url"] != location:
-                current["previous_azure_transcription_url"] = current["azure_transcription_url"]
+            existing_location = current.get("azure_transcription_url")
+            if isinstance(existing_location, str) and existing_location and existing_location != location:
+                current["previous_azure_transcription_url"] = existing_location
             current.update(partial)
             write_json_object(path, current)
         except Exception:
             pass
     try:
-        _append_jsonl(
+        append_jsonl(
             ops_dir / "ops_transcription.jsonl",
-            {
-                "ts": _now_utc(),
-                "case_id": case_id,
-                "event": "batch_location",
-                "azure_transcription_url": location,
-            },
+            _json_payload(
+                ts=_now_utc(),
+                case_id=case_id,
+                event="batch_location",
+                azure_transcription_url=location,
+            ),
         )
     except Exception:
         pass
@@ -300,7 +314,7 @@ def _ensure_wav(
     out_dir: Path,
     case_id: str,
     *,
-    metadata: Optional[Dict[str, Any]] = None,
+    metadata: JSONObject | None = None,
     diarization: bool = False,
     force: bool = False,
 ) -> Path:
@@ -322,16 +336,19 @@ def ensure_wav(input_path: Path, out_dir: Path, case_id: str) -> Path:
 
 def _sdk_version() -> str:
     try:
-        import pkgutil
+        import azure.cognitiveservices.speech as speechsdk  # type: ignore
 
-        return pkgutil.get_loader("azure.cognitiveservices.speech").path or "unknown"
+        version = getattr(speechsdk, "__version__", None)
+        if isinstance(version, str) and version:
+            return version
     except Exception:
         return "unknown"
+    return "unknown"
 
 
 def _iso8601_to_seconds(val: str) -> float:
     try:
-        if not isinstance(val, str) or not val.startswith("PT"):
+        if not val.startswith("PT"):
             return 0.0
         h = m = 0.0
         s = 0.0
@@ -368,45 +385,63 @@ def _to_seconds(val: Any) -> float:
     return 0.0
 
 
-def _analyze_batch_error(payload: Any) -> str:
+def _analyze_batch_error(payload: JSONValue) -> str:
     try:
-        if isinstance(payload, dict):
-            errors = payload.get("errors")
-            if isinstance(errors, list) and errors:
-                parts = []
-                for err in errors:
-                    if not isinstance(err, dict):
-                        parts.append(str(err))
+        if isinstance(payload, Mapping):
+            errors_val = payload.get("errors")
+            if isinstance(errors_val, Sequence) and not isinstance(errors_val, (str, bytes, bytearray)):
+                parts: list[str] = []
+                for err_val in errors_val:
+                    if not isinstance(err_val, Mapping):
+                        parts.append(str(err_val))
                         continue
-                    code = err.get("code")
-                    message = err.get("message") or err.get("description") or err.get("errorMessage")
-                    target = err.get("target")
-                    segment = " | ".join(
-                        p
-                        for p in (
-                            f"code={code}" if code else None,
-                            message,
-                            f"target={target}" if target else None,
-                        )
-                        if p
-                    )
-                    parts.append(segment or str(err))
-                return "; ".join(parts)
-            if isinstance(errors, dict) and errors:
-                code = errors.get("code")
-                message = errors.get("message") or errors.get("description")
-                return " | ".join(p for p in (f"code={code}" if code else None, message) if p)
+                    code = err_val.get("code") if isinstance(err_val.get("code"), (str, int)) else err_val.get("code")
+                    message_field = err_val.get("message") or err_val.get("description") or err_val.get("errorMessage")
+                    message = str(message_field) if isinstance(message_field, (str, int, float)) else None
+                    target_field = err_val.get("target")
+                    target = str(target_field) if isinstance(target_field, (str, int, float)) else None
+                    segment_parts = [
+                        f"code={code}" if isinstance(code, (str, int, float)) and str(code) else None,
+                        message,
+                        f"target={target}" if target else None,
+                    ]
+                    segment = " | ".join(item for item in segment_parts if item)
+                    parts.append(segment or str(err_val))
+                if parts:
+                    return "; ".join(parts)
+            if isinstance(errors_val, Mapping) and errors_val:
+                code = errors_val.get("code")
+                message = errors_val.get("message") or errors_val.get("description")
+                segment_parts = [
+                    f"code={code}" if isinstance(code, (str, int, float)) and str(code) else None,
+                    str(message) if isinstance(message, (str, int, float)) else None,
+                ]
+                segment = " | ".join(item for item in segment_parts if item)
+                if segment:
+                    return segment
             error_obj = payload.get("error")
-            if isinstance(error_obj, dict):
+            if isinstance(error_obj, Mapping):
                 code = error_obj.get("code")
                 message = error_obj.get("message") or error_obj.get("description")
-                return " | ".join(p for p in (f"code={code}" if code else None, message) if p) or str(error_obj)
-            details = payload.get("details")
-            if isinstance(details, list) and details:
-                return "; ".join(_analyze_batch_error(item) for item in details)
+                segment_parts = [
+                    f"code={code}" if isinstance(code, (str, int, float)) and str(code) else None,
+                    str(message) if isinstance(message, (str, int, float)) else None,
+                ]
+                segment = " | ".join(item for item in segment_parts if item)
+                if segment:
+                    return segment
+                return str(dict(error_obj))
+            details_val = payload.get("details")
+            if isinstance(details_val, Sequence) and not isinstance(details_val, (str, bytes, bytearray)):
+                detail_messages = [_analyze_batch_error(item) for item in details_val]
+                filtered = [msg for msg in detail_messages if msg]
+                if filtered:
+                    return "; ".join(filtered)
             props = payload.get("properties")
-            if isinstance(props, dict) and props.get("error"):
-                return _analyze_batch_error(props.get("error"))
+            if isinstance(props, Mapping):
+                error_prop = props.get("error")
+                if error_prop is not None:
+                    return _analyze_batch_error(error_prop)
         return str(payload)
     except Exception:
         return repr(payload)
@@ -419,22 +454,23 @@ def _rest_batch_transcribe(
     region: str,
     diarization: bool,
     on_location: Optional[Callable[[str], None]] = None,
-) -> Tuple[str, Optional[float], Dict[str, Any]]:
+) -> tuple[str, Optional[float], JSONObject]:
     base = f"https://{region}.api.cognitive.microsoft.com/speechtotext/v3.2"
     create_url = base + "/transcriptions"
     headers = {"Ocp-Apim-Subscription-Key": key, "Content-Type": "application/json"}
-    payload: Dict[str, Any] = {
+    properties: dict[str, JSONValue] = {
+        "wordLevelTimestampsEnabled": True,
+        "punctuationMode": "DictatedAndAutomatic",
+        "profanityFilterMode": "Masked",
+    }
+    if diarization:
+        properties["diarizationEnabled"] = True
+    payload: dict[str, JSONValue] = {
         "displayName": f"uDocket transcription {_now_utc()}",
         "locale": lang,
         "contentUrls": [audio_url],
-        "properties": {
-            "wordLevelTimestampsEnabled": True,
-            "punctuationMode": "DictatedAndAutomatic",
-            "profanityFilterMode": "Masked",
-        },
+        "properties": properties,
     }
-    if diarization:
-        payload["properties"]["diarizationEnabled"] = True
     r = requests.post(create_url, headers=headers, json=payload, timeout=30)
     r.raise_for_status()
 
@@ -449,12 +485,14 @@ def _rest_batch_transcribe(
             pass
 
     t0 = time.time()
+    status = ""
     while True:
         pr = requests.get(loc, headers=headers, timeout=30)
         pr.raise_for_status()
-        pdata = pr.json()
-        status = pdata.get("status")
-        if status in ("Succeeded", "Failed"):
+        pdata = coerce_json_object(pr.json())
+        status_value = pdata.get("status")
+        status = status_value if isinstance(status_value, str) else ""
+        if status in {"Succeeded", "Failed"}:
             break
         if time.time() - t0 > 5400:
             raise RuntimeError("REST batch timeout waiting for completion")
@@ -469,35 +507,50 @@ def _rest_batch_transcribe(
 
     fr = requests.get(loc + "/files", headers=headers, timeout=30)
     fr.raise_for_status()
-    files_payload = fr.json()
-    files = files_payload.get("values", [])
-    text_url = None
+    files_payload = coerce_json_object(fr.json())
+    files_value = files_payload.get("values")
+    files = files_value if isinstance(files_value, list) else []
+    text_url: Optional[str] = None
     for f in files:
-        if f.get("kind") == "Transcription":
-            links = f.get("links") or {}
-            text_url = links.get("contentUrl") or links.get("content")
-            if text_url:
-                break
+        if not isinstance(f, dict):
+            continue
+        if f.get("kind") != "Transcription":
+            continue
+        links_value = f.get("links")
+        links = links_value if isinstance(links_value, dict) else {}
+        potential_url = links.get("contentUrl") or links.get("content")
+        if isinstance(potential_url, str) and potential_url:
+            text_url = potential_url
+            break
     if not text_url:
         raise RuntimeError("REST files did not include a Transcription contentUrl")
     tresp = requests.get(text_url, timeout=120)
     tresp.raise_for_status()
 
     try:
-        jd = tresp.json()
-        meta: Dict[str, Any] = {"diarization": diarization, "azure_transcription_url": loc}
+        jd = coerce_json_object(tresp.json())
+        meta: JSONObject = _json_payload(diarization=diarization, azure_transcription_url=loc)
         dur_s: Optional[float] = None
+        rp_value = jd.get("recognizedPhrases")
         try:
-            rp = jd.get("recognizedPhrases") or []
+            rp = rp_value if isinstance(rp_value, list) else []
             max_end = 0.0
             seg_count = 0
             for p in rp:
+                if not isinstance(p, dict):
+                    continue
                 off = _to_seconds(p.get("offset") or p.get("offsetInTicks"))
                 dur = _to_seconds(p.get("duration") or p.get("durationInTicks"))
                 max_end = max(max_end, off + dur)
                 seg_count += 1
-                words = p.get("nBest", [{}])[0].get("words") or []
-                for w in words:
+                nbest_val = p.get("nBest")
+                nbest = nbest_val if isinstance(nbest_val, list) else []
+                best_candidate = nbest[0] if nbest else None
+                best_dict: JSONObject | None = cast(JSONObject, best_candidate) if isinstance(best_candidate, dict) else None
+                words_val = best_dict.get("words") if best_dict else None
+                words_iterable = words_val if isinstance(words_val, list) else []
+                word_dicts = [cast(dict[str, JSONValue], w) for w in words_iterable if isinstance(w, dict)]
+                for w in word_dicts:
                     woff = _to_seconds(w.get("offset") or w.get("offsetInTicks"))
                     wdur = _to_seconds(w.get("duration") or w.get("durationInTicks"))
                     max_end = max(max_end, off + woff + wdur)
@@ -512,14 +565,24 @@ def _rest_batch_transcribe(
         conf_sum = 0.0
         conf_n = 0
         if diarization:
-            rp = jd.get("recognizedPhrases") or []
-            rp_sorted = sorted(rp, key=lambda p: _to_seconds(p.get("offset") or p.get("offsetInTicks")))
-            spk_ids = set()
+            rp_list = rp_value if isinstance(rp_value, list) else []
+            rp_dicts = [item for item in rp_list if isinstance(item, dict)]
+            rp_sorted = sorted(
+                rp_dicts,
+                key=lambda p: _to_seconds(p.get("offset") or p.get("offsetInTicks")),
+            )
+            spk_ids: set[str] = set()
             for p in rp_sorted:
-                nbest = p.get("nBest") or []
-                best = nbest[0] if nbest else {}
-                text = (best.get("display") or best.get("lexical") or "").strip()
-                if not text:
+                nbest_val = p.get("nBest")
+                nbest_list = nbest_val if isinstance(nbest_val, list) else []
+                best_candidate = nbest_list[0] if nbest_list else None
+                best: JSONObject | None = cast(JSONObject, best_candidate) if isinstance(best_candidate, dict) else None
+                if best is None:
+                    continue
+                display_text = coerce_str(best.get("display"))
+                lexical_text = coerce_str(best.get("lexical"))
+                text_value = (display_text or lexical_text or "").strip()
+                if not text_value:
                     continue
                 c = best.get("confidence")
                 if isinstance(c, (int, float)):
@@ -527,29 +590,44 @@ def _rest_batch_transcribe(
                     conf_n += 1
                 spk = p.get("speaker") or p.get("channel")
                 if spk is not None:
-                    spk_ids.add(spk)
+                    spk_ids.add(str(spk))
                 off = _to_seconds(p.get("offset") or p.get("offsetInTicks"))
                 mm = int(off // 60)
                 ss = int(off % 60)
                 if spk is not None:
-                    lines.append(f"[{mm:02d}:{ss:02d}] SPK_{spk}: {text}")
+                    lines.append(f"[{mm:02d}:{ss:02d}] SPK_{spk}: {text_value}")
                 else:
-                    lines.append(f"[{mm:02d}:{ss:02d}] {text}")
+                    lines.append(f"[{mm:02d}:{ss:02d}] {text_value}")
             meta["num_speakers"] = len(spk_ids) if spk_ids else None
         if not lines:
-            crp = jd.get("combinedRecognizedPhrases") or []
+            crp_value = jd.get("combinedRecognizedPhrases")
+            crp = crp_value if isinstance(crp_value, list) else []
             for p in crp:
-                t = (p.get("display") or p.get("lexical") or "").strip()
-                if t:
-                    lines.append(t)
-            rp = jd.get("recognizedPhrases") or []
+                if not isinstance(p, dict):
+                    continue
+                display_text = coerce_str(p.get("display"))
+                lexical_text = coerce_str(p.get("lexical"))
+                candidate = (display_text or lexical_text or "").strip()
+                if candidate:
+                    lines.append(candidate)
+            rp = rp_value if isinstance(rp_value, list) else []
             if not lines and rp:
                 for p in rp:
-                    nb = p.get("nBest") or []
+                    if not isinstance(p, dict):
+                        continue
+                    nb_raw = p.get("nBest")
+                    nb = nb_raw if isinstance(nb_raw, list) else []
                     if nb:
-                        t = (nb[0].get("display") or nb[0].get("lexical") or "").strip()
-                        if t:
-                            lines.append(t)
+                        first = nb[0]
+                        if isinstance(first, dict):
+                            first_obj = cast(JSONObject, first)
+                            candidate = (
+                                coerce_str(first_obj.get("display"))
+                                or coerce_str(first_obj.get("lexical"))
+                                or ""
+                            ).strip()
+                            if candidate:
+                                lines.append(candidate)
         if conf_n > 0:
             avg_conf = conf_sum / conf_n
         meta["avg_confidence"] = avg_conf
@@ -557,7 +635,7 @@ def _rest_batch_transcribe(
             return ("\n".join(lines), dur_s, meta)
         return (tresp.text, dur_s, meta)
     except Exception:
-        return (tresp.text, None, {"diarization": diarization, "azure_transcription_url": loc})
+        return (tresp.text, None, _json_payload(diarization=diarization, azure_transcription_url=loc))
 
 
 @dataclass
@@ -631,9 +709,12 @@ class _OnDemandTranscriber:
             pass
 
         self._speechsdk = speechsdk
-        self.recognizer = speechsdk.SpeechRecognizer(
-            speech_config=speech_config,
-            audio_config=speechsdk.audio.AudioConfig(filename=str(audio)),
+        self.recognizer = cast(
+            Any,
+            speechsdk.SpeechRecognizer(
+                speech_config=speech_config,
+                audio_config=speechsdk.audio.AudioConfig(filename=str(audio)),
+            ),
         )
         self.chunks: list[str] = []
         self.done = threading.Event()
@@ -645,22 +726,25 @@ class _OnDemandTranscriber:
         self.recognizer.cancelled.connect(self._on_cancelled)
         self.recognizer.session_stopped.connect(self._on_stopped)
 
-    def _on_recognizing(self, evt) -> None:  # noqa: D401 - quiet
+    def _on_recognizing(self, evt: object) -> None:  # noqa: D401 - quiet
         return None
 
-    def _on_recognized(self, evt) -> None:
-        if evt.result.reason == self._speechsdk.ResultReason.RecognizedSpeech and evt.result.text.strip():
-            self.chunks.append(evt.result.text)
+    def _on_recognized(self, evt: object) -> None:
+        result = getattr(evt, "result", None)
+        reason = getattr(result, "reason", None)
+        text = getattr(result, "text", "")
+        if reason == self._speechsdk.ResultReason.RecognizedSpeech and isinstance(text, str) and text.strip():
+            self.chunks.append(text)
 
-    def _on_cancelled(self, evt) -> None:
-        self.cancelled_reason = str(evt.reason)
+    def _on_cancelled(self, evt: object) -> None:
+        self.cancelled_reason = str(getattr(evt, "reason", ""))
         try:
             self.cancelled_details = getattr(evt, "error_details", None)
         except Exception:
             self.cancelled_details = None
         self.done.set()
 
-    def _on_stopped(self, evt) -> None:
+    def _on_stopped(self, evt: object) -> None:
         self.done.set()
 
     def run(self, timeout: int) -> Optional[str]:
@@ -755,7 +839,7 @@ class TranscriptionAgent:
         audio_sha = None
         wav: Optional[Path] = None
         converted = False
-        audio_meta: Dict[str, Any] = {}
+        audio_meta: JSONObject = {}
         conversion_reasons: list[str] = []
         if not is_url:
             assert audio_in is not None
@@ -781,28 +865,28 @@ class TranscriptionAgent:
             conversion_reasons = normalization.reasons
 
             if converted:
-                _append_jsonl(
+                append_jsonl(
                     audit_jsonl,
-                    {
-                        "ts": _now_utc(),
-                        "case_id": case_id,
-                        "event": "audio_normalized",
-                        "reasons": conversion_reasons,
-                        "source_file": audio_in.name,
-                    },
+                    _json_payload(
+                        ts=_now_utc(),
+                        case_id=case_id,
+                        event="audio_normalized",
+                        reasons=conversion_reasons,
+                        source_file=audio_in.name,
+                    ),
                 )
 
             if _is_audio_empty(wav):
-                _append_jsonl(
+                append_jsonl(
                     audit_jsonl,
-                    {
-                        "ts": _now_utc(),
-                        "case_id": case_id,
-                        "event": "invalid_audio",
-                        "reason": "empty_or_too_short",
-                        "file": audio_in.name,
-                        "size": (wav.stat().st_size if wav.exists() else 0),
-                    },
+                    _json_payload(
+                        ts=_now_utc(),
+                        case_id=case_id,
+                        event="invalid_audio",
+                        reason="empty_or_too_short",
+                        file=audio_in.name,
+                        size=wav.stat().st_size if wav.exists() else 0,
+                    ),
                 )
                 raise RuntimeError("Audio file appears empty or too short to transcribe.")
 
@@ -811,11 +895,13 @@ class TranscriptionAgent:
         if not is_url:
             assert audio_in is not None
             dur = _get_duration_seconds(wav or audio_in) or _get_duration_seconds(audio_in)
-            if not dur and audio_meta.get("audio_duration_s"):
-                try:
-                    dur = float(audio_meta.get("audio_duration_s"))
-                except Exception:
-                    pass
+            if not dur:
+                duration_value = audio_meta.get("audio_duration_s")
+                if isinstance(duration_value, (int, float, str)):
+                    try:
+                        dur = float(duration_value)
+                    except Exception:
+                        dur = None
             if dur and dur / 60.0 > cfg.max_minutes:
                 raise RuntimeError(
                     f"Audio too long ({int(dur)//60:02d}:{int(dur)%60:02d}) > MAX_MINUTES={cfg.max_minutes}"
@@ -825,7 +911,7 @@ class TranscriptionAgent:
         attempts = 0
         text_raw: Optional[str] = None
         last_error: Optional[str] = None
-        rest_meta: Dict[str, Any] = {}
+        rest_meta: JSONObject = {}
         for attempt in range(cfg.retry_max):
             attempts = attempt + 1
             try:
@@ -851,15 +937,29 @@ class TranscriptionAgent:
                         dur = remote_dur
                 else:
                     assert wav is not None or audio_in is not None
-                    source = wav or audio_in  # prefer converted wav
+                    source = wav if wav is not None else audio_in
+                    if source is None:
+                        raise RuntimeError("Missing audio path for transcription")
                     tr = _OnDemandTranscriber(
-                        audio=source, lang=lang, key=cfg.azure_speech_key, region=cfg.azure_speech_region, case_dir=case_dir, case_id=case_id, debug=cfg.debug
+                        audio=source,
+                        lang=lang,
+                        key=cfg.azure_speech_key,
+                        region=cfg.azure_speech_region,
+                        case_dir=case_dir,
+                        case_id=case_id,
+                        debug=cfg.debug,
                     )
                     text_raw = tr.run(cfg.sdk_timeout_s)
             except Exception as e:
-                _append_jsonl(
+                append_jsonl(
                     audit_jsonl,
-                    {"ts": _now_utc(), "case_id": case_id, "event": "sdk_exception", "error": str(e), "attempt": attempts},
+                    _json_payload(
+                        ts=_now_utc(),
+                        case_id=case_id,
+                        event="sdk_exception",
+                        error=str(e),
+                        attempt=attempts,
+                    ),
                 )
                 last_error = str(e)
                 text_raw = None
@@ -871,29 +971,33 @@ class TranscriptionAgent:
 
         if not text_raw:
             msg = last_error or "No speech recognized or SDK timeout."
-            meta_fail = {
-                "case_id": case_id,
-                "audio_file": audio_name,
-                "audio_sha256": audio_sha,
-                "azure_region": cfg.azure_speech_region,
-                "language": lang,
-                "attempts_used": attempts,
-                "status": "failed",
-                "error_message": msg,
-                "timestamp_utc": _now_utc(),
-            }
+            meta_fail = _json_payload(
+                case_id=case_id,
+                audio_file=audio_name,
+                audio_sha256=audio_sha,
+                azure_region=cfg.azure_speech_region,
+                language=lang,
+                attempts_used=attempts,
+                status="failed",
+                error_message=msg,
+                timestamp_utc=_now_utc(),
+            )
             if audio_meta:
                 for key, value in audio_meta.items():
                     if value is not None and meta_fail.get(key) is None:
                         meta_fail[key] = value
-            import json
-
             for pth in (log_json, log_json_job):
                 try:
-                    pth.write_text(json.dumps(meta_fail, indent=2, ensure_ascii=False), encoding="utf-8")
+                    write_json_object(pth, meta_fail)
                 except Exception:
                     pass
-            _append_jsonl(audit_jsonl, {"ts": _now_utc(), "case_id": case_id, "event": "failed", "exit": 2, **meta_fail})
+            append_jsonl(
+                audit_jsonl,
+                merge_json_objects(
+                    meta_fail,
+                    _json_payload(ts=_now_utc(), case_id=case_id, event="failed", exit=2),
+                ),
+            )
             raise RuntimeError(msg)
 
         # Build transcript output
@@ -924,27 +1028,31 @@ class TranscriptionAgent:
         transcript_out.write_text(header + "\n" + text_ts + "\n", encoding="utf-8")
 
         # Meta
-        import json
 
-        meta = {
-            "case_id": case_id,
-            "audio_file": audio_name,
-            "audio_sha256": audio_sha,
-            "transcript_file": transcript_out.name,
-            "transcript_sha256": _sha256sum(transcript_out),
-            "azure_region": cfg.azure_speech_region,
-            "language": lang,
-            "audio_duration_s": dur,
-            "word_count": len(text_raw.split()),
-            "attempts_used": attempts,
-            "sdk_path": _sdk_version(),
-            "python": platform.python_version(),
-            "platform": platform.platform(),
-            "converted_temp_wav": converted,
-            "timestamp_utc": _now_utc(),
-            "diarization_enabled": bool(diarization),
-            "status": "succeeded",
-        }
+        python_version = platform.python_version()
+        platform_label = platform.platform()
+
+        sdk_version_value = _sdk_version()
+
+        meta = _json_payload(
+            case_id=case_id,
+            audio_file=audio_name,
+            audio_sha256=audio_sha,
+            transcript_file=transcript_out.name,
+            transcript_sha256=_sha256sum(transcript_out),
+            azure_region=cfg.azure_speech_region,
+            language=lang,
+            audio_duration_s=dur,
+            word_count=len(text_raw.split()),
+            attempts_used=attempts,
+            sdk_path=sdk_version_value,
+            python=python_version,
+            platform=platform_label,
+            converted_temp_wav=converted,
+            timestamp_utc=_now_utc(),
+            diarization_enabled=bool(diarization),
+            status="succeeded",
+        )
         if audio_meta:
             for key, value in audio_meta.items():
                 if value is None:
@@ -952,15 +1060,18 @@ class TranscriptionAgent:
                 if meta.get(key) is None:
                     meta[key] = value
         if rest_meta:
-            meta.update(rest_meta)
+            meta = merge_json_objects(meta, rest_meta)
         try:
-            log_json.write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
-            log_json_job.write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
+            write_json_object(log_json, meta)
+            write_json_object(log_json_job, meta)
         except Exception:
             pass
-        _append_jsonl(
+        append_jsonl(
             audit_jsonl,
-            {"ts": _now_utc(), "case_id": case_id, "event": "transcribed", "exit": 0, **meta},
+            merge_json_objects(
+                meta,
+                _json_payload(ts=_now_utc(), case_id=case_id, event="transcribed", exit=0),
+            ),
         )
         try:
             with open(log_txt, "a", encoding="utf-8") as f:

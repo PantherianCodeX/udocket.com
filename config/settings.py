@@ -629,23 +629,25 @@ class Settings(BaseSettings):
         if normalized_test_db != self.TEST_DATABASE_URL:
             updates["TEST_DATABASE_URL"] = normalized_test_db
 
-        updated = self.model_copy(update=updates) if updates else self
+        if updates:
+            for key, value in updates.items():
+                setattr(self, key, value)
 
-        updated.ensure_storage_root()
-        _ensure_sqlite_parent(updated.DATABASE_URL)
-        if updated.TEST_DATABASE_URL:
-            _ensure_sqlite_parent(updated.TEST_DATABASE_URL)
+        self.ensure_storage_root()
+        _ensure_sqlite_parent(self.DATABASE_URL)
+        if self.TEST_DATABASE_URL:
+            _ensure_sqlite_parent(self.TEST_DATABASE_URL)
 
-        if not updated.DJANGO_DEBUG and updated.DJANGO_SECRET_KEY.get_secret_value() == "dev-insecure-secret-key":
+        if not self.DJANGO_DEBUG and self.DJANGO_SECRET_KEY.get_secret_value() == "dev-insecure-secret-key":
             raise ValueError("DJANGO_SECRET_KEY must be set when DJANGO_DEBUG is false")
-        return updated
+        return self
 
     def ensure_storage_root(self) -> Path:
         root = self.STORAGE_ROOT
-        _safe_mkdir(root)
-        if root.exists():
+        if _safe_mkdir(root) and root.exists():
             return root
-        _safe_mkdir(FALLBACK_STORAGE_ROOT)
+        if _safe_mkdir(FALLBACK_STORAGE_ROOT):
+            return FALLBACK_STORAGE_ROOT
         return root
 
     @property

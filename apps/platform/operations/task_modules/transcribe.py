@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# pyright: strict
+
 import logging
 import mimetypes
 import shutil
@@ -7,9 +9,13 @@ import uuid
 from pathlib import Path
 
 from collections.abc import Mapping
-from typing import cast
+from typing import Any, Protocol, cast
 
-from celery import TaskProtocol, shared_task
+from celery import shared_task
+
+
+class TaskProtocol(Protocol):
+    request: Any
 from django.utils import timezone
 
 from apps.platform.artifacts.models import CaseArtifact
@@ -24,7 +30,13 @@ from apps.platform.operations.storage import ensure_case_dirs, ops_dir as storag
 from apps.platform.operations.utils import append_job_log, read_job_meta
 from packages.udocket_core.agents import TranscriptionAgent, TranscriptionConfig, normalize_audio
 from packages.udocket_core.audio import probe_audio_metadata
-from packages.udocket_core.json_utils import JSONObject, coerce_json_object, read_json_object
+from packages.udocket_core.json_utils import (
+    JSONObject,
+    coerce_json_object,
+    coerce_json_value,
+    merge_json_objects,
+    read_json_object,
+)
 
 log = logging.getLogger("apps.platform.operations.tasks.transcribe")
 
@@ -117,14 +129,16 @@ def transcribe_job(
     if job_obj is None:
         job_obj = Job.typed_objects().select_related("case").get(pk=job_id)
 
-    base_meta: dict[str, object] = {
-        "job_kind": "transcription",
-        "agent_type": "transcription",
-        "agent_label": "Transcribe",
-        "transcription_mode": mode,
-        "requested_language": language or getattr(job_obj, "language", None),
-        "transcription_status": str(getattr(job_obj, "status", "") or Job.Status.PENDING),
-    }
+    base_meta: JSONObject = coerce_json_object(
+        {
+            "job_kind": "transcription",
+            "agent_type": "transcription",
+            "agent_label": "Transcribe",
+            "transcription_mode": mode,
+            "requested_language": language or getattr(job_obj, "language", None),
+            "transcription_status": str(getattr(job_obj, "status", "") or Job.Status.PENDING),
+        }
+    )
     safe_job_meta(case_id, org_id, job_id, base_meta)
 
     runtime = JobRuntimeContext(
@@ -139,20 +153,22 @@ def transcribe_job(
             "language": language,
         },
     )
-    existing_job_meta = read_job_meta(case_id, org_id, job_id)
+    existing_job_meta = coerce_json_object(read_job_meta(case_id, org_id, job_id))
 
-    audio_meta_updates: dict[str, object] = {}
+    audio_meta_updates: JSONObject = {}
     ai: str = audio_input
     try:
         if audio_input and not audio_input.startswith("http"):
             audio_path = Path(audio_input)
             if audio_path.exists():
-                audio_meta_updates = {
-                    "audio_sha256": sha256_file(audio_path),
-                    "audio_size_bytes": audio_path.stat().st_size,
-                    "audio_mime": mimetypes.guess_type(audio_path.name)[0],
-                }
-                audio_meta_updates.update(probe_audio_metadata(audio_path))
+                audio_meta_updates = coerce_json_object(
+                    {
+                        "audio_sha256": sha256_file(audio_path),
+                        "audio_size_bytes": audio_path.stat().st_size,
+                        "audio_mime": mimetypes.guess_type(audio_path.name)[0],
+                    }
+                )
+                audio_meta_updates = merge_json_objects(audio_meta_updates, probe_audio_metadata(audio_path))
                 job_meta_target = job_obj
                 duration_val = audio_meta_updates.get("audio_duration_s")
                 if isinstance(duration_val, (int, float, str)):
@@ -205,7 +221,10 @@ def transcribe_job(
         f"(mode={mode}, diarization={'on' if diarization else 'off'}, language={log_language})"
     )
 
-    start_meta_updates: dict[str, object] = {**base_meta, "transcription_status": initial_meta_status}
+    start_meta_updates: JSONObject = merge_json_objects(
+        base_meta,
+        {"transcription_status": initial_meta_status},
+    )
     celery_task_id = runtime.task_id or None
     if celery_task_id:
         history: list[str] = []
@@ -224,7 +243,7 @@ def transcribe_job(
             history.append(celery_task_id)
         start_meta_updates["celery_task_id"] = celery_task_id
         if history:
-            start_meta_updates["celery_task_history"] = history
+            start_meta_updates["celery_task_history"] = coerce_json_value(history)
         if runtime.task_name:
             start_meta_updates.setdefault("celery_task_name", runtime.task_name)
 
@@ -246,7 +265,7 @@ def transcribe_job(
         )
 
     # Run the agent; only this block determines success vs. failure
-    batch_upload_meta: dict[str, object] = {}
+    batch_upload_meta: JSONObject = {}
     try:
         # If batch mode and the input is a local file, upload to Azure Blob to obtain SAS URL
         ai = audio_input
@@ -283,15 +302,16 @@ def transcribe_job(
                     if normalization.path != source_path:
                         cleanup_path = normalization.path
                     original_name = f"{source_path.stem}.wav"
-                    batch_upload_meta.update(
+                    batch_upload_meta = merge_json_objects(
+                        batch_upload_meta,
                         {
                             "batch_upload_original_extension": source_path.suffix.lower(),
                             "batch_upload_converted": True,
                             "audio_conversion_reasons": normalization.reasons,
-                        }
+                        },
                     )
-                    source_audio_meta = normalization.original_metadata or {}
-                    target_audio_meta = normalization.metadata or {}
+                    source_audio_meta: JSONObject = normalization.original_metadata or {}
+                    target_audio_meta: JSONObject = normalization.metadata or {}
                     source_audio_applied = False
                     for key, value in source_audio_meta.items():
                         if key.startswith("audio_") and value is not None:
@@ -382,9 +402,9 @@ def transcribe_job(
                         )
                         converted_path = Path(str(upload_path))
 
-                    converted_stats = {}
+                    converted_stats: JSONObject = {}
                     try:
-                        converted_stats = probe_audio_metadata(converted_path)
+                        converted_stats = coerce_json_object(probe_audio_metadata(converted_path))
                     except Exception:
                         converted_stats = {}
 
@@ -402,10 +422,9 @@ def transcribe_job(
                         converted_job_obj.started_at = converted_job_obj.started_at or now_ts
                         converted_job_obj.upload_progress = None
                         try:
-                            converted_job_obj.duration_s = (
-                                converted_stats.get("audio_duration_s")
-                                or converted_job_obj.duration_s
-                            )
+                            duration_candidate = converted_stats.get("audio_duration_s")
+                            if isinstance(duration_candidate, (int, float, str)):
+                                converted_job_obj.duration_s = float(duration_candidate)
                         except Exception:
                             pass
                         try:
@@ -423,20 +442,22 @@ def transcribe_job(
                             converted_job_obj.save()
                         converted_job_id = str(converted_job_obj.id)
 
-                        converted_meta_updates: dict[str, object] = {
-                            "job_kind": "audio_conversion",
-                            "agent_type": "Audio Conversion",
-                            "audio_file": converted_basename,
-                            "audio_path": str(converted_path),
-                            "audio_sha256": converted_sha,
-                            "audio_size_bytes": converted_size,
-                            "audio_mime": "audio/wav",
-                            "source_job_id": job_id,
-                            "source_audio_path": str(source_path),
-                            "source_audio_file": original_display,
-                            "conversion_source_extension": source_path.suffix.lower(),
-                            "conversion_completed_at": now_ts.isoformat(),
-                        }
+                        converted_meta_updates: JSONObject = coerce_json_object(
+                            {
+                                "job_kind": "audio_conversion",
+                                "agent_type": "Audio Conversion",
+                                "audio_file": converted_basename,
+                                "audio_path": str(converted_path),
+                                "audio_sha256": converted_sha,
+                                "audio_size_bytes": converted_size,
+                                "audio_mime": "audio/wav",
+                                "source_job_id": job_id,
+                                "source_audio_path": str(source_path),
+                                "source_audio_file": original_display,
+                                "conversion_source_extension": source_path.suffix.lower(),
+                                "conversion_completed_at": now_ts.isoformat(),
+                            }
+                        )
                         for key, value in (source_audio_meta or {}).items():
                             if key.startswith("audio_") and value is not None:
                                 converted_meta_updates.setdefault(f"source_{key}", value)
@@ -457,7 +478,10 @@ def transcribe_job(
                         except Exception:
                             converted_meta_updates.setdefault("job_title", converted_basename)
                         if converted_stats:
-                            converted_meta_updates.update(converted_stats)
+                            converted_meta_updates = merge_json_objects(
+                                converted_meta_updates,
+                                converted_stats,
+                            )
                         if converted_job_id:
                             safe_job_meta(case_id, org_id, converted_job_id, converted_meta_updates)
                         append_job_log(
@@ -675,9 +699,12 @@ def transcribe_job(
         except Exception as exc:
             log.debug("unable to parse transcription meta", extra={"job_id": job_id, "error": str(exc)})
     except UploadCancelled:
-        cancel_meta = {**base_meta, "transcription_status": "cancelled"}
-        cancel_meta.update(audio_meta_updates)
-        cancel_meta.update(batch_upload_meta)
+        cancel_meta: JSONObject = merge_json_objects(
+            base_meta,
+            {"transcription_status": "cancelled"},
+            audio_meta_updates,
+            batch_upload_meta,
+        )
         if celery_task_id:
             cancel_meta.setdefault("celery_task_id", celery_task_id)
             cancel_meta["celery_task_status"] = "cancelled"
@@ -729,9 +756,12 @@ def transcribe_job(
             "progress_percent": None,
             "upload_progress": None,
         }
-        failure_meta = {**base_meta, "transcription_status": "failed"}
-        failure_meta.update(audio_meta_updates)
-        failure_meta.update(batch_upload_meta)
+        failure_meta: JSONObject = merge_json_objects(
+            base_meta,
+            {"transcription_status": "failed"},
+            audio_meta_updates,
+            batch_upload_meta,
+        )
         if celery_task_id:
             failure_meta.setdefault("celery_task_id", celery_task_id)
             failure_meta["celery_task_status"] = "failed"
@@ -829,10 +859,11 @@ def transcribe_job(
     except Exception:
         pass
 
-    meta_updates = {**base_meta, "transcription_status": "completed"}
-    meta_updates.update(audio_meta_updates)
-    meta_updates.update(batch_upload_meta)
-    meta_updates.update(
+    meta_updates: JSONObject = merge_json_objects(
+        base_meta,
+        {"transcription_status": "completed"},
+        audio_meta_updates,
+        batch_upload_meta,
         {
             "transcript_file": str(result.transcript_file),
             "transcript_sha256": transcript_checksum,
@@ -841,7 +872,7 @@ def transcribe_job(
             "transcription_language": result.language,
             "transcription_region": result.region,
             "transcription_duration_s": result.duration_s,
-        }
+        },
     )
     if celery_task_id:
         meta_updates.setdefault("celery_task_id", celery_task_id)

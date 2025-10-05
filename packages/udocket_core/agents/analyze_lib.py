@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+# pyright: strict
 import logging
 import os
 from collections.abc import Callable, Mapping, Sequence
@@ -13,7 +14,7 @@ from .common import parse_transcript, TranscriptParse
 from .common.io import TranscriptSegment
 from .langgraph_orchestrator import build_analyze_graph, enable_langgraph_debug_logging
 from .analyze.utils import FinalizedOutputs, AnalyzePipeline
-from ..json_utils import read_json_object
+from ..json_utils import coerce_json_object, read_json_object
 from ..llm import LLMSettings, load_llm_settings
 from ..llm.runtime import (
     ChatClient,
@@ -758,11 +759,17 @@ class AnalyzeAgent:
                         )
                     )
                 try:
+                    credential_payload_json = (
+                        coerce_json_object(credential_payload)
+                        if credential_payload is not None
+                        else None
+                    )
+                    options_json = coerce_json_object(options)
                     runtime_cfg = build_provider_runtime_config(
                         provider=provider_meta,
                         model_name=preferred_model,
-                        credential_payload=credential_payload,
-                        options=options,
+                        credential_payload=credential_payload_json,
+                        options=options_json,
                     )
                 except ChatClientError as exc:  # pragma: no cover - configuration errors
                     self._log(

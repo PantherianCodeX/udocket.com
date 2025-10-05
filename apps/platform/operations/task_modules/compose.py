@@ -1,6 +1,13 @@
 from __future__ import annotations
 
-from celery import TaskProtocol, shared_task
+# pyright: strict
+from typing import Any, Protocol
+
+from celery import shared_task
+
+
+class TaskProtocol(Protocol):
+    request: Any
 
 from apps.platform.jobs.models import Job
 from apps.platform.operations.audit import emit as audit_emit

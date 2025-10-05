@@ -22,7 +22,7 @@ class CaseQuerySet(models.QuerySet["Case"]):
 
 class CaseManager(models.Manager["Case"]):
     def get_queryset(self) -> CaseQuerySet:
-        return cast(CaseQuerySet, super().get_queryset())
+        return CaseQuerySet(self.model, using=self._db)
 
     def for_user(self, user: Any) -> CaseQuerySet:
         return self.get_queryset().for_user(user)

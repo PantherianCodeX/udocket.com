@@ -35,7 +35,10 @@ class _StateGraphProtocol(Protocol):
 StateGraphFactory = Callable[[type[MutableMapping[str, object]]], _StateGraphProtocol]
 
 
-_langgraph_spec = importlib.util.find_spec("langgraph.graph")
+try:
+    _langgraph_spec = importlib.util.find_spec("langgraph.graph")
+except ModuleNotFoundError:  # pragma: no cover - optional dependency missing
+    _langgraph_spec = None
 if _langgraph_spec is not None:  # pragma: no cover - optional dependency
     _langgraph_module = importlib.import_module("langgraph.graph")
     _runtime_end = getattr(_langgraph_module, "END", None)
@@ -142,6 +145,7 @@ def build_analyze_graph(impl: AnalyzeNodeImpl) -> AnalyzeGraph:
 _LANGGRAPH_DEBUG_ENV = {"1", "true", "yes", "on"}
 _LANGGRAPH_TRACE_ENV = "LANGGRAPH_DEBUG"
 _langgraph_debug_initialized = False
+_LANGGRAPH_DEBUG_INITIALIZED = False
 
 
 def enable_langgraph_debug_logging(force: bool = False) -> None:
@@ -174,6 +178,7 @@ def enable_langgraph_debug_logging(force: bool = False) -> None:
         scoped_logger.propagate = True
 
     _langgraph_debug_initialized = True
+    globals()["_LANGGRAPH_DEBUG_INITIALIZED"] = True
 
 
 __all__ = [

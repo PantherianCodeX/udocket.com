@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Iterable, cast
+from typing import TYPE_CHECKING, Any, Callable, Iterable, cast
 from types import MethodType
 
 from django import forms
@@ -29,31 +29,50 @@ from .utils import (
     user_accessible_organizations,
 )
 
+if TYPE_CHECKING:
+    from django.contrib.admin import ModelAdmin as _ModelAdmin
+    from django.contrib.admin import TabularInline as _TabularInline
+    from django.contrib.auth.admin import UserAdmin as _UserAdmin
+
+    OrganizationMembershipInlineBase = _TabularInline[OrganizationMembership, User]
+    OrganizationMembershipUserInlineBase = _TabularInline[OrganizationMembership, Organization]
+    CaseMembershipInlineBase = _TabularInline[CaseMembership, User]
+    UserAdminBase = _UserAdmin[User]
+    OrganizationAdminBase = _ModelAdmin[Organization]
+    OrganizationMembershipAdminBase = _ModelAdmin[OrganizationMembership]
+else:
+    OrganizationMembershipInlineBase = admin.TabularInline
+    OrganizationMembershipUserInlineBase = admin.TabularInline
+    CaseMembershipInlineBase = admin.TabularInline
+    UserAdminBase = DjangoUserAdmin
+    OrganizationAdminBase = admin.ModelAdmin
+    OrganizationMembershipAdminBase = admin.ModelAdmin
+
 
 def _is_user_superuser(user: User) -> bool:
     return bool(getattr(user, "is_superuser", False))
 
 
-class OrganizationMembershipInline(admin.TabularInline[OrganizationMembership, User]):
+class OrganizationMembershipInline(OrganizationMembershipInlineBase):
     model = OrganizationMembership
     extra = 1
     autocomplete_fields = ["organization"]
 
 
-class OrganizationMembershipUserInline(admin.TabularInline[OrganizationMembership, Organization]):
+class OrganizationMembershipUserInline(OrganizationMembershipUserInlineBase):
     model = OrganizationMembership
     extra = 1
     autocomplete_fields = ["user"]
 
 
-class CaseMembershipInline(admin.TabularInline[CaseMembership, User]):
+class CaseMembershipInline(CaseMembershipInlineBase):
     model = CaseMembership
     extra = 1
     autocomplete_fields = ["case"]
 
 
 @admin.register(User)
-class UserAdmin(DjangoUserAdmin[User]):
+class UserAdmin(UserAdminBase):
     list_display = ("username", "email", "display_name", "primary_membership_roles", "last_login")
     search_fields = ("username", "email", "display_name", "kc_sub")
     ordering = ("username",)
@@ -155,7 +174,7 @@ class UserAdmin(DjangoUserAdmin[User]):
 
 
 @admin.register(Organization)
-class OrganizationAdmin(admin.ModelAdmin[Organization]):
+class OrganizationAdmin(OrganizationAdminBase):
     list_display = ("id", "name", "city", "province", "contact_email", "created_at")
     search_fields = ("id", "name", "display_name", "contact_email")
     ordering = ("name",)
@@ -181,7 +200,7 @@ class OrganizationAdmin(admin.ModelAdmin[Organization]):
 
 
 @admin.register(OrganizationMembership)
-class OrganizationMembershipAdmin(admin.ModelAdmin[OrganizationMembership]):
+class OrganizationMembershipAdmin(OrganizationMembershipAdminBase):
     list_display = ("organization", "user", "role", "created_at")
     list_filter = ("role", "organization")
     search_fields = ("organization__id", "organization__name", "user__username", "user__email")

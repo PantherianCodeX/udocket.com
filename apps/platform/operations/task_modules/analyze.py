@@ -1,37 +1,42 @@
 from __future__ import annotations
 
+# pyright: strict
 import logging
 from pathlib import Path
 
 from collections.abc import Mapping, Sequence
-from typing import cast
+from typing import Any, Protocol, cast
 
-from celery import TaskProtocol, shared_task
+from celery import shared_task
+
+
+class TaskProtocol(Protocol):
+    request: Any
 
 from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.jobs.models import Job
 from apps.platform.jobs.utils import unique_title
-from apps.platform.operations.audit import emit as audit_emit
-from apps.platform.operations.channels import send_case_update
+from apps.platform.operations.audit import emit as _audit_emit
+from apps.platform.operations.channels import send_case_update as _send_case_update
 from apps.platform.operations.llm import (
     LLMConfigurationPayload,
     StageMap,
-    ensure_default_llm_configuration,
-    get_llm_configuration,
-    get_provider_secret_with_metadata,
+    ensure_default_llm_configuration as _ensure_default_llm_configuration,
+    get_llm_configuration as _get_llm_configuration,
+    get_provider_secret_with_metadata as _get_provider_secret_with_metadata,
 )
 from apps.platform.operations.runtime import JobRuntimeContext, safe_job_meta
 from apps.platform.operations.services import (
     case_intake_payload,
     case_paths,
-    collect_requested_providers,
+    collect_requested_providers as _collect_requested_providers,
     latest_transcript,
 )
 from apps.platform.operations.services.files import sha256_file
 from apps.platform.operations.utils import read_job_meta
-from packages.udocket_core.agents import AnalyzeAgent, AnalyzeConfig
+from packages.udocket_core.agents import AnalyzeAgent as _AnalyzeAgent, AnalyzeConfig
 from packages.udocket_core.json_utils import JSONObject, coerce_json_object, read_json_object
-from packages.udocket_core.llm.config import load_llm_settings
+from packages.udocket_core.llm.config import load_llm_settings as _load_llm_settings
 
 
 log = logging.getLogger("apps.platform.operations.tasks.analyze")
@@ -195,9 +200,32 @@ def analyze_job(
         )
         raise
 
+    from apps.platform.operations import tasks as tasks_module
+
+    load_llm_settings_fn = getattr(tasks_module, "load_llm_settings", _load_llm_settings)
+    get_llm_configuration_fn = getattr(tasks_module, "get_llm_configuration", _get_llm_configuration)
+    ensure_default_llm_configuration_fn = getattr(
+        tasks_module,
+        "ensure_default_llm_configuration",
+        _ensure_default_llm_configuration,
+    )
+    get_provider_secret_with_metadata_fn = getattr(
+        tasks_module,
+        "get_provider_secret_with_metadata",
+        _get_provider_secret_with_metadata,
+    )
+    collect_requested_providers_fn = getattr(
+        tasks_module,
+        "collect_requested_providers",
+        _collect_requested_providers,
+    )
+    analyze_agent_cls = getattr(tasks_module, "AnalyzeAgent", _AnalyzeAgent)
+    send_case_update_fn = getattr(tasks_module, "send_case_update", _send_case_update)
+    audit_emit_fn = getattr(tasks_module, "audit_emit", _audit_emit)
+
     llm_settings = None
     try:
-        llm_settings = load_llm_settings()
+        llm_settings = load_llm_settings_fn()
     except Exception as exc:  # noqa: BLE001
         log.error(
             "load llm settings failed",
@@ -230,13 +258,13 @@ def analyze_job(
     config_payload: LLMConfigurationPayload | None = None
     if org_id_str:
         if llm_config_id:
-            config_payload = get_llm_configuration(
+            config_payload = get_llm_configuration_fn(
                 organization_id=org_id_str,
                 config_id=llm_config_id,
                 target="analyze",
             )
         if not config_payload:
-            config_payload = ensure_default_llm_configuration(
+            config_payload = ensure_default_llm_configuration_fn(
                 organization_id=org_id_str,
                 target="analyze",
                 llm_settings=llm_settings,
@@ -282,7 +310,7 @@ def analyze_job(
     )
     config_chain = [provider for provider in provider_chain_override]
 
-    requested_providers = collect_requested_providers(
+    requested_providers = collect_requested_providers_fn(
         tuple(analyze_config.provider_chain),
         config_chain,
         stage_map,
@@ -291,7 +319,7 @@ def analyze_job(
     provider_credentials: dict[str, Mapping[str, object]] = {}
     if org_id_str:
         for provider_name in requested_providers:
-            secret_payload = get_provider_secret_with_metadata(org_id_str, provider_name)
+            secret_payload = get_provider_secret_with_metadata_fn(org_id_str, provider_name)
             if secret_payload:
                 provider_credentials[provider_name] = secret_payload
 
@@ -304,7 +332,7 @@ def analyze_job(
             hint_payload[str(key)] = value
         transcript_hint_payload = hint_payload
 
-    agent = AnalyzeAgent(analyze_config)
+    agent = analyze_agent_cls(analyze_config)
 
     def _sanitize_details(details: Mapping[str, object]) -> dict[str, object]:
         sanitized: dict[str, object] = {}
@@ -502,7 +530,7 @@ def analyze_job(
         },
     )
 
-    audit_emit(
+    audit_emit_fn(
         None,
         case_id=case_id,
         event="analysis.summary.completed",
@@ -516,7 +544,12 @@ def analyze_job(
     )
 
     try:
-        send_case_update(case_id, event="artifact.created", kind="summary", job_id=str(job.id))
+        send_case_update_fn(
+            case_id,
+            event="artifact.created",
+            kind="summary",
+            job_id=str(job.id),
+        )
     except Exception:
         log.exception(
             "case artifact update emit failed",

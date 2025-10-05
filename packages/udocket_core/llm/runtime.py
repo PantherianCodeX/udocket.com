@@ -1,13 +1,36 @@
-"""Runtime helpers for constructing LLM chat clients."""
-# pyright: reportMissingModuleSource=false
-
 from __future__ import annotations
+
+# pyright: strict
 
 import json
 import logging
 import os
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Protocol, Tuple, cast
+from typing import Mapping, Protocol, Sequence, cast
+
+from packages.udocket_core.agents.common.azure_client import (
+    AzureChatClient,
+    AzureClientConfig,
+)
+from packages.udocket_core.json_utils import (
+    JSONObject,
+    JSONValue,
+    coerce_bool,
+    coerce_int,
+    coerce_json_object,
+    coerce_json_value,
+    coerce_str,
+    coerce_str_dict,
+    merge_json_objects,
+)
+from packages.udocket_core.llm.config import LLMProvider, LLMProviderModel
+
+logger = logging.getLogger("udocket.llm.runtime")
+
+
+ChatMessage = Mapping[str, JSONValue]
+TokenUsage = dict[str, int | None]
+ResponseFormat = JSONObject
 
 
 class _ResponseProtocol(Protocol):
@@ -15,7 +38,7 @@ class _ResponseProtocol(Protocol):
     text: str
     headers: Mapping[str, str]
 
-    def json(self) -> Any: ...
+    def json(self) -> JSONValue: ...
 
     def raise_for_status(self) -> None: ...
 
@@ -25,10 +48,10 @@ class _RequestsProtocol(Protocol):
         self,
         url: str,
         *,
-        headers: Optional[Mapping[str, str]] = None,
-        json: Optional[Mapping[str, Any]] = None,
-        params: Optional[Mapping[str, Any]] = None,
-        timeout: Optional[int] = None,
+        headers: Mapping[str, str] | None = None,
+        json: JSONValue | None = None,
+        params: Mapping[str, JSONValue] | None = None,
+        timeout: int | None = None,
     ) -> _ResponseProtocol: ...
 
 
@@ -37,20 +60,11 @@ try:  # pragma: no cover - optional dependency guard
 except Exception:  # pragma: no cover
     _requests = None
 
-requests: Optional[_RequestsProtocol]
+requests: _RequestsProtocol | None
 if _requests is not None:
     requests = cast(_RequestsProtocol, _requests)
 else:
     requests = None
-
-from packages.udocket_core.agents.common.azure_client import (
-    AzureChatClient,
-    AzureClientConfig,
-)
-from packages.udocket_core.llm.config import LLMProvider, LLMProviderModel
-
-
-logger = logging.getLogger("udocket.llm.runtime")
 
 
 class ChatClient(Protocol):
@@ -59,11 +73,11 @@ class ChatClient(Protocol):
     def chat(
         self,
         *,
-        messages: List[Dict[str, Any]],
+        messages: Sequence[ChatMessage],
         temperature: float = 1.0,
-        max_tokens: Optional[int] = None,
-        response_format: Optional[Dict[str, Any]] = None,
-    ) -> Tuple[str, Dict[str, Any]]: ...
+        max_tokens: int | None = None,
+        response_format: ResponseFormat | None = None,
+    ) -> tuple[str, TokenUsage]: ...
 
 
 class ChatClientError(RuntimeError):
@@ -76,7 +90,7 @@ def _require_requests() -> _RequestsProtocol:
     return requests
 
 
-def _coerce_base_url(value: Optional[str]) -> str:
+def _coerce_base_url(value: str | None) -> str:
     if not value:
         return ""
     url = value.strip()
@@ -90,10 +104,10 @@ class OpenAIChatClient:
         self,
         *,
         base_url: str,
-        api_key: Optional[str],
+        api_key: str | None,
         model: str,
         timeout: int = 120,
-        extra_headers: Optional[Dict[str, str]] = None,
+        extra_headers: Mapping[str, str] | None = None,
     ) -> None:
         _require_requests()
         self.base_url = _coerce_base_url(base_url) or "https://api.openai.com/v1"
@@ -108,25 +122,27 @@ class OpenAIChatClient:
     def chat(
         self,
         *,
-        messages: List[Dict[str, Any]],
+        messages: Sequence[ChatMessage],
         temperature: float = 1.0,
-        max_tokens: Optional[int] = None,
-        response_format: Optional[Dict[str, Any]] = None,
-    ) -> Tuple[str, Dict[str, Any]]:
+        max_tokens: int | None = None,
+        response_format: ResponseFormat | None = None,
+    ) -> tuple[str, TokenUsage]:
+        if not messages:
+            raise ChatClientError("OpenAI chat requires at least one message")
         url = f"{self.base_url}/chat/completions"
         headers = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
         headers.update(self.extra_headers)
-        payload: Dict[str, Any] = {
+        payload: JSONObject = {
             "model": self.model,
-            "messages": messages,
+            "messages": [coerce_json_object(message) for message in messages],
             "temperature": float(temperature),
         }
         if max_tokens is not None and max_tokens > 0:
             payload["max_tokens"] = int(max_tokens)
         if response_format:
-            payload["response_format"] = response_format
+            payload["response_format"] = coerce_json_object(response_format)
         requests_impl = _require_requests()
         try:
             response = requests_impl.post(url, headers=headers, json=payload, timeout=self.timeout)
@@ -137,43 +153,57 @@ class OpenAIChatClient:
             raise ChatClientError(
                 f"OpenAI request failed with status {response.status_code}: {text[:512]}"
             )
-        try:
-            data_raw = response.json()
-        except ValueError as exc:
-            raise ChatClientError("OpenAI response was not valid JSON") from exc
-        if not isinstance(data_raw, dict):
+        data_raw = response.json()
+        if not isinstance(data_raw, Mapping):
             raise ChatClientError("OpenAI response payload is not a JSON object")
-        data_obj = cast(Dict[str, Any], data_raw)
+        data_obj = coerce_json_object(data_raw)
         choices_raw = data_obj.get("choices")
         if not isinstance(choices_raw, list):
             raise ChatClientError("OpenAI response missing choices")
-        choices_iter = cast(List[Any], choices_raw)
-        choices_list: List[Dict[str, Any]] = []
-        for entry in choices_iter:
-            if isinstance(entry, dict):
-                choices_list.append(cast(Dict[str, Any], entry))
+        choices_list = [
+            coerce_json_object(choice)
+            for choice in choices_raw
+            if isinstance(choice, Mapping)
+        ]
         if not choices_list:
             raise ChatClientError("OpenAI response missing structured choices")
-        first: Dict[str, Any] = choices_list[0]
+        first = choices_list[0]
         message_value = first.get("message")
-        if not isinstance(message_value, dict):
+        if not isinstance(message_value, Mapping):
             raise ChatClientError("OpenAI response missing message content")
-        message_dict: Dict[str, Any] = message_value
-        content_raw: object = message_dict.get("content")
+        message_dict = coerce_json_object(message_value)
+        content_raw = message_dict.get("content")
         if isinstance(content_raw, str):
             content = content_raw
+        elif content_raw is None:
+            content = ""
+        elif isinstance(content_raw, Sequence) and not isinstance(content_raw, (str, bytes, bytearray)):
+            parts = [
+                coerce_str(part.get("text"))
+                for part in (
+                    coerce_json_object(item)
+                    for item in content_raw
+                    if isinstance(item, Mapping)
+                )
+            ]
+            content = "".join(part or "" for part in parts).strip()
         else:
-            content = str(content_raw or "")
-        usage_raw: object = data_obj.get("usage")
-        usage: Dict[str, Any] = {}
-        if isinstance(usage_raw, dict):
-            usage_dict: Dict[str, Any] = usage_raw
+            content = json.dumps(coerce_json_value(content_raw), ensure_ascii=False)
+        usage_raw = data_obj.get("usage")
+        usage: TokenUsage = {}
+        if isinstance(usage_raw, Mapping):
+            usage_obj = coerce_json_object(usage_raw)
+            prompt_tokens = usage_obj.get("prompt_tokens") or usage_obj.get("input_tokens")
+            completion_tokens = (
+                usage_obj.get("completion_tokens") or usage_obj.get("output_tokens")
+            )
+            total_tokens = usage_obj.get("total_tokens")
             usage = {
-                "prompt_tokens": usage_dict.get("prompt_tokens")
-                or usage_dict.get("input_tokens"),
-                "completion_tokens": usage_dict.get("completion_tokens")
-                or usage_dict.get("output_tokens"),
-                "total_tokens": usage_dict.get("total_tokens"),
+                "prompt_tokens": int(prompt_tokens) if isinstance(prompt_tokens, int) else None,
+                "completion_tokens": int(completion_tokens)
+                if isinstance(completion_tokens, int)
+                else None,
+                "total_tokens": int(total_tokens) if isinstance(total_tokens, int) else None,
             }
         return content, usage
 
@@ -200,40 +230,47 @@ class AnthropicChatClient:
     def chat(
         self,
         *,
-        messages: List[Dict[str, Any]],
+        messages: Sequence[ChatMessage],
         temperature: float = 1.0,
-        max_tokens: Optional[int] = None,
-        response_format: Optional[Dict[str, Any]] = None,
-    ) -> Tuple[str, Dict[str, Any]]:
+        max_tokens: int | None = None,
+        response_format: ResponseFormat | None = None,
+    ) -> tuple[str, TokenUsage]:
         if not messages:
             raise ChatClientError("Anthropic requires at least one message")
         max_tokens = max(1, int(max_tokens or 1024))
-        converted: List[Dict[str, Any]] = []
+        converted: list[JSONObject] = []
         for message in messages:
-            role_value = message.get("role") or "user"
-            role = str(role_value)
-            content = message.get("content")
-            parts: List[Dict[str, Any]]
-            if isinstance(content, str):
-                parts = [{"type": "text", "text": content}]
-            elif isinstance(content, list):
-                parts = []
-                content_items = cast(List[Any], content)
-                for entry in content_items:
-                    if isinstance(entry, dict):
-                        parts.append(cast(Dict[str, Any], entry))
-            else:
-                parts = [{"type": "text", "text": json.dumps(content)}]
-            converted.append({"role": role, "content": parts})
+            message_obj = coerce_json_object(message)
+            role_value = coerce_str(message_obj.get("role")) or "user"
+            content_value = message_obj.get("content")
+            parts: list[JSONValue] = []
+            if isinstance(content_value, str):
+                parts.append({"type": "text", "text": content_value})
+            elif isinstance(content_value, Sequence) and not isinstance(
+                content_value, (str, bytes, bytearray)
+            ):
+                for entry in content_value:
+                    if isinstance(entry, Mapping):
+                        parts.append(coerce_json_object(entry))
+            elif content_value is not None:
+                parts.append(
+                    {
+                        "type": "text",
+                        "text": json.dumps(coerce_json_value(content_value), ensure_ascii=False),
+                    }
+                )
+            if not parts:
+                parts.append({"type": "text", "text": ""})
+            converted.append({"role": role_value, "content": parts})
         url = f"{self.base_url}/messages"
         headers = {
             "Content-Type": "application/json",
             "x-api-key": self.api_key,
             "anthropic-version": self.api_version,
         }
-        payload: Dict[str, Any] = {
+        payload: JSONObject = {
             "model": self.model,
-            "messages": converted,
+            "messages": cast(list[JSONValue], converted),
             "temperature": float(temperature),
             "max_tokens": max_tokens,
         }
@@ -249,58 +286,65 @@ class AnthropicChatClient:
             raise ChatClientError(
                 f"Anthropic request failed with status {response.status_code}: {text[:512]}"
             )
-        try:
-            data_raw = response.json()
-        except ValueError as exc:
-            raise ChatClientError("Anthropic response was not valid JSON") from exc
-        if not isinstance(data_raw, dict):
+        data_raw = response.json()
+        if not isinstance(data_raw, Mapping):
             raise ChatClientError("Anthropic response payload is not a JSON object")
-        data_obj = cast(Dict[str, Any], data_raw)
+        data_obj = coerce_json_object(data_raw)
         content_blocks = data_obj.get("content")
-        text_fragments: List[str] = []
-        if isinstance(content_blocks, list):
-            content_block_items = cast(List[Any], content_blocks)
-            for block in content_block_items:
-                if isinstance(block, dict):
-                    block_dict = cast(Dict[str, Any], block)
-                    text_value: object = block_dict.get("text")
+        text_fragments: list[str] = []
+        if isinstance(content_blocks, Sequence) and not isinstance(content_blocks, (str, bytes, bytearray)):
+            for block in content_blocks:
+                if isinstance(block, Mapping):
+                    block_obj = coerce_json_object(block)
+                    text_value = block_obj.get("text")
                     if isinstance(text_value, str):
                         text_fragments.append(text_value)
         content = "".join(text_fragments).strip()
         usage_raw = data_obj.get("usage")
-        usage: Dict[str, Any] = {}
-        if isinstance(usage_raw, dict):
-            usage_dict = cast(Dict[str, Any], usage_raw)
+        usage: TokenUsage = {}
+        if isinstance(usage_raw, Mapping):
+            usage_obj = coerce_json_object(usage_raw)
+            prompt_tokens = usage_obj.get("input_tokens")
+            completion_tokens = usage_obj.get("output_tokens")
+            total_tokens = usage_obj.get("total_tokens")
             usage = {
-                "prompt_tokens": usage_dict.get("input_tokens"),
-                "completion_tokens": usage_dict.get("output_tokens"),
-                "total_tokens": usage_dict.get("total_tokens"),
+                "prompt_tokens": int(prompt_tokens) if isinstance(prompt_tokens, int) else None,
+                "completion_tokens": int(completion_tokens)
+                if isinstance(completion_tokens, int)
+                else None,
+                "total_tokens": int(total_tokens) if isinstance(total_tokens, int) else None,
             }
         return content, usage
 
 
-@dataclass
+@dataclass(frozen=True)
 class ProviderRuntimeConfig:
     provider: LLMProvider
     model: LLMProviderModel | None
     endpoint: str
     api_key: str
-    options: Dict[str, Any]
-    metadata: Dict[str, Any]
+    options: JSONObject
+    metadata: JSONObject
+
+
+def _string_option(options: Mapping[str, JSONValue], key: str) -> str | None:
+    value = options.get(key)
+    text = coerce_str(value)
+    return text.strip() if text else None
 
 
 def _resolve_endpoint(
     provider: LLMProvider,
-    credential_payload: Optional[Dict[str, Any]],
-    options: Dict[str, Any],
+    credential_payload: JSONObject | None,
+    options: JSONObject,
 ) -> str:
-    endpoint_option = options.get("endpoint")
-    if isinstance(endpoint_option, str) and endpoint_option.strip():
-        return endpoint_option.strip()
+    option_endpoint = _string_option(options, "endpoint")
+    if option_endpoint:
+        return option_endpoint
     if credential_payload:
-        endpoint = credential_payload.get("endpoint")
-        if isinstance(endpoint, str) and endpoint.strip():
-            return endpoint.strip()
+        cred_endpoint = _string_option(credential_payload, "endpoint")
+        if cred_endpoint:
+            return cred_endpoint
     if provider.default_endpoint:
         return provider.default_endpoint
     return ""
@@ -308,62 +352,97 @@ def _resolve_endpoint(
 
 def _resolve_api_key(
     provider: LLMProvider,
-    credential_payload: Optional[Dict[str, Any]],
-    options: Dict[str, Any],
+    credential_payload: JSONObject | None,
+    options: JSONObject,
 ) -> str:
-    option_key = options.get("api_key")
-    if isinstance(option_key, str) and option_key.strip():
-        return option_key.strip()
+    option_key = _string_option(options, "api_key")
+    if option_key:
+        return option_key
     if credential_payload:
-        key = credential_payload.get("api_key")
-        if isinstance(key, str) and key.strip():
-            return key.strip()
+        cred_key = _string_option(credential_payload, "api_key")
+        if cred_key:
+            return cred_key
     return ""
 
 
-def _resolve_metadata(credential_payload: Optional[Dict[str, Any]]) -> Dict[str, Any]:
-    metadata = credential_payload.get("metadata") if credential_payload else None
-    return dict(metadata or {})
+def _resolve_metadata(credential_payload: JSONObject | None) -> JSONObject:
+    if not credential_payload:
+        return {}
+    metadata_value = credential_payload.get("metadata")
+    return coerce_json_object(metadata_value)
 
 
-def _first_matching_model(
-    models_payload: Optional[Iterable[Any]],
-    model_name: str,
-) -> Optional[Dict[str, Any]]:
+def _first_matching_model(models_payload: object, model_name: str) -> JSONObject | None:
     if not models_payload or not model_name:
         return None
-    target_name = model_name.strip().lower()
-    if not target_name:
+    target = model_name.strip().lower()
+    if not target:
         return None
-    for entry in models_payload:
-        if not isinstance(entry, Mapping):
-            continue
-        entry_name_raw = entry.get("name") or entry.get("id")
-        if not isinstance(entry_name_raw, str):
-            continue
-        entry_name = entry_name_raw.strip().lower()
-        if not entry_name:
-            continue
-        if entry_name == target_name:
-            return {str(key): value for key, value in entry.items()}
+    candidates: list[JSONObject] = []
+    if isinstance(models_payload, Mapping):
+        mapping_payload = cast(Mapping[object, object], models_payload)
+        candidates.append(coerce_json_object(mapping_payload))
+    elif isinstance(models_payload, Sequence) and not isinstance(models_payload, (str, bytes, bytearray)):
+        entries_iter = cast(Sequence[object], models_payload)
+        for entry in entries_iter:
+            if isinstance(entry, Mapping):
+                mapping_entry = cast(Mapping[object, object], entry)
+                candidates.append(coerce_json_object(mapping_entry))
+    for entry in candidates:
+        entry_name = coerce_str(entry.get("name") or entry.get("id"))
+        if entry_name and entry_name.strip().lower() == target:
+            return entry
     return None
 
 
-def _merge_default_options(base: Dict[str, Any], defaults: Optional[Mapping[str, Any]]) -> None:
-    if not defaults:
-        return
+def _apply_default_options(target: JSONObject, defaults: Mapping[str, JSONValue]) -> None:
     for key, value in defaults.items():
-        if key in base:
+        if key in target:
             continue
-        if value is None:
+        json_value = coerce_json_value(value)
+        if json_value is None:
             continue
-        if isinstance(value, str):
-            candidate = value.strip()
-            if not candidate:
-                continue
-            base[key] = candidate
-        else:
-            base[key] = value
+        target[key] = json_value
+
+
+class _AzureChatAdapter:
+    """Adapter that normalises AzureChatClient to the ChatClient protocol."""
+
+    def __init__(self, client: AzureChatClient) -> None:
+        self._client = client
+
+    def chat(
+        self,
+        *,
+        messages: Sequence[ChatMessage],
+        temperature: float = 1.0,
+        max_tokens: int | None = None,
+        response_format: ResponseFormat | None = None,
+    ) -> tuple[str, TokenUsage]:
+        converted_messages: list[dict[str, str]] = []
+        for message in messages:
+            message_obj = coerce_json_object(message)
+            role = coerce_str(message_obj.get("role")) or "user"
+            content_value = message_obj.get("content")
+            if isinstance(content_value, str):
+                content_text = content_value
+            elif content_value is None:
+                content_text = ""
+            else:
+                content_text = json.dumps(coerce_json_value(content_value), ensure_ascii=False)
+            converted_messages.append({"role": role, "content": content_text})
+        content, usage_payload = self._client.chat(
+            messages=converted_messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            response_format=response_format,
+        )
+        usage: TokenUsage = {
+            "prompt_tokens": coerce_int(usage_payload.get("prompt_tokens")),
+            "completion_tokens": coerce_int(usage_payload.get("completion_tokens")),
+            "total_tokens": coerce_int(usage_payload.get("total_tokens")),
+        }
+        return content, usage
 
 
 def build_chat_client(
@@ -378,61 +457,67 @@ def build_chat_client(
     api_key = provider_runtime.api_key
 
     if provider.api_kind == "azure_openai":
-        deployment = options.get("azure_deployment")
+        deployment = _string_option(options, "azure_deployment")
         if not deployment and metadata:
             for key in ("azure_deployment", "default_deployment", "deployment"):
-                value = metadata.get(key)
-                if isinstance(value, str) and value.strip():
-                    deployment = value.strip()
+                value = _string_option(metadata, key)
+                if value:
+                    deployment = value
                     break
         if not deployment and model and model.deployment_env:
-            deployment = os.getenv(model.deployment_env)
+            env_value = os.getenv(model.deployment_env)
+            if env_value and env_value.strip():
+                deployment = env_value.strip()
         if not deployment:
             raise ChatClientError(
                 "Azure provider requires an `azure_deployment` option or stored metadata",
             )
-        allow_non_ca = bool(
-            options.get("allow_non_ca_region")
-            or metadata.get("allow_non_ca_region")
-        )
+        allow_non_ca = coerce_bool(options.get("allow_non_ca_region"))
+        if allow_non_ca is None and metadata:
+            allow_non_ca = coerce_bool(metadata.get("allow_non_ca_region"))
         cfg = AzureClientConfig(
             endpoint=endpoint,
             key=api_key,
             deployment=deployment,
-            api_version=str(options.get("api_version") or os.getenv("AZURE_OPENAI_API_VERSION", "2024-10-21")),
-            allow_non_ca_region=allow_non_ca,
+            api_version=_string_option(options, "api_version")
+            or os.getenv("AZURE_OPENAI_API_VERSION", "2024-10-21"),
+            allow_non_ca_region=bool(allow_non_ca),
         )
-        return AzureChatClient(cfg)
+        return _AzureChatAdapter(AzureChatClient(cfg))
 
     if provider.api_kind == "anthropic":
+        timeout = coerce_int(options.get("timeout")) or 120
+        api_version = _string_option(options, "api_version") or "2023-06-01"
+        model_name = model.name if model else _string_option(options, "model") or "claude-3-haiku-20240307"
         return AnthropicChatClient(
             base_url=endpoint or "https://api.anthropic.com/v1",
             api_key=api_key,
-            model=model.name if model else provider_runtime.options.get("model") or "claude-3-haiku-20240307",
-            timeout=int(options.get("timeout") or 120),
-            api_version=str(options.get("api_version") or "2023-06-01"),
+            model=model_name,
+            timeout=timeout,
+            api_version=api_version,
         )
 
-    if provider.api_kind in {"openai", "ollama", "cohere", "mistral", "deepseek", "fireworks", "groq", "openrouter", "perplexity", "together"}:
-        extra_headers: Dict[str, str] = {}
-        if metadata:
-            headers_meta = metadata.get("headers")
-            if isinstance(headers_meta, Mapping):
-                headers_mapping = cast(Mapping[str, Any], headers_meta)
-                for key, value in headers_mapping.items():
-                    if key:
-                        extra_headers[key] = str(value)
-        option_headers = options.get("headers")
-        if isinstance(option_headers, Mapping):
-            option_mapping = cast(Mapping[str, Any], option_headers)
-            for key, value in option_mapping.items():
-                if key:
-                    extra_headers[key] = str(value)
-        timeout = int(options.get("timeout") or 120)
+    if provider.api_kind in {
+        "openai",
+        "ollama",
+        "cohere",
+        "mistral",
+        "deepseek",
+        "fireworks",
+        "groq",
+        "openrouter",
+        "perplexity",
+        "together",
+    }:
+        extra_headers = coerce_str_dict(metadata.get("headers"))
+        option_headers = coerce_str_dict(options.get("headers"))
+        extra_headers.update(option_headers)
+        timeout = coerce_int(options.get("timeout")) or 120
+        model_name = model.name if model else _string_option(options, "model") or "gpt-4o-mini"
         return OpenAIChatClient(
             base_url=endpoint or provider.default_endpoint or "https://api.openai.com/v1",
             api_key=api_key,
-            model=model.name if model else provider_runtime.options.get("model") or "gpt-4o-mini",
+            model=model_name,
             timeout=timeout,
             extra_headers=extra_headers,
         )
@@ -450,52 +535,56 @@ def build_provider_runtime_config(
     *,
     provider: LLMProvider,
     model_name: str,
-    credential_payload: Optional[Dict[str, Any]],
-    options: Optional[Dict[str, Any]] = None,
+    credential_payload: Mapping[str, JSONValue] | None,
+    options: Mapping[str, JSONValue] | None = None,
 ) -> ProviderRuntimeConfig:
     model = provider.models.get(model_name) if model_name in provider.models else None
-    options = dict(options or {})
+    user_options = coerce_json_object(options) if options else {}
     if model and model.options:
-        _merge_default_options(options, model.options)
+        _apply_default_options(user_options, model.options)
 
-    models_payload = credential_payload.get("models") if credential_payload else None
-    credential_model = _first_matching_model(models_payload, model_name)
-    if credential_model:
-        credential_options = credential_model.get("options")
-        if isinstance(credential_options, Mapping):
-            _merge_default_options(options, credential_options)
-        deployment_env = credential_model.get("deployment_env")
-        if (
-            "azure_deployment" not in options
-            and isinstance(deployment_env, str)
-            and deployment_env.strip()
-        ):
-            options["azure_deployment"] = deployment_env.strip()
+    credential_payload_obj = coerce_json_object(credential_payload) if credential_payload else None
+    credential_model: JSONObject | None = None
+    if credential_payload_obj:
+        credential_model = _first_matching_model(credential_payload_obj.get("models"), model_name)
+        if credential_model:
+            credential_options = credential_model.get("options")
+            if isinstance(credential_options, Mapping):
+                credential_options_mapping = cast(Mapping[object, object], credential_options)
+                credential_options_obj = coerce_json_object(credential_options_mapping)
+                _apply_default_options(user_options, credential_options_obj)
+            deployment_env_value = coerce_str(credential_model.get("deployment_env"))
+            if (
+                deployment_env_value
+                and "azure_deployment" not in user_options
+            ):
+                user_options["azure_deployment"] = deployment_env_value
 
     if (
         provider.api_kind == "azure_openai"
-        and "azure_deployment" not in options
+        and "azure_deployment" not in user_options
         and model
-        and isinstance(model.deployment_env, str)
-        and model.deployment_env.strip()
+        and model.deployment_env
     ):
-        env_value = os.getenv(model.deployment_env.strip())
+        deployment_env_value = model.deployment_env.strip() if model.deployment_env else ""
+        env_value = os.getenv(deployment_env_value) if deployment_env_value else None
         if env_value and env_value.strip():
-            options["azure_deployment"] = env_value.strip()
-        else:
-            options["azure_deployment"] = model.deployment_env.strip()
+            user_options["azure_deployment"] = env_value.strip()
+        elif deployment_env_value:
+            user_options["azure_deployment"] = deployment_env_value
 
-    endpoint = _resolve_endpoint(provider, credential_payload, options)
-    api_key = _resolve_api_key(provider, credential_payload, options)
-    metadata = _resolve_metadata(credential_payload)
+    endpoint = _resolve_endpoint(provider, credential_payload_obj, user_options)
+    api_key = _resolve_api_key(provider, credential_payload_obj, user_options)
+    metadata = _resolve_metadata(credential_payload_obj)
     if provider.requires_api_key and not api_key:
         raise ChatClientError(f"Provider '{provider.name}' requires an API key")
+    merged_options = merge_json_objects(user_options)
     return ProviderRuntimeConfig(
         provider=provider,
         model=model,
         endpoint=endpoint,
         api_key=api_key,
-        options=options,
+        options=merged_options,
         metadata=metadata,
     )
 

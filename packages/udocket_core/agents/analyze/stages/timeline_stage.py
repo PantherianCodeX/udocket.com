@@ -16,7 +16,7 @@ from ...common.chunking import (
     should_retry_for_length,
     split_for_retry,
 )
-from packages.udocket_core.llm.runtime import ChatClient
+from packages.udocket_core.llm.runtime import ChatClient, ResponseFormat
 from ....json_utils import parse_json_value
 
 logger = logging.getLogger("udocket.analyze.timeline_stage")
@@ -171,6 +171,16 @@ def generate_timeline(
                 f"Transcript excerpts (remaining chunks: {len(chunk_queue)+1}):\n" + chunk_text
             )
             try:
+                response_format = cast(
+                    ResponseFormat,
+                    {
+                        "type": "json_schema",
+                        "json_schema": {
+                            "name": "timeline_v1",
+                            "schema": TIMELINE_SCHEMA,
+                        },
+                    },
+                )
                 content, usage = llm_client.chat(
                     messages=[
                         {"role": "system", "content": system_prompt},
@@ -178,10 +188,7 @@ def generate_timeline(
                     ],
                     temperature=temperature,
                     max_tokens=max(1, max_tokens),
-                    response_format={
-                        "type": "json_schema",
-                        "json_schema": {"name": "timeline_v1", "schema": TIMELINE_SCHEMA},
-                    },
+                    response_format=response_format,
                 )
             except RuntimeError as exc:
                 if should_retry_for_length(str(exc)):

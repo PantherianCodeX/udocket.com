@@ -41,6 +41,19 @@ def coerce_json_object(value: object, *, default: JSONObject | None = None) -> J
     return {} if default is None else dict(default)
 
 
+def merge_json_objects(*objects: object) -> JSONObject:
+    """Merge mapping-like objects into a single JSON object."""
+
+    merged: JSONObject = {}
+    for candidate in objects:
+        if not isinstance(candidate, Mapping):
+            continue
+        mapping_value = cast(Mapping[object, object], candidate)
+        for key, value in mapping_value.items():
+            merged[str(key)] = coerce_json_value(value)
+    return merged
+
+
 def json_object_to_dict(payload: JSONObject) -> dict[str, Any]:
     """Convert a ``JSONObject`` into a plain ``dict`` with ``Any`` values."""
 
@@ -76,6 +89,34 @@ def coerce_object_list(value: object) -> list[JSONObject]:
                 result.append(coerce_json_object(mapping_item))
         return result
     return []
+
+
+def coerce_str_dict(
+    value: object,
+    *,
+    drop_empty: bool = True,
+    value_drop_empty: bool = True,
+    lower_keys: bool = False,
+) -> dict[str, str]:
+    """Return a mapping of strings coerced from ``value`` when possible."""
+
+    if not isinstance(value, Mapping):
+        return {}
+    mapping_value = cast(Mapping[object, object], value)
+    result: dict[str, str] = {}
+    for key, raw_value in mapping_value.items():
+        key_str = str(key).strip()
+        if lower_keys:
+            key_str = key_str.lower()
+        if drop_empty and not key_str:
+            continue
+        value_str = coerce_str(raw_value)
+        if value_drop_empty and not value_str:
+            continue
+        if value_str is None:
+            continue
+        result[key_str] = value_str
+    return result
 
 
 def coerce_str(value: object) -> str | None:
@@ -308,9 +349,11 @@ __all__ = [
     "is_json_scalar",
     "coerce_json_value",
     "coerce_json_object",
+    "merge_json_objects",
     "ensure_json_object",
     "coerce_json_array",
     "coerce_object_list",
+    "coerce_str_dict",
     "coerce_str",
     "coerce_str_list",
     "coerce_int",

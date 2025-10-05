@@ -3,7 +3,12 @@ from __future__ import annotations
 # pyright: strict
 
 from collections.abc import Iterable, Mapping, Sequence
-from typing import Any, Mapping as TypingMapping, NotRequired, Required, TypedDict, cast
+from typing import Any, Mapping as TypingMapping, cast
+
+try:  # pragma: no cover - Python < 3.11 fallback
+    from typing import NotRequired, Required, TypedDict
+except ImportError:  # pragma: no cover - use typing_extensions when stdlib lacks PEP 655 types
+    from typing_extensions import NotRequired, Required, TypedDict
 
 from django.db import transaction
 

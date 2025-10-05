@@ -1,18 +1,30 @@
 from __future__ import annotations
 
+# pyright: strict
+
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, cast
+from typing import Optional
 
-from packages.udocket_core.json_utils import load_json_object
+from packages.udocket_core.json_utils import (
+    JSONObject,
+    JSONValue,
+    coerce_bool,
+    coerce_float,
+    coerce_int,
+    coerce_json_object,
+    coerce_str,
+    coerce_str_list,
+    load_json_object,
+)
 
 BASE_DIR = Path(__file__).resolve().parents[3]
 PROVIDERS_PATH = BASE_DIR / "config" / "llm_providers.json"
 ASSIGNMENTS_PATH = BASE_DIR / "config" / "llm_assignments.json"
 
 
-@dataclass
+@dataclass(frozen=True)
 class LLMProviderModel:
     name: str
     label: str
@@ -28,41 +40,41 @@ class LLMProviderModel:
     deployment_env: Optional[str] = None
     origin: Optional[str] = None
     default_enabled: bool = True
-    options: Dict[str, Any] = field(default_factory=dict)
+    options: dict[str, JSONValue] = field(default_factory=dict)
 
 
-@dataclass
+@dataclass(frozen=True)
 class LLMProvider:
     name: str
     display_name: str
-    models: Dict[str, LLMProviderModel]
-    env_requirements: List[str] = field(default_factory=list)
+    models: dict[str, LLMProviderModel]
+    env_requirements: list[str] = field(default_factory=list)
     api_kind: str = "openai"
     default_endpoint: str = ""
     requires_api_key: bool = True
     description: str = ""
     category: str = "creator"
-    hosted_creators: List[str] = field(default_factory=list)
+    hosted_creators: list[str] = field(default_factory=list)
 
     def is_available(self) -> bool:
         return all(os.getenv(key) for key in self.env_requirements)
 
 
-@dataclass
+@dataclass(frozen=True)
 class LLMStageAssignment:
     stage_key: str
-    providers: List[str]
+    providers: list[str]
     model: str
-    options: Dict[str, str] = field(default_factory=dict)
+    options: dict[str, str] = field(default_factory=dict)
     target: str = ""
     label: str = ""
     description: str = ""
 
 
-@dataclass
+@dataclass(frozen=True)
 class LLMSettings:
-    providers: Dict[str, LLMProvider]
-    assignments: Dict[str, LLMStageAssignment]
+    providers: dict[str, LLMProvider]
+    assignments: dict[str, LLMStageAssignment]
 
     def provider(self, name: str) -> Optional[LLMProvider]:
         return self.providers.get(name)
@@ -70,11 +82,11 @@ class LLMSettings:
     def stage(self, stage_key: str) -> Optional[LLMStageAssignment]:
         return self.assignments.get(stage_key)
 
-    def all_stage_keys(self) -> List[str]:
+    def all_stage_keys(self) -> list[str]:
         return list(self.assignments.keys())
 
-    def stage_targets(self) -> Dict[str, List[str]]:
-        targets: Dict[str, List[str]] = {}
+    def stage_targets(self) -> dict[str, list[str]]:
+        targets: dict[str, list[str]] = {}
         for assignment in self.assignments.values():
             target = (assignment.target or "").strip().lower()
             if not target:
@@ -87,121 +99,99 @@ class LLMSettings:
             targets[target] = sorted(keys)
         return targets
 
-    def stage_keys_for_target(self, target: str) -> List[str]:
+    def stage_keys_for_target(self, target: str) -> list[str]:
         normalized = (target or "").strip().lower()
         if not normalized:
             return []
         return list(self.stage_targets().get(normalized, []))
 
-
-def _load_json(path: Path) -> Dict[str, object]:
+def _load_json(path: Path) -> JSONObject:
     if not path.exists():
         return {}
     payload = load_json_object(path, context=str(path))
     return {str(key): value for key, value in payload.items()}
 
 
-def _as_dict(value: object) -> Dict[str, Any]:
-    mapping: Mapping[Any, Any]
-    if isinstance(value, dict):
-        mapping = cast(Mapping[Any, Any], value)
-    elif isinstance(value, Mapping):
-        mapping = value
-    else:
-        return {}
-    normalized: Dict[str, Any] = {}
-    for key, raw in mapping.items():
-        normalized[str(key)] = raw
-    return normalized
-
-
-def _as_list(value: object) -> List[Any]:
-    if isinstance(value, (list, tuple)):
-        iterable = cast(Iterable[Any], value)
-        return [element for element in iterable]
-    return []
-
-
 def load_llm_settings(
     providers_path: Path = PROVIDERS_PATH,
     assignments_path: Path = ASSIGNMENTS_PATH,
 ) -> LLMSettings:
-    providers_raw = _load_json(providers_path).get("providers", {})
-    providers_payload = _as_dict(providers_raw)
-    provider_map: Dict[str, LLMProvider] = {}
-    for name, payload_obj in providers_payload.items():
-        payload = _as_dict(payload_obj)
-        models_payload = _as_dict(payload.get("models", {}))
-        models: Dict[str, LLMProviderModel] = {}
-        for model_name, model_cfg_obj in models_payload.items():
-            model_cfg = _as_dict(model_cfg_obj)
+    providers_root = coerce_json_object(_load_json(providers_path).get("providers"))
+    provider_map: dict[str, LLMProvider] = {}
+    for name, provider_payload_raw in providers_root.items():
+        provider_payload = coerce_json_object(provider_payload_raw)
+        models_payload = coerce_json_object(provider_payload.get("models"))
+        models: dict[str, LLMProviderModel] = {}
+        for model_name, model_cfg_raw in models_payload.items():
+            model_cfg = coerce_json_object(model_cfg_raw)
+            options_payload = coerce_json_object(model_cfg.get("options"))
+            model_options: dict[str, JSONValue] = dict(options_payload.items())
+            default_enabled_value = coerce_bool(model_cfg.get("default_enabled"), default=True)
+            default_enabled = True if default_enabled_value is None else default_enabled_value
             models[model_name] = LLMProviderModel(
                 name=model_name,
-                label=model_cfg.get("label", model_name),
-                cost_tier=model_cfg.get("cost_tier", "standard"),
-                max_output_tokens=model_cfg.get("max_output_tokens"),
-                context_window_tokens=model_cfg.get("context_window_tokens"),
-                max_input_tokens=model_cfg.get("max_input_tokens"),
-                max_chunk_chars=model_cfg.get("max_chunk_chars"),
-                chunk_overlap_tokens=model_cfg.get("chunk_overlap_tokens"),
-                max_prompt_chars=model_cfg.get("max_prompt_chars"),
-                max_prompt_segments=model_cfg.get("max_prompt_segments"),
-                default_temperature=model_cfg.get("default_temperature"),
-                deployment_env=model_cfg.get("deployment_env"),
-                origin=model_cfg.get("origin"),
-                default_enabled=bool(
-                    model_cfg.get("default_enabled", True)
-                ),
-                options={
-                    str(k): v
-                    for k, v in _as_dict(model_cfg.get("options")).items()
-                },
+                label=coerce_str(model_cfg.get("label")) or model_name,
+                cost_tier=coerce_str(model_cfg.get("cost_tier")) or "standard",
+                max_output_tokens=coerce_int(model_cfg.get("max_output_tokens")),
+                context_window_tokens=coerce_int(model_cfg.get("context_window_tokens")),
+                max_input_tokens=coerce_int(model_cfg.get("max_input_tokens")),
+                max_chunk_chars=coerce_int(model_cfg.get("max_chunk_chars")),
+                chunk_overlap_tokens=coerce_int(model_cfg.get("chunk_overlap_tokens")),
+                max_prompt_chars=coerce_int(model_cfg.get("max_prompt_chars")),
+                max_prompt_segments=coerce_int(model_cfg.get("max_prompt_segments")),
+                default_temperature=coerce_float(model_cfg.get("default_temperature")),
+                deployment_env=coerce_str(model_cfg.get("deployment_env")),
+                origin=coerce_str(model_cfg.get("origin")),
+                default_enabled=default_enabled,
+                options=model_options,
             )
-        hosted_creators = [
-            str(entry)
-            for entry in _as_list(payload.get("hosted_creators"))
-            if isinstance(entry, (str, int, float))
-        ]
-        env_requirements = [
-            str(item)
-            for item in _as_list(payload.get("env_requirements"))
-            if isinstance(item, str)
-        ]
+
+        hosted_creators: list[str] = coerce_str_list(provider_payload.get("hosted_creators"))
+        env_requirements: list[str] = coerce_str_list(provider_payload.get("env_requirements"))
+        requires_api_key_value = coerce_bool(provider_payload.get("requires_api_key"), default=True)
+        requires_api_key = True if requires_api_key_value is None else requires_api_key_value
+
         provider_map[name] = LLMProvider(
             name=name,
-            display_name=payload.get("display_name", name.title()),
+            display_name=coerce_str(provider_payload.get("display_name")) or name.title(),
             models=models,
             env_requirements=env_requirements,
-            api_kind=str(payload.get("api_kind") or "openai"),
-            default_endpoint=str(payload.get("default_endpoint") or ""),
-            requires_api_key=bool(payload.get("requires_api_key", True)),
-            description=str(payload.get("description") or ""),
-            category=str(payload.get("category") or "creator"),
+            api_kind=coerce_str(provider_payload.get("api_kind")) or "openai",
+            default_endpoint=coerce_str(provider_payload.get("default_endpoint")) or "",
+            requires_api_key=requires_api_key,
+            description=coerce_str(provider_payload.get("description")) or "",
+            category=coerce_str(provider_payload.get("category")) or "creator",
             hosted_creators=hosted_creators,
         )
 
-    assignments_raw = _load_json(assignments_path).get("stages", {})
-    assignments_payload = _as_dict(assignments_raw)
-    assignment_map: Dict[str, LLMStageAssignment] = {}
-    for stage_key, payload_obj in assignments_payload.items():
-        payload = _as_dict(payload_obj)
-        providers_raw = _as_list(payload.get("providers"))
-        providers = [str(p) for p in providers_raw if isinstance(p, str)]
-        model_value = payload.get("model")
-        model = str(model_value) if isinstance(model_value, str) else ""
-        options_raw = _as_dict(payload.get("options"))
-        options = {str(k): str(v) for k, v in options_raw.items()}
-        target = payload.get("target") or stage_key.split(".", 1)[0]
-        label = payload.get("label") or stage_key
-        description = payload.get("description") or ""
+    assignments_root = coerce_json_object(_load_json(assignments_path).get("stages"))
+    assignment_map: dict[str, LLMStageAssignment] = {}
+    for stage_key, assignment_payload_raw in assignments_root.items():
+        assignment_payload = coerce_json_object(assignment_payload_raw)
+        providers = coerce_str_list(assignment_payload.get("providers"))
+        model = coerce_str(assignment_payload.get("model")) or ""
+        options_payload = coerce_json_object(assignment_payload.get("options"))
+        options: dict[str, str] = {key: str(value) for key, value in options_payload.items()}
+        target = coerce_str(assignment_payload.get("target")) or stage_key.split(".", 1)[0]
+        label = coerce_str(assignment_payload.get("label")) or stage_key
+        description = coerce_str(assignment_payload.get("description")) or ""
         assignment_map[stage_key] = LLMStageAssignment(
             stage_key=stage_key,
             providers=providers,
             model=model,
             options=options,
-            target=str(target),
-            label=str(label),
-            description=str(description),
+            target=target,
+            label=label,
+            description=description,
         )
 
     return LLMSettings(providers=provider_map, assignments=assignment_map)
+
+
+__all__ = [
+    "LLMProviderModel",
+    "LLMProvider",
+    "LLMStageAssignment",
+    "LLMSettings",
+    "load_llm_settings",
+]

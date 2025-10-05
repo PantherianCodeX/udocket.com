@@ -1,13 +1,23 @@
 from __future__ import annotations
 
+# pyright: strict
+
 import json
 import logging
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Optional
 
-from packages.udocket_core.json_utils import parse_json_object
+from packages.udocket_core.json_utils import (
+    JSONObject,
+    JSONValue,
+    coerce_json_object,
+    coerce_json_value,
+    coerce_str,
+    parse_json_object,
+)
 from packages.udocket_core.llm import LLMSettings, load_llm_settings
-from packages.udocket_core.llm.config import LLMProvider, LLMProviderModel
+from packages.udocket_core.llm.config import LLMProvider
 from packages.udocket_core.llm.runtime import (
     ChatClient,
     ChatClientError,
@@ -18,9 +28,9 @@ from packages.udocket_core.llm.runtime import (
 logger = logging.getLogger("udocket.guardian")
 
 
-def _normalize_providers(values: Iterable[str]) -> List[str]:
+def _normalize_providers(values: Iterable[str]) -> list[str]:
     seen: set[str] = set()
-    output: List[str] = []
+    output: list[str] = []
     for raw in values:
         name = (raw or "").strip().lower()
         if not name or name in seen:
@@ -38,35 +48,34 @@ def _select_model_name(provider: LLMProvider, preferred: Optional[str]) -> Optio
 
     # Prefer default-enabled models
     for model in provider.models.values():
-        if isinstance(model, LLMProviderModel) and model.default_enabled:
+        if model.default_enabled:
             return model.name
 
     # Fall back to the first declared model if available
     for model in provider.models.values():
-        if isinstance(model, LLMProviderModel):
-            return model.name
+        return model.name
 
     return None
 
 
-@dataclass
+@dataclass(frozen=True)
 class GuardianConfig:
-    provider_chain: List[str] = field(default_factory=lambda: ["azure"])
+    provider_chain: list[str] = field(default_factory=lambda: ["azure"])
     model: Optional[str] = None
     temperature: float = 0.0
     max_tokens: int = 2048
     retry_attempts: int = 1
 
 
-@dataclass
+@dataclass(frozen=True)
 class GuardianVerdict:
     approved: bool
     provider: Optional[str]
     model: Optional[str]
     notes: Optional[str]
-    violations: List[Dict[str, Any]]
-    usage: Dict[str, int]
-    raw: Dict[str, Any]
+    violations: list[JSONObject]
+    usage: dict[str, int]
+    raw: JSONObject
     remediation: Optional[str]
 
 
@@ -77,8 +86,8 @@ class GuardianRejection(RuntimeError):
         self.verdict = verdict
 
 
-def _usage_dict(payload: Dict[str, Any]) -> Dict[str, int]:
-    collector: Dict[str, int] = {}
+def _usage_dict(payload: Mapping[str, object]) -> dict[str, int]:
+    collector: dict[str, int] = {}
     for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
         value = payload.get(key)
         if isinstance(value, int):
@@ -105,12 +114,13 @@ class GuardianAgent:
         case_id: str,
         job_id: str,
         artifact_kind: str,
-        payload: Dict[str, Any],
+        payload: Mapping[str, JSONValue],
         providers: Optional[Iterable[str]] = None,
         model: Optional[str] = None,
-        options: Optional[Dict[str, Any]] = None,
-        provider_credentials: Optional[Dict[str, Dict[str, Any]]] = None,
-        context: Optional[Dict[str, Any]] = None,
+        options: Optional[Mapping[str, JSONValue]] = None,
+        provider_credentials: Optional[Mapping[str, Mapping[str, JSONValue]]]
+        = None,
+        context: Optional[Mapping[str, JSONValue]] = None,
         max_tokens: Optional[int] = None,
         temperature: Optional[float] = None,
     ) -> GuardianVerdict:
@@ -123,7 +133,10 @@ class GuardianAgent:
         if not provider_order:
             provider_order = list(self.config.provider_chain or ["azure"])
 
-        default_options = dict(options or {})
+        merged_options: dict[str, JSONValue] = {}
+        if options:
+            for key, value in options.items():
+                merged_options[key] = coerce_json_value(value)
         selected_model = model or self.config.model
         configured_max_tokens = max_tokens or self.config.max_tokens
         configured_temperature = (
@@ -136,10 +149,8 @@ class GuardianAgent:
                 provider_order = _normalize_providers(stage_assignment.providers)
             if not selected_model:
                 selected_model = stage_assignment.model or selected_model
-            default_options = {
-                **(stage_assignment.options or {}),
-                **default_options,
-            }
+            for key, value in stage_assignment.options.items():
+                merged_options[key] = value
 
         last_verdict: Optional[GuardianVerdict] = None
         attempts = max(1, int(self.config.retry_attempts))
@@ -168,11 +179,15 @@ class GuardianAgent:
             runtime = None
             client: Optional[ChatClient] = None
             try:
+                runtime_options = dict(merged_options) if merged_options else None
+                credential_dict = (
+                    dict(credential_payload) if credential_payload is not None else None
+                )
                 runtime = build_provider_runtime_config(
                     provider=provider_meta,
                     model_name=provider_model_name,
-                    credential_payload=credential_payload,
-                    options=default_options or None,
+                    credential_payload=credential_dict,
+                    options=runtime_options,
                 )
                 client = build_chat_client(provider_runtime=runtime)
             except ChatClientError as exc:
@@ -201,15 +216,17 @@ class GuardianAgent:
                     " Approve only when no violations are present."
                 )
 
-                effective_context = dict(context or {})
+                effective_context: dict[str, JSONValue] = {}
+                if context:
+                    effective_context.update(context)
                 if attempt > 0 and last_verdict is not None:
                     effective_context.setdefault("guardian_feedback", last_verdict.raw)
 
-                review_payload = {
+                review_payload: JSONObject = {
                     "case_id": case_id,
                     "job_id": job_id,
                     "artifact_kind": artifact_kind,
-                    "artifact": payload,
+                    "artifact": coerce_json_object(payload),
                     "context": effective_context,
                     "guardrails": {
                         "disallow_legal_advice": True,
@@ -260,7 +277,7 @@ class GuardianAgent:
         raw_response: Optional[str],
         provider: Optional[str],
         model: Optional[str],
-        usage: Dict[str, int],
+        usage: dict[str, int],
     ) -> GuardianVerdict:
         if not raw_response:
             raise RuntimeError("Guardian returned no response")
@@ -277,29 +294,30 @@ class GuardianAgent:
             raise RuntimeError(f"Guardian response parse error: {exc}") from exc
 
         approved = bool(payload.get("approved"))
-        notes = payload.get("notes") if isinstance(payload, Mapping) else None
+        notes = coerce_str(payload.get("notes"))
         remediation: Optional[str] = None
         raw_remediation = payload.get("remediation") or payload.get("remediation_instructions")
         if raw_remediation:
             remediation = str(raw_remediation)
         violations_raw = payload.get("violations")
-        violations: List[Dict[str, Any]] = []
+        violations: list[JSONObject] = []
         if isinstance(violations_raw, list):
             for entry in violations_raw:
                 if isinstance(entry, dict):
-                    category = str(entry.get("category") or "uncategorized")
-                    severity = str(entry.get("severity") or "medium")
-                    message = str(entry.get("message") or "")
-                    citation = entry.get("citation")
-                    recommendation = entry.get("recommendation")
-                    violation_entry: Dict[str, Any] = {
+                    entry_obj = coerce_json_object(entry)
+                    category = coerce_str(entry_obj.get("category")) or "uncategorized"
+                    severity = coerce_str(entry_obj.get("severity")) or "medium"
+                    message = coerce_str(entry_obj.get("message")) or ""
+                    citation = entry_obj.get("citation")
+                    recommendation = entry_obj.get("recommendation")
+                    violation_entry: JSONObject = {
                         "category": category,
                         "severity": severity,
                         "message": message,
                     }
-                    if citation:
+                    if citation is not None:
                         violation_entry["citation"] = citation
-                    if recommendation:
+                    if recommendation is not None:
                         violation_entry["recommendation"] = recommendation
                     violations.append(violation_entry)
                 elif isinstance(entry, str):
@@ -315,10 +333,10 @@ class GuardianAgent:
             approved=approved,
             provider=provider,
             model=model,
-            notes=str(notes) if notes else None,
+            notes=notes,
             violations=violations,
             usage=usage,
-            raw=payload if isinstance(payload, dict) else {"raw": raw_response},
+            raw=payload,
             remediation=str(remediation) if remediation else None,
         )
 

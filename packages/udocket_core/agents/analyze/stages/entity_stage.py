@@ -17,13 +17,12 @@ from ...common.chunking import (
     split_for_retry,
 )
 from packages.udocket_core.json_utils import (
-    JSONObject,
     coerce_object_list,
     coerce_str_list,
     json_object_to_dict,
     parse_json_object,
 )
-from packages.udocket_core.llm.runtime import ChatClient
+from packages.udocket_core.llm.runtime import ChatClient, ResponseFormat
 
 logger = logging.getLogger("udocket.analyze.entity_stage")
 
@@ -214,29 +213,53 @@ def _merge_entity_payload(target: Dict[str, Any], update: Dict[str, Any]) -> Non
             if normalized_entity.get("type") and not existing.get("type"):
                 existing["type"] = normalized_entity["type"]
 
-        existing_aliases = existing.setdefault("aliases", [])
-        if not isinstance(existing_aliases, list):
-            existing_aliases = []
-            existing["aliases"] = existing_aliases
-        alias_seen: Set[str] = {alias for alias in existing_aliases if isinstance(alias, str)}
-        for alias in cast(List[str], normalized_entity.get("aliases", [])):
-            if alias not in alias_seen:
-                existing_aliases.append(alias)
+        aliases_value = existing.setdefault("aliases", [])
+        alias_list: List[str] = []
+        if isinstance(aliases_value, list):
+            for existing_alias in cast(List[object], aliases_value):
+                if isinstance(existing_alias, str):
+                    alias_list.append(existing_alias)
+        existing["aliases"] = alias_list
+        alias_seen: Set[str] = set(alias_list)
+        normalized_aliases = normalized_entity.get("aliases")
+        if isinstance(normalized_aliases, list):
+            for raw_alias in cast(List[object], normalized_aliases):
+                if not isinstance(raw_alias, str):
+                    continue
+                alias = raw_alias.strip()
+                if not alias or alias in alias_seen:
+                    continue
+                alias_list.append(alias)
                 alias_seen.add(alias)
 
-        existing_mentions = existing.setdefault("mentions", [])
-        if not isinstance(existing_mentions, list):
-            existing_mentions = []
-            existing["mentions"] = existing_mentions
+        mentions_value = existing.setdefault("mentions", [])
+        mentions_list: List[Dict[str, Any]] = []
+        if isinstance(mentions_value, list):
+            for existing_mention in cast(List[object], mentions_value):
+                if isinstance(existing_mention, Mapping):
+                    mention_mapping = cast(Mapping[object, object], existing_mention)
+                    mention_dict: Dict[str, Any] = {
+                        str(key): value for key, value in mention_mapping.items()
+                    }
+                    mentions_list.append(mention_dict)
+        existing["mentions"] = mentions_list
         mention_seen: Set[str] = {
             json.dumps(mention, sort_keys=True)
-            for mention in existing_mentions
-            if isinstance(mention, Mapping)
+            for mention in mentions_list
         }
-        for mention in cast(List[Dict[str, Any]], normalized_entity.get("mentions", [])):
-            signature = json.dumps(mention, sort_keys=True)
-            if signature not in mention_seen:
-                existing_mentions.append(mention)
+        normalized_mentions = normalized_entity.get("mentions")
+        if isinstance(normalized_mentions, list):
+            for raw_mention in cast(List[object], normalized_mentions):
+                if not isinstance(raw_mention, Mapping):
+                    continue
+                mention_mapping = cast(Mapping[object, object], raw_mention)
+                mention: Dict[str, Any] = {
+                    str(key): value for key, value in mention_mapping.items()
+                }
+                signature = json.dumps(mention, sort_keys=True)
+                if signature in mention_seen:
+                    continue
+                mentions_list.append(mention)
                 mention_seen.add(signature)
 
     relations: List[Dict[str, Any]] = [
@@ -295,6 +318,16 @@ def generate_entities(
                 f"\nTranscript excerpts (remaining chunks: {len(chunk_queue)+1}):\n{chunk_text}\n"
             )
             try:
+                response_format = cast(
+                    ResponseFormat,
+                    {
+                        "type": "json_schema",
+                        "json_schema": {
+                            "name": "entity_v1",
+                            "schema": ENTITY_SCHEMA,
+                        },
+                    },
+                )
                 content, usage = llm_client.chat(
                     messages=[
                         {"role": "system", "content": system_prompt},
@@ -302,10 +335,7 @@ def generate_entities(
                     ],
                     temperature=temperature,
                     max_tokens=max(1, max_tokens),
-                    response_format={
-                        "type": "json_schema",
-                        "json_schema": {"name": "entity_v1", "schema": ENTITY_SCHEMA},
-                    },
+                    response_format=response_format,
                 )
             except RuntimeError as exc:
                 if should_retry_for_length(str(exc)):

@@ -43,3 +43,7 @@ _No pyright output recorded._
 - `packages/udocket_core/agents/analyze_lib.py` (verified 2025-10-05T04:59:48.388129+00:00)
 - `packages/udocket_core/agents/common/azure_client.py` (verified 2025-10-05T01:44:10.645472+00:00)
 - `packages/udocket_core/agents/common/io.py` (verified 2025-10-05T01:44:10.645472+00:00)
+- `packages/udocket_core/agents/compose_lib.py` (verified 2025-10-05T12:29:14.118682+00:00)
+- `packages/udocket_core/agents/transcribe_lib.py` (verified 2025-10-05T12:29:14.118682+00:00)
+- `apps/platform/operations/task_modules/guardian.py` (verified 2025-10-05T12:29:14.118682+00:00)
+- `apps/platform/operations/task_modules/transcribe.py` (verified 2025-10-05T12:29:14.118682+00:00)

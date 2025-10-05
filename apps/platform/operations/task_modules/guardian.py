@@ -1,25 +1,31 @@
 from __future__ import annotations
 
+# pyright: strict
+
 import logging
 
 from collections.abc import Sequence
-from typing import cast
+from typing import Any, Protocol, cast
 
-from celery import TaskProtocol, shared_task
+from celery import shared_task
+
+
+class TaskProtocol(Protocol):
+    request: Any
 from django.utils import timezone
 
 from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.cases.models import Case
 from apps.platform.jobs.models import Job
 from apps.platform.operations.guardian import (
-    build_guardian_context,
+    build_guardian_context as _default_guardian_context_factory,
     build_guardian_review_record,
     snapshot_artifact_for_guardian,
     store_guardian_review,
+    GuardianContext,
 )
 from apps.platform.operations.runtime import (
     JobRuntimeContext,
-    emit_job_update,
     safe_job_log,
     safe_job_meta,
 )
@@ -65,7 +71,15 @@ def guardian_review_artifact(self: TaskProtocol, *, artifact_id: int) -> dict[st
         org_value = getattr(artifact_case_fk, "organization_id", None)
     org_id_str = str(org_value) if org_value else None
 
-    context = build_guardian_context(org_id_str)
+    from apps.platform.operations import tasks as tasks_module
+
+    context_factory = getattr(
+        tasks_module,
+        "build_guardian_context",
+        _default_guardian_context_factory,
+    )
+    context_candidate = context_factory(org_id_str)
+    context = cast(GuardianContext | None, context_candidate)
 
     task_meta: dict[str, object] = {
         "artifact_id": artifact.id,
@@ -149,7 +163,7 @@ def guardian_review_artifact(self: TaskProtocol, *, artifact_id: int) -> dict[st
         artifact_type_upper = str(getattr(artifact, "type", "") or "").upper()
         applicable_instructions: list[JSONObject] = []
         for instruction in context.instructions:
-            instruction_payload = dict(instruction)
+            instruction_payload = coerce_json_object(instruction)
             applies_to = instruction_payload.get("applies_to")
             if not applies_to:
                 applicable_instructions.append(instruction_payload)
@@ -180,16 +194,18 @@ def guardian_review_artifact(self: TaskProtocol, *, artifact_id: int) -> dict[st
             )
 
         artifact_meta_payload = coerce_json_object(getattr(artifact, "metadata", {}))
-        guardian_context_payload: dict[str, object] = {
-            "artifact_metadata": artifact_meta_payload,
-            "job_metadata": job_metadata,
-            "artifact_type": getattr(artifact, "type", None),
-            "artifact_title": getattr(artifact, "title", None),
-            "artifact_path": getattr(artifact, "path", None),
-            "instructions": applicable_instructions,
-            "all_instructions": context.instructions,
-            "case": case_data,
-        }
+        guardian_context_payload = coerce_json_object(
+            {
+                "artifact_metadata": artifact_meta_payload,
+                "job_metadata": job_metadata,
+                "artifact_type": getattr(artifact, "type", None),
+                "artifact_title": getattr(artifact, "title", None),
+                "artifact_path": getattr(artifact, "path", None),
+                "instructions": applicable_instructions,
+                "all_instructions": context.instructions,
+                "case": case_data,
+            }
+        )
 
         review_options = {"temperature": context.temperature}
         verdict = context.agent.review(
@@ -242,10 +258,8 @@ def guardian_review_artifact(self: TaskProtocol, *, artifact_id: int) -> dict[st
         },
     )
     store_guardian_review(artifact, review_record)
-    event_status = "SUCCEEDED" if verdict.approved else "FAILED"
-
     if job_id:
-        reduced_record = dict(review_record)
+        reduced_record = coerce_json_object(review_record)
         reduced_record.pop("artifact_id", None)
         reduced_record.pop("artifact_type", None)
         safe_job_meta(case_id, org_id_str, job_id, {"guardian_last_review": reduced_record})
@@ -254,16 +268,6 @@ def guardian_review_artifact(self: TaskProtocol, *, artifact_id: int) -> dict[st
             org_id_str,
             job_id,
             "Guardian review completed" if verdict.approved else "Guardian review flagged violations",
-        )
-        emit_job_update(
-            job_id,
-            case_id=case_id,
-            event="guardian.review.completed",
-            status=event_status,
-            payload={
-                "guardian_status": status,
-                "artifact_id": int(artifact.id),
-            },
         )
 
     if runtime:
