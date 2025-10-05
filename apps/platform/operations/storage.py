@@ -1,3 +1,5 @@
+# pyright: strict
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -13,7 +15,8 @@ _DEFAULT_ORG_SLUG = "unassigned"
 
 def _case_org(case_id: str, fallback: Optional[str] = None) -> str:
     value = (
-        Case.objects.filter(pk=case_id)
+        Case.typed_objects()
+        .filter(pk=case_id)
         .values_list("organization_id", flat=True)
         .first()
     )
@@ -22,7 +25,8 @@ def _case_org(case_id: str, fallback: Optional[str] = None) -> str:
 
 def tenant_case_root(case_id: str, organization_id: Optional[str | UUID] = None) -> Path:
     org_value = str(organization_id) if organization_id else _case_org(case_id)
-    return Path(settings.MEDIA_ROOT) / "tenants" / org_value / "cases" / case_id
+    media_root = Path(str(settings.MEDIA_ROOT))
+    return media_root / "tenants" / org_value / "cases" / case_id
 
 
 def ensure_case_dirs(case_id: str, organization_id: Optional[str | UUID] = None) -> Path:

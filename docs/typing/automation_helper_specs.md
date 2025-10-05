@@ -74,6 +74,17 @@ This document spells out the automation we rely on to keep typing passes repeata
   - Emits actionable diagnostics for disallowed providers or token limits.
 - **Idempotency**: Sorted output and canonical ordering guarantee identical rewrites on repeated runs.
 
+## 8. Strict Manifest Check (`scripts/typing/check_strict.py`)
+- **Purpose**: Run `pyright` across every module recorded in the strict manifest to catch regressions early.
+- **CLI**: `python scripts/typing/check_strict.py [--manifest PATH] [--prefix PREFIX ...] [-- <pyright args>]`
+- **Behaviour**:
+  - Loads `docs/typing/automation_manifest.json` (or the supplied manifest path).
+  - Extracts the `path` for each entry under `strictModules` and deduplicates them.
+  - Optional `--prefix` filters allow targeting subsets (for example, `--prefix apps/platform/operations/`).
+  - Executes `pyright` once with the collected paths, forwarding any extra arguments supplied after `--`.
+- **Idempotency**: The command only reads repository metadata; repeated runs have no side effects beyond the pyright invocation.
+- **Integration**: Wire into CI or local pre-push hooks to ensure strict modules stay clean before merges.
+
 ## CI & Tooling Integration
 - Add a `just typing-bootstrap` recipe that wraps the bootstrapper and re-runs `pyright --stats`.
 - Introduce `just typing-strictify MODULE=<path>` to promote clean modules to strict mode.
