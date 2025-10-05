@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any, cast
 from uuid import UUID
@@ -29,6 +29,11 @@ from .analysis import (
     collect_requested_providers,
 )
 from .files import sha256_file
+from packages.udocket_core.json_utils import (
+    coerce_json_object,
+    coerce_str,
+    coerce_str_list,
+)
 
 log = logging.getLogger("apps.platform.operations.compose_service")
 
@@ -43,17 +48,10 @@ def _resolve_path(value: str | None, case_dir: Path) -> Path | None:
     return candidate if candidate.exists() else None
 
 
-def _extract_str(value: object) -> str | None:
-    return value if isinstance(value, str) and value else None
-
-
-def _extract_mapping(value: object) -> dict[str, Any] | None:
+def _coerce_any_mapping(value: object) -> dict[str, Any] | None:
     if isinstance(value, Mapping):
-        result: dict[str, Any] = {}
-        for key_obj, item in cast(Iterable[tuple[object, object]], value.items()):
-            if isinstance(key_obj, str):
-                result[key_obj] = item
-        return result
+        normalized = coerce_json_object(cast(Mapping[object, object], value))
+        return {key: cast(Any, item) for key, item in normalized.items()}
     return None
 
 
@@ -105,7 +103,7 @@ def execute_compose_job(
 
     def _meta_path(*keys: str) -> Path | None:
         for key in keys:
-            raw_value = _extract_str(summary_meta.get(key))
+            raw_value = coerce_str(summary_meta.get(key))
             if raw_value:
                 resolved = _resolve_path(raw_value, case_dir)
                 if resolved:
@@ -118,8 +116,8 @@ def execute_compose_job(
     entity_hint_path = _meta_path("summary_entity_file")
     staff_report_path = _meta_path("summary_case_brief_file", "summary_staff_report_file")
 
-    transcript_raw = _extract_str(summary_meta.get("source_transcript_path"))
-    transcript_raw = transcript_raw or _extract_str(getattr(summary_job, "transcript_path", None))
+    transcript_raw = coerce_str(summary_meta.get("source_transcript_path"))
+    transcript_raw = transcript_raw or coerce_str(getattr(summary_job, "transcript_path", None))
     transcript_path = _resolve_path(transcript_raw, case_dir)
 
     analysis_dir = case_dir / "analysis"
@@ -217,19 +215,14 @@ def execute_compose_job(
         )
 
     stage_map: dict[str, dict[str, Any]] = {}
-    raw_stage_map = _extract_mapping(active_config.get("stage_map"))
+    raw_stage_map = _coerce_any_mapping(active_config.get("stage_map"))
     if raw_stage_map:
         for key, value in raw_stage_map.items():
-            nested = _extract_mapping(value)
+            nested = _coerce_any_mapping(value)
             if nested is not None:
                 stage_map[key] = nested
 
-    provider_chain_values: list[str] = []
-    raw_chain = active_config.get("provider_chain")
-    if isinstance(raw_chain, Sequence) and not isinstance(raw_chain, (str, bytes)):
-        for entry in cast(Sequence[object], raw_chain):
-            if isinstance(entry, str):
-                provider_chain_values.append(entry)
+    provider_chain_values = coerce_str_list(active_config.get("provider_chain"), unique=False)
     if not provider_chain_values:
         provider_chain_values = list(compose_config.provider_chain)
     provider_chain = provider_chain_values
@@ -240,11 +233,12 @@ def execute_compose_job(
 
         for provider in requested_providers:
             secret_payload = get_provider_secret_with_metadata(organization_id_str, provider)
-            if secret_payload:
-                provider_credentials[provider] = dict(secret_payload)
+            credential = _coerce_any_mapping(secret_payload)
+            if credential:
+                provider_credentials[provider] = credential
 
     try:
-        intake_payload = _extract_mapping(summary_meta.get("intake"))
+        intake_payload = _coerce_any_mapping(summary_meta.get("intake"))
         if intake_payload is None:
             intake_payload = case_intake_payload(job_case)
 
@@ -254,7 +248,7 @@ def execute_compose_job(
             "summary_job_id": str(summary_job.id),
             "job_display_title": str(getattr(job, "display_title", "") or ""),
         }
-        case_title = _extract_str(getattr(job_case, "title", None))
+        case_title = coerce_str(getattr(job_case, "title", None))
         if case_title:
             case_metadata["case_title"] = case_title
         case_org_value = getattr(job_case, "organization_id", None)
@@ -262,7 +256,7 @@ def execute_compose_job(
             case_metadata["organization_id"] = str(case_org_value)
         case_organization = getattr(job_case, "organization", None)
         if case_organization is not None:
-            org_name = _extract_str(getattr(case_organization, "name", None))
+            org_name = coerce_str(getattr(case_organization, "name", None))
             if org_name:
                 case_metadata["organization_name"] = org_name
         if summary_markdown_path:
