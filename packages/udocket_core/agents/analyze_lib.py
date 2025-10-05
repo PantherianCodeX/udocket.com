@@ -7,6 +7,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
+from types import MappingProxyType
 from typing import Optional, TypedDict, cast
 
 from .common import parse_transcript, TranscriptParse
@@ -27,6 +28,10 @@ ANALYZE_DEFAULTS_PATH = BASE_DIR / "config" / "analyze_defaults.json"
 StageOptions = dict[str, object]
 StageMap = dict[str, StageOptions]
 ProviderCredentials = Mapping[str, Mapping[str, object]]
+
+
+def _empty_mapping_proxy() -> Mapping[str, object]:
+    return MappingProxyType({})
 
 
 class StageModelInfo(TypedDict):
@@ -163,6 +168,91 @@ for _attr, _stage_key in LLM_STAGE_KEYS.items():
         _STAGE_ALIAS_LOOKUP[_stage_key.split(".", 1)[1].lower()] = _stage_key
 
 
+@dataclass(frozen=True)
+class StageOverride:
+    providers: tuple[str, ...] = ()
+    model: str | None = None
+    options: Mapping[str, object] = field(default_factory=_empty_mapping_proxy)
+    max_tokens: int | None = None
+
+    @classmethod
+    def from_mapping(
+        cls,
+        payload: Mapping[str, object] | None,
+    ) -> "StageOverride" | None:
+        if not payload:
+            return None
+
+        providers_candidate: list[str] = []
+        raw_providers = payload.get("providers")
+        if isinstance(raw_providers, Sequence) and not isinstance(
+            raw_providers, (str, bytes, bytearray)
+        ):
+            for entry in cast(Sequence[object], raw_providers):
+                provider_name = str(entry or "").strip()
+                if provider_name:
+                    providers_candidate.append(provider_name)
+
+        raw_provider = payload.get("provider")
+        if isinstance(raw_provider, str):
+            single_provider = raw_provider.strip()
+            if single_provider:
+                providers_candidate.append(single_provider)
+
+        normalized_providers = tuple(_normalize_providers(providers_candidate))
+
+        model_value: object | None = payload.get("model")
+        model = str(model_value).strip() if isinstance(model_value, str) else None
+        if model == "":
+            model = None
+
+        options_payload = payload.get("options")
+        if isinstance(options_payload, Mapping):
+            option_items = cast(Mapping[object, object], options_payload)
+            options = MappingProxyType(
+                {
+                    str(key): value
+                    for key, value in option_items.items()
+                    if key is not None
+                }
+            )
+        else:
+            options = _empty_mapping_proxy()
+
+        max_tokens_value = payload.get("max_tokens") or payload.get("max_output_tokens")
+        max_tokens = None
+        if max_tokens_value is not None:
+            parsed = _coerce_int(max_tokens_value, 0)
+            if parsed > 0:
+                max_tokens = parsed
+
+        if (
+            not normalized_providers
+            and model is None
+            and not options
+            and max_tokens is None
+        ):
+            return None
+
+        return cls(
+            providers=normalized_providers,
+            model=model,
+            options=options,
+            max_tokens=max_tokens,
+        )
+
+
+def _build_stage_override_index(stage_map: StageMap) -> dict[str, StageOverride]:
+    overrides: dict[str, StageOverride] = {}
+    for key, options in stage_map.items():
+        canonical = _normalize_stage_identifier(key) or key
+        override = StageOverride.from_mapping(options)
+        if override is None:
+            continue
+        overrides.setdefault(canonical, override)
+    return overrides
+
+
 DISALLOWED_PROVIDERS: set[str] = set()
 
 
@@ -224,6 +314,8 @@ def _normalize_stage_identifier(value: str) -> Optional[str]:
     if not key:
         return None
     return _STAGE_ALIAS_LOOKUP.get(key)
+
+
 @dataclass(frozen=True)
 class StageProfile:
     stage_key: str
@@ -556,6 +648,7 @@ class AnalyzeAgent:
 
         settings = _load_llm_settings()
         stage_map = _normalize_stage_map(stage_map)
+        stage_overrides = _build_stage_override_index(stage_map)
         intake_mapping = intake or {}
         intake_data: dict[str, object] = {
             str(key): value for key, value in intake_mapping.items()
@@ -569,20 +662,10 @@ class AnalyzeAgent:
 
         if provider_chain is None:
             derived_chain: list[str] = []
-            for config in stage_map.values():
-                provider_value = config.get("provider")
-                providers_value = config.get("providers")
-                if isinstance(providers_value, Sequence) and not isinstance(
-                    providers_value, (str, bytes, bytearray)
-                ):
-                    for entry in cast(Sequence[object], providers_value):
-                        name = str(entry or "").strip().lower()
-                        if name and name not in derived_chain:
-                            derived_chain.append(name)
-                elif isinstance(provider_value, str):
-                    name = provider_value.strip().lower()
-                    if name and name not in derived_chain:
-                        derived_chain.append(name)
+            for override in stage_overrides.values():
+                for provider_name in override.providers:
+                    if provider_name and provider_name not in derived_chain:
+                        derived_chain.append(provider_name)
             provider_chain = derived_chain or list(self.config.provider_chain)
         provider_chain = _normalize_providers(provider_chain)
         if not provider_chain:
@@ -596,7 +679,7 @@ class AnalyzeAgent:
         stage_runtimes: dict[str, StageRuntime] = {}
         provider_sequence: list[str] = []
 
-        for stage_attr, stage_key in LLM_STAGE_KEYS.items():
+        for _stage_attr, stage_key in LLM_STAGE_KEYS.items():
             stage_profile = _stage_profile(stage_key)
             assignment = settings.stage(stage_key)
             providers = _normalize_providers(
@@ -624,38 +707,17 @@ class AnalyzeAgent:
             if assignment and assignment.options:
                 options.update(dict(assignment.options))
 
-            stage_config = stage_map.get(stage_key) or stage_map.get(stage_attr)
             override_max_tokens = None
-            if stage_config:
-                override_providers: list[str] | None = None
-                providers_payload = stage_config.get("providers")
-                if isinstance(providers_payload, Sequence) and not isinstance(
-                    providers_payload, (str, bytes, bytearray)
-                ):
-                    override_providers = [
-                        str(value)
-                        for value in cast(Sequence[object], providers_payload)
-                    ]
-                elif stage_config.get("provider"):
-                    override_providers = [str(stage_config["provider"])]
-                if override_providers is not None:
-                    override_normalized = _normalize_providers(override_providers)
-                    if override_normalized:
-                        providers = override_normalized
-                if stage_config.get("model"):
-                    preferred_model = str(stage_config["model"]).strip()
-                stage_options = stage_config.get("options")
-                if isinstance(stage_options, Mapping):
-                    option_items = cast(Mapping[object, object], stage_options)
-                    for key, value in option_items.items():
-                        if key is None:
-                            continue
-                        options[str(key)] = value
-                max_tokens_override = stage_config.get("max_tokens")
-                if max_tokens_override is not None:
-                    override_candidate = _coerce_int(max_tokens_override, 0)
-                    if override_candidate > 0:
-                        override_max_tokens = override_candidate
+            stage_override = stage_overrides.get(stage_key)
+            if stage_override is not None:
+                if stage_override.providers:
+                    providers = list(stage_override.providers)
+                if stage_override.model:
+                    preferred_model = stage_override.model
+                if stage_override.options:
+                    options.update(stage_override.options)
+                if stage_override.max_tokens is not None:
+                    override_max_tokens = stage_override.max_tokens
 
             requires_chat = stage_key != "analyze.context_builder"
             provider_name = providers[0]

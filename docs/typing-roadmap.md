@@ -1,7 +1,7 @@
 # Typing Roadmap
 
 ## Summary of Current Issues
-- `pyright` currently reports ~600 errors and ~3,300 warnings, so we cannot enable strict blocking yet.
+- Without the stub bootstrapper, `pyright` still reports well over a thousand errors due to missing Django/pytest stubs; once the stubs are present locally the count drops toward the ~700 error / ~3,500 warning band tracked in recent runs, so we cannot enable strict blocking yet.
 - The vast majority of errors come from pytest fixtures in `tests/`, where parameters such as `monkeypatch`, `db`, and `settings` lack annotations, and helper lambdas capture `Unknown` types.
 - Django and DRF helpers (e.g., `APIClient`, model managers) surface as `Unknown` because stub packages are missing; `.objects.create` chains and response objects are therefore untyped.
 - Several UI presenter tests instantiate `dict[str, Any]` structures and access nested members as `object`, which triggers index/type errors under strict mode.
@@ -35,6 +35,12 @@
 - Manual retries and request fallbacks should stay in the runtime wrapper (`AzureChatClient._chat`). Avoid folding error handling into per-agent code; instead expose structured exceptions with typed payloads so Celery tasks can log without `Any` casts.
 - `packages/udocket_core/agents/analyze_lib.py` now uses shared helpers (`_coerce_object_dict`, `_normalize_providers`) and typed `StageModelInfo`/`StageCatalogEntry` structures. Stage configuration inputs are normalised to `dict[str, object]`, so future contributors should preserve that pattern when adding new stage options or provider overrides.
 - When reading organization defaults (`config/analyze_defaults.json`), call `_coerce_int`/`_coerce_float` rather than sprinkling `int(...)`/`float(...)` coercions. This keeps environment overrides predictable and Pyright-friendly.
+
+## October 2025 Idempotency & Automation Focus
+- Stage overrides now flow through `StageOverride` dataclasses, giving us deterministic provider/model selection and making it safe to re-run normalisation scripts.
+- The new **Typing Idempotency Playbook** (`docs/typing-idempotency-playbook.md`) captures helper patterns and a backlog of automation ideas (bootstrap script, manager codemods, fixture shims) so contributors reach for tooling first.
+- The companion **Typing Idempotency Strategy** memo (`docs/typing-idempotency-strategy.md`) records recent typing commits, error snapshots, and the helper roadmap. Reference it when planning new automation work before touching high-churn modules.
+- When introducing new structured payloads, prefer frozen dataclasses or mapping proxies to guarantee that repeated normalisation yields identical output. This keeps diffs stable even when automation rewrites configs multiple times.
 
 ## Patterns Established (2024-03 Typing Pass)
 - **Nullable model fields** – When a Django field uses `null=True`, annotate the descriptor with `Optional[...]` for both the set and get generics (e.g., `models.TextField[Optional[str], Optional[str]]`). This satisfies the mypy-django plugin and prevents the “generic get type parameter is not optional” error.
