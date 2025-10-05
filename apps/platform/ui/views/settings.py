@@ -40,6 +40,7 @@ from apps.platform.operations.guardian import (
     save_guardian_instructions,
 )
 from packages.udocket_core.llm import LLMSettings, load_llm_settings
+from packages.udocket_core.json_utils import normalize_json_object
 from packages.udocket_core.llm.runtime import ChatClientError
 from packages.udocket_core.json_utils import parse_json_value
 
@@ -218,7 +219,7 @@ def _extract_provider_form_data(
         "Metadata JSON",
     )
 
-    data = {
+    data = normalize_json_object(
         "provider_uuid": provider_uuid,
         "provider": provider_key,
         "display_name": display_name,
@@ -230,7 +231,7 @@ def _extract_provider_form_data(
         "api_key": api_key_raw,
         "clear_flag": clear_flag,
         "existing_has_api_key": bool(existing.get("has_api_key")) if existing else False,
-    }
+    , drop_empty_keys=True, drop_nullish_values=True)
     return data, errors
 
 

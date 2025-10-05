@@ -34,6 +34,7 @@ from packages.udocket_core.json_utils import (
     coerce_json_object,
     coerce_str,
     coerce_str_list,
+    normalize_json_object,
     write_json_object,
 )
 
@@ -169,12 +170,16 @@ def execute_compose_job(
         fallback_md.write_text("# Summary\n\nNo summary available.\n", encoding="utf-8")
         summary_markdown_path = fallback_md
 
-    compose_started_meta = {
-        "compose_status": "running",
-        "summary_job_id": str(summary_job.id),
-        "summary_json": str(summary_json_path) if summary_json_path else None,
-        "summary_markdown": str(summary_markdown_path) if summary_markdown_path else None,
-    }
+    compose_started_meta = normalize_json_object(
+        {
+            "compose_status": "running",
+            "summary_job_id": str(summary_job.id),
+            "summary_json": str(summary_json_path) if summary_json_path else None,
+            "summary_markdown": str(summary_markdown_path) if summary_markdown_path else None,
+        },
+        drop_empty_keys=True,
+        drop_nullish_values=True,
+    )
     runtime.start(
         status=Job.Status.RUNNING,
         log_message="Worker started compose pipeline",
