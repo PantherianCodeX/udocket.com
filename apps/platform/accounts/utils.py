@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 import uuid
+import logging
 
 from django.db import models
 from django.core.exceptions import PermissionDenied
@@ -16,6 +17,7 @@ from apps.platform.cases.models import CaseMembership
 AdminOrgChoice = dict[str, str]
 
 _SESSION_KEY = "admin_active_org_id"
+logger = logging.getLogger("apps.platform.accounts.utils")
 
 
 def user_accessible_organizations(user: Any) -> models.QuerySet[Organization]:
@@ -67,10 +69,10 @@ def get_active_admin_org(request: HttpRequest) -> Optional[Organization]:
     accessible = list(orgs_qs)
     stored = session.get(_SESSION_KEY)
     if stored and stored not in {str(org.id) for org in accessible}:
+        logger.warning(
+            "admin session organization no longer permitted", extra={"org_id": stored}
+        )
         stored = None
-    if not stored and len(accessible) == 1:
-        stored = str(accessible[0].id)
-        session[_SESSION_KEY] = stored
     if stored:
         for org in accessible:
             if str(org.id) == stored:
@@ -109,10 +111,9 @@ def resolve_request_organization(
       1. Explicit header (`ORG_HEADER_NAME`) when the authenticated user is a
          member (or superuser).
       2. Admin-selected organization stored in session.
-      3. Single accessible organization for the user.
 
     Raises PermissionDenied when `required` and no organization can be
-    determined.
+    determined. No implicit organization fallbacks are performed.
     """
 
     user = getattr(request, "user", None)
@@ -140,12 +141,6 @@ def resolve_request_organization(
     active = get_active_admin_org(request)
     if active is not None:
         return active
-
-    if user and getattr(user, "is_authenticated", False):
-        accessible = user_accessible_organizations(user)
-        count = accessible.count()
-        if count == 1:
-            return accessible.first()
 
     if required:
         raise PermissionDenied("Organization context is required for this action.")

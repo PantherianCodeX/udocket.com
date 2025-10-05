@@ -42,6 +42,7 @@ The full automation specifications live in `docs/typing/automation_helper_specs.
 
 ## Reporting Plan
 
+- Keep the rolling status log in `docs/typing/typing_progress_log.md` up to date after each helper run or wave milestone so subsequent work picks up without rediscovery.
 - After each typing PR, append the latest `pyright --stats` summary (with command, date, and environment notes) to `docs/typing_debt_assessment.md`.
 - Link roadmap updates directly to the helpers or manifests that drove the change so reviewers can verify evidence quickly.
 - Review the manifest quarterly to decide whether new automation is needed or if manual clean-up is acceptable for the remaining modules.

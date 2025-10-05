@@ -1,6 +1,7 @@
 # Typing Roadmap
 
 ## Summary of Current Issues
+For day-to-day execution status, see `docs/typing/typing_progress_log.md`, which records the active waves and any blockers so the effort can resume quickly after context resets.
 - Without the stub bootstrapper, `pyright` still reports well over a thousand errors due to missing Django/pytest stubs; once the stubs are present locally the count drops toward the ~700 error / ~3,500 warning band tracked in recent runs, so we cannot enable strict blocking yet.
 - The vast majority of errors come from pytest fixtures in `tests/`, where parameters such as `monkeypatch`, `db`, and `settings` lack annotations, and helper lambdas capture `Unknown` types.
 - Django and DRF helpers (e.g., `APIClient`, model managers) surface as `Unknown` because stub packages are missing; `.objects.create` chains and response objects are therefore untyped.

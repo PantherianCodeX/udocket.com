@@ -9,6 +9,9 @@ Last updated: 2025-10-05.
 - **Third-party stub gaps**: upstream coverage for Azure SDK packages and HTMX helpers remains incomplete; track open issues and patch locally when needed.
 - **Automation state**: populate `docs/typing/automation_manifest.json` using the template and keep it in sync via `scripts/typing/sync_docs.py` so this document always reflects the latest helper runs.
 
+### Latest Pyright Run
+- 2025-10-05T15:41Z — `pyright --stats` → 879 errors, 1914 warnings (bootstrap script failed to install `pytest-stubs`; run executed without refreshed stubs).
+
 ## Hotspots to Tackle Next
 
 1. **Shared pytest fixtures** – introduce a typed fixture module (`tests/_typing.py`) so individual tests import annotated fixtures instead of duplicating annotations.

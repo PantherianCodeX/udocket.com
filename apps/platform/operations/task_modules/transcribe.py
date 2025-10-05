@@ -18,6 +18,7 @@ class TaskProtocol(Protocol):
     request: Any
 from django.utils import timezone
 
+from apps.platform.accounts.models import Organization
 from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.cases.models import Case
 from apps.platform.jobs.models import Job
@@ -34,6 +35,7 @@ from packages.udocket_core.json_utils import (
     JSONObject,
     coerce_json_object,
     coerce_json_value,
+    coerce_str,
     merge_json_objects,
     read_json_object,
 )
@@ -94,7 +96,14 @@ def transcribe_job(
         and not audio_input.lower().startswith(("http://", "https://"))
     )
 
-    converting_status = getattr(Job.Status, "CONVERTING", "CONVERTING")
+    converting_attr = getattr(Job.Status, "CONVERTING", Job.Status.RUNNING)
+    if isinstance(converting_attr, str):
+        try:
+            converting_status = Job.Status(converting_attr)
+        except ValueError:
+            converting_status = Job.Status.RUNNING
+    else:
+        converting_status = converting_attr
 
     org_id: str | None = None
     case_obj: Case | None = None
@@ -104,20 +113,17 @@ def transcribe_job(
         if job_obj.status == Job.Status.CANCELLED:
             log.info("job already cancelled before execution", extra={"job_id": job_id})
             return {"status": Job.Status.CANCELLED.value, "job_id": job_id, "case_id": case_id}
-        org_value = job_obj.organization_id or getattr(job_obj.case, "organization_id", None)
+        org_value = getattr(job_obj, "organization_id", None)
         if org_value:
             org_id = str(org_value)
         case_obj = getattr(job_obj, "case", None)
     except Exception:
         job_obj = None
     if org_id is None:
-        org_candidate = (
-            Case.typed_objects().filter(pk=case_id)
-            .values_list("organization_id", flat=True)
-            .first()
+        log.error(
+            "transcribe: job missing organization", extra={"job_id": job_id, "case_id": case_id}
         )
-        if org_candidate:
-            org_id = str(org_candidate)
+        raise RuntimeError("Job organization is required for transcription")
     if case_obj is None:
         case_obj = Case.typed_objects().select_related("organization").filter(pk=case_id).first()
     case_dir = ensure_case_dirs(case_id, org_id)
@@ -340,7 +346,10 @@ def transcribe_job(
                             existing_meta = {}
 
                     converted_job_obj: Job | None = None
-                    converted_job_id = existing_meta.get("converted_audio_job_id") or existing_meta.get("converted_wav_job_id")
+                    converted_job_id = coerce_str(
+                        existing_meta.get("converted_audio_job_id")
+                        or existing_meta.get("converted_wav_job_id")
+                    )
                     if converted_job_id:
                         try:
                             converted_job_obj = Job.typed_objects().select_related("case").get(pk=converted_job_id)
@@ -353,12 +362,36 @@ def transcribe_job(
 
                     now_ts = timezone.now()
                     if converted_job_obj is None:
+                        if case_obj is None:
+                            log.warning(
+                                "transcribe: missing case when creating conversion job",
+                                extra={"job_id": job_id, "case_id": case_id},
+                            )
+                            raise RuntimeError("Case not found for conversion job")
+                        case_organization = getattr(case_obj, "organization", None)
+                        if not isinstance(case_organization, Organization):
+                            case_org_id = getattr(case_obj, "organization_id", None)
+                            case_organization = (
+                                Organization.objects.filter(id=case_org_id).first()
+                                if case_org_id is not None
+                                else None
+                            )
+                        if case_organization is None:
+                            job_organization = getattr(job_obj, "organization", None)
+                            if isinstance(job_organization, Organization):
+                                case_organization = job_organization
+                        if case_organization is None:
+                            log.warning(
+                                "transcribe: unable to resolve organization for conversion job",
+                                extra={"job_id": job_id, "case_id": case_id},
+                            )
+                            raise RuntimeError("Organization not resolved for conversion job")
                         wav_job_uuid = uuid.uuid4()
                         try:
                             converted_job_obj = Job.typed_objects().create(
                                 id=wav_job_uuid,
                                 case=case_obj,
-                                organization=getattr(case_obj, "organization", None),
+                                organization=case_organization,
                                 audio_input="",
                                 mode=getattr(job_obj, "mode", Job.Mode.BATCH),
                                 diarization=False,
@@ -535,9 +568,19 @@ def transcribe_job(
                     )
                     if converted_job_id:
                         try:
+                            status_value = (
+                                Job.typed_objects()
+                                .filter(pk=job_id)
+                                .values_list("status", flat=True)
+                                .first()
+                            )
+                            status_str = coerce_str(status_value)
+                            if status_str is None:
+                                status_str = coerce_str(getattr(job_obj, "status", None))
                             current_status = (
-                                Job.typed_objects().filter(pk=job_id).values_list("status", flat=True).first()
-                                or (job_obj.status if job_obj else Job.Status.RUNNING)
+                                Job.Status(status_str)
+                                if status_str
+                                else Job.Status.RUNNING
                             )
                             send_job_update(
                                 job_id,
@@ -635,8 +678,18 @@ def transcribe_job(
                 except Exception:
                     pass
 
-            current_status = Job.typed_objects().filter(pk=job_id).values_list("status", flat=True).first()
-            if current_status in (Job.Status.CANCELLING, Job.Status.CANCELLED):
+            status_value = (
+                Job.typed_objects()
+                .filter(pk=job_id)
+                .values_list("status", flat=True)
+                .first()
+            )
+            status_choice = (
+                Job.Status(status_value)
+                if isinstance(status_value, str)
+                else None
+            )
+            if status_choice in (Job.Status.CANCELLING, Job.Status.CANCELLED):
                 raise UploadCancelled("Cancelled before transcription start")
             if batch_upload_meta:
                 batch_upload_meta.setdefault("batch_upload_blob_name", original_name)

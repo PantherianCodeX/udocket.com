@@ -19,7 +19,12 @@
       "version": "0.1.0"
     }
   ],
-  "notes": [],
+  "notes": [
+    {
+      "message": "2025-10-05T15:41Z: bootstrap_env.py failed to install pytest-stubs; pyright --stats run recorded 879 errors / 1914 warnings.",
+      "timestamp": "2025-10-05T15:41:06Z"
+    }
+  ],
   "pyrightStats": null,
   "recordedAt": "2025-10-05T03:56:36.755416+00:00",
   "strictModules": [

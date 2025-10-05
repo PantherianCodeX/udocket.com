@@ -12,6 +12,7 @@ from packages.udocket_core.agents import ComposeAgent, ComposeConfig
 from packages.udocket_core.llm.config import LLMSettings, load_llm_settings
 from apps.platform.jobs.models import Job
 from apps.platform.artifacts.models import CaseArtifact
+from apps.platform.accounts.models import Organization
 from apps.platform.operations.llm import (
     LLMConfigurationPayload,
     ensure_default_llm_configuration,
@@ -360,10 +361,17 @@ def execute_compose_job(
         titles = created_titles.setdefault(kind, set())
         title = unique_title(title_hint, titles)
         titles.add(title)
+        organization_obj = getattr(job, "organization", None)
+        if not isinstance(organization_obj, Organization):
+            log.warning(
+                "compose: organization missing on job; artifact creation skipped",
+                extra={"job_id": str(job.id)},
+            )
+            return
         CaseArtifact.objects.create(
             case_id=case_id,
             case_fk=job_case,
-            organization=job.organization or getattr(summary_job, "organization", None),
+            organization=organization_obj,
             job_id=str(job.id),
             type=kind,
             title=title,
