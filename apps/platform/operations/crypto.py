@@ -22,17 +22,17 @@ def _fernet() -> Fernet:
 
 
 def encrypt_secret(value: str | None) -> str:
-    if value in (None, ""):
+    if value is None or value == "":
         return ""
-    token = _fernet().encrypt(value.encode("utf-8"))
+    token: bytes = _fernet().encrypt(value.encode("utf-8"))
     return token.decode("utf-8")
 
 
 def decrypt_secret(token: str | None) -> str:
-    if not token:
+    if token is None or token == "":
         return ""
     try:
-        value = _fernet().decrypt(token.encode("utf-8"))
+        value: bytes = _fernet().decrypt(token.encode("utf-8"))
         return value.decode("utf-8")
     except (InvalidToken, ValueError):  # pragma: no cover - defensive guard
         return ""
