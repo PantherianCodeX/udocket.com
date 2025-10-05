@@ -1,9 +1,12 @@
+# pyright: strict
+
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any, Dict, Optional
 import json
 import uuid
+from collections.abc import Mapping
+from pathlib import Path
+from typing import Any, cast
 
 from django.utils import timezone
 
@@ -14,13 +17,25 @@ LOG_FILE_TEMPLATE = "{job_id}_transcription.log"
 META_FILE_TEMPLATE = "{job_id}_transcription_log.json"
 
 
-def update_job_meta(case_id: str, organization_id: Optional[str | uuid.UUID], job_id: str, updates: Dict[str, Any]) -> None:
+def _object_dict(value: object) -> dict[str, object]:
+    if isinstance(value, dict):
+        mapping = cast(dict[object, object], value)
+        return {str(key): val for key, val in mapping.items()}
+    return {}
+
+
+def update_job_meta(
+    case_id: str,
+    organization_id: str | uuid.UUID | None,
+    job_id: str,
+    updates: Mapping[str, object],
+) -> None:
     if not updates:
         return
     ops_path = storage_ops_dir(case_id, organization_id) / META_FILE_TEMPLATE.format(job_id=job_id)
     try:
         if ops_path.exists():
-            current = json.loads(ops_path.read_text(encoding="utf-8"))
+            current = _object_dict(json.loads(ops_path.read_text(encoding="utf-8")))
         else:
             current = {}
     except Exception:
@@ -39,8 +54,10 @@ def update_job_meta(case_id: str, organization_id: Optional[str | uuid.UUID], jo
             pass
 
     # Persist select metadata fields onto the Job record for efficient querying.
-    resolved_meta = current if changed else {**current, **(updates or {})}
-    job_updates: Dict[str, Any] = {}
+    resolved_meta: dict[str, object] = (
+        current if changed else {**current, **dict(updates)}
+    )
+    job_updates: dict[str, Any] = {}
 
     agent_type = resolved_meta.get("agent_type")
     if isinstance(agent_type, str) and agent_type.strip():
@@ -62,7 +79,9 @@ def update_job_meta(case_id: str, organization_id: Optional[str | uuid.UUID], jo
     if isinstance(job_title, str) and job_title.strip():
         job_updates["display_title"] = job_title.strip()[:255]
 
-    source_job_value = resolved_meta.get("source_job_id") or resolved_meta.get("converted_audio_job_id")
+    source_job_value = resolved_meta.get("source_job_id") or resolved_meta.get(
+        "converted_audio_job_id"
+    )
     if source_job_value:
         try:
             source_uuid = uuid.UUID(str(source_job_value))
@@ -88,17 +107,27 @@ def update_job_meta(case_id: str, organization_id: Optional[str | uuid.UUID], jo
                 pass
 
 
-def read_job_meta(case_id: str, organization_id: Optional[str | uuid.UUID], job_id: str) -> Dict[str, Any]:
+def read_job_meta(
+    case_id: str,
+    organization_id: str | uuid.UUID | None,
+    job_id: str,
+) -> dict[str, Any]:
     meta_path = storage_ops_dir(case_id, organization_id) / META_FILE_TEMPLATE.format(job_id=job_id)
     if not meta_path.exists():
         return {}
     try:
-        return json.loads(meta_path.read_text(encoding="utf-8"))
+        return _object_dict(json.loads(meta_path.read_text(encoding="utf-8")))
     except Exception:
         return {}
 
 
-def append_job_log(case_id: str, organization_id: Optional[str | uuid.UUID], job_id: str, message: str, level: str = "INFO") -> None:
+def append_job_log(
+    case_id: str,
+    organization_id: str | uuid.UUID | None,
+    job_id: str,
+    message: str,
+    level: str = "INFO",
+) -> None:
     log_path = storage_ops_dir(case_id, organization_id) / LOG_FILE_TEMPLATE.format(job_id=job_id)
     try:
         log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -109,5 +138,5 @@ def append_job_log(case_id: str, organization_id: Optional[str | uuid.UUID], job
         pass
 
 
-def job_log_path(case_id: str, organization_id: Optional[str | uuid.UUID], job_id: str) -> Path:
+def job_log_path(case_id: str, organization_id: str | uuid.UUID | None, job_id: str) -> Path:
     return storage_ops_dir(case_id, organization_id) / LOG_FILE_TEMPLATE.format(job_id=job_id)
