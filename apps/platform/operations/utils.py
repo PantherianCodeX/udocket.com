@@ -12,16 +12,34 @@ from django.utils import timezone
 
 from apps.platform.operations.storage import ops_dir as storage_ops_dir
 from apps.platform.jobs.models import Job
+from packages.udocket_core.json_utils import (
+    JSONObject,
+    coerce_json_object,
+    coerce_json_value,
+)
 
 LOG_FILE_TEMPLATE = "{job_id}_transcription.log"
 META_FILE_TEMPLATE = "{job_id}_transcription_log.json"
 
 
-def _object_dict(value: object) -> dict[str, object]:
-    if isinstance(value, dict):
-        mapping = cast(dict[object, object], value)
-        return {str(key): val for key, val in mapping.items()}
+def _load_json_dict(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    if isinstance(raw, Mapping):
+        normalized = coerce_json_object(cast(Mapping[object, object], raw))
+        return {key: cast(Any, value) for key, value in normalized.items()}
     return {}
+
+
+def _write_json_dict(path: Path, payload: Mapping[str, object]) -> None:
+    json_payload: JSONObject = {
+        str(key): coerce_json_value(value) for key, value in payload.items()
+    }
+    path.write_text(json.dumps(json_payload, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 def update_job_meta(
@@ -33,13 +51,7 @@ def update_job_meta(
     if not updates:
         return
     ops_path = storage_ops_dir(case_id, organization_id) / META_FILE_TEMPLATE.format(job_id=job_id)
-    try:
-        if ops_path.exists():
-            current = _object_dict(json.loads(ops_path.read_text(encoding="utf-8")))
-        else:
-            current = {}
-    except Exception:
-        current = {}
+    current = _load_json_dict(ops_path)
     changed = False
     for key, value in updates.items():
         if value is None:
@@ -49,7 +61,7 @@ def update_job_meta(
             changed = True
     if changed:
         try:
-            ops_path.write_text(json.dumps(current, indent=2, ensure_ascii=False), encoding="utf-8")
+            _write_json_dict(ops_path, current)
         except Exception:
             pass
 
@@ -113,12 +125,7 @@ def read_job_meta(
     job_id: str,
 ) -> dict[str, Any]:
     meta_path = storage_ops_dir(case_id, organization_id) / META_FILE_TEMPLATE.format(job_id=job_id)
-    if not meta_path.exists():
-        return {}
-    try:
-        return _object_dict(json.loads(meta_path.read_text(encoding="utf-8")))
-    except Exception:
-        return {}
+    return _load_json_dict(meta_path)
 
 
 def append_job_log(
