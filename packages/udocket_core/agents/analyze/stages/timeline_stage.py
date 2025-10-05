@@ -4,7 +4,7 @@ from collections import deque
 from dataclasses import dataclass
 import json
 import logging
-from typing import Any, Deque, Dict, List, Optional, Sequence
+from typing import Any, Deque, Dict, List, Mapping, Optional, Sequence, Set, Tuple, cast
 from uuid import NAMESPACE_URL, uuid5
 
 from ...common.io import TranscriptParse
@@ -15,6 +15,7 @@ from ...common.chunking import (
     split_for_retry,
 )
 from packages.udocket_core.llm.runtime import ChatClient
+from ....json_utils import parse_json_value
 
 logger = logging.getLogger("udocket.analyze.timeline_stage")
 
@@ -51,25 +52,16 @@ class TimelineStageResult:
     usage: Dict[str, int]
 
 
-def _usage_dict(usage: Dict[str, Any]) -> Dict[str, int]:
-    collector: Dict[str, int] = {}
-    for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
-        value = usage.get(key)
-        if isinstance(value, int):
-            collector[key] = value
-    return collector
-
-
 def _ensure_chunks(context: Any) -> List[str]:
     if isinstance(context, str):
         return [context]
-    if isinstance(context, Sequence):
+    if isinstance(context, Sequence) and not isinstance(context, (str, bytes, bytearray)):
+        sequence = cast(Sequence[object], context)
         result: List[str] = []
-        for item in context:
-            if not isinstance(item, str):
-                item = str(item)
-            if item:
-                result.append(item)
+        for item in sequence:
+            text = item if isinstance(item, str) else str(item)
+            if text:
+                result.append(text)
         return result or [""]
     return [str(context)]
 
@@ -111,7 +103,10 @@ def _normalize_event(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     labels_raw = payload.get("labels")
     labels: List[str] = []
     if isinstance(labels_raw, (list, tuple)):
-        labels = [str(item).strip() for item in labels_raw if str(item).strip()]
+        for raw_label in cast(Sequence[object], labels_raw):
+            label_text = str(raw_label).strip()
+            if label_text:
+                labels.append(label_text)
     elif isinstance(labels_raw, str) and labels_raw.strip():
         labels = [labels_raw.strip()]
 
@@ -158,7 +153,7 @@ def generate_timeline(
         chunk_queue: Deque[str] = deque(_ensure_chunks(context_snippet))
         aggregated: List[Dict[str, Any]] = []
         usage_totals: Dict[str, int] = {}
-        signatures = set()
+        signatures: Set[Tuple[str | None, Optional[float], Optional[float], Optional[str], str]] = set()
         while chunk_queue:
             chunk_text = chunk_queue.popleft()
             if not chunk_text or not chunk_text.strip():
@@ -200,26 +195,27 @@ def generate_timeline(
                     "Timeline stage returned empty content; continuing with aggregated results",
                 )
                 continue
-            try:
-                payload = json.loads(content_str)
-            except json.JSONDecodeError as exc:
+            payload = parse_json_value(content_str)
+            if not isinstance(payload, Mapping):
                 logger.warning(
-                    "Timeline stage produced non-JSON payload; skipping/splitting chunk",
+                    "Timeline stage produced non-JSON payload; skipping chunk",
                 )
-                if should_retry_for_json(str(exc)) or should_retry_for_length(str(exc)):
+                if should_retry_for_json("invalid json") or should_retry_for_length("invalid json"):
                     halves = split_for_retry(chunk_text, config=TIMELINE_SPLIT_CONFIG)
                     if halves:
                         chunk_queue.appendleft(halves[1])
                         chunk_queue.appendleft(halves[0])
                         continue
                 continue
-            events = payload.get("events", []) if isinstance(payload, dict) else []
-            if not isinstance(events, list):
+            events_raw = payload.get("events")
+            if not isinstance(events_raw, list):
                 continue
-            for item in events:
-                if not isinstance(item, dict):
-                    continue
-                normalized = _normalize_event(item)
+            event_dicts: List[Dict[str, Any]] = []
+            for raw_item in events_raw:
+                if isinstance(raw_item, Mapping):
+                    event_dicts.append({str(key): value for key, value in raw_item.items()})
+            for event_dict in event_dicts:
+                normalized = _normalize_event(event_dict)
                 if normalized is None:
                     continue
                 signature = (
