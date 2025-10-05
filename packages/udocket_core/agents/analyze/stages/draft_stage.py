@@ -1,24 +1,34 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+# pyright: strict
 
 import json
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from typing import cast
 
 from ...common.io import TranscriptParse
+from packages.udocket_core.json_utils import (
+    JSONObject,
+    JSONValue,
+    coerce_json_object,
+    coerce_object_list,
+    coerce_str,
+    coerce_str_list,
+    parse_json_object,
+)
 from packages.udocket_core.llm.runtime import ChatClient
-from packages.udocket_core.json_utils import parse_json_object
 
 
-@dataclass
+@dataclass(frozen=True)
 class SummaryStageResult:
-    data: Dict[str, Any]
+    data: JSONObject
     markdown: str
-    usage: Dict[str, int]
+    usage: dict[str, int]
 
 
-def _usage_dict(usage: Dict[str, Any]) -> Dict[str, int]:
-    collector: Dict[str, int] = {}
+def _usage_dict(usage: Mapping[str, object]) -> dict[str, int]:
+    collector: dict[str, int] = {}
     for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
         value = usage.get(key)
         if isinstance(value, int):
@@ -26,16 +36,31 @@ def _usage_dict(usage: Dict[str, Any]) -> Dict[str, int]:
     return collector
 
 
+def _normalize_snippet(snippet: object) -> str:
+    if isinstance(snippet, str):
+        return snippet
+    if isinstance(snippet, Sequence) and not isinstance(snippet, (bytes, bytearray)):
+        sequence = cast(Sequence[object], snippet)
+        for item in sequence:
+            text = item if isinstance(item, str) else str(item)
+            if text.strip():
+                return text
+        return ""
+    if snippet is None:
+        return ""
+    return str(snippet)
+
+
 def generate_summary_payload(
     *,
     parse: TranscriptParse,
-    outline: Dict[str, Any],
-    timeline: List[Dict[str, Any]],
-    entities: Dict[str, Any],
-    intake: Dict[str, Any],
-    context_snippet: Any,
-    case_brief: Dict[str, Any],
-    llm_client: Optional[ChatClient],
+    outline: Mapping[str, JSONValue],
+    timeline: Sequence[Mapping[str, JSONValue]],
+    entities: Mapping[str, JSONValue],
+    intake: Mapping[str, JSONValue],
+    context_snippet: object,
+    case_brief: Mapping[str, JSONValue],
+    llm_client: ChatClient | None,
     temperature: float,
     max_tokens: int,
 ) -> SummaryStageResult:
@@ -43,19 +68,14 @@ def generate_summary_payload(
         raise RuntimeError("LLM client is required for summary stage")
 
     try:
-        if isinstance(context_snippet, (list, tuple)):
-            context_snippet = context_snippet[0] if context_snippet else ""
-
-        schema_description = {
+        schema_description: JSONObject = {
             "case_metadata_summary": {
                 "overview": "string",
                 "parties": ["string"],
                 "jurisdiction": "string",
                 "key_dates": ["string"],
             },
-            "executive_summary": {
-                "bullets": ["string"],
-            },
+            "executive_summary": {"bullets": ["string"]},
             "detailed_narrative": [
                 {
                     "heading": "string",
@@ -85,7 +105,7 @@ def generate_summary_payload(
                 {
                     "action": "string",
                     "owner": "string",
-                    "due":"string",
+                    "due": "string",
                 }
             ],
             "supporting_quotes": [
@@ -97,59 +117,71 @@ def generate_summary_payload(
             ],
         }
 
-        system_prompt = (
-            "You are a compliance-focused summarization assistant supporting Canadian legal teams."
-            " Produce a structured JSON object matching the provided schema exactly."
-            " Never include legal advice, definitive interpretations, or form-selection guidance."
-            " Flag any potentially risky content in the risks_gaps_questions section."
-            " Respond with JSON only and no surrounding prose."
-        )
+        snippet_text = _normalize_snippet(context_snippet)
+        intake_payload = coerce_json_object(intake)
+        outline_payload = coerce_json_object(outline)
+        timeline_payload: list[JSONValue] = [
+            dict(item) for item in coerce_object_list(timeline)
+        ]
+        entities_payload = coerce_json_object(entities)
+        case_brief_payload = coerce_json_object(case_brief)
 
-        user_payload = {
-            "intake": intake,
-            "outline": outline,
-            "timeline": timeline,
-            "entities": entities,
-            "case_brief": case_brief,
-            "transcript_excerpt": context_snippet,
+        user_payload: JSONObject = {
+            "intake": intake_payload,
+            "outline": outline_payload,
+            "timeline": timeline_payload,
+            "entities": entities_payload,
+            "case_brief": case_brief_payload,
+            "transcript_excerpt": snippet_text,
             "schema": schema_description,
         }
 
         content, usage = llm_client.chat(
             messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": json.dumps(user_payload, ensure_ascii=False)},
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a compliance-focused summarization assistant supporting Canadian legal teams."
+                        " Produce a structured JSON object matching the provided schema exactly."
+                        " Never include legal advice, definitive interpretations, or form-selection guidance."
+                        " Flag any potentially risky content in the risks_gaps_questions section."
+                        " Respond with JSON only and no surrounding prose."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": json.dumps(user_payload, ensure_ascii=False),
+                },
             ],
             temperature=temperature,
             max_tokens=max(512, max_tokens),
             response_format={"type": "json_object"},
         )
-        raw = (content or "").strip()
+        raw = content.strip()
         data = _extract_json(raw)
         _validate_summary_schema(data)
         markdown = _render_markdown(data)
         return SummaryStageResult(data=data, markdown=markdown, usage=_usage_dict(usage))
-    except Exception as exc:
+    except Exception as exc:  # pragma: no cover - defensive guard
         raise RuntimeError(f"Summary stage failed: {exc}") from exc
 
 
-def _extract_json(raw: str) -> Dict[str, Any]:
+def _extract_json(raw: str) -> JSONObject:
     if not raw:
         raise RuntimeError("Summary stage returned no content")
-    buffer = raw
-    if "{" not in buffer:
+    if "{" not in raw:
         raise RuntimeError("Summary stage response was not JSON")
-    start = buffer.find("{")
-    end = buffer.rfind("}")
-    candidate = buffer[start : end + 1]
+    start = raw.find("{")
+    end = raw.rfind("}")
+    candidate = raw[start : end + 1]
     try:
         return parse_json_object(candidate, context="summary stage response")
-    except ValueError as exc:
+    except ValueError as exc:  # pragma: no cover - pass-through
         raise RuntimeError(f"Unable to parse summary JSON: {exc}") from exc
 
 
-def _validate_summary_schema(payload: Dict[str, Any]) -> None:
-    required_top_keys = [
+def _validate_summary_schema(payload: JSONObject) -> None:
+    required_top_keys = (
         "case_metadata_summary",
         "executive_summary",
         "detailed_narrative",
@@ -158,7 +190,7 @@ def _validate_summary_schema(payload: Dict[str, Any]) -> None:
         "risks_gaps_questions",
         "next_step_checklist",
         "supporting_quotes",
-    ]
+    )
     for key in required_top_keys:
         if key not in payload:
             raise RuntimeError(f"Summary JSON missing required field '{key}'")
@@ -185,84 +217,99 @@ def _validate_summary_schema(payload: Dict[str, Any]) -> None:
             raise RuntimeError(f"Summary JSON field '{array_field}' must be an array")
 
 
-def _render_markdown(data: Dict[str, Any]) -> str:
-    lines: List[str] = ["# Summary"]
+def _render_markdown(data: JSONObject) -> str:
+    lines: list[str] = ["# Summary"]
 
     def _append_section(title: str, body: str) -> None:
-        lines.append(f"\n## {title}\n{body.strip() if body else 'Pending.'}\n")
+        trimmed = body.strip() if body else "Pending."
+        lines.append(f"\n## {title}\n{trimmed}\n")
 
-    cms = data.get("case_metadata_summary", {})
-    overview = cms.get("overview") or "Pending case metadata."
-    details: List[str] = []
-    parties = cms.get("parties") or []
+    cms_value = data.get("case_metadata_summary")
+    cms = coerce_json_object(cms_value)
+    overview = coerce_str(cms.get("overview")) or "Pending case metadata."
+    details: list[str] = []
+    parties = coerce_str_list(cms.get("parties"))
     if parties:
         details.append("**Parties:** " + ", ".join(parties))
-    jurisdiction = cms.get("jurisdiction")
+    jurisdiction = coerce_str(cms.get("jurisdiction"))
     if jurisdiction:
         details.append(f"**Jurisdiction:** {jurisdiction}")
-    key_dates = cms.get("key_dates") or []
+    key_dates = coerce_str_list(cms.get("key_dates"))
     if key_dates:
         details.append("**Key dates:** " + ", ".join(key_dates))
-    _append_section("Case metadata summary", "\n".join([overview] + details))
+    metadata_body = overview
+    if details:
+        metadata_body += "\n\n" + "\n".join(f"- {item}" for item in details)
+    _append_section("Case metadata summary", metadata_body)
 
-    exec_summary = data.get("executive_summary", {}).get("bullets", [])
-    bullets = "\n".join(f"- {item}" for item in exec_summary) or "- Pending executive summary."
-    _append_section("Executive summary", bullets)
+    exec_summary_value = data.get("executive_summary")
+    exec_summary = coerce_json_object(exec_summary_value)
+    bullets = coerce_str_list(exec_summary.get("bullets"))
+    bullet_body = "\n".join(f"- {item}" for item in bullets) if bullets else "Pending executive summary."
+    _append_section("Executive summary", bullet_body)
 
-    narrative = data.get("detailed_narrative", [])
-    narrative_lines = []
-    for item in narrative:
-        heading = item.get("heading") or "Narrative item"
-        summary = item.get("summary") or "Pending summary."
-        narrative_lines.append(f"- **{heading}:** {summary}")
-    _append_section("Detailed narrative", "\n".join(narrative_lines) or "- Pending narrative.")
+    narrative = data.get("detailed_narrative")
+    narrative_items: list[JSONObject] = coerce_object_list(narrative)
+    narrative_lines: list[str] = []
+    for item in narrative_items:
+        heading = coerce_str(item.get("heading")) or "Section"
+        summary = coerce_str(item.get("summary")) or "Pending summary paragraph."
+        citations = coerce_str_list(item.get("citations"))
+        block = f"**{heading}**\n{summary}"
+        if citations:
+            block += "\n" + "\n".join(f"  - {cite}" for cite in citations)
+        narrative_lines.append(block)
+    _append_section("Detailed narrative", "\n\n".join(narrative_lines) if narrative_lines else "Pending narrative.")
 
-    claims = data.get("claims_and_remedies", [])
-    claim_lines = []
-    for item in claims:
-        claim_lines.append(f"- {item.get('claim') or 'Claim'} — {item.get('remedy_requested') or 'Remedy'}")
-    _append_section("Claims and remedies sought", "\n".join(claim_lines) or "- Pending claims.")
+    claims = data.get("claims_and_remedies")
+    claim_items: list[JSONObject] = coerce_object_list(claims)
+    claim_lines: list[str] = []
+    for item in claim_items:
+        claim = coerce_str(item.get("claim")) or "Claim"
+        remedy = coerce_str(item.get("remedy_requested")) or "Pending"
+        claim_lines.append(f"- **{claim}:** {remedy}")
+    _append_section("Claims and remedies sought", "\n".join(claim_lines) if claim_lines else "Pending claims and remedies.")
 
-    posture = data.get("procedural_posture", {})
-    posture_lines = []
-    if posture.get("status"):
-        posture_lines.append(f"**Status:** {posture['status']}")
-    if posture.get("deadlines"):
-        posture_lines.append("**Deadlines:** " + ", ".join(posture["deadlines"]))
-    if posture.get("orders"):
-        posture_lines.append("**Orders:** " + ", ".join(posture["orders"]))
-    _append_section("Procedural posture, orders, and deadlines", "\n".join(posture_lines) or "Pending procedural posture.")
+    posture_value = data.get("procedural_posture")
+    posture = coerce_json_object(posture_value)
+    status = coerce_str(posture.get("status")) or "Pending status update."
+    deadlines = coerce_str_list(posture.get("deadlines"))
+    orders = coerce_str_list(posture.get("orders"))
+    posture_lines = [status]
+    if deadlines:
+        posture_lines.append("Deadlines: " + ", ".join(deadlines))
+    if orders:
+        posture_lines.append("Orders: " + ", ".join(orders))
+    _append_section("Procedural posture, orders, and deadlines", "\n".join(posture_lines))
 
-    risks = data.get("risks_gaps_questions", [])
-    risk_lines = []
-    for item in risks:
-        risk_lines.append(
-            f"- {item.get('issue') or 'Risk'} ({item.get('risk_level') or 'unspecified'}): {item.get('notes') or 'Pending details.'}"
-        )
-    _append_section("Risks, gaps, and questions", "\n".join(risk_lines) or "- Pending risk assessment.")
+    risks_items: list[JSONObject] = coerce_object_list(data.get("risks_gaps_questions"))
+    risk_lines: list[str] = []
+    for item in risks_items:
+        issue = coerce_str(item.get("issue")) or "Risk"
+        level = (coerce_str(item.get("risk_level")) or "unknown").upper()
+        notes = coerce_str(item.get("notes")) or "Pending notes."
+        risk_lines.append(f"- **{issue} ({level})** — {notes}")
+    _append_section("Risks, gaps, and questions", "\n".join(risk_lines) if risk_lines else "Pending risk assessment.")
 
-    steps = data.get("next_step_checklist", [])
-    step_lines = []
-    for item in steps:
-        parts = [item.get("action") or "Action"]
-        if item.get("owner"):
-            parts.append(f"Owner: {item['owner']}")
-        if item.get("due"):
-            parts.append(f"Due: {item['due']}")
-        step_lines.append("- " + "; ".join(parts))
-    _append_section("Next-step checklist", "\n".join(step_lines) or "- Pending next steps.")
+    checklist_items: list[JSONObject] = coerce_object_list(data.get("next_step_checklist"))
+    checklist_lines: list[str] = []
+    for item in checklist_items:
+        action = coerce_str(item.get("action")) or "Action"
+        owner = coerce_str(item.get("owner")) or "Owner"
+        due = coerce_str(item.get("due")) or "Pending"
+        checklist_lines.append(f"- {action} (Owner: {owner}, Due: {due})")
+    _append_section("Next-step checklist", "\n".join(checklist_lines) if checklist_lines else "Pending next steps.")
 
-    quotes = data.get("supporting_quotes", [])
-    quote_lines = []
-    for quote in quotes:
-        timestamp = quote.get("timestamp") or "--"
-        speaker = quote.get("speaker") or "Speaker"
-        text = quote.get("text") or "(no text)"
+    quotes_items: list[JSONObject] = coerce_object_list(data.get("supporting_quotes"))
+    quote_lines: list[str] = []
+    for item in quotes_items:
+        timestamp = coerce_str(item.get("timestamp")) or "--:--"
+        speaker = coerce_str(item.get("speaker")) or "Unknown"
+        text = coerce_str(item.get("text")) or ""
         quote_lines.append(f"- [{timestamp}] {speaker}: {text}")
-    if quote_lines:
-        _append_section("Supporting quotes", "\n".join(quote_lines))
+    _append_section("Supporting quotes", "\n".join(quote_lines) if quote_lines else "Pending supporting quotes.")
 
-    return "\n".join(lines).strip() + "\n"
+    return "".join(lines).strip()
 
 
 __all__ = ["SummaryStageResult", "generate_summary_payload"]

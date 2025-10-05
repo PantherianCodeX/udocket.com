@@ -1,6 +1,6 @@
-# strict
-
 from __future__ import annotations
+
+# pyright: strict
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -8,7 +8,7 @@ from pathlib import Path
 from .io import AnalysisArtifact
 
 
-@dataclass
+@dataclass(frozen=True)
 class AnalysisResult:
     status: str
     artifacts: list[AnalysisArtifact]
@@ -30,4 +30,4 @@ class AnalysisAgent:
         raise NotImplementedError
 
 
-__all__ = ["AnalysisResult", "AnalysisAgent"]
+__all__: list[str] = ["AnalysisResult", "AnalysisAgent"]

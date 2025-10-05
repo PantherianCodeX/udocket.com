@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from collections.abc import Iterable, Mapping, Sequence
-from typing import TypeAlias, cast
+from typing import Any, TypeAlias, cast
 
 JSONPrimitive: TypeAlias = int | float | bool | str | None
 JSONValue: TypeAlias = JSONPrimitive | dict[str, "JSONValue"] | list["JSONValue"]
@@ -39,6 +39,12 @@ def coerce_json_object(value: object, *, default: JSONObject | None = None) -> J
         mapping_value = cast(Mapping[object, object], value)
         return {str(key): coerce_json_value(item) for key, item in mapping_value.items()}
     return {} if default is None else dict(default)
+
+
+def json_object_to_dict(payload: JSONObject) -> dict[str, Any]:
+    """Convert a ``JSONObject`` into a plain ``dict`` with ``Any`` values."""
+
+    return {key: cast(Any, value) for key, value in payload.items()}
 
 
 def ensure_json_object(value: object, *, context: str | None = None) -> JSONObject:
@@ -313,6 +319,7 @@ __all__ = [
     "read_json_value",
     "read_json_object",
     "write_json_object",
+    "json_object_to_dict",
     "parse_json_value",
     "parse_json_value_strict",
     "parse_json_object",

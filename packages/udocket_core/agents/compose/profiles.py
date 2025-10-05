@@ -1,8 +1,10 @@
+# pyright: strict
+
 """Stage profile metadata for the Compose pipeline."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict
 
 
 @dataclass(frozen=True)
@@ -17,7 +19,7 @@ class ComposeStageProfile:
     resource_notes: str | None = None
 
 
-COMPOSE_STAGE_PROFILES: Dict[str, ComposeStageProfile] = {
+COMPOSE_STAGE_PROFILES: dict[str, ComposeStageProfile] = {
     "compose.context_builder": ComposeStageProfile(
         stage_key="compose.context_builder",
         label="Context Builder",
@@ -111,7 +113,7 @@ COMPOSE_STAGE_PROFILES: Dict[str, ComposeStageProfile] = {
 }
 
 
-__all__ = [
+__all__: list[str] = [
     "COMPOSE_STAGE_PROFILES",
     "ComposeStageProfile",
 ]

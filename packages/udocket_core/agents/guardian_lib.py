@@ -5,7 +5,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Optional
 
-from packages.udocket_core.json_utils import parse_json_value_strict
+from packages.udocket_core.json_utils import parse_json_object
 from packages.udocket_core.llm import LLMSettings, load_llm_settings
 from packages.udocket_core.llm.config import LLMProvider, LLMProviderModel
 from packages.udocket_core.llm.runtime import (
@@ -269,23 +269,20 @@ class GuardianAgent:
         if start == -1 or end == -1:
             raise RuntimeError("Guardian response was not JSON")
         try:
-            payload = parse_json_value_strict(
+            payload = parse_json_object(
                 raw_response[start : end + 1],
                 context="guardian agent response",
             )
-            if not isinstance(payload, dict):
-                raise ValueError("Guardian response must be a JSON object")
-        except json.JSONDecodeError as exc:
+        except ValueError as exc:
             raise RuntimeError(f"Guardian response parse error: {exc}") from exc
 
         approved = bool(payload.get("approved"))
-        notes = payload.get("notes") if isinstance(payload, dict) else None
+        notes = payload.get("notes") if isinstance(payload, Mapping) else None
         remediation: Optional[str] = None
-        if isinstance(payload, dict):
-            raw_remediation = payload.get("remediation") or payload.get("remediation_instructions")
-            if raw_remediation:
-                remediation = str(raw_remediation)
-        violations_raw = payload.get("violations") if isinstance(payload, dict) else []
+        raw_remediation = payload.get("remediation") or payload.get("remediation_instructions")
+        if raw_remediation:
+            remediation = str(raw_remediation)
+        violations_raw = payload.get("violations")
         violations: List[Dict[str, Any]] = []
         if isinstance(violations_raw, list):
             for entry in violations_raw:

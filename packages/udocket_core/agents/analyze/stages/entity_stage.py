@@ -16,7 +16,13 @@ from ...common.chunking import (
     should_retry_for_length,
     split_for_retry,
 )
-from packages.udocket_core.json_utils import parse_json_object
+from packages.udocket_core.json_utils import (
+    JSONObject,
+    coerce_object_list,
+    coerce_str_list,
+    json_object_to_dict,
+    parse_json_object,
+)
 from packages.udocket_core.llm.runtime import ChatClient
 
 logger = logging.getLogger("udocket.analyze.entity_stage")
@@ -99,8 +105,6 @@ def _ensure_chunks(context: Any) -> List[str]:
                 chunks.append(text)
         return chunks or [""]
     return [str(context)]
-
-
 def _assign_entity_defaults(entity: Dict[str, Any]) -> Dict[str, Any]:
     name = str(entity.get("name") or "").strip()
     entity_type = str(entity.get("type") or "UNKNOWN").strip() or "UNKNOWN"
@@ -115,36 +119,30 @@ def _assign_entity_defaults(entity: Dict[str, Any]) -> Dict[str, Any]:
     entity_id = str(entity.get("id") or entity_uuid or derived_uuid)
     entity["id"] = entity_id
     entity["uuid"] = entity_uuid
-    aliases_raw = entity.get("aliases")
-    alias_list: List[str] = []
-    if isinstance(aliases_raw, Sequence) and not isinstance(aliases_raw, (str, bytes, bytearray)):
-        for raw_alias in cast(Sequence[object], aliases_raw):
-            alias_text = str(raw_alias).strip()
-            if alias_text:
-                alias_list.append(alias_text)
-    elif isinstance(aliases_raw, str) and aliases_raw.strip():
-        alias_list = [aliases_raw.strip()]
-    entity["aliases"] = alias_list
-    mentions = entity.get("mentions")
-    mention_items: Sequence[object]
-    if isinstance(mentions, Sequence) and not isinstance(mentions, (str, bytes, bytearray)):
-        mention_items = cast(Sequence[object], mentions)
-    else:
-        mention_items = []
+    entity["aliases"] = coerce_str_list(entity.get("aliases"), unique=True)
+
     normalized_mentions: List[Dict[str, Any]] = []
-    for mention in mention_items:
-        if not isinstance(mention, Mapping):
-            continue
-        mention_mapping = cast(Mapping[str, Any], mention)
-        text = str(mention_mapping.get("text") or "").strip()
+    for mention_mapping in coerce_object_list(entity.get("mentions")):
+        raw_text = mention_mapping.get("text")
+        if not isinstance(raw_text, str):
+            raw_text = str(raw_text or "")
+        text = raw_text.strip()
         if not text:
             continue
-        ts = mention_mapping.get("ts")
-        try:
-            ts_val = float(ts) if ts is not None else None
-        except (TypeError, ValueError):
-            ts_val = None
-        normalized_mentions.append({"ts": ts_val, "text": text})
+        ts_source = mention_mapping.get("ts")
+        if ts_source is None:
+            ts_source = mention_mapping.get("timestamp")
+        ts_normalized: float | None
+        if isinstance(ts_source, (int, float)):
+            ts_normalized = float(ts_source)
+        elif isinstance(ts_source, str):
+            try:
+                ts_normalized = float(ts_source)
+            except ValueError:
+                ts_normalized = None
+        else:
+            ts_normalized = None
+        normalized_mentions.append({"ts": ts_normalized, "text": text})
     entity["mentions"] = normalized_mentions
     entity["type"] = entity_type
     entity.setdefault("description", "")
@@ -166,93 +164,95 @@ def _assign_relation_defaults(relation: Dict[str, Any]) -> Dict[str, Any]:
     relation_id = str(relation.get("id") or relation_uuid or derived_uuid)
     relation["id"] = relation_id
     relation["uuid"] = relation_uuid
-    evidence = relation.get("evidence")
-    if not isinstance(evidence, list):
-        evidence = []
     normalized_evidence: List[Dict[str, Any]] = []
-    for item in evidence:
-        if isinstance(item, dict):
-            text = str(item.get("text") or item.get("excerpt") or "").strip()
-            if not text:
-                continue
-            ts_val = item.get("ts") or item.get("timestamp")
+    for evidence_entry in coerce_object_list(relation.get("evidence")):
+        raw_text = evidence_entry.get("text") or evidence_entry.get("excerpt")
+        if not isinstance(raw_text, str):
+            raw_text = str(raw_text or "")
+        text = raw_text.strip()
+        if not text:
+            continue
+        ts_source = evidence_entry.get("ts")
+        if ts_source is None:
+            ts_source = evidence_entry.get("timestamp")
+        ts_normalized: float | None
+        if isinstance(ts_source, (int, float)):
+            ts_normalized = float(ts_source)
+        elif isinstance(ts_source, str):
             try:
-                ts = float(ts_val) if ts_val is not None else None
-            except (TypeError, ValueError):
-                ts = None
-            normalized_evidence.append({"ts": ts, "text": text})
-        elif isinstance(item, str) and item.strip():
-            normalized_evidence.append({"ts": None, "text": item.strip()})
+                ts_normalized = float(ts_source)
+            except ValueError:
+                ts_normalized = None
+        else:
+            ts_normalized = None
+        normalized_evidence.append({"ts": ts_normalized, "text": text})
     relation["evidence"] = normalized_evidence
     relation["type"] = relation_type
     return relation
 
 
 def _merge_entity_payload(target: Dict[str, Any], update: Dict[str, Any]) -> None:
-    existing_entities_raw = target.get("entities")
-    normalized_existing_entities: List[Dict[str, Any]] = []
-    if isinstance(existing_entities_raw, list):
-        for item in existing_entities_raw:
-            if isinstance(item, dict):
-                normalized_existing_entities.append(_assign_entity_defaults(item))
-    target["entities"] = normalized_existing_entities
+    entities: List[Dict[str, Any]] = [
+        _assign_entity_defaults(json_object_to_dict(candidate))
+        for candidate in coerce_object_list(target.get("entities"))
+    ]
+    target["entities"] = entities
 
-    index: Dict[str, Dict[str, Any]] = {entity["id"]: entity for entity in normalized_existing_entities}
+    index: Dict[str, Dict[str, Any]] = {entity["id"]: entity for entity in entities}
 
-    update_entities_raw = update.get("entities")
-    if isinstance(update_entities_raw, Sequence):
-        for entity_raw in update_entities_raw:
-            if not isinstance(entity_raw, Mapping):
-                continue
-            normalized_entity = _assign_entity_defaults({str(key): value for key, value in entity_raw.items()})
-            key = normalized_entity["id"]
-            existing = index.get(key)
-            if existing is None:
-                normalized_existing_entities.append(normalized_entity)
-                index[key] = normalized_entity
-                continue
+    for entity_payload in coerce_object_list(update.get("entities")):
+        normalized_entity = _assign_entity_defaults(json_object_to_dict(entity_payload))
+        entity_id = normalized_entity["id"]
+        existing = index.get(entity_id)
+        if existing is None:
+            entities.append(normalized_entity)
+            index[entity_id] = normalized_entity
+            existing = normalized_entity
+        else:
             if normalized_entity.get("name") and not existing.get("name"):
                 existing["name"] = normalized_entity["name"]
             if normalized_entity.get("type") and not existing.get("type"):
                 existing["type"] = normalized_entity["type"]
-            existing_aliases = existing.setdefault("aliases", [])
-            if isinstance(existing_aliases, list):
-                alias_seen: Set[str] = set(existing_aliases)
-                for alias in normalized_entity.get("aliases") or []:
-                    if alias not in alias_seen:
-                        existing_aliases.append(alias)
-                        alias_seen.add(alias)
-            existing_mentions = existing.setdefault("mentions", [])
-            if isinstance(existing_mentions, list):
-                mention_seen: Set[str] = {json.dumps(m, sort_keys=True) for m in existing_mentions}
-                for mention in normalized_entity.get("mentions") or []:
-                    if not isinstance(mention, dict):
-                        continue
-                    signature = json.dumps(mention, sort_keys=True)
-                    if signature not in mention_seen:
-                        existing_mentions.append(mention)
-                        mention_seen.add(signature)
 
-    existing_relations_raw = target.get("relations")
-    normalized_relations: List[Dict[str, Any]] = []
-    if isinstance(existing_relations_raw, list):
-        for item in existing_relations_raw:
-            if isinstance(item, dict):
-                normalized_relations.append(_assign_relation_defaults(item))
-    target["relations"] = normalized_relations
+        existing_aliases = existing.setdefault("aliases", [])
+        if not isinstance(existing_aliases, list):
+            existing_aliases = []
+            existing["aliases"] = existing_aliases
+        alias_seen: Set[str] = {alias for alias in existing_aliases if isinstance(alias, str)}
+        for alias in cast(List[str], normalized_entity.get("aliases", [])):
+            if alias not in alias_seen:
+                existing_aliases.append(alias)
+                alias_seen.add(alias)
 
-    relation_seen: Set[str] = {json.dumps(rel, sort_keys=True) for rel in normalized_relations}
-    update_relations_raw = update.get("relations")
-    if isinstance(update_relations_raw, Sequence):
-        for relation_raw in update_relations_raw:
-            if not isinstance(relation_raw, Mapping):
-                continue
-            normalized_relation = _assign_relation_defaults({str(key): value for key, value in relation_raw.items()})
-            signature = json.dumps(normalized_relation, sort_keys=True)
-            if signature in relation_seen:
-                continue
-            normalized_relations.append(normalized_relation)
-            relation_seen.add(signature)
+        existing_mentions = existing.setdefault("mentions", [])
+        if not isinstance(existing_mentions, list):
+            existing_mentions = []
+            existing["mentions"] = existing_mentions
+        mention_seen: Set[str] = {
+            json.dumps(mention, sort_keys=True)
+            for mention in existing_mentions
+            if isinstance(mention, Mapping)
+        }
+        for mention in cast(List[Dict[str, Any]], normalized_entity.get("mentions", [])):
+            signature = json.dumps(mention, sort_keys=True)
+            if signature not in mention_seen:
+                existing_mentions.append(mention)
+                mention_seen.add(signature)
+
+    relations: List[Dict[str, Any]] = [
+        _assign_relation_defaults(json_object_to_dict(candidate))
+        for candidate in coerce_object_list(target.get("relations"))
+    ]
+    target["relations"] = relations
+
+    relation_seen: Set[str] = {json.dumps(relation, sort_keys=True) for relation in relations}
+    for relation_payload in coerce_object_list(update.get("relations")):
+        normalized_relation = _assign_relation_defaults(json_object_to_dict(relation_payload))
+        signature = json.dumps(normalized_relation, sort_keys=True)
+        if signature in relation_seen:
+            continue
+        relations.append(normalized_relation)
+        relation_seen.add(signature)
 
 
 def _merge_usage(target: Dict[str, int], usage: Dict[str, Any]) -> None:

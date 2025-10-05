@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+# pyright: strict
+
 from .transcribe_lib import (
     AudioNormalizationResult,
     TranscriptionAgent,
@@ -28,7 +32,7 @@ from .langgraph_orchestrator import (
     build_analyze_graph,
 )
 
-__all__ = [
+__all__: list[str] = [
     "AudioNormalizationResult",
     "TranscriptionAgent",
     "TranscriptionConfig",

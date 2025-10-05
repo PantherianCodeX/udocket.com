@@ -1,50 +1,82 @@
 from __future__ import annotations
 
+# pyright: strict
+
 import shutil
 import subprocess
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import TypedDict
 
-from packages.udocket_core.json_utils import parse_json_object
+from packages.udocket_core.json_utils import (
+    JSONObject,
+    JSONValue,
+    coerce_json_object,
+    coerce_object_list,
+    coerce_str,
+    parse_json_object,
+)
 
 
-def _parse_float(value: Any) -> Optional[float]:
+class AudioMetadata(TypedDict, total=False):
+    audio_duration_s: float | None
+    audio_bitrate_kbps: int | None
+    audio_channels: int | None
+    audio_sample_rate_hz: int | None
+    audio_codec: str | None
+    audio_channel_layout: str | None
+    audio_sample_fmt: str | None
+    audio_bits_per_sample: int | None
+
+
+def _parse_float(value: JSONValue | None) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return float(value)
+    if isinstance(value, (int, float)):
+        return float(value)
     try:
-        if value is None:
-            return None
-        if isinstance(value, (int, float)):
-            return float(value)
         return float(str(value))
-    except Exception:
+    except (TypeError, ValueError):
         return None
 
 
-def _parse_int(value: Any) -> Optional[int]:
+def _parse_int(value: JSONValue | None) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
     try:
-        if value is None:
-            return None
-        return int(float(value))
-    except Exception:
+        return int(float(str(value)))
+    except (TypeError, ValueError):
         return None
 
 
-def probe_audio_metadata(source: str | Path) -> Dict[str, Optional[Any]]:
-    """Return ffprobe-derived audio metadata.
+def _coerce_mapping(value: JSONValue | None) -> JSONObject:
+    if isinstance(value, Mapping):
+        return coerce_json_object(value)
+    return {}
 
-    Keys follow the naming used by job telemetry helpers so the result can be
-    merged directly into per-job metadata JSON files or database fields.
-    """
+
+def probe_audio_metadata(source: str | Path) -> AudioMetadata:
+    """Return ffprobe-derived audio metadata."""
 
     path = Path(source)
     try:
         path = path.expanduser().resolve()
-    except Exception:
+    except OSError:
         pass
 
+    metadata: AudioMetadata = {}
     if not path.exists():
-        return {}
+        return metadata
     if shutil.which("ffprobe") is None:
-        return {}
+        return metadata
 
     cmd = [
         "ffprobe",
@@ -62,35 +94,38 @@ def probe_audio_metadata(source: str | Path) -> Dict[str, Optional[Any]]:
     try:
         out = subprocess.check_output(cmd, stderr=subprocess.STDOUT, text=True)
         data = parse_json_object(out, context="ffprobe output")
-    except Exception:
-        return {}
+    except (subprocess.CalledProcessError, ValueError):
+        return metadata
 
-    streams_value = data.get("streams")
-    if not isinstance(streams_value, list) or not streams_value:
-        return {}
-    stream_candidate = streams_value[0]
-    if not isinstance(stream_candidate, dict):
-        return {}
-    stream = stream_candidate
+    streams = coerce_object_list(data.get("streams"))
+    if not streams:
+        return metadata
+    stream = streams[0]
+    if not stream:
+        return metadata
 
-    fmt_value = data.get("format")
-    fmt = fmt_value if isinstance(fmt_value, dict) else {}
+    fmt = _coerce_mapping(data.get("format"))
 
     duration = _parse_float(stream.get("duration")) or _parse_float(fmt.get("duration"))
-    bitrate = _parse_int(stream.get("bit_rate") or fmt.get("bit_rate"))
+    bitrate = _parse_int(stream.get("bit_rate"))
+    if bitrate is None:
+        bitrate = _parse_int(fmt.get("bit_rate"))
     channels = _parse_int(stream.get("channels"))
     sample_rate = _parse_int(stream.get("sample_rate"))
 
-    sample_fmt = stream.get("sample_fmt")
-    bits_per = _parse_int(stream.get("bits_per_raw_sample") or stream.get("bits_per_sample"))
+    bits_per = _parse_int(stream.get("bits_per_raw_sample"))
+    if bits_per is None:
+        bits_per = _parse_int(stream.get("bits_per_sample"))
 
-    return {
-        "audio_duration_s": duration,
-        "audio_bitrate_kbps": int(round(bitrate / 1000)) if isinstance(bitrate, int) and bitrate > 0 else None,
-        "audio_channels": channels,
-        "audio_sample_rate_hz": sample_rate,
-        "audio_codec": stream.get("codec_name"),
-        "audio_channel_layout": stream.get("channel_layout"),
-        "audio_sample_fmt": sample_fmt,
-        "audio_bits_per_sample": bits_per,
-    }
+    metadata["audio_duration_s"] = duration
+    metadata["audio_bitrate_kbps"] = (
+        int(round(bitrate / 1000)) if isinstance(bitrate, int) and bitrate > 0 else None
+    )
+    metadata["audio_channels"] = channels
+    metadata["audio_sample_rate_hz"] = sample_rate
+    metadata["audio_codec"] = coerce_str(stream.get("codec_name"))
+    metadata["audio_channel_layout"] = coerce_str(stream.get("channel_layout"))
+    metadata["audio_sample_fmt"] = coerce_str(stream.get("sample_fmt"))
+    metadata["audio_bits_per_sample"] = bits_per
+
+    return metadata

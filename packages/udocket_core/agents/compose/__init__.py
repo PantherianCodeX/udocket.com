@@ -1,3 +1,5 @@
+# pyright: strict
+
 """Compose agent support modules.
 
 This package currently exposes stage profile metadata used by the UI when
@@ -8,8 +10,7 @@ live here to keep the contract aligned with root AGENTS guidelines.
 
 from .profiles import COMPOSE_STAGE_PROFILES, ComposeStageProfile
 
-__all__ = [
+__all__: list[str] = [
     "COMPOSE_STAGE_PROFILES",
     "ComposeStageProfile",
 ]
-

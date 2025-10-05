@@ -13,7 +13,7 @@ from .common.docx import write_basic_docx
 from .compose import COMPOSE_STAGE_PROFILES
 from ..llm import LLMSettings, load_llm_settings
 from ..llm.runtime import ChatClient, ChatClientError, build_chat_client, build_provider_runtime_config
-from packages.udocket_core.json_utils import load_json_object, load_json_value, parse_json_value_strict
+from packages.udocket_core.json_utils import load_json_object, load_json_value, parse_json_object
 
 
 logger = logging.getLogger("udocket.compose.agent")
@@ -1143,17 +1143,9 @@ class ComposeAgent:
             "compose.qa_review",
         }:
             try:
-                parsed = parse_json_value_strict(content, context=f"{stage_key} response")
+                parsed = parse_json_object(content, context=f"{stage_key} response")
             except ValueError as exc:
                 raise ComposeStageError(stage_key, str(exc))
-            if stage_key in {
-                "compose.timeline_builder",
-                "compose.graph_builder",
-                "compose.context_builder",
-                "compose.graph_visual",
-                "compose.qa_review",
-            } and not isinstance(parsed, Mapping):
-                raise ComposeStageError(stage_key, "Stage response must be a JSON object")
             return parsed
 
         if stage_key in {"compose.client_brief", "compose.lawyer_brief"}:

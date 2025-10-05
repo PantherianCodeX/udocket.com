@@ -1,3 +1,5 @@
+# pyright: strict
+
 """LLM configuration utilities."""
 
 from .config import (
@@ -8,7 +10,7 @@ from .config import (
     load_llm_settings,
 )
 
-__all__ = [
+__all__: list[str] = [
     "LLMProvider",
     "LLMProviderModel",
     "LLMStageAssignment",

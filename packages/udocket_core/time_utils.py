@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# pyright: strict
+
 from datetime import datetime, timezone
 from typing import Literal, overload
 

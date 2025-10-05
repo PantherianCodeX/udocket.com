@@ -1,11 +1,13 @@
+# pyright: strict
+
 """Minimal helpers for writing DOCX files without heavy dependencies."""
+
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Iterable, Sequence
-from xml.sax.saxutils import escape
-
 import zipfile
+from collections.abc import Iterable, Sequence
+from pathlib import Path
+from xml.sax.saxutils import escape
 
 from ...time_utils import format_utc
 
@@ -42,17 +44,12 @@ _CORE_PROPS_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
 
 def _paragraph_xml(text: str) -> str:
     safe = escape(text).replace("\n", "<w:br />")
-    return (
-        "<w:p><w:r><w:t xml:space=\"preserve\">"
-        + safe
-        + "</w:t></w:r></w:p>"
-    )
+    return "<w:p><w:r><w:t xml:space=\"preserve\">" + safe + "</w:t></w:r></w:p>"
 
 
 def _document_xml(paragraphs: Sequence[str]) -> str:
-    if not paragraphs:
-        paragraphs = ("",)
-    body = "".join(_paragraph_xml(p) for p in paragraphs)
+    content = paragraphs or ("",)
+    body = "".join(_paragraph_xml(paragraph) for paragraph in content)
     return (
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
         "<w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\">"
@@ -67,24 +64,23 @@ def write_basic_docx(
     output_path: Path,
     title: str = "Compose Deliverable",
 ) -> Path:
-    """Write a minimal DOCX file with the provided paragraphs.
+    """Write a minimal DOCX file with the provided paragraphs."""
 
-    The implementation intentionally avoids third-party dependencies to keep the
-    agent lightweight. It is not feature complete but produces standards-compliant
-    documents that open in Word, LibreOffice, and most viewers.
-    """
-
-    para_list = [str(p or "").strip("\r") for p in paragraphs]
+    para_list = [str(paragraph or "").strip("\r") for paragraph in paragraphs]
     timestamp = format_utc(timespec="seconds")
-    core_props = _CORE_PROPS_TEMPLATE.format(title=escape(title), created=timestamp, modified=timestamp)
+    core_props = _CORE_PROPS_TEMPLATE.format(
+        title=escape(title),
+        created=timestamp,
+        modified=timestamp,
+    )
     document_xml = _document_xml(para_list)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(output_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("[Content_Types].xml", _CONTENT_TYPES)
-        zf.writestr("_rels/.rels", _RELS)
-        zf.writestr("docProps/core.xml", core_props)
-        zf.writestr("word/document.xml", document_xml)
+    with zipfile.ZipFile(output_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("[Content_Types].xml", _CONTENT_TYPES)
+        archive.writestr("_rels/.rels", _RELS)
+        archive.writestr("docProps/core.xml", core_props)
+        archive.writestr("word/document.xml", document_xml)
     return output_path
 
 

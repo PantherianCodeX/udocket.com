@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+# pyright: strict
+
 from dataclasses import dataclass
-from typing import Optional
 
 DEFAULT_MIN_LINES = 8
 DEFAULT_MIN_CHARS = 2000
@@ -17,13 +18,13 @@ def split_for_retry(
     text: str,
     *,
     config: ChunkSplitConfig | None = None,
-) -> Optional[tuple[str, str]]:
+) -> tuple[str, str] | None:
     cfg = config or ChunkSplitConfig()
-    text = text.strip()
-    if not text:
+    trimmed = text.strip()
+    if not trimmed:
         return None
 
-    lines = text.splitlines()
+    lines = trimmed.splitlines()
     if len(lines) >= cfg.min_lines:
         midpoint = len(lines) // 2
         left = "\n".join(lines[:midpoint]).strip()
@@ -31,10 +32,10 @@ def split_for_retry(
         if left and right:
             return left, right
 
-    if len(text) >= cfg.min_chars * 2:
-        midpoint = len(text) // 2
-        left = text[:midpoint].rstrip()
-        right = text[midpoint:].lstrip()
+    if len(trimmed) >= cfg.min_chars * 2:
+        midpoint = len(trimmed) // 2
+        left = trimmed[:midpoint].rstrip()
+        right = trimmed[midpoint:].lstrip()
         if left and right:
             return left, right
 
@@ -43,12 +44,22 @@ def split_for_retry(
 
 def should_retry_for_length(message: str) -> bool:
     lowered = message.lower()
-    return "empty completion" in lowered or "finish_reason='length'" in lowered or "finish_reason=length" in lowered or "length" in lowered
+    return any(
+        token in lowered
+        for token in (
+            "empty completion",
+            "finish_reason='length'",
+            "finish_reason=length",
+            "length",
+        )
+    )
 
 
 def should_retry_for_json(message: str) -> bool:
     lowered = message.lower()
-    return "invalid json" in lowered or "jsondecodeerror" in lowered
+    return any(
+        token in lowered for token in ("invalid json", "jsondecodeerror", "json decode error")
+    )
 
 
 __all__ = [
