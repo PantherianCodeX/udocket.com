@@ -3,7 +3,6 @@ from __future__ import annotations
 # pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false, reportAttributeAccessIssue=false
 
 from datetime import datetime
-import json
 from typing import Any, Dict, List
 
 from django.http import HttpRequest, HttpResponse, JsonResponse, HttpResponseBadRequest
@@ -28,6 +27,7 @@ from apps.platform.operations.llm import (
     upsert_llm_configuration,
     upsert_org_provider_credential,
 )
+from packages.udocket_core.json_utils import parse_json_value
 
 
 @require_http_methods(["POST"])
@@ -183,14 +183,11 @@ def case_llm_settings(request: HttpRequest, case_id: str) -> HttpResponse:
     if not organization_id:
         return HttpResponseBadRequest("Case is not associated with an organization.")
 
-    try:
-        raw_body = request.body.decode("utf-8") if request.body else "{}"
-        payload = json.loads(raw_body or "{}")
-    except Exception:  # noqa: BLE001
+    raw_body = request.body.decode("utf-8") if request.body else "{}"
+    parsed_payload = parse_json_value(raw_body or "{}")
+    if not isinstance(parsed_payload, dict):
         return HttpResponseBadRequest("Invalid JSON payload.")
-
-    if not isinstance(payload, dict):
-        return HttpResponseBadRequest("Invalid JSON payload.")
+    payload = {str(key): value for key, value in parsed_payload.items()}
 
     target_raw = payload.get("target")
     if not isinstance(target_raw, str) or not target_raw.strip():
@@ -284,13 +281,10 @@ def case_llm_providers(request: HttpRequest, case_id: str) -> HttpResponse:
             }
         )
 
-    try:
-        payload = json.loads(request.body.decode("utf-8") or "{}")
-    except Exception:  # noqa: BLE001
-        return HttpResponseBadRequest("Invalid JSON payload.")
-
-    if not isinstance(payload, dict):
+    parsed_payload = parse_json_value(request.body.decode("utf-8") if request.body else "{}")
+    if not isinstance(parsed_payload, dict):
         return HttpResponseBadRequest("Invalid payload format.")
+    payload = {str(key): value for key, value in parsed_payload.items()}
 
     provider_key = str(payload.get("provider") or "").strip().lower()
     if not provider_key:
