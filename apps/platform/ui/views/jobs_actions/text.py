@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import re
 import shutil
 import uuid
@@ -22,6 +21,7 @@ from apps.platform.jobs.models import Job
 from apps.platform.operations.channels import send_job_update
 from apps.platform.operations.storage import ensure_case_dirs
 from apps.platform.operations.utils import append_job_log, update_job_meta
+from packages.udocket_core.json_utils import parse_json_value
 
 from ..auth import ensure_authenticated
 from ..contexts import user_can_review_case
@@ -115,10 +115,11 @@ def _collect_fixture_transcripts() -> Iterable[Dict[str, Any]]:
 def _handle_text_upload(request: HttpRequest, case: Case) -> UploadResult:
     payload: Dict[str, Any] = {}
     if request.content_type and "application/json" in request.content_type:
-        try:
-            payload = json.loads(request.body.decode("utf-8")) if request.body else {}
-        except json.JSONDecodeError as exc:  # noqa: PERF203 — explicit error
-            raise ValueError("Invalid JSON payload") from exc
+        if request.body:
+            parsed = parse_json_value(request.body.decode("utf-8"))
+            if not isinstance(parsed, dict):
+                raise ValueError("Invalid JSON payload")
+            payload = {str(key): value for key, value in parsed.items()}
     elif isinstance(request.POST, QueryDict):
         payload = request.POST.dict()
 
