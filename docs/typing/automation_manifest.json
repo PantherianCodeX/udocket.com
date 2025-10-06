@@ -58,10 +58,7 @@
   },
   "recordedAt": "2025-10-05T15:52:04.935222+00:00",
   "strictModules": [
-    {
-      "path": "apps/platform/accounts/admin.py",
-      "verifiedAt": "2025-10-05T01:44:10.645472+00:00"
-    },
+    
     {
       "path": "apps/platform/accounts/models.py",
       "verifiedAt": "2025-10-05T01:44:10.645472+00:00"

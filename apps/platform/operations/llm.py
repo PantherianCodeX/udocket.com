@@ -39,14 +39,14 @@ from packages.udocket_core.json_utils import (
     read_json_object,
 )
 
-_ANALYZE_SRC: Iterable[str]
+_analyze_src: Iterable[str]
 try:
     _mod = importlib.import_module("packages.udocket_core.agents.analyze_lib")
-    _ANALYZE_SRC = getattr(_mod, "DISALLOWED_PROVIDERS", ())
+    _analyze_src = getattr(_mod, "DISALLOWED_PROVIDERS", ())
 except Exception:  # pragma: no cover - fallback when analyzer unavailable
-    _ANALYZE_SRC = ()
+    _analyze_src = ()
 
-_ANALYZE_DISALLOWED_PROVIDERS: set[str] = {str(name) for name in _ANALYZE_SRC}
+_ANALYZE_DISALLOWED_PROVIDERS: set[str] = {str(name) for name in _analyze_src}
 
 from .crypto import decrypt_secret, encrypt_secret
 from .models import LLMConfiguration, LLMProviderCredential

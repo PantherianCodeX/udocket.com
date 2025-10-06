@@ -198,13 +198,6 @@ class JobStreamConsumer(AsyncJsonWebsocketConsumer):
         if getattr(settings, "PLATFORM_DEV_OPEN", True):
             return [str(pk) for pk in qs.values_list("pk", flat=True)]
         user_value = self.scope.get("user")
-        user_lookup: AppUser | int | None
-        if isinstance(user_value, AppUser):
-            user_lookup = user_value
-        elif isinstance(user_value, int):
-            user_lookup = user_value
-        else:
-            user_lookup = None
         scoped = scope_jobs(qs, user_value)
         return [str(pk) for pk in scoped.values_list("pk", flat=True)]
 
