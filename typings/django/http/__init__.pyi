@@ -38,4 +38,5 @@ __all__ = [
     "HttpResponseRedirect",
     "JsonResponse",
     "Http404",
+    "QueryDict",
 ]

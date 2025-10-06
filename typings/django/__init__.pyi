@@ -3,7 +3,17 @@
 
 """Overlay package for django."""
 
-from .http.request import HttpRequest
+from .http import HttpRequest, HttpResponse, HttpResponseRedirect, JsonResponse, Http404, QueryDict
+# Re-export commonly imported submodules to satisfy "from django import template/shortcuts"
+from . import template, shortcuts
 
-__all__ = ["HttpRequest"]
-
+__all__ = [
+    "HttpRequest",
+    "HttpResponse",
+    "HttpResponseRedirect",
+    "JsonResponse",
+    "Http404",
+    "QueryDict",
+    "template",
+    "shortcuts",
+]
