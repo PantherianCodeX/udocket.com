@@ -4,10 +4,6 @@ from typing import Any, Optional
 from django.db.models import QuerySet as _DJQuerySet
 
 
-class _Choice(str):
-    value: str
-
-
 class JobQuerySet(_DJQuerySet[Any]):
     def select_related(self, *args: Any, **kwargs: Any) -> JobQuerySet: ...
     def filter(self, *args: Any, **kwargs: Any) -> JobQuerySet: ...
@@ -37,28 +33,32 @@ class Job:
     @classmethod
     def typed_objects(cls) -> JobManager: ...
 
-    # Enum-like choices (TextChoices in implementation)
-    class Status:
-        def __new__(cls, *args: Any, **kwargs: Any) -> _Choice: ...
-        def __init__(self, *args: Any, **kwargs: Any) -> None: ...
-        PENDING: _Choice
-        RUNNING: _Choice
-        CONVERTING: _Choice
-        UPLOADING: _Choice
-        CANCELLING: _Choice
-        SUCCEEDED: _Choice
-        FAILED: _Choice
-        CANCELLED: _Choice
-        CORRUPTED: _Choice
+    # Enum-like choices (TextChoices in implementation), modeled as str subclasses
+    class Status(str):
+        value: str
+        def __new__(cls, *args: Any, **kwargs: Any) -> "Job.Status": ...
+        PENDING: "Job.Status"
+        RUNNING: "Job.Status"
+        CONVERTING: "Job.Status"
+        UPLOADING: "Job.Status"
+        CANCELLING: "Job.Status"
+        SUCCEEDED: "Job.Status"
+        FAILED: "Job.Status"
+        CANCELLED: "Job.Status"
+        CORRUPTED: "Job.Status"
 
-    class Mode:
-        BATCH: _Choice
-        ON_DEMAND: _Choice
+    class Mode(str):
+        value: str
+        def __new__(cls, *args: Any, **kwargs: Any) -> "Job.Mode": ...
+        BATCH: "Job.Mode"
+        ON_DEMAND: "Job.Mode"
 
-    class ReviewStatus:
-        PENDING: _Choice
-        APPROVED: _Choice
-        REJECTED: _Choice
+    class ReviewStatus(str):
+        value: str
+        def __new__(cls, *args: Any, **kwargs: Any) -> "Job.ReviewStatus": ...
+        PENDING: "Job.ReviewStatus"
+        APPROVED: "Job.ReviewStatus"
+        REJECTED: "Job.ReviewStatus"
 
     # Commonly accessed fields
     status: str

@@ -42,14 +42,14 @@ INSTALLED_APPS = [
     "rules",
     "simple_history",
     "mozilla_django_oidc",
-    "apps.platform.jobs",
+    "apps.platform.jobs.apps.JobsConfig",
     "django_celery_results",
     "django_celery_beat",
     # Channels (ASGI)
     "channels",
     # Local apps
     "apps.platform.accounts",
-    "apps.platform.cases",
+    "apps.platform.cases.apps.CasesConfig",
     "apps.platform.artifacts",
     "apps.platform.operations",
     "apps.platform.authorization",
