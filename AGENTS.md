@@ -157,7 +157,7 @@ General guidelines:
 - Audit streams: `ops/ops_<agent>.jsonl`
 
 ## Coding Guidelines
-- Language: Python 3.11.
+- Language: Python 3.12.
 - Style: type-annotated functions; avoid one-letter names; no inline comments unless essential.
 - Strong typing:
   - Read and follow `docs/typing-roadmap.md` and `docs/typing_refactor_plan.md` before touching code.

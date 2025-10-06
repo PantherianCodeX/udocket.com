@@ -40,7 +40,6 @@ DIST_NAMES: tuple[str, ...] = (
     "django-stubs",
     "djangorestframework-stubs",
     "channels-stubs",
-    "types-psycopg2",
     "types-requests",
     "types-requests-oauthlib",
     "types-redis",

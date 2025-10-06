@@ -1,5 +1,5 @@
 # Allow overriding the Python base image (useful for mirrors/registries)
-ARG PYTHON_BASE=mcr.microsoft.com/devcontainers/python:3.11
+ARG PYTHON_BASE=mcr.microsoft.com/devcontainers/python:3.12
 FROM ${PYTHON_BASE}
 
 ENV PYTHONDONTWRITEBYTECODE=1 \

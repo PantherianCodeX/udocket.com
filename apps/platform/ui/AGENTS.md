@@ -11,7 +11,7 @@ Scope: everything beneath `apps/platform/ui/` (templates, views, presenters, sel
 - Minimal surface area: push shared behavior into low‑level includes and helpers (presenters, selectors, scripts) to reduce drift.
 - Server‑rendered first: use HTMX for partial updates; keep JS lightweight and colocated in shared component scripts.
 - Accessibility: use the provided modal/popover systems with focus management and ARIA attributes.
-- Small, typed view functions: Python 3.11, type hints, explicit error handling, and guardrails aligned with backend security rules.
+- Small, typed view functions: Python 3.12, type hints, explicit error handling, and guardrails aligned with backend security rules.
 
 
 ## Directory Layout
@@ -170,7 +170,7 @@ Scope: everything beneath `apps/platform/ui/` (templates, views, presenters, sel
 
 
 ## Python Conventions
-- Python 3.11, type annotations on function signatures and key variables; avoid one‑letter names.
+- Python 3.12, type annotations on function signatures and key variables; avoid one-letter names.
 - Keep view functions small and explicit; push formatting/aggregation into presenters and selectors.
 - Use `@require_http_methods` decorators and return appropriate fragments when `HX-Request` is present.
 - Log with module logger `apps.platform.ui` and include identifiers in `extra` where useful.
