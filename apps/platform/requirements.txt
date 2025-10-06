@@ -47,7 +47,9 @@ model-bakery>=1.20.5
 mypy>=1.18.2
 django-stubs[compatible-mypy]>=5.2.5
 djangorestframework-stubs>=3.16.4
-channels-stubs>=4.0.0
+# The channels-stubs project currently publishes 0.1.x versions.
+# Use the latest 0.1 series to provide typing for Django Channels 4.
+channels-stubs>=0.1.9
 types-psycopg2>=3.1.21.0
 types-requests>=2.32.0.20240914
 types-requests-oauthlib>=2.0.0.20240522
