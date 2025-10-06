@@ -10,6 +10,7 @@ from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from django.conf import settings
 
 from apps.platform.cases.models import CaseMembership
+from apps.platform.accounts.models import User as AppUser
 from apps.platform.jobs.models import Job
 from apps.platform.tenancy import scope_jobs
 
@@ -196,8 +197,15 @@ class JobStreamConsumer(AsyncJsonWebsocketConsumer):
         qs = Job.objects.filter(pk__in=job_ids)
         if getattr(settings, "PLATFORM_DEV_OPEN", True):
             return [str(pk) for pk in qs.values_list("pk", flat=True)]
-        user = self.scope.get("user")
-        scoped = scope_jobs(qs, user)
+        user_value = self.scope.get("user")
+        user_lookup: AppUser | int | None
+        if isinstance(user_value, AppUser):
+            user_lookup = user_value
+        elif isinstance(user_value, int):
+            user_lookup = user_value
+        else:
+            user_lookup = None
+        scoped = scope_jobs(qs, user_value)
         return [str(pk) for pk in scoped.values_list("pk", flat=True)]
 
     @database_sync_to_async
@@ -206,13 +214,20 @@ class JobStreamConsumer(AsyncJsonWebsocketConsumer):
             return []
         if getattr(settings, "PLATFORM_DEV_OPEN", True):
             return [str(case_id) for case_id in case_ids]
-        user = self.scope.get("user")
-        if not user or not getattr(user, "is_authenticated", False):
+        user_value = self.scope.get("user")
+        user_lookup: AppUser | int | None
+        if isinstance(user_value, AppUser):
+            user_lookup = user_value
+        elif isinstance(user_value, int):
+            user_lookup = user_value
+        else:
+            user_lookup = None
+        if not user_value or not getattr(user_value, "is_authenticated", False):
             return []
         return [
             str(case_id)
             for case_id in CaseMembership.objects.filter(
-                case_id__in=case_ids, user=user
+                case_id__in=case_ids, user=user_lookup
             ).values_list("case_id", flat=True)
         ]
 
@@ -262,14 +277,21 @@ class JobConsumer(AsyncJsonWebsocketConsumer):
     def _allowed_for_job(self, job_id: str) -> bool:
         if getattr(settings, "PLATFORM_DEV_OPEN", True):
             return True
-        user = self.scope.get("user")
-        if not user or not getattr(user, "is_authenticated", False):
+        user_value = self.scope.get("user")
+        user_lookup: AppUser | int | None
+        if isinstance(user_value, AppUser):
+            user_lookup = user_value
+        elif isinstance(user_value, int):
+            user_lookup = user_value
+        else:
+            user_lookup = None
+        if not user_value or not getattr(user_value, "is_authenticated", False):
             return False
         try:
             job = Job.objects.select_related("case").get(pk=job_id)
         except Job.DoesNotExist:
             return False
-        return CaseMembership.objects.filter(case=job.case, user=user).exists()
+        return CaseMembership.objects.filter(case=job.case, user=user_lookup).exists()
 
 
 class CaseConsumer(AsyncJsonWebsocketConsumer):
@@ -298,7 +320,14 @@ class CaseConsumer(AsyncJsonWebsocketConsumer):
     def _allowed_for_case(self, case_id: str) -> bool:
         if getattr(settings, "PLATFORM_DEV_OPEN", True):
             return True
-        user = self.scope.get("user")
-        if not user or not getattr(user, "is_authenticated", False):
+        user_value = self.scope.get("user")
+        user_lookup: AppUser | int | None
+        if isinstance(user_value, AppUser):
+            user_lookup = user_value
+        elif isinstance(user_value, int):
+            user_lookup = user_value
+        else:
+            user_lookup = None
+        if not user_value or not getattr(user_value, "is_authenticated", False):
             return False
-        return CaseMembership.objects.filter(case_id=case_id, user=user).exists()
+        return CaseMembership.objects.filter(case_id=case_id, user=user_lookup).exists()

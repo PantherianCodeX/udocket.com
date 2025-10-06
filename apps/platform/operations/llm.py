@@ -3,6 +3,7 @@ from __future__ import annotations
 # pyright: strict
 
 from collections.abc import Iterable, Mapping, Sequence
+import importlib
 from typing import Any, TypeAlias, cast
 
 try:  # pragma: no cover - Python < 3.11 fallback
@@ -38,17 +39,14 @@ from packages.udocket_core.json_utils import (
     read_json_object,
 )
 
+_ANALYZE_SRC: Iterable[str]
 try:
-    from packages.udocket_core.agents.analyze_lib import (
-        DISALLOWED_PROVIDERS as _analyze_disallowed_providers_source,
-    )
+    _mod = importlib.import_module("packages.udocket_core.agents.analyze_lib")
+    _ANALYZE_SRC = getattr(_mod, "DISALLOWED_PROVIDERS", ())
 except Exception:  # pragma: no cover - fallback when analyzer unavailable
-    _analyze_disallowed_providers_source: Iterable[str] = ()
-else:
-    # already bound by the import alias above
-    pass
+    _ANALYZE_SRC = ()
 
-_ANALYZE_DISALLOWED_PROVIDERS: set[str] = {str(name) for name in _analyze_disallowed_providers_source}
+_ANALYZE_DISALLOWED_PROVIDERS: set[str] = {str(name) for name in _ANALYZE_SRC}
 
 from .crypto import decrypt_secret, encrypt_secret
 from .models import LLMConfiguration, LLMProviderCredential
