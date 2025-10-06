@@ -1,6 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/microsoft/pyright/main/packages/vscode-pyright/schemas/pyrightconfig.schema.json",
-  "pythonVersion": "3.11",
+  "pythonVersion": "3.12",
   "venvPath": ".",
   "typeCheckingMode": "standard",
   // Enable strict via per-file pragma for clean modules only.
@@ -55,4 +55,6 @@
       "extraPaths": ["apps", "typings"]
     }
   ]
+  ,
+  "stubPath": "typings"
 }
