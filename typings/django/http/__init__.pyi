@@ -2,11 +2,21 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
+class QueryDict(Mapping[str, Any]):
+    def __init__(self, *args: Any, **kwargs: Any) -> None: ...
+    def get(self, key: str, default: Any | None = ...) -> Any | None: ...
+    def getlist(self, key: str) -> list[Any]: ...
+
 class HttpRequest:
     method: str
     user: Any
-    GET: Mapping[str, Any]
-    POST: Mapping[str, Any]
+    GET: QueryDict
+    POST: QueryDict
+    META: Mapping[str, Any]
+    FILES: Mapping[str, Any]
+    headers: Mapping[str, str]
+    content_type: str
+    body: bytes
 
 class HttpResponse:
     status_code: int
@@ -29,4 +39,3 @@ __all__ = [
     "JsonResponse",
     "Http404",
 ]
-
