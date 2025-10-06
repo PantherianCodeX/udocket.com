@@ -3,7 +3,12 @@
   "pythonVersion": "3.11",
   "venvPath": ".",
   "typeCheckingMode": "standard",
-//STAGE 5
+  // Enable strict via per-file pragma for clean modules only.
+  // Keep repo-wide scanning limited initially to core packages.
+  "include": [
+    "packages",
+    "apps/platform/operations"
+  ],
   "strict": [],
 // STAGE 1
   "reportArgumentType": "warning",
@@ -47,7 +52,7 @@
   "executionEnvironments": [
     {
       "root": ".",
-      "extraPaths": ["apps"]
+      "extraPaths": ["apps", "typings"]
     }
   ]
 }

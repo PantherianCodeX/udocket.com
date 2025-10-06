@@ -43,11 +43,12 @@ try:
         DISALLOWED_PROVIDERS as _analyze_disallowed_providers_source,
     )
 except Exception:  # pragma: no cover - fallback when analyzer unavailable
-    _ANALYZE_DISALLOWED_PROVIDERS_SOURCE: Iterable[str] = ()
+    _analyze_disallowed_providers_source: Iterable[str] = ()
 else:
-    _ANALYZE_DISALLOWED_PROVIDERS_SOURCE = _analyze_disallowed_providers_source
+    # already bound by the import alias above
+    pass
 
-_ANALYZE_DISALLOWED_PROVIDERS: set[str] = {str(name) for name in _ANALYZE_DISALLOWED_PROVIDERS_SOURCE}
+_ANALYZE_DISALLOWED_PROVIDERS: set[str] = {str(name) for name in _analyze_disallowed_providers_source}
 
 from .crypto import decrypt_secret, encrypt_secret
 from .models import LLMConfiguration, LLMProviderCredential
@@ -151,7 +152,8 @@ def _clean_stage_map(payload: Mapping[str, Any] | None) -> StageMap:
             continue
         if not isinstance(cfg, Mapping):
             continue
-        cfg_dict = coerce_json_object(cfg)
+        cfg_mapping = cast(Mapping[str, object], cfg)
+        cfg_dict = coerce_json_object(cfg_mapping)
 
         provider_raw = cfg_dict.get("provider")
         provider = coerce_str(provider_raw)
@@ -228,8 +230,7 @@ def _normalize_provider_chain(provider_chain: Iterable[str] | None) -> list[str]
 
 def serialize_llm_configuration(config: LLMConfiguration) -> LLMConfigurationPayload:
     raw_stage_map = config.stage_map
-    stage_map_input = raw_stage_map if isinstance(raw_stage_map, Mapping) else None
-    stage_map = _clean_stage_map(stage_map_input)
+    stage_map = _clean_stage_map(cast(Mapping[str, Any] | None, raw_stage_map))
     provider_chain = [
         provider.strip().lower()
         for provider in (config.provider_chain or [])
@@ -423,8 +424,6 @@ def _provider_catalog() -> dict[str, JSONDict]:
         return {}
     catalog: dict[str, JSONDict] = {}
     for provider_name_obj, provider_cfg in providers_payload.items():
-        if not isinstance(provider_name_obj, str):
-            continue
         if isinstance(provider_cfg, Mapping):
             catalog[provider_name_obj] = coerce_json_object(provider_cfg)
         else:
@@ -710,12 +709,14 @@ def evaluate_provider_setup(
         )
         if not any_enabled:
             issues.append("Enable at least one model before enabling this provider")
+    issues_json: list[JSONValue] = [s for s in issues]
+    models_json: list[JSONValue] = [coerce_json_object(m) for m in sanitized_models]
     return {
         "ready": not issues,
-        "issues": issues,
+        "issues": issues_json,
         "endpoint": endpoint_value,
         "metadata": metadata_dict,
-        "models": sanitized_models,
+        "models": models_json,
     }
 
 
@@ -793,7 +794,7 @@ def build_provider_registry(
         else:
             analysis_issues = []
 
-        registry[provider_name] = {
+        entry_catalog: dict[str, object] = {
             "value": provider_name,
             "label": provider.display_name,
             "available": available,
@@ -819,6 +820,9 @@ def build_provider_registry(
             "category": getattr(provider, "category", "creator"),
             "hosted_creators": list(getattr(provider, "hosted_creators", [])),
         }
+        registry[provider_name] = {
+            k: coerce_json_value(v) for k, v in entry_catalog.items()
+        }
 
     for provider_name, credential in credentials_map.items():
         if provider_name in registry:
@@ -828,14 +832,16 @@ def build_provider_registry(
             for item in existing_models_seq:
                 value = str(item.get("value") or "")
                 if value:
-                    merged_models[value] = dict(item)
+                    merged_models[value] = coerce_json_object(item)
             credential_models_seq = _as_mapping_sequence(credential.get("models"))
             for option in _credential_models_to_options(credential_models_seq):
                 option_value = option["value"]
                 if option_value:
-                    merged_models[option_value] = dict(option)
+                    merged_models[option_value] = coerce_json_object(option)
             if merged_models:
-                existing["models"] = list(merged_models.values())
+                existing["models"] = [
+                    coerce_json_object(opt) for opt in merged_models.values()
+                ]
             endpoint_override = credential.get("endpoint")
             if isinstance(endpoint_override, str) and endpoint_override:
                 existing["endpoint"] = endpoint_override
@@ -888,8 +894,7 @@ def build_provider_registry(
             entry["default_endpoint"] = default_endpoint
         if endpoint_override:
             entry["endpoint"] = endpoint_override
-
-        registry[provider_name] = entry
+        registry[provider_name] = {k: coerce_json_value(v) for k, v in entry.items()}
 
     return registry
 
@@ -908,7 +913,7 @@ def get_provider_secret_with_metadata(
     return {
         "endpoint": record.endpoint,
         "api_key": decrypt_secret(record.api_key_encrypted),
-        "models": models_payload,
+        "models": [coerce_json_object(m) for m in models_payload],
         "metadata": metadata_payload,
     }
 

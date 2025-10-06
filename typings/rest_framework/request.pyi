@@ -1,16 +1,12 @@
-# pyright: reportUnusedImport=false, reportUnusedClass=false, reportUnusedFunction=false, reportUnusedVariable=false
-# mypy: ignore-errors
-
 from __future__ import annotations
 
 from typing import Any, Mapping
 
-
 class Request:
-    user: Any
-    data: Mapping[str, Any]
+    method: str
+    data: Any
     query_params: Mapping[str, Any]
-
+    user: Any
 
 __all__ = ["Request"]
 

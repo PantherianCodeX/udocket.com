@@ -17,12 +17,24 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r apps/platform/requirements.txt -r apps/platform/requirements-stubs.txt
           pip install pyright
+          pip install mypy
       - name: Run migrations
         env:
           DJANGO_SETTINGS_MODULE: apps.platform.config.settings.dev
           DATABASE_URL: sqlite:///./udocket_ci.db
         run: |
           python manage.py migrate --noinput
+      - name: Type checks (pyright baseline)
+        run: pyright
+
+      - name: Type checks (mypy baseline)
+        env:
+          MYPY_CACHE_DIR: .mypy_cache
+        run: mypy
+
+      - name: Enforce strict pragma presence
+        run: python scripts/typing/ci_enforce_strict.py
+
       - name: Run tests
         env:
           DJANGO_SETTINGS_MODULE: apps.platform.config.settings.dev

@@ -69,7 +69,7 @@ def _unique_conversion_title(
                 title_candidate = title_val.strip()
                 if title_candidate:
                     existing.add(title_candidate)
-    return cast(str, unique_title("Conversion", existing))
+    return unique_title("Conversion", existing)
 
 
 @shared_task(bind=True)

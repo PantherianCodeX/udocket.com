@@ -79,7 +79,9 @@ def coerce_object_dict(
         return {}
 
     mapping_value = cast(Mapping[object, object], value)
-    transform = key_transform or (lambda text: text)
+    def _identity(text: str) -> str:
+        return text
+    transform: Callable[[str], str] = key_transform or _identity
 
     result: dict[str, object] = {}
     for raw_key, raw_value in mapping_value.items():

@@ -13,7 +13,7 @@ import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional, cast
+from typing import Any, Optional
 
 import requests
 
@@ -336,7 +336,7 @@ def ensure_wav(input_path: Path, out_dir: Path, case_id: str) -> Path:
 
 def _sdk_version() -> str:
     try:
-        import azure.cognitiveservices.speech as speechsdk  # type: ignore
+        import azure.cognitiveservices.speech as speechsdk
 
         version = getattr(speechsdk, "__version__", None)
         if isinstance(version, str) and version:
@@ -556,10 +556,10 @@ def _rest_batch_transcribe(
                 nbest_val = p.get("nBest")
                 nbest = nbest_val if isinstance(nbest_val, list) else []
                 best_candidate = nbest[0] if nbest else None
-                best_dict: JSONObject | None = cast(JSONObject, best_candidate) if isinstance(best_candidate, dict) else None
+                best_dict: JSONObject | None = best_candidate if isinstance(best_candidate, dict) else None
                 words_val = best_dict.get("words") if best_dict else None
                 words_iterable = words_val if isinstance(words_val, list) else []
-                word_dicts = [cast(dict[str, JSONValue], w) for w in words_iterable if isinstance(w, dict)]
+                word_dicts = [w for w in words_iterable if isinstance(w, dict)]
                 for w in word_dicts:
                     woff = _to_seconds(w.get("offset") or w.get("offsetInTicks"))
                     wdur = _to_seconds(w.get("duration") or w.get("durationInTicks"))
@@ -586,7 +586,7 @@ def _rest_batch_transcribe(
                 nbest_val = p.get("nBest")
                 nbest_list = nbest_val if isinstance(nbest_val, list) else []
                 best_candidate = nbest_list[0] if nbest_list else None
-                best: JSONObject | None = cast(JSONObject, best_candidate) if isinstance(best_candidate, dict) else None
+                best: JSONObject | None = best_candidate if isinstance(best_candidate, dict) else None
                 if best is None:
                     continue
                 display_text = coerce_str(best.get("display"))
@@ -630,7 +630,7 @@ def _rest_batch_transcribe(
                     if nb:
                         first = nb[0]
                         if isinstance(first, dict):
-                            first_obj = cast(JSONObject, first)
+                            first_obj = first
                             candidate = (
                                 coerce_str(first_obj.get("display"))
                                 or coerce_str(first_obj.get("lexical"))
@@ -695,7 +695,7 @@ class TranscriptionResult:
 class _OnDemandTranscriber:
     def __init__(self, audio: Path, lang: str, key: str, region: str, case_dir: Path, case_id: str, debug: bool) -> None:
         try:
-            import azure.cognitiveservices.speech as speechsdk  # type: ignore
+            import azure.cognitiveservices.speech as speechsdk
         except Exception as e:  # pragma: no cover - import-time
             raise RuntimeError("Azure Speech SDK not installed (pip install azure-cognitiveservices-speech)") from e
 
@@ -719,12 +719,9 @@ class _OnDemandTranscriber:
             pass
 
         self._speechsdk = speechsdk
-        self.recognizer = cast(
-            Any,
-            speechsdk.SpeechRecognizer(
-                speech_config=speech_config,
-                audio_config=speechsdk.audio.AudioConfig(filename=str(audio)),
-            ),
+        self.recognizer: speechsdk.SpeechRecognizer = speechsdk.SpeechRecognizer(
+            speech_config=speech_config,
+            audio_config=speechsdk.audio.AudioConfig(filename=str(audio)),
         )
         self.chunks: list[str] = []
         self.done = threading.Event()

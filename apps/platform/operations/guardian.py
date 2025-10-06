@@ -105,7 +105,7 @@ def _load_guardian_defaults() -> JSONDict:
 
 def _default_instructions() -> InstructionList:
     defaults = _load_guardian_defaults()
-    return cast(InstructionList, coerce_object_list(defaults.get("instructions")))
+    return coerce_object_list(defaults.get("instructions"))
 
 
 def _fetch_guardian_configuration(organization_id: str) -> JSONDict:

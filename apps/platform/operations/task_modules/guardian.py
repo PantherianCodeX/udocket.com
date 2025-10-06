@@ -19,7 +19,6 @@ from apps.platform.cases.models import Case
 from apps.platform.jobs.models import Job
 from apps.platform.operations.guardian import (
     build_guardian_context as _default_guardian_context_factory,
-    build_guardian_review_record,
     snapshot_artifact_for_guardian,
     store_guardian_review,
     GuardianContext,

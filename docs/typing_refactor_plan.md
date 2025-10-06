@@ -20,6 +20,7 @@ This document lays out the baseline rules for strengthening static typing across
 - Share common shape definitions from `typing` modules rather than inlining anonymous dictionaries.
 - Prefer `@dataclass` or `NamedTuple` where we shuttle structured data between layers (e.g., job metadata, websocket payloads).
 - Keep third-party stubs in sync: add/update `types-` wheels in `pyproject.toml` when a dependency starts producing `Any` spillage.
+  - When upstream types are unavailable, add minimal local stubs under `typings/` following `docs/typing/vendor_stubs.md`.
 - When the same clean-up appears in multiple reviews (for example, adding `# pyright: strict` or wiring `typed_objects()`), log the pattern in `docs/typing-idempotency-strategy.md` and automate it before repeating the manual edit.
 - Check `docs/typing/automation_helper_specs.md` before hand-editing; if a helper exists (or should exist), extend it instead of applying one-off fixes.
 

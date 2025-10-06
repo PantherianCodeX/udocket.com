@@ -12,8 +12,9 @@ def coerce_sequence(value: object) -> list[Any] | None:
     """Return ``value`` as a list when it is a non-string sequence."""
 
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        seq = cast(Sequence[object], value)
         result: list[Any] = []
-        for item in value:
+        for item in seq:
             result.append(item)
         return result
     return None
