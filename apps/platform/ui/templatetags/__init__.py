@@ -1,1 +1,1 @@
-# pyright: strict
+ 

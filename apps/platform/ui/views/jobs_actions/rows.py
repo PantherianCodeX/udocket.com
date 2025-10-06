@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-# pyright: strict
+ 
 from typing import Any, Dict
 from uuid import UUID
 

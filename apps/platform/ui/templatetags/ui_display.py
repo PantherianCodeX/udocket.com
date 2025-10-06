@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-# pyright: strict
+ 
 from django import template
 
 register = template.Library()

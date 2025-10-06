@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-# pyright: strict
+ 
 import json
 from typing import Any, Dict, List, Sequence
 from urllib.parse import quote

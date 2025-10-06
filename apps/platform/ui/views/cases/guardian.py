@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-# pyright: strict
+ 
 from typing import Dict
 
 from django.http import HttpRequest, HttpResponse, JsonResponse

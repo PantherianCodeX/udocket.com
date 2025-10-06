@@ -47,6 +47,7 @@ The full automation specifications live in `docs/typing/automation_helper_specs.
 - Link roadmap updates directly to the helpers or manifests that drove the change so reviewers can verify evidence quickly.
 - Review the manifest quarterly to decide whether new automation is needed or if manual clean-up is acceptable for the remaining modules.
 - Regenerate `docs/typing/automation_status.md` via `scripts/typing/sync_docs.py` so the helper and strict manifest tables stay current.
+- Keep `# pyright: strict` only in modules that are listed in the strict manifest. Remove the pragma from other files to avoid IDE noise; use the manifest + CI gates to enforce strictness.
 
 ### Implementation Checklist
 - [x] Ship `scripts/typing/bootstrap_env.py` and expose it via `just typing-bootstrap`.
