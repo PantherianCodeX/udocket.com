@@ -55,7 +55,8 @@ types-requests-oauthlib>=2.0.0.20240522
 types-redis>=4.6.0.20241004
 types-PyYAML>=6.0.12.20240917
 types-python-jose>=3.3.4.20240901
-types-pyOpenSSL>=24.2.0.20240813
+# Latest resolvable series on PyPI as of 3.12 images
+types-pyOpenSSL>=24.1.0.20240722
 types-cffi>=1.16.0.20240724
 types-setuptools>=75.2.0.20240917
 types-oauthlib>=3.2.0.20240806
