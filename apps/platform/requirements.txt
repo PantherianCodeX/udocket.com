@@ -62,7 +62,6 @@ types-setuptools>=75.2.0.20240917
 types-oauthlib>=3.2.0.20240806
 types-python-dateutil>=2.9.0.20240906
 types-pyasn1>=0.6.0.20240926
-pytest-stubs>=0.2.0
 celery-stubs>=0.1.3
 flake8>=7.3.0
 black>=25.9.0
