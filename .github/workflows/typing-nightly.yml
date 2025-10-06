@@ -32,3 +32,11 @@ jobs:
       - name: Strict manifest checks
         run: |
           python scripts/typing/check_strict.py --tool both || true
+      - name: Typing audit manifest
+        run: |
+          python -m typing_inspector audit --max-depth 3
+      - name: Upload typing audit manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: typing-audit-manifest
+          path: docs/typing/typing_audit_manifest.json
