@@ -1,6 +1,6 @@
 PYTHON ?= python
 
-.PHONY: init-precommit typing type-baseline type-strict tests ci-check typing-audit typing-dashboard typing-readiness typing-ci
+.PHONY: init-precommit typing type-baseline type-strict tests ci-check typing-audit typing-dashboard typing-readiness typing-ci typing-clean-cache
 
 init-precommit:
 	$(PYTHON) -m pip install pre-commit || true
@@ -43,3 +43,5 @@ typing-ci: reports/typing
 	. ./.venv/bin/activate && typewiz dashboard --manifest reports/typing/typing_audit.json --format markdown --output reports/typing/dashboard.md || true
 	. ./.venv/bin/activate && typewiz dashboard --manifest reports/typing/typing_audit.json --format html --output reports/typing/dashboard.html || true
 
+typing-clean-cache:
+	rm -f .typewiz_cache.json
