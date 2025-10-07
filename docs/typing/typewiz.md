@@ -21,7 +21,12 @@ Ratcheting plan
 ---------------
 - Keep repo-wide baseline (`pyright` baseline) via `typewiz.toml`.
 - Enforce strict zones via per-folder overrides `typewiz.dir.toml` starting with `packages/udocket_core/logging`.
-- Expand strict zones incrementally (e.g., `packages/udocket_core/agents`, `apps/platform/admin`) once clean.
+- Expand strict zones incrementally as folders reach zero diagnostics. Current strict zones:
+  - `packages/udocket_core/logging/` (strict)
+  - `apps/platform/admin/` (strict)
+  - `apps/platform/authorization/` (strict)
+  - `apps/platform/jobs/` (strict)
+  - Candidates (validate, then promote): `tests/`, `packages/udocket_core/agents/`, `apps/platform/operations/`
 - When stable, remove legacy ad-hoc typing steps and make the typewiz CI job blocking.
 
 Configuration
@@ -33,4 +38,3 @@ Notes
 -----
 - Aligns with AGENTS typing guidance; do not introduce `Any` in strict zones.
 - Keep Pyright and mypy configs as the source of truth; typewiz reads them.
-
