@@ -1,0 +1,29 @@
+config_version = 0
+
+[audit]
+# Keep explicit paths for deterministic CI runs
+full_paths = ["apps", "packages", "config", "tests"]
+runners = ["pyright", "mypy"]
+fail_on = "errors"
+max_depth = 3
+
+[audit.active_profiles]
+# Baseline across the repo; stricter profiles applied via folder overrides
+pyright = "baseline"
+
+[audit.engines.pyright]
+config_file = "pyrightconfig.json"
+# Ensure alignment with repo runtime (3.12)
+plugin_args = ["--pythonversion", "3.12"]
+
+[audit.engines.pyright.profiles.baseline]
+# Baseline keeps warnings visible without strict gating
+plugin_args = ["--warnings"]
+
+[audit.engines.pyright.profiles.strict]
+inherit = "baseline"
+plugin_args = ["--strict"]
+
+[audit.engines.mypy]
+config_file = "mypy.ini"
+
