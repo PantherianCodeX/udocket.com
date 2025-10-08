@@ -1,0 +1,81 @@
+<div class="rounded-3xl border border-white/10 bg-gradient-to-br from-slate-900/90 via-primary-600/20 to-slate-900/80 p-6 shadow-2xl shadow-black/30">
+  <h3 class="text-lg font-semibold text-white">{{ widget.title }}</h3>
+  <p class="mt-1 text-sm text-slate-200">{{ widget.description }}</p>
+  {% if widget.context.error %}
+    <div class="mt-4 rounded-2xl border border-rose-400/40 bg-rose-500/10 px-4 py-3 text-xs text-rose-100">
+      {{ widget.context.error }}
+    </div>
+  {% endif %}
+  <form method="post" class="mt-4 space-y-4">
+    {% csrf_token %}
+    <div class="grid gap-4 md:grid-cols-2">
+      <label class="text-xs font-semibold uppercase tracking-wide text-slate-200">Title
+        <input type="text" name="title" value="{{ widget.context.data.title }}" class="mt-1 block w-full rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-slate-400 focus:border-white focus:outline-none" />
+      </label>
+      <label class="text-xs font-semibold uppercase tracking-wide text-slate-200">Client
+        <input type="text" name="client_name" value="{{ widget.context.data.client_name }}" class="mt-1 block w-full rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-slate-400 focus:border-white focus:outline-none" />
+      </label>
+      <label class="text-xs font-semibold uppercase tracking-wide text-slate-200">Opposing party
+        <input type="text" name="opposing_party" value="{{ widget.context.data.opposing_party }}" class="mt-1 block w-full rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-slate-400 focus:border-white focus:outline-none" />
+      </label>
+      <label class="text-xs font-semibold uppercase tracking-wide text-slate-200">Client position
+        <select name="client_position" class="mt-1 block w-full rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-sm text-white focus:border-white focus:outline-none">
+          <option value="">Select role…</option>
+          {% for value, label in widget.context.client_position_choices %}
+            <option value="{{ value }}" {% if widget.context.data.client_position == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="text-xs font-semibold uppercase tracking-wide text-slate-200">Court location
+        <input type="text" name="court_location" value="{{ widget.context.data.court_location }}" class="mt-1 block w-full rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-slate-400 focus:border-white focus:outline-none" />
+      </label>
+      <label class="text-xs font-semibold uppercase tracking-wide text-slate-200">Court level
+        <select name="court_level" class="mt-1 block w-full rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-sm text-white focus:border-white focus:outline-none">
+          <option value="">Select level…</option>
+          {% for value, label in widget.context.court_level_choices %}
+            <option value="{{ value }}" {% if widget.context.data.court_level == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="text-xs font-semibold uppercase tracking-wide text-slate-200">Division
+        <select name="court_division" class="mt-1 block w-full rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-sm text-white focus:border-white focus:outline-none">
+          <option value="">Select division…</option>
+          {% for value, label in widget.context.court_division_choices %}
+            <option value="{{ value }}" {% if widget.context.data.court_division == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="text-xs font-semibold uppercase tracking-wide text-slate-200">Court case number
+        <input type="text" name="court_case_number" value="{{ widget.context.data.court_case_number }}" class="mt-1 block w-full rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-slate-400 focus:border-white focus:outline-none" />
+      </label>
+      <label class="text-xs font-semibold uppercase tracking-wide text-slate-200">Representation
+        <select name="representation" class="mt-1 block w-full rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-sm text-white focus:border-white focus:outline-none">
+          <option value="">Select representation…</option>
+          {% for value, label in widget.context.representation_choices %}
+            <option value="{{ value }}" {% if widget.context.data.representation == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="text-xs font-semibold uppercase tracking-wide text-slate-200">Court date
+        <input type="datetime-local" name="court_date" value="{{ widget.context.data.court_date }}" class="mt-1 block w-full rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-sm text-white focus:border-white focus:outline-none" />
+      </label>
+      <label class="text-xs font-semibold uppercase tracking-wide text-slate-200">Filing deadline
+        <input type="date" name="filing_deadline" value="{{ widget.context.data.filing_deadline }}" class="mt-1 block w-full rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-sm text-white focus:border-white focus:outline-none" />
+      </label>
+    </div>
+    <div class="grid gap-4 md:grid-cols-2">
+      <label class="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-200">
+        <input type="checkbox" name="legal_aid" class="h-4 w-4 rounded border-white/30 bg-white/10 text-primary-200 focus:ring-white" {% if widget.context.data.legal_aid %}checked{% endif %} />
+        Legal aid
+      </label>
+      <label class="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-200">
+        <input type="checkbox" name="pro_bono" class="h-4 w-4 rounded border-white/30 bg-white/10 text-primary-200 focus:ring-white" {% if widget.context.data.pro_bono %}checked{% endif %} />
+        Pro bono
+      </label>
+    </div>
+    <label class="text-xs font-semibold uppercase tracking-wide text-slate-200">Notes
+      <textarea name="notes" rows="3" class="mt-1 block w-full rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-slate-400 focus:border-white focus:outline-none">{{ widget.context.data.notes }}</textarea>
+    </label>
+    <button type="submit" class="inline-flex w-full items-center justify-center rounded-xl bg-white/90 px-4 py-2.5 text-sm font-semibold text-primary-700 shadow-lg shadow-primary-900/30 transition hover:bg-white">Create case</button>
+  </form>
+</div>

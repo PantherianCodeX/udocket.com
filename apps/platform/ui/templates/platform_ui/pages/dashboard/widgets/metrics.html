@@ -1,0 +1,22 @@
+<div class="rounded-3xl border border-white/10 bg-white/5 p-8 shadow-2xl shadow-black/30">
+  <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div>
+      <h3 class="text-xl font-semibold text-white">{{ widget.title }}</h3>
+      <p class="mt-1 text-sm text-slate-300">{{ widget.description }}</p>
+    </div>
+    {% if widget.context.active_org %}
+      <span class="inline-flex items-center gap-2 rounded-full border border-primary-500/40 bg-primary-500/15 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary-100">
+        {{ widget.context.active_org.name }}
+      </span>
+    {% endif %}
+  </div>
+  <div class="mt-6 grid gap-4 md:grid-cols-3">
+    {% for metric in widget.context.metrics %}
+      <div class="rounded-2xl border border-white/10 bg-slate-900/60 p-4 text-slate-100 shadow-lg shadow-black/30">
+        <p class="text-xs uppercase tracking-wide text-slate-300">{{ metric.label }}</p>
+        <p class="mt-2 text-3xl font-semibold text-white">{{ metric.value }}</p>
+        <p class="mt-1 text-xs text-slate-400">{{ metric.hint }}</p>
+      </div>
+    {% endfor %}
+  </div>
+</div>

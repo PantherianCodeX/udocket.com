@@ -6,6 +6,7 @@ from apps.platform.ui import views
 urlpatterns = [
     path("favicon.ico", views.favicon, name="ui-favicon"),
     path("", views.index, name="ui-index"),
+    path("login/", views.login_view, name="ui-login"),
     path("cases/<str:case_id>/", views.case_detail, name="ui-case-detail"),
     path("ui/log", views.ui_log, name="ui-log"),
     path(
@@ -95,6 +96,7 @@ urlpatterns = [
         views.organization_settings,
         name="ui-organization-settings-section",
     ),
+    path("org/choose/", views.organization_gate, name="ui-organization-gate"),
     path("org/select/", views.select_organization, name="ui-select-organization"),
     path("jobs/<uuid:job_id>/detail-panel/", views.job_detail_panel, name="ui-job-detail-panel"),
     path("logout/", views.logout_view, name="ui-logout"),

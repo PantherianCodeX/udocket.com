@@ -1,0 +1,61 @@
+<div class="rounded-3xl border border-white/10 bg-white/5 shadow-2xl shadow-black/30">
+  <div class="flex items-center justify-between border-b border-white/10 px-6 py-4">
+    <div>
+      <h3 class="text-xl font-semibold text-white">{{ widget.title }}</h3>
+      <p class="text-sm text-slate-300">{{ widget.description }}</p>
+    </div>
+    <a href="{% url 'ui-index' %}" class="text-xs font-semibold uppercase tracking-wide text-primary-200 hover:text-primary-100">View all</a>
+  </div>
+  <div class="overflow-x-auto">
+    <table class="min-w-full divide-y divide-white/10 text-sm">
+      <thead class="bg-white/5 text-left text-xs uppercase tracking-wide text-slate-400">
+        <tr>
+          <th class="px-4 py-3">Case</th>
+          <th class="px-4 py-3">Client</th>
+          <th class="px-4 py-3">Created</th>
+          <th class="px-4 py-3">Jobs</th>
+          <th class="px-4 py-3">Next milestone</th>
+          <th class="px-4 py-3 text-right">Actions</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-white/5 bg-slate-900/40 text-slate-100">
+        {% for row in widget.context.rows %}
+          <tr class="transition hover:bg-white/10">
+            <td class="px-4 py-3">
+              <div class="flex flex-col">
+                <span class="font-semibold text-white">{{ row.title }}</span>
+                <span class="text-xs text-slate-400 font-mono">{{ row.id }}</span>
+              </div>
+            </td>
+            <td class="px-4 py-3 text-slate-300">{{ row.client_name|default:"—" }}</td>
+            <td class="px-4 py-3 text-slate-300"><time data-ts="{{ row.created_at|date:'c' }}" data-ts-format="datetime">{{ row.created_at|date:'M d, Y h:i A' }}</time></td>
+            <td class="px-4 py-3 text-slate-100">{{ row.job_total }}</td>
+            <td class="px-4 py-3 text-slate-300">
+              {% if row.court_date %}
+                <span class="inline-flex items-center gap-2 rounded-full border border-amber-400/40 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-100">
+                  Court <time data-ts="{{ row.court_date|date:'c' }}" data-ts-format="datetime">{{ row.court_date|date:'M d, Y' }}</time>
+                </span>
+              {% elif row.filing_deadline %}
+                <span class="inline-flex items-center gap-2 rounded-full border border-emerald-400/40 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-100">
+                  Filing <time data-ts="{{ row.filing_deadline|date:'c' }}" data-ts-format="date">{{ row.filing_deadline|date:'M d, Y' }}</time>
+                </span>
+              {% else %}
+                <span class="text-xs text-slate-400">No milestone</span>
+              {% endif %}
+            </td>
+            <td class="px-4 py-3 text-right">
+              <div class="inline-flex items-center gap-2">
+                <a href="/cases/{{ row.id }}/" class="rounded-lg border border-primary-500/40 bg-primary-500/20 px-3 py-1.5 text-xs font-semibold text-primary-50 transition hover:bg-primary-500/40">Open</a>
+                <a href="/admin/cases/case/{{ row.id }}/change/" class="rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-primary-400 hover:text-white" target="_blank" rel="noopener">Admin</a>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="6" class="px-6 py-8 text-center text-slate-400">No cases yet. Create one to get started.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>

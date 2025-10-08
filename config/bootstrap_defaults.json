@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "superuser": {
+    "username": "admin",
+    "email": "admin@example.com",
+    "password": "changeme",
+    "reset_password": true
+  },
+  "organization": {
+    "name": "Demo Organization",
+    "display_name": "Demo Organization",
+    "contact_email": "demo@example.com",
+    "attach_superuser": true
+  },
+  "import_presets": true
+}

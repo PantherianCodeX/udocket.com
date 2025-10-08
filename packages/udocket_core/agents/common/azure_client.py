@@ -251,11 +251,14 @@ class AzureClientConfig:
         if not self.endpoint:
             raise ValueError("Missing Azure OpenAI endpoint")
         if not self.allow_non_ca_region and not _endpoint_is_canadian(self.endpoint):
+            raise ValueError(
+                f"Azure OpenAI endpoint '{self.endpoint}' is outside allowed Canadian regions"
+            )
+        if self.allow_non_ca_region and not _endpoint_is_canadian(self.endpoint):
             logger.warning(
-                "Azure endpoint %s is outside approved Canadian regions; allowing temporarily.",
+                "Azure endpoint %s bypasses Canadian-region guard (testing override enabled).",
                 self.endpoint,
             )
-            # TODO: move regional restrictions into configurable settings enforcement.
         if not self.key:
             raise ValueError("Missing Azure OpenAI API key")
         if not self.deployment:
@@ -372,8 +375,21 @@ class AzureChatClient:
                         "status_code": getattr(response_obj, "status_code", None),
                         "body": detail,
                     },
-                )
+            )
             raise RuntimeError(error_message) from exc
+        except requests_client.exceptions.RequestException as exc:
+            logger.error(
+                "azure transport failure",
+                exc_info=exc,
+                extra={
+                    "endpoint": url,
+                    "deployment": self.config.deployment,
+                },
+            )
+            raise RuntimeError(
+                "Azure OpenAI transport error: could not reach the configured endpoint. "
+                "Verify the deployment name, region, and network connectivity."
+            ) from exc
 
         response_text = response.text
         headers_obj = getattr(response, "headers", None)

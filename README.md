@@ -8,19 +8,29 @@ and module discovery (`db/__init__.py`, `config/__init__.py`).
    `packages/udocket_core/agents/transcribe_lib.py` (see `TranscriptionAgent`).
 2) Copy `.env.example` to `.env` and fill required values.
    - Postgres defaults are provided; start the bundled database with `docker compose up -d postgres`.
-   - Run `python manage.py migrate && python manage.py enable_rls` inside the `platform` container (idempotent; the entrypoint does this on boot).
+   - The container entrypoint runs `python manage.py migrate`, `python manage.py enable_rls`, and `python manage.py bootstrap_defaults` automatically; you can rerun them manually if needed.
 3) Build & run the stack:
    docker compose up --build
 - Platform (UI + API) → http://localhost:8000
 
 ## Notes
 - Postgres is now the default application database. Per-organization row-level security is enforced via `python manage.py enable_rls`.
+- Local development bootstrap is controlled via `PLATFORM_BOOTSTRAP_ENABLED`. The default `.env.example` seeds an `admin/changeme` superuser, a demo organization, and permission presets; override or disable these variables for production.
+- Default bootstrap values also live in `config/bootstrap_defaults.json`. Point `PLATFORM_BOOTSTRAP_CONFIG` at a custom file to tailor per-environment seeds without baking credentials into the image.
+- Django admin remains limited to superusers; seeded superusers can also sign in through `/login/` to access the tenant-scoped UI while staff/non-admin accounts rely solely on the UI.
+- Application migrations were flattened into new `0001_initial.py` files for the local apps; run `docker compose down --volumes` after pulling to ensure your database is recreated before starting the stack.
+- Azure OpenAI providers now enforce Canada-only endpoints (canadacentral/canadaeast). Set the per-provider `allow_non_ca_region` flag only for temporary local testing; production deployments must stay in-region.
 - Media storage is tenant-aware: artifacts for organization `ORG123` live under `/media/tenants/ORG123/cases/<CASE_ID>/...`.
 - Run tests inside the dev container directly: `pytest`. The devcontainer provides the runtime and services, so no local helper scripts are required.
 - Remote dev: open the repository in VS Code using **Dev Containers > Reopen in Container** to attach to the `platform-dev` service defined under `.devcontainer/` (starts alongside Postgres and Redis).
 - Permissions: Visit `/permissions/` for a read-only catalog of artifact fields, presets, and roles (edits still happen via Django admin for MVP).
 - Platform uploads let you choose `batch` (default) or `on-demand` transcription.
 - Batch mode optionally enables speaker diarization via UI toggle or `--diarization` flag.
+
+## Authentication & dashboard flow
+- Sign in at `/login/` to use the themed welcome screen. Local username/password login remains available in development, while production instances surface a Single Sign-On button when OIDC is configured.
+- After authenticating, members with access to multiple organizations land on the organization chooser. Pick a workspace to continue; single-organization members are auto-forwarded to the dashboard.
+- The dashboard is now widget-driven. Metrics, case tables, job summaries, and upcoming deadlines are rendered as modular widgets that can be customized per organization as template overrides are introduced (see `docs/dashboard_widgets.md`).
 
 ## Transcription Modes
 - Batch: audio is uploaded to Azure Blob Storage; the agent invokes Azure Batch Transcription using an HTTPS SAS URL.

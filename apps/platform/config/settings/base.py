@@ -231,10 +231,12 @@ OIDC_RP_CLIENT_ID = oidc_config.client_id
 OIDC_RP_CLIENT_SECRET = oidc_config.client_secret_value()
 OIDC_OP_DISCOVERY_ENDPOINT = oidc_config.discovery_url
 OIDC_RP_SIGN_ALGO = oidc_config.rp_sign_algo
-# Route login via OIDC only when enabled; otherwise use Django admin/login
-LOGIN_URL = "/oidc/authenticate/" if _oidc_enabled else "/admin/login/"
+# Route login through the platform UI; template renders SSO button when OIDC is enabled
+LOGIN_URL = "/login/"
 LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/"
+# Surface the toggle for runtime checks (UI uses it to decide when to show SSO entry)
+OIDC_ENABLED = _oidc_enabled
 # Development/open access toggle (bypasses auth policies when true)
 PLATFORM_DEV_OPEN = settings.django.platform_dev_open
 

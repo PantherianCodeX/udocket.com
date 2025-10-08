@@ -50,6 +50,14 @@ class User(AbstractUser):
     For SSO, we map Keycloak 'sub' to kc_sub.
     """
 
+    @classmethod
+    def typed_objects(cls) -> models.Manager["User"]:
+        return cast(models.Manager["User"], cls.objects)
+
+    @classmethod
+    def scoped(cls) -> models.Manager["User"]:
+        return cls.typed_objects()
+
     kc_sub: models.CharField[Optional[str], Optional[str]] = models.CharField(
         max_length=64,
         unique=True,

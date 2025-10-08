@@ -1,0 +1,54 @@
+{% extends "platform_ui/layouts/base.html" %}
+{% block content %}
+  <div class="mx-auto flex max-w-5xl flex-col gap-8 py-12">
+    <div class="space-y-4">
+      <p class="inline-flex items-center gap-2 rounded-full border border-primary-500/40 bg-primary-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary-100">
+        Organization access
+      </p>
+      <h1 class="text-3xl font-semibold text-white">Choose your organization</h1>
+      <p class="max-w-3xl text-sm leading-relaxed text-slate-200">
+        uDocket keeps cases, artifacts, and automation jobs isolated per organization. Select the workspace you want to manage.
+        You can switch organizations at any time from the profile menu.
+      </p>
+    </div>
+
+    {% if organizations %}
+      <form method="post" action="{% url 'ui-select-organization' %}" class="space-y-6">
+        {% csrf_token %}
+        {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}" />{% endif %}
+        <div class="grid gap-6 md:grid-cols-2">
+          {% for option in organizations %}
+            <button type="submit" name="organization_id" value="{{ option.id }}" class="group flex h-full flex-col justify-between rounded-2xl border {{ option.is_active|yesno:'border-primary-400 bg-primary-500/15, border-white/10 bg-white/5' }} p-6 text-left text-slate-100 shadow-xl shadow-black/30 transition hover:border-primary-400 hover:bg-primary-500/15">
+              <div class="space-y-3">
+                <div class="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide {{ option.is_active|yesno:'text-primary-100','text-slate-300' }}">
+                  {% if option.is_active %}
+                    Active organization
+                  {% else %}
+                    Available workspace
+                  {% endif %}
+                </div>
+                <h2 class="text-2xl font-semibold text-white">{{ option.name }}</h2>
+                <p class="text-sm text-slate-300">{{ option.case_count }} case{{ option.case_count|pluralize }} tracked</p>
+                <div class="flex flex-wrap gap-2">
+                  {% for role_label in option.role_labels %}
+                    <span class="inline-flex items-center rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-200">{{ role_label }}</span>
+                  {% endfor %}
+                </div>
+              </div>
+              <span class="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-primary-200">
+                Continue
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                  <path fill-rule="evenodd" d="M3 10a.75.75 0 01.75-.75h9.69l-2.22-2.22a.75.75 0 111.06-1.06l3.5 3.5a.75.75 0 010 1.06l-3.5 3.5a.75.75 0 11-1.06-1.06l2.22-2.22H3.75A.75.75 0 013 10z" clip-rule="evenodd" />
+                </svg>
+              </span>
+            </button>
+          {% endfor %}
+        </div>
+      </form>
+    {% else %}
+      <div class="rounded-2xl border border-white/10 bg-white/5 p-6 text-sm text-slate-200">
+        No organizations are currently assigned to your account. Contact an administrator to be invited to a workspace.
+      </div>
+    {% endif %}
+  </div>
+{% endblock %}

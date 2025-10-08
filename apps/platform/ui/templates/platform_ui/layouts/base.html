@@ -337,7 +337,7 @@
           {% if request.user.is_authenticated %}
             {% include "platform_ui/components/_profile_menu.html" with popover_key='profile-menu' %}
           {% else %}
-            <a href="/oidc/authenticate/" class="rounded-md bg-primary-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-primary-500/30 transition hover:bg-primary-400">Login</a>
+            <a href="{% url 'ui-login' %}" class="rounded-md bg-primary-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-primary-500/30 transition hover:bg-primary-400">Sign in</a>
           {% endif %}
         </div>
       </div>

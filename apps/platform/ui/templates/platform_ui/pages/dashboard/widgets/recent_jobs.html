@@ -1,0 +1,30 @@
+<div class="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-2xl shadow-black/30">
+  <h3 class="text-lg font-semibold text-white">{{ widget.title }}</h3>
+  <p class="mt-1 text-sm text-slate-300">{{ widget.description }}</p>
+  <ul class="mt-4 space-y-3 text-sm text-slate-200">
+    {% for job in widget.context.jobs %}
+      <li class="rounded-2xl border border-white/10 bg-slate-900/60 p-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="font-semibold text-white">{{ job.agent_label }}</p>
+            <p class="text-xs text-slate-400">Case: {{ job.case_title }}</p>
+          </div>
+          {% if job.status == 'SUCCEEDED' %}
+            <span class="inline-flex items-center gap-2 rounded-full border border-emerald-400/40 bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-emerald-100">Succeeded</span>
+          {% elif job.status == 'RUNNING' or job.status == 'CONVERTING' or job.status == 'UPLOADING' %}
+            <span class="inline-flex items-center gap-2 rounded-full border border-blue-400/40 bg-blue-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-blue-100">In progress</span>
+          {% elif job.status == 'FAILED' or job.status == 'CANCELLED' or job.status == 'CORRUPTED' %}
+            <span class="inline-flex items-center gap-2 rounded-full border border-rose-400/40 bg-rose-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-rose-100">Needs review</span>
+          {% else %}
+            <span class="inline-flex items-center gap-2 rounded-full border border-slate-400/40 bg-slate-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-100">{{ job.status|title }}</span>
+          {% endif %}
+        </div>
+        <p class="mt-2 text-xs text-slate-300">Started <time data-ts="{{ job.created_at|date:'c' }}" data-ts-format="datetime">{{ job.created_at|date:'M d, Y h:i A' }}</time></p>
+      </li>
+    {% empty %}
+      <li class="rounded-2xl border border-dashed border-white/20 bg-transparent p-4 text-xs text-slate-300">
+        No recent jobs. Launch an agent from a case to populate history.
+      </li>
+    {% endfor %}
+  </ul>
+</div>

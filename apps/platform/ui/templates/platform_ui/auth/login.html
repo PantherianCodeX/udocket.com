@@ -1,0 +1,88 @@
+{% extends "platform_ui/layouts/base.html" %}
+{% block content %}
+  <div class="mx-auto flex max-w-4xl flex-col gap-8 py-12">
+    <div class="rounded-3xl border border-white/10 bg-white/5 p-10 shadow-2xl shadow-black/30">
+      <div class="grid gap-10 md:grid-cols-[1.25fr,1fr] md:items-center">
+        <div class="space-y-6">
+          <p class="inline-flex items-center gap-2 rounded-full border border-primary-500/40 bg-primary-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary-100">
+            Welcome back
+          </p>
+          <h1 class="text-3xl font-semibold text-white">Sign in to uDocket</h1>
+          <p class="text-sm leading-relaxed text-slate-200">
+            Access case automation, artifact history, and organization-wide dashboards with a single login.
+            Use your organization credentials to continue.
+          </p>
+          <ul class="space-y-3 text-sm text-slate-200/80">
+            <li class="flex items-start gap-3">
+              <span class="mt-1 inline-flex h-5 w-5 items-center justify-center rounded-full border border-primary-400/60 bg-primary-500/20 text-[11px] font-semibold text-primary-100">1</span>
+              Choose your authentication method (Single Sign-On or local dev login).
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="mt-1 inline-flex h-5 w-5 items-center justify-center rounded-full border border-primary-400/60 bg-primary-500/20 text-[11px] font-semibold text-primary-100">2</span>
+              Select an organization if you collaborate with multiple teams.
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="mt-1 inline-flex h-5 w-5 items-center justify-center rounded-full border border-primary-400/60 bg-primary-500/20 text-[11px] font-semibold text-primary-100">3</span>
+              Jump directly into your dashboard widgets to monitor case health and agent activity.
+            </li>
+          </ul>
+        </div>
+        <div class="rounded-2xl border border-white/10 bg-slate-900/60 p-8 shadow-xl shadow-black/40">
+          {% if oidc_login_url %}
+            <a href="{{ oidc_login_url }}" class="group inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white/90 px-4 py-3 text-sm font-semibold text-primary-700 shadow-lg shadow-primary-900/20 transition hover:bg-white">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-primary-600 transition group-hover:text-primary-700" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                <path fill-rule="evenodd" d="M3 4.75A1.75 1.75 0 014.75 3h10.5A1.75 1.75 0 0117 4.75v10.5A1.75 1.75 0 0115.25 17H4.75A1.75 1.75 0 013 15.25V4.75zm6.28 2.22a.75.75 0 10-1.06 1.06L9.94 10l-1.72 1.97a.75.75 0 101.12.98l2.25-2.57a.75.75 0 000-.98l-2.25-2.57z" clip-rule="evenodd" />
+              </svg>
+              Continue with Single Sign-On
+            </a>
+            <div class="my-6 flex items-center gap-4 text-xs uppercase tracking-[0.2em] text-slate-400">
+              <span class="h-px flex-1 bg-white/10"></span>
+              <span>or</span>
+              <span class="h-px flex-1 bg-white/10"></span>
+            </div>
+          {% endif %}
+          <form method="post" class="space-y-5">
+            {% csrf_token %}
+            {% if next_url %}
+              <input type="hidden" name="next" value="{{ next_url }}" />
+            {% endif %}
+            {% if form.non_field_errors %}
+              <div class="rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+                {% for error in form.non_field_errors %}
+                  <p>{{ error }}</p>
+                {% endfor %}
+              </div>
+            {% endif %}
+            <label class="block text-xs font-semibold uppercase tracking-wide text-slate-300">
+              Email or username
+              <input type="text" name="username" autocomplete="username" value="{{ form.username.value|default_if_none:'' }}" class="mt-2 w-full rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-slate-400 focus:border-white focus:outline-none focus:ring-2 focus:ring-primary-400/70" required />
+              {% if form.username.errors %}
+                <p class="mt-2 text-xs text-rose-200">
+                  {% for error in form.username.errors %}{{ error }}{% if not forloop.last %}<br />{% endif %}{% endfor %}
+                </p>
+              {% endif %}
+            </label>
+            <label class="block text-xs font-semibold uppercase tracking-wide text-slate-300">
+              Password
+              <input type="password" name="password" autocomplete="current-password" class="mt-2 w-full rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-slate-400 focus:border-white focus:outline-none focus:ring-2 focus:ring-primary-400/70" required />
+              {% if form.password.errors %}
+                <p class="mt-2 text-xs text-rose-200">
+                  {% for error in form.password.errors %}{{ error }}{% if not forloop.last %}<br />{% endif %}{% endfor %}
+                </p>
+              {% endif %}
+            </label>
+            <button type="submit" class="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary-500 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-primary-800/40 transition hover:bg-primary-400">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                <path d="M3.172 5.172a4 4 0 000 5.656l3 3a4 4 0 005.656 0l3-3a4 4 0 00-5.656-5.656L10 5.344l-.172-.172a4 4 0 00-5.656 0z" />
+              </svg>
+              Sign in
+            </button>
+            <p class="text-xs text-slate-400">
+              Local username/password login is only available in development environments.
+            </p>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}

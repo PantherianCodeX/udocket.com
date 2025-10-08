@@ -129,6 +129,8 @@ Progress To Date
 - Configurable RBAC scaffolding: Role and RoleCapability models, capability resolver, and seeded default roles; admin page for Effective Capabilities.
 - Stability and resilience improvements: AccessPolicy fallback, resilient migrations in `artifacts`.
 - Case insights: Django UI now consumes DRF telemetry endpoints (`/api/v1/jobs/<id>/detail/`, `/api/v1/cases/<id>/jobs/summary|detail/`) to surface per-job diagnostics, transcript artifacts, and modal drill-downs sourced from ops metadata.
+- Authentication experience: `/login/` now serves a branded welcome screen with SSO entry points, and post-login flows enforce an organization chooser with automatic selection when only one workspace is available.
+- Dashboard foundation: the cases landing page has been rebuilt around configurable widgets (metrics, case table, job summary, deadlines, case creation) so organizations can layer on custom analytics and layouts.
 - Next slices under consideration:
   - Create and apply migrations for `simple_history` changes; admin filters for user/date/action.
   - Expand tests for capability resolution, policies, and field-level redaction.
@@ -182,8 +184,8 @@ Alerts System (LLM-controllable)
 
 
 Org & User UX Improvements
-- Sign-in & branding: add welcome/sign-in page with theme hooks; branding doc describing where brand files live; default theme colors (green/blue) configurable per org.
-- Org selection: after login, show org chooser when >1 org; auto-forward when only one; fix case-page switching edge cases.
+- Sign-in & branding: extend the new welcome/sign-in page with per-organization theming assets; document where brand files live; keep default theme colors configurable per org.
+- Org selection: continue hardening edge cases (e.g., websocket reconnects) now that the chooser gate auto-selects single-org members.
 - Org settings: DOCX templates, data retention, default LLM configs, reviewer policies, questionnaire seeds, permissions config, org profile.
 - User profile: view/edit profile, password/MFA/preferences.
 

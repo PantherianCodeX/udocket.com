@@ -74,4 +74,8 @@ EXPOSE 8000
 # Default to prod settings; override in compose if needed
 ENV DJANGO_SETTINGS_MODULE=apps.platform.config.settings.prod
 
-CMD ["sh", "-lc", "python manage.py migrate && python manage.py enable_rls && daphne -b 0.0.0.0 -p 8000 apps.platform.config.asgi:application"]
+COPY infra/docker/entrypoint.platform.sh /usr/local/bin/platform-entrypoint.sh
+RUN chmod +x /usr/local/bin/platform-entrypoint.sh
+
+ENTRYPOINT ["platform-entrypoint.sh"]
+CMD ["daphne", "-b", "0.0.0.0", "-p", "8000", "apps.platform.config.asgi:application"]

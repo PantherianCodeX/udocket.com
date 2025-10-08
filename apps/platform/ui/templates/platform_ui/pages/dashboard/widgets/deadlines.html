@@ -1,0 +1,21 @@
+<div class="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-2xl shadow-black/30">
+  <h3 class="text-lg font-semibold text-white">{{ widget.title }}</h3>
+  <p class="mt-1 text-sm text-slate-300">{{ widget.description }}</p>
+  <ul class="mt-4 space-y-3 text-sm text-slate-200">
+    {% for deadline in widget.context.deadlines %}
+      <li class="rounded-2xl border border-white/10 bg-slate-900/60 p-4">
+        <div class="flex items-center justify-between">
+          <span class="font-semibold text-white">{{ deadline.case_title }}</span>
+          <span class="inline-flex items-center gap-2 rounded-full border border-primary-500/30 bg-primary-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary-100">{{ deadline.kind }}</span>
+        </div>
+        <p class="mt-2 text-xs text-slate-300">
+          Due <time data-ts="{{ deadline.due_at|date:'c' }}" data-ts-format="datetime">{{ deadline.due_at|date:'M d, Y h:i A' }}</time>
+        </p>
+      </li>
+    {% empty %}
+      <li class="rounded-2xl border border-dashed border-white/20 bg-transparent p-4 text-xs text-slate-300">
+        No upcoming deadlines in the next 30 days.
+      </li>
+    {% endfor %}
+  </ul>
+</div>

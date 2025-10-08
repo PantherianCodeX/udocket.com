@@ -3,7 +3,13 @@ from __future__ import annotations
 # pyright: strict
 from apps.platform.operations.tasks import transcribe_job
 
-from .auth import ensure_authenticated, logout_view, select_organization
+from .auth import (
+    ensure_authenticated,
+    login_view,
+    logout_view,
+    organization_gate,
+    select_organization,
+)
 from .artifacts import artifacts_index
 from .cases import (
     case_analysis_module,
@@ -53,6 +59,7 @@ from .presenters.cases import table_config
 __all__ = [
     "compute_case_tool_state",
     "ensure_authenticated",
+    "login_view",
     "format_metadata",
     "get_case_and_org",
     "job_detail_context",
@@ -88,6 +95,7 @@ __all__ = [
     "jobs",
     "transcribe_job",
     "logout_view",
+    "organization_gate",
     "organization_settings",
     "permissions_overview",
     "select_organization",
