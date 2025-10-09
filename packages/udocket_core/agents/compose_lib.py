@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -49,6 +50,62 @@ DEFAULT_PROVIDER_CHAIN = ["azure"]
 DEFAULT_TEMPERATURE = 0.7
 DEFAULT_LAWYER_TEMPERATURE = 0.4
 DEFAULT_MAX_OUTPUT_TOKENS = 24000
+
+
+CLIENT_REQUIRED_HEADINGS: tuple[str, ...] = (
+    "## Case Overview",
+    "## Key People and Roles",
+    "## Timeline of Events",
+    "## Main Issues",
+    "## Next Steps / Preparation Notes",
+)
+
+
+LAWYER_REQUIRED_HEADINGS: tuple[str, ...] = (
+    "## Case Summary",
+    "## Parties and Roles",
+    "## Factual Background",
+    "## Issues Presented",
+    "## Evidence / Supporting Facts",
+    "## Procedural Status / Next Known Steps",
+)
+
+
+CLIENT_MIN_SECTION_WORDS = 8
+LAWYER_MIN_SECTION_WORDS = 12
+CLIENT_MAX_AVG_SENTENCE_WORDS = 18.0
+
+
+CLIENT_COMPOSER_SYSTEM_PROMPT = (
+    "You are Client Composer. Task: write the Client Summary only.\n"
+    "Constraints:\n"
+    "- Plain English, grade 6-8, neutral and empathetic.\n"
+    "- No legal advice, no opinions, no predictions, no instructions.\n"
+    "- No new facts; use only the provided ComposeContext.\n"
+    "- If data is missing, write 'Information not provided.'\n"
+    "Format (exact H2 headings, plain text):\n"
+    "## Case Overview\n"
+    "## Key People and Roles\n"
+    "## Timeline of Events\n"
+    "## Main Issues\n"
+    "## Next Steps / Preparation Notes\n"
+)
+
+
+LAWYER_COMPOSER_SYSTEM_PROMPT = (
+    "You are Lawyer Composer. Task: write the Lawyer Brief only.\n"
+    "Constraints:\n"
+    "- Neutral, concise, professional; no advocacy, no advice, no predictions.\n"
+    "- No new facts; rely solely on the provided ComposeContext.\n"
+    "- If data is missing, state 'Information not provided.'\n"
+    "Format (exact H2 headings, plain text):\n"
+    "## Case Summary\n"
+    "## Parties and Roles\n"
+    "## Factual Background\n"
+    "## Issues Presented\n"
+    "## Evidence / Supporting Facts\n"
+    "## Procedural Status / Next Known Steps\n"
+)
 
 
 class ComposeStageError(RuntimeError):
@@ -267,6 +324,110 @@ def _normalize_graph_payload(payload: Mapping[str, JSONValue]) -> JSONObject:
 
 def _payload_dict(**items: object) -> JSONObject:
     return {key: coerce_json_value(value) for key, value in items.items()}
+
+
+_HEADING_PATTERN = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
+
+
+def _split_markdown_sections(document: str) -> list[tuple[str, str]]:
+    normalized = document.replace("\r\n", "\n")
+    matches = list(_HEADING_PATTERN.finditer(normalized))
+    sections: list[tuple[str, str]] = []
+    for index, match in enumerate(matches):
+        heading = "## " + match.group(1).strip()
+        start = match.end()
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(normalized)
+        content = normalized[start:end].strip()
+        sections.append((heading, content))
+    return sections
+
+
+def _markdown_structure_errors(
+    *,
+    document: str,
+    required_headings: Sequence[str],
+    min_section_words: int,
+) -> list[str]:
+    text = document.strip()
+    if not text:
+        return ["Document is empty"]
+
+    sections = _split_markdown_sections(text)
+    if not sections:
+        return ["No H2 headings found"]
+
+    heading_order = [heading for heading, _ in sections]
+    errors: list[str] = []
+
+    last_index = -1
+    for required in required_headings:
+        occurrences = [idx for idx, heading in enumerate(heading_order) if heading == required]
+        if not occurrences:
+            errors.append(f"Missing heading '{required}'")
+            continue
+        if len(occurrences) > 1:
+            errors.append(f"Duplicate heading '{required}'")
+        current_index = occurrences[0]
+        if current_index <= last_index:
+            errors.append(f"Heading '{required}' appears out of order")
+        last_index = current_index
+
+    allowed = set(required_headings)
+    for heading in heading_order:
+        if heading not in allowed:
+            errors.append(f"Unexpected heading '{heading}'")
+
+    section_map = {heading: content for heading, content in sections}
+    for required in required_headings:
+        content = section_map.get(required)
+        if content is None:
+            continue
+        word_count = len(re.findall(r"\b\w+\b", content))
+        if word_count < min_section_words:
+            errors.append(
+                f"Section '{required}' is too short (has {word_count} words, expected at least {min_section_words})"
+            )
+
+    return errors
+
+
+def _sentence_length_errors(document: str, *, max_average_words: float) -> list[str]:
+    body = _HEADING_PATTERN.sub("", document.replace("\r\n", "\n"))
+    candidates = re.split(r"(?<=[.!?])\s+|\n", body)
+    lengths: list[int] = []
+    for candidate in candidates:
+        words = re.findall(r"\b\w+\b", candidate)
+        if words:
+            lengths.append(len(words))
+    if not lengths:
+        return []
+    average = sum(lengths) / float(len(lengths))
+    if average > max_average_words:
+        return [f"Average sentence length {average:.1f} words exceeds {max_average_words:.0f}"]
+    return []
+
+
+def _validate_client_brief(document: str) -> None:
+    errors = _markdown_structure_errors(
+        document=document,
+        required_headings=CLIENT_REQUIRED_HEADINGS,
+        min_section_words=CLIENT_MIN_SECTION_WORDS,
+    )
+    errors.extend(
+        _sentence_length_errors(document, max_average_words=CLIENT_MAX_AVG_SENTENCE_WORDS)
+    )
+    if errors:
+        raise ComposeStageError("compose.client_brief", "; ".join(errors))
+
+
+def _validate_lawyer_brief(document: str) -> None:
+    errors = _markdown_structure_errors(
+        document=document,
+        required_headings=LAWYER_REQUIRED_HEADINGS,
+        min_section_words=LAWYER_MIN_SECTION_WORDS,
+    )
+    if errors:
+        raise ComposeStageError("compose.lawyer_brief", "; ".join(errors))
 
 
 @dataclass
@@ -1127,7 +1288,7 @@ class ComposeAgent:
 
         if stage_key == "compose.client_brief":
             payload = _payload_dict(
-                case_brief=case_brief,
+                compose_context=case_brief,
                 timeline=timeline_payload,
                 graph=graph_payload,
                 summary_text=summary_markdown,
@@ -1139,13 +1300,14 @@ class ComposeAgent:
                 graph_visual=graph_visual,
             )
             user_prompt = (
-                "Draft a Markdown brief for the client in grade-six reading level. Include sections: Overview, Timeline Highlights, Key Issues, Next Steps."
+                "Use the ComposeContext and supporting artifacts to draft the full Client Summary. "
+                "Follow the system prompt exactly, do not add new facts, and output plain text with the required headings."
             ) + "\n\n" + json.dumps(payload, ensure_ascii=False)
-            return base_system, user_prompt, None
+            return CLIENT_COMPOSER_SYSTEM_PROMPT, user_prompt, None
 
         if stage_key == "compose.lawyer_brief":
             payload = _payload_dict(
-                case_brief=case_brief,
+                compose_context=case_brief,
                 timeline=timeline_payload,
                 graph=graph_payload,
                 summary_text=summary_markdown,
@@ -1155,9 +1317,10 @@ class ComposeAgent:
                 graph_visual=graph_visual,
             )
             user_prompt = (
-                "Draft a professional Markdown brief for counsel. Organize by issue, reference timestamps, and list supporting evidence."
+                "Use the ComposeContext and supporting artifacts to draft the full Lawyer Brief. "
+                "Follow the system prompt exactly, stay neutral, and output plain text with the required headings."
             ) + "\n\n" + json.dumps(payload, ensure_ascii=False)
-            return base_system, user_prompt, None
+            return LAWYER_COMPOSER_SYSTEM_PROMPT, user_prompt, None
 
         if stage_key == "compose.qa_review":
             response_schema = cast(
@@ -1211,8 +1374,15 @@ class ComposeAgent:
                 raise ComposeStageError(stage_key, str(exc))
             return parsed
 
-        if stage_key in {"compose.client_brief", "compose.lawyer_brief"}:
-            return content.strip()
+        if stage_key == "compose.client_brief":
+            normalized = content.strip()
+            _validate_client_brief(normalized)
+            return normalized
+
+        if stage_key == "compose.lawyer_brief":
+            normalized = content.strip()
+            _validate_lawyer_brief(normalized)
+            return normalized
 
         return content
 
