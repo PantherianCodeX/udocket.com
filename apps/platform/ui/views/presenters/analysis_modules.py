@@ -3,7 +3,7 @@ from __future__ import annotations
  
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, List, Optional, Collection, cast
 
 from django.conf import settings
 from django.http import HttpRequest
@@ -88,20 +88,39 @@ def analysis_modules_context(
     jobs: List[Job],
     telemetry_map: Dict[str, Dict[str, Any]],
     transcript_artifacts: Optional[Dict[str, CaseArtifact]] = None,
+    *,
+    target_keys: Optional[Collection[str]] = None,
 ) -> List[Dict[str, Any]]:
+    normalized_targets: Optional[set[str]] = None
+    if target_keys is not None:
+        normalized_targets = {str(key).strip().lower() for key in target_keys if str(key).strip()}
+        if not normalized_targets:
+            return []
+
+    need_analyze = normalized_targets is None or "analyze" in normalized_targets
+    need_compose = normalized_targets is None or "compose" in normalized_targets
+    if not need_analyze and not need_compose:
+        return []
     return_url = request.get_full_path() if hasattr(request, "get_full_path") else ""
     user = getattr(request, "user", None)
-    artifacts_manager = cast(CaseArtifactQuerySet, CaseArtifact.objects)
-    artifacts_qs = (
-        artifacts_manager.for_user(user)
-        .filter(
-            case_id=str(case.id),
-            type__in=["SUMMARY", "TIMELINE", "ANALYSIS", "COMPOSE", "GRAPH", "ENTITIES"],
-        )
-        .order_by("-created_at")
-    )
+    artifact_types: set[str] = set()
+    if need_analyze:
+        artifact_types.update({"SUMMARY", "TIMELINE", "ANALYSIS", "GRAPH", "ENTITIES"})
+    if need_compose:
+        artifact_types.update({"COMPOSE", "SUMMARY", "TIMELINE", "GRAPH", "ENTITIES"})
 
-    artifact_payloads: List[Dict[str, Any]] = [artifact_payload(artifact) for artifact in artifacts_qs]
+    artifact_payloads: List[Dict[str, Any]] = []
+    if artifact_types:
+        artifacts_manager = cast(CaseArtifactQuerySet, CaseArtifact.objects)
+        artifacts_qs = (
+            artifacts_manager.for_user(user)
+            .filter(
+                case_id=str(case.id),
+                type__in=list(artifact_types),
+            )
+            .order_by("-created_at")
+        )
+        artifact_payloads = [artifact_payload(artifact) for artifact in artifacts_qs]
 
     summary_artifacts: List[Dict[str, Any]] = []
     timeline_artifacts: List[Dict[str, Any]] = []
@@ -398,6 +417,24 @@ def analysis_modules_context(
             "deliverables": deliverables,
         }
 
+    modules: List[Dict[str, Any]] = []
+
+    analyze_module: Dict[str, Any] = {}
+    if need_analyze:
+        analyze_module = build_module(
+            key="analyze",
+            label="Analyze",
+            description="Generate layered summaries and companion analysis artifacts with AI assistance.",
+            artifacts=summary_artifacts,
+            empty_message="No analyze jobs yet. Generate one from the latest transcript.",
+            action_label="Queue analyze job",
+            success_label="Analyze queued",
+        )
+        modules.append(analyze_module)
+
+    if not need_compose:
+        return modules
+
     compose_latest_entry = _format_compose_entry(compose_entries[0]) if compose_entries else None
     compose_history_entries = [_format_compose_entry(entry) for entry in compose_entries[1:5]]
     compose_notes_context = _notes_context(compose_latest_entry.get("job_id") if compose_latest_entry else None)
@@ -528,7 +565,8 @@ def analysis_modules_context(
         },
     }
 
-    return [analyze_module, compose_module]
+    modules.append(compose_module)
+    return modules
 
 
 __all__ = [

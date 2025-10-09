@@ -145,9 +145,24 @@ def compute_case_tool_state(
             is_child=bool(row.get("is_child")),
         )
 
-    analysis_modules = analysis_modules_context(
-        request, case, jobs_list, telemetry_map, transcript_artifacts
-    )
+    normalized_tool = (active_tool or "").strip().lower() or "intake"
+    analysis_targets: set[str] = set()
+    if normalized_tool == "analyze":
+        analysis_targets.add("analyze")
+    elif normalized_tool == "compose":
+        analysis_targets.update({"analyze", "compose"})
+
+    if analysis_targets:
+        analysis_modules = analysis_modules_context(
+            request,
+            case,
+            jobs_list,
+            telemetry_map,
+            transcript_artifacts,
+            target_keys=analysis_targets,
+        )
+    else:
+        analysis_modules = []
     artifacts_all = collect_case_artifacts(request, case)
 
     progress_ctx = case_progress_context(

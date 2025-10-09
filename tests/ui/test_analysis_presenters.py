@@ -198,3 +198,85 @@ def test_compose_module_lists_extended_deliverables(settings: SettingsFixture, t
 
     download_labels = {item["label"] for item in compose_module["downloads"]}
     assert "Timeline narrative" in download_labels
+
+
+@pytest.mark.django_db()
+def test_analysis_modules_context_respects_target_keys(settings: SettingsFixture, tmp_path):
+    settings.PLATFORM_DEV_OPEN = True
+
+    org = Organization.objects.create(name="Target Org")
+    case = Case.objects.create(id="CASE-TARGET", title="Target Case", organization=org)
+
+    user_model = get_user_model()
+    user = user_model.objects.create_user(username="target", email="target@example.com", password="pass")
+    CaseMembership.objects.create(case=case, user=user)
+
+    transcript_job = Job.objects.create(
+        case=case,
+        audio_input="/tmp/audio.wav",
+        status=Job.Status.SUCCEEDED,
+        transcript_path="/tmp/transcript.txt",
+    )
+
+    summary_job = Job.objects.create(
+        case=case,
+        audio_input="/tmp/audio.wav",
+        status=Job.Status.SUCCEEDED,
+    )
+
+    compose_job = Job.objects.create(
+        case=case,
+        audio_input="/tmp/audio.wav",
+        status=Job.Status.SUCCEEDED,
+    )
+
+    CaseArtifact.objects.create(
+        case_id=str(case.id),
+        case_fk=case,
+        organization=org,
+        job_id=str(summary_job.id),
+        type="SUMMARY",
+        title="Summary Approved",
+        path=str(tmp_path / "summary.json"),
+        checksum="",
+        schema_version="v1",
+    )
+
+    CaseArtifact.objects.create(
+        case_id=str(case.id),
+        case_fk=case,
+        organization=org,
+        job_id=str(compose_job.id),
+        type="COMPOSE",
+        title="Compose client",
+        path=str(tmp_path / "compose_client_v1.md"),
+        checksum="",
+        schema_version="v1",
+    )
+
+    telemetry_map = {
+        str(transcript_job.id): {"metadata": {"job_kind": "transcription"}},
+        str(summary_job.id): {"metadata": {"job_kind": "analyze"}},
+        str(compose_job.id): {"metadata": {"job_kind": "compose"}},
+    }
+
+    request = RequestFactory().get(f"/cases/{case.id}/tools/analyze/")
+    request.user = user
+
+    analyze_only = analysis_modules_context(
+        request=request,
+        case=case,
+        jobs=[transcript_job, summary_job, compose_job],
+        telemetry_map=telemetry_map,
+        target_keys={"analyze"},
+    )
+    assert {module["key"] for module in analyze_only} == {"analyze"}
+
+    compose_and_analyze = analysis_modules_context(
+        request=request,
+        case=case,
+        jobs=[transcript_job, summary_job, compose_job],
+        telemetry_map=telemetry_map,
+        target_keys={"compose", "analyze"},
+    )
+    assert {module["key"] for module in compose_and_analyze} == {"analyze", "compose"}
