@@ -51,6 +51,7 @@
         fallbackJobs: new Set(),
         fallbackTimer: null,
         connectTimeouts: {},
+        prefetchScheduled: false,
       };
     jobsState.currentCaseId = caseId;
     if (!(jobsState.fallbackJobs instanceof Set)) {
@@ -65,6 +66,9 @@
     jobsState.lastStatus = jobsState.lastStatus || {};
     if (typeof jobsState.pendingToolRefresh === 'undefined') {
       jobsState.pendingToolRefresh = null;
+    }
+    if (typeof jobsState.prefetchScheduled === 'undefined') {
+      jobsState.prefetchScheduled = false;
     }
     global.JobsState = jobsState;
 
@@ -183,6 +187,21 @@
       jobLink: (evt) => actions.handleJobLinkClick(evt),
       jobLog: (evt) => actions.handleJobViewLog(evt),
       analysisAction: (evt) => actions.handleAnalysisAction(evt),
+      toolCardCacheBefore: (evt) => {
+        const src = (evt.detail && evt.detail.elt) || evt.target;
+        const button = src && src.closest ? src.closest('[data-tool-card]') : null;
+        if (!button) return;
+        const key = button.getAttribute('data-tool-card');
+        if (!key || typeof controller.ui.renderCachedPanel !== 'function') return;
+        if (evt.detail) {
+          evt.preventDefault();
+          evt.detail.shouldAbort = true;
+        }
+        const rendered = controller.ui.renderCachedPanel(key);
+        if (!rendered) return;
+        button.classList.remove('ring-1', 'ring-primary-400/60');
+        button.removeAttribute('data-tool-card-active');
+      },
       toolCardBefore: (evt) => {
         const src = (evt.detail && evt.detail.elt) || evt.target;
         const button = src && src.closest ? src.closest('[data-tool-card]') : null;
@@ -217,6 +236,10 @@
             el.classList.remove('ring-1', 'ring-primary-400/60');
             el.removeAttribute('data-tool-card-active');
           });
+          const activeTool = controller.ctx.caseView ? controller.ctx.caseView.getAttribute('data-active-tool') : null;
+          if (activeTool && typeof controller.ui.cachePanel === 'function' && controller.ctx.workspace) {
+            controller.ui.cachePanel(activeTool, controller.ctx.workspace.innerHTML);
+          }
           const table = ui.getTableController();
           if (table && typeof table.collapseAll === 'function') {
             table.collapseAll();
@@ -283,6 +306,14 @@
           if (refreshed.active_tool) {
             ui.setActiveCard(refreshed.active_tool);
           }
+          if (Array.isArray(refreshed.tools)) {
+            refreshed.tools.forEach((toolKey) => {
+              controller.ui.clearCachedPanel?.(toolKey);
+            });
+          }
+          if (controller.ctx && controller.ctx.jobsState) {
+            controller.ctx.jobsState.prefetchScheduled = false;
+          }
           controller.ui.boost(controller.ctx.caseId);
           dbg('htmxAfterOnLoad', { refreshed });
         } catch (error) {
@@ -300,6 +331,7 @@
     global.document.body.addEventListener('click', handlers.jobLink);
     global.document.body.addEventListener('click', handlers.jobLog);
     global.document.body.addEventListener('click', handlers.analysisAction);
+    global.document.body.addEventListener('htmx:beforeRequest', handlers.toolCardCacheBefore);
     global.document.body.addEventListener('htmx:beforeRequest', handlers.toolCardBefore);
     global.document.body.addEventListener('htmx:afterSwap', handlers.toolCardAfter);
     global.document.body.addEventListener('htmx:afterSettle', handlers.toolCardSettle);

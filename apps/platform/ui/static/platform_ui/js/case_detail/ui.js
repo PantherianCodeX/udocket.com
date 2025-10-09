@@ -51,6 +51,8 @@
   let deps = {};
   let tableController = null;
   let transcribeSidebarBinding = null;
+  const panelCache = new Map();
+  const prefetchedTools = new Set();
   let analyzeStageOrder = BASE_ANALYZE_STAGE_ORDER.slice();
   let analyzeProgressJobId = null;
   let analyzePipelineStatus = 'Idle';
@@ -58,6 +60,13 @@
 
   function setContext(value) {
     ctx = value;
+    if (ctx) {
+      const workspaceEl = ctx.workspace || (ctx.caseView && ctx.caseView.querySelector('#tool-workspace'));
+      const initialKey = ctx.initialToolKey || '';
+      if (workspaceEl && initialKey && !panelCache.has(initialKey)) {
+        panelCache.set(initialKey, workspaceEl.innerHTML);
+      }
+    }
     renderAnalyzeProgress();
   }
 
@@ -111,6 +120,7 @@
     const initialTool = ctx.initialToolKey || '';
     const chosen = (preferredTool || activeAttr || initialTool || 'transcribe').toString().trim();
     const targetTool = chosen || 'transcribe';
+    clearCachedPanel(targetTool);
     ctx.jobsState.pendingToolRefresh = targetTool;
     if (ctx.jobsState.refreshTranscribeScheduled) return;
     ctx.jobsState.refreshTranscribeScheduled = true;
@@ -122,27 +132,105 @@
       ctx.jobsState.pendingToolRefresh = null;
       const normalizedTool = (nextTool || '').trim() || 'transcribe';
       const url = `/cases/${nextCaseId}/tools/${encodeURIComponent(normalizedTool)}/`;
-      if (global.htmx && typeof global.htmx.ajax === 'function') {
-        global.htmx.ajax('GET', url, '#tool-workspace');
-        return;
-      }
-      fetch(url, { headers: { 'HX-Request': 'true' }, credentials: 'same-origin' })
-        .then((resp) => (resp.ok ? resp.text() : null))
+      fetchPanel(url)
         .then((html) => {
           if (!html) return;
-          const workspaceEl = ctx.workspace || global.document.getElementById('tool-workspace');
-          if (workspaceEl) {
-            workspaceEl.innerHTML = html;
-            if (deps.onTranscribeRefresh) {
-              deps.onTranscribeRefresh(normalizedTool);
-            }
+          renderPanelHtml(normalizedTool, html, { cache: true, updateHistory: false });
+          if (deps.onTranscribeRefresh) {
+            deps.onTranscribeRefresh(normalizedTool);
           }
         })
         .catch(() => {});
     }, 150);
   }
 
-  function setActiveCard(key) {
+  function clearCachedPanel(toolKey) {
+    if (!toolKey) return;
+    panelCache.delete(toolKey);
+    prefetchedTools.delete(toolKey);
+  }
+
+  function cachePanel(toolKey, html) {
+    if (!toolKey || typeof html !== 'string') return;
+    panelCache.set(toolKey, html);
+  }
+
+  function getCachedPanel(toolKey) {
+    if (!toolKey) return undefined;
+    return panelCache.get(toolKey);
+  }
+
+  function fetchPanel(url) {
+    if (!url) return Promise.resolve(null);
+    return fetch(url, { headers: { 'HX-Request': 'true' }, credentials: 'same-origin' }).then((resp) => (resp.ok ? resp.text() : null));
+  }
+
+  function renderPanelHtml(toolKey, html, options = {}) {
+    if (!ctx) return;
+    const workspaceEl = ctx.workspace || global.document.getElementById('tool-workspace');
+    if (!workspaceEl || typeof html !== 'string') return;
+    workspaceEl.innerHTML = html;
+    if (options.cache !== false) {
+      cachePanel(toolKey, html);
+    }
+    if (toolKey) {
+      setActiveCard(toolKey, { updateHistory: options.updateHistory !== false });
+    }
+    boost(ctx.caseId);
+  }
+
+  function renderCachedPanel(toolKey) {
+    const cached = getCachedPanel(toolKey);
+    if (!cached) return false;
+    renderPanelHtml(toolKey, cached, { cache: false });
+    return true;
+  }
+
+  function availableToolKeys() {
+    if (!ctx || !ctx.caseView) return [];
+    const keys = new Set();
+    ctx.caseView.querySelectorAll('[data-tool-card]').forEach((card) => {
+      const key = card.getAttribute('data-tool-card');
+      if (key) keys.add(key);
+    });
+    return Array.from(keys);
+  }
+
+  function prefetchTool(toolKey, delayMs = 500) {
+    if (!ctx || !toolKey || panelCache.has(toolKey) || prefetchedTools.has(toolKey)) return;
+    prefetchedTools.add(toolKey);
+    global.setTimeout(() => {
+      if (!ctx) return;
+      const caseId = ctx.jobsState.currentCaseId;
+      if (!caseId) return;
+      const url = `/cases/${caseId}/tools/${encodeURIComponent(toolKey)}/`;
+      fetchPanel(url)
+        .then((html) => {
+          if (!html) {
+            prefetchedTools.delete(toolKey);
+            return;
+          }
+          cachePanel(toolKey, html);
+        })
+        .catch(() => {
+          prefetchedTools.delete(toolKey);
+        });
+    }, delayMs);
+  }
+
+  function prefetchRemainingTools() {
+    if (!ctx) return;
+    const active = ctx.caseView ? ctx.caseView.getAttribute('data-active-tool') : ctx.initialToolKey;
+    let offset = 600;
+    availableToolKeys().forEach((key) => {
+      if (key && key !== active) {
+        prefetchTool(key, offset);
+        offset += 400;
+      }
+    });
+  }
+
+  function setActiveCard(key, options = {}) {
     if (!ctx) return;
     global.document.querySelectorAll('[data-tool-card]').forEach((card) => {
       const match = card.getAttribute('data-tool-card') === key;
@@ -151,6 +239,10 @@
       card.setAttribute('aria-pressed', match ? 'true' : 'false');
     });
     ctx.caseView.setAttribute('data-active-tool', key || '');
+    const shouldUpdateHistory = options.updateHistory !== false;
+    if (!shouldUpdateHistory) {
+      return;
+    }
     if (key) {
       global.history.replaceState({}, '', `?tool=${encodeURIComponent(key)}`);
     } else {
@@ -578,6 +670,10 @@
 
   function boost(caseIdParam) {
     refreshCaseJobs(caseIdParam || ctx.caseId);
+    if (ctx && ctx.jobsState && !ctx.jobsState.prefetchScheduled) {
+      ctx.jobsState.prefetchScheduled = true;
+      prefetchRemainingTools();
+    }
   }
 
   function getTableController() {
@@ -614,6 +710,7 @@
     initJobsTable,
     scheduleTranscribeRefresh,
     setActiveCard,
+    renderCachedPanel,
     setAnalyzeActiveJob,
     updateAnalyzeProgress,
     handleAnalyzeJobStatus,
@@ -624,5 +721,8 @@
     boost,
     getTableController,
     updateReviewDisplays,
+    cachePanel,
+    getCachedPanel,
+    clearCachedPanel,
   };
 })(window);
