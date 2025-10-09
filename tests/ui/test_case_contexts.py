@@ -77,3 +77,38 @@ def test_get_case_tool_state_uses_cache(settings: SettingsFixture):
 
         assert first == second
         assert mock_compute.call_count == 1
+
+
+@pytest.mark.django_db()
+def test_get_case_tool_state_default_cache(settings: SettingsFixture):
+    settings.PLATFORM_DEV_OPEN = True
+    sentinel = object()
+    original_value = getattr(settings, "CASE_TOOL_CACHE_SECONDS", sentinel)
+    if hasattr(settings, "CASE_TOOL_CACHE_SECONDS"):
+        delattr(settings, "CASE_TOOL_CACHE_SECONDS")
+    cache.clear()
+
+    org = Organization.objects.create(name="Ctx Org Default")
+    case = Case.objects.create(id="CASE-CTX-DEFAULT", title="Ctx Default", organization=org)
+    Job.objects.create(case=case, audio_input="/tmp/audio.wav", status=Job.Status.SUCCEEDED)
+
+    request = RequestFactory().get(f"/cases/{case.id}/tools/intake/")
+
+    with patch("apps.platform.ui.views.contexts.compute_case_tool_state") as mock_compute:
+        mock_compute.return_value = {
+            "tool_panels": {},
+            "case_header": {},
+            "developer_cards": [],
+            "job_summary": {},
+            "latest_activity_ts": None,
+            "job_summary_last_dt": None,
+            "user_can_review": False,
+            "job_table_state": None,
+            "job_row_total": 0,
+        }
+        get_case_tool_state(request, case, active_tool="intake")
+        get_case_tool_state(request, case, active_tool="intake")
+        assert mock_compute.call_count == 1
+
+    if original_value is not sentinel:
+        setattr(settings, "CASE_TOOL_CACHE_SECONDS", original_value)

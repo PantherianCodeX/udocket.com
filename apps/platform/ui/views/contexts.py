@@ -244,12 +244,16 @@ def compute_case_tool_state(
         "job_row_total": table_state.pagination.get("total", total_display_rows),
     }
 
+DEFAULT_CASE_TOOL_CACHE_SECONDS = 15
+
 
 def _cache_seconds() -> int:
+    value = getattr(settings, "CASE_TOOL_CACHE_SECONDS", DEFAULT_CASE_TOOL_CACHE_SECONDS)
     try:
-        return int(getattr(settings, "CASE_TOOL_CACHE_SECONDS", 0))
-    except Exception:
-        return 0
+        ttl = int(value)
+    except (TypeError, ValueError):
+        ttl = DEFAULT_CASE_TOOL_CACHE_SECONDS
+    return max(0, ttl)
 
 
 def _cache_key(case: Case, user_id: str | None, tool_key: str | None) -> str:
