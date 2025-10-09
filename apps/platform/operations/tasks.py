@@ -16,7 +16,7 @@ from apps.platform.operations.llm import (
 )
 from apps.platform.operations.services import collect_requested_providers
 from apps.platform.operations.task_modules.guardian import guardian_review_artifact
-from apps.platform.operations.task_modules.recover import recover_stale_jobs
+from apps.platform.operations.task_modules.recover_maintenance import recover_stale_jobs
 from apps.platform.operations.task_modules.transcribe import transcribe_job
 from apps.platform.operations.utils import update_job_meta
 from apps.platform.operations.runtime import emit_job_update

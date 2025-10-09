@@ -196,6 +196,11 @@ try:
 except Exception:
     pass
 CELERY_BEAT_SCHEDULE_FILENAME = str(celery_runtime_dir / "celerybeat-schedule")
+CELERY_TASK_ROUTES = {
+    "apps.platform.operations.task_modules.recover_maintenance.recover_stale_jobs": {
+        "queue": "maintenance"
+    }
+}
 
 # Logging configuration: rely on propagation so modules inherit handler wiring
 logging_config = settings.logging
@@ -204,12 +209,9 @@ LOGGING = {
     "disable_existing_loggers": False,
     "formatters": {
         "context": {
-            "()": "packages.udocket_core.logging.formatters.ContextualFormatter",
+            "()": "packages.udocket_core.logging.context_formatter.ContextualFormatter",
             "fmt": (
-                "%(asctime)s %(levelname)s %(name)s "
-                "[event=%(event)s component=%(component)s case=%(case_id)s "
-                "job=%(job_id)s artifact=%(artifact_id)s org=%(organization_id)s "
-                "task=%(task_id)s] %(message)s"
+                "%(asctime)s %(levelname)s %(name)s: %(message)s%(context_suffix)s"
             ),
             "defaults": {
                 "event": "-",
