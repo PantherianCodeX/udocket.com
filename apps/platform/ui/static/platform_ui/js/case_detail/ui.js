@@ -278,9 +278,9 @@
     }
     const state = analyzeStageState.get(stageKeyRaw);
     if (!state) return;
-    const previousStatus = state.status;
     const nextStatus = statusForEvent(payload && payload.stage_event);
     if (nextStatus) {
+      const previousStatus = state.status;
       state.status = nextStatus;
       state.updatedAt = Date.now();
     }
