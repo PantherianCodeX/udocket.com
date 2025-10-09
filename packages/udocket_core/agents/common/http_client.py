@@ -23,7 +23,7 @@ class _RequestsSessionProtocol(Protocol):
         params: Mapping[str, object] | None = None,
         headers: Mapping[str, str] | None = None,
         json: object | None = None,
-        timeout: int | float | None = None,
+        timeout: int | float | tuple[float, float] | None = None,
     ) -> _RequestsResponseProtocol: ...
 
     def get(
@@ -32,8 +32,10 @@ class _RequestsSessionProtocol(Protocol):
         *,
         params: Mapping[str, object] | None = None,
         headers: Mapping[str, str] | None = None,
-        timeout: int | float | None = None,
+        timeout: int | float | tuple[float, float] | None = None,
     ) -> _RequestsResponseProtocol: ...
+
+    def close(self) -> None: ...
 
 
 class _RequestsModuleProtocol(Protocol):
@@ -116,6 +118,19 @@ class RequestsSessionManager:
             session = self._build_session()
             self._sessions[key] = session
             return session
+
+    def reset_session(self, endpoint: str) -> None:
+        normalized = (endpoint or "").strip()
+        key = normalized.lower() if normalized else "__default__"
+        session: _RequestsSessionProtocol | None
+        with self._lock:
+            session = self._sessions.pop(key, None)
+        if session is None:
+            return
+        try:
+            session.close()
+        except Exception:  # pragma: no cover - best-effort cleanup
+            pass
 
     def _build_session(self) -> _RequestsSessionProtocol:
         retry_cfg = self._config.retry

@@ -12,10 +12,12 @@ from packages.udocket_core.agents.common.azure_client import (
     AzureChatClient,
     AzureClientConfig,
 )
+from packages.udocket_core.agents.common.http_client import HTTPRetryConfig
 from packages.udocket_core.json_utils import (
     JSONObject,
     JSONValue,
     coerce_bool,
+    coerce_float,
     coerce_int,
     coerce_json_object,
     coerce_json_value,
@@ -495,12 +497,68 @@ def build_chat_client(
             or os.getenv("AZURE_OPENAI_API_VERSION", "2024-10-21")
             or "2024-10-21"
         )
+        # Timeouts: allow granular overrides for long-running outputs
+        timeout_opt = coerce_int(options.get("timeout"))
+        connect_timeout_opt = coerce_int(options.get("connect_timeout"))
+        read_timeout_opt = coerce_int(options.get("read_timeout"))
+        if timeout_opt is None:
+            timeout_env = coerce_int(os.getenv("AZURE_OPENAI_TIMEOUT"))
+            if timeout_env is not None:
+                timeout_opt = timeout_env
+        if connect_timeout_opt is None:
+            connect_env = coerce_int(os.getenv("AZURE_OPENAI_CONNECT_TIMEOUT"))
+            if connect_env is not None:
+                connect_timeout_opt = connect_env
+        if read_timeout_opt is None:
+            read_env = coerce_int(os.getenv("AZURE_OPENAI_READ_TIMEOUT"))
+            if read_env is not None:
+                read_timeout_opt = read_env
+
+        # Session and retry tuning
+        pool_opt = coerce_int(options.get("session_pool_size"))
+        if pool_opt is None:
+            pool_env = coerce_int(os.getenv("AZURE_OPENAI_SESSION_POOL_SIZE"))
+            if pool_env is not None:
+                pool_opt = pool_env
+        retry_total_opt = coerce_int(options.get("retry_total"))
+        if retry_total_opt is None:
+            retry_total_env = coerce_int(os.getenv("AZURE_OPENAI_RETRY_TOTAL"))
+            if retry_total_env is not None:
+                retry_total_opt = retry_total_env
+        retry_backoff_opt = coerce_float(options.get("retry_backoff_factor"))
+        if retry_backoff_opt is None:
+            retry_backoff_env = coerce_float(os.getenv("AZURE_OPENAI_RETRY_BACKOFF_FACTOR"))
+            if retry_backoff_env is not None:
+                retry_backoff_opt = retry_backoff_env
+
+        retry_cfg = HTTPRetryConfig(
+            total=retry_total_opt if retry_total_opt is not None else 3,
+            backoff_factor=retry_backoff_opt if retry_backoff_opt is not None else 0.6,
+            status_forcelist=(
+                408,
+                409,
+                425,
+                429,
+                500,
+                502,
+                503,
+                504,
+                521,
+                522,
+                524,
+            ),
+        )
         cfg = AzureClientConfig(
             endpoint=endpoint,
             key=api_key,
             deployment=deployment,
             api_version=api_version_value,
             allow_non_ca_region=bool(allow_non_ca),
+            timeout=timeout_opt if timeout_opt is not None else 120,
+            connect_timeout=connect_timeout_opt if connect_timeout_opt is not None else 10,
+            read_timeout=read_timeout_opt if read_timeout_opt is not None else 600,
+            session_pool_size=pool_opt if pool_opt is not None else 10,
+            retry_config=retry_cfg,
         )
         return _AzureChatAdapter(AzureChatClient(cfg))
 

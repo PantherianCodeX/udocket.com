@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 import threading
 import time
 from typing import Any, Optional, Protocol, cast
-import math
+from urllib.parse import urlsplit
 
 
 class _ResponseProtocol(Protocol):
@@ -39,7 +39,8 @@ class _RequestsProtocol(Protocol):
             params: Mapping[str, object] | None = None,
             headers: Mapping[str, str] | None = None,
             json: object | None = None,
-            timeout: int | float | None = None,
+            stream: bool | None = None,
+            timeout: int | float | tuple[float, float] | None = None,
         ) -> _ResponseProtocol: ...
 
 
@@ -64,6 +65,57 @@ CANADIAN_REGIONS = {"canadacentral", "canadaeast"}
 
 
 logger = logging.getLogger("udocket.azure.client")
+
+
+@dataclass
+class _FallbackState:
+    require_default_temperature: bool = False
+    disable_max_output_tokens: bool = False
+
+
+_FALLBACK_STATE: dict[tuple[str, str], _FallbackState] = {}
+_FALLBACK_LOCK = threading.Lock()
+
+
+def _fallback_state_key(config: AzureClientConfig) -> tuple[str, str]:
+    endpoint = config.endpoint.strip().lower()
+    deployment = config.deployment.strip().lower()
+    return (endpoint, deployment)
+
+
+def _get_fallback_state(key: tuple[str, str]) -> _FallbackState:
+    with _FALLBACK_LOCK:
+        state = _FALLBACK_STATE.get(key)
+        if state is None:
+            return _FallbackState()
+        return _FallbackState(
+            require_default_temperature=state.require_default_temperature,
+            disable_max_output_tokens=state.disable_max_output_tokens,
+        )
+
+
+def _update_fallback_state(
+    key: tuple[str, str],
+    *,
+    require_default_temperature: bool = False,
+    disable_max_output_tokens: bool = False,
+) -> None:
+    if not require_default_temperature and not disable_max_output_tokens:
+        return
+    with _FALLBACK_LOCK:
+        state = _FALLBACK_STATE.get(key)
+        if state is None:
+            state = _FallbackState()
+            _FALLBACK_STATE[key] = state
+        if require_default_temperature:
+            state.require_default_temperature = True
+        if disable_max_output_tokens:
+            state.disable_max_output_tokens = True
+
+
+def _reset_fallback_state() -> None:  # pragma: no cover - test helper
+    with _FALLBACK_LOCK:
+        _FALLBACK_STATE.clear()
 
 
 def _endpoint_is_canadian(endpoint: str) -> bool:
@@ -244,6 +296,30 @@ def _content_from_delta(delta_payload: object) -> str:
     return ""
 
 
+def _summarize_exception_chain(exc: BaseException, *, max_depth: int = 4) -> str:
+    parts: list[str] = []
+    current: BaseException | None = exc
+    visited: set[int] = set()
+    depth = 0
+    while current is not None and depth < max_depth:
+        identifier = id(current)
+        if identifier in visited:
+            break
+        visited.add(identifier)
+        text = str(current).strip()
+        if not text:
+            text = current.__class__.__name__
+        parts.append(text)
+        next_exc: BaseException | None = None
+        if current.__cause__ is not None:
+            next_exc = current.__cause__
+        elif current.__context__ is not None and not current.__suppress_context__:
+            next_exc = current.__context__
+        current = next_exc
+        depth += 1
+    return " -> ".join(parts)
+
+
 @dataclass
 class AzureClientConfig:
     endpoint: str
@@ -251,6 +327,8 @@ class AzureClientConfig:
     deployment: str
     api_version: str = "2024-10-21"
     timeout: int = 120
+    connect_timeout: int = 10
+    read_timeout: int = 600
     allow_non_ca_region: bool = False
     session_pool_size: int = 10
     retry_config: HTTPRetryConfig = field(
@@ -315,6 +393,10 @@ class AzureChatClient:
         self._session_manager = _resolve_session_manager(self.config, session_manager)
         self._health_lock = threading.Lock()
         self._last_health_check: float | None = None
+        self._state_key = _fallback_state_key(self.config)
+        fallback_state = _get_fallback_state(self._state_key)
+        self._require_default_temperature: bool = fallback_state.require_default_temperature
+        self._disable_max_output_tokens: bool = fallback_state.disable_max_output_tokens
 
     def chat(
         self,
@@ -323,25 +405,6 @@ class AzureChatClient:
         temperature: float = 1.0,
         max_tokens: Optional[int] = None,
         response_format: Optional[Mapping[str, JSONValue]] = None,
-    ) -> tuple[str, JSONObject]:
-        return self._chat(
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            response_format=response_format,
-            include_max_output_tokens=True,
-            allow_temperature_retry=True,
-        )
-
-    def _chat(
-        self,
-        *,
-        messages: list[dict[str, str]],
-        temperature: float,
-        max_tokens: Optional[int],
-        response_format: Optional[Mapping[str, JSONValue]],
-        include_max_output_tokens: bool,
-        allow_temperature_retry: bool,
     ) -> tuple[str, JSONObject]:
         requests_client = _require_requests()
         session = self._session_manager.session_for(self.config.endpoint)
@@ -352,123 +415,153 @@ class AzureChatClient:
         )
         params = {"api-version": self.config.api_version}
         message_payloads = [coerce_json_value(message) for message in messages]
-        payload: JSONObject = {
-            "messages": message_payloads,
-            "temperature": temperature,
-        }
-        if max_tokens is not None:
-            payload["max_completion_tokens"] = max_tokens
-            if include_max_output_tokens:
-                payload["max_output_tokens"] = max_tokens
-        if response_format:
-            payload["response_format"] = dict(response_format)
-
         headers = {
             "api-key": self.config.key,
             "Content-Type": "application/json",
         }
 
-        try:
-            _resp = session.post(
-                url,
-                params=params,
-                headers=headers,
-                json=payload,
-                timeout=self.config.timeout,
-            )
-            response = cast(_ResponseProtocol, _resp)
-            logger.debug(
-                "azure request",
-                extra={
-                    "endpoint": url,
-                    "deployment": self.config.deployment,
-                    "status_code": response.status_code,
-                },
-            )
-            response.raise_for_status()
-        except requests_client.exceptions.HTTPError as exc:
-            response_obj = getattr(exc, "response", None)
-            detail = cast(str, getattr(response_obj, "text", "") or "")
-            status_code = getattr(response_obj, "status_code", None)
-            detail_lower = detail.lower() if detail else ""
+        while True:
+            temp_to_use = 1.0 if self._require_default_temperature else temperature
+            payload: JSONObject = {
+                "messages": message_payloads,
+                "temperature": temp_to_use,
+                "stream": True,
+            }
+            if max_tokens is not None:
+                payload["max_completion_tokens"] = max_tokens
+                if not self._disable_max_output_tokens:
+                    payload["max_output_tokens"] = max_tokens
+            if response_format:
+                payload["response_format"] = dict(response_format)
 
-            if (
-                allow_temperature_retry
-                and status_code == 400
-                and detail_lower
-                and "temperature" in detail_lower
-                and "only the default (1) value is supported" in detail_lower
-                and not math.isclose(temperature, 1.0, rel_tol=1e-6, abs_tol=1e-6)
-            ):
-                logger.warning(
-                    "azure temperature fallback",
+            try:
+                _resp = session.post(
+                    url,
+                    params=params,
+                    headers=headers,
+                    json=payload,
+                    stream=True,
+                    timeout=(
+                        float(max(1, self.config.connect_timeout)),
+                        float(max(30, self.config.read_timeout)),
+                    )
+                    if (self.config.connect_timeout or self.config.read_timeout)
+                    else self.config.timeout,
+                )
+                response = cast(_ResponseProtocol, _resp)
+                logger.debug(
+                    "azure request",
                     extra={
                         "endpoint": url,
                         "deployment": self.config.deployment,
-                        "requested_temperature": temperature,
-                        "status_code": status_code,
+                        "status_code": response.status_code,
                     },
                 )
-                return self._chat(
-                    messages=messages,
-                    temperature=1.0,
-                    max_tokens=max_tokens,
-                    response_format=response_format,
-                    include_max_output_tokens=include_max_output_tokens,
-                    allow_temperature_retry=False,
-                )
-
-            if (
-                include_max_output_tokens
-                and response_obj is not None
-                and status_code == 400
-                and detail
-                and "max_output_tokens" in detail
-            ):
-                logger.info(
-                    "retrying without max_output_tokens parameter",
+                response.raise_for_status()
+                break
+            except requests_client.exceptions.HTTPError as exc:
+                response_obj = getattr(exc, "response", None)
+                detail = cast(str, getattr(response_obj, "text", "") or "")
+                status_code = getattr(response_obj, "status_code", None)
+                detail_lower = detail.lower() if isinstance(detail, str) else ""
+                if (
+                    status_code == 400
+                    and detail_lower
+                    and "temperature" in detail_lower
+                    and "only the default (1) value is supported" in detail_lower
+                    and not self._require_default_temperature
+                ):
+                    logger.warning(
+                        "azure temperature fallback",
+                        extra={
+                            "endpoint": url,
+                            "deployment": self.config.deployment,
+                            "requested_temperature": temperature,
+                            "status_code": status_code,
+                        },
+                    )
+                    self._require_default_temperature = True
+                    _update_fallback_state(
+                        self._state_key,
+                        require_default_temperature=True,
+                    )
+                    continue
+                if (
+                    status_code == 400
+                    and detail_lower
+                    and "max_output_tokens" in detail_lower
+                    and not self._disable_max_output_tokens
+                    and max_tokens is not None
+                ):
+                    logger.info(
+                        "retrying without max_output_tokens parameter",
+                        extra={
+                            "endpoint": url,
+                            "deployment": self.config.deployment,
+                            "status_code": status_code,
+                        },
+                    )
+                    self._disable_max_output_tokens = True
+                    _update_fallback_state(
+                        self._state_key,
+                        disable_max_output_tokens=True,
+                    )
+                    continue
+                error_message = f"Azure OpenAI request failed: {exc}"
+                if detail:
+                    error_message += f"\n{detail}"
+                logger.error(
+                    "azure request failed",
                     extra={
-                        "endpoint": url,
-                        "deployment": self.config.deployment,
-                        "status_code": status_code,
-                    },
-                )
-                return self._chat(
-                    messages=messages,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    response_format=response_format,
-                    include_max_output_tokens=False,
-                    allow_temperature_retry=allow_temperature_retry,
-                )
-            error_message = (
-                f"Azure OpenAI request failed: {exc}" + (f"\n{detail}" if detail else "")
-            )
-            logger.error(
-                "azure request failed",
-                extra={
                         "endpoint": url,
                         "deployment": self.config.deployment,
                         "status_code": status_code,
                         "body": detail,
                     },
-            )
-            raise RuntimeError(error_message) from exc
-        except requests_client.exceptions.RequestException as exc:
-            logger.error(
-                "azure transport failure",
-                exc_info=exc,
-                extra={
-                    "endpoint": url,
-                    "deployment": self.config.deployment,
-                },
-            )
-            raise RuntimeError(
-                "Azure OpenAI transport error: could not reach the configured endpoint. "
-                "Verify the deployment name, region, and network connectivity."
-            ) from exc
+                )
+                raise RuntimeError(error_message) from exc
+            except requests_client.exceptions.RequestException as exc:
+                self._session_manager.reset_session(self.config.endpoint)
+                connection_error_type = getattr(requests_client.exceptions, "ConnectionError", None)
+                timeout_error_type = getattr(requests_client.exceptions, "Timeout", None)
+                is_connection_error = (
+                    isinstance(exc, connection_error_type) if connection_error_type is not None else False
+                )
+                is_timeout_error = (
+                    isinstance(exc, timeout_error_type) if timeout_error_type is not None else False
+                )
+                error_summary = _summarize_exception_chain(exc)
+                retry_cfg = self.config.retry_config
+                max_retries = retry_cfg.total if retry_cfg.total >= 0 else 0
+                retry_fragment = f" (max retries={max_retries})" if max_retries else ""
+                guidance_parts: list[str] = []
+                if error_summary:
+                    summary_text = f"Last error: {error_summary}"
+                    if not summary_text.endswith((".", "!", "?")):
+                        summary_text += "."
+                    guidance_parts.append(summary_text)
+                if is_connection_error and "closed connection without response" in error_summary.lower():
+                    guidance_parts.append("Azure closed the connection without sending a response.")
+                elif is_connection_error:
+                    guidance_parts.append("Azure reported a connection failure.")
+                if is_timeout_error:
+                    guidance_parts.append("The request timed out waiting for a response from Azure.")
+                message = f"Azure OpenAI transport error: request failed after retries{retry_fragment}."
+                if guidance_parts:
+                    message = message.rstrip(".") + ". " + " ".join(guidance_parts)
 
-        response_text = response.text
+                logger.error(
+                    "azure transport failure",
+                    exc_info=exc,
+                    extra={
+                        "endpoint": url,
+                        "deployment": self.config.deployment,
+                        "max_retries": max_retries,
+                        "error": error_summary,
+                    },
+                )
+                raise RuntimeError(message) from exc
+
         headers_obj = getattr(response, "headers", None)
         response_headers: Mapping[str, str] | None
         if isinstance(headers_obj, Mapping):
@@ -485,110 +578,100 @@ class AzureChatClient:
         if response_headers is not None:
             request_id = response_headers.get("x-ms-request-id") or response_headers.get("x-request-id")
 
-        if logger.isEnabledFor(logging.DEBUG):
-            preview = (response_text or "")[:2000]
-            logger.debug(
-                "azure response body preview=%s",
-                preview if preview else "<empty>",
+        content_parts: list[str] = []
+        usage: JSONObject = {}
+
+        for raw_line in response.iter_lines(decode_unicode=True):
+            if not raw_line:
+                continue
+            segment = raw_line.strip()
+            if not segment:
+                continue
+            if segment.startswith("data:"):
+                payload_text = segment[5:].strip()
+            else:
+                payload_text = segment
+            if not payload_text:
+                continue
+            if payload_text == "[DONE]":
+                break
+            try:
+                chunk = _require_json_object(json.loads(payload_text), context="stream chunk")
+            except ValueError:
+                logger.debug(
+                    "azure stream chunk decode failed",
+                    extra={
+                        "deployment": self.config.deployment,
+                        "request_id": request_id,
+                        "chunk": payload_text[:200],
+                    },
+                )
+                continue
+
+            choices_value = chunk.get("choices")
+            if isinstance(choices_value, list) and choices_value:
+                choice0 = choices_value[0]
+                if isinstance(choice0, Mapping):
+                    choice_obj = _require_json_object(choice0, context="stream choice")
+                    delta_value = choice_obj.get("delta")
+                    if isinstance(delta_value, Mapping):
+                        delta = _require_json_object(delta_value, context="stream delta")
+                        content_piece = delta.get("content")
+                        if isinstance(content_piece, str):
+                            content_parts.append(content_piece)
+                        elif isinstance(content_piece, Sequence) and not isinstance(
+                            content_piece, (str, bytes, bytearray)
+                        ):
+                            content_parts.append(_content_from_parts(content_piece))
+                        else:
+                            tool_calls_piece = delta.get("tool_calls")
+                            if tool_calls_piece is not None:
+                                content_parts.append(_content_from_tool_calls(tool_calls_piece))
+                            annotations_piece = delta.get("annotations")
+                            if annotations_piece is not None:
+                                content_parts.append(_content_from_annotations(annotations_piece))
+                    message_value = choice_obj.get("message")
+                    if isinstance(message_value, Mapping):
+                        message_obj = _require_json_object(message_value, context="stream message")
+                        content_value = message_obj.get("content")
+                        if isinstance(content_value, str):
+                            content_parts.append(content_value)
+                        elif isinstance(content_value, Sequence) and not isinstance(
+                            content_value, (str, bytes, bytearray)
+                        ):
+                            content_parts.append(_content_from_parts(content_value))
+                        else:
+                            content_parts.append(_content_from_tool_calls(message_obj.get("tool_calls")))
+                            content_parts.append(_content_from_annotations(message_obj.get("annotations")))
+
+            usage_value = chunk.get("usage")
+            if isinstance(usage_value, Mapping):
+                usage = _require_json_object(usage_value, context="usage metadata")
+
+        content = "".join(part for part in content_parts if part).strip()
+        if content:
+            content = _extract_json_candidate(content)
+
+        if not content:
+            logger.error(
+                "azure streaming completion empty",
                 extra={
                     "deployment": self.config.deployment,
                     "request_id": request_id,
                 },
             )
-
-        try:
-            data = _require_json_object(response.json(), context="chat response")
-        except ValueError as exc:
-            preview = (response_text or "")[:500]
-            preview_single_line = preview.replace("\n", "\\n").replace("\r", "\\r")
-            logger.error(
-                "azure response json decode failed (status=%s, deployment=%s, request_id=%s): %s",
-                response.status_code,
-                self.config.deployment,
-                request_id,
-                preview_single_line if preview_single_line else "<empty>",
-            )
             raise RuntimeError(
-                "Azure OpenAI returned an invalid JSON payload (status="
-                f"{response.status_code}, deployment='{self.config.deployment}', request_id='{request_id}'). "
-                f"Body preview: {preview_single_line if preview_single_line else '<empty>'}"
-            ) from exc
+                "Azure OpenAI returned an empty streaming completion "
+                f"(deployment='{self.config.deployment}', request_id='{request_id}')."
+            )
 
         logger.debug(
             "azure response usage",
             extra={
                 "deployment": self.config.deployment,
-                "usage": data.get("usage"),
+                "usage": usage,
             },
         )
-
-        choices_value = data.get("choices")
-        if not isinstance(choices_value, list):
-            raise RuntimeError("Azure OpenAI response missing choices")
-
-        choices: list[JSONObject] = [item for item in choices_value if isinstance(item, dict)]
-        if not choices:
-            raise RuntimeError("Azure OpenAI response missing choices")
-
-        choice0 = choices[0]
-        message_value = choice0.get("message")
-        if isinstance(message_value, Mapping):
-            message = _require_json_object(message_value, context="chat message")
-        else:
-            message = {}
-
-        content = ""
-        content_obj = message.get("content")
-        if isinstance(content_obj, str) and content_obj.strip():
-            content = content_obj
-        else:
-            content = _content_from_parts(content_obj)
-
-        if not content:
-            content = _content_from_tool_calls(message.get("tool_calls"))
-
-        if not content:
-            content = _content_from_annotations(message.get("annotations"))
-
-        if not content:
-            refusal = message.get("refusal")
-            if isinstance(refusal, str) and refusal.strip():
-                content = refusal
-            elif isinstance(refusal, (dict, list)) and refusal:
-                try:
-                    content = json.dumps(refusal)
-                except Exception:
-                    content = str(refusal)
-
-        if not content:
-            content = _content_from_delta(choice0.get("delta"))
-
-        if content:
-            content = _extract_json_candidate(content)
-
-        if not content:
-            finish_reason = choice0.get("finish_reason")
-            preview = (response_text or "")[:500]
-            preview_single_line = preview.replace("\n", "\\n").replace("\r", "\\r")
-            logger.error(
-                "azure empty completion (status=%s, deployment=%s, request_id=%s, finish_reason=%s): %s",
-                response.status_code,
-                self.config.deployment,
-                request_id,
-                finish_reason,
-                preview_single_line if preview_single_line else "<empty>",
-            )
-            raise RuntimeError(
-                "Azure OpenAI returned an empty completion (deployment='"
-                f"{self.config.deployment}', request_id='{request_id}', finish_reason='{finish_reason}'). "
-                f"Body preview: {preview_single_line if preview_single_line else '<empty>'}"
-            )
-
-        usage_value = data.get("usage")
-        if isinstance(usage_value, Mapping):
-            usage = _require_json_object(usage_value, context="usage metadata")
-        else:
-            usage = {}
 
         return content, usage
 
@@ -601,8 +684,14 @@ class AzureChatClient:
                 and (now - self._last_health_check) < max(1, self.config.health_check_cache_ttl)
             ):
                 return
+        parsed = urlsplit(self.config.endpoint)
+        hostname = (parsed.hostname or "").lower()
+        if not hostname or hostname.startswith("example") or hostname in {"localhost", "127.0.0.1"}:
+            with self._health_lock:
+                self._last_health_check = now
+            return
         try:
-            self._chat(
+            self.chat(
                 messages=[
                     {
                         "role": "system",
@@ -614,10 +703,8 @@ class AzureChatClient:
                     },
                 ],
                 temperature=1.0,
-                max_tokens=max(128, self.config.health_check_max_tokens),
+                max_tokens=max(256, self.config.health_check_max_tokens),
                 response_format=None,
-                include_max_output_tokens=False,
-                allow_temperature_retry=False,
             )
         except RuntimeError as exc:
             raise RuntimeError(f"Azure OpenAI health check failed: {exc}") from exc

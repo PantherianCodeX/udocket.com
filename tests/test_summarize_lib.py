@@ -53,6 +53,57 @@ def _write_transcript(path: Path, text: str) -> Path:
     return path
 
 
+def _install_llm_settings_stub(monkeypatch: pytest.MonkeyPatch) -> None:
+    azure_models = {
+        "gpt-5-mini": LLMProviderModel(
+            name="gpt-5-mini",
+            label="GPT-5 Mini",
+            cost_tier="standard",
+            default_enabled=True,
+            max_output_tokens=16000,
+            context_window_tokens=200000,
+            default_temperature=1.0,
+        ),
+        "gpt-5": LLMProviderModel(
+            name="gpt-5",
+            label="GPT-5",
+            cost_tier="premium",
+            default_enabled=True,
+            max_output_tokens=32000,
+            context_window_tokens=220000,
+            default_temperature=1.0,
+        ),
+        "gpt-4o": LLMProviderModel(
+            name="gpt-4o",
+            label="GPT-4o",
+            cost_tier="standard",
+            default_enabled=True,
+            max_output_tokens=10000,
+            context_window_tokens=128000,
+            default_temperature=1.0,
+        ),
+    }
+    azure_provider = LLMProvider(
+        name="azure",
+        display_name="Azure",
+        models=azure_models,
+    )
+    assignments: Dict[str, LLMStageAssignment] = {}
+    for stage_key in LLM_STAGE_KEYS.values():
+        model_name = "gpt-5" if stage_key == "analyze.draft_markdown" else "gpt-5-mini"
+        assignments[stage_key] = LLMStageAssignment(
+            stage_key=stage_key,
+            providers=["azure"],
+            model=model_name,
+        )
+    settings = LLMSettings(
+        providers={"azure": azure_provider},
+        assignments=assignments,
+    )
+    monkeypatch.setattr(analyze_lib, "_llm_settings_cache", settings, raising=False)
+    monkeypatch.setattr(analyze_lib, "_load_llm_settings", lambda: settings)
+
+
 def _install_stage_stubs(monkeypatch: pytest.MonkeyPatch, summary_text: str | None = None) -> None:
     if summary_text is None:
         summary_text = (
@@ -240,6 +291,7 @@ def test_analyze_agent_writes_artifacts(monkeypatch: MonkeyPatch, tmp_path):
         """Header line\n---------------------------\n[00:01] SPK_1: Hello there\n[00:02] SPK_2: Welcome to court\n""",
     )
 
+    _install_llm_settings_stub(monkeypatch)
     _install_stage_stubs(monkeypatch)
     agent = AnalyzeAgent(_make_config())
     result = agent.analyze(
@@ -288,6 +340,7 @@ def test_analyze_agent_versioned_outputs(monkeypatch: MonkeyPatch, tmp_path):
         """Heading\n---------------------------\n[00:01] SPK_1: Statement A\n[00:02] SPK_2: Statement B\n""",
     )
 
+    _install_llm_settings_stub(monkeypatch)
     _install_stage_stubs(monkeypatch)
     agent = AnalyzeAgent(_make_config())
     first = agent.analyze(
@@ -344,6 +397,7 @@ def test_analyze_agent_adds_default_header(monkeypatch: MonkeyPatch, tmp_path):
         """[00:01] Speaker: Hello\n[00:05] Another line\n""",
     )
 
+    _install_llm_settings_stub(monkeypatch)
     _install_stage_stubs(monkeypatch, summary_text="Executive summary only")
     agent = AnalyzeAgent(_make_config())
     result = agent.analyze(
@@ -390,6 +444,7 @@ def test_stage_temperature_and_max_tokens_override(monkeypatch: MonkeyPatch, tmp
     transcript = case_dir / "transcript" / "JOB-OVR__transcript.txt"
     _write_transcript(transcript, "[00:00] Speaker: Hello world")
 
+    _install_llm_settings_stub(monkeypatch)
     _install_stage_stubs(monkeypatch)
 
     recorded_temperatures: list[float] = []
@@ -559,6 +614,7 @@ def test_build_context_respects_config_limits(tmp_path):
 
 
 def test_analyze_agent_raises_on_stage_failure(monkeypatch: MonkeyPatch, tmp_path):
+    _install_llm_settings_stub(monkeypatch)
     _install_stage_stubs(monkeypatch)
 
     def boom(**_: Any) -> OutlineStageResult:

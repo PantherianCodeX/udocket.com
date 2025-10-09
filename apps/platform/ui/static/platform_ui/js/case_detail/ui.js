@@ -278,6 +278,7 @@
     }
     const state = analyzeStageState.get(stageKeyRaw);
     if (!state) return;
+    const previousStatus = state.status;
     const nextStatus = statusForEvent(payload && payload.stage_event);
     if (nextStatus) {
       state.status = nextStatus;
@@ -302,6 +303,14 @@
         analyzePipelineStatus = 'Complete';
       } else if (nextStatus === 'failed') {
         analyzePipelineStatus = 'Failed';
+        const pipelineMessage =
+          message || 'Analyze pipeline failed. Review the job log for more details.';
+        if (deps.notify) {
+          deps.notify({
+            type: 'error',
+            message: `Analyze pipeline failed: ${pipelineMessage}`,
+          });
+        }
       } else if (nextStatus === 'running') {
         analyzePipelineStatus = 'Running';
       } else if (nextStatus === 'ready') {
@@ -311,6 +320,17 @@
       }
     } else if (nextStatus === 'failed') {
       analyzePipelineStatus = 'Failed';
+    }
+    if (nextStatus === 'failed' && previousStatus !== 'failed' && stageKeyRaw !== 'pipeline') {
+      const label = stageLabel(stageKeyRaw);
+      const detailMessage =
+        message || `The ${label.toLowerCase()} stage encountered an error. Review the job log for details.`;
+      if (deps.notify) {
+        deps.notify({
+          type: 'error',
+          message: `${label} failed: ${detailMessage}`,
+        });
+      }
     }
     renderAnalyzeProgress();
   }
