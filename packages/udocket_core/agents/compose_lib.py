@@ -32,6 +32,7 @@ from .common import append_jsonl, ensure_dir, next_versioned, parse_transcript, 
 from .common.llm_health import ensure_llm_client_health
 from .common.docx import write_basic_docx
 from .compose import COMPOSE_STAGE_PROFILES, ComposeStageProfile
+from .compose.graph_visuals import build_graph_visual_artifacts
 from ..llm import LLMSettings, load_llm_settings
 from ..llm.runtime import (
     ChatClientError,
@@ -331,7 +332,9 @@ class ComposeArtifacts:
     lawyer_docx: Optional[Path] = None
     timeline_summary: Optional[Path] = None
     entity_brief: Optional[Path] = None
-    graph_visual: Optional[Path] = None
+    graph_visual_json: Optional[Path] = None
+    graph_html: Optional[Path] = None
+    graph_image: Optional[Path] = None
 
 
 @dataclass
@@ -588,7 +591,26 @@ class ComposeAgent:
         if graph_visual_payload:
             graph_visual_file = next_versioned(analysis_dir / f"{job_id}__compose_graph_visual_v1.json")
             write_json_object(graph_visual_file, graph_visual_payload)
-            artifacts.graph_visual = graph_visual_file
+            artifacts.graph_visual_json = graph_visual_file
+            alt_text_value = coerce_str(graph_visual_payload.get("alt_text")) or "Relationship graph"
+            size_hint_obj = (
+                coerce_json_object(graph_visual_payload.get("size_hint"))
+                if isinstance(graph_visual_payload.get("size_hint"), Mapping)
+                else None
+            )
+            notes_value = coerce_str(graph_visual_payload.get("notes")) or None
+            visual_artifacts = build_graph_visual_artifacts(
+                graph_payload=graph_payload,
+                alt_text=alt_text_value,
+                size_hint=size_hint_obj,
+                notes=notes_value,
+            )
+            graph_html_path = next_versioned(analysis_dir / f"{job_id}__graph_v2.html")
+            graph_html_path.write_text(visual_artifacts.html, encoding="utf-8")
+            artifacts.graph_html = graph_html_path
+            graph_png_path = next_versioned(analysis_dir / f"{job_id}__graph_v2.png")
+            graph_png_path.write_bytes(visual_artifacts.png_bytes)
+            artifacts.graph_image = graph_png_path
 
         if "client" in requested_targets and client_markdown:
             client_md = next_versioned(analysis_dir / f"{job_id}__compose_client_v1.md")
@@ -615,6 +637,9 @@ class ComposeAgent:
             timeline_file=str(artifacts.timeline_file) if artifacts.timeline_file else None,
             graph_file=str(artifacts.graph_file) if artifacts.graph_file else None,
             entities_file=str(artifacts.entities_file) if artifacts.entities_file else None,
+            graph_visual_json=str(artifacts.graph_visual_json) if artifacts.graph_visual_json else None,
+            graph_html=str(artifacts.graph_html) if artifacts.graph_html else None,
+            graph_image=str(artifacts.graph_image) if artifacts.graph_image else None,
             client_markdown=str(artifacts.client_markdown) if artifacts.client_markdown else None,
             lawyer_markdown=str(artifacts.lawyer_markdown) if artifacts.lawyer_markdown else None,
             client_docx=str(artifacts.client_docx) if artifacts.client_docx else None,

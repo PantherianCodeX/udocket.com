@@ -128,6 +128,27 @@ def analysis_modules_context(
     entity_artifacts: List[Dict[str, Any]] = []
     compose_candidates: Dict[str, Dict[str, Any]] = {}
 
+    def _append_compose_candidate(payload: Dict[str, Any]) -> None:
+        job_key = payload.get("job_id") or str(payload.get("id") or "").replace(" ", "")
+        if not job_key:
+            return
+        candidate = compose_candidates.setdefault(
+            job_key,
+            {
+                "job_id": job_key,
+                "artifacts": [],
+                "created_at": payload.get("created_at"),
+                "source": payload.get("metadata", {}).get("source_summary"),
+                "title": payload.get("title") or "Compose Deliverables",
+            },
+        )
+        candidate["artifacts"].append(payload)
+        created_at = payload.get("created_at")
+        if created_at and (candidate.get("created_at") is None or created_at > candidate["created_at"]):
+            candidate["created_at"] = created_at
+        if payload.get("title"):
+            candidate["title"] = payload["title"]
+
     for payload in artifact_payloads:
         artifact_type = str(payload.get("artifact_type") or "").upper()
         if artifact_type == "SUMMARY":
@@ -136,29 +157,17 @@ def analysis_modules_context(
             timeline_artifacts.append(payload)
         elif artifact_type == "GRAPH":
             graph_artifacts.append(payload)
+            filename = (payload.get("filename") or "").lower()
+            title = (payload.get("title") or "").lower()
+            if "graph_v2" in filename or "graph visual" in title:
+                _append_compose_candidate(payload)
         elif artifact_type == "ENTITIES":
             entity_artifacts.append(payload)
         else:
             filename = payload.get("filename", "").lower()
             title = (payload.get("title") or "").lower()
             if "compose" in filename or "compose" in title:
-                job_key = payload.get("job_id") or str(payload["id"]).replace(" ", "")
-                candidate = compose_candidates.setdefault(
-                    job_key,
-                    {
-                        "job_id": job_key,
-                        "artifacts": [],
-                        "created_at": payload.get("created_at"),
-                        "source": payload.get("metadata", {}).get("source_summary"),
-                        "title": payload.get("title") or "Compose Deliverables",
-                    },
-                )
-                candidate["artifacts"].append(payload)
-                created_at = payload.get("created_at")
-                if created_at and (candidate.get("created_at") is None or created_at > candidate["created_at"]):
-                    candidate["created_at"] = created_at
-                if payload.get("title"):
-                    candidate["title"] = payload["title"]
+                _append_compose_candidate(payload)
 
     summary_artifacts = enrich_summary_artifacts(summary_artifacts, jobs, telemetry_map)
     timeline_artifacts = enrich_timeline_artifacts(timeline_artifacts)
@@ -366,10 +375,18 @@ def analysis_modules_context(
                 label = "Entity briefing"
                 kind = "entity_brief"
                 priority = 11
-            elif "compose_graph_visual" in lower:
-                label = "Graph visual embed"
-                kind = "graph_visual"
+            elif "graph_v2.html" in lower:
+                label = "Graph visual (HTML)"
+                kind = "graph_html"
                 priority = 12
+            elif "graph_v2.png" in lower:
+                label = "Graph visual (PNG)"
+                kind = "graph_png"
+                priority = 13
+            elif "compose_graph_visual" in lower:
+                label = "Graph visual plan"
+                kind = "graph_visual_plan"
+                priority = 30
             return {
                 "label": label,
                 "download_url": artifact.get("download_url"),

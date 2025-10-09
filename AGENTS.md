@@ -91,7 +91,7 @@ The repository hosts agents that consume transcripts and emit analysis artifacts
     - Client deliverable (grade 6, in-client voice): `analysis/<job_id>__compose_client_v1.md` and `.docx`
     - Lawyer deliverable (professional legal): `analysis/<job_id>__compose_lawyer_v1.md` and `.docx`
     - Timeline: `analysis/<job_id>__timeline_v2.json` (+ `...html` and optional `...png`)
-    - Graph: `analysis/<job_id>__graph_v2.json` (+ `...html` and optional `...png`)
+    - Graph: `analysis/<job_id>__graph_v2.json` + deterministic `...graph_v2.html` and `...graph_v2.png`
     - Ops JSON (per run): `ops/<job_id>__compose_log.json`
     - Ops audit JSONL: `ops/ops_compose.jsonl`
   - Notes: per‑org DOCX template selection with uDocket default fallback; no offline fallbacks; fail fast on missing credentials.

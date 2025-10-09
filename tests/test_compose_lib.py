@@ -36,7 +36,16 @@ def test_compose_agent_creates_artifacts(tmp_path, monkeypatch: MonkeyPatch):
         "compose.timeline_summary": ("## Key Milestones\n- Item", {"prompt_tokens": 4, "completion_tokens": 3}, "stub"),
         "compose.graph_builder": ({"entities": [], "relationships": []}, {"prompt_tokens": 8, "completion_tokens": 4}, "stub"),
         "compose.entity_brief": ("## Primary Parties\n- Example", {"prompt_tokens": 5, "completion_tokens": 3}, "stub"),
-        "compose.graph_visual": ({"embed_html": "<div></div>", "alt_text": "Graph"}, {"prompt_tokens": 4, "completion_tokens": 2}, "stub"),
+        "compose.graph_visual": (
+            {
+                "embed_html": "<div></div>",
+                "alt_text": "Graph visual summary",
+                "notes": "Centered layout",
+                "size_hint": {"width": "960px", "height": "640px"},
+            },
+            {"prompt_tokens": 4, "completion_tokens": 2},
+            "stub",
+        ),
         "compose.client_brief": ("# Client Brief", {"prompt_tokens": 12, "completion_tokens": 6}, "stub"),
         "compose.lawyer_brief": ("# Lawyer Brief", {"prompt_tokens": 12, "completion_tokens": 6}, "stub"),
         "compose.qa_review": ({"status": "ok"}, {"prompt_tokens": 6, "completion_tokens": 3}, "stub"),
@@ -63,7 +72,9 @@ def test_compose_agent_creates_artifacts(tmp_path, monkeypatch: MonkeyPatch):
     assert artifacts.graph_file and artifacts.graph_file.exists()
     assert artifacts.timeline_summary and artifacts.timeline_summary.exists()
     assert artifacts.entity_brief and artifacts.entity_brief.exists()
-    assert artifacts.graph_visual and artifacts.graph_visual.exists()
+    assert artifacts.graph_visual_json and artifacts.graph_visual_json.exists()
+    assert artifacts.graph_html and artifacts.graph_html.exists()
+    assert artifacts.graph_image and artifacts.graph_image.exists()
     assert artifacts.client_markdown and artifacts.client_markdown.exists()
     assert artifacts.lawyer_markdown and artifacts.lawyer_markdown.exists()
     assert artifacts.client_docx and artifacts.client_docx.exists()

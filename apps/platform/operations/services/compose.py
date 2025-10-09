@@ -383,8 +383,12 @@ def execute_compose_job(
         meta_updates["compose_timeline_summary"] = str(artifacts.timeline_summary)
     if artifacts.entity_brief:
         meta_updates["compose_entity_brief"] = str(artifacts.entity_brief)
-    if artifacts.graph_visual:
-        meta_updates["compose_graph_visual"] = str(artifacts.graph_visual)
+    if artifacts.graph_visual_json:
+        meta_updates["compose_graph_visual_json"] = str(artifacts.graph_visual_json)
+    if artifacts.graph_html:
+        meta_updates["graph_v2_html_file"] = str(artifacts.graph_html)
+    if artifacts.graph_image:
+        meta_updates["graph_v2_png_file"] = str(artifacts.graph_image)
     if artifacts.client_markdown:
         meta_updates["compose_client_markdown"] = str(artifacts.client_markdown)
     if artifacts.lawyer_markdown:
@@ -403,7 +407,9 @@ def execute_compose_job(
             artifacts.entities_file,
             artifacts.timeline_summary,
             artifacts.entity_brief,
-            artifacts.graph_visual,
+            artifacts.graph_visual_json,
+            artifacts.graph_html,
+            artifacts.graph_image,
             artifacts.client_markdown,
             artifacts.lawyer_markdown,
             artifacts.client_docx,
@@ -501,10 +507,18 @@ def execute_compose_job(
         metadata={"format": "markdown", "source_summary": summary_source_name},
     )
     _create_artifact(
-        kind="COMPOSE",
-        path=artifacts.graph_visual,
-        title_hint="Graph visual embed",
-        metadata={"format": "json", "source_summary": summary_source_name},
+        kind="GRAPH",
+        path=artifacts.graph_html,
+        title_hint="Relationship graph (HTML)",
+        metadata={"format": "html", "source_summary": summary_source_name},
+        schema_version="v2",
+    )
+    _create_artifact(
+        kind="GRAPH",
+        path=artifacts.graph_image,
+        title_hint="Relationship graph (PNG)",
+        metadata={"format": "png", "source_summary": summary_source_name},
+        schema_version="v2",
     )
     _create_artifact(
         kind="TIMELINE",

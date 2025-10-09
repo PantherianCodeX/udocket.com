@@ -156,7 +156,6 @@ def test_compose_module_lists_extended_deliverables(settings: SettingsFixture, t
         ("Compose lawyer (MD)", "analysis/JOB__compose_lawyer_v1.md"),
         ("Compose timeline", "analysis/JOB__compose_timeline_v1.md"),
         ("Compose entities", "analysis/JOB__compose_entities_v1.md"),
-        ("Compose graph visual", "analysis/JOB__compose_graph_visual_v1.json"),
     ]
     for idx, (title, path) in enumerate(compose_artifacts):
         CaseArtifact.objects.create(
@@ -169,6 +168,23 @@ def test_compose_module_lists_extended_deliverables(settings: SettingsFixture, t
             path=str(tmp_path / path),
             checksum="",
             schema_version="v1",
+        )
+
+    # Graph deliverables
+    for title, path in [
+        ("Graph visual HTML", "analysis/JOB__graph_v2.html"),
+        ("Graph visual PNG", "analysis/JOB__graph_v2.png"),
+    ]:
+        CaseArtifact.objects.create(
+            case_id=str(case.id),
+            case_fk=case,
+            organization=org,
+            job_id=str(compose_job.id),
+            type="GRAPH",
+            title=title,
+            path=str(tmp_path / path),
+            checksum="",
+            schema_version="v2",
         )
 
     telemetry_map = {
@@ -194,7 +210,8 @@ def test_compose_module_lists_extended_deliverables(settings: SettingsFixture, t
     assert "Client deliverable (Markdown)" in labels
     assert "Timeline narrative" in labels
     assert "Entity briefing" in labels
-    assert "Graph visual embed" in labels
+    assert "Graph visual (HTML)" in labels
+    assert "Graph visual (PNG)" in labels
 
     download_labels = {item["label"] for item in compose_module["downloads"]}
     assert "Timeline narrative" in download_labels

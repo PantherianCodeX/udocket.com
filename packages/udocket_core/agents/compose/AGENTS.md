@@ -18,7 +18,7 @@ The Compose pipeline runs sequential stages. Stage keys align with `config/llm_a
 | `compose.timeline_summary` | Timeline Narrator | Case metadata, timeline_v2 JSON, summary data | Markdown narrative of key milestones | Feeds both briefs and QA with human-readable highlights. |
 | `compose.graph_builder` | Relationship Cartographer | Case brief, entity hints, timeline, case metadata, summary data, transcript excerpt | Graph JSON `{entities, relationships}` | Every entity/relationship returns stable `uuid` + `id`; include evidence pointers. |
 | `compose.entity_brief` | Entity Briefing Specialist | Case metadata, graph payload, entity hints, timeline | Markdown briefing covering parties and relationships | Used by both client and lawyer deliverables for quick reference. |
-| `compose.graph_visual` | Graph Visual Planner | Case metadata, graph payload | JSON with embeddable HTML, sizing, and accessibility notes | Enables UI/docx embedding with consistent styling. |
+| `compose.graph_visual` | Graph Visual Planner | Case metadata, graph payload | JSON instructions with alt text, sizing, and styling notes | Feeds deterministic renderer that produces HTML + PNG artifacts. |
 | `compose.client_brief` | Client Brief Drafter | Case brief, timeline, graph, summary Markdown, staff report, intake, case metadata | Markdown deliverable at grade-six reading level | Tone: empathetic/explanatory. |
 | `compose.lawyer_brief` | Counsel Brief Drafter | Case brief, timeline, graph, summary Markdown, case metadata | Professional Markdown with issue/evidence organization | Lower temperature (`COMPOSE_LAWYER_TEMPERATURE`). |
 | `compose.qa_review` | QA Reviewer | Case brief, timeline, graph, client & lawyer Markdown, case metadata | JSON QA payload (`status`, `alerts`, `recommendations`) | Temperature forced to 0; no generative text. |
@@ -46,7 +46,9 @@ All stages rely on Canadian-region Azure OpenAI deployments by default. Configur
 - `analysis/<job_id>__entities_v2.json` (entity list derived from graph payload)
 - `analysis/<job_id>__compose_timeline_v1.md` (timeline narrative)
 - `analysis/<job_id>__compose_entities_v1.md` (entity briefing)
-- `analysis/<job_id>__compose_graph_visual_v1.json` (graph embed instructions)
+- `analysis/<job_id>__graph_v2.html`
+- `analysis/<job_id>__graph_v2.png`
+- `analysis/<job_id>__compose_graph_visual_v1.json` (graph visual instructions retained for provenance)
 - `analysis/<job_id>__compose_client_v1.{md,docx}`
 - `analysis/<job_id>__compose_lawyer_v1.{md,docx}`
 - Ops log: `ops/<job_id>__compose_log.json`

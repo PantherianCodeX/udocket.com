@@ -31,6 +31,9 @@ PyYAML>=6.0.3
 azure-storage-blob>=12.26.0
 azure-cognitiveservices-speech>=1.46.0
 
+# Rendering
+Pillow>=10.4.0
+
 # Integrity / audit helpers
 django-auditlog>=3.2.1
 django-simple-history>=3.10.1

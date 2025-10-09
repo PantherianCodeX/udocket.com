@@ -29,6 +29,8 @@ ANALYSIS_KIND_TO_META_KEY: Dict[str, str] = {
     "summary_case_brief": "summary_case_brief_file",
     "timeline_v2": "timeline_v2_file",
     "graph_v2": "graph_v2_file",
+    "graph_v2_html": "graph_v2_html_file",
+    "graph_v2_png": "graph_v2_png_file",
     "entities_v2": "entities_v2_file",
     "compose_client_markdown": "compose_client_markdown",
     "compose_client_docx": "compose_client_docx",
@@ -36,7 +38,7 @@ ANALYSIS_KIND_TO_META_KEY: Dict[str, str] = {
     "compose_lawyer_docx": "compose_lawyer_docx",
     "compose_timeline_summary": "compose_timeline_summary",
     "compose_entity_brief": "compose_entity_brief",
-    "compose_graph_visual": "compose_graph_visual",
+    "compose_graph_visual_json": "compose_graph_visual_json",
 }
 
 from apps.platform.authorization.capabilities import has_capability
