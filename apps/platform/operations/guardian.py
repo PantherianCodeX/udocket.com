@@ -239,7 +239,7 @@ def build_guardian_context(organization_id: str | None) -> GuardianContext | Non
         drop_empty_keys=True,
         drop_nullish_values=True,
     )
-    temperature = coerce_float(options_raw.get("temperature"), default=0.0) or 0.0
+    temperature = coerce_float(options_raw.get("temperature"), default=1.0) or 1.0
 
     max_tokens_value = coerce_int(review_cfg.get("max_tokens"), default=2048, minimum=1) or 2048
 

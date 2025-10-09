@@ -7,12 +7,6 @@
       "version": "0.1.0"
     },
     {
-      "lastRun": "2025-10-05T00:00:00Z",
-      "name": "normalize_json_object_adoption",
-      "status": "planned",
-      "version": "0.1.0"
-    },
-    {
       "lastRun": "2025-10-05T15:51:45.333494+00:00",
       "name": "bootstrap_env",
       "status": "ok",
@@ -31,7 +25,13 @@
       "version": "0.1.0"
     },
     {
-      "lastRun": "2025-10-05T18:26:29.903468+00:00",
+      "lastRun": "2025-10-05T00:00:00Z",
+      "name": "normalize_json_object_adoption",
+      "status": "planned",
+      "version": "0.1.0"
+    },
+    {
+      "lastRun": "2025-10-09T01:47:10.716050+00:00",
       "name": "vendor_stubs",
       "status": "ok",
       "version": "0.1.0"
@@ -58,7 +58,6 @@
   },
   "recordedAt": "2025-10-05T15:52:04.935222+00:00",
   "strictModules": [
-    
     {
       "path": "apps/platform/accounts/models.py",
       "verifiedAt": "2025-10-05T01:44:10.645472+00:00"

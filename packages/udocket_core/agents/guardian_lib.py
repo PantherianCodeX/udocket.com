@@ -24,6 +24,7 @@ from packages.udocket_core.llm.runtime import (
     build_chat_client,
     build_provider_runtime_config,
 )
+from .common.llm_health import ensure_llm_client_health
 
 logger = logging.getLogger("udocket.guardian")
 
@@ -193,6 +194,28 @@ class GuardianAgent:
             except ChatClientError as exc:
                 self.logger.exception(
                     "guardian.provider.init_failed",
+                    extra={
+                        "provider": provider_meta.name,
+                        "model": provider_model_name,
+                        "job_id": job_id,
+                        "case_id": case_id,
+                        "error": str(exc),
+                    },
+                )
+                continue
+
+            try:
+                ensure_llm_client_health(
+                    client,
+                    stage="guardian.review",
+                    provider=provider_meta.name,
+                    model=provider_model_name,
+                    logger=self.logger,
+                    raise_error=lambda message: ChatClientError(message),
+                )
+            except ChatClientError as exc:
+                self.logger.error(
+                    "guardian.provider.health_failed",
                     extra={
                         "provider": provider_meta.name,
                         "model": provider_model_name,

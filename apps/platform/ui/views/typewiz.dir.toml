@@ -1,0 +1,9 @@
+[active_profiles]
+pyright = "strict"
+
+[engines.pyright]
+include = [
+  "jobs_actions/title.py",
+  "cases/helpers.py",
+  "presenters/analysis_llm.py"
+]

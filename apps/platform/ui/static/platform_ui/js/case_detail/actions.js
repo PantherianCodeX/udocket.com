@@ -36,24 +36,14 @@
     }
   };
 
+  const JSONU = platformUI.json;
+
   const getEmbeddedJSON = (container, key) => {
     if (!container) return null;
-    try {
-      const script = container.querySelector(`[data-llm-json="${key}"]`);
-      if (!script) return null;
-      const text = script.textContent || '';
-      if (!text.trim()) return null;
-      const parsed = JSON.parse(text);
-      if (platformUI.llmDebug) {
-        console.debug('[LLM] Parsed embedded JSON', key, parsed);
-      }
-      return parsed;
-    } catch (error) {
-      if (platformUI.llmDebug) {
-        console.warn('[LLM] Failed to parse embedded JSON', key, error);
-      }
-      return null;
-    }
+    const script = container.querySelector(`[data-llm-json="${key}"]`);
+    if (!script) return null;
+    const text = script.textContent || '';
+    return JSONU.parse(text, null);
   };
 
   const helpers = caseDetail.helpers || {};
@@ -107,14 +97,7 @@
     const readEmbeddedJSON = (key) => {
       const el = container.querySelector(`[data-llm-json="${key}"]`);
       if (!el) return null;
-      try {
-        return JSON.parse(el.textContent || '');
-      } catch (error) {
-        if (platformUI.llmDebug) {
-          console.warn('[LLM] Failed to parse embedded JSON', key, error);
-        }
-        return null;
-      }
+      return JSONU.parse(el.textContent || '', null);
     };
 
     const rawConfigs = readEmbeddedJSON('configurations') || [];
@@ -192,7 +175,7 @@
         ((Array.isArray(value) && value.length > 0) ||
           (typeof value === 'object' && Object.keys(value).length > 0));
       if (hasValue) {
-        container.dataset[prop] = JSON.stringify(value);
+        container.dataset[prop] = JSONU.stringifyStable(value);
       } else {
         delete container.dataset[prop];
       }
@@ -520,7 +503,7 @@
           'Content-Type': 'application/json',
         },
         credentials: 'same-origin',
-        body: JSON.stringify({ comment }),
+        body: JSONU.stringifyStable({ comment }),
       });
       if (!resp.ok) {
         let message = `HTTP ${resp.status}`;
@@ -700,7 +683,7 @@
         closeMenu();
         return;
       }
-      requestBody = JSON.stringify({ comment: response });
+      requestBody = JSONU.stringifyStable({ comment: response });
     }
     const optionalQuery = control.getAttribute('data-job-action-query');
     if (optionalQuery) {
@@ -770,14 +753,14 @@
           Accept: 'application/json',
         },
         credentials: 'same-origin',
-        body: JSON.stringify({ notes: textarea.value }),
+        body: JSONU.stringifyStable({ notes: textarea.value }),
       });
       if (!resp.ok) {
         const bodyText = await resp.text();
         let message = `HTTP ${resp.status}`;
         if (bodyText) {
           try {
-            const parsed = JSON.parse(bodyText);
+            const parsed = JSONU.parse(bodyText, null);
             if (parsed && typeof parsed === 'object') {
               const detail = typeof parsed.detail === 'string' ? parsed.detail.trim() : '';
               if (detail) {
@@ -904,7 +887,7 @@
           Accept: 'application/json',
         },
         credentials: 'same-origin',
-        body: JSON.stringify(payload),
+        body: JSONU.stringifyStable(payload),
       });
       if (resp.ok) {
         const data = await resp.json();
@@ -1262,7 +1245,7 @@
             'X-CSRFToken': helpers.getCSRFToken(),
           },
           credentials: 'same-origin',
-          body: JSON.stringify({ fixture_name: name }),
+          body: JSONU.stringifyStable({ fixture_name: name }),
         });
         const data = await resp.json().catch(() => null);
         if (!resp.ok || !data || data.status !== 'ok') {
@@ -1671,14 +1654,14 @@
           'Content-Type': 'application/json',
         },
         credentials: 'same-origin',
-        body: Object.keys(payload).length ? JSON.stringify(payload) : null,
+        body: Object.keys(payload).length ? JSONU.stringifyStable(payload) : null,
       });
       if (!resp.ok) {
         const bodyText = await resp.text();
         let message = `HTTP ${resp.status}`;
         if (bodyText) {
           try {
-            const parsed = JSON.parse(bodyText);
+            const parsed = JSONU.parse(bodyText, null);
             if (parsed && typeof parsed === 'object') {
               const detail = typeof parsed.detail === 'string' ? parsed.detail.trim() : '';
               if (detail) {
@@ -1700,6 +1683,29 @@
           }
         }
         throw new Error(message);
+      }
+      let queuedJobId = null;
+      try {
+        const responseData = await resp.json();
+        if (responseData && typeof responseData === 'object') {
+          const responseJobId =
+            typeof responseData.job_id === 'string'
+              ? responseData.job_id
+              : typeof responseData.job_id === 'number'
+                ? String(responseData.job_id)
+                : null;
+          if (responseJobId) {
+            queuedJobId = responseJobId;
+          }
+        }
+      } catch (_) {
+        queuedJobId = null;
+      }
+      if (queuedJobId) {
+        deps.realtime?.watchJob?.(queuedJobId);
+        if (action === 'analyze') {
+          deps.ui?.setAnalyzeActiveJob?.(queuedJobId);
+        }
       }
       if (deps.notify) {
         deps.notify(toastX, toastY, 'Automation queued');

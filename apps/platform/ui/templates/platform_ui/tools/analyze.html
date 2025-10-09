@@ -38,6 +38,13 @@
     {% if analyze_llm %}
       {% include "platform_ui/tools/components/_llm_controls.html" with llm_context=analyze_llm %}
     {% endif %}
+    <div class="hidden rounded-xl border border-white/10 bg-slate-900/60 px-4 py-4 text-xs text-slate-200" data-analyze-progress-panel>
+      <div class="flex items-center justify-between gap-3">
+        <p class="text-[11px] uppercase tracking-wide text-slate-400">Pipeline progress</p>
+        <span class="font-semibold text-slate-100" data-analyze-progress-status>Queued</span>
+      </div>
+      <ol class="mt-3 space-y-2" data-analyze-progress-list></ol>
+    </div>
     {% if analyze_llm and analyze_llm.stage_configs %}
       <details class="group rounded-xl border border-white/10 bg-slate-900/60" data-analyze-stage-models>
         <summary class="flex cursor-pointer items-center justify-between px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-300">

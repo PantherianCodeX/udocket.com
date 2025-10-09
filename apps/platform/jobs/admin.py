@@ -14,5 +14,5 @@ class JobAdmin(TenantScopedAdminMixin, admin.ModelAdmin):
     search_fields = ("id", "case__id", "organization__name")
     autocomplete_fields = ["case"]
 
-    def scope_queryset(self, request, queryset):  # type: ignore[override]
+    def scope_queryset(self, request, queryset):
         return scope_jobs(queryset, request.user)

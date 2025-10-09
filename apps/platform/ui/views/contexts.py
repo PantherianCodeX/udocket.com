@@ -3,7 +3,7 @@ from __future__ import annotations
 # pyright: strict
 # pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false, reportUnknownParameterType=false, reportAttributeAccessIssue=false
 
-import json
+from packages.udocket_core.json_utils import stringify_pretty
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -47,7 +47,7 @@ def format_metadata(metadata: Dict[str, Any] | None) -> list[Dict[str, Any]]:
         value = metadata[key]
         is_structured = isinstance(value, (dict, list))
         if is_structured:
-            display = json.dumps(value, ensure_ascii=False, indent=2)
+            display = stringify_pretty(value)
         else:
             display = "" if value is None else str(value)
         items.append(

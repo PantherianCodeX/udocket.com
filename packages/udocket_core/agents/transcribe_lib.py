@@ -3,33 +3,29 @@ from __future__ import annotations
 # pyright: strict
 
 import hashlib
-import json
+import logging
 import os
 import platform
 import re
 import shutil
 import threading
 import time
-from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
-
-import requests
+from typing import Optional
 
 from ..audio import probe_audio_metadata
 from ..json_utils import (
     JSONObject,
-    JSONValue,
     coerce_json_object,
     coerce_json_value,
-    coerce_str,
     merge_json_objects,
     read_json_object,
     write_json_object,
 )
 from ..time_utils import format_utc
 from .common import append_jsonl
+from .common.azure_speech import AzureSpeechClient, AzureSpeechClientConfig, AzureSpeechError
 
 TARGET_SAMPLE_RATE_HZ = 16000
 TARGET_AUDIO_CODEC = "pcm_s16le"
@@ -38,6 +34,9 @@ TARGET_SAMPLE_FMT = "s16"
 TARGET_BITS_PER_SAMPLE = 16
 TARGET_AUDIO_MIME = "audio/wav"
 TARGET_SAMPLE_FMTS = {"s16", "s16p", "s16le"}
+
+
+logger = logging.getLogger("udocket.transcribe.agent")
 
 
 def _json_payload(**items: object) -> JSONObject:
@@ -346,308 +345,6 @@ def _sdk_version() -> str:
     return "unknown"
 
 
-def _iso8601_to_seconds(val: str) -> float:
-    try:
-        if not val.startswith("PT"):
-            return 0.0
-        h = m = 0.0
-        s = 0.0
-        import re as _re
-
-        mobj = _re.search(r"(\d+(?:\.\d+)?)H", val)
-        if mobj:
-            h = float(mobj.group(1))
-        mobj = _re.search(r"(\d+(?:\.\d+)?)M", val)
-        if mobj:
-            m = float(mobj.group(1))
-        mobj = _re.search(r"(\d+(?:\.\d+)?)S", val)
-        if mobj:
-            s = float(mobj.group(1))
-        return h * 3600.0 + m * 60.0 + s
-    except Exception:
-        return 0.0
-
-
-def _to_seconds(val: Any) -> float:
-    try:
-        if val is None:
-            return 0.0
-        if isinstance(val, (int, float)):
-            if val > 1_000_000:
-                return float(val) / 10_000_000.0
-            return float(val)
-        if isinstance(val, str):
-            if val.startswith("PT"):
-                return _iso8601_to_seconds(val)
-            return float(val)
-    except Exception:
-        return 0.0
-    return 0.0
-
-
-def _analyze_batch_error(payload: JSONValue) -> str:
-    try:
-        if isinstance(payload, Mapping):
-            errors_val = payload.get("errors")
-            if isinstance(errors_val, Sequence) and not isinstance(errors_val, (str, bytes, bytearray)):
-                parts: list[str] = []
-                for err_val in errors_val:
-                    if not isinstance(err_val, Mapping):
-                        parts.append(str(err_val))
-                        continue
-                    code = err_val.get("code") if isinstance(err_val.get("code"), (str, int)) else err_val.get("code")
-                    message_field = err_val.get("message") or err_val.get("description") or err_val.get("errorMessage")
-                    message = str(message_field) if isinstance(message_field, (str, int, float)) else None
-                    target_field = err_val.get("target")
-                    target = str(target_field) if isinstance(target_field, (str, int, float)) else None
-                    segment_parts = [
-                        f"code={code}" if isinstance(code, (str, int, float)) and str(code) else None,
-                        message,
-                        f"target={target}" if target else None,
-                    ]
-                    segment = " | ".join(item for item in segment_parts if item)
-                    parts.append(segment or str(err_val))
-                if parts:
-                    return "; ".join(parts)
-            if isinstance(errors_val, Mapping) and errors_val:
-                code = errors_val.get("code")
-                message_val = errors_val.get("message") or errors_val.get("description")
-                message_text = (
-                    str(message_val)
-                    if isinstance(message_val, (str, int, float))
-                    else None
-                )
-                segment_parts = [
-                    f"code={code}" if isinstance(code, (str, int, float)) and str(code) else None,
-                    message_text,
-                ]
-                segment = " | ".join(item for item in segment_parts if item)
-                if segment:
-                    return segment
-            error_obj = payload.get("error")
-            if isinstance(error_obj, Mapping):
-                code = error_obj.get("code")
-                message_val = error_obj.get("message") or error_obj.get("description")
-                message_text = (
-                    str(message_val)
-                    if isinstance(message_val, (str, int, float))
-                    else None
-                )
-                segment_parts = [
-                    f"code={code}" if isinstance(code, (str, int, float)) and str(code) else None,
-                    message_text,
-                ]
-                segment = " | ".join(item for item in segment_parts if item)
-                if segment:
-                    return segment
-                return str(dict(error_obj))
-            details_val = payload.get("details")
-            if isinstance(details_val, Sequence) and not isinstance(details_val, (str, bytes, bytearray)):
-                detail_messages = [_analyze_batch_error(item) for item in details_val]
-                filtered = [msg for msg in detail_messages if msg]
-                if filtered:
-                    return "; ".join(filtered)
-            props = payload.get("properties")
-            if isinstance(props, Mapping):
-                error_prop = props.get("error")
-                if error_prop is not None:
-                    return _analyze_batch_error(error_prop)
-        return str(payload)
-    except Exception:
-        return repr(payload)
-
-
-def _rest_batch_transcribe(
-    audio_url: str,
-    lang: str,
-    key: str,
-    region: str,
-    diarization: bool,
-    on_location: Optional[Callable[[str], None]] = None,
-) -> tuple[str, Optional[float], JSONObject]:
-    base = f"https://{region}.api.cognitive.microsoft.com/speechtotext/v3.2"
-    create_url = base + "/transcriptions"
-    headers = {"Ocp-Apim-Subscription-Key": key, "Content-Type": "application/json"}
-    properties: dict[str, JSONValue] = {
-        "wordLevelTimestampsEnabled": True,
-        "punctuationMode": "DictatedAndAutomatic",
-        "profanityFilterMode": "Masked",
-    }
-    if diarization:
-        properties["diarizationEnabled"] = True
-    payload: dict[str, JSONValue] = {
-        "displayName": f"uDocket transcription {_now_utc()}",
-        "locale": lang,
-        "contentUrls": [audio_url],
-        "properties": properties,
-    }
-    r = requests.post(create_url, headers=headers, json=payload, timeout=30)
-    r.raise_for_status()
-
-    loc = r.headers.get("Location") or r.json().get("self")
-    if not loc:
-        raise RuntimeError("REST create did not return a polling location")
-
-    if on_location is not None:
-        try:
-            on_location(loc)
-        except Exception:
-            pass
-
-    t0 = time.time()
-    status = ""
-    while True:
-        pr = requests.get(loc, headers=headers, timeout=30)
-        pr.raise_for_status()
-        pdata = coerce_json_object(pr.json())
-        status_value = pdata.get("status")
-        status = status_value if isinstance(status_value, str) else ""
-        if status in {"Succeeded", "Failed"}:
-            break
-        if time.time() - t0 > 5400:
-            raise RuntimeError("REST batch timeout waiting for completion")
-        time.sleep(5)
-    if status != "Succeeded":
-        err = _analyze_batch_error(pdata)
-        try:
-            detail = json.dumps(pdata, ensure_ascii=False)[:800]
-        except Exception:
-            detail = repr(pdata)
-        raise RuntimeError(f"REST batch status={status}: {err} (details={detail})")
-
-    fr = requests.get(loc + "/files", headers=headers, timeout=30)
-    fr.raise_for_status()
-    files_payload = coerce_json_object(fr.json())
-    files_value = files_payload.get("values")
-    files = files_value if isinstance(files_value, list) else []
-    text_url: Optional[str] = None
-    for f in files:
-        if not isinstance(f, dict):
-            continue
-        if f.get("kind") != "Transcription":
-            continue
-        links_value = f.get("links")
-        links = links_value if isinstance(links_value, dict) else {}
-        potential_url = links.get("contentUrl") or links.get("content")
-        if isinstance(potential_url, str) and potential_url:
-            text_url = potential_url
-            break
-    if not text_url:
-        raise RuntimeError("REST files did not include a Transcription contentUrl")
-    tresp = requests.get(text_url, timeout=120)
-    tresp.raise_for_status()
-
-    try:
-        jd = coerce_json_object(tresp.json())
-        meta: JSONObject = _json_payload(diarization=diarization, azure_transcription_url=loc)
-        dur_s: Optional[float] = None
-        rp_value = jd.get("recognizedPhrases")
-        try:
-            rp = rp_value if isinstance(rp_value, list) else []
-            max_end = 0.0
-            seg_count = 0
-            for p in rp:
-                if not isinstance(p, dict):
-                    continue
-                off = _to_seconds(p.get("offset") or p.get("offsetInTicks"))
-                dur = _to_seconds(p.get("duration") or p.get("durationInTicks"))
-                max_end = max(max_end, off + dur)
-                seg_count += 1
-                nbest_val = p.get("nBest")
-                nbest = nbest_val if isinstance(nbest_val, list) else []
-                best_candidate = nbest[0] if nbest else None
-                best_dict: JSONObject | None = best_candidate if isinstance(best_candidate, dict) else None
-                words_val = best_dict.get("words") if best_dict else None
-                words_iterable = words_val if isinstance(words_val, list) else []
-                word_dicts = [w for w in words_iterable if isinstance(w, dict)]
-                for w in word_dicts:
-                    woff = _to_seconds(w.get("offset") or w.get("offsetInTicks"))
-                    wdur = _to_seconds(w.get("duration") or w.get("durationInTicks"))
-                    max_end = max(max_end, off + woff + wdur)
-            if max_end > 0:
-                dur_s = max_end
-            meta["segments"] = seg_count
-        except Exception:
-            dur_s = None
-
-        lines: list[str] = []
-        avg_conf = None
-        conf_sum = 0.0
-        conf_n = 0
-        if diarization:
-            rp_list = rp_value if isinstance(rp_value, list) else []
-            rp_dicts = [item for item in rp_list if isinstance(item, dict)]
-            rp_sorted = sorted(
-                rp_dicts,
-                key=lambda p: _to_seconds(p.get("offset") or p.get("offsetInTicks")),
-            )
-            spk_ids: set[str] = set()
-            for p in rp_sorted:
-                nbest_val = p.get("nBest")
-                nbest_list = nbest_val if isinstance(nbest_val, list) else []
-                best_candidate = nbest_list[0] if nbest_list else None
-                best: JSONObject | None = best_candidate if isinstance(best_candidate, dict) else None
-                if best is None:
-                    continue
-                display_text = coerce_str(best.get("display"))
-                lexical_text = coerce_str(best.get("lexical"))
-                text_value = (display_text or lexical_text or "").strip()
-                if not text_value:
-                    continue
-                c = best.get("confidence")
-                if isinstance(c, (int, float)):
-                    conf_sum += float(c)
-                    conf_n += 1
-                spk = p.get("speaker") or p.get("channel")
-                if spk is not None:
-                    spk_ids.add(str(spk))
-                off = _to_seconds(p.get("offset") or p.get("offsetInTicks"))
-                mm = int(off // 60)
-                ss = int(off % 60)
-                if spk is not None:
-                    lines.append(f"[{mm:02d}:{ss:02d}] SPK_{spk}: {text_value}")
-                else:
-                    lines.append(f"[{mm:02d}:{ss:02d}] {text_value}")
-            meta["num_speakers"] = len(spk_ids) if spk_ids else None
-        if not lines:
-            crp_value = jd.get("combinedRecognizedPhrases")
-            crp = crp_value if isinstance(crp_value, list) else []
-            for p in crp:
-                if not isinstance(p, dict):
-                    continue
-                display_text = coerce_str(p.get("display"))
-                lexical_text = coerce_str(p.get("lexical"))
-                candidate = (display_text or lexical_text or "").strip()
-                if candidate:
-                    lines.append(candidate)
-            rp = rp_value if isinstance(rp_value, list) else []
-            if not lines and rp:
-                for p in rp:
-                    if not isinstance(p, dict):
-                        continue
-                    nb_raw = p.get("nBest")
-                    nb = nb_raw if isinstance(nb_raw, list) else []
-                    if nb:
-                        first = nb[0]
-                        if isinstance(first, dict):
-                            first_obj = first
-                            candidate = (
-                                coerce_str(first_obj.get("display"))
-                                or coerce_str(first_obj.get("lexical"))
-                                or ""
-                            ).strip()
-                            if candidate:
-                                lines.append(candidate)
-        if conf_n > 0:
-            avg_conf = conf_sum / conf_n
-        meta["avg_confidence"] = avg_conf
-        if lines:
-            return ("\n".join(lines), dur_s, meta)
-        return (tresp.text, dur_s, meta)
-    except Exception:
-        return (tresp.text, None, _json_payload(diarization=diarization, azure_transcription_url=loc))
-
-
 @dataclass
 class TranscriptionConfig:
     azure_speech_key: str
@@ -781,6 +478,20 @@ class TranscriptionAgent:
         self.config = config or TranscriptionConfig.from_env()
         if self.config.azure_speech_region not in self.ALLOWED_REGIONS:
             raise RuntimeError("Region must be canadacentral or canadaeast")
+        self._speech_client: AzureSpeechClient | None = None
+
+    def _get_speech_client(self) -> AzureSpeechClient:
+        if self._speech_client is None:
+            cfg = self.config
+            client_cfg = AzureSpeechClientConfig(
+                key=cfg.azure_speech_key,
+                region=cfg.azure_speech_region,
+                request_timeout_s=float(cfg.retry_base_s * 6),
+                poll_interval_s=float(max(1, cfg.retry_base_s)),
+                poll_timeout_s=float(cfg.sdk_timeout_s),
+            )
+            self._speech_client = AzureSpeechClient(client_cfg, logger=logger)
+        return self._speech_client
 
     def transcribe(
         self,
@@ -795,6 +506,11 @@ class TranscriptionAgent:
         diagnostics: bool = False,
     ) -> TranscriptionResult:
         cfg = self.config
+        speech_client = self._get_speech_client()
+        try:
+            speech_client.ensure_health(force=False)
+        except AzureSpeechError as exc:
+            raise RuntimeError(f"Azure Speech health check failed: {exc}") from exc
         lang = (language or cfg.language).strip()
         case_dir = Path(case_dir).resolve()
         (case_dir / "transcript").mkdir(parents=True, exist_ok=True)
@@ -925,12 +641,11 @@ class TranscriptionAgent:
                 if mode == "batch":
                     if not is_url:
                         raise RuntimeError("Batch mode requires HTTPS URL input (use worker upload)")
-                    text_raw, remote_dur, rest_meta = _rest_batch_transcribe(
-                        str(input),
-                        lang,
-                        cfg.azure_speech_key,
-                        cfg.azure_speech_region,
-                        diarization,
+                    batch_result = speech_client.run_batch_transcription(
+                        audio_url=str(input),
+                        locale=lang,
+                        diarization=diarization,
+                        display_name=f"uDocket transcription {_now_utc()}",
                         on_location=lambda loc: _record_batch_location(
                             case_dir,
                             case_id,
@@ -940,8 +655,10 @@ class TranscriptionAgent:
                             lang,
                         ),
                     )
-                    if remote_dur and not dur:
-                        dur = remote_dur
+                    text_raw = batch_result.text
+                    rest_meta = batch_result.metadata
+                    if batch_result.duration_s and not dur:
+                        dur = batch_result.duration_s
                 else:
                     assert wav is not None or audio_in is not None
                     source = wav if wav is not None else audio_in
@@ -957,18 +674,32 @@ class TranscriptionAgent:
                         debug=cfg.debug,
                     )
                     text_raw = tr.run(cfg.sdk_timeout_s)
-            except Exception as e:
+            except AzureSpeechError as exc:
+                speech_client.ensure_health(force=True)
                 append_jsonl(
                     audit_jsonl,
                     _json_payload(
                         ts=_now_utc(),
                         case_id=case_id,
                         event="sdk_exception",
-                        error=str(e),
+                        error=str(exc),
                         attempt=attempts,
                     ),
                 )
-                last_error = str(e)
+                last_error = str(exc)
+                text_raw = None
+            except Exception as exc:
+                append_jsonl(
+                    audit_jsonl,
+                    _json_payload(
+                        ts=_now_utc(),
+                        case_id=case_id,
+                        event="sdk_exception",
+                        error=str(exc),
+                        attempt=attempts,
+                    ),
+                )
+                last_error = str(exc)
                 text_raw = None
             if text_raw:
                 break

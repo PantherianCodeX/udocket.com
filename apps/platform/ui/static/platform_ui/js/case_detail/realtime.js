@@ -194,6 +194,13 @@
 
   function handleJobUpdate(jobId, payload, source) {
     if (!ctx) return;
+    const eventName =
+      payload && typeof payload.event === 'string'
+        ? payload.event.toString().trim().toLowerCase()
+        : '';
+    if (eventName === 'analyze.progress') {
+      deps.ui?.updateAnalyzeProgress?.(jobId, payload);
+    }
     const status = normalizeStatus(payload.status || payload.event || '');
     const progressValue =
       payload.upload_progress ??
@@ -232,6 +239,8 @@
     ) {
       deps.scheduleTranscribeRefresh?.();
     }
+
+    deps.ui?.handleAnalyzeJobStatus?.(jobId, status);
 
     if (status && terminalStatuses().includes(status)) {
       clearFallback(jobId);

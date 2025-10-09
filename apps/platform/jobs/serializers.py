@@ -1,15 +1,15 @@
 from __future__ import annotations
-
-import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional, Protocol, cast
 
 from django.conf import settings
 from rest_framework import serializers
+from rest_framework.fields import CharField, SerializerMethodField
 
 from apps.platform.authorization.capabilities import has_capability
 from apps.platform.jobs.models import Job
 from apps.platform.jobs.telemetry import JobTelemetry, job_telemetry
+from packages.udocket_core.json_utils import stringify_pretty
 
 
 AGENT_LABELS = {
@@ -25,10 +25,29 @@ AGENT_LABELS = {
 }
 
 
+class JobLike(Protocol):
+    id: Any
+    case_id: Any
+    status: Any
+    upload_progress: Any
+    mode: str
+    language: str
+    diarization: bool
+    duration_s: Optional[float]
+    created_at: Any
+    started_at: Any
+    finished_at: Any
+    error_message: Optional[str]
+    transcript_path: Optional[str]
+
+
 class JobTelemetrySerializer(serializers.Serializer):
     """Enriched job diagnostics payload mirroring worker metadata."""
 
-    def to_representation(self, instance: Job) -> Dict[str, Any]:  # type: ignore[override]
+    # DRF injects `context` at runtime; annotate for type-checkers
+    context: Dict[str, Any]
+
+    def to_representation(self, instance: JobLike) -> Dict[str, Any]:
         request = self.context.get("request") if hasattr(self, "context") else None
         ui_mode = bool(self.context.get("ui_mode"))
         user = getattr(request, "user", None)
@@ -58,7 +77,7 @@ class JobTelemetrySerializer(serializers.Serializer):
                 allow_transcript = False
                 allow_transcript_path = False
 
-        telem: JobTelemetry = job_telemetry(instance)
+        telem: JobTelemetry = job_telemetry(cast(Job, instance))
         audio_payload: Dict[str, Any] = telem.audio_payload(include_paths=allow_audio)
         transcript_payload: Dict[str, Any] = telem.transcript_payload(include_paths=allow_transcript_path)
         agent_payload: Dict[str, Any] = telem.agent_payload()
@@ -189,7 +208,7 @@ class JobTelemetrySerializer(serializers.Serializer):
                 try:
                     from rest_framework.reverse import reverse
 
-                    download_href = reverse("job-download", kwargs={"pk": instance.pk}, request=request)
+                    download_href = reverse("job-download", kwargs={"pk": str(instance.id)}, request=request)
                     transcript_entry["download_url"] = download_href
                 except Exception:
                     transcript_entry["download_url"] = None
@@ -202,7 +221,7 @@ class JobTelemetrySerializer(serializers.Serializer):
 
         data["metadata"] = meta_payload or None
         if meta_payload:
-            data["metadata_pretty"] = json.dumps(meta_payload, indent=2, sort_keys=True, default=str)
+            data["metadata_pretty"] = stringify_pretty(meta_payload)
         else:
             data["metadata_pretty"] = None
 
@@ -222,7 +241,11 @@ class JobCreateSerializer(serializers.ModelSerializer):
 
 
 class JobSerializer(serializers.ModelSerializer):
-    case_id = serializers.CharField(read_only=True)
+    # DRF injects this at runtime
+    context: Dict[str, Any]
+    case_id: CharField = CharField(read_only=True)
+    audio_input: SerializerMethodField = SerializerMethodField()
+    transcript_path: SerializerMethodField = SerializerMethodField()
 
     class Meta:
         model = Job
@@ -254,25 +277,24 @@ class JobSerializer(serializers.ModelSerializer):
             "finished_at",
         ]
 
-    def to_representation(self, instance):  # type: ignore[override]
-        data = super().to_representation(instance)
+    def get_audio_input(self, obj: Job) -> str | None:
         request = self.context.get("request") if hasattr(self, "context") else None
         user = getattr(request, "user", None)
         dev_open = bool(getattr(settings, "PLATFORM_DEV_OPEN", True))
-
         if not user or not getattr(user, "is_authenticated", False):
-            if not dev_open:
-                data.pop("audio_input", None)
-                data.pop("transcript_path", None)
-            return data
+            return obj.audio_input if dev_open else None
+        case_id = str(getattr(obj, "case_id", ""))
+        if case_id and has_capability(user, case_id, "artifact.download"):
+            return obj.audio_input
+        return None
 
-        case_id = str(getattr(instance, "case_id", ""))
-        if case_id:
-            if not has_capability(user, case_id, "artifact.download"):
-                data.pop("audio_input", None)
-            if not has_capability(user, case_id, "artifact.field.path.view"):
-                data.pop("transcript_path", None)
-        else:
-            data.pop("audio_input", None)
-            data.pop("transcript_path", None)
-        return data
+    def get_transcript_path(self, obj: Job) -> str | None:
+        request = self.context.get("request") if hasattr(self, "context") else None
+        user = getattr(request, "user", None)
+        dev_open = bool(getattr(settings, "PLATFORM_DEV_OPEN", True))
+        if not user or not getattr(user, "is_authenticated", False):
+            return obj.transcript_path or None if dev_open else None
+        case_id = str(getattr(obj, "case_id", ""))
+        if case_id and has_capability(user, case_id, "artifact.field.path.view"):
+            return obj.transcript_path or None
+        return None

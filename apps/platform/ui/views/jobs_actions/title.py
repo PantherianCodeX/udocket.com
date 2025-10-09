@@ -1,7 +1,5 @@
 from __future__ import annotations
 
- 
-import json
 from typing import Any, Dict, Optional, cast
 from uuid import UUID
 
@@ -19,6 +17,7 @@ from ..selectors import job_telemetry_payload
 from ..transcripts import ensure_transcript_artifact
 from .utils import CaseArtifactLike, resolve_job
 from apps.platform.operations.utils import append_job_log, update_job_meta
+from packages.udocket_core.json_utils import stringify_json
 
 
 @require_http_methods(["GET"])
@@ -145,7 +144,7 @@ def case_job_update_title(request: HttpRequest, case_id: str, job_id: UUID) -> H
 
     context = job_detail_context(request, job)
     context["case"] = case
-    trigger = json.dumps({"job-title-updated": {"job_id": str(job.id), "title": new_title}})
+    trigger = stringify_json({"job-title-updated": {"job_id": str(job.id), "title": new_title}})
     response = render(request, "platform_ui/components/jobs/job_detail_title_form.html", context)
-    response["HX-Trigger"] = trigger
+    cast(Any, response)["HX-Trigger"] = trigger
     return response

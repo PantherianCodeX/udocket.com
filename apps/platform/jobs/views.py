@@ -1,6 +1,4 @@
 from __future__ import annotations
-
-import json
 import hashlib
 import logging
 import os
@@ -14,7 +12,9 @@ from rest_framework.permissions import AllowAny
 from apps.platform.authorization.access_policies import JobAccessPolicy
 from django.conf import settings
 from rest_framework.response import Response
-from django.http import FileResponse, Http404
+from django.http import Http404
+from django.http.response import FileResponse
+from django.shortcuts import render
 import requests
 
 log = logging.getLogger("apps.platform.jobs.views")
@@ -74,6 +74,7 @@ from apps.platform.operations.llm import (
     load_llm_settings,
 )
 from apps.platform.operations.services.analysis import collect_requested_providers
+from packages.udocket_core.json_utils import stringify_json
 
 
 def _derive_audio_filename(path_obj: Path | None, meta: Dict[str, Any], fallback: str) -> str:
@@ -1321,7 +1322,7 @@ class JobViewSet(viewsets.ModelViewSet):
         artifact.title = new_title
         artifact.save(update_fields=["title"])
         append_job_log(str(job.case_id), job.organization_id, str(job.id), f"Transcript title set to '{new_title}'")
-        headers = {"HX-Trigger": json.dumps({"job-title-updated": {"job_id": str(job.id), "title": new_title}})}
+        headers = {"HX-Trigger": stringify_json({"job-title-updated": {"job_id": str(job.id), "title": new_title}})}
         telemetry = JobTelemetrySerializer(job, context={"request": request, "ui_mode": True}).data
         context = {
             "case": job.case,

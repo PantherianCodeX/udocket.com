@@ -22,14 +22,14 @@ class Command(BaseCommand):
         "Set PLATFORM_BOOTSTRAP_ENABLED=1 to run automatically or pass --force for a one-off execution."
     )
 
-    def add_arguments(self, parser: CommandParser) -> None:  # type: ignore[override]
+    def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "--force",
             action="store_true",
             help="Ignore PLATFORM_BOOTSTRAP_ENABLED and run bootstrap steps once.",
         )
 
-    def handle(self, *args: Any, **options: Any) -> None:  # type: ignore[override]
+    def handle(self, *args: Any, **options: Any) -> None:
         config = BootstrapConfig.from_env()
         force = bool(options.get("force"))
         if force and not config.enabled:

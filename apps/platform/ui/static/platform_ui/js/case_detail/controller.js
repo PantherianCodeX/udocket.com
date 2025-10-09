@@ -1,6 +1,7 @@
 (function (global) {
   const platformUI = (global.platformUI = global.platformUI || {});
   const caseDetail = (platformUI.caseDetail = platformUI.caseDetail || {});
+  const JSONU = platformUI.json;
 
   if (typeof caseDetail.init === 'function' && caseDetail.controller) {
     return;
@@ -252,7 +253,8 @@
         const headerValue = evt.detail?.xhr?.getResponseHeader('HX-Trigger');
         if (!headerValue) return;
         try {
-          const payload = JSON.parse(headerValue);
+          const payload = JSONU.parse(headerValue, null);
+          if (!payload) return;
           const refreshed = payload['case-view-refreshed'];
           if (!refreshed) return;
           if (refreshed.header_html) {

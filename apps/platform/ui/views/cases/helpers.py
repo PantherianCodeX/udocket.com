@@ -1,8 +1,5 @@
 from __future__ import annotations
-
- 
-import json
-from typing import Dict, Iterable, Mapping, MutableMapping, Tuple
+from typing import Any, Dict, Iterable, Mapping, MutableMapping, Tuple, cast
 
 from django.conf import settings
 from django.http import HttpRequest, HttpResponse
@@ -16,6 +13,7 @@ from apps.platform.tenancy import scope_jobs
 
 from ..presenters.cases import case_progress_context, collect_case_artifacts
 from ..selectors import job_telemetry_map
+from packages.udocket_core.json_utils import stringify_json
 
 
 TOOL_KEY_ALIASES = {
@@ -151,5 +149,6 @@ def render_case_panel_with_refresh(
         active_tool=active_tool,
         tools=tools,
     )
-    response["HX-Trigger"] = json.dumps(trigger_payload)
+    # Set HTMX trigger header (typing-safe cast for stubs)
+    cast(Any, response)["HX-Trigger"] = stringify_json(trigger_payload)
     return response

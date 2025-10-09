@@ -6,7 +6,9 @@ import json
 import logging
 import re
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+import threading
+import time
 from typing import Any, Optional, Protocol, cast
 
 
@@ -22,20 +24,22 @@ class _ResponseProtocol(Protocol):
 
 class _RequestsExceptionsProtocol(Protocol):
     HTTPError: type[Exception]
+    RequestException: type[Exception]
 
 
 class _RequestsProtocol(Protocol):
     exceptions: _RequestsExceptionsProtocol
 
-    def post(
-        self,
-        url: str,
-        *,
-        params: Mapping[str, object] | None = None,
-        headers: Mapping[str, str] | None = None,
-        json: object | None = None,
-        timeout: int | float | None = None,
-    ) -> _ResponseProtocol: ...
+    class Session(Protocol):
+        def post(
+            self,
+            url: str,
+            *,
+            params: Mapping[str, object] | None = None,
+            headers: Mapping[str, str] | None = None,
+            json: object | None = None,
+            timeout: int | float | None = None,
+        ) -> _ResponseProtocol: ...
 
 
 _requests_module: _RequestsProtocol | None
@@ -54,6 +58,7 @@ from packages.udocket_core.json_utils import (
     coerce_json_value,
     ensure_json_object,
 )
+from .http_client import HTTPRetryConfig, HTTPSessionConfig, RequestsSessionManager
 CANADIAN_REGIONS = {"canadacentral", "canadaeast"}
 
 
@@ -246,6 +251,12 @@ class AzureClientConfig:
     api_version: str = "2024-10-21"
     timeout: int = 120
     allow_non_ca_region: bool = False
+    session_pool_size: int = 10
+    retry_config: HTTPRetryConfig = field(
+        default_factory=lambda: HTTPRetryConfig(total=3, backoff_factor=0.6)
+    )
+    health_check_cache_ttl: int = 300
+    health_check_max_tokens: int = 16
 
     def validate(self) -> None:
         if not self.endpoint:
@@ -266,12 +277,43 @@ class AzureClientConfig:
         _require_requests()
 
 
+_SESSION_MANAGER_CACHE: dict[HTTPSessionConfig, RequestsSessionManager] = {}
+_SESSION_MANAGER_LOCK = threading.Lock()
+
+
+def _resolve_session_manager(
+    config: AzureClientConfig,
+    override: RequestsSessionManager | None,
+) -> RequestsSessionManager:
+    if override is not None:
+        return override
+    http_config = HTTPSessionConfig(
+        pool_maxsize=config.session_pool_size,
+        retry=config.retry_config,
+    )
+    with _SESSION_MANAGER_LOCK:
+        cached = _SESSION_MANAGER_CACHE.get(http_config)
+        if cached is not None:
+            return cached
+        manager = RequestsSessionManager(config=http_config)
+        _SESSION_MANAGER_CACHE[http_config] = manager
+        return manager
+
+
 class AzureChatClient:
     """Lightweight wrapper around Azure OpenAI chat completions."""
 
-    def __init__(self, config: AzureClientConfig) -> None:
+    def __init__(
+        self,
+        config: AzureClientConfig,
+        *,
+        session_manager: RequestsSessionManager | None = None,
+    ) -> None:
         self.config = config
         self.config.validate()
+        self._session_manager = _resolve_session_manager(self.config, session_manager)
+        self._health_lock = threading.Lock()
+        self._last_health_check: float | None = None
 
     def chat(
         self,
@@ -299,6 +341,7 @@ class AzureChatClient:
         include_max_output_tokens: bool,
     ) -> tuple[str, JSONObject]:
         requests_client = _require_requests()
+        session = self._session_manager.session_for(self.config.endpoint)
 
         url = (
             self.config.endpoint.rstrip("/")
@@ -323,13 +366,14 @@ class AzureChatClient:
         }
 
         try:
-            response = requests_client.post(
+            _resp = session.post(
                 url,
                 params=params,
                 headers=headers,
                 json=payload,
                 timeout=self.config.timeout,
             )
+            response = cast(_ResponseProtocol, _resp)
             logger.debug(
                 "azure request",
                 extra={
@@ -533,5 +577,31 @@ class AzureChatClient:
 
         return content, usage
 
+    def health_check(self, *, force: bool = False) -> None:
+        now = time.monotonic()
+        with self._health_lock:
+            if (
+                not force
+                and self._last_health_check is not None
+                and (now - self._last_health_check) < max(1, self.config.health_check_cache_ttl)
+            ):
+                return
+        try:
+            self._chat(
+                messages=[{"role": "user", "content": "Ping"}],
+                temperature=1.0,
+                max_tokens=max(1, self.config.health_check_max_tokens),
+                response_format=None,
+                include_max_output_tokens=False,
+            )
+        except RuntimeError as exc:
+            raise RuntimeError(f"Azure OpenAI health check failed: {exc}") from exc
+        with self._health_lock:
+            self._last_health_check = now
 
-__all__ = ["AzureClientConfig", "AzureChatClient", "_endpoint_is_canadian"]
+
+__all__ = [
+    "AzureClientConfig",
+    "AzureChatClient",
+    "_endpoint_is_canadian",
+]

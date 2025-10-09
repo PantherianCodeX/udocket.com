@@ -17,13 +17,48 @@
       'inline-flex items-center rounded-full border border-white/20 bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-300',
   };
 
+  const BASE_ANALYZE_STAGE_ORDER = [
+    'pipeline',
+    'input_discovery',
+    'parse_transcript',
+    'context_builder',
+    'extract_outline',
+    'build_timeline_seeds',
+    'build_entity_hints',
+    'draft_markdown',
+    'qa_and_finalize',
+  ];
+  const ANALYZE_STAGE_LABELS = {
+    pipeline: 'Pipeline',
+    input_discovery: 'Input discovery',
+    parse_transcript: 'Parse transcript',
+    context_builder: 'Context builder',
+    extract_outline: 'Outline',
+    build_timeline_seeds: 'Timeline seeds',
+    build_entity_hints: 'Entity hints',
+    draft_markdown: 'Draft summary',
+    qa_and_finalize: 'QA and finalize',
+  };
+  const ANALYZE_STATUS_PRESENTATION = {
+    pending: { label: 'Pending', className: 'text-slate-400' },
+    ready: { label: 'Ready', className: 'text-amber-300' },
+    running: { label: 'Running', className: 'text-primary-300' },
+    complete: { label: 'Complete', className: 'text-emerald-300' },
+    failed: { label: 'Failed', className: 'text-rose-300' },
+  };
+
   let ctx = null;
   let deps = {};
   let tableController = null;
   let transcribeSidebarBinding = null;
+  let analyzeStageOrder = BASE_ANALYZE_STAGE_ORDER.slice();
+  let analyzeProgressJobId = null;
+  let analyzePipelineStatus = 'Idle';
+  const analyzeStageState = new Map();
 
   function setContext(value) {
     ctx = value;
+    renderAnalyzeProgress();
   }
 
   function setDeps(value) {
@@ -139,6 +174,164 @@
     if (pill) {
       renderStatusLabel(pill, status, progress);
     }
+  }
+
+  function normalizeStageKey(value) {
+    return (value || '').toString().trim().toLowerCase();
+  }
+
+  function statusForEvent(eventName) {
+    const normalized = normalizeStageKey(eventName);
+    if (!normalized) return null;
+    if (normalized === 'configured') return 'ready';
+    if (normalized === 'start') return 'running';
+    if (normalized === 'complete') return 'complete';
+    if (normalized === 'failure' || normalized === 'failed' || normalized === 'error') return 'failed';
+    return null;
+  }
+
+  function ensureAnalyzeProgressElements() {
+    if (!ctx || !ctx.caseView) return null;
+    const panel = ctx.caseView.querySelector('[data-analyze-progress-panel]');
+    if (!panel) return null;
+    const list = panel.querySelector('[data-analyze-progress-list]');
+    const statusEl = panel.querySelector('[data-analyze-progress-status]');
+    if (!list || !statusEl) return null;
+    return { panel, list, statusEl };
+  }
+
+  function resetAnalyzeStageState() {
+    analyzeStageState.clear();
+    analyzeStageOrder = BASE_ANALYZE_STAGE_ORDER.slice();
+    const timestamp = Date.now();
+    analyzeStageOrder.forEach((stageKey) => {
+      analyzeStageState.set(stageKey, { status: 'pending', message: '', updatedAt: timestamp });
+    });
+    analyzePipelineStatus = 'Queued';
+  }
+
+  function stageLabel(stageKey) {
+    if (Object.prototype.hasOwnProperty.call(ANALYZE_STAGE_LABELS, stageKey)) {
+      return ANALYZE_STAGE_LABELS[stageKey];
+    }
+    return stageKey.replace(/[_-]/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+  }
+
+  function renderAnalyzeProgress() {
+    const elements = ensureAnalyzeProgressElements();
+    if (!elements) return;
+    const { panel, list, statusEl } = elements;
+    if (!analyzeProgressJobId) {
+      panel.classList.add('hidden');
+      list.innerHTML = '';
+      statusEl.textContent = 'Idle';
+      return;
+    }
+    panel.classList.remove('hidden');
+    statusEl.textContent = analyzePipelineStatus;
+    const fragment = global.document.createDocumentFragment();
+    analyzeStageOrder.forEach((stageKey) => {
+      const state = analyzeStageState.get(stageKey);
+      if (!state) return;
+      const item = global.document.createElement('li');
+      item.className = 'rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2';
+      const header = global.document.createElement('div');
+      header.className = 'flex items-center justify-between text-[11px] uppercase tracking-wide';
+      const labelEl = global.document.createElement('span');
+      labelEl.className = 'text-slate-300';
+      labelEl.textContent = stageLabel(stageKey);
+      header.appendChild(labelEl);
+      const presentation = ANALYZE_STATUS_PRESENTATION[state.status] || ANALYZE_STATUS_PRESENTATION.pending;
+      const statusBadge = global.document.createElement('span');
+      statusBadge.className = `font-semibold ${presentation.className}`;
+      statusBadge.textContent = presentation.label;
+      header.appendChild(statusBadge);
+      item.appendChild(header);
+      if (state.message) {
+        const messageEl = global.document.createElement('p');
+        messageEl.className = 'mt-1 text-[11px] text-slate-400';
+        messageEl.textContent = state.message;
+        item.appendChild(messageEl);
+      }
+      fragment.appendChild(item);
+    });
+    list.innerHTML = '';
+    list.appendChild(fragment);
+  }
+
+  function setAnalyzeActiveJob(jobId) {
+    if (!jobId) return;
+    analyzeProgressJobId = String(jobId);
+    resetAnalyzeStageState();
+    renderAnalyzeProgress();
+  }
+
+  function updateAnalyzeProgress(jobId, payload) {
+    if (!analyzeProgressJobId || String(jobId) !== analyzeProgressJobId) return;
+    const stageKeyRaw = normalizeStageKey(payload && payload.stage);
+    if (!stageKeyRaw) return;
+    if (!analyzeStageState.has(stageKeyRaw)) {
+      analyzeStageState.set(stageKeyRaw, { status: 'pending', message: '', updatedAt: Date.now() });
+      if (!analyzeStageOrder.includes(stageKeyRaw)) {
+        analyzeStageOrder.push(stageKeyRaw);
+      }
+    }
+    const state = analyzeStageState.get(stageKeyRaw);
+    if (!state) return;
+    const nextStatus = statusForEvent(payload && payload.stage_event);
+    if (nextStatus) {
+      state.status = nextStatus;
+      state.updatedAt = Date.now();
+    }
+    const detailPayload = payload && typeof payload.details === 'object' && payload.details !== null ? payload.details : {};
+    let message = '';
+    if (detailPayload) {
+      if (typeof detailPayload.error === 'string' && detailPayload.error.trim()) {
+        message = detailPayload.error.trim();
+      } else if (typeof detailPayload.reason === 'string' && detailPayload.reason.trim()) {
+        message = detailPayload.reason.trim();
+      } else if (typeof detailPayload.message === 'string' && detailPayload.message.trim()) {
+        message = detailPayload.message.trim();
+      }
+    }
+    if (message) {
+      state.message = message;
+    }
+    if (stageKeyRaw === 'pipeline' && nextStatus) {
+      if (nextStatus === 'complete') {
+        analyzePipelineStatus = 'Complete';
+      } else if (nextStatus === 'failed') {
+        analyzePipelineStatus = 'Failed';
+      } else if (nextStatus === 'running') {
+        analyzePipelineStatus = 'Running';
+      } else if (nextStatus === 'ready') {
+        analyzePipelineStatus = 'Ready';
+      } else {
+        analyzePipelineStatus = 'Pending';
+      }
+    } else if (nextStatus === 'failed') {
+      analyzePipelineStatus = 'Failed';
+    }
+    renderAnalyzeProgress();
+  }
+
+  function handleAnalyzeJobStatus(jobId, status) {
+    if (!analyzeProgressJobId || String(jobId) !== analyzeProgressJobId) return;
+    const normalized = (status || '').toString().trim().toUpperCase();
+    if (!normalized) return;
+    const pipelineState = analyzeStageState.get('pipeline');
+    if (normalized === 'SUCCEEDED') {
+      analyzePipelineStatus = 'Complete';
+      if (pipelineState) {
+        pipelineState.status = 'complete';
+      }
+    } else if (normalized === 'FAILED' || normalized === 'ERROR' || normalized === 'CANCELLED') {
+      analyzePipelineStatus = 'Failed';
+      if (pipelineState) {
+        pipelineState.status = 'failed';
+      }
+    }
+    renderAnalyzeProgress();
   }
 
   function normalizeReviewStatus(value) {
@@ -349,6 +542,7 @@
         }
       }
     });
+    renderAnalyzeProgress();
     deps.realtime?.syncJobs?.(visibleJobIds);
   }
 
@@ -390,6 +584,9 @@
     initJobsTable,
     scheduleTranscribeRefresh,
     setActiveCard,
+    setAnalyzeActiveJob,
+    updateAnalyzeProgress,
+    handleAnalyzeJobStatus,
     updateStatusDisplays,
     updateNotesIndicator,
     syncTranscribeSidebar,

@@ -22,6 +22,7 @@ from ..llm.runtime import (
     build_chat_client,
     build_provider_runtime_config,
 )
+from .common.llm_health import ensure_llm_client_health
 
 BASE_DIR = Path(__file__).resolve().parents[3]
 ANALYZE_DEFAULTS_PATH = BASE_DIR / "config" / "analyze_defaults.json"
@@ -859,6 +860,26 @@ class AnalyzeAgent:
                 providers=runtime.providers,
                 model=runtime.model,
                 client_available=bool(runtime.client),
+            )
+
+        for stage_key, runtime in stage_runtimes.items():
+            client = runtime.client
+            if client is None:
+                continue
+            ensure_llm_client_health(
+                client,
+                stage=stage_key,
+                provider=runtime.provider,
+                model=runtime.model,
+                logger=self.logger,
+                raise_error=lambda message, stage_key=stage_key, runtime=runtime: RuntimeError(
+                    _stage_error_message(
+                        stage_key,
+                        provider=runtime.provider,
+                        model=runtime.model,
+                        reason=message,
+                    )
+                ),
             )
 
         pipeline = AnalyzePipeline(

@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import json
 import logging
 import os
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, cast
+from django.db.models import Model
 
 from django.conf import settings
 from django.core.management import call_command
@@ -15,6 +15,7 @@ from django.db import transaction
 
 from apps.platform.accounts.models import Organization, OrganizationMembership, User
 from apps.platform.accounts.utils import sync_user_access_flags
+from packages.udocket_core.json_utils import load_json_value
 
 logger = logging.getLogger(__name__)
 
@@ -223,13 +224,14 @@ def _ensure_superuser(config: SuperuserConfig) -> Tuple[User, bool, bool]:
     if fields_to_update:
         # Remove duplicates while preserving order
         seen: set[str] = set()
-        unique_fields = []
+        unique_fields: list[str] = []
         for field in fields_to_update:
             if field in seen:
                 continue
             seen.add(field)
             unique_fields.append(field)
-        user.save(update_fields=unique_fields)
+        # Help type-checker recognize Django model method availability
+        cast(Model, user).save(update_fields=unique_fields)
         updated = not created
 
     return user, created, updated
@@ -267,7 +269,7 @@ def _ensure_membership(user: User, organization: Organization) -> Tuple[bool, bo
         defaults={"role": OrganizationMembership.Role.SUPERUSER},
     )
     updated = False
-    if not created and membership.role != OrganizationMembership.Role.SUPERUSER:
+    if not created and membership.role != str(OrganizationMembership.Role.SUPERUSER):
         membership.role = OrganizationMembership.Role.SUPERUSER
         membership.save(update_fields=["role"])
         updated = True
@@ -287,7 +289,7 @@ def _load_bootstrap_defaults() -> BootstrapDefaults:
         try:
             if not path.exists():
                 continue
-            data = json.loads(path.read_text(encoding="utf-8"))
+            data = load_json_value(path, context=str(path))
             return _parse_defaults_payload(data)
         except Exception:
             logger.exception("Failed to load bootstrap defaults from %s", path)
@@ -310,8 +312,12 @@ def _parse_defaults_payload(payload: object) -> BootstrapDefaults:
     if not isinstance(payload, dict):
         raise ValueError("Bootstrap defaults payload must be an object.")
 
-    superuser_section = payload.get("superuser")
-    organization_section = payload.get("organization")
+    payload_map = cast(dict[str, object], payload)
+
+    superuser_raw = payload_map.get("superuser")
+    superuser_section: dict[str, object] | None = cast(dict[str, object], superuser_raw) if isinstance(superuser_raw, dict) else None
+    org_raw = payload_map.get("organization")
+    organization_section: dict[str, object] | None = cast(dict[str, object], org_raw) if isinstance(org_raw, dict) else None
 
     def _optional_bool(value: object) -> Optional[bool]:
         if isinstance(value, bool):
@@ -321,28 +327,18 @@ def _parse_defaults_payload(payload: object) -> BootstrapDefaults:
     def _optional_str(value: object) -> Optional[str]:
         return str(value) if isinstance(value, str) and value.strip() else None
 
-    enabled = bool(payload.get("enabled", False))
-    import_presets = bool(payload.get("import_presets", True))
+    enabled = bool(payload_map.get("enabled", False))
+    import_presets = bool(payload_map.get("import_presets", True))
 
-    superuser_username = _optional_str(superuser_section.get("username")) if isinstance(superuser_section, dict) else None
-    superuser_email = _optional_str(superuser_section.get("email")) if isinstance(superuser_section, dict) else None
-    superuser_password = _optional_str(superuser_section.get("password")) if isinstance(superuser_section, dict) else None
-    superuser_reset_password = (
-        _optional_bool(superuser_section.get("reset_password")) if isinstance(superuser_section, dict) else None
-    )
+    superuser_username = _optional_str(superuser_section.get("username")) if superuser_section else None
+    superuser_email = _optional_str(superuser_section.get("email")) if superuser_section else None
+    superuser_password = _optional_str(superuser_section.get("password")) if superuser_section else None
+    superuser_reset_password = _optional_bool(superuser_section.get("reset_password")) if superuser_section else None
 
-    organization_name = (
-        _optional_str(organization_section.get("name")) if isinstance(organization_section, dict) else None
-    )
-    organization_display_name = (
-        _optional_str(organization_section.get("display_name")) if isinstance(organization_section, dict) else None
-    )
-    organization_contact_email = (
-        _optional_str(organization_section.get("contact_email")) if isinstance(organization_section, dict) else None
-    )
-    organization_attach_superuser = (
-        _optional_bool(organization_section.get("attach_superuser")) if isinstance(organization_section, dict) else None
-    )
+    organization_name = _optional_str(organization_section.get("name")) if organization_section else None
+    organization_display_name = _optional_str(organization_section.get("display_name")) if organization_section else None
+    organization_contact_email = _optional_str(organization_section.get("contact_email")) if organization_section else None
+    organization_attach_superuser = _optional_bool(organization_section.get("attach_superuser")) if organization_section else None
 
     return BootstrapDefaults(
         enabled=enabled,

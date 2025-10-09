@@ -31,29 +31,29 @@ def _credential_payload(models: Dict[str, object]) -> Dict[str, object]:
 
 def test_build_provider_runtime_config_prefers_credential_model_options() -> None:
     model = LLMProviderModel(
-        name="gpt-4o-mini",
-        label="GPT-4o Mini",
+        name="gpt-5-mini",
+        label="GPT-5 Mini",
         cost_tier="standard",
-        options={"temperature": 0.2},
+        options={"temperature": 1.0},
     )
     provider = _azure_provider(model)
     credential_payload = _credential_payload(
         {
-            "name": "gpt-4o-mini",
+            "name": "gpt-5-mini",
             "options": {"azure_deployment": "mini-deployment"},
         }
     )
 
     runtime_cfg = build_provider_runtime_config(
         provider=provider,
-        model_name="gpt-4o-mini",
+        model_name="gpt-5-mini",
         credential_payload=credential_payload,
         options=None,
     )
 
     assert runtime_cfg.options["azure_deployment"] == "mini-deployment"
     # ensure other model defaults remain available
-    assert runtime_cfg.options["temperature"] == 0.2
+    assert runtime_cfg.options["temperature"] == 1.0
 
 
 @pytest.mark.parametrize("env_value", ["", "actual-deployment"])
@@ -62,8 +62,8 @@ def test_build_provider_runtime_config_uses_model_deployment_env(monkeypatch: Mo
     if env_value:
         monkeypatch.setenv("AZURE_OPENAI_DEPLOYMENT_TEST", env_value)
     model = LLMProviderModel(
-        name="gpt-4o",
-        label="GPT-4o",
+        name="gpt-5",
+        label="GPT-5",
         cost_tier="standard",
         deployment_env="AZURE_OPENAI_DEPLOYMENT_TEST",
     )
@@ -71,7 +71,7 @@ def test_build_provider_runtime_config_uses_model_deployment_env(monkeypatch: Mo
 
     runtime_cfg = build_provider_runtime_config(
         provider=provider,
-        model_name="gpt-4o",
+        model_name="gpt-5",
         credential_payload={
             "endpoint": "https://example-canadacentral.openai.azure.com",
             "api_key": "test-key",

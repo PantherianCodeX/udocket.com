@@ -69,5 +69,6 @@
 
 {% block body_scripts %}
   {{ block.super }}
+  <script src="{% static 'platform_ui/js/utils/json.js' %}"></script>
   <script src="{% static 'platform_ui/js/settings/organization_llm.js' %}"></script>
 {% endblock %}

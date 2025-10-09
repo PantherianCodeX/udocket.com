@@ -19,7 +19,7 @@
     "DJANGO_SETTINGS_MODULE": "apps.platform.config.settings.dev",
     "ENV_READ_DOTENV": "1"
   },
-  "postCreateCommand": "pip install --upgrade pip && pip install -r apps/platform/requirements.txt",
+  "postCreateCommand": "bash -lc 'set -euo pipefail; pip install --upgrade pip; pip install -r apps/platform/requirements.txt; pip install git+https://github.com/PantherianCodeX/typewiz@main; python scripts/typing/vendor_stubs.py || true'",
   "customizations": {
     "vscode": {
       "extensions": [
@@ -40,7 +40,7 @@
         "ms-python.mypy-type-checker"
       ],
       "settings": {
-        "python.defaultInterpreterPath": "/usr/local/bin/python"
+        "python.defaultInterpreterPath": "/app/.venv/bin/python"
       }
     }
   }

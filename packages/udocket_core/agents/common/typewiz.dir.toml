@@ -3,6 +3,6 @@ pyright = "strict"
 
 [engines.pyright]
 include = [
-  "serializers.py",
-  "telemetry.py",
+  "io.py",
 ]
+

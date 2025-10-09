@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, Optional
+from typing import Any, Dict, Iterable, Optional, TypedDict
+from datetime import datetime
 import hashlib
 
 from django.utils.functional import cached_property
@@ -85,7 +86,7 @@ class JobTelemetry:
                 except Exception:
                     probe = {}
                 if isinstance(probe, dict):
-                    local_probe = probe
+                    local_probe = dict(probe)
         return {
             "path": audio_input,
             "original_name": _original_audio_name(self.job.audio_input) or meta.get("audio_file"),
@@ -130,7 +131,7 @@ class JobTelemetry:
             "segments": meta.get("segments"),
             "avg_confidence": avg_conf,
             "avg_confidence_pct": avg_conf_pct,
-            "language": meta.get("language") or self.job.language,
+            "language": meta.get("language") or getattr(self.job, "language", None),
             "artifact_type": "TRANSCRIPT",
             "title": meta.get("transcript_title"),
         }
@@ -165,8 +166,17 @@ def job_telemetry(job: Job) -> JobTelemetry:
     return payload
 
 
-def analyze_jobs(jobs: Iterable[Job]) -> Dict[str, Any]:
-    summary = {
+class JobSummary(TypedDict):
+    total: int
+    succeeded: int
+    failed: int
+    running: int
+    pending: int
+    last_update: datetime | None
+
+
+def analyze_jobs(jobs: Iterable[Job]) -> JobSummary:
+    summary: JobSummary = {
         "total": 0,
         "succeeded": 0,
         "failed": 0,
@@ -187,7 +197,11 @@ def analyze_jobs(jobs: Iterable[Job]) -> Dict[str, Any]:
             summary["running"] += 1
         else:
             summary["pending"] += 1
-        timestamp = job.finished_at or job.started_at or job.created_at
+        timestamp = (
+            getattr(job, "finished_at", None)
+            or getattr(job, "started_at", None)
+            or getattr(job, "created_at", None)
+        )
         if timestamp is not None:
             existing = summary["last_update"]
             if existing is None or timestamp > existing:

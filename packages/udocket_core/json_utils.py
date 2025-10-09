@@ -411,6 +411,21 @@ def write_json_value(
         path.write_text(json.dumps(value, ensure_ascii=False), encoding="utf-8")
 
 
+def stringify_json(value: object, *, indent: int | None = None, sort_keys: bool = False) -> str:
+    """Return a JSON string for ``value`` after coercion, with options.
+
+    Coerces the value via ``coerce_json_value`` to ensure serialisability and
+    uses UTF-8 friendly ``ensure_ascii=False``.
+    """
+    coerced = coerce_json_value(value)
+    return json.dumps(coerced, ensure_ascii=False, indent=indent, sort_keys=sort_keys)
+
+
+def stringify_pretty(value: object, *, sort_keys: bool = True) -> str:
+    """Return a pretty-printed JSON string for ``value`` with stable keys."""
+    return stringify_json(value, indent=2, sort_keys=sort_keys)
+
+
 __all__ = [
     "JSONPrimitive",
     "JSONValue",
@@ -439,4 +454,6 @@ __all__ = [
     "load_json_value",
     "load_json_object",
     "write_json_value",
+    "stringify_json",
+    "stringify_pretty",
 ]

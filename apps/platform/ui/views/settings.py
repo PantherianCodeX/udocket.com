@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 # pyright: strict
-import json
 from urllib.parse import urlparse
 from typing import Any, Dict, List
 
@@ -40,7 +39,7 @@ from apps.platform.operations.guardian import (
     save_guardian_instructions,
 )
 from packages.udocket_core.llm import LLMSettings, load_llm_settings
-from packages.udocket_core.json_utils import normalize_json_object
+from packages.udocket_core.json_utils import normalize_json_object, stringify_pretty
 from packages.udocket_core.llm.runtime import ChatClientError
 from packages.udocket_core.json_utils import parse_json_value
 
@@ -1255,7 +1254,7 @@ def organization_settings(
                 "selected_max_tokens": selected.get("max_tokens"),
                 "selected_temperature": selected_options.get("temperature"),
                 "selected_options": selected_options,
-                "selected_options_json": json.dumps(selected_options, indent=2)
+                "selected_options_json": stringify_pretty(selected_options)
                 if selected_options
                 else "",
                 "field_provider": _stage_field(stage_key, "provider"),

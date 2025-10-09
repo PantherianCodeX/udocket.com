@@ -1,7 +1,4 @@
 from __future__ import annotations
-
- 
-import json
 from typing import Any, Dict, List, Sequence
 from urllib.parse import quote
 
@@ -11,6 +8,7 @@ from apps.platform.cases.models import Case
 from packages.udocket_core.agents.compose import COMPOSE_STAGE_PROFILES
 from packages.udocket_core.agents.analyze_lib import SUMMARIZE_STAGE_PROFILES, AnalyzeConfig
 from packages.udocket_core.llm import load_llm_settings
+from packages.udocket_core.json_utils import stringify_json
 
 from apps.platform.operations.llm import (
     build_provider_registry,
@@ -231,15 +229,15 @@ def build_analysis_llm_context(case: Case, *, return_url: str) -> Dict[str, Dict
         return {
             "target": target,
             "configurations": config_list,
-            "configurations_json": json.dumps(config_list),
+            "configurations_json": stringify_json(config_list),
             "active_configuration": active_config,
-            "active_configuration_json": json.dumps(active_config or {}),
+            "active_configuration_json": stringify_json(active_config or {}),
             "configured_stages": _configured_stages(stage_configs, stage_map),
             "stage_configs": stage_configs,
-            "stage_configs_json": json.dumps(stage_configs),
-            "stage_map_json": json.dumps(stage_map),
+            "stage_configs_json": stringify_json(stage_configs),
+            "stage_map_json": stringify_json(stage_map),
             "provider_chain": chain,
-            "provider_chain_json": json.dumps(chain),
+            "provider_chain_json": stringify_json(chain),
             "urls": _build_llm_urls(target, return_url=return_url, active_config=active_config),
             "return_url": return_url,
         }

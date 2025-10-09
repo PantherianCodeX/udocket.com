@@ -6,7 +6,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass
-from typing import Mapping, Protocol, Sequence, cast
+from typing import Mapping, Protocol, Sequence, cast, runtime_checkable
 
 from packages.udocket_core.agents.common.azure_client import (
     AzureChatClient,
@@ -77,6 +77,11 @@ class ChatClient(Protocol):
         max_tokens: int | None = None,
         response_format: ResponseFormat | None = None,
     ) -> tuple[str, TokenUsage]: ...
+
+
+@runtime_checkable
+class SupportsHealthCheck(Protocol):
+    def health_check(self, *, force: bool = False) -> None: ...
 
 
 class ChatClientError(RuntimeError):
@@ -443,6 +448,9 @@ class _AzureChatAdapter:
         }
         return content, usage
 
+    def health_check(self, *, force: bool = False) -> None:
+        self._client.health_check(force=force)
+
 
 def build_chat_client(
     *,
@@ -474,6 +482,14 @@ def build_chat_client(
         allow_non_ca = coerce_bool(options.get("allow_non_ca_region"))
         if allow_non_ca is None and metadata:
             allow_non_ca = coerce_bool(metadata.get("allow_non_ca_region"))
+        if allow_non_ca is None:
+            allow_non_ca_env = coerce_bool(os.getenv("AZURE_OPENAI_ALLOW_NON_CA_REGION"))
+            if allow_non_ca_env is not None:
+                allow_non_ca = allow_non_ca_env
+                if allow_non_ca_env:
+                    logger.warning(
+                        "AZURE_OPENAI_ALLOW_NON_CA_REGION enabled; non-Canadian Azure endpoints are allowed."
+                    )
         api_version_value = (
             _string_option(options, "api_version")
             or os.getenv("AZURE_OPENAI_API_VERSION", "2024-10-21")
@@ -595,6 +611,7 @@ def build_provider_runtime_config(
 __all__ = [
     "ChatClient",
     "ChatClientError",
+    "SupportsHealthCheck",
     "OpenAIChatClient",
     "AnthropicChatClient",
     "ProviderRuntimeConfig",

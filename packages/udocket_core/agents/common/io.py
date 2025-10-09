@@ -1,14 +1,12 @@
 # pyright: strict
 
 from __future__ import annotations
-
-import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
 
-from packages.udocket_core.json_utils import JSONObject, JSONValue
+from packages.udocket_core.json_utils import JSONObject, JSONValue, stringify_json
 
 
 @dataclass
@@ -67,7 +65,7 @@ def append_jsonl(path: Path, obj: Mapping[str, JSONValue]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:
         payload: JSONObject = {key: value for key, value in obj.items()}
-        handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
+        handle.write(stringify_json(payload) + "\n")
 
 
 def sha256_file(path: Path) -> str:

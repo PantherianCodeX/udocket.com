@@ -29,6 +29,7 @@ from packages.udocket_core.json_utils import (
 )
 
 from .common import append_jsonl, ensure_dir, next_versioned, parse_transcript, TranscriptParse
+from .common.llm_health import ensure_llm_client_health
 from .common.docx import write_basic_docx
 from .compose import COMPOSE_STAGE_PROFILES, ComposeStageProfile
 from ..llm import LLMSettings, load_llm_settings
@@ -739,6 +740,19 @@ class ComposeAgent:
             try:
                 client = build_chat_client(provider_runtime=runtime_cfg)
             except ChatClientError as exc:
+                last_error = exc
+                continue
+
+            try:
+                ensure_llm_client_health(
+                    client,
+                    stage=stage_key,
+                    provider=provider_name,
+                    model=resolved_model_name,
+                    logger=logger,
+                    raise_error=lambda message, stage_key=stage_key: ComposeStageError(stage_key, message),
+                )
+            except ComposeStageError as exc:
                 last_error = exc
                 continue
 

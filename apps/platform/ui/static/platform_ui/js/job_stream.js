@@ -1,6 +1,7 @@
 (function (global) {
   const platformUI = (global.platformUI = global.platformUI || {});
   if (platformUI.jobStream) return;
+  const JSONU = platformUI.json;
 
   const WS_PATH = '/ws/jobs/stream/';
   const MAX_BACKOFF = 30000;
@@ -59,7 +60,7 @@
     if (jobs.length) payload.jobs = jobs;
     if (cases.length) payload.cases = cases;
     try {
-      socket.send(JSON.stringify(payload));
+      socket.send(JSONU.stringifyStable(payload));
     } catch (_) {}
   }
 
@@ -74,10 +75,11 @@
 
   function onMessage(event) {
     try {
-      const data = JSON.parse(event.data);
-      if (data && data.type && data.type.startsWith('job.')) {
+      const data = JSONU.parse(event.data, null);
+      if (!data) return;
+      if (data.type && data.type.startsWith('job.')) {
         notifyUpdate(data);
-      } else if (data && data.type === 'job.update') {
+      } else if (data.type === 'job.update') {
         notifyUpdate(data);
       }
     } catch (error) {

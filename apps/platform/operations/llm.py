@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
 import importlib
+import logging
 from typing import Any, TypeAlias, cast
 
 try:  # pragma: no cover - Python < 3.11 fallback
@@ -25,6 +26,7 @@ from packages.udocket_core.llm.runtime import (
     build_chat_client,
     build_provider_runtime_config,
 )
+from packages.udocket_core.agents.common.llm_health import ensure_llm_client_health
 from packages.udocket_core.json_utils import (
     JSONObject,
     JSONValue,
@@ -50,6 +52,9 @@ _ANALYZE_DISALLOWED_PROVIDERS: set[str] = {str(name) for name in _analyze_src}
 
 from .crypto import decrypt_secret, encrypt_secret
 from .models import LLMConfiguration, LLMProviderCredential
+
+
+log = logging.getLogger("udocket.operations.llm")
 
 
 JSONDict: TypeAlias = dict[str, JSONValue]
@@ -1057,6 +1062,14 @@ def run_live_model_probe(
         options=options_payload,
     )
     client = build_chat_client(provider_runtime=runtime_cfg)
+    ensure_llm_client_health(
+        client,
+        stage="llm.live_probe",
+        provider=provider.name,
+        model=model_name,
+        logger=log,
+        raise_error=lambda message: ChatClientError(message),
+    )
     # Choose a safe temperature: prefer explicit option, then model default, else 1.0
     test_temperature = 1.0
     try:

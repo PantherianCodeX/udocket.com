@@ -20,9 +20,27 @@ class _FakeRequestsModule:
         class RequestException(Exception):
             ...
 
-    def __init__(self, *, should_raise_transport: bool = False) -> None:
-        self.should_raise_transport = should_raise_transport
-        self.last_payload: Dict[str, Any] | None = None
+
+class _FakeResponse:
+    status_code = 200
+    text = "{}"
+    headers: Mapping[str, str] = {}
+
+    def raise_for_status(self) -> None:
+        return None
+
+    def json(self) -> object:
+        return {
+            "choices": [{"message": {"role": "assistant", "content": "ok"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+        }
+
+
+class _FakeSession:
+    def __init__(self, *, raise_transport: bool = False) -> None:
+        self.raise_transport = raise_transport
+        self.calls: list[Dict[str, Any]] = []
+        self.response: _FakeResponse = _FakeResponse()
 
     def post(
         self,
@@ -32,26 +50,27 @@ class _FakeRequestsModule:
         headers: Mapping[str, str] | None = None,
         json: object | None = None,
         timeout: int | float | None = None,
-    ):
-        if self.should_raise_transport:
-            raise self.exceptions.RequestException("transport down")
-        self.last_payload = {"url": url, "params": params, "headers": headers, "json": json, "timeout": timeout}
+    ) -> _FakeResponse:
+        self.calls.append(
+            {
+                "url": url,
+                "params": params,
+                "headers": headers,
+                "json": json,
+                "timeout": timeout,
+            }
+        )
+        if self.raise_transport:
+            raise _FakeRequestsModule.exceptions.RequestException("transport down")
+        return self.response
 
-        class _Response:
-            status_code = 200
-            text = "{}"
-            headers: Mapping[str, str] = {}
 
-            def raise_for_status(self) -> None:
-                return None
+class _FakeSessionManager:
+    def __init__(self, session: _FakeSession) -> None:
+        self._session = session
 
-            def json(self) -> object:
-                return {
-                    "choices": [{"message": {"role": "assistant", "content": "ok"}, "finish_reason": "stop"}],
-                    "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
-                }
-
-        return _Response()
+    def session_for(self, endpoint: str) -> _FakeSession:
+        return self._session
 
 
 def test_azure_config_disallows_non_canadian_endpoint() -> None:
@@ -74,10 +93,12 @@ def test_azure_config_allows_override(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     fake_requests = _FakeRequestsModule()
     monkeypatch.setattr(azure_client, "requests", fake_requests)
-    client = AzureChatClient(cfg)
+    fake_session = _FakeSession()
+    client = AzureChatClient(cfg, session_manager=_FakeSessionManager(fake_session))
     content, usage = client.chat(messages=[{"role": "user", "content": "hi"}])
     assert content == "ok"
     assert usage["total_tokens"] == 2
+    assert fake_session.calls, "expected API call to be recorded"
 
 
 def test_azure_transport_error_raises_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -87,8 +108,30 @@ def test_azure_transport_error_raises_runtime(monkeypatch: pytest.MonkeyPatch) -
         deployment="deploy",
         allow_non_ca_region=False,
     )
-    fake_requests = _FakeRequestsModule(should_raise_transport=True)
+    fake_requests = _FakeRequestsModule()
     monkeypatch.setattr(azure_client, "requests", fake_requests)
-    client = AzureChatClient(cfg)
+    fake_session = _FakeSession(raise_transport=True)
+    client = AzureChatClient(cfg, session_manager=_FakeSessionManager(fake_session))
     with pytest.raises(RuntimeError, match="transport error"):
         client.chat(messages=[{"role": "user", "content": "hi"}])
+
+
+def test_azure_health_check(monkeypatch: pytest.MonkeyPatch) -> None:
+    cfg = AzureClientConfig(
+        endpoint="https://canadacentral.api.cognitive.microsoft.com",
+        key="secret",
+        deployment="deploy",
+        allow_non_ca_region=False,
+        health_check_cache_ttl=999,
+    )
+    fake_requests = _FakeRequestsModule()
+    monkeypatch.setattr(azure_client, "requests", fake_requests)
+    fake_session = _FakeSession()
+    client = AzureChatClient(cfg, session_manager=_FakeSessionManager(fake_session))
+    client.health_check()
+    first_count = len(fake_session.calls)
+    assert first_count == 1
+    client.health_check()
+    assert len(fake_session.calls) == first_count  # cached
+    client.health_check(force=True)
+    assert len(fake_session.calls) == first_count + 1

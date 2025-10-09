@@ -7,7 +7,7 @@
       "providers": [
         "azure"
       ],
-      "model": "gpt-4o-mini"
+      "model": "gpt-5-mini"
     },
     "analyze.extract_outline": {
       "target": "analyze",
@@ -16,7 +16,7 @@
       "providers": [
         "azure"
       ],
-      "model": "gpt-4o-mini"
+      "model": "gpt-5-mini"
     },
     "analyze.build_timeline_seeds": {
       "target": "analyze",
@@ -25,7 +25,7 @@
       "providers": [
         "azure"
       ],
-      "model": "gpt-4o-mini"
+      "model": "gpt-5-mini"
     },
     "analyze.build_entity_hints": {
       "target": "analyze",
@@ -34,7 +34,7 @@
       "providers": [
         "azure"
       ],
-      "model": "gpt-4o-mini"
+      "model": "gpt-5-mini"
     },
     "analyze.draft_markdown": {
       "target": "analyze",
@@ -43,7 +43,7 @@
       "providers": [
         "azure"
       ],
-      "model": "gpt-4o"
+      "model": "gpt-5"
     },
     "analyze.qa_and_finalize": {
       "target": "analyze",
@@ -52,7 +52,7 @@
       "providers": [
         "azure"
       ],
-      "model": "gpt-4o-mini"
+      "model": "gpt-5-mini"
     },
     "compose.context_builder": {
       "target": "compose",
@@ -61,7 +61,7 @@
       "providers": [
         "azure"
       ],
-      "model": "gpt-4o-mini"
+      "model": "gpt-5-mini"
     },
     "compose.timeline_builder": {
       "target": "compose",
@@ -70,7 +70,7 @@
       "providers": [
         "azure"
       ],
-      "model": "gpt-4o-mini"
+      "model": "gpt-5-mini"
     },
     "compose.timeline_summary": {
       "target": "compose",
@@ -79,7 +79,7 @@
       "providers": [
         "azure"
       ],
-      "model": "gpt-4o-mini"
+      "model": "gpt-5-mini"
     },
     "compose.graph_builder": {
       "target": "compose",
@@ -88,7 +88,7 @@
       "providers": [
         "azure"
       ],
-      "model": "gpt-4o-mini"
+      "model": "gpt-5-mini"
     },
     "compose.entity_brief": {
       "target": "compose",
@@ -97,7 +97,7 @@
       "providers": [
         "azure"
       ],
-      "model": "gpt-4o-mini"
+      "model": "gpt-5-mini"
     },
     "compose.graph_visual": {
       "target": "compose",
@@ -106,7 +106,7 @@
       "providers": [
         "azure"
       ],
-      "model": "gpt-4o-mini"
+      "model": "gpt-5-mini"
     },
     "compose.client_brief": {
       "target": "compose",
@@ -115,7 +115,7 @@
       "providers": [
         "azure"
       ],
-      "model": "gpt-4o"
+      "model": "gpt-5"
     },
     "compose.lawyer_brief": {
       "target": "compose",
@@ -124,7 +124,7 @@
       "providers": [
         "azure"
       ],
-      "model": "gpt-4o"
+      "model": "gpt-5"
     },
     "compose.qa_review": {
       "target": "compose",
@@ -133,9 +133,9 @@
       "providers": [
         "azure"
       ],
-      "model": "gpt-4o-mini",
+      "model": "gpt-5-mini",
       "options": {
-        "temperature": "0.0"
+        "temperature": "1.0"
       }
     },
     "guardian.review": {
@@ -145,9 +145,9 @@
       "providers": [
         "azure"
       ],
-      "model": "gpt-4o-mini",
+      "model": "gpt-5-mini",
       "options": {
-        "temperature": "0.0"
+        "temperature": "1.0"
       }
     }
   }

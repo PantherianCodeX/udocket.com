@@ -3,10 +3,9 @@ from __future__ import annotations
 # pyright: strict
 
 from datetime import datetime, timezone
-import json
 import sys
 
-from packages.udocket_core.json_utils import JSONObject, JSONValue, coerce_json_value
+from packages.udocket_core.json_utils import JSONObject, JSONValue, coerce_json_value, stringify_json
 
 
 def log(event: str, **kwargs: JSONValue) -> None:
@@ -18,7 +17,7 @@ def log(event: str, **kwargs: JSONValue) -> None:
     }
     for key, value in kwargs.items():
         payload[key] = coerce_json_value(value)
-    sys.stdout.write(json.dumps(payload, ensure_ascii=False) + "\n")
+    sys.stdout.write(stringify_json(payload) + "\n")
     sys.stdout.flush()
 
 

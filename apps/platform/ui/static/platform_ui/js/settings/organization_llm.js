@@ -1,6 +1,7 @@
 (function () {
   const doc = window.document;
   const platformUI = (window.platformUI = window.platformUI || {});
+  const JSONU = platformUI.json;
 
   function toBool(value, fallback = false) {
     if (value == null) return fallback;
@@ -62,12 +63,7 @@
   function parseJSONScript(id, fallback) {
     const el = doc.getElementById(id);
     if (!el) return fallback;
-    try {
-      return JSON.parse(el.textContent || "");
-    } catch (error) {
-      console.warn("[OrgSettings] Failed to parse JSON for", id, error);
-      return fallback;
-    }
+    return JSONU.parse(el.textContent || "", fallback);
   }
 
   function toNumber(raw) {
@@ -174,7 +170,7 @@
     }
     if (optionsJson) {
       if (Object.keys(advancedOptions).length) {
-        optionsJson.value = JSON.stringify(advancedOptions, null, 2);
+        optionsJson.value = JSONU.stringifyStable(advancedOptions, true);
       } else {
         optionsJson.value = '';
       }
@@ -257,7 +253,7 @@
     const optionsJson = row.querySelector('textarea[name="model_options_json"]')?.value?.trim();
     if (optionsJson) {
       try {
-        const parsed = JSON.parse(optionsJson);
+        const parsed = JSONU.parse(optionsJson, {});
         if (parsed && typeof parsed === 'object') {
           Object.assign(options, parsed);
         }
@@ -366,7 +362,7 @@
         return;
       }
       if (!modelTestPayloadInput) return;
-      modelTestPayloadInput.value = JSON.stringify(payload);
+      modelTestPayloadInput.value = JSONU.stringifyStable(payload);
       form.requestSubmit(button);
     }
 
@@ -462,7 +458,7 @@
       if (modelJsonOverride) modelJsonOverride.value = '';
       if (metadataJson) {
         metadataJson.value = metadata && Object.keys(metadata).length
-          ? JSON.stringify(metadata, null, 2)
+          ? JSONU.stringifyStable(metadata, true)
           : '';
       }
       populateModels(models || []);
@@ -561,8 +557,8 @@
       appendHidden('provider', providerKey);
       appendHidden('display_name', cred.display_name || providerInfo.label || providerKey);
       appendHidden('endpoint', cred.endpoint || providerInfo.endpoint || '');
-      appendHidden('models_payload_compiled', JSON.stringify(models));
-      appendHidden('metadata_json', JSON.stringify(cred.metadata || {}));
+      appendHidden('models_payload_compiled', JSONU.stringifyStable(models));
+      appendHidden('metadata_json', JSONU.stringifyStable(cred.metadata || {}));
       appendHidden('is_enabled', (enabled != null ? enabled : (cred.is_enabled ?? providerInfo.enabled ?? false)) ? '1' : '0');
       appendHidden('provider_uuid', cred.uid ? String(cred.uid) : '');
 
@@ -672,7 +668,7 @@
         return;
       }
       const modelsPayload = buildModelsPayload();
-      compiledInput.value = modelsPayload.length ? JSON.stringify(modelsPayload) : '';
+      compiledInput.value = modelsPayload.length ? JSONU.stringifyStable(modelsPayload) : '';
     });
 
     // Edit buttons removed with Actions column; row click still loads editor.

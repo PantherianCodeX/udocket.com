@@ -1,6 +1,4 @@
 from __future__ import annotations
-
-import json
 import logging
 import re
 from dataclasses import dataclass
@@ -21,6 +19,7 @@ from ..common import (
     sequence_length,
     sha256_file,
 )
+from packages.udocket_core.json_utils import write_json_object
 from .stages import (
     EntityStageResult,
     OutlineStageResult,
@@ -686,30 +685,24 @@ def finalize_outputs(
     ensure_dir(ops_dir)
 
     summary_json_path = next_versioned(analysis_dir / f"{job_id}__summary_v1.json")
-    summary_json_path.write_text(
-        json.dumps(summary_result.data, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    write_json_object(summary_json_path, summary_result.data)
 
     summary_markdown_path = next_versioned(analysis_dir / f"{job_id}__summary_v1.md")
     summary_markdown_path.write_text(summary_result.markdown, encoding="utf-8")
 
     outline_path = next_versioned(analysis_dir / f"{job_id}__outline_v1.json")
-    outline_path.write_text(json.dumps(outline_result.outline, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_json_object(outline_path, outline_result.outline)
 
     timeline_path = next_versioned(analysis_dir / f"{job_id}__timeline_seeds_v1.json")
     timeline_payload = {"events": timeline_result.events}
-    timeline_path.write_text(json.dumps(timeline_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_json_object(timeline_path, timeline_payload)
 
     entity_path = next_versioned(analysis_dir / f"{job_id}__entity_hints_v1.json")
-    entity_path.write_text(json.dumps(entity_result.hints, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_json_object(entity_path, entity_result.hints)
 
     case_brief_payload = case_brief or {}
     case_brief_path = next_versioned(analysis_dir / f"{job_id}__case_brief_v1.json")
-    case_brief_path.write_text(
-        json.dumps(case_brief_payload, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    write_json_object(case_brief_path, case_brief_payload)
 
     summary_json_sha = sha256_file(summary_json_path)
     summary_markdown_sha = sha256_file(summary_markdown_path)
@@ -775,7 +768,7 @@ def finalize_outputs(
         meta["token_usage"] = token_usage
 
     meta_path = ops_dir / f"{job_id}__summary_log.json"
-    meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_json_object(meta_path, meta)
 
     audit_path = ops_dir / "ops_summary.jsonl"
     append_jsonl(
