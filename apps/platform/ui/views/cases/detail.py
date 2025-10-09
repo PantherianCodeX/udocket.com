@@ -14,7 +14,7 @@ from apps.platform.accounts.utils import resolve_request_organization
 from apps.platform.cases.models import Case
 
 from ..auth import ensure_authenticated
-from ..contexts import compute_case_tool_state, get_case_and_org
+from ..contexts import compute_case_tool_state, get_case_and_org, get_case_tool_state
 from ..jobs import create_job
 from ..presenters.tool_registry import iter_tool_definitions
 from .helpers import render_case_panel_with_refresh, resolve_panel, resolve_tool_key
@@ -46,7 +46,7 @@ def case_detail(request: HttpRequest, case_id: str) -> HttpResponse:
     raw_tool = (request.GET.get("tool") or request.GET.get("module") or "")
     initial_tool_key = resolve_tool_key(raw_tool, available_keys, default="intake")
 
-    state = compute_case_tool_state(request, case, active_tool=initial_tool_key)
+    state = get_case_tool_state(request, case, active_tool=initial_tool_key)
     tool_panels: Dict[str, Dict[str, object]] = state["tool_panels"]
     if initial_tool_key and initial_tool_key not in tool_panels:
         # Fallback to full context if the targeted panel wasn't materialized.
@@ -79,7 +79,7 @@ def case_tool_panel(request: HttpRequest, case_id: str, tool_key: str) -> HttpRe
     case, _ = get_case_and_org(request, case_id)
     available_keys = [definition.key for definition in iter_tool_definitions()]
     requested_key = resolve_tool_key(tool_key, available_keys, default="", allow_fallback=False)
-    state = compute_case_tool_state(request, case, active_tool=requested_key or None)
+    state = get_case_tool_state(request, case, active_tool=requested_key or None)
     panels = state["tool_panels"]
     if requested_key and requested_key not in panels:
         state = compute_case_tool_state(request, case)

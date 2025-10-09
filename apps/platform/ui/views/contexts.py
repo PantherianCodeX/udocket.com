@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from django.conf import settings
+from django.core.cache import cache
 from django.core.exceptions import PermissionDenied
 from django.http import Http404, HttpRequest
 from django.db.models import Count
@@ -242,6 +243,52 @@ def compute_case_tool_state(
         "job_table_state": table_state,
         "job_row_total": table_state.pagination.get("total", total_display_rows),
     }
+
+
+def _cache_seconds() -> int:
+    try:
+        return int(getattr(settings, "CASE_TOOL_CACHE_SECONDS", 0))
+    except Exception:
+        return 0
+
+
+def _cache_key(case: Case, user_id: str | None, tool_key: str | None) -> str:
+    normalized_tool = (tool_key or "").strip().lower() or "intake"
+    user_component = user_id or "anon"
+    case_component = str(case.id)
+    timestamp_component = "0"
+    case_updated = getattr(case, "updated_at", None)
+    if case_updated is not None:
+        try:
+            timestamp_component = str(int(case_updated.timestamp()))
+        except Exception:
+            timestamp_component = "0"
+    return f"case-tool-state:{case_component}:{user_component}:{normalized_tool}:{timestamp_component}"
+
+
+def get_case_tool_state(
+    request: HttpRequest,
+    case: Case,
+    *,
+    active_tool: str | None = None,
+) -> Dict[str, Any]:
+    cache_seconds = _cache_seconds()
+    if cache_seconds <= 0:
+        return compute_case_tool_state(request, case, active_tool=active_tool)
+
+    user = getattr(request, "user", None)
+    user_id = str(getattr(user, "id", "")) if user and getattr(user, "is_authenticated", False) else None
+    key = _cache_key(case, user_id, active_tool)
+    cached = cache.get(key)
+    if cached is not None:
+        return cached
+
+    state = compute_case_tool_state(request, case, active_tool=active_tool)
+    try:
+        cache.set(key, state, cache_seconds)
+    except Exception:
+        pass
+    return state
 
 
 def job_detail_context(
