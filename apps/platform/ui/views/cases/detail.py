@@ -48,6 +48,10 @@ def case_detail(request: HttpRequest, case_id: str) -> HttpResponse:
 
     state = compute_case_tool_state(request, case, active_tool=initial_tool_key)
     tool_panels: Dict[str, Dict[str, object]] = state["tool_panels"]
+    if initial_tool_key and initial_tool_key not in tool_panels:
+        # Fallback to full context if the targeted panel wasn't materialized.
+        state = compute_case_tool_state(request, case)
+        tool_panels = state["tool_panels"]
     developer_cards = state["developer_cards"]
     case_header = state["case_header"]
     job_summary = state["job_summary"]
@@ -77,6 +81,9 @@ def case_tool_panel(request: HttpRequest, case_id: str, tool_key: str) -> HttpRe
     requested_key = resolve_tool_key(tool_key, available_keys, default="", allow_fallback=False)
     state = compute_case_tool_state(request, case, active_tool=requested_key or None)
     panels = state["tool_panels"]
+    if requested_key and requested_key not in panels:
+        state = compute_case_tool_state(request, case)
+        panels = state["tool_panels"]
 
     resolved_key, panel = resolve_panel(tool_key, panels, allow_fallback=False)
     if not resolved_key or not panel:

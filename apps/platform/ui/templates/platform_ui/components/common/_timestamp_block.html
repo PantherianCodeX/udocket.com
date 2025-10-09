@@ -1,9 +1,3 @@
-{#
-  Reusable timestamp presenter that keeps server-rendered date/time markup
-  consistent with client-side `renderLocalTimes`. We render the ISO timestamp
-  once and expose it via `data-ts` on both lines so repeated conversions remain
-  idempotent.
-#}
 {% if value %}
   {% with iso=value|date:'c' %}
     {% with date_fmt=date_format|default:'M d, Y' %}

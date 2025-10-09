@@ -47,6 +47,7 @@
         sockets: {},
         lastStatus: {},
         refreshTranscribeScheduled: false,
+        pendingToolRefresh: null,
         fallbackJobs: new Set(),
         fallbackTimer: null,
         connectTimeouts: {},
@@ -62,6 +63,9 @@
     jobsState.pollers = jobsState.pollers || {};
     jobsState.sockets = jobsState.sockets || {};
     jobsState.lastStatus = jobsState.lastStatus || {};
+    if (typeof jobsState.pendingToolRefresh === 'undefined') {
+      jobsState.pendingToolRefresh = null;
+    }
     global.JobsState = jobsState;
 
     const ctx = {
@@ -366,7 +370,7 @@
     });
     controller.realtime.setDeps?.({
       ui: controller.ui,
-      scheduleTranscribeRefresh: () => controller.ui.scheduleTranscribeRefresh(),
+      scheduleTranscribeRefresh: (toolKey) => controller.ui.scheduleTranscribeRefresh(toolKey),
     });
     controller.actions.setDeps?.({
       helpers,

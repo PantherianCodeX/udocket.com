@@ -105,13 +105,23 @@
     return tableController;
   }
 
-  function scheduleTranscribeRefresh() {
+  function scheduleTranscribeRefresh(preferredTool) {
     if (!ctx || !ctx.jobsState.currentCaseId) return;
+    const activeAttr = ctx.caseView ? ctx.caseView.getAttribute('data-active-tool') : '';
+    const initialTool = ctx.initialToolKey || '';
+    const chosen = (preferredTool || activeAttr || initialTool || 'transcribe').toString().trim();
+    const targetTool = chosen || 'transcribe';
+    ctx.jobsState.pendingToolRefresh = targetTool;
     if (ctx.jobsState.refreshTranscribeScheduled) return;
     ctx.jobsState.refreshTranscribeScheduled = true;
     setTimeout(() => {
       ctx.jobsState.refreshTranscribeScheduled = false;
-      const url = `/cases/${ctx.jobsState.currentCaseId}/tools/transcribe/`;
+      const nextCaseId = ctx.jobsState.currentCaseId;
+      if (!nextCaseId) return;
+      const nextTool = ctx.jobsState.pendingToolRefresh || targetTool;
+      ctx.jobsState.pendingToolRefresh = null;
+      const normalizedTool = (nextTool || '').trim() || 'transcribe';
+      const url = `/cases/${nextCaseId}/tools/${encodeURIComponent(normalizedTool)}/`;
       if (global.htmx && typeof global.htmx.ajax === 'function') {
         global.htmx.ajax('GET', url, '#tool-workspace');
         return;
@@ -124,7 +134,7 @@
           if (workspaceEl) {
             workspaceEl.innerHTML = html;
             if (deps.onTranscribeRefresh) {
-              deps.onTranscribeRefresh();
+              deps.onTranscribeRefresh(normalizedTool);
             }
           }
         })

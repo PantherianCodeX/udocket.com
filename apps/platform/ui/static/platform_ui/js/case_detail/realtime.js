@@ -43,9 +43,13 @@
   function syncJobs(jobIds) {
     const state = ensureStateCollections();
     if (!state) return;
-    state.streamJobs = new Set((jobIds || []).map((id) => String(id)));
+    const incoming = new Set((jobIds || []).map((id) => String(id)));
+    state.streamJobs = incoming;
     if (jobStream && typeof jobStream.setJobsForSource === 'function' && streamKey) {
       jobStream.setJobsForSource(streamKey, Array.from(state.streamJobs));
+    }
+    if (incoming.size) {
+      runFallbackPoll(Array.from(incoming));
     }
   }
 
@@ -237,7 +241,7 @@
       payload.converted_audio_job_id ||
       (payload.event && String(payload.event).toLowerCase() === 'job.created' && jobKind.includes('audio_conversion'))
     ) {
-      deps.scheduleTranscribeRefresh?.();
+      deps.scheduleTranscribeRefresh?.('transcribe');
     }
 
     deps.ui?.handleAnalyzeJobStatus?.(jobId, status);

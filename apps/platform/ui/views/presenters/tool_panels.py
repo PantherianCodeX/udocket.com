@@ -26,7 +26,7 @@ def table_config(
     *,
     panel_key: str,
     title: str,
-    pill: str,
+    pill: str | None,
     rows: Sequence[Dict[str, Any]],
     columns: Sequence[Dict[str, Any]],
     column_ids: Sequence[str],
@@ -332,7 +332,7 @@ def build_tool_panels(
         case_panel["body_context"] = {}
     case_panel["jobs"] = job_rows
     case_panel["jobs_title"] = "All Jobs"
-    case_panel["jobs_pill"] = "Live updates"
+    case_panel["jobs_pill"] = None
     case_panel["jobs_empty_message"] = "No jobs recorded yet."
     case_panel["case_id"] = str(case.id)
     case_panel["jobs_columns"] = list(CASE_JOB_TABLE_COLUMNS)
@@ -346,7 +346,7 @@ def build_tool_panels(
         table_config(
             panel_key=case_panel["key"],
             title="All Jobs",
-            pill="Live updates",
+            pill=None,
             rows=job_rows,
             columns=CASE_JOB_TABLE_COLUMNS,
             column_ids=[col["id"] for col in CASE_JOB_TABLE_COLUMNS],
@@ -442,24 +442,26 @@ def build_tool_panels(
         }
         transcribe_panel["jobs"] = transcription_jobs
         transcribe_panel["jobs_title"] = "Transcription Jobs"
-        transcribe_panel["jobs_pill"] = "Uploads"
+        transcribe_panel["jobs_pill"] = None
         transcribe_panel["jobs_empty_message"] = "No transcription jobs yet."
         transcribe_panel["case_id"] = str(case.id)
         transcribe_panel["jobs_columns"] = list(CASE_JOB_TABLE_COLUMNS)
         transcribe_panel["jobs_column_ids"] = [col["id"] for col in CASE_JOB_TABLE_COLUMNS]
-        transcribe_panel["jobs_filters"] = DEFAULT_TABLE_FILTERS
+        transcribe_panel["jobs_filters"] = job_filters or DEFAULT_TABLE_FILTERS
         transcribe_panel["jobs_show_identifiers"] = True
         transcribe_panel["jobs_table"] = table_config(
             panel_key=transcribe_panel["key"],
             title="Transcription Jobs",
-            pill="Uploads",
+            pill=None,
             rows=transcription_jobs,
             columns=CASE_JOB_TABLE_COLUMNS,
             column_ids=[col["id"] for col in CASE_JOB_TABLE_COLUMNS],
-            filters=DEFAULT_TABLE_FILTERS,
+            filters=job_filters or DEFAULT_TABLE_FILTERS,
             empty_message="No transcription jobs yet.",
             show_identifiers=True,
             case_id=str(case.id),
+            filters_active=job_filters_active,
+            has_advanced_filters=job_has_advanced_filters,
         )
     else:
         transcribe_panel["notes"] = empty_notes.copy()
@@ -471,12 +473,12 @@ def build_tool_panels(
         }
         transcribe_panel["jobs"] = transcription_jobs
         transcribe_panel["jobs_title"] = "Transcription Jobs"
-        transcribe_panel["jobs_pill"] = "Uploads"
+        transcribe_panel["jobs_pill"] = None
         transcribe_panel["jobs_empty_message"] = "No transcription jobs yet."
         transcribe_panel["case_id"] = str(case.id)
         transcribe_panel["jobs_columns"] = list(CASE_JOB_TABLE_COLUMNS)
         transcribe_panel["jobs_column_ids"] = [col["id"] for col in CASE_JOB_TABLE_COLUMNS]
-        transcribe_panel["jobs_filters"] = DEFAULT_TABLE_FILTERS
+        transcribe_panel["jobs_filters"] = job_filters or DEFAULT_TABLE_FILTERS
         transcribe_panel["jobs_show_identifiers"] = True
         transcribe_panel["jobs_table"] = None
     panels[transcribe_panel["key"]] = transcribe_panel
@@ -528,24 +530,26 @@ def build_tool_panels(
         }
         analyze_panel["jobs"] = analyze_jobs
         analyze_panel["jobs_title"] = "Analyze Jobs"
-        analyze_panel["jobs_pill"] = "Automations"
+        analyze_panel["jobs_pill"] = None
         analyze_panel["jobs_empty_message"] = "No analyze jobs yet. Queue one above."
         analyze_panel["case_id"] = str(case.id)
         analyze_panel["jobs_columns"] = list(GLOBAL_JOB_TABLE_COLUMNS)
         analyze_panel["jobs_column_ids"] = [col["id"] for col in GLOBAL_JOB_TABLE_COLUMNS]
-        analyze_panel["jobs_filters"] = DEFAULT_TABLE_FILTERS
+        analyze_panel["jobs_filters"] = job_filters or DEFAULT_TABLE_FILTERS
         analyze_panel["jobs_show_identifiers"] = False
         analyze_panel["jobs_table"] = table_config(
             panel_key=analyze_panel["key"],
             title="Analyze Jobs",
-            pill="Automations",
+            pill=None,
             rows=analyze_jobs,
             columns=GLOBAL_JOB_TABLE_COLUMNS,
             column_ids=[col["id"] for col in GLOBAL_JOB_TABLE_COLUMNS],
-            filters=DEFAULT_TABLE_FILTERS,
+            filters=job_filters or DEFAULT_TABLE_FILTERS,
             empty_message="No analyze jobs yet. Queue one above.",
             show_identifiers=False,
             case_id=str(case.id),
+            filters_active=job_filters_active,
+            has_advanced_filters=job_has_advanced_filters,
         )
     else:
         analyze_panel["body_context"] = {
@@ -555,12 +559,12 @@ def build_tool_panels(
         }
         analyze_panel["jobs"] = analyze_jobs
         analyze_panel["jobs_title"] = "Analyze Jobs"
-        analyze_panel["jobs_pill"] = "Automations"
+        analyze_panel["jobs_pill"] = None
         analyze_panel["jobs_empty_message"] = "No analyze jobs yet. Queue one above."
         analyze_panel["case_id"] = str(case.id)
         analyze_panel["jobs_columns"] = list(GLOBAL_JOB_TABLE_COLUMNS)
         analyze_panel["jobs_column_ids"] = [col["id"] for col in GLOBAL_JOB_TABLE_COLUMNS]
-        analyze_panel["jobs_filters"] = DEFAULT_TABLE_FILTERS
+        analyze_panel["jobs_filters"] = job_filters or DEFAULT_TABLE_FILTERS
         analyze_panel["jobs_show_identifiers"] = False
         analyze_panel["jobs_table"] = None
     panels[analyze_panel["key"]] = analyze_panel
@@ -603,24 +607,26 @@ def build_tool_panels(
         }
         compose_panel["jobs"] = compose_jobs
         compose_panel["jobs_title"] = "Compose Jobs"
-        compose_panel["jobs_pill"] = "Automations"
+        compose_panel["jobs_pill"] = None
         compose_panel["jobs_empty_message"] = "No compose jobs yet. Generate deliverables above."
         compose_panel["case_id"] = str(case.id)
         compose_panel["jobs_columns"] = list(GLOBAL_JOB_TABLE_COLUMNS)
         compose_panel["jobs_column_ids"] = [col["id"] for col in GLOBAL_JOB_TABLE_COLUMNS]
-        compose_panel["jobs_filters"] = DEFAULT_TABLE_FILTERS
+        compose_panel["jobs_filters"] = job_filters or DEFAULT_TABLE_FILTERS
         compose_panel["jobs_show_identifiers"] = False
         compose_panel["jobs_table"] = table_config(
             panel_key=compose_panel["key"],
             title="Compose Jobs",
-            pill="Automations",
+            pill=None,
             rows=compose_jobs,
             columns=GLOBAL_JOB_TABLE_COLUMNS,
             column_ids=[col["id"] for col in GLOBAL_JOB_TABLE_COLUMNS],
-            filters=DEFAULT_TABLE_FILTERS,
+            filters=job_filters or DEFAULT_TABLE_FILTERS,
             empty_message="No compose jobs yet. Generate deliverables above.",
             show_identifiers=False,
             case_id=str(case.id),
+            filters_active=job_filters_active,
+            has_advanced_filters=job_has_advanced_filters,
         )
     else:
         compose_panel["body_context"] = {
@@ -634,12 +640,12 @@ def build_tool_panels(
         }
         compose_panel["jobs"] = compose_jobs
         compose_panel["jobs_title"] = "Compose Jobs"
-        compose_panel["jobs_pill"] = "Automations"
+        compose_panel["jobs_pill"] = None
         compose_panel["jobs_empty_message"] = "No compose jobs yet. Generate deliverables above."
         compose_panel["case_id"] = str(case.id)
         compose_panel["jobs_columns"] = list(GLOBAL_JOB_TABLE_COLUMNS)
         compose_panel["jobs_column_ids"] = [col["id"] for col in GLOBAL_JOB_TABLE_COLUMNS]
-        compose_panel["jobs_filters"] = DEFAULT_TABLE_FILTERS
+        compose_panel["jobs_filters"] = job_filters or DEFAULT_TABLE_FILTERS
         compose_panel["jobs_show_identifiers"] = False
         compose_panel["jobs_table"] = None
     panels[compose_panel["key"]] = compose_panel

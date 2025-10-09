@@ -715,7 +715,9 @@
         console.warn('Job action failed', endpointAction, body);
       } else if (method === 'DELETE') {
         removeJobRow(jobId);
-        deps.ui?.scheduleTranscribeRefresh();
+        const tableContainer = control.closest('[data-table-container]');
+        const toolKey = tableContainer && tableContainer.getAttribute('data-tool-key');
+        deps.ui?.scheduleTranscribeRefresh(toolKey || undefined);
       } else {
         const data = await resp.json();
         deps.realtime?.handleJobUpdate(jobId, data, 'action');
