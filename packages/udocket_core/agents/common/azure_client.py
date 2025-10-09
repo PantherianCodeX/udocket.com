@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 import threading
 import time
 from typing import Any, Optional, Protocol, cast
+import math
 
 
 class _ResponseProtocol(Protocol):
@@ -329,6 +330,7 @@ class AzureChatClient:
             max_tokens=max_tokens,
             response_format=response_format,
             include_max_output_tokens=True,
+            allow_temperature_retry=True,
         )
 
     def _chat(
@@ -339,6 +341,7 @@ class AzureChatClient:
         max_tokens: Optional[int],
         response_format: Optional[Mapping[str, JSONValue]],
         include_max_output_tokens: bool,
+        allow_temperature_retry: bool,
     ) -> tuple[str, JSONObject]:
         requests_client = _require_requests()
         session = self._session_manager.session_for(self.config.endpoint)
@@ -386,10 +389,39 @@ class AzureChatClient:
         except requests_client.exceptions.HTTPError as exc:
             response_obj = getattr(exc, "response", None)
             detail = cast(str, getattr(response_obj, "text", "") or "")
+            status_code = getattr(response_obj, "status_code", None)
+            detail_lower = detail.lower() if detail else ""
+
+            if (
+                allow_temperature_retry
+                and status_code == 400
+                and detail_lower
+                and "temperature" in detail_lower
+                and "only the default (1) value is supported" in detail_lower
+                and not math.isclose(temperature, 1.0, rel_tol=1e-6, abs_tol=1e-6)
+            ):
+                logger.warning(
+                    "azure temperature fallback",
+                    extra={
+                        "endpoint": url,
+                        "deployment": self.config.deployment,
+                        "requested_temperature": temperature,
+                        "status_code": status_code,
+                    },
+                )
+                return self._chat(
+                    messages=messages,
+                    temperature=1.0,
+                    max_tokens=max_tokens,
+                    response_format=response_format,
+                    include_max_output_tokens=include_max_output_tokens,
+                    allow_temperature_retry=False,
+                )
+
             if (
                 include_max_output_tokens
                 and response_obj is not None
-                and getattr(response_obj, "status_code", None) == 400
+                and status_code == 400
                 and detail
                 and "max_output_tokens" in detail
             ):
@@ -398,7 +430,7 @@ class AzureChatClient:
                     extra={
                         "endpoint": url,
                         "deployment": self.config.deployment,
-                        "status_code": getattr(response_obj, "status_code", None),
+                        "status_code": status_code,
                     },
                 )
                 return self._chat(
@@ -407,6 +439,7 @@ class AzureChatClient:
                     max_tokens=max_tokens,
                     response_format=response_format,
                     include_max_output_tokens=False,
+                    allow_temperature_retry=allow_temperature_retry,
                 )
             error_message = (
                 f"Azure OpenAI request failed: {exc}" + (f"\n{detail}" if detail else "")
@@ -416,7 +449,7 @@ class AzureChatClient:
                 extra={
                         "endpoint": url,
                         "deployment": self.config.deployment,
-                        "status_code": getattr(response_obj, "status_code", None),
+                        "status_code": status_code,
                         "body": detail,
                     },
             )
@@ -551,24 +584,6 @@ class AzureChatClient:
                 f"Body preview: {preview_single_line if preview_single_line else '<empty>'}"
             )
 
-        if not content:
-            finish_reason = choice0.get("finish_reason")
-            preview = (response_text or "")[:500]
-            preview_single_line = preview.replace("\n", "\\n").replace("\r", "\\r")
-            logger.error(
-                "azure empty completion after coercion (status=%s, deployment=%s, request_id=%s, finish_reason=%s): %s",
-                response.status_code,
-                self.config.deployment,
-                request_id,
-                finish_reason,
-                preview_single_line if preview_single_line else "<empty>",
-            )
-            raise RuntimeError(
-                "Azure OpenAI returned an empty completion after coercion (deployment='"
-                f"{self.config.deployment}', request_id='{request_id}', finish_reason='{finish_reason}'). "
-                f"Body preview: {preview_single_line if preview_single_line else '<empty>'}"
-            )
-
         usage_value = data.get("usage")
         if isinstance(usage_value, Mapping):
             usage = _require_json_object(usage_value, context="usage metadata")
@@ -588,11 +603,21 @@ class AzureChatClient:
                 return
         try:
             self._chat(
-                messages=[{"role": "user", "content": "Ping"}],
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You respond to health probes with a short acknowledgement.",
+                    },
+                    {
+                        "role": "user",
+                        "content": "Reply with the word OK.",
+                    },
+                ],
                 temperature=1.0,
-                max_tokens=max(1, self.config.health_check_max_tokens),
+                max_tokens=max(128, self.config.health_check_max_tokens),
                 response_format=None,
                 include_max_output_tokens=False,
+                allow_temperature_retry=False,
             )
         except RuntimeError as exc:
             raise RuntimeError(f"Azure OpenAI health check failed: {exc}") from exc
