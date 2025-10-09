@@ -203,10 +203,27 @@ LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
     "formatters": {
-        "simple": {"format": "%(asctime)s %(levelname)s %(name)s: %(message)s"},
+        "context": {
+            "()": "packages.udocket_core.logging.formatters.ContextualFormatter",
+            "fmt": (
+                "%(asctime)s %(levelname)s %(name)s "
+                "[event=%(event)s component=%(component)s case=%(case_id)s "
+                "job=%(job_id)s artifact=%(artifact_id)s org=%(organization_id)s "
+                "task=%(task_id)s] %(message)s"
+            ),
+            "defaults": {
+                "event": "-",
+                "component": "-",
+                "case_id": "-",
+                "job_id": "-",
+                "artifact_id": "-",
+                "organization_id": "-",
+                "task_id": "-",
+            },
+        },
     },
     "handlers": {
-        "console": {"class": "logging.StreamHandler", "formatter": "simple"},
+        "console": {"class": "logging.StreamHandler", "formatter": "context"},
     },
     "root": {"handlers": ["console"], "level": logging_config.root_level},
     "loggers": {

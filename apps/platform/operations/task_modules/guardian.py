@@ -12,6 +12,7 @@ from celery import shared_task
 
 class TaskProtocol(Protocol):
     request: Any
+
 from django.utils import timezone
 
 from apps.platform.artifacts.models import CaseArtifact
@@ -31,15 +32,30 @@ from apps.platform.operations.runtime import (
 from apps.platform.operations.utils import read_job_meta
 from packages.udocket_core.agents.guardian_lib import GuardianVerdict
 from packages.udocket_core.json_utils import JSONObject, normalize_json_object
+from packages.udocket_core.logging.context import LogContext
 
 log = logging.getLogger("apps.platform.operations.tasks.guardian")
 
 @shared_task(bind=True)
 def guardian_review_artifact(self: TaskProtocol, *, artifact_id: int) -> dict[str, object]:
     request_id = getattr(getattr(self, "request", None), "id", "") or ""
+    task_context = LogContext.from_defaults(
+        component="guardian.task",
+        task_id=request_id or None,
+        task_name="guardian_review_artifact",
+        artifact_id=artifact_id,
+    )
+    log.info(
+        "Guardian review task received",
+        extra=task_context.extra(event="guardian.task.received"),
+    )
     try:
         artifact = CaseArtifact.typed_objects().select_related("case_fk").get(pk=artifact_id)
     except CaseArtifact.DoesNotExist:
+        log.error(
+            "Guardian review requested for missing artifact",
+            extra=task_context.extra(event="guardian.task.missing_artifact"),
+        )
         return {"status": "missing", "artifact_id": artifact_id}
 
     job_id = str(getattr(artifact, "job_id", "") or "")
@@ -69,6 +85,16 @@ def guardian_review_artifact(self: TaskProtocol, *, artifact_id: int) -> dict[st
         artifact_case_fk = getattr(artifact, "case_fk", None)
         org_value = getattr(artifact_case_fk, "organization_id", None)
     org_id_str = str(org_value) if org_value else None
+    task_context = task_context.bind(
+        case_id=case_id or None,
+        job_id=job_id or None,
+        organization_id=org_id_str,
+        artifact_type=getattr(artifact, "type", None),
+    )
+    log.debug(
+        "Guardian review task resolved references",
+        extra=task_context.extra(event="guardian.task.resolved_references"),
+    )
 
     from apps.platform.operations import tasks as tasks_module
 
@@ -106,6 +132,10 @@ def guardian_review_artifact(self: TaskProtocol, *, artifact_id: int) -> dict[st
         )
 
     if context is None:
+        log.info(
+            "Guardian context is not configured; review skipped",
+            extra=task_context.extra(event="guardian.task.skipped_no_context"),
+        )
         review_record = normalize_json_object(
             {
                 "status": "skipped",
@@ -131,6 +161,10 @@ def guardian_review_artifact(self: TaskProtocol, *, artifact_id: int) -> dict[st
 
     artifact_payload = snapshot_artifact_for_guardian(artifact)
     if "content" not in artifact_payload and "parsed" not in artifact_payload:
+        log.warning(
+            "Guardian snapshot missing readable content; review skipped",
+            extra=task_context.extra(event="guardian.task.skipped_unreadable"),
+        )
         review_record = normalize_json_object(
             {
                 "status": "skipped",
@@ -216,6 +250,17 @@ def guardian_review_artifact(self: TaskProtocol, *, artifact_id: int) -> dict[st
         )
 
         review_options = {"temperature": context.temperature}
+        log.info(
+            "Guardian review dispatched to agent",
+            extra=task_context.extra(
+                event="guardian.task.dispatched",
+                providers=context.provider_chain,
+                model=context.model,
+                max_tokens=context.max_tokens,
+                temperature=context.temperature,
+                instruction_count=len(context.instructions),
+            ),
+        )
         verdict = context.agent.review(
             case_id=case_id,
             job_id=job_id,
@@ -230,6 +275,13 @@ def guardian_review_artifact(self: TaskProtocol, *, artifact_id: int) -> dict[st
             temperature=context.temperature,
         )
     except Exception as exc:
+        log.error(
+            "Guardian review raised an exception",
+            extra=task_context.extra(
+                event="guardian.task.error",
+                error=str(exc),
+            ),
+        )
         review_record = normalize_json_object(
             {
                 "status": "error",
@@ -257,6 +309,16 @@ def guardian_review_artifact(self: TaskProtocol, *, artifact_id: int) -> dict[st
         raise
 
     status = "approved" if verdict.approved else "rejected"
+    log.info(
+        "Guardian review completed",
+        extra=task_context.extra(
+            event="guardian.task.completed",
+            status=status,
+            provider=verdict.provider,
+            model=verdict.model,
+            violation_count=len(verdict.violations),
+        ),
+    )
     review_record = normalize_json_object(
         {
             "status": status,

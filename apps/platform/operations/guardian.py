@@ -35,6 +35,7 @@ from packages.udocket_core.json_utils import (
     parse_json_value,
     read_json_object,
 )
+from packages.udocket_core.logging.context import LogContext, build_extra
 
 
 MAX_CONTENT_CHARS: Final = 50000
@@ -163,17 +164,40 @@ def save_guardian_instructions(organization_id: str | None, instructions: Instru
 
 def build_guardian_context(organization_id: str | None) -> GuardianContext | None:
     if not organization_id:
+        log.info(
+            "Guardian context skipped because no organization id was provided",
+            extra=build_extra(
+                event="guardian.context.missing_org",
+                component="guardian.context",
+            ),
+        )
         return None
 
+    context = LogContext.from_defaults(
+        component="guardian.context",
+        organization_id=organization_id,
+    )
+    log.debug(
+        "Building Guardian context",
+        extra=context.extra(event="guardian.context.build"),
+    )
     llm_settings: LLMSettings = load_llm_settings()
 
     config_payload = _fetch_guardian_configuration(organization_id)
     if not config_payload:
+        log.debug(
+            "Guardian configuration missing; attempting to ensure defaults",
+            extra=context.extra(event="guardian.context.ensure_default"),
+        )
         config_payload = _ensure_guardian_configuration(
             organization_id,
             llm_settings=llm_settings,
         )
     if not config_payload:
+        log.warning(
+            "Guardian configuration is unavailable for organization",
+            extra=context.extra(event="guardian.context.unconfigured"),
+        )
         return None
 
     stage_map_raw = coerce_json_object(config_payload.get("stage_map"))
@@ -185,11 +209,11 @@ def build_guardian_context(organization_id: str | None) -> GuardianContext | Non
     provider_chain = [name for name in configured_chain if llm_settings.provider(name)]
     if configured_chain and not provider_chain:
         log.warning(
-            "guardian.provider.unknown_configured",
-            extra={
-                "organization_id": organization_id,
-                "providers": configured_chain,
-            },
+            "Guardian provider override contains unknown providers",
+            extra=context.extra(
+                event="guardian.providers.unknown_configured",
+                providers=configured_chain,
+            ),
         )
 
     if not provider_chain:
@@ -199,11 +223,11 @@ def build_guardian_context(organization_id: str | None) -> GuardianContext | Non
         review_filtered = [name for name in review_chain if llm_settings.provider(name)]
         if review_chain and not review_filtered:
             log.warning(
-                "guardian.provider.unknown_stage",
-                extra={
-                    "organization_id": organization_id,
-                    "providers": review_chain,
-                },
+                "Guardian review stage references unknown providers",
+                extra=context.extra(
+                    event="guardian.providers.unknown_stage",
+                    providers=review_chain,
+                ),
             )
         provider_chain = review_filtered
 
@@ -213,11 +237,11 @@ def build_guardian_context(organization_id: str | None) -> GuardianContext | Non
         assignment_filtered = [name for name in assignment_chain if llm_settings.provider(name)]
         if assignment_chain and not assignment_filtered:
             log.warning(
-                "guardian.provider.unknown_assignment",
-                extra={
-                    "organization_id": organization_id,
-                    "providers": assignment_chain,
-                },
+                "Guardian stage assignment references unknown providers",
+                extra=context.extra(
+                    event="guardian.providers.unknown_assignment",
+                    providers=assignment_chain,
+                ),
             )
         provider_chain = assignment_filtered
 
@@ -230,8 +254,8 @@ def build_guardian_context(organization_id: str | None) -> GuardianContext | Non
 
     if not provider_chain:
         log.warning(
-            "guardian.provider_chain.empty",
-            extra={"organization_id": organization_id},
+            "Guardian provider chain resolved to an empty list",
+            extra=context.extra(event="guardian.providers.empty"),
         )
 
     options_raw = normalize_json_object(
@@ -259,8 +283,34 @@ def build_guardian_context(organization_id: str | None) -> GuardianContext | Non
         )
         if secret:
             credentials[provider] = secret
+            log.debug(
+                "Loaded Guardian provider credentials",
+                extra=context.extra(
+                    event="guardian.credentials.loaded",
+                    provider=provider,
+                ),
+            )
+        else:
+            log.info(
+                "Guardian provider credentials missing",
+                extra=context.extra(
+                    event="guardian.credentials.missing",
+                    provider=provider,
+                ),
+            )
 
     instructions = get_guardian_instructions(organization_id)
+    log.info(
+        "Guardian context ready",
+        extra=context.extra(
+            event="guardian.context.ready",
+            provider_chain=list(guardian_config.provider_chain),
+            model=guardian_config.model,
+            max_tokens=guardian_config.max_tokens,
+            temperature=guardian_config.temperature,
+            instruction_count=len(instructions),
+        ),
+    )
 
     return GuardianContext(
         agent=agent,
@@ -287,6 +337,23 @@ def new_instruction_template() -> JSONDict:
 
 def snapshot_artifact_for_guardian(artifact: CaseArtifact) -> JSONDict:
     metadata = normalize_json_object(artifact.metadata or {})
+    case_id_value = getattr(artifact, "case_id", None)
+    job_id_value = getattr(artifact, "job_id", None)
+    org_value = getattr(artifact, "organization_id", None)
+    artifact_context = LogContext.from_defaults(
+        component="guardian.snapshot",
+        case_id=str(case_id_value) if case_id_value else None,
+        job_id=str(job_id_value) if job_id_value else None,
+        artifact_id=int(artifact.id),
+        organization_id=str(org_value) if org_value else None,
+    )
+    log.debug(
+        "Preparing Guardian snapshot for artifact",
+        extra=artifact_context.extra(
+            event="guardian.artifact.snapshot",
+            artifact_type=artifact.type,
+        ),
+    )
     payload: JSONDict = {
         "id": artifact.id,
         "case_id": artifact.case_id,
@@ -303,11 +370,22 @@ def snapshot_artifact_for_guardian(artifact: CaseArtifact) -> JSONDict:
     path_value = artifact.path
     if not path_value:
         payload["missing_path"] = True
+        log.warning(
+            "Guardian snapshot skipped because the artifact path is empty",
+            extra=artifact_context.extra(event="guardian.artifact.missing_path"),
+        )
         return payload
 
     path = Path(path_value)
     if not path.exists():
         payload["missing_file"] = True
+        log.warning(
+            "Guardian snapshot skipped because the artifact file is missing",
+            extra=artifact_context.extra(
+                event="guardian.artifact.missing_file",
+                path=str(path),
+            ),
+        )
         return payload
 
     suffix = path.suffix.lower()
@@ -338,6 +416,23 @@ def snapshot_artifact_for_guardian(artifact: CaseArtifact) -> JSONDict:
             payload["binary"] = True
     except Exception as exc:
         payload["read_error"] = str(exc)
+        log.exception(
+            "Guardian snapshot failed to read artifact",
+            extra=artifact_context.extra(
+                event="guardian.artifact.read_error",
+                path=str(path),
+            ),
+        )
+    else:
+        log.debug(
+            "Guardian snapshot prepared",
+            extra=artifact_context.extra(
+                event="guardian.artifact.snapshot_ready",
+                has_content="content" in payload,
+                has_parsed="parsed" in payload,
+                binary=payload.get("binary", False),
+            ),
+        )
     return payload
 
 
@@ -353,6 +448,23 @@ def store_guardian_review(artifact: CaseArtifact, review: JSONDict) -> None:
     metadata["guardian_last_review"] = cast(JSONValue, dict(review))
     CaseArtifact.objects.filter(pk=artifact.pk).update(metadata=metadata)
     artifact.metadata = metadata
+    case_id_value = getattr(artifact, "case_id", None)
+    job_id_value = getattr(artifact, "job_id", None)
+    org_value = getattr(artifact, "organization_id", None)
+    review_context = LogContext.from_defaults(
+        component="guardian.review.store",
+        case_id=str(case_id_value) if case_id_value else None,
+        job_id=str(job_id_value) if job_id_value else None,
+        artifact_id=int(artifact.id),
+        organization_id=str(org_value) if org_value else None,
+    )
+    log.info(
+        "Stored Guardian review metadata",
+        extra=review_context.extra(
+            event="guardian.review.store",
+            status=review.get("status"),
+        ),
+    )
 
 
 def build_guardian_review_record(
@@ -387,6 +499,14 @@ def enqueue_guardian_review(artifact_id: int) -> None:
 
     task = cast(_GuardianReviewTask, guardian_review_artifact)
     task.delay(artifact_id=artifact_id)
+    log.info(
+        "Guardian review enqueued",
+        extra=build_extra(
+            event="guardian.review.enqueue",
+            component="guardian.enqueue",
+            artifact_id=artifact_id,
+        ),
+    )
 
 
 __all__ = [

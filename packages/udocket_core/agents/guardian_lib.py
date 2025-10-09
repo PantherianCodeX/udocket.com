@@ -25,6 +25,7 @@ from packages.udocket_core.llm.runtime import (
     build_provider_runtime_config,
 )
 from .common.llm_health import ensure_llm_client_health
+from packages.udocket_core.logging.context import LogContext
 
 logger = logging.getLogger("udocket.guardian")
 
@@ -108,6 +109,7 @@ class GuardianAgent:
         self.config = config or GuardianConfig()
         self.settings = settings or load_llm_settings()
         self.logger = logger
+        self._log_context = LogContext.from_defaults(component="guardian.agent")
 
     def review(
         self,
@@ -156,25 +158,53 @@ class GuardianAgent:
         last_verdict: Optional[GuardianVerdict] = None
         attempts = max(1, int(self.config.retry_attempts))
 
+        call_context = self._log_context.bind(
+            case_id=case_id or None,
+            job_id=job_id or None,
+            artifact_kind=artifact_kind,
+        )
+        self.logger.info(
+            "Guardian agent review started",
+            extra=call_context.extra(
+                event="guardian.agent.review.start",
+                provider_chain=list(provider_order),
+                requested_model=selected_model,
+                max_tokens=configured_max_tokens,
+                temperature=configured_temperature,
+                retry_attempts=attempts,
+            ),
+        )
+
         for provider in provider_order:
             provider_meta = self.settings.provider(provider)
             if provider_meta is None:
+                self.logger.warning(
+                    "Guardian provider reference is missing from settings",
+                    extra=call_context.extra(
+                        event="guardian.agent.provider.missing",
+                        provider=provider,
+                    ),
+                )
                 continue
 
+            provider_context = call_context.bind(provider=provider_meta.name)
             provider_model_name = _select_model_name(
                 provider_meta,
                 selected_model or (stage_assignment.model if stage_assignment else None),
             )
             if not provider_model_name:
                 self.logger.warning(
-                    "guardian.provider.no_model",
-                    extra={
-                        "provider": provider_meta.name,
-                        "job_id": job_id,
-                        "case_id": case_id,
-                    },
+                    "Guardian provider has no model configured",
+                    extra=provider_context.extra(
+                        event="guardian.agent.provider.no_model",
+                    ),
                 )
                 continue
+            provider_context = provider_context.bind(model=provider_model_name)
+            self.logger.debug(
+                "Evaluating Guardian provider",
+                extra=provider_context.extra(event="guardian.agent.provider.start"),
+            )
 
             credential_payload = provider_credentials.get(provider)
             runtime = None
@@ -193,18 +223,21 @@ class GuardianAgent:
                 client = build_chat_client(provider_runtime=runtime)
             except ChatClientError as exc:
                 self.logger.exception(
-                    "guardian.provider.init_failed",
-                    extra={
-                        "provider": provider_meta.name,
-                        "model": provider_model_name,
-                        "job_id": job_id,
-                        "case_id": case_id,
-                        "error": str(exc),
-                    },
+                    "Guardian provider initialization failed",
+                    extra=provider_context.extra(
+                        event="guardian.agent.provider.init_failed",
+                        error=str(exc),
+                    ),
                 )
                 continue
 
             try:
+                self.logger.debug(
+                    "Running Guardian provider health check",
+                    extra=provider_context.extra(
+                        event="guardian.agent.provider.health_check",
+                    ),
+                )
                 ensure_llm_client_health(
                     client,
                     stage="guardian.review",
@@ -215,14 +248,11 @@ class GuardianAgent:
                 )
             except ChatClientError as exc:
                 self.logger.error(
-                    "guardian.provider.health_failed",
-                    extra={
-                        "provider": provider_meta.name,
-                        "model": provider_model_name,
-                        "job_id": job_id,
-                        "case_id": case_id,
-                        "error": str(exc),
-                    },
+                    "Guardian provider health check failed",
+                    extra=provider_context.extra(
+                        event="guardian.agent.provider.health_failed",
+                        error=str(exc),
+                    ),
                 )
                 continue
 
@@ -260,6 +290,15 @@ class GuardianAgent:
                 }
 
                 try:
+                    self.logger.debug(
+                        "Submitting Guardian review request to provider",
+                        extra=provider_context.extra(
+                            event="guardian.agent.request",
+                            attempt=attempt + 1,
+                            temperature=configured_temperature,
+                            max_tokens=max(256, configured_max_tokens),
+                        ),
+                    )
                     content, usage = client.chat(
                         messages=[
                             {"role": "system", "content": system_prompt},
@@ -270,15 +309,12 @@ class GuardianAgent:
                     )
                 except ChatClientError as exc:
                     self.logger.exception(
-                        "guardian.provider.request_failed",
-                        extra={
-                            "provider": provider_meta.name,
-                            "model": provider_model_name,
-                            "job_id": job_id,
-                            "case_id": case_id,
-                            "error": str(exc),
-                            "attempt": attempt + 1,
-                        },
+                        "Guardian provider request failed",
+                        extra=provider_context.extra(
+                            event="guardian.agent.request_failed",
+                            error=str(exc),
+                            attempt=attempt + 1,
+                        ),
                     )
                     continue
 
@@ -288,10 +324,33 @@ class GuardianAgent:
                     model=runtime.model.name if runtime and runtime.model else provider_model_name,
                     usage=_usage_dict(usage),
                 )
+                self.logger.info(
+                    "Guardian provider returned verdict",
+                    extra=provider_context.extra(
+                        event="guardian.agent.verdict",
+                        attempt=attempt + 1,
+                        approved=verdict.approved,
+                        violation_count=len(verdict.violations),
+                    ),
+                )
                 if verdict.approved or attempt == attempts - 1:
                     return verdict
+                self.logger.debug(
+                    "Guardian provider verdict rejected; retrying if attempts remain",
+                    extra=provider_context.extra(
+                        event="guardian.agent.retry",
+                        attempt=attempt + 1,
+                    ),
+                )
                 last_verdict = verdict
 
+        self.logger.error(
+            "Guardian agent could not complete review with any provider",
+            extra=call_context.extra(
+                event="guardian.agent.review.exhausted",
+                provider_chain=list(provider_order),
+            ),
+        )
         raise RuntimeError("Guardian validation could not contact any provider")
 
     def _parse_verdict(

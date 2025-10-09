@@ -37,6 +37,7 @@ from packages.udocket_core.json_utils import (
     normalize_json_object,
     write_json_object,
 )
+from packages.udocket_core.logging.context import LogContext
 
 log = logging.getLogger("apps.platform.operations.compose_service")
 
@@ -101,6 +102,17 @@ def execute_compose_job(
         raise ValueError("Compose job requires an organization id")
     org_id = str(org_value)
     case_dir, _, _ = case_paths(case_id, org_id)
+    job_context = LogContext.from_defaults(
+        component="compose.service",
+        case_id=case_id,
+        job_id=str(job.id),
+        organization_id=org_id,
+        summary_job_id=str(summary_job.id),
+    )
+    log.info(
+        "Compose service starting",
+        extra=job_context.extra(event="compose.service.start"),
+    )
 
     summary_meta = read_job_meta(case_id, org_id, str(summary_job.id))
 
@@ -237,6 +249,14 @@ def execute_compose_job(
     if not provider_chain_values:
         provider_chain_values = list(compose_config.provider_chain)
     provider_chain = provider_chain_values
+    log.debug(
+        "Compose provider chain resolved",
+        extra=job_context.extra(
+            event="compose.service.providers",
+            provider_chain=provider_chain,
+            stage_map=list(stage_map.keys()),
+        ),
+    )
 
     provider_credentials: dict[str, dict[str, Any]] = {}
     if organization_id_str:
@@ -247,6 +267,21 @@ def execute_compose_job(
             credential = _coerce_any_mapping(secret_payload)
             if credential:
                 provider_credentials[provider] = credential
+                log.debug(
+                    "Loaded compose provider credentials",
+                    extra=job_context.extra(
+                        event="compose.service.credentials.loaded",
+                        provider=provider,
+                    ),
+                )
+            else:
+                log.info(
+                    "Compose provider credentials missing",
+                    extra=job_context.extra(
+                        event="compose.service.credentials.missing",
+                        provider=provider,
+                    ),
+                )
 
     try:
         intake_payload = _coerce_any_mapping(summary_meta.get("intake"))
@@ -286,6 +321,15 @@ def execute_compose_job(
                 details={key: cast(Any, value) for key, value in details.items()},
             )
 
+        log.info(
+            "Dispatching compose agent",
+            extra=job_context.extra(
+                event="compose.service.dispatch",
+                provider_chain=provider_chain,
+                summary_json=str(summary_json_path) if summary_json_path else None,
+                summary_markdown=str(summary_markdown_path) if summary_markdown_path else None,
+            ),
+        )
         result = compose_agent.compose(
             case_id=case_id,
             case_dir=case_dir,
@@ -304,6 +348,13 @@ def execute_compose_job(
             progress_callback=_progress,
         )
     except Exception as exc:  # noqa: BLE001
+        log.error(
+            "Compose agent raised an exception",
+            extra=job_context.extra(
+                event="compose.service.error",
+                error=str(exc),
+            ),
+        )
         error_message = str(exc)
         runtime.fail(
             error=error_message,
@@ -344,6 +395,30 @@ def execute_compose_job(
         meta_updates["compose_lawyer_docx"] = str(artifacts.lawyer_docx)
 
     update_job_meta(case_id, org_id, str(job.id), meta_updates)
+    produced_artifact_count = sum(
+        1
+        for candidate in (
+            artifacts.timeline_file,
+            artifacts.graph_file,
+            artifacts.entities_file,
+            artifacts.timeline_summary,
+            artifacts.entity_brief,
+            artifacts.graph_visual,
+            artifacts.client_markdown,
+            artifacts.lawyer_markdown,
+            artifacts.client_docx,
+            artifacts.lawyer_docx,
+        )
+        if candidate
+    )
+    log.info(
+        "Compose agent completed successfully",
+        extra=job_context.extra(
+            event="compose.service.completed",
+            provider_chain=result.provider_chain,
+            artifact_count=produced_artifact_count,
+        ),
+    )
 
     created_titles: dict[str, set[str]] = {
         kind: set(
