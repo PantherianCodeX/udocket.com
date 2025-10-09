@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import threading
 import time
 from dataclasses import dataclass, field
@@ -157,20 +158,38 @@ class AzureSpeechBatchResult:
     metadata: JSONObject
 
 
+_ISO_DURATION_PATTERN = re.compile(
+    r"^P(?:(?P<days>\d+)D)?(?:T(?:(?P<hours>\d+)H)?(?:(?P<minutes>\d+)M)?(?:(?P<seconds>\d+(?:\.\d+)?)S)?)?$",
+    re.IGNORECASE,
+)
+
+
 def _json_payload(**items: object) -> JSONObject:
     return {key: coerce_json_value(value) for key, value in items.items()}
 
 
 def _iso8601_to_seconds(value: str) -> float:
-    parts = value.split(":")
-    if len(parts) != 3:
-        raise ValueError(f"Invalid duration: {value}")
-    hours, minutes = int(parts[0]), int(parts[1])
-    seconds_part = parts[2]
-    if "." in seconds_part:
-        seconds, fractional = seconds_part.split(".", 1)
-        return hours * 3600 + minutes * 60 + int(seconds) + float(f"0.{fractional}")
-    return hours * 3600 + minutes * 60 + int(seconds_part)
+    trimmed = value.strip()
+    if ":" in trimmed:
+        parts = trimmed.split(":")
+        if len(parts) != 3:
+            raise ValueError(f"Invalid duration: {value}")
+        hours, minutes = int(parts[0]), int(parts[1])
+        seconds_part = parts[2]
+        if "." in seconds_part:
+            seconds, fractional = seconds_part.split(".", 1)
+            return hours * 3600 + minutes * 60 + int(seconds) + float(f"0.{fractional}")
+        return hours * 3600 + minutes * 60 + int(seconds_part)
+    if trimmed.upper().startswith("P"):
+        match = _ISO_DURATION_PATTERN.fullmatch(trimmed)
+        if match is None:
+            raise ValueError(f"Invalid duration: {value}")
+        days = float(match.group("days") or 0)
+        hours = float(match.group("hours") or 0)
+        minutes = float(match.group("minutes") or 0)
+        seconds = float(match.group("seconds") or 0)
+        return days * 86400 + hours * 3600 + minutes * 60 + seconds
+    raise ValueError(f"Invalid duration: {value}")
 
 
 def _to_seconds(value: Any) -> float:
