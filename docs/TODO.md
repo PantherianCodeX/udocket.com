@@ -1,4 +1,3 @@
-Switching tools in case is very slow - it used to be very quick - re-optimize
 Remove UUID prefix from all filenames and ensure that UUID's are only used internally and in diagnostic data, not to the general user. Don't worry about permissions, leave diagnostic UUID display but use friendly UUID display with typehints via a template or something to make anything with a UUID friendly when it is necessary to display it. Keep full UUID in logs and othe diag data. For example, the downloads should all be renamed to omit the UUID and displays 
 
 Case Details Page
@@ -8,10 +7,6 @@ Job details do not have the ability to download the files - it should have the s
 Latest analyze result
 - should be more compact without boxes around everything.
 - Remove Providers field - replace with model
-
-
-Team Alerts:
-- not updating transcript reviews count. I only have 2 transcripts, both are approved and it says 3 are awaiting approval.
 
 
 Common pipeline progress:
