@@ -1,7 +1,8 @@
 from __future__ import annotations
 
  
-from datetime import datetime
+import os
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Sequence
 
 from django.utils import timezone
@@ -62,6 +63,39 @@ def build_case_team_alerts(case: Case, jobs: Sequence[Job]) -> List[Dict[str, An
     today = timezone.localdate()
     alerts: List[Dict[str, Any]] = []
 
+    def _is_transcription_job(job: Job) -> bool:
+        job_kind = (getattr(job, "job_kind", "") or "").strip().lower()
+        if job_kind.startswith("audio_conversion"):
+            return False
+        if job_kind in {"transcription"}:
+            return True
+        agent_type = (getattr(job, "agent_type", "") or "").strip().lower()
+        if any(token in agent_type for token in ("transcription", "speech")):
+            return True
+        if not job_kind:
+            mode_value = getattr(job, "mode", "")
+            if mode_value in (Job.Mode.BATCH, Job.Mode.ON_DEMAND):
+                if getattr(job, "audio_input", None) or getattr(job, "transcript_path", None):
+                    return True
+        return False
+
+    def _stale_job_cutoff(reference: datetime) -> datetime:
+        minutes = 60  # default: jobs older than 3 hours are considered stale
+        team_env = os.getenv("TEAM_ALERTS_STALE_MINUTES")
+        if team_env:
+            try:
+                minutes = max(1, int(team_env))
+            except ValueError:
+                minutes = max(1, minutes)
+        else:
+            recovery_env = os.getenv("JOB_RECOVERY_STALE_MINUTES")
+            if recovery_env:
+                try:
+                    minutes = max(minutes, max(1, int(recovery_env)) * 12)
+                except ValueError:
+                    minutes = max(1, minutes)
+        return reference - timedelta(minutes=minutes)
+
     if case.filing_deadline:
         days_until = (case.filing_deadline - today).days
         severity = _deadline_severity(days_until)
@@ -121,6 +155,7 @@ def build_case_team_alerts(case: Case, jobs: Sequence[Job]) -> List[Dict[str, An
         job
         for job in jobs
         if job.status == Job.Status.SUCCEEDED and job.review_status == Job.ReviewStatus.PENDING
+        and _is_transcription_job(job)
     ]
     if pending_reviews:
         count = len(pending_reviews)
@@ -149,19 +184,53 @@ def build_case_team_alerts(case: Case, jobs: Sequence[Job]) -> List[Dict[str, An
         }
     ]
     if active_jobs:
-        count = len(active_jobs)
-        alerts.append(
-            {
-                "id": "active-jobs",
-                "title": "Jobs in progress",
-                "summary": f"{count} job{'s' if count != 1 else ''} running",
-                "detail": "You will see updates here as they complete.",
-                "severity": "info",
-                "severity_class": ALERT_SEVERITY_CLASSES["info"],
-                "tooltip": "Jobs are actively running for this case.",
-                "sort_ts": now.timestamp() + 1,
-            }
-        )
+        cutoff = _stale_job_cutoff(now)
+        stale_jobs: List[Job] = []
+        recent_jobs: List[Job] = []
+        for job in active_jobs:
+            started_or_created = job.started_at or job.created_at
+            if started_or_created and started_or_created < cutoff:
+                stale_jobs.append(job)
+            else:
+                recent_jobs.append(job)
+        if recent_jobs:
+            recent_count = len(recent_jobs)
+            alerts.append(
+                {
+                    "id": "active-jobs",
+                    "title": "Jobs in progress",
+                    "summary": f"{recent_count} job{'s' if recent_count != 1 else ''} running",
+                    "detail": "You will see updates here as they complete.",
+                    "severity": "info",
+                    "severity_class": ALERT_SEVERITY_CLASSES["info"],
+                    "tooltip": "Jobs are actively running for this case.",
+                    "sort_ts": now.timestamp() + 1,
+                }
+            )
+        if stale_jobs:
+            stale_count = len(stale_jobs)
+            oldest_job = min(
+                (job.started_at or job.created_at for job in stale_jobs if job.started_at or job.created_at),
+                default=None,
+            )
+            detail = "No recent worker updates."
+            tooltip = "Jobs appear stuck without an active worker."
+            if oldest_job:
+                localized_oldest = timezone.localtime(oldest_job)
+                detail = f"Last activity {localized_oldest.strftime('%b %d, %Y %I:%M %p')}"
+                tooltip = f"No worker updates since {_format_datetime(oldest_job)}."
+            alerts.append(
+                {
+                    "id": "stale-jobs",
+                    "title": "Jobs may be stalled",
+                    "summary": f"{stale_count} job{'s' if stale_count != 1 else ''} need recovery",
+                    "detail": detail,
+                    "severity": "warning",
+                    "severity_class": ALERT_SEVERITY_CLASSES["warning"],
+                    "tooltip": tooltip,
+                    "sort_ts": now.timestamp() + 0.5,
+                }
+            )
 
     alerts.sort(
         key=lambda item: (
