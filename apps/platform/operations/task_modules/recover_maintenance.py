@@ -11,7 +11,7 @@ from celery import shared_task
 from django.utils import timezone
 
 from apps.platform.jobs.models import Job
-from apps.platform.operations.runtime import JobRuntimeContext, safe_job_log, safe_job_meta
+from apps.platform.operations.runtime import JobRuntimeContext, safe_job_meta
 from apps.platform.operations.utils import read_job_meta
 from apps.platform.operations.task_modules.analyze import analyze_job as _analyze_job
 from apps.platform.operations.task_modules.compose import compose_job as _compose_job
