@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import timedelta
-from typing import Any, Iterable, Mapping, Protocol, Sequence, cast
+from datetime import datetime, timedelta
+from typing import Any, Iterable, Mapping, Protocol, Sequence, Tuple, cast
 
 from celery import shared_task
 from django.utils import timezone
@@ -32,11 +32,16 @@ def _int_env(name: str, default: int) -> int:
         return default
 
 
-def _active_celery_task_ids(inspect_obj: Any, task_ids: Iterable[str]) -> set[str]:
+def _task_states(
+    celery_app: Any | None,
+    inspect_obj: Any,
+    task_ids: Iterable[str],
+) -> Tuple[set[str], set[str]]:
     ids = [tid for tid in task_ids if tid]
     active: set[str] = set()
+    pending: set[str] = set()
     if not ids:
-        return active
+        return active, pending
     if inspect_obj is not None:
         for attr in ("active", "reserved", "scheduled"):
             try:
@@ -51,7 +56,20 @@ def _active_celery_task_ids(inspect_obj: Any, task_ids: Iterable[str]) -> set[st
                     entry_state = entry.get("state") or entry.get("request", {}).get("state")
                     if entry_id in ids and entry_state in {None, "STARTED", "RETRY"}:
                         active.add(entry_id)
-    return active
+    if celery_app is not None:
+        for tid in ids:
+            if tid in active:
+                continue
+            try:
+                result = celery_app.AsyncResult(tid)
+                state = str(getattr(result, "state", "")).upper()
+            except Exception:
+                continue
+            if state in {"STARTED", "RETRY"}:
+                active.add(tid)
+            elif state in {"PENDING", "RECEIVED"}:
+                pending.add(tid)
+    return active, pending
 
 
 def _candidate_task_ids(meta: Mapping[str, object]) -> Sequence[str]:
@@ -84,12 +102,17 @@ def _finalize_cancel(job: Job, *, reason: str | None = None) -> None:
         task_name="recover_stale_jobs",
         task_id="",
     )
-    runtime.cancel(reason=reason or "Cancelled", log_message="Recovery: finalized cancellation")
+    finished = runtime.cancel(reason=reason or "Cancelled", log_message="Recovery: finalized cancellation")
     safe_job_meta(
         case_id,
         org_id,
         str(job.id),
-        {"celery_task_status": "cancelled", "celery_task_finished_at": timezone.now().isoformat()},
+        {
+            "celery_task_status": "cancelled",
+            "celery_task_finished_at": finished.isoformat() if finished else timezone.now().isoformat(),
+            "recovery_status": "cancelled",
+            "recovered_at": finished.isoformat() if finished else timezone.now().isoformat(),
+        },
     )
 
 
@@ -103,13 +126,41 @@ def _cannot_resume(job: Job, *, message: str) -> None:
         task_name="recover_stale_jobs",
         task_id="",
     )
-    runtime.fail(error=message, log_message=f"Recovery failed: {message}")
+    finished = runtime.fail(error=message, log_message=f"Recovery failed: {message}")
     safe_job_meta(
         case_id,
         org_id,
         str(job.id),
-        {"recovery_error": message, "recovered_at": timezone.now().isoformat()},
+        {
+            "recovery_error": message,
+            "recovered_at": finished.isoformat() if finished else timezone.now().isoformat(),
+            "recovery_status": "failed",
+        },
     )
+
+
+def _parse_timestamp(value: object) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        candidate = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if candidate.tzinfo is None:
+            return timezone.make_aware(candidate)
+        return candidate
+    except ValueError:
+        return None
+
+
+def _meta_int(meta: Mapping[str, object], key: str, default: int = 0) -> int:
+    raw = meta.get(key)
+    if isinstance(raw, int):
+        return raw
+    if isinstance(raw, str):
+        try:
+            return int(raw)
+        except ValueError:
+            return default
+    return default
 
 
 @shared_task(bind=True)
@@ -146,9 +197,11 @@ def recover_stale_jobs(self: TaskProtocol) -> dict[str, object]:
         return {"status": "ok", "checked": 0, "resumed": 0, "finalized": 0}
 
     # Inspect active tasks once
+    celery_app: Any | None = None
     try:
-        from apps.platform.config.celery import app as celery_app
+        from apps.platform.config.celery import app as celery_app_mod
 
+        celery_app = celery_app_mod
         inspect_obj = celery_app.control.inspect()
     except Exception:
         inspect_obj = None
@@ -162,8 +215,15 @@ def recover_stale_jobs(self: TaskProtocol) -> dict[str, object]:
         org_id = str(job.organization_id) if job.organization_id else None
         meta = read_job_meta(case_id, org_id, job_id)
         task_ids = _candidate_task_ids(meta)
-        active = _active_celery_task_ids(inspect_obj, task_ids) if task_ids else set()
+        active, pending = _task_states(celery_app, inspect_obj, task_ids) if task_ids else (set(), set())
         if active:
+            continue
+
+        now = timezone.now()
+        recovered_at_ts = _parse_timestamp(meta.get("recovered_at"))
+        recent_recovery = recovered_at_ts is not None and (now - recovered_at_ts) < timedelta(minutes=stale_minutes)
+        task_status = str(meta.get("celery_task_status") or "").strip().lower()
+        if pending and recent_recovery and task_status in {"queued", "pending", "retry"}:
             continue
 
         # No active worker for this job
@@ -178,14 +238,20 @@ def recover_stale_jobs(self: TaskProtocol) -> dict[str, object]:
         kind = job_kind or agent_type
 
         try:
+            runtime = JobRuntimeContext(
+                job=job,
+                case_id=case_id,
+                org_id=org_id,
+                task_name="recover_stale_jobs",
+                task_id=getattr(self.request, "id", "") or "",
+            )
             if kind in {"transcription", "transcribe", ""}:
                 # Resume transcription with original job args
                 if not job.audio_input:
                     _cannot_resume(job, message="Missing audio input path")
                     finalized += 1
                     continue
-                safe_job_log(case_id, org_id, job_id, "Recovery: restarting transcription task")
-                _transcribe_job.apply_async(
+                result = _transcribe_job.apply_async(
                     kwargs={
                         "case_id": case_id,
                         "job_id": job_id,
@@ -195,15 +261,37 @@ def recover_stale_jobs(self: TaskProtocol) -> dict[str, object]:
                         "language": job.language,
                     }
                 )
-                safe_job_meta(case_id, org_id, job_id, {"recovered_at": timezone.now().isoformat()})
+                new_task_id = str(getattr(result, "id", "") or "")
+                history: list[str] = []
+                for tid in task_ids:
+                    if tid and tid != new_task_id:
+                        history.append(tid)
+                if new_task_id:
+                    history.append(new_task_id)
+                attempts = _meta_int(meta, "recovery_attempts", 0) + 1
+                meta_updates = {
+                    "celery_task_id": new_task_id or meta.get("celery_task_id"),
+                    "celery_task_status": "queued",
+                    "recovered_at": now.isoformat(),
+                    "recovery_status": "queued",
+                    "recovery_attempts": attempts,
+                    "recovery_error": None,
+                }
+                if history:
+                    meta_updates["celery_task_history"] = history
+                runtime.transition(
+                    status=Job.Status.PENDING,
+                    log_message="Recovery: re-queued transcription job",
+                    meta_updates=meta_updates,
+                    job_updates={"started_at": None, "finished_at": None, "error_message": None, "upload_progress": None},
+                )
                 resumed += 1
                 continue
 
             if kind in {"analyze", "analysis", "summary"}:
-                safe_job_log(case_id, org_id, job_id, "Recovery: restarting analyze task")
                 llm_cfg = cast(str | None, meta.get("requested_llm_config_id"))
                 source_job_id = cast(str | None, meta.get("source_job_id"))
-                _analyze_job.apply_async(
+                result = _analyze_job.apply_async(
                     kwargs={
                         "case_id": case_id,
                         "job_id": job_id,
@@ -211,19 +299,38 @@ def recover_stale_jobs(self: TaskProtocol) -> dict[str, object]:
                         "source_job_id": source_job_id,
                     }
                 )
-                safe_job_meta(case_id, org_id, job_id, {"recovered_at": timezone.now().isoformat()})
+                new_task_id = str(getattr(result, "id", "") or "")
+                history = [tid for tid in task_ids if tid and tid != new_task_id]
+                if new_task_id:
+                    history.append(new_task_id)
+                attempts = _meta_int(meta, "recovery_attempts", 0) + 1
+                meta_updates = {
+                    "celery_task_id": new_task_id or meta.get("celery_task_id"),
+                    "celery_task_status": "queued",
+                    "recovered_at": now.isoformat(),
+                    "recovery_status": "queued",
+                    "recovery_attempts": attempts,
+                    "recovery_error": None,
+                }
+                if history:
+                    meta_updates["celery_task_history"] = history
+                runtime.transition(
+                    status=Job.Status.PENDING,
+                    log_message="Recovery: re-queued analyze job",
+                    meta_updates=meta_updates,
+                    job_updates={"started_at": None, "finished_at": None, "error_message": None, "upload_progress": None},
+                )
                 resumed += 1
                 continue
 
             if kind in {"compose"}:
-                safe_job_log(case_id, org_id, job_id, "Recovery: restarting compose task")
                 summary_job_id = cast(str | None, meta.get("summary_job_id"))
                 llm_cfg = cast(str | None, meta.get("requested_llm_config_id"))
                 if not summary_job_id:
                     _cannot_resume(job, message="Missing summary_job_id for compose")
                     finalized += 1
                     continue
-                _compose_job.apply_async(
+                result = _compose_job.apply_async(
                     kwargs={
                         "case_id": case_id,
                         "job_id": job_id,
@@ -231,7 +338,27 @@ def recover_stale_jobs(self: TaskProtocol) -> dict[str, object]:
                         "llm_config_id": llm_cfg,
                     }
                 )
-                safe_job_meta(case_id, org_id, job_id, {"recovered_at": timezone.now().isoformat()})
+                new_task_id = str(getattr(result, "id", "") or "")
+                history = [tid for tid in task_ids if tid and tid != new_task_id]
+                if new_task_id:
+                    history.append(new_task_id)
+                attempts = _meta_int(meta, "recovery_attempts", 0) + 1
+                meta_updates = {
+                    "celery_task_id": new_task_id or meta.get("celery_task_id"),
+                    "celery_task_status": "queued",
+                    "recovered_at": now.isoformat(),
+                    "recovery_status": "queued",
+                    "recovery_attempts": attempts,
+                    "recovery_error": None,
+                }
+                if history:
+                    meta_updates["celery_task_history"] = history
+                runtime.transition(
+                    status=Job.Status.PENDING,
+                    log_message="Recovery: re-queued compose job",
+                    meta_updates=meta_updates,
+                    job_updates={"started_at": None, "finished_at": None, "error_message": None, "upload_progress": None},
+                )
                 resumed += 1
                 continue
 

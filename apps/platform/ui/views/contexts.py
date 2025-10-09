@@ -71,7 +71,12 @@ def user_can_review_case(user: Optional[User], case: Case) -> bool:
     return has_capability(user, str(case.id), "case.update")
 
 
-def compute_case_tool_state(request: HttpRequest, case: Case) -> Dict[str, Any]:
+def compute_case_tool_state(
+    request: HttpRequest,
+    case: Case,
+    *,
+    active_tool: str | None = None,
+) -> Dict[str, Any]:
     jobs_qs = (
         Job.objects.select_related("case", "case__organization", "reviewed_by")
         .filter(case=case)
@@ -193,6 +198,7 @@ def compute_case_tool_state(request: HttpRequest, case: Case) -> Dict[str, Any]:
         job_param_names=table_state.param_names,
         job_has_advanced_filters=table_state.has_advanced_filters,
         job_filters_active=table_state.active_filters,
+        active_key=active_tool,
     )
 
     case_details_panel = tool_panels.get("intake") or {}

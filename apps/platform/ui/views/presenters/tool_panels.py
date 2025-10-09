@@ -150,6 +150,7 @@ def build_tool_panels(
     job_param_names: Optional[Sequence[str]] = None,
     job_has_advanced_filters: bool = False,
     job_filters_active: int = 0,
+    active_key: str | None = None,
 ) -> Dict[str, Dict[str, Any]]:
     progress_lookup = {item["key"]: item for item in progress_items}
     analysis_lookup = {module["key"]: module for module in analysis_modules}
@@ -189,6 +190,9 @@ def build_tool_panels(
             updated_by=notes.get("updated_by"),
             user_can_add=notes.get("user_can_add", False),
         )
+
+    def _expand(key: str) -> bool:
+        return active_key is None or key == active_key
 
     owner_labels = case_owner_labels(memberships)
     owner_ids = [str(m.user_id) for m in case_owner_memberships(memberships)]
@@ -273,129 +277,99 @@ def build_tool_panels(
     questionnaire_artifacts = artifacts_by_type.get("QUESTIONNAIRE", [])
 
     case_panel = _panel_from_definition("intake")
-    case_notes = empty_notes.copy()
-    case_notes["user_can_add"] = user_can_review
     case_panel.update(
         {
             "status_label": case_status["label"],
             "status_class": case_status["class"],
             "updated_at": case_status.get("updated") or case.updated_at,
             "progress_detail": case_status.get("detail"),
-            "notes": case_notes,
-            "notes_panel_html": _notes_panel(case_notes),
             "team_alerts": team_alerts,
-            "meta": [
-                {"label": "Owners", "value": ", ".join(owner_labels) or "Unassigned"},
-                {"label": "Reviewer", "value": reviewer_label or "Unassigned"},
-                {"label": "Client", "value": client_label or "Unassigned"},
-                {"label": "Case ID", "value": case.id},
-            ],
-            "body_context": {
-                "case": case,
-                "fields": case_fields,
-                "field_groups": field_groups,
-                "owner_labels": owner_labels,
-                "owner_options": org_options,
-                "current_owner_id": owner_id,
-                "reviewer_id": str(case.reviewer_id) if case.reviewer_id else "",
-                "client_user_id": str(case.client_user_id) if case.client_user_id else "",
-                "reviewer_options": org_options,
-                "client_options": org_options,
-                "contributor_options": org_options,
-                "contributor_ids": [
-                    str(membership.user_id)
-                    for membership in memberships
-                    if getattr(membership, "role", "") == CaseMembership.Role.CONTRIBUTOR
-                ],
-                "update_url": reverse("ui-case-details-update", kwargs={"case_id": case.id}),
-                "job_summary": job_summary,
-                "job_summary_last_dt": job_summary_last_dt,
-                "representation_choices": representation_choices,
-                "current_representation": current_representation,
-                "engagement_options": engagement_options,
-                "current_engagement": current_engagement,
-                "questionnaire": {
-                    "latest": questionnaire_artifacts[0] if questionnaire_artifacts else None,
-                    "history": questionnaire_artifacts[1:5] if questionnaire_artifacts else [],
-                    "manual_edit_url": "#",
-                    "agent_edit_available": False,
-                },
-            },
-            "jobs": job_rows,
-            "jobs_title": "All Jobs",
-            "jobs_pill": "Live updates",
-            "jobs_empty_message": "No jobs recorded yet.",
-            "case_id": str(case.id),
-            "jobs_columns": list(CASE_JOB_TABLE_COLUMNS),
-            "jobs_column_ids": [col["id"] for col in CASE_JOB_TABLE_COLUMNS],
-            "jobs_filters": DEFAULT_TABLE_FILTERS,
-            "jobs_show_identifiers": True,
-            "jobs_limit": job_row_limit,
-            "jobs_limit_options": list(job_limit_choices),
-            "jobs_total_count": job_row_total,
-            "jobs_table": table_config(
-                panel_key=case_panel["key"],
-                title="All Jobs",
-                pill="Live updates",
-                rows=job_rows,
-                columns=CASE_JOB_TABLE_COLUMNS,
-                column_ids=[col["id"] for col in CASE_JOB_TABLE_COLUMNS],
-                filters=job_filters or DEFAULT_TABLE_FILTERS,
-                empty_message="No jobs recorded yet.",
-                show_identifiers=True,
-                case_id=str(case.id),
-                limit_value=job_row_limit,
-                limit_options=job_limit_choices,
-                total_count=job_row_total,
-                pagination=job_pagination,
-                param_prefix=job_param_prefix,
-                filter_param_names=job_param_names,
-                filters_active=job_filters_active,
-                has_advanced_filters=job_has_advanced_filters,
-            ),
         }
+    )
+    case_panel["meta"] = [
+        {"label": "Owners", "value": ", ".join(owner_labels) or "Unassigned"},
+        {"label": "Reviewer", "value": reviewer_label or "Unassigned"},
+        {"label": "Client", "value": client_label or "Unassigned"},
+        {"label": "Case ID", "value": case.id},
+    ]
+    base_case_notes = empty_notes.copy()
+    base_case_notes["user_can_add"] = user_can_review
+    case_panel["notes"] = base_case_notes
+    case_panel["notes_panel_html"] = _notes_panel(base_case_notes) if _expand("intake") else ""
+    if _expand("intake"):
+        case_panel["body_context"] = {
+            "case": case,
+            "fields": case_fields,
+            "field_groups": field_groups,
+            "owner_labels": owner_labels,
+            "owner_options": org_options,
+            "current_owner_id": owner_id,
+            "reviewer_id": str(case.reviewer_id) if case.reviewer_id else "",
+            "client_user_id": str(case.client_user_id) if case.client_user_id else "",
+            "reviewer_options": org_options,
+            "client_options": org_options,
+            "contributor_options": org_options,
+            "contributor_ids": [
+                str(membership.user_id)
+                for membership in memberships
+                if getattr(membership, "role", "") == CaseMembership.Role.CONTRIBUTOR
+            ],
+            "update_url": reverse("ui-case-details-update", kwargs={"case_id": case.id}),
+            "job_summary": job_summary,
+            "job_summary_last_dt": job_summary_last_dt,
+            "representation_choices": representation_choices,
+            "current_representation": current_representation,
+            "engagement_options": engagement_options,
+            "current_engagement": current_engagement,
+            "questionnaire": {
+                "latest": questionnaire_artifacts[0] if questionnaire_artifacts else None,
+                "history": questionnaire_artifacts[1:5] if questionnaire_artifacts else [],
+                "manual_edit_url": "#",
+                "agent_edit_available": False,
+            },
+        }
+    else:
+        case_panel["body_context"] = {}
+    case_panel["jobs"] = job_rows
+    case_panel["jobs_title"] = "All Jobs"
+    case_panel["jobs_pill"] = "Live updates"
+    case_panel["jobs_empty_message"] = "No jobs recorded yet."
+    case_panel["case_id"] = str(case.id)
+    case_panel["jobs_columns"] = list(CASE_JOB_TABLE_COLUMNS)
+    case_panel["jobs_column_ids"] = [col["id"] for col in CASE_JOB_TABLE_COLUMNS]
+    case_panel["jobs_filters"] = job_filters or DEFAULT_TABLE_FILTERS
+    case_panel["jobs_show_identifiers"] = True
+    case_panel["jobs_limit"] = job_row_limit
+    case_panel["jobs_limit_options"] = list(job_limit_choices)
+    case_panel["jobs_total_count"] = job_row_total
+    case_panel["jobs_table"] = (
+        table_config(
+            panel_key=case_panel["key"],
+            title="All Jobs",
+            pill="Live updates",
+            rows=job_rows,
+            columns=CASE_JOB_TABLE_COLUMNS,
+            column_ids=[col["id"] for col in CASE_JOB_TABLE_COLUMNS],
+            filters=job_filters or DEFAULT_TABLE_FILTERS,
+            empty_message="No jobs recorded yet.",
+            show_identifiers=True,
+            case_id=str(case.id),
+            limit_value=job_row_limit,
+            limit_options=job_limit_choices,
+            total_count=job_row_total,
+            pagination=job_pagination,
+            param_prefix=job_param_prefix,
+            filter_param_names=job_param_names,
+            filters_active=job_filters_active,
+            has_advanced_filters=job_has_advanced_filters,
+        )
+        if _expand("intake")
+        else None
     )
     panels[case_panel["key"]] = case_panel
 
     transcription_status = status_payload(progress_lookup, "transcription", "Not Started")
     transcription_jobs = jobs_by_agent(job_rows, keywords=("transcription", "speech", "audio"), include_conversion=True)
-
-    latest_job_title = None
-    if latest_job:
-        latest_artifact = (transcript_artifacts or {}).get(str(latest_job.id)) if transcript_artifacts else None
-        latest_job_title = friendly_job_title(
-            latest_job,
-            latest_job_telemetry,
-            latest_artifact,
-        )
-
-    latest_downloads = []
-    if latest_job:
-        latest_payload = telemetry_map.get(str(latest_job.id), {})
-        downloads = (latest_payload or {}).get("downloads") or []
-        latest_downloads = [download for download in downloads if download.get("url")]
-
-    # notes
-    notes_payload = next((row.get("notes") for row in job_rows if row.get("job") == latest_job), None)
-    transcribe_notes = notes_payload or empty_notes.copy()
-    if latest_job:
-        serialized_notes = serialize_notes(JobNote.objects.filter(job=latest_job))
-        latest_entry = serialized_notes[0] if serialized_notes else None
-        updated_at = latest_entry.get("created_at") if latest_entry else None
-        updated_by = (
-            latest_entry.get("created_by_label")
-            or latest_entry.get("created_by")
-            if latest_entry
-            else None
-        )
-        transcribe_notes = {
-            "job_id": str(latest_job.id),
-            "entries": serialized_notes,
-            "updated_at": updated_at,
-            "updated_by": updated_by,
-            "user_can_add": user_can_review,
-            "count": len(serialized_notes),
-        }
 
     transcribe_panel = _panel_from_definition("transcribe")
     transcribe_panel.update(
@@ -404,68 +378,119 @@ def build_tool_panels(
             "status_class": transcription_status["class"],
             "updated_at": transcription_status["updated"],
             "progress_detail": transcription_status.get("detail"),
-            "notes": transcribe_notes,
-            "notes_panel_html": _notes_panel(transcribe_notes),
             "team_alerts": team_alerts,
-            "meta": [
-                {
-                    "label": "Approved",
-                    "value": sum(
-                        1
-                        for item in transcription_jobs
-                        if getattr(item.get("job"), "review_status", "") == Job.ReviewStatus.APPROVED
-                    ),
-                },
-                {
-                    "label": "Total Jobs",
-                    "value": len(transcription_jobs),
-                },
-            ],
-            "body_context": {
-                "case": case,
-                "form_action": reverse("ui-job-create", kwargs={"case_id": case.id}),
-                "diarization_default": True,
-                "force_wav_default": False,
-                "language_default": getattr(latest_job, "language", "en-CA") if latest_job else "en-CA",
-                "latest_job": latest_job,
-                "latest_job_telemetry": latest_job_telemetry,
-                "latest_job_title": latest_job_title,
-                "downloads": latest_downloads,
-                "transcript_sources": transcript_sources,
-                "approved_transcripts": [item for item in transcript_sources if item.get("approved")],
-                "can_review": user_can_review,
-            },
-            "jobs": transcription_jobs,
-            "jobs_title": "Transcription Jobs",
-            "jobs_pill": "Live updates",
-            "jobs_empty_message": "No transcription jobs yet.",
-            "case_id": str(case.id),
-            "jobs_columns": list(CASE_JOB_TABLE_COLUMNS),
-            "jobs_column_ids": [col["id"] for col in CASE_JOB_TABLE_COLUMNS],
-            "jobs_filters": DEFAULT_TABLE_FILTERS,
-            "jobs_show_identifiers": True,
-            "jobs_table": table_config(
-                panel_key=transcribe_panel["key"],
-                title="Transcription Jobs",
-                pill="Live updates",
-                rows=transcription_jobs,
-                columns=CASE_JOB_TABLE_COLUMNS,
-                column_ids=[col["id"] for col in CASE_JOB_TABLE_COLUMNS],
-                filters=DEFAULT_TABLE_FILTERS,
-                empty_message="No transcription jobs yet.",
-                show_identifiers=True,
-                case_id=str(case.id),
-            ),
         }
     )
+    approved_count = sum(
+        1
+        for item in transcription_jobs
+        if getattr(item.get("job"), "review_status", "") == Job.ReviewStatus.APPROVED
+    )
+    transcribe_panel["meta"] = [
+        {"label": "Approved", "value": approved_count},
+        {"label": "Total Jobs", "value": len(transcription_jobs)},
+    ]
+    if _expand("transcribe"):
+        latest_job_title = None
+        latest_downloads: list[dict[str, Any]] = []
+        if latest_job:
+            latest_artifact = (transcript_artifacts or {}).get(str(latest_job.id)) if transcript_artifacts else None
+            latest_job_title = friendly_job_title(
+                latest_job,
+                latest_job_telemetry,
+                latest_artifact,
+            )
+            latest_payload = telemetry_map.get(str(latest_job.id), {})
+            downloads = (latest_payload or {}).get("downloads") or []
+            latest_downloads = [download for download in downloads if download.get("url")]
+
+        notes_payload = next((row.get("notes") for row in job_rows if row.get("job") == latest_job), None)
+        transcribe_notes = notes_payload or empty_notes.copy()
+        if latest_job:
+            serialized_notes = serialize_notes(JobNote.objects.filter(job=latest_job))
+            latest_entry = serialized_notes[0] if serialized_notes else None
+            updated_at = latest_entry.get("created_at") if latest_entry else None
+            updated_by = (
+                latest_entry.get("created_by_label")
+                or latest_entry.get("created_by")
+                if latest_entry
+                else None
+            )
+            transcribe_notes = {
+                "job_id": str(latest_job.id),
+                "entries": serialized_notes,
+                "updated_at": updated_at,
+                "updated_by": updated_by,
+                "user_can_add": user_can_review,
+                "count": len(serialized_notes),
+            }
+        transcribe_panel["notes"] = transcribe_notes
+        transcribe_panel["notes_panel_html"] = _notes_panel(transcribe_notes)
+        transcribe_panel["body_context"] = {
+            "case": case,
+            "form_action": reverse("ui-job-create", kwargs={"case_id": case.id}),
+            "diarization_default": True,
+            "force_wav_default": False,
+            "language_default": getattr(latest_job, "language", "en-CA") if latest_job else "en-CA",
+            "latest_job": latest_job,
+            "latest_job_telemetry": latest_job_telemetry,
+            "latest_job_title": latest_job_title,
+            "downloads": latest_downloads,
+            "transcript_sources": transcript_sources,
+            "approved_transcripts": [item for item in transcript_sources if item.get("approved")],
+            "can_review": user_can_review,
+        }
+        transcribe_panel["jobs"] = transcription_jobs
+        transcribe_panel["jobs_title"] = "Transcription Jobs"
+        transcribe_panel["jobs_pill"] = "Uploads"
+        transcribe_panel["jobs_empty_message"] = "No transcription jobs yet."
+        transcribe_panel["case_id"] = str(case.id)
+        transcribe_panel["jobs_columns"] = list(CASE_JOB_TABLE_COLUMNS)
+        transcribe_panel["jobs_column_ids"] = [col["id"] for col in CASE_JOB_TABLE_COLUMNS]
+        transcribe_panel["jobs_filters"] = DEFAULT_TABLE_FILTERS
+        transcribe_panel["jobs_show_identifiers"] = True
+        transcribe_panel["jobs_table"] = table_config(
+            panel_key=transcribe_panel["key"],
+            title="Transcription Jobs",
+            pill="Uploads",
+            rows=transcription_jobs,
+            columns=CASE_JOB_TABLE_COLUMNS,
+            column_ids=[col["id"] for col in CASE_JOB_TABLE_COLUMNS],
+            filters=DEFAULT_TABLE_FILTERS,
+            empty_message="No transcription jobs yet.",
+            show_identifiers=True,
+            case_id=str(case.id),
+        )
+    else:
+        transcribe_panel["notes"] = empty_notes.copy()
+        transcribe_panel["notes_panel_html"] = ""
+        transcribe_panel["body_context"] = {
+            "case": case,
+            "transcript_sources": transcript_sources,
+            "approved_transcripts": [item for item in transcript_sources if item.get("approved")],
+        }
+        transcribe_panel["jobs"] = transcription_jobs
+        transcribe_panel["jobs_title"] = "Transcription Jobs"
+        transcribe_panel["jobs_pill"] = "Uploads"
+        transcribe_panel["jobs_empty_message"] = "No transcription jobs yet."
+        transcribe_panel["case_id"] = str(case.id)
+        transcribe_panel["jobs_columns"] = list(CASE_JOB_TABLE_COLUMNS)
+        transcribe_panel["jobs_column_ids"] = [col["id"] for col in CASE_JOB_TABLE_COLUMNS]
+        transcribe_panel["jobs_filters"] = DEFAULT_TABLE_FILTERS
+        transcribe_panel["jobs_show_identifiers"] = True
+        transcribe_panel["jobs_table"] = None
     panels[transcribe_panel["key"]] = transcribe_panel
 
     if not return_url:
         return_url = reverse("ui-case-detail", kwargs={"case_id": case.id})
 
-    analysis_llm = build_analysis_llm_context(case, return_url=return_url)
-    analyze_llm = analysis_llm["analyze"]
-    compose_llm = analysis_llm["compose"]
+    analysis_llm_cache: Dict[str, Any] | None = None
+
+    def _analysis_llm() -> Dict[str, Any]:
+        nonlocal analysis_llm_cache
+        if analysis_llm_cache is None:
+            analysis_llm_cache = build_analysis_llm_context(case, return_url=return_url)
+        return analysis_llm_cache
     analyze_status = status_payload(progress_lookup, "analyze", "Not Started")
     analyze_module = analysis_lookup.get("analyze") or {}
     analyze_latest = analyze_module.get("latest") or {}
@@ -482,46 +507,62 @@ def build_tool_panels(
             "status_class": analyze_status["class"],
             "updated_at": analyze_status["updated"] or analyze_latest.get("created_at"),
             "progress_detail": analyze_status.get("detail"),
-            "notes": analyze_module.get("notes") or empty_notes.copy(),
-            "notes_panel_html": analyze_module.get("notes_panel_html"),
             "team_alerts": analyze_module.get("team_alerts", team_alerts),
-            "meta": [
-                {"label": "Summaries", "value": len(analyze_history) + (1 if analyze_latest else 0)},
-                {
-                    "label": "Approved transcripts",
-                    "value": sum(1 for src in transcript_sources if src.get("approved")),
-                },
-            ],
-            "body_context": {
-                "case": case,
-                "module": analyze_module,
-                "transcripts": transcript_sources,
-                "job_endpoint_template": analyze_panel.get("job_endpoint_template"),
-                "analyze_llm": analyze_llm,
-            },
-            "jobs": analyze_jobs,
-            "jobs_title": "Analyze Jobs",
-            "jobs_pill": "Automations",
-            "jobs_empty_message": "No analyze jobs yet. Queue one above.",
-            "case_id": str(case.id),
-            "jobs_columns": list(GLOBAL_JOB_TABLE_COLUMNS),
-            "jobs_column_ids": [col["id"] for col in GLOBAL_JOB_TABLE_COLUMNS],
-            "jobs_filters": DEFAULT_TABLE_FILTERS,
-            "jobs_show_identifiers": False,
-            "jobs_table": table_config(
-                panel_key=analyze_panel["key"],
-                title="Analyze Jobs",
-                pill="Automations",
-                rows=analyze_jobs,
-                columns=GLOBAL_JOB_TABLE_COLUMNS,
-                column_ids=[col["id"] for col in GLOBAL_JOB_TABLE_COLUMNS],
-                filters=DEFAULT_TABLE_FILTERS,
-                empty_message="No analyze jobs yet. Queue one above.",
-                show_identifiers=False,
-                case_id=str(case.id),
-            ),
         }
     )
+    analyze_panel["meta"] = [
+        {"label": "Summaries", "value": len(analyze_history) + (1 if analyze_latest else 0)},
+        {"label": "Approved transcripts", "value": sum(1 for src in transcript_sources if src.get("approved"))},
+    ]
+    analyze_notes = analyze_module.get("notes") or empty_notes.copy()
+    analyze_panel["notes"] = analyze_notes
+    analyze_panel["notes_panel_html"] = analyze_module.get("notes_panel_html") if _expand("analyze") else ""
+    if _expand("analyze"):
+        llm_map = _analysis_llm()
+        analyze_panel["body_context"] = {
+            "case": case,
+            "module": analyze_module,
+            "transcripts": transcript_sources,
+            "job_endpoint_template": analyze_panel.get("job_endpoint_template"),
+            "analyze_llm": llm_map.get("analyze"),
+        }
+        analyze_panel["jobs"] = analyze_jobs
+        analyze_panel["jobs_title"] = "Analyze Jobs"
+        analyze_panel["jobs_pill"] = "Automations"
+        analyze_panel["jobs_empty_message"] = "No analyze jobs yet. Queue one above."
+        analyze_panel["case_id"] = str(case.id)
+        analyze_panel["jobs_columns"] = list(GLOBAL_JOB_TABLE_COLUMNS)
+        analyze_panel["jobs_column_ids"] = [col["id"] for col in GLOBAL_JOB_TABLE_COLUMNS]
+        analyze_panel["jobs_filters"] = DEFAULT_TABLE_FILTERS
+        analyze_panel["jobs_show_identifiers"] = False
+        analyze_panel["jobs_table"] = table_config(
+            panel_key=analyze_panel["key"],
+            title="Analyze Jobs",
+            pill="Automations",
+            rows=analyze_jobs,
+            columns=GLOBAL_JOB_TABLE_COLUMNS,
+            column_ids=[col["id"] for col in GLOBAL_JOB_TABLE_COLUMNS],
+            filters=DEFAULT_TABLE_FILTERS,
+            empty_message="No analyze jobs yet. Queue one above.",
+            show_identifiers=False,
+            case_id=str(case.id),
+        )
+    else:
+        analyze_panel["body_context"] = {
+            "case": case,
+            "module": analyze_module,
+            "transcripts": transcript_sources,
+        }
+        analyze_panel["jobs"] = analyze_jobs
+        analyze_panel["jobs_title"] = "Analyze Jobs"
+        analyze_panel["jobs_pill"] = "Automations"
+        analyze_panel["jobs_empty_message"] = "No analyze jobs yet. Queue one above."
+        analyze_panel["case_id"] = str(case.id)
+        analyze_panel["jobs_columns"] = list(GLOBAL_JOB_TABLE_COLUMNS)
+        analyze_panel["jobs_column_ids"] = [col["id"] for col in GLOBAL_JOB_TABLE_COLUMNS]
+        analyze_panel["jobs_filters"] = DEFAULT_TABLE_FILTERS
+        analyze_panel["jobs_show_identifiers"] = False
+        analyze_panel["jobs_table"] = None
     panels[analyze_panel["key"]] = analyze_panel
 
     compose_status = status_payload(progress_lookup, "compose", "Not Started")
@@ -537,53 +578,70 @@ def build_tool_panels(
             "status_class": compose_status["class"],
             "updated_at": compose_status["updated"] or compose_latest.get("created_at"),
             "progress_detail": compose_status.get("detail"),
-            "notes": compose_module.get("notes") or empty_notes.copy(),
-            "notes_panel_html": compose_module.get("notes_panel_html"),
             "team_alerts": compose_module.get("team_alerts", team_alerts),
-            "meta": [
-                {
-                    "label": "Deliverables",
-                    "value": len(compose_details.get("deliverables", [])),
-                },
-                {
-                    "label": "History",
-                    "value": len(compose_history) + (1 if compose_latest else 0),
-                },
-            ],
-            "body_context": {
-                "case": case,
-                "module": compose_module,
-                "analyze_module": analyze_module,
-                "transcripts": transcript_sources,
-                "summaries": compose_module.get("available_summaries") or [],
-                "compose_llm": compose_llm,
-                "job_endpoint_template": compose_panel.get("job_endpoint_template"),
-                "dependencies": compose_module.get("dependencies")
-                or {"has_summary": False, "has_transcript": False},
-            },
-            "jobs": compose_jobs,
-            "jobs_title": "Compose Jobs",
-            "jobs_pill": "Automations",
-            "jobs_empty_message": "No compose jobs yet. Generate deliverables above.",
-            "case_id": str(case.id),
-            "jobs_columns": list(GLOBAL_JOB_TABLE_COLUMNS),
-            "jobs_column_ids": [col["id"] for col in GLOBAL_JOB_TABLE_COLUMNS],
-            "jobs_filters": DEFAULT_TABLE_FILTERS,
-            "jobs_show_identifiers": False,
-            "jobs_table": table_config(
-                panel_key=compose_panel["key"],
-                title="Compose Jobs",
-                pill="Automations",
-                rows=compose_jobs,
-                columns=GLOBAL_JOB_TABLE_COLUMNS,
-                column_ids=[col["id"] for col in GLOBAL_JOB_TABLE_COLUMNS],
-                filters=DEFAULT_TABLE_FILTERS,
-                empty_message="No compose jobs yet. Generate deliverables above.",
-                show_identifiers=False,
-                case_id=str(case.id),
-            ),
         }
     )
+    compose_panel["meta"] = [
+        {"label": "Deliverables", "value": len(compose_details.get("deliverables", []))},
+        {"label": "History", "value": len(compose_history) + (1 if compose_latest else 0)},
+    ]
+    compose_notes = compose_module.get("notes") or empty_notes.copy()
+    compose_panel["notes"] = compose_notes
+    compose_panel["notes_panel_html"] = compose_module.get("notes_panel_html") if _expand("compose") else ""
+    if _expand("compose"):
+        llm_map = _analysis_llm()
+        compose_panel["body_context"] = {
+            "case": case,
+            "module": compose_module,
+            "analyze_module": analyze_module,
+            "transcripts": transcript_sources,
+            "summaries": compose_module.get("available_summaries") or [],
+            "compose_llm": llm_map.get("compose"),
+            "job_endpoint_template": compose_panel.get("job_endpoint_template"),
+            "dependencies": compose_module.get("dependencies")
+            or {"has_summary": False, "has_transcript": False},
+        }
+        compose_panel["jobs"] = compose_jobs
+        compose_panel["jobs_title"] = "Compose Jobs"
+        compose_panel["jobs_pill"] = "Automations"
+        compose_panel["jobs_empty_message"] = "No compose jobs yet. Generate deliverables above."
+        compose_panel["case_id"] = str(case.id)
+        compose_panel["jobs_columns"] = list(GLOBAL_JOB_TABLE_COLUMNS)
+        compose_panel["jobs_column_ids"] = [col["id"] for col in GLOBAL_JOB_TABLE_COLUMNS]
+        compose_panel["jobs_filters"] = DEFAULT_TABLE_FILTERS
+        compose_panel["jobs_show_identifiers"] = False
+        compose_panel["jobs_table"] = table_config(
+            panel_key=compose_panel["key"],
+            title="Compose Jobs",
+            pill="Automations",
+            rows=compose_jobs,
+            columns=GLOBAL_JOB_TABLE_COLUMNS,
+            column_ids=[col["id"] for col in GLOBAL_JOB_TABLE_COLUMNS],
+            filters=DEFAULT_TABLE_FILTERS,
+            empty_message="No compose jobs yet. Generate deliverables above.",
+            show_identifiers=False,
+            case_id=str(case.id),
+        )
+    else:
+        compose_panel["body_context"] = {
+            "case": case,
+            "module": compose_module,
+            "analyze_module": analyze_module,
+            "transcripts": transcript_sources,
+            "summaries": compose_module.get("available_summaries") or [],
+            "dependencies": compose_module.get("dependencies")
+            or {"has_summary": False, "has_transcript": False},
+        }
+        compose_panel["jobs"] = compose_jobs
+        compose_panel["jobs_title"] = "Compose Jobs"
+        compose_panel["jobs_pill"] = "Automations"
+        compose_panel["jobs_empty_message"] = "No compose jobs yet. Generate deliverables above."
+        compose_panel["case_id"] = str(case.id)
+        compose_panel["jobs_columns"] = list(GLOBAL_JOB_TABLE_COLUMNS)
+        compose_panel["jobs_column_ids"] = [col["id"] for col in GLOBAL_JOB_TABLE_COLUMNS]
+        compose_panel["jobs_filters"] = DEFAULT_TABLE_FILTERS
+        compose_panel["jobs_show_identifiers"] = False
+        compose_panel["jobs_table"] = None
     panels[compose_panel["key"]] = compose_panel
 
     return panels

@@ -16,6 +16,7 @@ from apps.platform.cases.models import Case
 from ..auth import ensure_authenticated
 from ..contexts import compute_case_tool_state, get_case_and_org
 from ..jobs import create_job
+from ..presenters.tool_registry import iter_tool_definitions
 from .helpers import render_case_panel_with_refresh, resolve_panel, resolve_tool_key
 
 
@@ -41,15 +42,16 @@ def case_detail(request: HttpRequest, case_id: str) -> HttpResponse:
             return response
         return redirect("ui-case-detail", case_id=case_id)
 
-    state = compute_case_tool_state(request, case)
+    available_keys = [definition.key for definition in iter_tool_definitions()]
+    raw_tool = (request.GET.get("tool") or request.GET.get("module") or "")
+    initial_tool_key = resolve_tool_key(raw_tool, available_keys, default="intake")
+
+    state = compute_case_tool_state(request, case, active_tool=initial_tool_key)
     tool_panels: Dict[str, Dict[str, object]] = state["tool_panels"]
     developer_cards = state["developer_cards"]
     case_header = state["case_header"]
     job_summary = state["job_summary"]
     latest_activity_ts = state["latest_activity_ts"]
-
-    raw_tool = (request.GET.get("tool") or request.GET.get("module") or "")
-    initial_tool_key = resolve_tool_key(raw_tool, tool_panels.keys(), default="intake")
     initial_panel = tool_panels.get(initial_tool_key)
 
     context = {
@@ -71,7 +73,9 @@ def case_tool_panel(request: HttpRequest, case_id: str, tool_key: str) -> HttpRe
         return auth_response
 
     case, _ = get_case_and_org(request, case_id)
-    state = compute_case_tool_state(request, case)
+    available_keys = [definition.key for definition in iter_tool_definitions()]
+    requested_key = resolve_tool_key(tool_key, available_keys, default="", allow_fallback=False)
+    state = compute_case_tool_state(request, case, active_tool=requested_key or None)
     panels = state["tool_panels"]
 
     resolved_key, panel = resolve_panel(tool_key, panels, allow_fallback=False)

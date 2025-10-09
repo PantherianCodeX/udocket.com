@@ -102,7 +102,7 @@ def case_details_update(request: HttpRequest, case_id: str) -> HttpResponse:
     engagement_value = (request.POST.get("engagement_model") or "standard").strip().lower()
 
     if form_errors:
-        state = compute_case_tool_state(request, case)
+        state = compute_case_tool_state(request, case, active_tool="intake")
         panel = state["tool_panels"].get("intake")
         if panel:
             panel_body = panel.get("body_context", {})
@@ -154,7 +154,7 @@ def case_details_update(request: HttpRequest, case_id: str) -> HttpResponse:
     if update_fields:
         case.save(update_fields=list(set(update_fields)))
 
-    state = compute_case_tool_state(request, case)
+    state = compute_case_tool_state(request, case, active_tool="intake")
     panel = state["tool_panels"].get("intake")
     if panel is None:
         return render(request, "platform_ui/tools/_panel.html", {"panel": panel})

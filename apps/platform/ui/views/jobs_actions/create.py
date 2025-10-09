@@ -131,7 +131,7 @@ def create_job(request: HttpRequest, case_id: str) -> HttpResponse:
     telemetry_dict = job_telemetry_payload(job, request, ui_mode=True)
 
     if request.headers.get("HX-Request"):
-        state = compute_case_tool_state(request, case)
+        state = compute_case_tool_state(request, case, active_tool="transcribe")
         panel = state["tool_panels"].get("transcribe")
         if panel:
             return render_case_panel_with_refresh(
