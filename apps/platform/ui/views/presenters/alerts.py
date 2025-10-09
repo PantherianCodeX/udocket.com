@@ -1,14 +1,14 @@
 from __future__ import annotations
 
  
-import os
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any, Dict, List, Sequence
 
 from django.utils import timezone
 
 from apps.platform.cases.models import Case
 from apps.platform.jobs.models import Job
+from .status_flags import job_activity_timestamp, job_is_stalled
 
 ALERT_SEVERITY_CLASSES: Dict[str, str] = {
     "critical": "border-rose-500/60 bg-rose-500/10 text-rose-100",
@@ -62,6 +62,18 @@ def build_case_team_alerts(case: Case, jobs: Sequence[Job]) -> List[Dict[str, An
     now = timezone.now()
     today = timezone.localdate()
     alerts: List[Dict[str, Any]] = []
+    stalled_status = getattr(Job.Status, "STALLED", "STALLED")
+
+    def _alert_sort_key(entry: Dict[str, Any]) -> tuple[int, float]:
+        severity_key = str(entry.get("severity") or "").lower()
+        severity_rank = ALERT_SEVERITY_ORDER.get(severity_key, 99)
+        sort_ts_value = entry.get("sort_ts")
+        sort_ts = (
+            float(sort_ts_value)
+            if isinstance(sort_ts_value, (int, float))
+            else float("inf")
+        )
+        return severity_rank, sort_ts
 
     def _is_transcription_job(job: Job) -> bool:
         job_kind = (getattr(job, "job_kind", "") or "").strip().lower()
@@ -78,23 +90,6 @@ def build_case_team_alerts(case: Case, jobs: Sequence[Job]) -> List[Dict[str, An
                 if getattr(job, "audio_input", None) or getattr(job, "transcript_path", None):
                     return True
         return False
-
-    def _stale_job_cutoff(reference: datetime) -> datetime:
-        minutes = 60  # default: jobs older than 3 hours are considered stale
-        team_env = os.getenv("TEAM_ALERTS_STALE_MINUTES")
-        if team_env:
-            try:
-                minutes = max(1, int(team_env))
-            except ValueError:
-                minutes = max(1, minutes)
-        else:
-            recovery_env = os.getenv("JOB_RECOVERY_STALE_MINUTES")
-            if recovery_env:
-                try:
-                    minutes = max(minutes, max(1, int(recovery_env)) * 12)
-                except ValueError:
-                    minutes = max(1, minutes)
-        return reference - timedelta(minutes=minutes)
 
     if case.filing_deadline:
         days_until = (case.filing_deadline - today).days
@@ -181,15 +176,14 @@ def build_case_team_alerts(case: Case, jobs: Sequence[Job]) -> List[Dict[str, An
             Job.Status.CONVERTING,
             Job.Status.UPLOADING,
             Job.Status.CANCELLING,
+            stalled_status,
         }
     ]
     if active_jobs:
-        cutoff = _stale_job_cutoff(now)
         stale_jobs: List[Job] = []
         recent_jobs: List[Job] = []
         for job in active_jobs:
-            started_or_created = job.started_at or job.created_at
-            if started_or_created and started_or_created < cutoff:
+            if job_is_stalled(job, reference=now):
                 stale_jobs.append(job)
             else:
                 recent_jobs.append(job)
@@ -209,10 +203,14 @@ def build_case_team_alerts(case: Case, jobs: Sequence[Job]) -> List[Dict[str, An
             )
         if stale_jobs:
             stale_count = len(stale_jobs)
-            oldest_job = min(
-                (job.started_at or job.created_at for job in stale_jobs if job.started_at or job.created_at),
-                default=None,
-            )
+            activity_times: List[datetime] = []
+            for candidate in (job_activity_timestamp(job) for job in stale_jobs):
+                if candidate is None:
+                    continue
+                if candidate.tzinfo is None:
+                    candidate = timezone.make_aware(candidate)
+                activity_times.append(candidate)
+            oldest_job = min(activity_times, default=None)
             detail = "No recent worker updates."
             tooltip = "Jobs appear stuck without an active worker."
             if oldest_job:
@@ -232,11 +230,6 @@ def build_case_team_alerts(case: Case, jobs: Sequence[Job]) -> List[Dict[str, An
                 }
             )
 
-    alerts.sort(
-        key=lambda item: (
-            ALERT_SEVERITY_ORDER.get(item.get("severity"), 99),
-            item.get("sort_ts", float("inf")),
-        )
-    )
+    alerts.sort(key=_alert_sort_key)
 
     return alerts

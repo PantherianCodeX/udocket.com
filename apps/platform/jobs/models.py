@@ -44,6 +44,7 @@ class Job(models.Model):
         CONVERTING = "CONVERTING"
         UPLOADING = "UPLOADING"
         CANCELLING = "CANCELLING"
+        STALLED = "STALLED"
         SUCCEEDED = "SUCCEEDED"
         FAILED = "FAILED"
         CANCELLED = "CANCELLED"

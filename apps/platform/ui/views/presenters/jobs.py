@@ -11,6 +11,7 @@ from apps.platform.jobs.models import Job
 
 from ..common import JobRow, JobTelemetryPayload, as_dict
 from ..constants import STATUS_PILL_STYLES, STATUS_SORT_ORDER
+from .status_flags import job_is_stalled
 from .utils import humanize_label, safe_lower, status_sort_value
 
 
@@ -74,7 +75,11 @@ def job_most_recent_timestamp(job: Optional[Job]) -> datetime:
     if not job:
         return datetime.min
     finished_at = getattr(job, "finished_at", None)
-    if isinstance(finished_at, datetime):
+    status_code = getattr(job, "status", "")
+    if (
+        isinstance(finished_at, datetime)
+        and status_code not in {Job.Status.CANCELLED, Job.Status.CANCELLING}
+    ):
         return finished_at
     started_at = getattr(job, "started_at", None)
     if isinstance(started_at, datetime):
@@ -126,9 +131,12 @@ def select_agent(latest: Dict[str, JobRow], keywords: tuple[str, ...]) -> Option
 def map_job_status(job: Optional[Job]) -> str:
     if not job:
         return "Created"
+    if job_is_stalled(job):
+        return "Stalled"
     status = str(getattr(job, "status", "") or "").upper()
     converting = getattr(Job.Status, "CONVERTING", "CONVERTING")
     cancelling = getattr(Job.Status, "CANCELLING", "CANCELLING")
+    stalled = getattr(Job.Status, "STALLED", "STALLED")
     display_map = {
         Job.Status.PENDING: "Pending",
         Job.Status.RUNNING: "Running",
@@ -137,6 +145,7 @@ def map_job_status(job: Optional[Job]) -> str:
         Job.Status.UPLOADING: "Uploading",
         converting: "Converting",
         cancelling: "Cancelling",
+        stalled: "Stalled",
         getattr(Job.Status, "CANCELLED", "CANCELLED"): "Cancelled",
     }
     if status in display_map:
@@ -151,7 +160,11 @@ def build_row_table_meta(row: Dict[str, Any]) -> None:
     audio_meta = telemetry.get("audio") if isinstance(telemetry, dict) else {}
     meta = telemetry.get("metadata") if isinstance(telemetry, dict) else {}
 
+    stalled = job_is_stalled(job) if isinstance(job, Job) else False
+    stalled_status_value = getattr(Job.Status, "STALLED", "STALLED")
     status_raw = str(telemetry.get("status") or getattr(job, "status", "") or "").strip().upper()
+    if stalled:
+        status_raw = stalled_status_value
     review_status = str(getattr(job, "review_status", "") or "").strip().upper()
     review_status_label = "Pending"
     if review_status == Job.ReviewStatus.APPROVED:

@@ -11,6 +11,7 @@ STATUS_CLASS_MAP: Dict[str, str] = {
     "Uploading": "border-primary-400/40 bg-primary-500/10 text-primary-200",
     "Rejected": "border-rose-400/40 bg-rose-500/10 text-rose-200",
     "Cancelling": "border-slate-400/40 bg-slate-500/20 text-slate-200",
+    "Stalled": "border-amber-400/40 bg-amber-500/10 text-amber-100",
     "Ready": "border-emerald-400/40 bg-emerald-500/10 text-emerald-200",
     "Not Started": "border-white/20 bg-white/5 text-slate-200",
     "No Transcript": "border-amber-400/40 bg-amber-500/10 text-amber-100",
@@ -34,11 +35,12 @@ STATUS_PILL_STYLES: Dict[str, str] = {
     "CONVERTING": "border-primary-400/40 bg-primary-500/10 text-primary-100",
     "UPLOADING": "border-primary-400/40 bg-primary-500/10 text-primary-100",
     "QUEUED": "border-amber-400/40 bg-amber-500/10 text-amber-100",
+    "STALLED": "border-amber-400/40 bg-amber-500/10 text-amber-100",
 }
 
 CANCELABLE_STATUSES = {"RUNNING", "PENDING", "QUEUED", "UPLOADING", "CANCELLING", "CONVERTING"}
 
-RESTARTABLE_STATUSES = {"SUCCEEDED", "FAILED", "CANCELLED", "CORRUPTED"}
+RESTARTABLE_STATUSES = {"SUCCEEDED", "FAILED", "CANCELLED", "CORRUPTED", "STALLED"}
 
 STATUS_SORT_ORDER: Dict[str, int] = {
     "UPLOADING": 10,
@@ -47,6 +49,7 @@ STATUS_SORT_ORDER: Dict[str, int] = {
     "CONVERTING": 40,
     "RUNNING": 50,
     "CANCELLING": 60,
+    "STALLED": 65,
     "SUCCEEDED": 80,
     "READY": 85,
     "FAILED": 90,
