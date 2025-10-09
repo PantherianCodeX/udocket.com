@@ -141,14 +141,27 @@ def render_case_panel_with_refresh(
     status: int = 200,
 ) -> HttpResponse:
     """Render a panel and attach refreshed case trigger payload."""
-    response = render(request, "platform_ui/tools/_panel.html", {"panel": panel}, status=status)
-    trigger_payload: Dict[str, object] = dict(extra_triggers or {})
-    trigger_payload["case-view-refreshed"] = case_refresh_trigger(
+    refresh_payload = case_refresh_trigger(
         case,
         state,
         active_tool=active_tool,
         tools=tools,
     )
+    snippets = {
+        "header_html": refresh_payload.get("header_html"),
+        "cards_html": refresh_payload.get("cards_html"),
+        "collaboration_html": refresh_payload.get("collaboration_html"),
+    }
+    context = {
+        "panel": panel,
+        "case_refresh": snippets,
+    }
+    response = render(request, "platform_ui/tools/_panel.html", context, status=status)
+    trigger_payload: Dict[str, object] = dict(extra_triggers or {})
+    trigger_payload["case-view-refreshed"] = {
+        "tools": refresh_payload.get("tools", []),
+        "active_tool": refresh_payload.get("active_tool"),
+    }
     # Set HTMX trigger header (typing-safe cast for stubs)
     cast(Any, response)["HX-Trigger"] = stringify_json(trigger_payload)
     return response

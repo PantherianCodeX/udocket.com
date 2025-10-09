@@ -48,4 +48,9 @@
       {{ panel.jobs_empty_message }}
     </div>
   {% endif %}
+  {% if case_refresh %}
+    <template data-case-refresh="header">{{ case_refresh.header_html|safe }}</template>
+    <template data-case-refresh="cards">{{ case_refresh.cards_html|safe }}</template>
+    <template data-case-refresh="collaboration">{{ case_refresh.collaboration_html|safe }}</template>
+  {% endif %}
 </div>

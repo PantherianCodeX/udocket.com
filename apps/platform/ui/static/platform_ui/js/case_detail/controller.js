@@ -255,39 +255,79 @@
       },
       htmxAfterOnLoad: (evt) => {
         const headerValue = evt.detail?.xhr?.getResponseHeader('HX-Trigger');
-        if (!headerValue) return;
+        let payload = null;
         try {
-          const payload = JSONU.parse(headerValue, null);
-          if (!payload) return;
-          const refreshed = payload['case-view-refreshed'];
-          if (!refreshed) return;
-          if (refreshed.header_html) {
-            const headerContainer = global.document.querySelector('[data-case-header-container]');
-            if (headerContainer) headerContainer.innerHTML = refreshed.header_html;
-            try { if (global.htmx && global.htmx.process) { global.htmx.process(headerContainer); } } catch (_) {}
+          if (headerValue) {
+            payload = JSONU.parse(headerValue, null);
           }
-          if (refreshed.cards_html) {
-            const cardsContainer = global.document.querySelector('[data-case-developer-cards]');
-            if (cardsContainer) {
-              cardsContainer.innerHTML = refreshed.cards_html;
-              try { if (global.htmx && global.htmx.process) { global.htmx.process(cardsContainer); } } catch (_) {}
-            }
-          }
-          if (Object.prototype.hasOwnProperty.call(refreshed, 'collaboration_html')) {
-            const collabContainer = global.document.querySelector('[data-case-collaboration]');
-            if (collabContainer) {
-              collabContainer.innerHTML = refreshed.collaboration_html || '';
-              try { if (global.htmx && global.htmx.process) { global.htmx.process(collabContainer); } } catch (_) {}
-            }
-          }
-          if (refreshed.active_tool) {
-            ui.setActiveCard(refreshed.active_tool);
-          }
-          controller.ui.boost(controller.ctx.caseId);
-          dbg('htmxAfterOnLoad', { refreshed });
         } catch (error) {
           console.warn('Failed to parse HX-Trigger payload', error);
+          payload = null;
         }
+        const refreshed = payload && typeof payload === 'object' ? payload['case-view-refreshed'] : null;
+        const targetEl =
+          evt && evt.target && typeof evt.target.querySelector === 'function'
+            ? evt.target
+            : controller.ctx.workspace;
+        const findSnippet = (key) => {
+          if (!targetEl || typeof targetEl.querySelector !== 'function') return undefined;
+          const el = targetEl.querySelector(`[data-case-refresh="${key}"]`);
+          if (!el) return undefined;
+          let html = '';
+          if (el.tagName && el.tagName.toLowerCase() === 'template') {
+            html = el.innerHTML || '';
+          } else {
+            html = el.innerHTML || '';
+          }
+          el.remove();
+          return html;
+        };
+        if (!payload && (!targetEl || typeof targetEl.querySelector !== 'function' || !targetEl.querySelector('[data-case-refresh]'))) {
+          return;
+        }
+        const headerHTML = refreshed && Object.prototype.hasOwnProperty.call(refreshed, 'header_html')
+          ? refreshed.header_html
+          : findSnippet('header');
+        if (headerHTML !== undefined) {
+          const headerContainer = global.document.querySelector('[data-case-header-container]');
+          if (headerContainer) {
+            headerContainer.innerHTML = headerHTML;
+            try { if (global.htmx && global.htmx.process) { global.htmx.process(headerContainer); } } catch (_) {}
+          }
+        }
+        const cardsHTML = refreshed && Object.prototype.hasOwnProperty.call(refreshed, 'cards_html')
+          ? refreshed.cards_html
+          : findSnippet('cards');
+        if (cardsHTML !== undefined) {
+          const cardsContainer = global.document.querySelector('[data-case-developer-cards]');
+          if (cardsContainer) {
+            cardsContainer.innerHTML = cardsHTML;
+            try { if (global.htmx && global.htmx.process) { global.htmx.process(cardsContainer); } } catch (_) {}
+          }
+        }
+        const collabHTML = refreshed && Object.prototype.hasOwnProperty.call(refreshed, 'collaboration_html')
+          ? refreshed.collaboration_html
+          : findSnippet('collaboration');
+        if (collabHTML !== undefined) {
+          const collabContainer = global.document.querySelector('[data-case-collaboration]');
+          if (collabContainer) {
+            collabContainer.innerHTML = collabHTML || '';
+            try { if (global.htmx && global.htmx.process) { global.htmx.process(collabContainer); } } catch (_) {}
+          }
+        }
+        if (refreshed && refreshed.active_tool) {
+          ui.setActiveCard(refreshed.active_tool);
+        }
+        controller.ui.boost(controller.ctx.caseId);
+        dbg('htmxAfterOnLoad', {
+          refreshed,
+          parsed: Boolean(payload),
+          snippets: {
+            header: headerHTML !== undefined,
+            cards: cardsHTML !== undefined,
+            collaboration: collabHTML !== undefined,
+          },
+        });
       },
     };
 

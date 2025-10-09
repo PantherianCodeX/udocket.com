@@ -3,6 +3,7 @@ from __future__ import annotations
 """Helpers to derive enriched job telemetry for UI and API consumers."""
 
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional, TypedDict
 from datetime import datetime
@@ -50,6 +51,33 @@ def _original_audio_name(audio_input: str | None) -> Optional[str]:
         return None
 
 
+_PROBE_FIELDS = ("audio_duration_s", "audio_sample_rate_hz", "audio_channels", "audio_bitrate_kbps", "audio_codec")
+
+
+def _needs_probe(meta: Dict[str, Any]) -> bool:
+    """Return True when the metadata lacks key audio fields."""
+    for field in _PROBE_FIELDS:
+        if meta.get(field) in (None, ""):
+            return True
+    return False
+
+
+@lru_cache(maxsize=128)
+def _probe_audio_metadata_cached(path_str: str) -> Dict[str, Any]:
+    """Call the audio probe helper with basic caching to avoid repeated ffprobe calls."""
+    try:
+        from packages.udocket_core.audio import probe_audio_metadata as _probe  # local import to avoid heavy dependency at module load
+    except Exception:
+        return {}
+    try:
+        result = _probe(Path(path_str))
+    except Exception:
+        return {}
+    if isinstance(result, dict):
+        return dict(result)
+    return {}
+
+
 @dataclass
 class JobTelemetry:
     job: Job
@@ -78,15 +106,10 @@ class JobTelemetry:
                 local_size = local_path.stat().st_size
                 if not sha256 and not remote_sha:
                     local_sha = _sha256_file(local_path)
-                # Opportunistically probe audio characteristics if not present in metadata
-                try:
-                    from packages.udocket_core.audio import probe_audio_metadata as _probe
-
-                    probe = _probe(local_path)
-                except Exception:
-                    probe = {}
-                if isinstance(probe, dict):
-                    local_probe = dict(probe)
+                if _needs_probe(meta):
+                    probe = _probe_audio_metadata_cached(str(local_path))
+                    if probe:
+                        local_probe = dict(probe)
         return {
             "path": audio_input,
             "original_name": _original_audio_name(self.job.audio_input) or meta.get("audio_file"),
