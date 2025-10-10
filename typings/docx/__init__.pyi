@@ -1,0 +1,13 @@
+from typing import Any
+
+class Paragraph:
+    text: str
+
+class DocxDocument:
+    paragraphs: list[Paragraph]
+
+    def add_heading(self, text: str, level: int = ...) -> Paragraph: ...
+    def add_paragraph(self, text: str) -> Paragraph: ...
+    def save(self, path: str) -> None: ...
+
+def Document(*args: Any, **kwargs: Any) -> DocxDocument: ...

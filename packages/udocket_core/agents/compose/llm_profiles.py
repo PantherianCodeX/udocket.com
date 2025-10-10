@@ -92,7 +92,8 @@ QA_REVIEWER_SYSTEM_PROMPT = (
     "- Use provided context only.\n"
     "- Flag legal advice or speculation.\n"
     "- Ensure timelines and facts align with claimable atoms.\n"
-    "Output: respond with JSON containing keys `status`, `alerts`, `recommendations`, `staff_report`."
+    "Output: respond with JSON containing keys `status`, `alerts`, `recommendations`, `staff_report`, `global_notes`, and `lane_actions`.\n"
+    "`lane_actions` must include objects for `client` and `lawyer`, each containing `action` (`revise`, `editor`, or `none`) and optional `revision_brief` describing specific fixes."
 )
 
 
@@ -102,6 +103,8 @@ STAGE_MODEL_DEFAULTS: Mapping[str, str] = {
     "compose.lawyer.draft": "gpt-4o",
     "compose.lawyer.revise": "gpt-4o-mini",
     "compose.qa_reviewer": "gpt-4o-mini",
+    "compose.client.editor": "gpt-4o-mini",
+    "compose.lawyer.editor": "gpt-4o-mini",
 }
 
 
@@ -138,6 +141,28 @@ LAWYER_REVISION_USER_INSTRUCTION = (
 )
 
 REVISION_HEADER_TEMPLATE = "Revise the {lane} document to address the following:"
+
+
+CLIENT_EDITOR_SYSTEM_PROMPT = (
+    "You are the Compose Client Editor.\n"
+    "Apply surgical, non-factual edits to the provided document.\n"
+    "Never add or remove transcript facts, timestamps, or entities.\n"
+    "Focus on formatting polish, compliance wording, punctuation, and clarity."
+)
+
+LAWYER_EDITOR_SYSTEM_PROMPT = (
+    "You are the Compose Lawyer Editor.\n"
+    "Apply precise, non-factual edits to the provided document.\n"
+    "Never introduce new authorities, advice, or predictions.\n"
+    "Focus on formatting polish, compliance language, timestamp placement, and clarity."
+)
+
+CLIENT_EDITOR_USER_INSTRUCTION = (
+    "Return JSON with keys `document` (full edited markdown) and `change_log` (list of short bullet strings).\n"
+    "Apply only allowed edits from the brief."
+)
+
+LAWYER_EDITOR_USER_INSTRUCTION = CLIENT_EDITOR_USER_INSTRUCTION
 
 
 @dataclass(frozen=True)

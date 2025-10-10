@@ -11,14 +11,18 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Optional, Sequence, cast
 
+from typing_extensions import Annotated
+
 from docxtpl import DocxTemplate  # type: ignore[import]
 from langgraph.graph import END, START, StateGraph  # type: ignore[import]
 
 from packages.udocket_core.json_utils import (
+    JSONArray,
     JSONObject,
     JSONValue,
     coerce_float,
     coerce_json_object,
+    coerce_json_value,
     coerce_object_list,
     coerce_str,
     coerce_str_list,
@@ -41,8 +45,12 @@ from .compose.llm_profiles import (
     STAGE_MODEL_DEFAULTS,
     CLIENT_DRAFT_USER_INSTRUCTION,
     CLIENT_REVISION_USER_INSTRUCTION,
+    CLIENT_EDITOR_SYSTEM_PROMPT,
+    CLIENT_EDITOR_USER_INSTRUCTION,
     LAWYER_DRAFT_USER_INSTRUCTION,
     LAWYER_REVISION_USER_INSTRUCTION,
+    LAWYER_EDITOR_SYSTEM_PROMPT,
+    LAWYER_EDITOR_USER_INSTRUCTION,
     REVISION_HEADER_TEMPLATE,
     lane_system_prompt,
 )
@@ -60,9 +68,32 @@ QA_REVIEWER_STATUS_OK = {"ok", "pass", "approved"}
 
 
 class ComposeStageError(RuntimeError):
-    def __init__(self, stage: str, message: str) -> None:
-        super().__init__(f"{stage}: {message}")
+    def __init__(
+        self,
+        stage: str,
+        message: str,
+        *,
+        lane: Optional[str] = None,
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
+        attempt: Optional[int] = None,
+    ) -> None:
+        details: list[str] = []
+        if lane:
+            details.append(f"lane={lane}")
+        if provider:
+            details.append(f"provider={provider}")
+        if model:
+            details.append(f"model={model}")
+        if attempt is not None:
+            details.append(f"attempt={attempt}")
+        suffix = f" ({', '.join(details)})" if details else ""
+        super().__init__(f"{stage}: {message}{suffix}")
         self.stage = stage
+        self.lane = lane
+        self.provider = provider
+        self.model = model
+        self.attempt = attempt
 
 
 def _truthy(value: Optional[str], default: bool) -> bool:
@@ -175,6 +206,33 @@ def _merge_usage(target: dict[str, dict[str, int]], stage: str, usage: dict[str,
         stage_bucket[key] = stage_bucket.get(key, 0) + value
 
 
+def _merge_stage_usage(
+    existing: Optional[dict[str, dict[str, int]]],
+    update: Optional[dict[str, dict[str, int]]],
+) -> dict[str, dict[str, int]]:
+    if not existing and not update:
+        return {}
+    merged: dict[str, dict[str, int]] = {
+        stage: dict(values) for stage, values in (existing or {}).items()
+    }
+    for stage, usage in (update or {}).items():
+        bucket = merged.setdefault(stage, {})
+        for key, value in usage.items():
+            bucket[key] = bucket.get(key, 0) + int(value)
+    return merged
+
+
+def _append_events(
+    existing: Optional[list[JSONObject]],
+    update: Optional[list[JSONObject]],
+) -> list[JSONObject]:
+    if not existing:
+        return list(update or [])
+    if not update:
+        return list(existing)
+    return [*existing, *update]
+
+
 def _markdown_paragraphs(markdown_text: str) -> list[str]:
     lines = markdown_text.splitlines()
     buffer: list[str] = []
@@ -196,6 +254,18 @@ def _markdown_paragraphs(markdown_text: str) -> list[str]:
     if buffer:
         paragraphs.append(" ".join(buffer).strip())
     return paragraphs
+
+
+def _known_issues_from_brief(brief: str) -> list[str]:
+    cleaned: list[str] = []
+    for raw_line in brief.splitlines():
+        stripped = raw_line.strip()
+        if not stripped or stripped.endswith(":"):
+            continue
+        cleaned_value = stripped.lstrip("-* ").strip()
+        if cleaned_value:
+            cleaned.append(cleaned_value)
+    return cleaned[:20]
 
 
 @dataclass(slots=True)
@@ -230,8 +300,15 @@ class GuardReport:
 
 
 @dataclass(slots=True)
+class LaneActionDirective:
+    action: str
+    revision_brief: Optional[str] = None
+
+
+@dataclass(slots=True)
 class LaneAttempt:
     attempt_number: int
+    source: str
     document: str
     structure: GuardReport
     compliance: GuardReport
@@ -249,6 +326,34 @@ class LaneOutcome:
     stage_usage: dict[str, dict[str, int]]
     token_usage: dict[str, int]
     providers: list[str]
+    models: list[str]
+
+
+def _merge_lane_outcomes(
+    existing: Optional[dict[str, "LaneOutcome"]],
+    update: Optional[dict[str, Optional["LaneOutcome"]]],
+) -> dict[str, "LaneOutcome"]:
+    merged: dict[str, LaneOutcome] = {}
+    if existing:
+        merged = {lane: outcome for lane, outcome in existing.items()}
+    if update:
+        for lane, outcome in update.items():
+            if outcome is None:
+                merged.pop(lane, None)
+            elif isinstance(outcome, LaneOutcome):
+                merged[lane] = outcome
+    return merged
+
+
+def _latest_lane_state(
+    existing: Optional["LaneRuntimeState"],
+    update: Optional["LaneRuntimeState"],
+) -> "LaneRuntimeState":
+    if update is not None:
+        return update
+    if existing is not None:
+        return existing
+    raise ComposeStageError("compose.lane_state", "Lane state missing for reducer")
 
 
 @dataclass(slots=True)
@@ -257,6 +362,7 @@ class LaneRuntimeState:
     config: LaneConfig
     max_attempts: int
     attempts: int = 0
+    current_source: str = "draft"
     revision_brief: Optional[str] = None
     last_document_hash: Optional[int] = None
     document: Optional[str] = None
@@ -267,6 +373,8 @@ class LaneRuntimeState:
     stage_usage: dict[str, dict[str, int]] = field(default_factory=dict)
     token_usage: dict[str, int] = field(default_factory=dict)
     providers: list[str] = field(default_factory=list)
+    models: list[str] = field(default_factory=list)
+    editor_attempted: bool = False
 
     def record_usage(self, stage: str, usage: Mapping[str, int]) -> None:
         _merge_usage(self.stage_usage, stage, dict(usage))
@@ -286,6 +394,7 @@ class LaneRuntimeState:
             stage_usage={stage: dict(values) for stage, values in self.stage_usage.items()},
             token_usage=dict(self.token_usage),
             providers=list(self.providers),
+            models=list(self.models),
         )
 
 
@@ -295,6 +404,9 @@ class QAReviewerResult:
     alerts: list[str]
     recommendations: list[str]
     staff_report: str
+    provider: str
+    lane_actions: dict[str, LaneActionDirective] = field(default_factory=dict)
+    global_notes: str = ""
 
 
 @dataclass(slots=True)
@@ -330,6 +442,10 @@ class ComposeConfig:
     qa_required: bool = True
     debug: bool = False
     doc_template_path: Optional[Path] = None
+    enable_editor: bool = True
+    client_editor_model: Optional[str] = None
+    lawyer_editor_model: Optional[str] = None
+    qa_iteration_limit: int = 3
 
     @classmethod
     def from_env(cls) -> "ComposeConfig":
@@ -343,6 +459,10 @@ class ComposeConfig:
         min_timestamp_references = _safe_int(os.getenv("COMPOSE_MIN_TIMESTAMP_REFERENCES"), 3)
         qa_required = _truthy(os.getenv("COMPOSE_QA_REQUIRED"), True)
         debug = _truthy(os.getenv("DEBUG"), False)
+        enable_editor = _truthy(os.getenv("COMPOSE_ENABLE_EDITOR"), True)
+        client_editor_model = os.getenv("COMPOSE_CLIENT_EDITOR_MODEL") or None
+        lawyer_editor_model = os.getenv("COMPOSE_LAWYER_EDITOR_MODEL") or None
+        qa_iteration_limit = _safe_int(os.getenv("COMPOSE_QA_MAX_ITERATIONS"), 3)
         template_env = os.getenv(DOC_TEMPLATE_ENV)
         template_path = Path(template_env).resolve() if template_env else None
         if template_path and not template_path.exists():
@@ -361,18 +481,24 @@ class ComposeConfig:
             qa_required=qa_required,
             debug=debug,
             doc_template_path=template_path,
+            enable_editor=enable_editor,
+            client_editor_model=client_editor_model,
+            lawyer_editor_model=lawyer_editor_model,
+            qa_iteration_limit=qa_iteration_limit,
         )
 
 
 @dataclass(slots=True)
 class ComposeState:
     inputs: ComposeInputs
-    client: LaneRuntimeState
-    lawyer: LaneRuntimeState
+    client: Annotated[LaneRuntimeState, _latest_lane_state]
+    lawyer: Annotated[LaneRuntimeState, _latest_lane_state]
     context: Optional[ComposeContext] = None
-    lanes: dict[str, LaneOutcome] = field(default_factory=dict)
+    lanes: Annotated[dict[str, LaneOutcome], _merge_lane_outcomes] = field(default_factory=dict)
     qa: Optional[QAReviewerResult] = None
-    stage_usage: dict[str, dict[str, int]] = field(default_factory=dict)
+    stage_usage: Annotated[dict[str, dict[str, int]], _merge_stage_usage] = field(default_factory=dict)
+    qa_iterations: int = 0
+    events: Annotated[list[JSONObject], _append_events] = field(default_factory=list)
 
 
 class ComposeAgent:
@@ -435,10 +561,20 @@ class ComposeAgent:
             for name, payload in (provider_credentials or {}).items()
         }
 
-        self._run_graph(
+        collected_events: list[JSONObject] = []
+
+        def progress_proxy(stage: str, event: str, payload: JSONObject) -> None:
+            envelope = coerce_json_object(
+                {"stage": stage, "event": event, **payload}
+            )
+            collected_events.append(envelope)
+            if progress_callback:
+                progress_callback(stage, event, envelope)
+
+        state = self._run_graph(
             state=state,
             provider_credentials=provider_credentials_map,
-            progress=progress_callback,
+            progress=progress_proxy,
         )
 
         if state.qa is None:
@@ -456,6 +592,20 @@ class ComposeAgent:
             job_id=job_id,
         )
 
+        combined_events: list[JSONObject] = []
+        combined_events.extend(state.events)
+        combined_events.extend(collected_events)
+        events_payload: JSONArray = [coerce_json_object(event) for event in combined_events]
+        qa_lane_actions_payload: dict[str, JSONObject] = {
+            lane: coerce_json_object(
+                {
+                    "action": directive.action,
+                    "revision_brief": directive.revision_brief,
+                }
+            )
+            for lane, directive in state.qa.lane_actions.items()
+        }
+
         meta_payload = {
             "case_id": case_id,
             "job_id": job_id,
@@ -465,13 +615,20 @@ class ComposeAgent:
             "lawyer_reports": _lane_history_payload(state.lanes["lawyer"].history),
             "client_providers": state.lanes["client"].providers,
             "lawyer_providers": state.lanes["lawyer"].providers,
+            "client_models": state.lanes["client"].models,
+            "lawyer_models": state.lanes["lawyer"].models,
             "client_token_usage": state.lanes["client"].token_usage,
             "lawyer_token_usage": state.lanes["lawyer"].token_usage,
             "qa_status": state.qa.status,
             "qa_alerts": state.qa.alerts,
             "qa_recommendations": state.qa.recommendations,
+            "qa_provider": state.qa.provider,
+            "qa_global_notes": state.qa.global_notes,
+            "qa_lane_actions": qa_lane_actions_payload,
+            "qa_iterations": state.qa_iterations,
             "provider_chain": list(self.config.provider_chain),
             "stage_usage": {stage: dict(values) for stage, values in state.stage_usage.items()},
+            "events": events_payload,
             "bundle_path": str(artifacts.bundle_path) if artifacts.bundle_path else None,
             "client_markdown": str(artifacts.client_markdown) if artifacts.client_markdown else None,
             "lawyer_markdown": str(artifacts.lawyer_markdown) if artifacts.lawyer_markdown else None,
@@ -486,12 +643,41 @@ class ComposeAgent:
         write_json_object(meta_json, meta_payload)
 
         audit_jsonl = ops_dir / "ops_compose.jsonl"
+        for event_record in collected_events:
+            qa_block = event_record.get("qa")
+            guards_block = event_record.get("guards")
+            status_summary: Optional[str] = None
+            if isinstance(qa_block, Mapping):
+                status_summary = coerce_str(qa_block.get("status"))
+            if status_summary is None and isinstance(guards_block, Mapping):
+                status_parts = [
+                    f"{key}:{value}"
+                    for key, value in guards_block.items()
+                ]
+                if status_parts:
+                    status_summary = ", ".join(status_parts)
+            append_jsonl(
+                audit_jsonl,
+                {
+                    "case_id": case_id,
+                    "job_id": job_id,
+                    "stage": event_record.get("stage"),
+                    "event": event_record.get("event"),
+                    "lane": event_record.get("lane"),
+                    "attempt": event_record.get("attempt"),
+                    "status": status_summary,
+                    "details": coerce_json_object(event_record),
+                },
+            )
         append_jsonl(
             audit_jsonl,
             {
                 "case_id": case_id,
                 "job_id": job_id,
                 "status": "ok",
+                "qa_status": state.qa.status,
+                "qa_iterations": state.qa_iterations,
+                "qa_provider": state.qa.provider,
                 "bundle_path": str(artifacts.bundle_path) if artifacts.bundle_path else None,
                 "client_markdown": str(artifacts.client_markdown) if artifacts.client_markdown else None,
                 "lawyer_markdown": str(artifacts.lawyer_markdown) if artifacts.lawyer_markdown else None,
@@ -517,13 +703,13 @@ class ComposeAgent:
         state: ComposeState,
         provider_credentials: Mapping[str, JSONObject],
         progress: Optional[Callable[[str, str, JSONObject], None]],
-    ) -> None:
+    ) -> ComposeState:
         graph: Any = StateGraph(ComposeState)
 
-        def context_node(current: ComposeState) -> ComposeState:
+        def context_node(current: ComposeState) -> dict[str, object]:
             return self._context_assembler(current, progress)
 
-        def client_composer_node(current: ComposeState) -> ComposeState:
+        def client_composer_node(current: ComposeState) -> dict[str, object]:
             return self._draft_lane(
                 current,
                 lane="client",
@@ -531,19 +717,19 @@ class ComposeAgent:
                 progress=progress,
             )
 
-        def client_structure_node(current: ComposeState) -> ComposeState:
+        def client_structure_node(current: ComposeState) -> dict[str, object]:
             return self._structure_guard(current, lane="client", progress=progress)
 
-        def client_compliance_node(current: ComposeState) -> ComposeState:
+        def client_compliance_node(current: ComposeState) -> dict[str, object]:
             return self._compliance_guard(current, lane="client", progress=progress)
 
-        def client_factual_node(current: ComposeState) -> ComposeState:
+        def client_factual_node(current: ComposeState) -> dict[str, object]:
             return self._factuality_gate(current, lane="client", progress=progress)
 
-        def client_revision_node(current: ComposeState) -> ComposeState:
+        def client_revision_node(current: ComposeState) -> dict[str, object]:
             return self._prepare_revision(current, lane="client", progress=progress)
 
-        def lawyer_composer_node(current: ComposeState) -> ComposeState:
+        def lawyer_composer_node(current: ComposeState) -> dict[str, object]:
             return self._draft_lane(
                 current,
                 lane="lawyer",
@@ -551,22 +737,67 @@ class ComposeAgent:
                 progress=progress,
             )
 
-        def lawyer_structure_node(current: ComposeState) -> ComposeState:
+        def lawyer_structure_node(current: ComposeState) -> dict[str, object]:
             return self._structure_guard(current, lane="lawyer", progress=progress)
 
-        def lawyer_compliance_node(current: ComposeState) -> ComposeState:
+        def lawyer_compliance_node(current: ComposeState) -> dict[str, object]:
             return self._compliance_guard(current, lane="lawyer", progress=progress)
 
-        def lawyer_factual_node(current: ComposeState) -> ComposeState:
+        def lawyer_factual_node(current: ComposeState) -> dict[str, object]:
             return self._factuality_gate(current, lane="lawyer", progress=progress)
 
-        def lawyer_revision_node(current: ComposeState) -> ComposeState:
+        def lawyer_revision_node(current: ComposeState) -> dict[str, object]:
             return self._prepare_revision(current, lane="lawyer", progress=progress)
 
-        def release_node(current: ComposeState) -> ComposeState:
-            return self._release_gate(
+        def qa_reviewer_node(current: ComposeState) -> dict[str, object]:
+            return self._qa_reviewer_step(
                 current,
                 provider_credentials=provider_credentials,
+                progress=progress,
+            )
+
+        def client_qa_revision_node(current: ComposeState) -> dict[str, object]:
+            return self._qa_lane_revision(
+                current,
+                lane="client",
+                progress=progress,
+            )
+
+        def client_qa_editor_node(current: ComposeState) -> dict[str, object]:
+            return self._qa_lane_editor(
+                current,
+                lane="client",
+                provider_credentials=provider_credentials,
+                progress=progress,
+            )
+
+        def lawyer_qa_revision_node(current: ComposeState) -> dict[str, object]:
+            return self._qa_lane_revision(
+                current,
+                lane="lawyer",
+                progress=progress,
+            )
+
+        def lawyer_qa_editor_node(current: ComposeState) -> dict[str, object]:
+            return self._qa_lane_editor(
+                current,
+                lane="lawyer",
+                provider_credentials=provider_credentials,
+                progress=progress,
+            )
+
+        def compose_join_node(current: ComposeState) -> dict[str, object]:
+            return {}
+
+        def wait_for_client_node(current: ComposeState) -> dict[str, object]:
+            return {}
+
+        def wait_for_lawyer_node(current: ComposeState) -> dict[str, object]:
+            return {}
+
+        def release_node(current: ComposeState) -> dict[str, object]:
+            return self._release_gate(
+                current,
                 progress=progress,
             )
 
@@ -582,6 +813,16 @@ class ComposeAgent:
         graph.add_node("LawyerComplianceGuard", lawyer_compliance_node)
         graph.add_node("LawyerFactualityGate", lawyer_factual_node)
         graph.add_node("LawyerRevision", lawyer_revision_node)
+
+        graph.add_node("QAReviewer", qa_reviewer_node)
+        graph.add_node("ClientQARevision", client_qa_revision_node)
+        graph.add_node("ClientQAEditor", client_qa_editor_node)
+        graph.add_node("LawyerQARevision", lawyer_qa_revision_node)
+        graph.add_node("LawyerQAEditor", lawyer_qa_editor_node)
+
+        graph.add_node("ComposeJoin", compose_join_node)
+        graph.add_node("WaitForClientLane", wait_for_client_node)
+        graph.add_node("WaitForLawyerLane", wait_for_lawyer_node)
 
         graph.add_node("ReleaseGate", release_node)
 
@@ -600,16 +841,22 @@ class ComposeAgent:
                 lane_state.factuality_report,
             ]
             bad = [report for report in reports if report is not None and not report.ok]
+            logger.debug(
+                "compose.client.needs_revision attempts=%s max=%s bad=%s",
+                lane_state.attempts,
+                lane_state.max_attempts,
+                bool(bad),
+            )
             if bad and lane_state.attempts < lane_state.max_attempts:
                 return "ClientRevision"
-            return "LawyerComposer"
+            return "ComposeJoin"
 
         graph.add_conditional_edges(
             "ClientFactualityGate",
             client_needs_revision,
             {
                 "ClientRevision": "ClientRevision",
-                "LawyerComposer": "LawyerComposer",
+                "ComposeJoin": "ComposeJoin",
             },
         )
         graph.add_edge("ClientRevision", "ClientComposer")
@@ -628,21 +875,65 @@ class ComposeAgent:
             bad = [report for report in reports if report is not None and not report.ok]
             if bad and lane_state.attempts < lane_state.max_attempts:
                 return "LawyerRevision"
-            return "ReleaseGate"
+            return "ComposeJoin"
 
         graph.add_conditional_edges(
             "LawyerFactualityGate",
             lawyer_needs_revision,
             {
                 "LawyerRevision": "LawyerRevision",
-                "ReleaseGate": "ReleaseGate",
+                "ComposeJoin": "ComposeJoin",
             },
         )
         graph.add_edge("LawyerRevision", "LawyerComposer")
+        graph.add_edge("ClientQARevision", "ClientComposer")
+        graph.add_edge("ClientQAEditor", "ClientStructureValidator")
+        graph.add_edge("LawyerQARevision", "LawyerComposer")
+        graph.add_edge("LawyerQAEditor", "LawyerStructureValidator")
+
+        def compose_join_decision(current: ComposeState) -> str:
+            has_client = "client" in current.lanes
+            has_lawyer = "lawyer" in current.lanes
+            if has_client and has_lawyer:
+                return "QAReviewer"
+            if not has_client:
+                return "WaitForClientLane"
+            return "WaitForLawyerLane"
+
+        graph.add_conditional_edges(
+            "ComposeJoin",
+            compose_join_decision,
+            {
+                "QAReviewer": "QAReviewer",
+                "WaitForClientLane": "WaitForClientLane",
+                "WaitForLawyerLane": "WaitForLawyerLane",
+            },
+        )
+        graph.add_edge("WaitForClientLane", "ComposeJoin")
+        graph.add_edge("WaitForLawyerLane", "ComposeJoin")
+
+        graph.add_conditional_edges(
+            "QAReviewer",
+            self._qa_decision,
+            {
+                "ReleaseGate": "ReleaseGate",
+                "ClientQARevision": "ClientQARevision",
+                "ClientQAEditor": "ClientQAEditor",
+                "LawyerQARevision": "LawyerQARevision",
+                "LawyerQAEditor": "LawyerQAEditor",
+            },
+        )
         graph.add_edge("ReleaseGate", END)
 
         compiled = graph.compile()
-        compiled.invoke(state)
+        result_state = compiled.invoke(state)
+        if isinstance(result_state, ComposeState):
+            return result_state
+        if isinstance(result_state, dict):
+            for key, value in result_state.items():
+                setattr(state, key, value)
+            return state
+        raise ComposeStageError("compose.graph", f"Unexpected graph result type: {type(result_state)!r}")
 
     @staticmethod
     def _lane_state(state: ComposeState, lane: str) -> LaneRuntimeState:
@@ -656,12 +947,12 @@ class ComposeAgent:
         self,
         state: ComposeState,
         progress: Optional[Callable[[str, str, JSONObject], None]],
-    ) -> ComposeState:
+    ) -> dict[str, object]:
         stage_name = "compose.context"
         _emit(progress, stage_name, "start", {})
         state.context = _assemble_context(state.inputs, self.config.min_timestamp_references)
         _emit(progress, stage_name, "complete", {})
-        return state
+        return {"context": state.context}
 
     def _draft_lane(
         self,
@@ -670,7 +961,7 @@ class ComposeAgent:
         lane: str,
         provider_credentials: Mapping[str, JSONObject],
         progress: Optional[Callable[[str, str, JSONObject], None]],
-    ) -> ComposeState:
+    ) -> dict[str, object]:
         lane_state = self._lane_state(state, lane)
         context = state.context
         if context is None:
@@ -679,13 +970,19 @@ class ComposeAgent:
         stage_name = f"compose.{lane}.{'revise' if is_revision else 'draft'}"
         next_attempt = lane_state.attempts + 1
         if next_attempt > lane_state.max_attempts:
-            raise ComposeStageError(stage_name, "Maximum attempts exhausted")
-        _emit(progress, stage_name, "start", {"attempt": next_attempt})
+            raise ComposeStageError(stage_name, "Maximum attempts exhausted", lane=lane, attempt=lane_state.attempts)
+        lane_state.current_source = "revise" if is_revision else "draft"
+        _emit(
+            progress,
+            stage_name,
+            "start",
+            {"attempt": next_attempt, "lane": lane, "source": lane_state.current_source},
+        )
         lane_state.attempts = next_attempt
         temperature = self.config.temperature if lane == "client" else self.config.lawyer_temperature
         if is_revision:
             temperature = lane_state.config.revision_temperature
-        document, usage, provider = self._invoke_llm(
+        document, usage, provider, model = self._invoke_llm(
             stage=stage_name,
             system_prompt=lane_system_prompt(lane, revision=is_revision),
             user_prompt=_lane_user_prompt(lane, context, lane_state.revision_brief),
@@ -696,21 +993,45 @@ class ComposeAgent:
         lane_state.document = document
         doc_hash = hash(document.strip().lower())
         if is_revision and lane_state.last_document_hash is not None and doc_hash == lane_state.last_document_hash:
-            raise ComposeStageError(stage_name, "Revision produced no changes")
+            raise ComposeStageError(stage_name, "Revision produced no changes", lane=lane, attempt=lane_state.attempts)
         lane_state.last_document_hash = doc_hash
         lane_state.structure_report = None
         lane_state.compliance_report = None
         lane_state.factuality_report = None
         lane_state.providers.append(provider)
+        lane_state.models.append(model)
         lane_state.record_usage(stage_name, usage)
-        _merge_usage(state.stage_usage, stage_name, usage)
         _emit(
             progress,
             stage_name,
             "complete",
-            {"attempt": lane_state.attempts, "provider": provider},
+            {
+                "attempt": lane_state.attempts,
+                "lane": lane,
+                "provider": provider,
+                "model": model,
+                "usage": dict(usage),
+                "source": lane_state.current_source,
+            },
         )
-        return state
+        return {
+            lane: lane_state,
+            "stage_usage": {stage_name: dict(usage)},
+            "events": [
+                coerce_json_object(
+                    {
+                        "stage": stage_name,
+                        "event": "complete",
+                        "lane": lane,
+                        "attempt": lane_state.attempts,
+                        "provider": provider,
+                        "model": model,
+                        "usage": dict(usage),
+                        "source": lane_state.current_source,
+                    }
+                )
+            ],
+        }
 
     def _structure_guard(
         self,
@@ -718,13 +1039,18 @@ class ComposeAgent:
         *,
         lane: str,
         progress: Optional[Callable[[str, str, JSONObject], None]],
-    ) -> ComposeState:
+    ) -> dict[str, object]:
         lane_state = self._lane_state(state, lane)
         document = lane_state.document
         if document is None:
             raise ComposeStageError(f"compose.{lane}.structure", "No draft available")
         stage_name = f"compose.{lane}.structure"
-        _emit(progress, stage_name, "start", {"attempt": lane_state.attempts})
+        _emit(
+            progress,
+            stage_name,
+            "start",
+            {"attempt": lane_state.attempts, "lane": lane, "source": lane_state.current_source},
+        )
         report = _markdown_structure_report(
             document,
             lane_state.config.headings,
@@ -739,8 +1065,28 @@ class ComposeAgent:
                 report.errors.extend(readability.errors)
                 report.warnings.extend(readability.warnings)
         lane_state.structure_report = report
-        _emit(progress, stage_name, "complete", {"ok": report.ok})
-        return state
+        _emit(
+            progress,
+            stage_name,
+            "complete",
+            {
+                "lane": lane,
+                "attempt": lane_state.attempts,
+                "guards": {"structure": "ok" if report.ok else "fail"},
+                "errors": list(report.errors),
+                "warnings": list(report.warnings),
+            },
+        )
+        event_payload = coerce_json_object(
+            {
+                "stage": stage_name,
+                "event": "complete",
+                "lane": lane,
+                "attempt": lane_state.attempts,
+                "guards": {"structure": "ok" if report.ok else "fail"},
+            }
+        )
+        return {lane: lane_state, "events": [event_payload]}
 
     def _compliance_guard(
         self,
@@ -748,17 +1094,42 @@ class ComposeAgent:
         *,
         lane: str,
         progress: Optional[Callable[[str, str, JSONObject], None]],
-    ) -> ComposeState:
+    ) -> dict[str, object]:
         lane_state = self._lane_state(state, lane)
         document = lane_state.document
         if document is None:
             raise ComposeStageError(f"compose.{lane}.compliance", "No draft available")
         stage_name = f"compose.{lane}.compliance"
-        _emit(progress, stage_name, "start", {"attempt": lane_state.attempts})
+        _emit(
+            progress,
+            stage_name,
+            "start",
+            {"attempt": lane_state.attempts, "lane": lane, "source": lane_state.current_source},
+        )
         report = _compliance_report(document)
         lane_state.compliance_report = report
-        _emit(progress, stage_name, "complete", {"ok": report.ok})
-        return state
+        _emit(
+            progress,
+            stage_name,
+            "complete",
+            {
+                "lane": lane,
+                "attempt": lane_state.attempts,
+                "guards": {"compliance": "ok" if report.ok else "fail"},
+                "errors": list(report.errors),
+                "warnings": list(report.warnings),
+            },
+        )
+        event_payload = coerce_json_object(
+            {
+                "stage": stage_name,
+                "event": "complete",
+                "lane": lane,
+                "attempt": lane_state.attempts,
+                "guards": {"compliance": "ok" if report.ok else "fail"},
+            }
+        )
+        return {lane: lane_state, "events": [event_payload]}
 
     def _factuality_gate(
         self,
@@ -766,14 +1137,19 @@ class ComposeAgent:
         *,
         lane: str,
         progress: Optional[Callable[[str, str, JSONObject], None]],
-    ) -> ComposeState:
+    ) -> dict[str, object]:
         lane_state = self._lane_state(state, lane)
         document = lane_state.document
         context = state.context
         if document is None or context is None:
             raise ComposeStageError(f"compose.{lane}.factuality", "Missing draft or context")
         stage_name = f"compose.{lane}.factuality"
-        _emit(progress, stage_name, "start", {"attempt": lane_state.attempts})
+        _emit(
+            progress,
+            stage_name,
+            "start",
+            {"attempt": lane_state.attempts, "lane": lane, "source": lane_state.current_source},
+        )
         report = _factuality_report(
             document,
             claimable_atoms=context.claimable_atoms,
@@ -793,16 +1169,23 @@ class ComposeAgent:
         )
         attempt_record = LaneAttempt(
             attempt_number=lane_state.attempts,
+            source=lane_state.current_source,
             document=document,
             structure=structure_snapshot,
             compliance=compliance_snapshot,
             factuality=_clone_report(report),
         )
         lane_state.history.append(attempt_record)
-        payload: JSONObject = {"ok": report.ok}
-        if report.errors:
-            payload["errors"] = list(report.errors)
+        lane_state.current_source = "draft"
+        payload: JSONObject = {
+            "lane": lane,
+            "attempt": lane_state.attempts,
+            "guards": {"factuality": "ok" if report.ok else "fail"},
+            "errors": list(report.errors),
+            "warnings": list(report.warnings),
+        }
         _emit(progress, stage_name, "complete", payload)
+        lanes_update: Optional[dict[str, LaneOutcome]] = None
         if (
             lane_state.structure_report
             and lane_state.structure_report.ok
@@ -810,8 +1193,20 @@ class ComposeAgent:
             and lane_state.compliance_report.ok
             and report.ok
         ):
-            state.lanes[lane] = lane_state.to_outcome()
-        return state
+            lanes_update = {lane: lane_state.to_outcome()}
+        event_payload = coerce_json_object(
+            {
+                "stage": stage_name,
+                "event": "complete",
+                "lane": lane,
+                "attempt": lane_state.attempts,
+                "guards": {"factuality": "ok" if report.ok else "fail"},
+            }
+        )
+        updates: dict[str, object] = {lane: lane_state, "events": [event_payload]}
+        if lanes_update:
+            updates["lanes"] = lanes_update
+        return updates
 
     def _prepare_revision(
         self,
@@ -819,10 +1214,15 @@ class ComposeAgent:
         *,
         lane: str,
         progress: Optional[Callable[[str, str, JSONObject], None]],
-    ) -> ComposeState:
+    ) -> dict[str, object]:
         lane_state = self._lane_state(state, lane)
         stage_name = f"compose.{lane}.revision"
-        _emit(progress, stage_name, "start", {"attempt": lane_state.attempts})
+        _emit(
+            progress,
+            stage_name,
+            "start",
+            {"attempt": lane_state.attempts, "lane": lane},
+        )
         if lane_state.structure_report is None or lane_state.compliance_report is None or lane_state.factuality_report is None:
             raise ComposeStageError(stage_name, "Revision requested before guard reports computed")
         revision_brief = _build_revision_brief(
@@ -836,19 +1236,23 @@ class ComposeAgent:
             progress,
             stage_name,
             "complete",
-            {"has_revision": bool(revision_brief.strip())},
+            {"has_revision": bool(revision_brief.strip()), "lane": lane},
         )
-        return state
+        return {lane: lane_state}
 
     def _release_gate(
         self,
         state: ComposeState,
         *,
-        provider_credentials: Mapping[str, JSONObject],
         progress: Optional[Callable[[str, str, JSONObject], None]],
-    ) -> ComposeState:
+    ) -> dict[str, object]:
         stage_name = "compose.release_gate"
-        _emit(progress, stage_name, "start", {})
+        _emit(
+            progress,
+            stage_name,
+            "start",
+            {"lane_states": ["client", "lawyer"]},
+        )
         client_outcome = state.lanes.get("client")
         lawyer_outcome = state.lanes.get("lawyer")
         if client_outcome is None or not (
@@ -863,14 +1267,277 @@ class ComposeAgent:
             and lawyer_outcome.factuality_report.ok
         ):
             raise ComposeStageError(stage_name, "Lawyer lane did not pass all guards")
-        self._execute_qa(
+        if state.qa is None:
+            raise ComposeStageError(stage_name, "QA results missing")
+        qa_status = state.qa.status
+        if self.config.qa_required and qa_status.lower() not in QA_REVIEWER_STATUS_OK:
+            raise ComposeStageError(stage_name, f"QA reviewer returned status '{qa_status}'")
+        _emit(
+            progress,
+            stage_name,
+            "complete",
+            {"qa_status": qa_status, "qa_iterations": state.qa_iterations},
+        )
+        event_payload = coerce_json_object(
+            {
+                "stage": stage_name,
+                "event": "complete",
+                "qa_status": qa_status,
+                "qa_iterations": state.qa_iterations,
+            }
+        )
+        return {"events": [event_payload]}
+
+    def _qa_reviewer_step(
+        self,
+        state: ComposeState,
+        *,
+        provider_credentials: Mapping[str, JSONObject],
+        progress: Optional[Callable[[str, str, JSONObject], None]],
+    ) -> dict[str, object]:
+        if state.qa_iterations >= self.config.qa_iteration_limit:
+            raise ComposeStageError(
+                "compose.qa_reviewer",
+                "QA iteration limit exceeded",
+            )
+        state.qa_iterations += 1
+        qa_result, usage, provider, model, event_payload = self._execute_qa(
             state=state,
             provider_credentials=provider_credentials,
             progress=progress,
         )
-        qa_status = state.qa.status if state.qa else "missing"
-        _emit(progress, stage_name, "complete", {"qa_status": qa_status})
-        return state
+        return {
+            "qa": qa_result,
+            "qa_iterations": state.qa_iterations,
+            "stage_usage": {"compose.qa_reviewer": dict(usage)},
+            "events": [event_payload],
+        }
+
+    @staticmethod
+    def _qa_decision(state: ComposeState) -> str:
+        qa = state.qa
+        if qa is None:
+            raise ComposeStageError("compose.qa_reviewer", "QA reviewer result missing")
+        normalized_status = qa.status.lower().strip()
+        if normalized_status in QA_REVIEWER_STATUS_OK:
+            return "ReleaseGate"
+        for lane in ("client", "lawyer"):
+            directive = qa.lane_actions.get(lane)
+            if directive is None:
+                continue
+            action = (directive.action or "none").strip().lower()
+            if action == "revise":
+                return "ClientQARevision" if lane == "client" else "LawyerQARevision"
+            if action == "editor":
+                return "ClientQAEditor" if lane == "client" else "LawyerQAEditor"
+        raise ComposeStageError(
+            "compose.qa_reviewer",
+            "QA reported failure without actionable lane directives",
+        )
+
+    def _qa_lane_revision(
+        self,
+        state: ComposeState,
+        *,
+        lane: str,
+        progress: Optional[Callable[[str, str, JSONObject], None]],
+    ) -> dict[str, object]:
+        qa = state.qa
+        if qa is None:
+            raise ComposeStageError(f"compose.{lane}.qa_revision", "QA reviewer result missing", lane=lane)
+        directive = qa.lane_actions.get(lane)
+        stage_name = f"compose.{lane}.qa_revision"
+        if directive is None or (directive.action or "none").strip().lower() != "revise":
+            raise ComposeStageError(stage_name, "No revision directive available", lane=lane)
+        revision_brief = (directive.revision_brief or "").strip()
+        if not revision_brief:
+            raise ComposeStageError(stage_name, "QA requested revision without brief", lane=lane)
+        lane_state = self._lane_state(state, lane)
+        _emit(
+            progress,
+            stage_name,
+            "start",
+            {"lane": lane, "attempt": lane_state.attempts + 1, "revision_brief": revision_brief},
+        )
+        lane_state.revision_brief = revision_brief
+        lane_state.current_source = "revise"
+        lane_state.structure_report = None
+        lane_state.compliance_report = None
+        lane_state.factuality_report = None
+        lane_state.editor_attempted = False
+        directive.action = "none"
+        event_payload = coerce_json_object(
+            {
+                "stage": stage_name,
+                "event": "complete",
+                "lane": lane,
+                "revision_brief": revision_brief,
+            }
+        )
+        _emit(
+            progress,
+            stage_name,
+            "complete",
+            {"lane": lane, "revision_brief": revision_brief},
+        )
+        return {
+            lane: lane_state,
+            "lanes": {lane: None},
+            "events": [event_payload],
+        }
+
+    def _qa_lane_editor(
+        self,
+        state: ComposeState,
+        *,
+        lane: str,
+        provider_credentials: Mapping[str, JSONObject],
+        progress: Optional[Callable[[str, str, JSONObject], None]],
+    ) -> dict[str, object]:
+        qa = state.qa
+        if qa is None:
+            raise ComposeStageError(f"compose.{lane}.editor", "QA reviewer result missing", lane=lane)
+        directive = qa.lane_actions.get(lane)
+        if directive is None or (directive.action or "none").strip().lower() != "editor":
+            raise ComposeStageError(f"compose.{lane}.editor", "No editor directive available", lane=lane)
+        updates = self._run_lane_editor(
+            state=state,
+            lane=lane,
+            directive=directive,
+            provider_credentials=provider_credentials,
+            progress=progress,
+        )
+        directive.action = "none"
+        directive.revision_brief = directive.revision_brief or ""
+        return updates
+
+    def _run_lane_editor(
+        self,
+        *,
+        state: ComposeState,
+        lane: str,
+        directive: LaneActionDirective,
+        provider_credentials: Mapping[str, JSONObject],
+        progress: Optional[Callable[[str, str, JSONObject], None]],
+    ) -> dict[str, object]:
+        if not self.config.enable_editor:
+            raise ComposeStageError(
+                f"compose.{lane}.editor",
+                "Editor is disabled",
+                lane=lane,
+            )
+        lane_state = self._lane_state(state, lane)
+        stage_name = f"compose.{lane}.editor"
+        if lane_state.editor_attempted:
+            raise ComposeStageError(stage_name, "Editor already attempted", lane=lane)
+        document = lane_state.document
+        if document is None:
+            raise ComposeStageError(stage_name, "No draft available for editor", lane=lane)
+        lane_state.current_source = "editor"
+        revision_brief = (directive.revision_brief or "").strip()
+        known_issues = _known_issues_from_brief(revision_brief)
+        constraints_payload = coerce_json_object(
+            {
+                "headings": list(lane_state.config.headings),
+                "min_words": lane_state.config.min_words,
+                "min_timestamp_references": lane_state.config.min_timestamp_references,
+                "tone": lane,
+            }
+        )
+        allowed_edits: JSONArray = [
+            coerce_json_value(item)
+            for item in [
+                "formatting",
+                "punctuation",
+                "grammar",
+                "compliance wording",
+                "timestamp placement",
+            ]
+        ]
+        known_issues_json: JSONArray = [coerce_json_value(item) for item in known_issues]
+        base_payload: dict[str, JSONValue] = {
+            "document": document,
+            "constraints": constraints_payload,
+            "known_issues": known_issues_json,
+            "allowed_edits": allowed_edits,
+        }
+        if revision_brief:
+            base_payload["revision_brief"] = revision_brief
+        system_prompt = CLIENT_EDITOR_SYSTEM_PROMPT if lane == "client" else LAWYER_EDITOR_SYSTEM_PROMPT
+        instruction = CLIENT_EDITOR_USER_INSTRUCTION if lane == "client" else LAWYER_EDITOR_USER_INSTRUCTION
+        base_payload["instruction"] = instruction
+        payload = coerce_json_object(base_payload)
+        user_prompt = json.dumps(payload, ensure_ascii=False)
+        _emit(
+            progress,
+            stage_name,
+            "start",
+            {"lane": lane, "attempt": lane_state.attempts, "revision_brief": revision_brief},
+        )
+        response, usage, provider, model = self._invoke_llm(
+            stage=stage_name,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            temperature=0.0,
+            provider_credentials=provider_credentials,
+        )
+        try:
+            parsed = json.loads(response)
+        except json.JSONDecodeError as exc:
+            raise ComposeStageError(stage_name, f"Invalid editor response: {exc}", lane=lane, provider=provider, model=model) from exc
+        new_document = coerce_str(parsed.get("document")) or ""
+        if not new_document.strip():
+            raise ComposeStageError(stage_name, "Editor returned empty document", lane=lane, provider=provider, model=model)
+        change_log_raw = parsed.get("change_log")
+        change_log: list[str] = []
+        if isinstance(change_log_raw, Sequence) and not isinstance(change_log_raw, (str, bytes)):
+            for item in cast(Sequence[object], change_log_raw):
+                if isinstance(item, str):
+                    normalized = item.strip()
+                    if normalized:
+                        change_log.append(normalized)
+        new_hash = hash(new_document.strip().lower())
+        if lane_state.last_document_hash is not None and new_hash == lane_state.last_document_hash:
+            raise ComposeStageError(stage_name, "Editor produced no changes", lane=lane, provider=provider, model=model)
+        lane_state.editor_attempted = True
+        lane_state.document = new_document
+        lane_state.last_document_hash = new_hash
+        lane_state.revision_brief = None
+        lane_state.structure_report = None
+        lane_state.compliance_report = None
+        lane_state.factuality_report = None
+        lane_state.providers.append(provider)
+        lane_state.models.append(model)
+        lane_state.record_usage(stage_name, usage)
+        event_payload = coerce_json_object(
+            {
+                "stage": stage_name,
+                "event": "complete",
+                "lane": lane,
+                "provider": provider,
+                "model": model,
+                "usage": dict(usage),
+                "change_log": [coerce_json_value(entry) for entry in change_log],
+            }
+        )
+        _emit(
+            progress,
+            stage_name,
+            "complete",
+            {
+                "lane": lane,
+                "provider": provider,
+                "model": model,
+                "usage": dict(usage),
+                "change_log": [coerce_json_value(entry) for entry in change_log],
+            },
+        )
+        return {
+            lane: lane_state,
+            "lanes": {lane: None},
+            "stage_usage": {stage_name: dict(usage)},
+            "events": [event_payload],
+        }
 
     def _execute_qa(
         self,
@@ -878,28 +1545,39 @@ class ComposeAgent:
         state: ComposeState,
         provider_credentials: Mapping[str, JSONObject],
         progress: Optional[Callable[[str, str, JSONObject], None]],
-    ) -> None:
+    ) -> tuple[QAReviewerResult, dict[str, int], str, str, JSONObject]:
         stage_name = "compose.qa_reviewer"
-        _emit(progress, stage_name, "start", {})
+        _emit(
+            progress,
+            stage_name,
+            "start",
+            {"iteration": state.qa_iterations},
+        )
 
         if state.context is None:
             raise ComposeStageError(stage_name, "Compose context missing")
+        if "client" not in state.lanes or "lawyer" not in state.lanes:
+            raise ComposeStageError(
+                stage_name,
+                "QA reviewer invoked before lane outcomes ready",
+            )
 
-        payload = {
-            "compose_context": state.context.procedural,
-            "claimable_atoms": state.context.claimable_atoms,
-            "client_brief": state.lanes["client"].document,
-            "lawyer_brief": state.lanes["lawyer"].document,
-        }
+        payload = coerce_json_object(
+            {
+                "compose_context": state.context.procedural,
+                "claimable_atoms": state.context.claimable_atoms,
+                "client_brief": state.lanes["client"].document,
+                "lawyer_brief": state.lanes["lawyer"].document,
+            }
+        )
         user_prompt = json.dumps(payload, ensure_ascii=False)
-        response, usage, provider = self._invoke_llm(
+        response, usage, provider, model = self._invoke_llm(
             stage=stage_name,
             system_prompt=QA_REVIEWER_SYSTEM_PROMPT,
             user_prompt=user_prompt,
             temperature=0.0,
             provider_credentials=provider_credentials,
         )
-        _merge_usage(state.stage_usage, stage_name, usage)
 
         try:
             parsed = json.loads(response)
@@ -916,14 +1594,73 @@ class ComposeAgent:
         staff_report = coerce_str(parsed.get("staff_report")) or ""
         if not staff_report.strip():
             staff_report = "# Staff Report\n\nNo staff report returned."
+        global_notes = coerce_str(parsed.get("global_notes")) or ""
+        lane_actions_payload = parsed.get("lane_actions")
+        lane_actions: dict[str, LaneActionDirective] = {}
+        allowed_actions = {"revise", "editor", "none"}
+        lane_mapping: Mapping[str, JSONValue]
+        if isinstance(lane_actions_payload, Mapping):
+            lane_mapping = cast(Mapping[str, JSONValue], lane_actions_payload)
+        else:
+            lane_mapping = cast(Mapping[str, JSONValue], {})
+        for lane in ("client", "lawyer"):
+            directive_raw = lane_mapping.get(lane)
+            directive_obj = coerce_json_object(directive_raw) if isinstance(directive_raw, Mapping) else {}
+            action_value = coerce_str(directive_obj.get("action")) or "none"
+            normalized_action = action_value.strip().lower()
+            if normalized_action not in allowed_actions:
+                raise ComposeStageError(
+                    stage_name,
+                    f"Unsupported action '{action_value}' for lane '{lane}'",
+                    lane=lane,
+                    provider=provider,
+                    model=model,
+                )
+            revision_brief = (coerce_str(directive_obj.get("revision_brief")) or "").strip()
+            lane_actions[lane] = LaneActionDirective(action=normalized_action, revision_brief=revision_brief)
 
-        state.qa = QAReviewerResult(
+        qa_result = QAReviewerResult(
             status=status,
             alerts=[item for item in alerts if item],
             recommendations=[item for item in recommendations if item],
             staff_report=staff_report,
+            provider=provider,
+            lane_actions=lane_actions,
+            global_notes=global_notes,
         )
-        _emit(progress, stage_name, "complete", {"status": status, "provider": provider})
+        qa_emit_payload = coerce_json_object(
+            {
+                "status": status,
+                "lane_actions": {lane: directive.action for lane, directive in lane_actions.items()},
+                "alerts": list(qa_result.alerts),
+            }
+        )
+        event_payload = coerce_json_object(
+            {
+                "stage": stage_name,
+                "event": "complete",
+                "iteration": state.qa_iterations,
+                "status": status,
+                "provider": provider,
+                "model": model,
+                "usage": dict(usage),
+                "qa": qa_emit_payload,
+            }
+        )
+        _emit(
+            progress,
+            stage_name,
+            "complete",
+            {
+                "iteration": state.qa_iterations,
+                "status": status,
+                "provider": provider,
+                "model": model,
+                "usage": dict(usage),
+                "qa": qa_emit_payload,
+            },
+        )
+        return qa_result, dict(usage), provider, model, event_payload
 
     # ------------------------------------------------------------------
     # Artifact writing
@@ -1028,57 +1765,65 @@ class ComposeAgent:
         user_prompt: str,
         temperature: float,
         provider_credentials: Mapping[str, JSONObject],
-    ) -> tuple[str, dict[str, int], str]:
+    ) -> tuple[str, dict[str, int], str, str]:
         providers = _normalize_providers(self.config.provider_chain)
-        last_error: Optional[Exception] = None
+        assignment = self.settings.stage(stage)
+        provider_name = ""
+        if assignment and assignment.providers:
+            provider_name = assignment.providers[0]
+        if not provider_name and providers:
+            provider_name = providers[0]
+        if not provider_name:
+            provider_name = DEFAULT_PROVIDER_CHAIN[0]
+
+        provider_meta = self.settings.provider(provider_name)
+        if provider_meta is None:
+            raise ComposeStageError(stage, f"Unknown provider '{provider_name}'", provider=provider_name)
+
+        provider_info = cast(Any, provider_meta)
+        default_model = cast(str, getattr(provider_info, "default_model", ""))
         model_override = STAGE_MODEL_DEFAULTS.get(stage, "")
+        if stage == "compose.client.editor" and self.config.client_editor_model:
+            model_override = self.config.client_editor_model
+        elif stage == "compose.lawyer.editor" and self.config.lawyer_editor_model:
+            model_override = self.config.lawyer_editor_model
+        elif assignment and assignment.model and not model_override:
+            model_override = assignment.model
+        model_name = model_override or default_model
+        if not model_name:
+            raise ComposeStageError(stage, f"No model configured for provider '{provider_name}'", provider=provider_name)
 
-        for provider_name in providers:
-            provider_meta = self.settings.provider(provider_name)
-            if provider_meta is None:
-                continue
-            provider_info = cast(Any, provider_meta)
-            default_model = cast(str, getattr(provider_info, "default_model", ""))
-            model_name = model_override or default_model
-            if not model_name:
-                last_error = ComposeStageError(stage, f"No model configured for provider '{provider_name}'")
-                continue
-            credentials = provider_credentials.get(provider_name)
-            try:
-                runtime = build_provider_runtime_config(
-                    provider=provider_meta,
-                    model_name=model_name,
-                    credential_payload=credentials,
-                    options=None,
-                )
-            except ChatClientError as exc:
-                last_error = exc
-                continue
+        credentials = provider_credentials.get(provider_name)
+        try:
+            runtime = build_provider_runtime_config(
+                provider=provider_meta,
+                model_name=model_name,
+                credential_payload=credentials,
+                options=None,
+            )
+        except ChatClientError as exc:
+            raise ComposeStageError(stage, str(exc), provider=provider_name, model=model_name) from exc
 
-            try:
-                client = build_chat_client(provider_runtime=runtime)
-            except ChatClientError as exc:
-                last_error = exc
-                continue
+        try:
+            client = build_chat_client(provider_runtime=runtime)
+        except ChatClientError as exc:
+            raise ComposeStageError(stage, str(exc), provider=provider_name, model=model_name) from exc
 
-            try:
-                content, usage = client.chat(
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                    temperature=temperature,
-                    max_tokens=self.config.max_output_tokens,
-                    response_format=None,
-                )
-            except ChatClientError as exc:
-                last_error = exc
-                continue
+        try:
+            content, usage = client.chat(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=temperature,
+                max_tokens=self.config.max_output_tokens,
+                response_format=None,
+            )
+        except ChatClientError as exc:
+            raise ComposeStageError(stage, str(exc), provider=provider_name, model=model_name) from exc
 
-            usage_map = {key: value for key, value in usage.items() if isinstance(value, int)}
-            return content, usage_map, provider_name
-
-        raise ComposeStageError(stage, str(last_error) if last_error else "No provider available")
+        usage_map = {key: value for key, value in usage.items() if isinstance(value, int)}
+        return content, usage_map, provider_name, model_name
 
 
 # ----------------------------------------------------------------------
@@ -1392,6 +2137,12 @@ def _render_qa_markdown(state: ComposeState) -> str:
     assert qa is not None
     lines = ["# QA Review", ""]
     lines.append(f"**Status:** {qa.status}")
+    if qa.provider:
+        lines.append(f"**Provider:** {qa.provider}")
+    if qa.global_notes:
+        lines.append("")
+        lines.append("## QA Notes")
+        lines.append(qa.global_notes.strip())
     if qa.alerts:
         lines.append("## Alerts")
         lines.extend([f"- {alert}" for alert in qa.alerts])
@@ -1399,6 +2150,15 @@ def _render_qa_markdown(state: ComposeState) -> str:
         lines.append("")
         lines.append("## Recommendations")
         lines.extend([f"- {rec}" for rec in qa.recommendations])
+    if qa.lane_actions:
+        lines.append("")
+        lines.append("## Lane Actions")
+        for lane, directive in qa.lane_actions.items():
+            action_text = directive.action or "none"
+            brief = directive.revision_brief or ""
+            lines.append(f"- {lane.title()}: {action_text}")
+            if brief:
+                lines.append(f"  - Brief: {brief}")
 
     def _lane_section(lane_key: str, title: str, outcome: LaneOutcome) -> None:
         lines.append("")
@@ -1454,10 +2214,7 @@ def _render_docx_from_template(
     for key, value in _docx_placeholder_context().items():
         provided = sections.get(key, value)
         context[f"{key}_plain"] = provided
-        if provided.strip():
-            context[key] = _markdown_to_subdoc(template, provided)
-        else:
-            context[key] = ""
+        context[key] = provided
 
     try:
         template.render(context)
@@ -1502,11 +2259,14 @@ def _emit(
     event: str,
     payload: JSONObject,
 ) -> None:
+    envelope: JSONObject = {"stage": stage, "event": event}
+    for key, value in payload.items():
+        envelope[key] = value
     if progress is None:
-        logger.debug("compose.stage", extra={"stage": stage, "event": event, "payload": payload})
+        logger.debug("compose.stage", extra={"stage": stage, "event": event, "payload": envelope})
         return
     try:
-        progress(stage, event, payload)
+        progress(stage, event, envelope)
     except Exception:  # pragma: no cover - defensive
         logger.debug("compose.progress_callback_failed", exc_info=True)
 
@@ -1532,6 +2292,7 @@ def _lane_history_payload(history: Sequence[LaneAttempt]) -> list[JSONObject]:
         serialized.append(
             {
                 "attempt": attempt.attempt_number,
+                "source": attempt.source,
                 "structure": structure_payload,
                 "compliance": compliance_payload,
                 "factuality": factual_payload,

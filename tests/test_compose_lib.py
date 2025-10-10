@@ -4,14 +4,14 @@ import json
 from pathlib import Path
 from typing import Dict, Tuple
 
-from docx import Document as DocxDocument  # type: ignore[import]
+from docx import Document as DocxDocument
 
 from packages.udocket_core.agents.compose_lib import ComposeAgent, ComposeConfig, ComposeResult
 from packages.udocket_core.json_utils import JSONObject
 from tests._typing import MonkeyPatch
 
 
-ClientResponse = Tuple[str, Dict[str, int], str]
+ClientResponse = Tuple[str, Dict[str, int], str, str]
 
 
 def _write_inputs(base_dir: Path) -> tuple[Path, Path, Path]:
@@ -139,9 +139,21 @@ The case conference is scheduled, and the parties must exchange updated financia
         provider_credentials: JSONObject,
     ) -> ClientResponse:
         if stage == "compose.client.draft":
-            return client_doc, {"prompt_tokens": 100, "completion_tokens": 200}, "stub"
+            return client_doc, {"prompt_tokens": 100, "completion_tokens": 200}, "stub", "stub-model"
+        if stage == "compose.client.revise":
+            revised_client = client_doc.replace(
+                "## Next Steps / Preparation Notes",
+                "## Next Steps / Preparation Notes\nUpdated after QA.",
+            )
+            return revised_client, {"prompt_tokens": 90, "completion_tokens": 190}, "stub", "stub-model"
         if stage == "compose.lawyer.draft":
-            return lawyer_doc, {"prompt_tokens": 120, "completion_tokens": 210}, "stub"
+            return lawyer_doc, {"prompt_tokens": 120, "completion_tokens": 210}, "stub", "stub-model"
+        if stage == "compose.lawyer.revise":
+            revised_lawyer = lawyer_doc.replace(
+                "## Procedural Status / Next Known Steps",
+                "## Procedural Status / Next Known Steps\nQA confirmed clarity.",
+            )
+            return revised_lawyer, {"prompt_tokens": 110, "completion_tokens": 205}, "stub", "stub-model"
         if stage == "compose.qa_reviewer":
             response = json.dumps(
                 {
@@ -149,9 +161,14 @@ The case conference is scheduled, and the parties must exchange updated financia
                     "alerts": [],
                     "recommendations": [],
                     "staff_report": "# Staff Report\n\nAll checks passed.",
+                    "global_notes": "",
+                    "lane_actions": {
+                        "client": {"action": "none", "revision_brief": ""},
+                        "lawyer": {"action": "none", "revision_brief": ""},
+                    },
                 }
             )
-            return response, {"prompt_tokens": 80, "completion_tokens": 40}, "stub"
+            return response, {"prompt_tokens": 80, "completion_tokens": 40}, "stub", "stub-model"
         raise AssertionError(f"Unexpected stage: {stage}")
 
     monkeypatch.setattr(ComposeAgent, "_invoke_llm", fake_invoke)
@@ -269,12 +286,14 @@ The case conference is scheduled, and the parties must exchange updated financia
     ) -> ClientResponse:
         if stage == "compose.client.draft":
             call_counts[stage] += 1
-            return bad_client_doc, {"prompt_tokens": 50, "completion_tokens": 50}, "stub"
+            return bad_client_doc, {"prompt_tokens": 50, "completion_tokens": 50}, "stub", "stub-model"
         if stage == "compose.client.revise":
             call_counts[stage] += 1
-            return good_client_doc, {"prompt_tokens": 60, "completion_tokens": 70}, "stub"
+            return good_client_doc, {"prompt_tokens": 60, "completion_tokens": 70}, "stub", "stub-model"
         if stage == "compose.lawyer.draft":
-            return lawyer_doc, {"prompt_tokens": 40, "completion_tokens": 60}, "stub"
+            return lawyer_doc, {"prompt_tokens": 40, "completion_tokens": 60}, "stub", "stub-model"
+        if stage == "compose.lawyer.revise":
+            return lawyer_doc, {"prompt_tokens": 45, "completion_tokens": 65}, "stub", "stub-model"
         if stage == "compose.qa_reviewer":
             response = json.dumps(
                 {
@@ -282,9 +301,14 @@ The case conference is scheduled, and the parties must exchange updated financia
                     "alerts": [],
                     "recommendations": [],
                     "staff_report": "# Staff Report\n\nClient lane fixed.",
+                    "global_notes": "",
+                    "lane_actions": {
+                        "client": {"action": "none", "revision_brief": ""},
+                        "lawyer": {"action": "none", "revision_brief": ""},
+                    },
                 }
             )
-            return response, {"prompt_tokens": 30, "completion_tokens": 30}, "stub"
+            return response, {"prompt_tokens": 30, "completion_tokens": 30}, "stub", "stub-model"
         raise AssertionError(f"Unexpected stage: {stage}")
 
     monkeypatch.setattr(ComposeAgent, "_invoke_llm", fake_invoke)
@@ -328,7 +352,7 @@ def test_compose_agent_docx_template(tmp_path: Path, monkeypatch: MonkeyPatch) -
     template_doc.add_paragraph("{{ lawyer_brief }}")
     template_doc.add_heading("Staff Notes", level=2)
     template_doc.add_paragraph("{{ staff_report_plain }}")
-    template_doc.save(template_path)
+    template_doc.save(str(template_path))
 
     config = ComposeConfig(
         provider_chain=["stub"],
@@ -346,10 +370,37 @@ def test_compose_agent_docx_template(tmp_path: Path, monkeypatch: MonkeyPatch) -
 
     client_doc = """## Case Overview
 The judge reviewed the interim custody order at [00:01] and confirmed it remained active. The hearing record at [02:00] notes the court expects continued compliance while scheduling the next appearance.
+
+## Key People and Roles
+Alex, the Applicant, described day-to-day parenting responsibilities documented at [00:01]. Morgan, the Respondent, acknowledged disclosure duties at [02:00] and agreed to provide additional materials before the next date.
+
+## Timeline of Events
+At [00:01] the hearing opened with the judge summarising prior orders and confirming attendance. By [02:00] the court restated the interim order and set expectations for preparing the next conference.
+
+## Main Issues
+Interim custody arrangements discussed at [00:01] remain the central topic for the parties. Compliance with prior disclosure obligations at [02:00] continues to affect scheduling and preparation work.
+
+## Next Steps / Preparation Notes
+Gather additional financial disclosures before the next conference at [02:00], including updated income details and childcare schedules. Follow the existing order until further direction from the court and keep notes of cooperation at [00:01].
 """
 
     lawyer_doc = """## Case Summary
 This matter involves interim custody arrangements reviewed on January 5, 2024 at [00:01]. The transcript at [02:00] confirms the interim order remains active while the parties organise updated disclosure.
+
+## Parties and Roles
+Alex (Applicant) presented evidence about parenting schedules at [00:01] and discussed timelines for exchanges. Morgan (Respondent) addressed compliance topics at [02:00] and confirmed availability for upcoming conferences.
+
+## Factual Background
+At [00:01] the hearing opened with a review of prior orders. The court confirmed at [02:00] that the interim order remains in effect and that disclosure obligations continue.
+
+## Issues Presented
+Whether the interim order should remain in effect based on remarks at [02:00] remains under consideration. Scheduling of disclosure deadlines discussed at [00:01] also needs coordination with counsel and the parties.
+
+## Evidence / Supporting Facts
+Transcript segments at [00:01] and [02:00] summarise the oral reasons and confirm the judge’s expectations. Counsel also referenced disclosure undertakings at [02:00] to support the status quo.
+
+## Procedural Status / Next Known Steps
+The case conference is scheduled, and the parties must exchange updated financial materials before the next appearance at [02:00]. The court also requested written updates that track commitments made at [00:01] and [02:00].
 """
 
     def fake_invoke(
@@ -362,9 +413,15 @@ This matter involves interim custody arrangements reviewed on January 5, 2024 at
         provider_credentials: JSONObject,
     ) -> ClientResponse:
         if stage == "compose.client.draft":
-            return client_doc, {"prompt_tokens": 80, "completion_tokens": 120}, "stub"
+            return client_doc, {"prompt_tokens": 80, "completion_tokens": 120}, "stub", "stub-model"
+        if stage == "compose.client.revise":
+            revised_client = client_doc + "\nRevision note added."
+            return revised_client, {"prompt_tokens": 70, "completion_tokens": 110}, "stub", "stub-model"
         if stage == "compose.lawyer.draft":
-            return lawyer_doc, {"prompt_tokens": 90, "completion_tokens": 130}, "stub"
+            return lawyer_doc, {"prompt_tokens": 90, "completion_tokens": 130}, "stub", "stub-model"
+        if stage == "compose.lawyer.revise":
+            revised_lawyer = lawyer_doc + "\nRevision note recorded."
+            return revised_lawyer, {"prompt_tokens": 85, "completion_tokens": 120}, "stub", "stub-model"
         if stage == "compose.qa_reviewer":
             response = json.dumps(
                 {
@@ -372,9 +429,14 @@ This matter involves interim custody arrangements reviewed on January 5, 2024 at
                     "alerts": [],
                     "recommendations": [],
                     "staff_report": "# Staff Report\n\nAll checks passed.",
+                    "global_notes": "",
+                    "lane_actions": {
+                        "client": {"action": "none", "revision_brief": ""},
+                        "lawyer": {"action": "none", "revision_brief": ""},
+                    },
                 }
             )
-            return response, {"prompt_tokens": 60, "completion_tokens": 30}, "stub"
+            return response, {"prompt_tokens": 60, "completion_tokens": 30}, "stub", "stub-model"
         raise AssertionError(stage)
 
     monkeypatch.setattr(ComposeAgent, "_invoke_llm", fake_invoke)
