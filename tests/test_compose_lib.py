@@ -2,172 +2,306 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Dict, Tuple
 
-from packages.udocket_core.agents.compose_lib import (
-    ComposeAgent,
-    ComposeConfig,
-    ComposeResult,
-    _normalize_graph_payload,
-    _normalize_timeline_payload,
-)
+from packages.udocket_core.agents.compose_lib import ComposeAgent, ComposeConfig, ComposeResult
+from packages.udocket_core.json_utils import JSONObject
 from tests._typing import MonkeyPatch
 
 
-def test_compose_agent_creates_artifacts(tmp_path, monkeypatch: MonkeyPatch):
+ClientResponse = Tuple[str, Dict[str, int], str]
+
+
+def _write_inputs(base_dir: Path) -> tuple[Path, Path, Path]:
+    summary_json = base_dir / "summary.json"
+    summary_json.write_text(
+        json.dumps(
+            {
+                "parties": [
+                    {"name": "Alex", "role": "Applicant"},
+                    {"name": "Morgan", "role": "Respondent"},
+                ],
+                "facts": [
+                    {"text": "Hearing held on January 5, 2024."},
+                    {"text": "Interim custody order currently in effect."},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    summary_md = base_dir / "summary.md"
+    summary_md.write_text(
+        """# Summary
+
+Alex and Morgan appeared before the court on January 5, 2024.
+The court issued an interim order.
+""",
+        encoding="utf-8",
+    )
+
+    timeline_json = base_dir / "timeline.json"
+    timeline_json.write_text(
+        json.dumps(
+            {
+                "events": [
+                    {
+                        "id": "event-1",
+                        "summary": "Hearing commenced",
+                        "ts_start": 1.0,
+                        "ts_end": 2.0,
+                        "speakers": ["Alex"],
+                        "references": ["[00:01]"]
+                    },
+                    {
+                        "id": "event-2",
+                        "summary": "Order granted",
+                        "ts_start": 120.0,
+                        "ts_end": 121.0,
+                        "speakers": ["Judge"],
+                        "references": ["[02:00]"]
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    return summary_json, summary_md, timeline_json
+
+
+def test_compose_agent_parallel_lanes(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
     case_dir = tmp_path / "case"
-    analysis_dir = case_dir / "analysis"
+    docs_dir = case_dir / "docs"
     ops_dir = case_dir / "ops"
-    analysis_dir.mkdir(parents=True)
+    docs_dir.mkdir(parents=True)
     ops_dir.mkdir(parents=True)
 
-    summary_json = analysis_dir / "summary.json"
-    summary_json.write_text(json.dumps({"summary": "Test"}), encoding="utf-8")
-    summary_md = analysis_dir / "summary.md"
-    summary_md.write_text("# Summary\n\nDetails", encoding="utf-8")
+    summary_json, summary_md, timeline_json = _write_inputs(docs_dir)
 
-    transcript = analysis_dir / "transcript.txt"
-    transcript.write_text("[00:00] SPK_1: Hello", encoding="utf-8")
+    config = ComposeConfig(
+        provider_chain=["stub"],
+        temperature=0.2,
+        lawyer_temperature=0.2,
+        max_output_tokens=2048,
+        max_client_attempts=2,
+        max_lawyer_attempts=2,
+        min_timestamp_references=1,
+        qa_required=True,
+        enable_parallel_lanes=True,
+        debug=True,
+    )
+    agent = ComposeAgent(config)
 
-    agent = ComposeAgent(ComposeConfig(provider_chain=["stub"], debug=True))
+    client_doc = """## Case Overview
+The judge reviewed the interim custody order at [00:01] and confirmed it remained active. The hearing record at [02:00] notes the court expects continued compliance while scheduling the next appearance.
 
-    stage_outputs = {
-        "compose.context_builder": ({"parties": [], "issues": []}, {"prompt_tokens": 10, "completion_tokens": 5}, "stub"),
-        "compose.timeline_builder": ({"revision": "v2", "events": []}, {"prompt_tokens": 8, "completion_tokens": 4}, "stub"),
-        "compose.timeline_summary": ("## Key Milestones\n- Item", {"prompt_tokens": 4, "completion_tokens": 3}, "stub"),
-        "compose.graph_builder": ({"entities": [], "relationships": []}, {"prompt_tokens": 8, "completion_tokens": 4}, "stub"),
-        "compose.entity_brief": ("## Primary Parties\n- Example", {"prompt_tokens": 5, "completion_tokens": 3}, "stub"),
-        "compose.graph_visual": (
-            {
-                "embed_html": "<div></div>",
-                "alt_text": "Graph visual summary",
-                "notes": "Centered layout",
-                "size_hint": {"width": "960px", "height": "640px"},
-            },
-            {"prompt_tokens": 4, "completion_tokens": 2},
-            "stub",
-        ),
-        "compose.client_brief": ("# Client Brief", {"prompt_tokens": 12, "completion_tokens": 6}, "stub"),
-        "compose.lawyer_brief": ("# Lawyer Brief", {"prompt_tokens": 12, "completion_tokens": 6}, "stub"),
-        "compose.qa_review": ({"status": "ok"}, {"prompt_tokens": 6, "completion_tokens": 3}, "stub"),
-    }
+## Key People and Roles
+Alex, the Applicant, described day-to-day parenting responsibilities documented at [00:01]. Morgan, the Respondent, acknowledged disclosure duties at [02:00] and agreed to provide additional materials before the next date.
 
-    def fake_invoke_stage(self, **kwargs):  # type: ignore[override]
-        key = kwargs["stage_key"]
-        return stage_outputs[key]
+## Timeline of Events
+At [00:01] the hearing opened with the judge summarising prior orders and confirming attendance. By [02:00] the court restated the interim order and set expectations for preparing the next conference.
 
-    monkeypatch.setattr(ComposeAgent, "_invoke_stage", fake_invoke_stage)
+## Main Issues
+Interim custody arrangements discussed at [00:01] remain the central topic for the parties. Compliance with prior disclosure obligations at [02:00] continues to affect scheduling and preparation work.
+
+## Next Steps / Preparation Notes
+Gather additional financial disclosures before the next conference at [02:00], including updated income details and childcare schedules. Follow the existing order until further direction from the court and keep notes of cooperation at [00:01].
+"""
+
+    lawyer_doc = """## Case Summary
+This matter involves interim custody arrangements reviewed on January 5, 2024 at [00:01]. The transcript at [02:00] confirms the interim order remains active while the parties organise updated disclosure.
+
+## Parties and Roles
+Alex (Applicant) presented evidence about parenting schedules at [00:01] and discussed timelines for exchanges. Morgan (Respondent) addressed compliance topics at [02:00] and confirmed availability for upcoming conferences.
+
+## Factual Background
+At [00:01] the hearing opened with a review of prior orders. The court confirmed at [02:00] that the interim order remains in effect and that disclosure obligations continue.
+
+## Issues Presented
+Whether the interim order should remain in effect based on remarks at [02:00] remains under consideration. Scheduling of disclosure deadlines discussed at [00:01] also needs coordination with counsel and the parties.
+
+## Evidence / Supporting Facts
+Transcript segments at [00:01] and [02:00] summarise the oral reasons and confirm the judge’s expectations. Counsel also referenced disclosure undertakings at [02:00] to support the status quo.
+
+## Procedural Status / Next Known Steps
+The case conference is scheduled, and the parties must exchange updated financial materials before the next appearance at [02:00]. The court also requested written updates that track commitments made at [00:01] and [02:00].
+"""
+
+    def fake_invoke(
+        self: ComposeAgent,
+        *,
+        stage: str,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float,
+        provider_credentials: JSONObject,
+    ) -> ClientResponse:
+        if stage == "compose.client.draft":
+            return client_doc, {"prompt_tokens": 100, "completion_tokens": 200}, "stub"
+        if stage == "compose.lawyer.draft":
+            return lawyer_doc, {"prompt_tokens": 120, "completion_tokens": 210}, "stub"
+        if stage == "compose.qa_reviewer":
+            response = json.dumps(
+                {
+                    "status": "ok",
+                    "alerts": [],
+                    "recommendations": [],
+                    "staff_report": "# Staff Report\n\nAll checks passed.",
+                }
+            )
+            return response, {"prompt_tokens": 80, "completion_tokens": 40}, "stub"
+        raise AssertionError(f"Unexpected stage: {stage}")
+
+    monkeypatch.setattr(ComposeAgent, "_invoke_llm", fake_invoke)  # type: ignore[arg-type]
 
     result: ComposeResult = agent.compose(
-        case_id="CASE-1",
+        case_id="CASE-001",
         case_dir=case_dir,
-        job_id="JOB-1",
+        job_id="JOB-001",
         summary_json_path=summary_json,
         summary_markdown_path=summary_md,
-        transcript_path=transcript,
+        transcript_path=None,
+        timeline_seed_path=timeline_json,
+        entity_hint_path=None,
     )
 
     assert result.status == "ok"
     artifacts = result.artifacts
-    assert artifacts.timeline_file and artifacts.timeline_file.exists()
-    assert artifacts.graph_file and artifacts.graph_file.exists()
-    assert artifacts.timeline_summary and artifacts.timeline_summary.exists()
-    assert artifacts.entity_brief and artifacts.entity_brief.exists()
-    assert artifacts.graph_visual_json and artifacts.graph_visual_json.exists()
-    assert artifacts.graph_html and artifacts.graph_html.exists()
-    assert artifacts.graph_image and artifacts.graph_image.exists()
+    assert artifacts.bundle_path and artifacts.bundle_path.exists()
+    bundle_text = artifacts.bundle_path.read_text(encoding="utf-8")
+    assert "Part 1 – Client Summary" in bundle_text
+    assert "Part 2 – Lawyer Brief" in bundle_text
     assert artifacts.client_markdown and artifacts.client_markdown.exists()
     assert artifacts.lawyer_markdown and artifacts.lawyer_markdown.exists()
-    assert artifacts.client_docx and artifacts.client_docx.exists()
-    assert artifacts.lawyer_docx and artifacts.lawyer_docx.exists()
+    assert artifacts.staff_report and artifacts.staff_report.exists()
+    assert artifacts.qa_report and artifacts.qa_report.exists()
+    qa_text = artifacts.qa_report.read_text(encoding="utf-8")
+    assert "## Client Lane" in qa_text
     assert result.meta_json.exists()
-    assert result.audit_jsonl.exists()
+    meta = json.loads(result.meta_json.read_text(encoding="utf-8"))
+    assert meta["client_attempts"] == 1
+    assert meta["lawyer_attempts"] == 1
+    assert meta["stage_usage"]
+    assert meta["staff_report"] and Path(meta["staff_report"]).exists()
 
 
-def test_normalize_timeline_payload_preserves_uuid():
-    payload = {
-        "events": [
-            {
-                "id": "event-1",
-                "uuid": "seed-uuid-123",
-                "summary": "Seed",
-                "ts_start": 1.23,
-                "ts_end": 4.56,
-                "speaker": "SPK_1",
-                "labels": ["test"],
-            }
-        ]
-    }
+def test_compose_agent_revision_cycle(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
+    case_dir = tmp_path / "case"
+    docs_dir = case_dir / "docs"
+    ops_dir = case_dir / "ops"
+    docs_dir.mkdir(parents=True)
+    ops_dir.mkdir(parents=True)
 
-    result = _normalize_timeline_payload(payload)
-    assert result["events"], result
-    normalized = result["events"][0]
-    assert normalized["id"] == "event-1"
-    assert normalized["uuid"] == "seed-uuid-123"
+    summary_json, summary_md, timeline_json = _write_inputs(docs_dir)
 
+    config = ComposeConfig(
+        provider_chain=["stub"],
+        temperature=0.2,
+        lawyer_temperature=0.2,
+        max_output_tokens=2048,
+        max_client_attempts=2,
+        max_lawyer_attempts=1,
+        min_timestamp_references=1,
+        qa_required=True,
+        enable_parallel_lanes=False,
+        debug=True,
+    )
+    agent = ComposeAgent(config)
 
-def test_normalize_graph_payload_preserves_uuid():
-    payload = {
-        "entities": [
-            {
-                "id": "entity-1",
-                "uuid": "entity-uuid-1",
-                "name": "Person A",
-                "type": "PERSON",
-                "aliases": [],
-                "mentions": [],
-            }
-        ],
-        "relationships": [
-            {
-                "id": "rel-1",
-                "uuid": "rel-uuid-1",
-                "source": "entity-1",
-                "target": "entity-2",
-                "type": "ASSOCIATED_WITH",
-                "summary": "Worked together",
-                "evidence": [
-                    {"ts": 12.0, "text": "Reference"},
-                ],
-            }
-        ],
-    }
+    call_counts: dict[str, int] = {"compose.client.draft": 0, "compose.client.revise": 0}
 
-    result = _normalize_graph_payload(payload)
-    assert result["entities"], result
-    assert result["relationships"], result
-    entity = result["entities"][0]
-    relation = result["relationships"][0]
-    assert entity["uuid"] == "entity-uuid-1"
-    assert entity["id"] == "entity-1"
-    assert relation["uuid"] == "rel-uuid-1"
-    assert relation["id"] == "rel-1"
+    bad_client_doc = """## Case Overview
+This section omits required references and headings.
 
+## Key People and Roles
+- Alex: Applicant
 
-def test_compose_prompts_include_case_metadata():
-    agent = ComposeAgent(ComposeConfig(provider_chain=["stub"], debug=True))
+## Main Issues
+- Missing sections cause failure.
+"""
 
-    system_prompt, user_prompt, response_schema = agent._build_prompts(
-        stage_key="compose.context_builder",
-        transcript_text="",
-        summary_markdown="",
-        summary_data={},
-        timeline_seeds=[],
-        entity_hints={},
-        staff_report="",
-        case_brief={},
-        timeline_payload={},
-        graph_payload={},
-        intake={"court_level": "APPEAL"},
-        case_metadata={"case_title": "Example Case", "case_id": "CASE-123"},
-        timeline_summary="",
-        entity_brief="",
-        graph_visual={},
-        attachments=[],
-        transcript_parse=None,
-        profile=None,
-        client_markdown="",
-        lawyer_markdown="",
+    good_client_doc = """## Case Overview
+The interim order remains active as described at [00:01], and the court reiterated those terms at [02:00] while planning the next steps.
+
+## Key People and Roles
+Alex, the Applicant, outlined weekly parenting responsibilities at [00:01] with support plans. Morgan, the Respondent, agreed at [02:00] to deliver additional disclosure and continue cooperation before the next court date.
+
+## Timeline of Events
+The hearing noted at [00:01] contextualised prior orders, while [02:00] documented the judge’s expectation that parties maintain the interim regime.
+
+## Main Issues
+Interim custody arrangements discussed at [00:01] remain unresolved and require updates. Disclosure compliance tracked at [02:00] directly affects scheduling for the next appearance.
+
+## Next Steps / Preparation Notes
+Prepare updated disclosure documents referencing commitments at [02:00] and summarise cooperation highlights from [00:01] so counsel can brief the court efficiently.
+"""
+
+    lawyer_doc = """## Case Summary
+This matter involves interim custody arrangements reviewed on January 5, 2024 at [00:01]. The transcript at [02:00] confirms the interim order remains active while the parties organise updated disclosure.
+
+## Parties and Roles
+Alex (Applicant) presented evidence about parenting schedules at [00:01] and discussed timelines for exchanges. Morgan (Respondent) addressed compliance topics at [02:00] and confirmed availability for upcoming conferences.
+
+## Factual Background
+At [00:01] the hearing opened with a review of prior orders. The court confirmed at [02:00] that the interim order remains in effect and that disclosure obligations continue.
+
+## Issues Presented
+Whether the interim order should remain in effect based on remarks at [02:00] remains under consideration. Scheduling of disclosure deadlines discussed at [00:01] also needs coordination with counsel and the parties.
+
+## Evidence / Supporting Facts
+Transcript segments at [00:01] and [02:00] summarise the oral reasons and confirm the judge’s expectations. Counsel also referenced disclosure undertakings at [02:00] to support the status quo.
+
+## Procedural Status / Next Known Steps
+The case conference is scheduled, and the parties must exchange updated financial materials before the next appearance at [02:00]. The court also requested written updates that track commitments made at [00:01] and [02:00].
+"""
+
+    def fake_invoke(
+        self: ComposeAgent,
+        *,
+        stage: str,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float,
+        provider_credentials: JSONObject,
+    ) -> ClientResponse:
+        if stage == "compose.client.draft":
+            call_counts[stage] += 1
+            return bad_client_doc, {"prompt_tokens": 50, "completion_tokens": 50}, "stub"
+        if stage == "compose.client.revise":
+            call_counts[stage] += 1
+            return good_client_doc, {"prompt_tokens": 60, "completion_tokens": 70}, "stub"
+        if stage == "compose.lawyer.draft":
+            return lawyer_doc, {"prompt_tokens": 40, "completion_tokens": 60}, "stub"
+        if stage == "compose.qa_reviewer":
+            response = json.dumps(
+                {
+                    "status": "ok",
+                    "alerts": [],
+                    "recommendations": [],
+                    "staff_report": "# Staff Report\n\nClient lane fixed.",
+                }
+            )
+            return response, {"prompt_tokens": 30, "completion_tokens": 30}, "stub"
+        raise AssertionError(f"Unexpected stage: {stage}")
+
+    monkeypatch.setattr(ComposeAgent, "_invoke_llm", fake_invoke)  # type: ignore[arg-type]
+
+    result = agent.compose(
+        case_id="CASE-REV",
+        case_dir=case_dir,
+        job_id="JOB-REV",
+        summary_json_path=summary_json,
+        summary_markdown_path=summary_md,
+        transcript_path=None,
+        timeline_seed_path=timeline_json,
+        entity_hint_path=None,
     )
 
-    assert "Example Case" in user_prompt
-    assert "case_metadata" in user_prompt
+    meta = json.loads(result.meta_json.read_text(encoding="utf-8"))
+    assert meta["client_attempts"] == 2
+    assert meta["lawyer_attempts"] == 1
+    assert call_counts["compose.client.draft"] == 1
+    assert call_counts["compose.client.revise"] == 1
+    bundle_text = result.artifacts.bundle_path.read_text(encoding="utf-8")
+    assert "Next Steps / Preparation Notes" in bundle_text

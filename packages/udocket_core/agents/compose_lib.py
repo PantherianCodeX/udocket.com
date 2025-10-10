@@ -6,106 +6,57 @@ import json
 import logging
 import os
 import re
-from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
+from difflib import SequenceMatcher
 from pathlib import Path
-from typing import Any, Callable, Optional, Tuple, cast
-from uuid import NAMESPACE_URL, uuid5
+from typing import Any, Callable, Iterable, Mapping, Optional, Sequence, cast
+
+from docx import Document  # type: ignore[import]
+from langgraph.graph import END, START, StateGraph  # type: ignore[import]
 
 from packages.udocket_core.json_utils import (
     JSONObject,
     JSONValue,
     coerce_float,
-    coerce_int,
     coerce_json_object,
-    coerce_json_value,
     coerce_object_list,
     coerce_str,
     coerce_str_list,
     load_json_object,
     load_json_value,
-    merge_json_objects,
-    parse_json_object,
     write_json_object,
 )
 
-from .common import append_jsonl, ensure_dir, next_versioned, parse_transcript, TranscriptParse
-from .common.llm_health import ensure_llm_client_health
+from .common import append_jsonl, ensure_dir, next_versioned
 from .common.docx import write_basic_docx
-from .compose import COMPOSE_STAGE_PROFILES, ComposeStageProfile
-from .compose.graph_visuals import build_graph_visual_artifacts
 from ..llm import LLMSettings, load_llm_settings
-from ..llm.runtime import (
-    ChatClientError,
-    ResponseFormat,
-    build_chat_client,
-    build_provider_runtime_config,
+from ..llm.runtime import ChatClientError, build_chat_client, build_provider_runtime_config
+from .compose.llm_profiles import (
+    DEFAULT_LAWYER_TEMPERATURE,
+    DEFAULT_MAX_OUTPUT_TOKENS,
+    DEFAULT_TEMPERATURE,
+    LANE_CONFIGS,
+    LaneConfig,
+    QA_REVIEWER_SYSTEM_PROMPT,
+    STAGE_MODEL_DEFAULTS,
+    CLIENT_DRAFT_USER_INSTRUCTION,
+    CLIENT_REVISION_USER_INSTRUCTION,
+    LAWYER_DRAFT_USER_INSTRUCTION,
+    LAWYER_REVISION_USER_INSTRUCTION,
+    REVISION_HEADER_TEMPLATE,
+    lane_system_prompt,
 )
 
 
 logger = logging.getLogger("udocket.compose.agent")
 
 
-DEFAULT_PROVIDER_CHAIN = ["azure"]
-DEFAULT_TEMPERATURE = 0.7
-DEFAULT_LAWYER_TEMPERATURE = 0.4
-DEFAULT_MAX_OUTPUT_TOKENS = 24000
+DEFAULT_PROVIDER_CHAIN: list[str] = ["azure"]
+
+DOC_TEMPLATE_ENV = "COMPOSE_DOCX_TEMPLATE"
 
 
-CLIENT_REQUIRED_HEADINGS: tuple[str, ...] = (
-    "## Case Overview",
-    "## Key People and Roles",
-    "## Timeline of Events",
-    "## Main Issues",
-    "## Next Steps / Preparation Notes",
-)
-
-
-LAWYER_REQUIRED_HEADINGS: tuple[str, ...] = (
-    "## Case Summary",
-    "## Parties and Roles",
-    "## Factual Background",
-    "## Issues Presented",
-    "## Evidence / Supporting Facts",
-    "## Procedural Status / Next Known Steps",
-)
-
-
-CLIENT_MIN_SECTION_WORDS = 8
-LAWYER_MIN_SECTION_WORDS = 12
-CLIENT_MAX_AVG_SENTENCE_WORDS = 18.0
-
-
-CLIENT_COMPOSER_SYSTEM_PROMPT = (
-    "You are Client Composer. Task: write the Client Summary only.\n"
-    "Constraints:\n"
-    "- Plain English, grade 6-8, neutral and empathetic.\n"
-    "- No legal advice, no opinions, no predictions, no instructions.\n"
-    "- No new facts; use only the provided ComposeContext.\n"
-    "- If data is missing, write 'Information not provided.'\n"
-    "Format (exact H2 headings, plain text):\n"
-    "## Case Overview\n"
-    "## Key People and Roles\n"
-    "## Timeline of Events\n"
-    "## Main Issues\n"
-    "## Next Steps / Preparation Notes\n"
-)
-
-
-LAWYER_COMPOSER_SYSTEM_PROMPT = (
-    "You are Lawyer Composer. Task: write the Lawyer Brief only.\n"
-    "Constraints:\n"
-    "- Neutral, concise, professional; no advocacy, no advice, no predictions.\n"
-    "- No new facts; rely solely on the provided ComposeContext.\n"
-    "- If data is missing, state 'Information not provided.'\n"
-    "Format (exact H2 headings, plain text):\n"
-    "## Case Summary\n"
-    "## Parties and Roles\n"
-    "## Factual Background\n"
-    "## Issues Presented\n"
-    "## Evidence / Supporting Facts\n"
-    "## Procedural Status / Next Known Steps\n"
-)
+QA_REVIEWER_STATUS_OK = {"ok", "pass", "approved"}
 
 
 class ComposeStageError(RuntimeError):
@@ -114,31 +65,24 @@ class ComposeStageError(RuntimeError):
         self.stage = stage
 
 
-def _normalize_stage_identifier(value: str) -> Optional[str]:
-    key = (value or "").strip().lower()
-    if not key:
-        return None
-    if key in COMPOSE_STAGE_PROFILES:
-        return key
-    for profile_key in COMPOSE_STAGE_PROFILES:
-        short = profile_key.split(".", 1)[-1]
-        if key == short:
-            return profile_key
-    return None
+def _truthy(value: Optional[str], default: bool) -> bool:
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _normalize_stage_map(
-    stage_map: Mapping[str, Mapping[str, object]] | None,
-) -> dict[str, JSONObject]:
-    if not stage_map:
-        return {}
-    normalized: dict[str, JSONObject] = {}
-    for raw_key, payload in stage_map.items():
-        canonical = _normalize_stage_identifier(coerce_str(raw_key) or "")
-        if not canonical:
-            continue
-        normalized[canonical] = coerce_json_object(payload)
-    return normalized
+def _safe_float(value: Optional[str], fallback: float) -> float:
+    try:
+        return float(value) if value else fallback
+    except (TypeError, ValueError):
+        return fallback
+
+
+def _safe_int(value: Optional[str], fallback: int) -> int:
+    try:
+        return int(value) if value else fallback
+    except (TypeError, ValueError):
+        return fallback
 
 
 def _normalize_providers(values: Iterable[str]) -> list[str]:
@@ -153,352 +97,218 @@ def _normalize_providers(values: Iterable[str]) -> list[str]:
     return ordered
 
 
-def _load_text_file(path: Optional[Path]) -> str:
-    if not path:
-        return ""
-    try:
-        return path.read_text(encoding="utf-8")
-    except Exception:
-        return ""
+def _coerce_optional_object(value: JSONValue) -> JSONObject:
+    return coerce_json_object(value) if isinstance(value, Mapping) else {}
 
 
-def _first_n_segments(transcript_text: str, limit: int = 120) -> str:
-    if not transcript_text:
-        return ""
-    lines = transcript_text.splitlines()
-    return "\n".join(lines[:limit])
+def _collect_alias_items(source: Mapping[str, JSONValue], *keys: str) -> list[JSONObject]:
+    items: list[JSONObject] = []
+    for key in keys:
+        payload = source.get(key)
+        if isinstance(payload, Mapping):
+            items.append(coerce_json_object(payload))
+        elif isinstance(payload, Sequence):
+            for element in payload:
+                if isinstance(element, Mapping):
+                    items.append(coerce_json_object(element))
+    return items
+
+
+def _extract_parties(summary_data: Mapping[str, JSONValue]) -> list[JSONObject]:
+    parties_value = summary_data.get("parties")
+    parties: list[JSONObject] = []
+    if isinstance(parties_value, Mapping):
+        for role_key in (
+            "client",
+            "applicant",
+            "plaintiff",
+            "petitioner",
+            "respondent",
+            "defendant",
+            "opposing",
+        ):
+            role_val = parties_value.get(role_key)
+            if isinstance(role_val, Mapping):
+                obj = coerce_json_object(role_val)
+                obj.setdefault("role", role_key.upper())
+                parties.append(obj)
+        for collection_key in ("counsel", "lawyers", "representatives"):
+            for item in coerce_object_list(parties_value.get(collection_key)):
+                obj = coerce_json_object(item)
+                obj.setdefault("role", collection_key[:-1].upper())
+                parties.append(obj)
+    elif isinstance(parties_value, Sequence):
+        for element in parties_value:
+            if isinstance(element, Mapping):
+                parties.append(coerce_json_object(element))
+    if not parties:
+        parties.extend(_collect_alias_items(summary_data, "parties"))
+    return parties
+
+
+def _extract_deadlines(summary_data: Mapping[str, JSONValue]) -> list[JSONObject]:
+    return _collect_alias_items(summary_data, "deadlines", "upcoming_deadlines")
+
+
+def _extract_orders(summary_data: Mapping[str, JSONValue]) -> list[JSONObject]:
+    orders = _collect_alias_items(summary_data, "orders", "orders_and_directions")
+    if not orders:
+        orders = _collect_alias_items(summary_data, "court_orders", "directions")
+    return orders
+
+
+def _extract_exhibits(summary_data: Mapping[str, JSONValue]) -> list[JSONObject]:
+    return _collect_alias_items(summary_data, "exhibits", "evidence", "documents")
+
+
+def _trim_atom(text: str) -> Optional[str]:
+    normalized = text.strip()
+    if not normalized or len(normalized) < 8:
+        return None
+    sanitized = re.sub(r"\s+", " ", normalized)
+    return sanitized[:280]
+
+
+def _merge_usage(target: dict[str, dict[str, int]], stage: str, usage: dict[str, int]) -> None:
+    stage_bucket = target.setdefault(stage, {})
+    for key, value in usage.items():
+        stage_bucket[key] = stage_bucket.get(key, 0) + value
 
 
 def _markdown_paragraphs(markdown_text: str) -> list[str]:
     lines = markdown_text.splitlines()
-    paragraphs: list[str] = []
     buffer: list[str] = []
+    paragraphs: list[str] = []
     for line in lines:
-        striped = line.strip()
-        if not striped:
+        stripped = line.strip()
+        if not stripped:
             if buffer:
                 paragraphs.append(" ".join(buffer).strip())
                 buffer.clear()
             continue
-        if striped.startswith("#"):
+        if stripped.startswith("##"):
             if buffer:
                 paragraphs.append(" ".join(buffer).strip())
                 buffer.clear()
-            paragraphs.append(striped.lstrip("#").strip())
+            paragraphs.append(stripped)
         else:
-            buffer.append(striped)
+            buffer.append(stripped)
     if buffer:
         paragraphs.append(" ".join(buffer).strip())
-    return paragraphs or [markdown_text.strip()]
+    return paragraphs
 
 
-def _normalize_timeline_payload(payload: Mapping[str, JSONValue]) -> JSONObject:
-    payload_obj = coerce_json_object(payload)
-    events = coerce_object_list(payload_obj.get("events"))
-    normalized_events: list[JSONValue] = []
-    for event in events:
-        title = coerce_str(event.get("title")) or coerce_str(event.get("summary")) or coerce_str(event.get("text")) or ""
-        summary = coerce_str(event.get("summary")) or coerce_str(event.get("text")) or ""
-        ts_start_val = coerce_float(event.get("ts_start"))
-        ts_end_val = coerce_float(event.get("ts_end"))
-        speakers = coerce_str_list(event.get("speakers"))
-        if not speakers:
-            solo = coerce_str(event.get("speaker"))
-            if solo:
-                speakers = [solo]
-        references = coerce_str_list(event.get("references"))
-        labels = coerce_str_list(event.get("labels"), unique=True)
-        signature = "|".join(
-            [
-                "compose.timeline",
-                "" if ts_start_val is None else f"{ts_start_val:.3f}",
-                "" if ts_end_val is None else f"{ts_end_val:.3f}",
-                "::".join(speakers),
-                summary or "",
-            ]
-        )
-        derived_uuid = uuid5(NAMESPACE_URL, signature)
-        existing_uuid = coerce_str(event.get("uuid"))
-        event_uuid = existing_uuid or str(derived_uuid)
-        existing_id = coerce_str(event.get("id"))
-        event_id = existing_id or event_uuid
-        normalized_events.append(
-            _payload_dict(
-                id=event_id,
-                uuid=event_uuid,
-                title=title or summary or "Timeline event",
-                summary=summary,
-                ts_start=ts_start_val,
-                ts_end=ts_end_val,
-                speakers=speakers,
-                references=references,
-                labels=labels,
-            )
-        )
-
-    result: JSONObject = {
-        key: coerce_json_value(value)
-        for key, value in payload_obj.items()
-        if key != "events"
-    }
-    result["events"] = normalized_events
-    return result
+@dataclass(slots=True)
+class ComposeInputs:
+    summary_markdown: str
+    summary_data: JSONObject
+    timeline_seeds: list[JSONObject]
+    entity_hints: JSONObject
+    intake: JSONObject
+    case_metadata: JSONObject
 
 
-def _normalize_graph_payload(payload: Mapping[str, JSONValue]) -> JSONObject:
-    payload_obj = coerce_json_object(payload)
-    entities_raw = coerce_object_list(payload_obj.get("entities"))
-    relations_raw = coerce_object_list(payload_obj.get("relationships"))
+@dataclass(slots=True)
+class ComposeContext:
+    parties: list[JSONObject] = field(default_factory=list)
+    issues: list[JSONObject] = field(default_factory=list)
+    facts: list[JSONObject] = field(default_factory=list)
+    events: list[JSONObject] = field(default_factory=list)
+    deadlines: list[JSONObject] = field(default_factory=list)
+    orders: list[JSONObject] = field(default_factory=list)
+    exhibits: list[JSONObject] = field(default_factory=list)
+    procedural: JSONObject = field(default_factory=dict)
+    claimable_atoms: list[str] = field(default_factory=list)
 
-    normalized_entities: list[JSONValue] = []
-    for entity in entities_raw:
-        name = coerce_str(entity.get("name")) or ""
-        entity_type = coerce_str(entity.get("type")) or "UNKNOWN"
-        signature = f"compose.entity|{entity_type}|{name.lower()}"
-        derived_uuid = uuid5(NAMESPACE_URL, signature)
-        existing_uuid = coerce_str(entity.get("uuid"))
-        entity_uuid = existing_uuid or str(derived_uuid)
-        entity_id = coerce_str(entity.get("id")) or entity_uuid
-        aliases = coerce_str_list(entity.get("aliases"))
-        mentions: list[JSONValue] = []
-        for mention in coerce_object_list(entity.get("mentions")):
-            text = coerce_str(mention.get("text")) or coerce_str(mention.get("excerpt"))
-            if not text:
-                continue
-            ts_normalized = coerce_float(mention.get("ts"))
-            if ts_normalized is None:
-                ts_normalized = coerce_float(mention.get("timestamp"))
-            mentions.append(_payload_dict(ts=ts_normalized, text=text))
-        normalized_entities.append(
-            _payload_dict(
-                id=entity_id,
-                uuid=entity_uuid,
-                name=name,
-                type=entity_type,
-                aliases=aliases,
-                mentions=mentions,
-                description=coerce_str(entity.get("description")) or "",
-            )
-        )
 
-    normalized_relations: list[JSONValue] = []
-    for relation in relations_raw:
-        relation_type = coerce_str(relation.get("type")) or "RELATED_TO"
-        source = coerce_str(relation.get("source")) or ""
-        target = coerce_str(relation.get("target")) or ""
-        signature = f"compose.relation|{relation_type}|{source.lower()}|{target.lower()}"
-        derived_uuid = uuid5(NAMESPACE_URL, signature)
-        existing_uuid = coerce_str(relation.get("uuid"))
-        relation_uuid = existing_uuid or str(derived_uuid)
-        relation_id = coerce_str(relation.get("id")) or relation_uuid
-        evidence_entries: list[JSONValue] = []
-        for item in coerce_object_list(relation.get("evidence")):
-            text = coerce_str(item.get("text")) or coerce_str(item.get("excerpt"))
-            if not text:
-                continue
-            ts_value = coerce_float(item.get("ts"))
-            if ts_value is None:
-                ts_value = coerce_float(item.get("timestamp"))
-            evidence_entries.append(_payload_dict(ts=ts_value, text=text))
-        normalized_relations.append(
-            _payload_dict(
-                id=relation_id,
-                uuid=relation_uuid,
-                type=relation_type,
-                source=source,
-                target=target,
-                summary=coerce_str(relation.get("summary")) or "",
-                evidence=evidence_entries,
-            )
+@dataclass(slots=True)
+class GuardReport:
+    ok: bool
+    errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    checks: JSONObject = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class LaneAttempt:
+    attempt_number: int
+    document: str
+    structure: GuardReport
+    compliance: GuardReport
+    factuality: GuardReport
+
+
+@dataclass(slots=True)
+class LaneOutcome:
+    document: str
+    structure_report: GuardReport
+    compliance_report: GuardReport
+    factuality_report: GuardReport
+    attempts: int
+    history: list[LaneAttempt]
+    stage_usage: dict[str, dict[str, int]]
+    token_usage: dict[str, int]
+    providers: list[str]
+
+
+@dataclass(slots=True)
+class LaneRuntimeState:
+    lane: str
+    config: LaneConfig
+    max_attempts: int
+    attempts: int = 0
+    revision_brief: Optional[str] = None
+    last_document_hash: Optional[int] = None
+    document: Optional[str] = None
+    structure_report: Optional[GuardReport] = None
+    compliance_report: Optional[GuardReport] = None
+    factuality_report: Optional[GuardReport] = None
+    history: list[LaneAttempt] = field(default_factory=list)
+    stage_usage: dict[str, dict[str, int]] = field(default_factory=dict)
+    token_usage: dict[str, int] = field(default_factory=dict)
+    providers: list[str] = field(default_factory=list)
+
+    def record_usage(self, stage: str, usage: Mapping[str, int]) -> None:
+        _merge_usage(self.stage_usage, stage, dict(usage))
+        for key, value in usage.items():
+            self.token_usage[key] = self.token_usage.get(key, 0) + value
+
+    def to_outcome(self) -> LaneOutcome:
+        if self.document is None or self.structure_report is None or self.compliance_report is None or self.factuality_report is None:
+            raise ComposeStageError(f"compose.{self.lane}", "Lane outcome requested before completion")
+        return LaneOutcome(
+            document=self.document,
+            structure_report=_clone_report(self.structure_report),
+            compliance_report=_clone_report(self.compliance_report),
+            factuality_report=_clone_report(self.factuality_report),
+            attempts=self.attempts,
+            history=list(self.history),
+            stage_usage={stage: dict(values) for stage, values in self.stage_usage.items()},
+            token_usage=dict(self.token_usage),
+            providers=list(self.providers),
         )
 
-    result: JSONObject = {
-        key: coerce_json_value(value)
-        for key, value in payload_obj.items()
-        if key not in {"entities", "relationships"}
-    }
-    result["entities"] = normalized_entities
-    result["relationships"] = normalized_relations
-    return result
+
+@dataclass(slots=True)
+class QAReviewerResult:
+    status: str
+    alerts: list[str]
+    recommendations: list[str]
+    staff_report: str
 
 
-def _payload_dict(**items: object) -> JSONObject:
-    return {key: coerce_json_value(value) for key, value in items.items()}
-
-
-_HEADING_PATTERN = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
-
-
-def _split_markdown_sections(document: str) -> list[tuple[str, str]]:
-    normalized = document.replace("\r\n", "\n")
-    matches = list(_HEADING_PATTERN.finditer(normalized))
-    sections: list[tuple[str, str]] = []
-    for index, match in enumerate(matches):
-        heading = "## " + match.group(1).strip()
-        start = match.end()
-        end = matches[index + 1].start() if index + 1 < len(matches) else len(normalized)
-        content = normalized[start:end].strip()
-        sections.append((heading, content))
-    return sections
-
-
-def _markdown_structure_errors(
-    *,
-    document: str,
-    required_headings: Sequence[str],
-    min_section_words: int,
-) -> list[str]:
-    text = document.strip()
-    if not text:
-        return ["Document is empty"]
-
-    sections = _split_markdown_sections(text)
-    if not sections:
-        return ["No H2 headings found"]
-
-    heading_order = [heading for heading, _ in sections]
-    errors: list[str] = []
-
-    last_index = -1
-    for required in required_headings:
-        occurrences = [idx for idx, heading in enumerate(heading_order) if heading == required]
-        if not occurrences:
-            errors.append(f"Missing heading '{required}'")
-            continue
-        if len(occurrences) > 1:
-            errors.append(f"Duplicate heading '{required}'")
-        current_index = occurrences[0]
-        if current_index <= last_index:
-            errors.append(f"Heading '{required}' appears out of order")
-        last_index = current_index
-
-    allowed = set(required_headings)
-    for heading in heading_order:
-        if heading not in allowed:
-            errors.append(f"Unexpected heading '{heading}'")
-
-    section_map = {heading: content for heading, content in sections}
-    for required in required_headings:
-        content = section_map.get(required)
-        if content is None:
-            continue
-        word_count = len(re.findall(r"\b\w+\b", content))
-        if word_count < min_section_words:
-            errors.append(
-                f"Section '{required}' is too short (has {word_count} words, expected at least {min_section_words})"
-            )
-
-    return errors
-
-
-def _sentence_length_errors(document: str, *, max_average_words: float) -> list[str]:
-    body = _HEADING_PATTERN.sub("", document.replace("\r\n", "\n"))
-    candidates = re.split(r"(?<=[.!?])\s+|\n", body)
-    lengths: list[int] = []
-    for candidate in candidates:
-        words = re.findall(r"\b\w+\b", candidate)
-        if words:
-            lengths.append(len(words))
-    if not lengths:
-        return []
-    average = sum(lengths) / float(len(lengths))
-    if average > max_average_words:
-        return [f"Average sentence length {average:.1f} words exceeds {max_average_words:.0f}"]
-    return []
-
-
-def _validate_client_brief(document: str) -> None:
-    errors = _markdown_structure_errors(
-        document=document,
-        required_headings=CLIENT_REQUIRED_HEADINGS,
-        min_section_words=CLIENT_MIN_SECTION_WORDS,
-    )
-    errors.extend(
-        _sentence_length_errors(document, max_average_words=CLIENT_MAX_AVG_SENTENCE_WORDS)
-    )
-    if errors:
-        raise ComposeStageError("compose.client_brief", "; ".join(errors))
-
-
-def _validate_lawyer_brief(document: str) -> None:
-    errors = _markdown_structure_errors(
-        document=document,
-        required_headings=LAWYER_REQUIRED_HEADINGS,
-        min_section_words=LAWYER_MIN_SECTION_WORDS,
-    )
-    if errors:
-        raise ComposeStageError("compose.lawyer_brief", "; ".join(errors))
-
-
-@dataclass
-class ComposeConfig:
-    provider_chain: list[str] = field(default_factory=lambda: list(DEFAULT_PROVIDER_CHAIN))
-    temperature: float = DEFAULT_TEMPERATURE
-    lawyer_temperature: float = DEFAULT_LAWYER_TEMPERATURE
-    max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS
-    debug: bool = False
-
-    @classmethod
-    def from_env(cls) -> "ComposeConfig":
-        providers_env = os.getenv("COMPOSE_PROVIDER_CHAIN", "")
-        providers: list[str]
-        if providers_env:
-            providers = _normalize_providers(providers_env.split(","))
-        else:
-            providers = list(DEFAULT_PROVIDER_CHAIN)
-        temp = os.getenv("COMPOSE_TEMPERATURE")
-        lawyer_temp = os.getenv("COMPOSE_LAWYER_TEMPERATURE")
-        max_tokens_env = os.getenv("COMPOSE_MAX_OUTPUT_TOKENS")
-        debug = os.getenv("DEBUG", "0").strip().lower() in {"1", "true", "yes", "on"}
-        try:
-            temperature = float(temp) if temp else DEFAULT_TEMPERATURE
-        except (TypeError, ValueError):
-            temperature = DEFAULT_TEMPERATURE
-        try:
-            lawyer_temperature = float(lawyer_temp) if lawyer_temp else DEFAULT_LAWYER_TEMPERATURE
-        except (TypeError, ValueError):
-            lawyer_temperature = DEFAULT_LAWYER_TEMPERATURE
-        try:
-            max_tokens = int(max_tokens_env) if max_tokens_env else DEFAULT_MAX_OUTPUT_TOKENS
-        except (TypeError, ValueError):
-            max_tokens = DEFAULT_MAX_OUTPUT_TOKENS
-        if not providers:
-            providers = list(DEFAULT_PROVIDER_CHAIN)
-        return cls(
-            provider_chain=providers,
-            temperature=temperature,
-            lawyer_temperature=lawyer_temperature,
-            max_output_tokens=max_tokens,
-            debug=debug,
-        )
-
-    def stage_max_tokens(self, stage_key: str, model_max: Optional[int]) -> int:
-        profile = COMPOSE_STAGE_PROFILES.get(stage_key)
-        base = self.max_output_tokens
-        if profile and profile.output_reserve_tokens > 0:
-            base = max(base, profile.output_reserve_tokens)
-        if model_max and model_max > 0:
-            base = min(base, model_max)
-        return max(base, 512)
-
-
-@dataclass
+@dataclass(slots=True)
 class ComposeArtifacts:
-    timeline_file: Optional[Path] = None
-    graph_file: Optional[Path] = None
-    entities_file: Optional[Path] = None
     client_markdown: Optional[Path] = None
     lawyer_markdown: Optional[Path] = None
     client_docx: Optional[Path] = None
     lawyer_docx: Optional[Path] = None
-    timeline_summary: Optional[Path] = None
-    entity_brief: Optional[Path] = None
-    graph_visual_json: Optional[Path] = None
-    graph_html: Optional[Path] = None
-    graph_image: Optional[Path] = None
+    bundle_path: Optional[Path] = None
+    qa_report: Optional[Path] = None
+    staff_report: Optional[Path] = None
 
 
-@dataclass
+@dataclass(slots=True)
 class ComposeResult:
     status: str
     artifacts: ComposeArtifacts
@@ -506,6 +316,63 @@ class ComposeResult:
     audit_jsonl: Path
     provider_chain: list[str]
     stage_usage: dict[str, dict[str, int]]
+
+
+@dataclass(slots=True)
+class ComposeConfig:
+    provider_chain: list[str] = field(default_factory=lambda: list(DEFAULT_PROVIDER_CHAIN))
+    temperature: float = DEFAULT_TEMPERATURE
+    lawyer_temperature: float = DEFAULT_LAWYER_TEMPERATURE
+    max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS
+    max_client_attempts: int = 2
+    max_lawyer_attempts: int = 2
+    min_timestamp_references: int = 3
+    qa_required: bool = True
+    debug: bool = False
+    doc_template_path: Optional[Path] = None
+
+    @classmethod
+    def from_env(cls) -> "ComposeConfig":
+        providers_env = os.getenv("COMPOSE_PROVIDER_CHAIN", "")
+        providers = _normalize_providers(providers_env.split(",")) if providers_env else list(DEFAULT_PROVIDER_CHAIN)
+        temperature = _safe_float(os.getenv("COMPOSE_TEMPERATURE"), DEFAULT_TEMPERATURE)
+        lawyer_temperature = _safe_float(os.getenv("COMPOSE_LAWYER_TEMPERATURE"), DEFAULT_LAWYER_TEMPERATURE)
+        max_tokens = _safe_int(os.getenv("COMPOSE_MAX_OUTPUT_TOKENS"), DEFAULT_MAX_OUTPUT_TOKENS)
+        max_client_attempts = _safe_int(os.getenv("COMPOSE_MAX_CLIENT_ATTEMPTS"), 2)
+        max_lawyer_attempts = _safe_int(os.getenv("COMPOSE_MAX_LAWYER_ATTEMPTS"), 2)
+        min_timestamp_references = _safe_int(os.getenv("COMPOSE_MIN_TIMESTAMP_REFERENCES"), 3)
+        qa_required = _truthy(os.getenv("COMPOSE_QA_REQUIRED"), True)
+        debug = _truthy(os.getenv("DEBUG"), False)
+        template_env = os.getenv(DOC_TEMPLATE_ENV)
+        template_path = Path(template_env).resolve() if template_env else None
+        if template_path and not template_path.exists():
+            logger.warning("compose.doc_template.missing", extra={"path": str(template_path)})
+            template_path = None
+        if not providers:
+            providers = list(DEFAULT_PROVIDER_CHAIN)
+        return cls(
+            provider_chain=providers,
+            temperature=temperature,
+            lawyer_temperature=lawyer_temperature,
+            max_output_tokens=max_tokens,
+            max_client_attempts=max_client_attempts,
+            max_lawyer_attempts=max_lawyer_attempts,
+            min_timestamp_references=min_timestamp_references,
+            qa_required=qa_required,
+            debug=debug,
+            doc_template_path=template_path,
+        )
+
+
+@dataclass(slots=True)
+class ComposeState:
+    inputs: ComposeInputs
+    client: LaneRuntimeState
+    lawyer: LaneRuntimeState
+    context: Optional[ComposeContext] = None
+    lanes: dict[str, LaneOutcome] = field(default_factory=dict)
+    qa: Optional[QAReviewerResult] = None
+    stage_usage: dict[str, dict[str, int]] = field(default_factory=dict)
 
 
 class ComposeAgent:
@@ -522,301 +389,98 @@ class ComposeAgent:
         job_id: str,
         summary_json_path: Optional[Path],
         summary_markdown_path: Optional[Path],
-        transcript_path: Optional[Path],
+        transcript_path: Optional[Path],  # unused but kept for API parity
         timeline_seed_path: Optional[Path] = None,
         entity_hint_path: Optional[Path] = None,
-        staff_report_path: Optional[Path] = None,
         intake: Optional[Mapping[str, Any]] = None,
         case_metadata: Optional[Mapping[str, Any]] = None,
-        provider_chain: Optional[Sequence[str]] = None,
-        stage_map: Optional[Mapping[str, Mapping[str, Any]]] = None,
         provider_credentials: Optional[Mapping[str, Mapping[str, Any]]] = None,
-        targets: Optional[Sequence[str]] = None,
-        attachments: Optional[Sequence[Mapping[str, Any]]] = None,
-        progress_callback: Optional[Callable[[str, str, Mapping[str, JSONValue]], None]] = None,
+        progress_callback: Optional[Callable[[str, str, JSONObject], None]] = None,
     ) -> ComposeResult:
         case_dir = Path(case_dir)
-        analysis_dir = case_dir / "analysis"
+        docs_dir = case_dir / "docs"
         ops_dir = case_dir / "ops"
-        ensure_dir(analysis_dir)
+        ensure_dir(docs_dir)
         ensure_dir(ops_dir)
 
-        summary_markdown = _load_text_file(summary_markdown_path)
-        summary_data: JSONObject = {}
-        if summary_json_path and summary_json_path.exists():
-            try:
-                summary_data = load_json_object(summary_json_path, context="summary data")
-            except ValueError as exc:
-                raise ComposeStageError("compose.context_builder", str(exc)) from exc
-
-        timeline_seeds: list[JSONObject] = []
-        if timeline_seed_path and timeline_seed_path.exists():
-            try:
-                payload = load_json_value(timeline_seed_path, context="timeline seeds")
-            except ValueError as exc:
-                raise ComposeStageError("compose.timeline_builder", str(exc)) from exc
-
-            if isinstance(payload, Mapping):
-                events = coerce_object_list(payload.get("events"))
-            elif isinstance(payload, Sequence) and not isinstance(payload, (str, bytes, bytearray)):
-                events = [item for item in payload if isinstance(item, Mapping)]
-                events = [coerce_json_object(event) for event in events]
-            else:
-                events = []
-            timeline_seeds = events
-
-        entity_hints: JSONObject = {}
-        if entity_hint_path and entity_hint_path.exists():
-            try:
-                entity_hints = load_json_object(entity_hint_path, context="entity hints")
-            except ValueError as exc:
-                raise ComposeStageError("compose.entity_brief", str(exc)) from exc
-
-        staff_report = _load_text_file(staff_report_path)
-        transcript_text = _load_text_file(transcript_path)
-        transcript_parse = (
-            parse_transcript(transcript_path)
-            if transcript_path and transcript_path.exists()
-            else None
+        summary_markdown = _read_text(summary_markdown_path)
+        summary_data = _read_json(summary_json_path)
+        timeline_seeds = _load_sequence(timeline_seed_path)
+        entity_hints = _read_json(entity_hint_path)
+        inputs = ComposeInputs(
+            summary_markdown=summary_markdown,
+            summary_data=summary_data,
+            timeline_seeds=timeline_seeds,
+            entity_hints=entity_hints,
+            intake=coerce_json_object(intake) if intake else {},
+            case_metadata=coerce_json_object(case_metadata) if case_metadata else {},
         )
 
-        normalized_stage_map = _normalize_stage_map(stage_map)
-        requested_targets = set(targets or [
-            "timeline",
-            "graph",
-            "client",
-            "lawyer",
-            "qa",
-        ])
+        state = ComposeState(
+            inputs=inputs,
+            client=LaneRuntimeState(
+                lane="client",
+                config=LANE_CONFIGS["client"],
+                max_attempts=self.config.max_client_attempts,
+            ),
+            lawyer=LaneRuntimeState(
+                lane="lawyer",
+                config=LANE_CONFIGS["lawyer"],
+                max_attempts=self.config.max_lawyer_attempts,
+            ),
+        )
 
-        provider_chain = list(provider_chain or self.config.provider_chain)
-        provider_credentials_map: dict[str, JSONObject] = {
-            provider_name: coerce_json_object(payload)
-            for provider_name, payload in (provider_credentials or {}).items()
+        provider_credentials_map: Mapping[str, JSONObject] = {
+            name: coerce_json_object(payload)
+            for name, payload in (provider_credentials or {}).items()
         }
 
-        state_usage: dict[str, dict[str, int]] = {}
-        stage_order: list[tuple[str, str]] = [
-            ("compose.context_builder", "context"),
-            ("compose.timeline_builder", "timeline"),
-            ("compose.timeline_summary", "timeline_summary"),
-            ("compose.graph_builder", "graph"),
-            ("compose.entity_brief", "entity_brief"),
-            ("compose.graph_visual", "graph_visual"),
-            ("compose.client_brief", "client"),
-            ("compose.lawyer_brief", "lawyer"),
-            ("compose.qa_review", "qa"),
-        ]
-
-        context_payload: JSONObject = {}
-        timeline_payload: JSONObject = {}
-        graph_payload: JSONObject = {}
-        client_markdown = ""
-        lawyer_markdown = ""
-        qa_payload: JSONObject = {}
-        used_providers: list[str] = []
-        case_metadata_obj = coerce_json_object(case_metadata) if case_metadata else {}
-        timeline_summary_markdown = ""
-        entity_brief_markdown = ""
-        graph_visual_payload: JSONObject = {}
-        intake_obj = coerce_json_object(intake) if intake else {}
-        attachments_list: list[JSONObject] = [
-            coerce_json_object(item) for item in (attachments or [])
-        ]
-
-        def emit(stage: str, event: str, details: Mapping[str, JSONValue] | None = None) -> None:
-            if progress_callback is None:
-                if self.config.debug:
-                    self.logger.info(
-                        "compose.stage",
-                        extra={"stage": stage, "event": event, "details": dict(details or {})},
-                    )
-                return
-            try:
-                progress_callback(stage, event, details or {})
-            except Exception:  # pragma: no cover - defensive
-                self.logger.debug("progress callback failed", exc_info=True)
-
-        def _bucket_enabled(bucket: str) -> bool:
-            if bucket == "context":
-                return True
-            if bucket == "timeline":
-                return any(target in requested_targets for target in {"timeline", "client", "lawyer", "qa"})
-            if bucket == "timeline_summary":
-                return any(target in requested_targets for target in {"timeline", "client", "lawyer", "qa"})
-            if bucket == "graph":
-                return any(target in requested_targets for target in {"graph", "client", "lawyer", "qa"})
-            if bucket in {"entity_brief", "graph_visual"}:
-                return any(target in requested_targets for target in {"graph", "client", "lawyer", "qa"})
-            return bucket in requested_targets
-
-        for stage_key, bucket in stage_order:
-            if not _bucket_enabled(bucket):
-                continue
-
-            emit(stage_key, "start")
-            try:
-                response, usage, provider = self._invoke_stage(
-                    stage_key=stage_key,
-                    normalized_stage_map=normalized_stage_map,
-                    provider_chain=provider_chain,
-                    provider_credentials=provider_credentials_map,
-                    transcript_text=transcript_text,
-                    transcript_parse=transcript_parse,
-                    summary_markdown=summary_markdown,
-                    summary_data=summary_data,
-                    timeline_seeds=tuple(timeline_seeds),
-                    entity_hints=entity_hints,
-                    staff_report=staff_report,
-                    case_brief=context_payload,
-                    timeline_payload=timeline_payload,
-                    graph_payload=graph_payload,
-                    intake=intake_obj,
-                    case_metadata=case_metadata_obj,
-                    timeline_summary=timeline_summary_markdown,
-                    entity_brief=entity_brief_markdown,
-                    graph_visual=graph_visual_payload,
-                    attachments=tuple(attachments_list),
-                    client_markdown=client_markdown,
-                    lawyer_markdown=lawyer_markdown,
-                )
-            except ComposeStageError:
-                emit(stage_key, "failed")
-                raise
-            used_providers.append(provider)
-            if usage:
-                state_usage[stage_key] = usage
-
-            if stage_key == "compose.context_builder":
-                context_payload = (
-                    coerce_json_object(response)
-                    if isinstance(response, Mapping)
-                    else {}
-                )
-            elif stage_key == "compose.timeline_builder":
-                if isinstance(response, Mapping):
-                    timeline_payload = _normalize_timeline_payload(response)
-            elif stage_key == "compose.timeline_summary":
-                timeline_summary_markdown = str(response)
-            elif stage_key == "compose.graph_builder":
-                if isinstance(response, Mapping):
-                    graph_payload = _normalize_graph_payload(response)
-            elif stage_key == "compose.entity_brief":
-                entity_brief_markdown = str(response)
-            elif stage_key == "compose.graph_visual":
-                graph_visual_payload = (
-                    coerce_json_object(response)
-                    if isinstance(response, Mapping)
-                    else {}
-                )
-            elif stage_key == "compose.client_brief":
-                client_markdown = str(response)
-            elif stage_key == "compose.lawyer_brief":
-                lawyer_markdown = str(response)
-            elif stage_key == "compose.qa_review":
-                qa_payload = (
-                    coerce_json_object(response)
-                    if isinstance(response, Mapping)
-                    else {}
-                )
-
-            emit(stage_key, "complete", {"provider": provider})
-
-        artifacts = ComposeArtifacts()
-
-        if "timeline" in requested_targets and timeline_payload:
-            timeline_file = next_versioned(analysis_dir / f"{job_id}__timeline_v2.json")
-            write_json_object(timeline_file, timeline_payload)
-            artifacts.timeline_file = timeline_file
-
-        if timeline_summary_markdown:
-            timeline_summary_file = next_versioned(analysis_dir / f"{job_id}__compose_timeline_v1.md")
-            timeline_summary_file.write_text(timeline_summary_markdown, encoding="utf-8")
-            artifacts.timeline_summary = timeline_summary_file
-
-        if "graph" in requested_targets and graph_payload:
-            graph_file = next_versioned(analysis_dir / f"{job_id}__graph_v2.json")
-            write_json_object(graph_file, graph_payload)
-            artifacts.graph_file = graph_file
-            entities_value = graph_payload.get("entities")
-            if isinstance(entities_value, list):
-                entities_file = next_versioned(analysis_dir / f"{job_id}__entities_v2.json")
-                write_json_object(entities_file, {"entities": entities_value})
-                artifacts.entities_file = entities_file
-
-        if entity_brief_markdown:
-            entity_brief_file = next_versioned(analysis_dir / f"{job_id}__compose_entities_v1.md")
-            entity_brief_file.write_text(entity_brief_markdown, encoding="utf-8")
-            artifacts.entity_brief = entity_brief_file
-
-        if graph_visual_payload:
-            graph_visual_file = next_versioned(analysis_dir / f"{job_id}__compose_graph_visual_v1.json")
-            write_json_object(graph_visual_file, graph_visual_payload)
-            artifacts.graph_visual_json = graph_visual_file
-            alt_text_value = coerce_str(graph_visual_payload.get("alt_text")) or "Relationship graph"
-            size_hint_obj = (
-                coerce_json_object(graph_visual_payload.get("size_hint"))
-                if isinstance(graph_visual_payload.get("size_hint"), Mapping)
-                else None
-            )
-            notes_value = coerce_str(graph_visual_payload.get("notes")) or None
-            visual_artifacts = build_graph_visual_artifacts(
-                graph_payload=graph_payload,
-                alt_text=alt_text_value,
-                size_hint=size_hint_obj,
-                notes=notes_value,
-            )
-            graph_html_path = next_versioned(analysis_dir / f"{job_id}__graph_v2.html")
-            graph_html_path.write_text(visual_artifacts.html, encoding="utf-8")
-            artifacts.graph_html = graph_html_path
-            graph_png_path = next_versioned(analysis_dir / f"{job_id}__graph_v2.png")
-            graph_png_path.write_bytes(visual_artifacts.png_bytes)
-            artifacts.graph_image = graph_png_path
-
-        if "client" in requested_targets and client_markdown:
-            client_md = next_versioned(analysis_dir / f"{job_id}__compose_client_v1.md")
-            client_md.write_text(client_markdown, encoding="utf-8")
-            artifacts.client_markdown = client_md
-            docx_path = next_versioned(analysis_dir / f"{job_id}__compose_client_v1.docx")
-            write_basic_docx(paragraphs=_markdown_paragraphs(client_markdown), output_path=docx_path, title="Client Deliverable")
-            artifacts.client_docx = docx_path
-
-        if "lawyer" in requested_targets and lawyer_markdown:
-            lawyer_md = next_versioned(analysis_dir / f"{job_id}__compose_lawyer_v1.md")
-            lawyer_md.write_text(lawyer_markdown, encoding="utf-8")
-            artifacts.lawyer_markdown = lawyer_md
-            docx_path = next_versioned(analysis_dir / f"{job_id}__compose_lawyer_v1.docx")
-            write_basic_docx(paragraphs=_markdown_paragraphs(lawyer_markdown), output_path=docx_path, title="Lawyer Deliverable")
-            artifacts.lawyer_docx = docx_path
-
-        meta_payload = _payload_dict(
-            case_id=case_id,
-            job_id=job_id,
-            summary_json=str(summary_json_path) if summary_json_path else None,
-            summary_markdown=str(summary_markdown_path) if summary_markdown_path else None,
-            transcript_path=str(transcript_path) if transcript_path else None,
-            timeline_file=str(artifacts.timeline_file) if artifacts.timeline_file else None,
-            graph_file=str(artifacts.graph_file) if artifacts.graph_file else None,
-            entities_file=str(artifacts.entities_file) if artifacts.entities_file else None,
-            graph_visual_json=str(artifacts.graph_visual_json) if artifacts.graph_visual_json else None,
-            graph_html=str(artifacts.graph_html) if artifacts.graph_html else None,
-            graph_image=str(artifacts.graph_image) if artifacts.graph_image else None,
-            client_markdown=str(artifacts.client_markdown) if artifacts.client_markdown else None,
-            lawyer_markdown=str(artifacts.lawyer_markdown) if artifacts.lawyer_markdown else None,
-            client_docx=str(artifacts.client_docx) if artifacts.client_docx else None,
-            lawyer_docx=str(artifacts.lawyer_docx) if artifacts.lawyer_docx else None,
-            context=context_payload,
-            timeline=timeline_payload,
-            graph=graph_payload,
-            qa=qa_payload,
-            case_metadata=case_metadata_obj,
-            timeline_summary=timeline_summary_markdown,
-            entity_brief=entity_brief_markdown,
-            graph_visual=graph_visual_payload,
-            provider_chain=used_providers,
-            stage_usage=state_usage,
-            status="ok",
+        self._run_graph(
+            state=state,
+            provider_credentials=provider_credentials_map,
+            progress=progress_callback,
         )
+
+        if state.qa is None:
+            raise ComposeStageError("compose.qa_reviewer", "QA reviewer did not execute")
+
+        if self.config.qa_required and state.qa.status.lower() not in QA_REVIEWER_STATUS_OK:
+            raise ComposeStageError(
+                "compose.qa_reviewer",
+                f"QA reviewer returned status '{state.qa.status}'",
+            )
+
+        artifacts = self._write_artifacts(
+            state=state,
+            docs_dir=docs_dir,
+            job_id=job_id,
+        )
+
+        meta_payload = {
+            "case_id": case_id,
+            "job_id": job_id,
+            "client_attempts": state.lanes["client"].attempts,
+            "lawyer_attempts": state.lanes["lawyer"].attempts,
+            "client_reports": _lane_history_payload(state.lanes["client"].history),
+            "lawyer_reports": _lane_history_payload(state.lanes["lawyer"].history),
+            "client_providers": state.lanes["client"].providers,
+            "lawyer_providers": state.lanes["lawyer"].providers,
+            "client_token_usage": state.lanes["client"].token_usage,
+            "lawyer_token_usage": state.lanes["lawyer"].token_usage,
+            "qa_status": state.qa.status,
+            "qa_alerts": state.qa.alerts,
+            "qa_recommendations": state.qa.recommendations,
+            "provider_chain": list(self.config.provider_chain),
+            "stage_usage": {stage: dict(values) for stage, values in state.stage_usage.items()},
+            "bundle_path": str(artifacts.bundle_path) if artifacts.bundle_path else None,
+            "client_markdown": str(artifacts.client_markdown) if artifacts.client_markdown else None,
+            "lawyer_markdown": str(artifacts.lawyer_markdown) if artifacts.lawyer_markdown else None,
+            "client_docx": str(artifacts.client_docx) if artifacts.client_docx else None,
+            "lawyer_docx": str(artifacts.lawyer_docx) if artifacts.lawyer_docx else None,
+            "qa_report": str(artifacts.qa_report) if artifacts.qa_report else None,
+            "staff_report": str(artifacts.staff_report) if artifacts.staff_report else None,
+            "status": "ok",
+        }
 
         meta_json = ops_dir / f"{job_id}__compose_log.json"
         write_json_object(meta_json, meta_payload)
@@ -828,10 +492,10 @@ class ComposeAgent:
                 "case_id": case_id,
                 "job_id": job_id,
                 "status": "ok",
-                "timeline_file": str(artifacts.timeline_file) if artifacts.timeline_file else None,
-                "graph_file": str(artifacts.graph_file) if artifacts.graph_file else None,
+                "bundle_path": str(artifacts.bundle_path) if artifacts.bundle_path else None,
                 "client_markdown": str(artifacts.client_markdown) if artifacts.client_markdown else None,
                 "lawyer_markdown": str(artifacts.lawyer_markdown) if artifacts.lawyer_markdown else None,
+                "staff_report": str(artifacts.staff_report) if artifacts.staff_report else None,
             },
         )
 
@@ -840,557 +504,1031 @@ class ComposeAgent:
             artifacts=artifacts,
             meta_json=meta_json,
             audit_jsonl=audit_jsonl,
-            provider_chain=used_providers,
-            stage_usage=state_usage,
+            provider_chain=list(self.config.provider_chain),
+            stage_usage={stage: dict(values) for stage, values in state.stage_usage.items()},
         )
 
-    def _invoke_stage(
+    # ------------------------------------------------------------------
+    # Orchestration
+
+    def _run_graph(
         self,
         *,
-        stage_key: str,
-        normalized_stage_map: Mapping[str, JSONObject],
-        provider_chain: Sequence[str],
+        state: ComposeState,
         provider_credentials: Mapping[str, JSONObject],
-        transcript_text: str,
-        transcript_parse: TranscriptParse | None,
-        summary_markdown: str,
-        summary_data: JSONObject,
-        timeline_seeds: Sequence[JSONObject],
-        entity_hints: JSONObject,
-        staff_report: str,
-        case_brief: JSONObject,
-        timeline_payload: JSONObject,
-        graph_payload: JSONObject,
-        intake: JSONObject,
-        case_metadata: JSONObject,
-        timeline_summary: str,
-        entity_brief: str,
-        graph_visual: JSONObject,
-        attachments: Sequence[JSONObject],
-        client_markdown: str,
-        lawyer_markdown: str,
-    ) -> tuple[JSONValue, dict[str, int], str]:
-        assignment = self.settings.stage(stage_key)
-        override = normalized_stage_map.get(stage_key)
-        providers_list: list[str] = []
-        if override:
-            providers_list.extend(_normalize_providers(coerce_str_list(override.get("providers"))))
-            provider_value = coerce_str(override.get("provider"))
-            if provider_value:
-                providers_list.insert(0, provider_value)
-        if assignment and assignment.providers:
-            providers_list.extend(assignment.providers)
-        providers_list.extend(provider_chain)
-        providers = _normalize_providers(providers_list or DEFAULT_PROVIDER_CHAIN)
+        progress: Optional[Callable[[str, str, JSONObject], None]],
+    ) -> None:
+        graph: Any = StateGraph(ComposeState)
 
-        model_override = coerce_str(override.get("model")) if override else None
-        model_name = model_override or (assignment.model if assignment and assignment.model else "")
+        def context_node(current: ComposeState) -> ComposeState:
+            return self._context_assembler(current, progress)
 
-        options_obj: JSONObject = {}
-        if assignment and assignment.options:
-            options_obj = merge_json_objects(options_obj, assignment.options)
-        if override:
-            override_options = override.get("options")
-            if isinstance(override_options, Mapping):
-                options_obj = merge_json_objects(options_obj, override_options)
+        def client_composer_node(current: ComposeState) -> ComposeState:
+            return self._draft_lane(
+                current,
+                lane="client",
+                provider_credentials=provider_credentials,
+                progress=progress,
+            )
 
-        max_tokens_override = coerce_int(
-            override.get("max_tokens") if override else None
+        def client_structure_node(current: ComposeState) -> ComposeState:
+            return self._structure_guard(current, lane="client", progress=progress)
+
+        def client_compliance_node(current: ComposeState) -> ComposeState:
+            return self._compliance_guard(current, lane="client", progress=progress)
+
+        def client_factual_node(current: ComposeState) -> ComposeState:
+            return self._factuality_gate(current, lane="client", progress=progress)
+
+        def client_revision_node(current: ComposeState) -> ComposeState:
+            return self._prepare_revision(current, lane="client", progress=progress)
+
+        def lawyer_composer_node(current: ComposeState) -> ComposeState:
+            return self._draft_lane(
+                current,
+                lane="lawyer",
+                provider_credentials=provider_credentials,
+                progress=progress,
+            )
+
+        def lawyer_structure_node(current: ComposeState) -> ComposeState:
+            return self._structure_guard(current, lane="lawyer", progress=progress)
+
+        def lawyer_compliance_node(current: ComposeState) -> ComposeState:
+            return self._compliance_guard(current, lane="lawyer", progress=progress)
+
+        def lawyer_factual_node(current: ComposeState) -> ComposeState:
+            return self._factuality_gate(current, lane="lawyer", progress=progress)
+
+        def lawyer_revision_node(current: ComposeState) -> ComposeState:
+            return self._prepare_revision(current, lane="lawyer", progress=progress)
+
+        def release_node(current: ComposeState) -> ComposeState:
+            return self._release_gate(
+                current,
+                provider_credentials=provider_credentials,
+                progress=progress,
+            )
+
+        graph.add_node("ContextAssembler", context_node)
+        graph.add_node("ClientComposer", client_composer_node)
+        graph.add_node("ClientStructureValidator", client_structure_node)
+        graph.add_node("ClientComplianceGuard", client_compliance_node)
+        graph.add_node("ClientFactualityGate", client_factual_node)
+        graph.add_node("ClientRevision", client_revision_node)
+
+        graph.add_node("LawyerComposer", lawyer_composer_node)
+        graph.add_node("LawyerStructureValidator", lawyer_structure_node)
+        graph.add_node("LawyerComplianceGuard", lawyer_compliance_node)
+        graph.add_node("LawyerFactualityGate", lawyer_factual_node)
+        graph.add_node("LawyerRevision", lawyer_revision_node)
+
+        graph.add_node("ReleaseGate", release_node)
+
+        graph.add_edge(START, "ContextAssembler")
+        graph.add_edge("ContextAssembler", "ClientComposer")
+        graph.add_edge("ContextAssembler", "LawyerComposer")
+        graph.add_edge("ClientComposer", "ClientStructureValidator")
+        graph.add_edge("ClientStructureValidator", "ClientComplianceGuard")
+        graph.add_edge("ClientComplianceGuard", "ClientFactualityGate")
+
+        def client_needs_revision(current: ComposeState) -> str:
+            lane_state = current.client
+            reports = [
+                lane_state.structure_report,
+                lane_state.compliance_report,
+                lane_state.factuality_report,
+            ]
+            bad = [report for report in reports if report is not None and not report.ok]
+            if bad and lane_state.attempts < lane_state.max_attempts:
+                return "ClientRevision"
+            return "LawyerComposer"
+
+        graph.add_conditional_edges(
+            "ClientFactualityGate",
+            client_needs_revision,
+            {
+                "ClientRevision": "ClientRevision",
+                "LawyerComposer": "LawyerComposer",
+            },
         )
-        if max_tokens_override is None and override:
-            max_tokens_override = coerce_int(override.get("max_output_tokens"))
+        graph.add_edge("ClientRevision", "ClientComposer")
 
-        last_error: Exception | None = None
+        graph.add_edge("LawyerComposer", "LawyerStructureValidator")
+        graph.add_edge("LawyerStructureValidator", "LawyerComplianceGuard")
+        graph.add_edge("LawyerComplianceGuard", "LawyerFactualityGate")
+
+        def lawyer_needs_revision(current: ComposeState) -> str:
+            lane_state = current.lawyer
+            reports = [
+                lane_state.structure_report,
+                lane_state.compliance_report,
+                lane_state.factuality_report,
+            ]
+            bad = [report for report in reports if report is not None and not report.ok]
+            if bad and lane_state.attempts < lane_state.max_attempts:
+                return "LawyerRevision"
+            return "ReleaseGate"
+
+        graph.add_conditional_edges(
+            "LawyerFactualityGate",
+            lawyer_needs_revision,
+            {
+                "LawyerRevision": "LawyerRevision",
+                "ReleaseGate": "ReleaseGate",
+            },
+        )
+        graph.add_edge("LawyerRevision", "LawyerComposer")
+        graph.add_edge("ReleaseGate", END)
+
+        compiled = graph.compile()
+        compiled.invoke(state)
+
+    @staticmethod
+    def _lane_state(state: ComposeState, lane: str) -> LaneRuntimeState:
+        if lane == "client":
+            return state.client
+        if lane == "lawyer":
+            return state.lawyer
+        raise ComposeStageError(f"compose.{lane}", "Unknown lane")
+
+    def _context_assembler(
+        self,
+        state: ComposeState,
+        progress: Optional[Callable[[str, str, JSONObject], None]],
+    ) -> ComposeState:
+        stage_name = "compose.context"
+        _emit(progress, stage_name, "start", {})
+        state.context = _assemble_context(state.inputs, self.config.min_timestamp_references)
+        _emit(progress, stage_name, "complete", {})
+        return state
+
+    def _draft_lane(
+        self,
+        state: ComposeState,
+        *,
+        lane: str,
+        provider_credentials: Mapping[str, JSONObject],
+        progress: Optional[Callable[[str, str, JSONObject], None]],
+    ) -> ComposeState:
+        lane_state = self._lane_state(state, lane)
+        context = state.context
+        if context is None:
+            raise ComposeStageError(f"compose.{lane}.draft", "Compose context missing")
+        is_revision = lane_state.revision_brief is not None
+        stage_name = f"compose.{lane}.{'revise' if is_revision else 'draft'}"
+        next_attempt = lane_state.attempts + 1
+        if next_attempt > lane_state.max_attempts:
+            raise ComposeStageError(stage_name, "Maximum attempts exhausted")
+        _emit(progress, stage_name, "start", {"attempt": next_attempt})
+        lane_state.attempts = next_attempt
+        temperature = self.config.temperature if lane == "client" else self.config.lawyer_temperature
+        if is_revision:
+            temperature = lane_state.config.revision_temperature
+        document, usage, provider = self._invoke_llm(
+            stage=stage_name,
+            system_prompt=lane_system_prompt(lane, revision=is_revision),
+            user_prompt=_lane_user_prompt(lane, context, lane_state.revision_brief),
+            temperature=temperature,
+            provider_credentials=provider_credentials,
+        )
+        lane_state.revision_brief = None
+        lane_state.document = document
+        doc_hash = hash(document.strip().lower())
+        if is_revision and lane_state.last_document_hash is not None and doc_hash == lane_state.last_document_hash:
+            raise ComposeStageError(stage_name, "Revision produced no changes")
+        lane_state.last_document_hash = doc_hash
+        lane_state.structure_report = None
+        lane_state.compliance_report = None
+        lane_state.factuality_report = None
+        lane_state.providers.append(provider)
+        lane_state.record_usage(stage_name, usage)
+        _merge_usage(state.stage_usage, stage_name, usage)
+        _emit(
+            progress,
+            stage_name,
+            "complete",
+            {"attempt": lane_state.attempts, "provider": provider},
+        )
+        return state
+
+    def _structure_guard(
+        self,
+        state: ComposeState,
+        *,
+        lane: str,
+        progress: Optional[Callable[[str, str, JSONObject], None]],
+    ) -> ComposeState:
+        lane_state = self._lane_state(state, lane)
+        document = lane_state.document
+        if document is None:
+            raise ComposeStageError(f"compose.{lane}.structure", "No draft available")
+        stage_name = f"compose.{lane}.structure"
+        _emit(progress, stage_name, "start", {"attempt": lane_state.attempts})
+        report = _markdown_structure_report(
+            document,
+            lane_state.config.headings,
+            min_words=lane_state.config.min_words,
+        )
+        if lane_state.config.readability_limit is not None:
+            readability = _sentence_length_report(
+                document,
+                max_average_words=lane_state.config.readability_limit,
+            )
+            if not readability.ok:
+                report.errors.extend(readability.errors)
+                report.warnings.extend(readability.warnings)
+        lane_state.structure_report = report
+        _emit(progress, stage_name, "complete", {"ok": report.ok})
+        return state
+
+    def _compliance_guard(
+        self,
+        state: ComposeState,
+        *,
+        lane: str,
+        progress: Optional[Callable[[str, str, JSONObject], None]],
+    ) -> ComposeState:
+        lane_state = self._lane_state(state, lane)
+        document = lane_state.document
+        if document is None:
+            raise ComposeStageError(f"compose.{lane}.compliance", "No draft available")
+        stage_name = f"compose.{lane}.compliance"
+        _emit(progress, stage_name, "start", {"attempt": lane_state.attempts})
+        report = _compliance_report(document)
+        lane_state.compliance_report = report
+        _emit(progress, stage_name, "complete", {"ok": report.ok})
+        return state
+
+    def _factuality_gate(
+        self,
+        state: ComposeState,
+        *,
+        lane: str,
+        progress: Optional[Callable[[str, str, JSONObject], None]],
+    ) -> ComposeState:
+        lane_state = self._lane_state(state, lane)
+        document = lane_state.document
+        context = state.context
+        if document is None or context is None:
+            raise ComposeStageError(f"compose.{lane}.factuality", "Missing draft or context")
+        stage_name = f"compose.{lane}.factuality"
+        _emit(progress, stage_name, "start", {"attempt": lane_state.attempts})
+        report = _factuality_report(
+            document,
+            claimable_atoms=context.claimable_atoms,
+            timeline_events=context.events,
+            min_timestamp_references=lane_state.config.min_timestamp_references,
+        )
+        lane_state.factuality_report = report
+        structure_snapshot = (
+            _clone_report(lane_state.structure_report)
+            if lane_state.structure_report
+            else GuardReport(ok=False, errors=["Structure report missing"])
+        )
+        compliance_snapshot = (
+            _clone_report(lane_state.compliance_report)
+            if lane_state.compliance_report
+            else GuardReport(ok=False, errors=["Compliance report missing"])
+        )
+        attempt_record = LaneAttempt(
+            attempt_number=lane_state.attempts,
+            document=document,
+            structure=structure_snapshot,
+            compliance=compliance_snapshot,
+            factuality=_clone_report(report),
+        )
+        lane_state.history.append(attempt_record)
+        payload: JSONObject = {"ok": report.ok}
+        if report.errors:
+            payload["errors"] = list(report.errors)
+        _emit(progress, stage_name, "complete", payload)
+        if (
+            lane_state.structure_report
+            and lane_state.structure_report.ok
+            and lane_state.compliance_report
+            and lane_state.compliance_report.ok
+            and report.ok
+        ):
+            state.lanes[lane] = lane_state.to_outcome()
+        return state
+
+    def _prepare_revision(
+        self,
+        state: ComposeState,
+        *,
+        lane: str,
+        progress: Optional[Callable[[str, str, JSONObject], None]],
+    ) -> ComposeState:
+        lane_state = self._lane_state(state, lane)
+        stage_name = f"compose.{lane}.revision"
+        _emit(progress, stage_name, "start", {"attempt": lane_state.attempts})
+        if lane_state.structure_report is None or lane_state.compliance_report is None or lane_state.factuality_report is None:
+            raise ComposeStageError(stage_name, "Revision requested before guard reports computed")
+        revision_brief = _build_revision_brief(
+            lane,
+            lane_state.structure_report,
+            lane_state.compliance_report,
+            lane_state.factuality_report,
+        )
+        lane_state.revision_brief = revision_brief
+        _emit(
+            progress,
+            stage_name,
+            "complete",
+            {"has_revision": bool(revision_brief.strip())},
+        )
+        return state
+
+    def _release_gate(
+        self,
+        state: ComposeState,
+        *,
+        provider_credentials: Mapping[str, JSONObject],
+        progress: Optional[Callable[[str, str, JSONObject], None]],
+    ) -> ComposeState:
+        stage_name = "compose.release_gate"
+        _emit(progress, stage_name, "start", {})
+        client_outcome = state.lanes.get("client")
+        lawyer_outcome = state.lanes.get("lawyer")
+        if client_outcome is None or not (
+            client_outcome.structure_report.ok
+            and client_outcome.compliance_report.ok
+            and client_outcome.factuality_report.ok
+        ):
+            raise ComposeStageError(stage_name, "Client lane did not pass all guards")
+        if lawyer_outcome is None or not (
+            lawyer_outcome.structure_report.ok
+            and lawyer_outcome.compliance_report.ok
+            and lawyer_outcome.factuality_report.ok
+        ):
+            raise ComposeStageError(stage_name, "Lawyer lane did not pass all guards")
+        self._execute_qa(
+            state=state,
+            provider_credentials=provider_credentials,
+            progress=progress,
+        )
+        qa_status = state.qa.status if state.qa else "missing"
+        _emit(progress, stage_name, "complete", {"qa_status": qa_status})
+        return state
+
+    def _execute_qa(
+        self,
+        *,
+        state: ComposeState,
+        provider_credentials: Mapping[str, JSONObject],
+        progress: Optional[Callable[[str, str, JSONObject], None]],
+    ) -> None:
+        stage_name = "compose.qa_reviewer"
+        _emit(progress, stage_name, "start", {})
+
+        if state.context is None:
+            raise ComposeStageError(stage_name, "Compose context missing")
+
+        payload = {
+            "compose_context": state.context.procedural,
+            "claimable_atoms": state.context.claimable_atoms,
+            "client_brief": state.lanes["client"].document,
+            "lawyer_brief": state.lanes["lawyer"].document,
+        }
+        user_prompt = json.dumps(payload, ensure_ascii=False)
+        response, usage, provider = self._invoke_llm(
+            stage=stage_name,
+            system_prompt=QA_REVIEWER_SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+            temperature=0.0,
+            provider_credentials=provider_credentials,
+        )
+        _merge_usage(state.stage_usage, stage_name, usage)
+
+        try:
+            parsed = json.loads(response)
+        except json.JSONDecodeError as exc:  # pragma: no cover - defensive
+            raise ComposeStageError(stage_name, f"Invalid QA reviewer response: {exc}") from exc
+
+        status = coerce_str(parsed.get("status")) or "unknown"
+        alerts = [coerce_str(item) or "" for item in parsed.get("alerts", []) if isinstance(item, str)]
+        recommendations = [
+            coerce_str(item) or ""
+            for item in parsed.get("recommendations", [])
+            if isinstance(item, str)
+        ]
+        staff_report = coerce_str(parsed.get("staff_report")) or ""
+        if not staff_report.strip():
+            staff_report = "# Staff Report\n\nNo staff report returned."
+
+        state.qa = QAReviewerResult(
+            status=status,
+            alerts=[item for item in alerts if item],
+            recommendations=[item for item in recommendations if item],
+            staff_report=staff_report,
+        )
+        _emit(progress, stage_name, "complete", {"status": status, "provider": provider})
+
+    # ------------------------------------------------------------------
+    # Artifact writing
+
+    def _write_artifacts(
+        self,
+        state: ComposeState,
+        docs_dir: Path,
+        job_id: str,
+    ) -> ComposeArtifacts:
+        artifacts = ComposeArtifacts()
+
+        client_md_path = next_versioned(docs_dir / f"{job_id}__compose_client_v1.md")
+        client_md_path.write_text(state.lanes["client"].document, encoding="utf-8")
+        artifacts.client_markdown = client_md_path
+
+        lawyer_md_path = next_versioned(docs_dir / f"{job_id}__compose_lawyer_v1.md")
+        lawyer_md_path.write_text(state.lanes["lawyer"].document, encoding="utf-8")
+        artifacts.lawyer_markdown = lawyer_md_path
+
+        bundle_path = next_versioned(docs_dir / f"{job_id}__compose_bundle_v1.md")
+        bundle = self._build_bundle(state)
+        bundle_path.write_text(bundle, encoding="utf-8")
+        artifacts.bundle_path = bundle_path
+
+        qa_result = state.qa
+        if qa_result is None:
+            raise ComposeStageError("compose.write_artifacts", "QA results missing")
+
+        staff_report_path = next_versioned(docs_dir / f"{job_id}__compose_staff_report_v1.md")
+        staff_report_path.write_text(qa_result.staff_report, encoding="utf-8")
+        artifacts.staff_report = staff_report_path
+
+        qa_report_path = next_versioned(docs_dir / f"{job_id}__compose_qa_report_v1.md")
+        qa_report_path.write_text(_render_qa_markdown(state), encoding="utf-8")
+        artifacts.qa_report = qa_report_path
+
+        artifacts.client_docx = self._write_docx(
+            markdown=state.lanes["client"].document,
+            output_prefix=docs_dir / f"{job_id}__compose_client_v1",
+        )
+        artifacts.lawyer_docx = self._write_docx(
+            markdown=state.lanes["lawyer"].document,
+            output_prefix=docs_dir / f"{job_id}__compose_lawyer_v1",
+        )
+
+        return artifacts
+
+    def _write_docx(self, *, markdown: str, output_prefix: Path) -> Optional[Path]:
+        output_path = next_versioned(output_prefix.with_suffix(".docx"))
+        if self.config.doc_template_path and Document is not None and self.config.doc_template_path.exists():
+            if _render_docx_from_template(self.config.doc_template_path, markdown, output_path):
+                return output_path
+        paragraphs = _markdown_paragraphs(markdown)
+        write_basic_docx(paragraphs=paragraphs, output_path=output_path, title=output_prefix.name)
+        return output_path
+
+    def _build_bundle(self, state: ComposeState) -> str:
+        sections = [
+            "Part 1 – Client Summary",
+            state.lanes["client"].document.strip(),
+            "",
+            "---",
+            "",
+            "Part 2 – Lawyer Brief",
+            state.lanes["lawyer"].document.strip(),
+        ]
+        return "\n".join(sections).strip() + "\n"
+
+    # ------------------------------------------------------------------
+    # LLM Invocation
+
+    def _invoke_llm(
+        self,
+        *,
+        stage: str,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float,
+        provider_credentials: Mapping[str, JSONObject],
+    ) -> tuple[str, dict[str, int], str]:
+        providers = _normalize_providers(self.config.provider_chain)
+        last_error: Optional[Exception] = None
+        model_override = STAGE_MODEL_DEFAULTS.get(stage, "")
+
         for provider_name in providers:
             provider_meta = self.settings.provider(provider_name)
             if provider_meta is None:
                 continue
-
-            credential_payload = provider_credentials.get(provider_name)
-            resolved_model_name = model_name or (assignment.model if assignment and assignment.model else "")
-            if not resolved_model_name:
-                last_error = ComposeStageError(stage_key, "No model configured")
+            provider_info = cast(Any, provider_meta)
+            default_model = cast(str, getattr(provider_info, "default_model", ""))
+            model_name = model_override or default_model
+            if not model_name:
+                last_error = ComposeStageError(stage, f"No model configured for provider '{provider_name}'")
                 continue
-
+            credentials = provider_credentials.get(provider_name)
             try:
-                runtime_cfg = build_provider_runtime_config(
+                runtime = build_provider_runtime_config(
                     provider=provider_meta,
-                    model_name=resolved_model_name,
-                    credential_payload=credential_payload,
-                    options=options_obj if options_obj else None,
+                    model_name=model_name,
+                    credential_payload=credentials,
+                    options=None,
                 )
             except ChatClientError as exc:
                 last_error = exc
                 continue
 
             try:
-                client = build_chat_client(provider_runtime=runtime_cfg)
+                client = build_chat_client(provider_runtime=runtime)
             except ChatClientError as exc:
                 last_error = exc
                 continue
 
-            try:
-                ensure_llm_client_health(
-                    client,
-                    stage=stage_key,
-                    provider=provider_name,
-                    model=resolved_model_name,
-                    logger=logger,
-                    raise_error=lambda message, stage_key=stage_key: ComposeStageError(stage_key, message),
-                )
-            except ComposeStageError as exc:
-                last_error = exc
-                continue
-
-            profile = COMPOSE_STAGE_PROFILES.get(stage_key)
-            max_tokens = self.config.stage_max_tokens(
-                stage_key,
-                runtime_cfg.model.max_output_tokens if runtime_cfg.model and runtime_cfg.model.max_output_tokens else None,
-            )
-            if max_tokens_override and max_tokens_override > 0:
-                max_tokens = min(max_tokens, max_tokens_override)
-
-            temperature = (
-                self.config.lawyer_temperature if stage_key == "compose.lawyer_brief" else self.config.temperature
-            )
-            override_temperature = coerce_float(options_obj.get("temperature"))
-            if override_temperature is not None:
-                temperature = override_temperature
-
-            system_prompt, user_prompt, response_format = self._build_prompts(
-                stage_key=stage_key,
-                transcript_text=transcript_text,
-                summary_markdown=summary_markdown,
-                summary_data=summary_data,
-                timeline_seeds=timeline_seeds,
-                entity_hints=entity_hints,
-                staff_report=staff_report,
-                case_brief=case_brief,
-                timeline_payload=timeline_payload,
-                graph_payload=graph_payload,
-                intake=intake,
-                case_metadata=case_metadata,
-                timeline_summary=timeline_summary,
-                entity_brief=entity_brief,
-                graph_visual=graph_visual,
-                attachments=attachments,
-                transcript_parse=transcript_parse,
-                profile=profile,
-                client_markdown=client_markdown,
-                lawyer_markdown=lawyer_markdown,
-            )
-
-            messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ]
             try:
                 content, usage = client.chat(
-                    messages=messages,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
                     temperature=temperature,
-                    max_tokens=max_tokens,
-                    response_format=response_format,
+                    max_tokens=self.config.max_output_tokens,
+                    response_format=None,
                 )
             except ChatClientError as exc:
                 last_error = exc
                 continue
 
-            try:
-                parsed = self._parse_stage_output(stage_key, content)
-            except ComposeStageError as exc:
-                last_error = exc
-                continue
+            usage_map = {key: value for key, value in usage.items() if isinstance(value, int)}
+            return content, usage_map, provider_name
 
-            usage_int: dict[str, int] = {
-                key: value for key, value in usage.items() if isinstance(value, int)
-            }
-            return parsed, usage_int, provider_name
+        raise ComposeStageError(stage, str(last_error) if last_error else "No provider available")
 
-        if last_error:
-            raise ComposeStageError(stage_key, str(last_error))
-        raise ComposeStageError(stage_key, "No provider available")
 
-    def _build_prompts(
-        self,
-        *,
-        stage_key: str,
-        transcript_text: str,
-        summary_markdown: str,
-        summary_data: JSONObject,
-        timeline_seeds: Sequence[JSONObject],
-        entity_hints: JSONObject,
-        staff_report: str,
-        case_brief: JSONObject,
-        timeline_payload: JSONObject,
-        graph_payload: JSONObject,
-        intake: JSONObject,
-        case_metadata: JSONObject,
-        timeline_summary: str,
-        entity_brief: str,
-        graph_visual: JSONObject,
-        attachments: Sequence[JSONObject],
-        transcript_parse: TranscriptParse | None,
-        profile: ComposeStageProfile | None,
-        client_markdown: str,
-        lawyer_markdown: str,
-    ) -> Tuple[str, str, ResponseFormat | None]:
-        transcript_excerpt = _first_n_segments(transcript_text, limit=240)
-        base_system = (
-            "You are the uDocket Compose agent, a Canadian legal assistant who builds clear, "
-            "auditable deliverables from transcripts, summaries, and prior analyses."
+# ----------------------------------------------------------------------
+# Guard helpers
+
+
+def _clone_report(report: GuardReport) -> GuardReport:
+    return GuardReport(
+        ok=report.ok,
+        errors=list(report.errors),
+        warnings=list(report.warnings),
+        checks=dict(report.checks),
+    )
+
+
+def _sentence_length_report(document: str, *, max_average_words: float) -> GuardReport:
+    filtered_lines = [line for line in document.splitlines() if not line.strip().startswith(('- ', '* '))]
+    body = "\n".join(filtered_lines)
+    body = re.sub(r"^##.+$", "", body, flags=re.MULTILINE)
+    candidates = [candidate.strip() for candidate in re.split(r"(?<=[.!?])\s+|\n", body) if candidate.strip()]
+    lengths: list[int] = []
+    for candidate in candidates:
+        words = re.findall(r"\b\w+\b", candidate)
+        if words:
+            lengths.append(len(words))
+    if not lengths:
+        return GuardReport(ok=True, errors=[], warnings=[], checks={"average_words": 0.0})
+    average = sum(lengths) / float(len(lengths))
+    if average > max_average_words:
+        return GuardReport(
+            ok=False,
+            errors=[f"Average sentence length {average:.1f} exceeds {max_average_words:.0f}"],
+            warnings=[],
+            checks={"average_words": average},
         )
-        _ = profile
-        _ = transcript_parse
+    return GuardReport(ok=True, errors=[], warnings=[], checks={"average_words": average})
 
-        if stage_key == "compose.context_builder":
-            response_schema = cast(
-                ResponseFormat,
-                {
-                    "type": "json_schema",
-                    "json_schema": {
-                        "name": "compose_context_response",
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "parties": {
-                                    "type": "array",
-                                    "items": {
-                                        "type": "object",
-                                        "properties": {
-                                            "name": {"type": "string"},
-                                            "role": {"type": "string"},
-                                            "description": {"type": "string"},
-                                        },
-                                        "required": ["name"],
-                                    },
-                                },
-                                "issues": {
-                                    "type": "array",
-                                    "items": {
-                                        "type": "object",
-                                        "properties": {
-                                            "label": {"type": "string"},
-                                            "summary": {"type": "string"},
-                                        },
-                                        "required": ["label"],
-                                    },
-                                },
-                                "posture": {"type": "string"},
-                                "risks": {"type": "array", "items": {"type": "string"}},
-                                "next_steps": {"type": "array", "items": {"type": "string"}},
-                                "key_facts": {"type": "array", "items": {"type": "string"}},
-                            },
-                            "required": ["parties", "issues"],
-                        },
-                    },
-                },
-            )
-            user_payload = _payload_dict(
-                intake=intake,
-                case_metadata=case_metadata,
-                summary=summary_data,
-                summary_markdown=summary_markdown,
-                staff_report=staff_report,
-                transcript_excerpt=transcript_excerpt,
-            )
-            user_prompt = (
-                "Use the provided summary outputs, staff report, and transcript excerpt to build a concise "
-                "case brief JSON with parties, legal posture, key issues, risks, and next steps."
-            ) + "\n\n" + json.dumps(user_payload, ensure_ascii=False)
-            return base_system, user_prompt, response_schema
 
-        if stage_key == "compose.timeline_builder":
-            response_schema = cast(
-                ResponseFormat,
-                {
-                    "type": "json_schema",
-                    "json_schema": {
-                        "name": "compose_timeline_response",
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "revision": {"type": "string"},
-                                "events": {
-                                    "type": "array",
-                                    "items": {
-                                        "type": "object",
-                                        "properties": {
-                                            "id": {"type": "string"},
-                                            "title": {"type": "string"},
-                                            "summary": {"type": "string"},
-                                            "ts_start": {"type": "number"},
-                                            "ts_end": {"type": "number"},
-                                            "speakers": {"type": "array", "items": {"type": "string"}},
-                                            "references": {"type": "array", "items": {"type": "string"}},
-                                            "labels": {"type": "array", "items": {"type": "string"}},
-                                        },
-                                        "required": ["id", "title", "summary", "ts_start"],
-                                    },
-                                },
-                            },
-                            "required": ["events"],
-                        },
-                    },
-                },
-            )
-            payload = _payload_dict(
-                case_brief=case_brief,
-                timeline_seeds=list(timeline_seeds),
-                summary=summary_data,
-                transcript_excerpt=transcript_excerpt,
-                case_metadata=case_metadata,
-            )
-            user_prompt = (
-                "Produce timeline_v2 JSON describing the proceedings. Each event must reference "
-                "timestamps and speakers when known, include a deterministic `id`, and mirror the "
-                "existing `uuid` from seeds when available. Generate stable `uuid` values (use the "
-                "provided one or derive via UUID5 over the event signature) so downstream tools can "
-                "cross-link results. Keep the order chronological."
-            ) + "\n\n" + json.dumps(payload, ensure_ascii=False)
-            return base_system, user_prompt, response_schema
+_ADVICE_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\byou should\b", re.IGNORECASE),
+    re.compile(r"\byou must\b", re.IGNORECASE),
+    re.compile(r"\bi recommend\b", re.IGNORECASE),
+    re.compile(r"\bi advise\b", re.IGNORECASE),
+    re.compile(r"\bwe recommend\b", re.IGNORECASE),
+    re.compile(r"\bwe advise\b", re.IGNORECASE),
+)
 
-        if stage_key == "compose.timeline_summary":
-            payload = _payload_dict(
-                case_metadata=case_metadata,
-                timeline=timeline_payload,
-                summary=summary_data,
+
+_RISKY_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"\bshould consider\b", re.IGNORECASE), "Suggestive wording"),
+    (re.compile(r"\blikely\b", re.IGNORECASE), "Speculative wording"),
+    (re.compile(r"\bprobably\b", re.IGNORECASE), "Speculative wording"),
+)
+
+
+_HEADING_PATTERN = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
+
+
+def _split_markdown_sections(document: str) -> list[tuple[str, str]]:
+    normalized = document.replace("\r\n", "\n")
+    matches = list(_HEADING_PATTERN.finditer(normalized))
+    sections: list[tuple[str, str]] = []
+    for index, match in enumerate(matches):
+        heading = "## " + match.group(1).strip()
+        start = match.end()
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(normalized)
+        sections.append((heading, normalized[start:end].strip()))
+    return sections
+
+
+def _markdown_structure_report(document: str, required: Sequence[str], *, min_words: int) -> GuardReport:
+    text = document.strip()
+    if not text:
+        return GuardReport(ok=False, errors=["Document is empty"], warnings=[], checks={})
+
+    sections = _split_markdown_sections(text)
+    heading_order = [heading for heading, _ in sections]
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    last_index = -1
+    for heading in required:
+        occurrences = [idx for idx, present in enumerate(heading_order) if present == heading]
+        if not occurrences:
+            errors.append(f"Missing heading '{heading}'")
+            continue
+        if len(occurrences) > 1:
+            errors.append(f"Duplicate heading '{heading}'")
+        current_index = occurrences[0]
+        if current_index <= last_index:
+            errors.append(f"Heading '{heading}' out of order")
+        last_index = current_index
+
+    allowed = set(required)
+    for heading in heading_order:
+        if heading not in allowed:
+            warnings.append(f"Unexpected heading '{heading}'")
+
+    section_map = {heading: content for heading, content in sections}
+    for heading in required:
+        content = section_map.get(heading, "")
+        word_count = len(re.findall(r"\b\w+\b", content))
+        if word_count < min_words:
+            errors.append(
+                f"Section '{heading}' too short (has {word_count} words, expected at least {min_words})"
             )
-            user_prompt = (
-                "Create a Markdown narrative capturing the timeline."
-                " Include sections for 'Key Milestones' and 'Upcoming Deadlines' when applicable,"
-                " with bullet lists referencing timestamps in [mm:ss] format."
-                " Highlight speakers or parties for each item."
-            ) + "\n\n" + json.dumps(payload, ensure_ascii=False)
-            return base_system, user_prompt, None
 
-        if stage_key == "compose.graph_builder":
-            response_schema = cast(
-                ResponseFormat,
-                {
-                    "type": "json_schema",
-                    "json_schema": {
-                        "name": "compose_graph_response",
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "entities": {
-                                    "type": "array",
-                                    "items": {
-                                        "type": "object",
-                                        "properties": {
-                                            "id": {"type": "string"},
-                                            "name": {"type": "string"},
-                                            "type": {"type": "string"},
-                                            "description": {"type": "string"},
-                                            "mentions": {
-                                                "type": "array",
-                                                "items": {
-                                                    "type": "object",
-                                                    "properties": {
-                                                        "timestamp": {"type": "number"},
-                                                        "excerpt": {"type": "string"},
-                                                    },
-                                                    "required": ["excerpt"],
-                                                },
-                                            },
-                                        },
-                                        "required": ["id", "name", "type"],
-                                    },
-                                },
-                                "relationships": {
-                                    "type": "array",
-                                    "items": {
-                                        "type": "object",
-                                        "properties": {
-                                            "id": {"type": "string"},
-                                            "source": {"type": "string"},
-                                            "target": {"type": "string"},
-                                            "type": {"type": "string"},
-                                            "summary": {"type": "string"},
-                                            "evidence": {"type": "array", "items": {"type": "string"}},
-                                        },
-                                        "required": ["id", "source", "target", "type"],
-                                    },
-                                },
-                            },
-                            "required": ["entities"],
-                        },
-                    },
-                },
-            )
-            payload = _payload_dict(
-                case_brief=case_brief,
-                entity_hints=entity_hints,
-                timeline=timeline_payload,
-                summary=summary_data,
-                transcript_excerpt=transcript_excerpt,
-                case_metadata=case_metadata,
-            )
-            user_prompt = (
-                "Generate entities and relationships JSON. Include evidence references to transcript timestamps or timeline IDs."
-                " Preserve provided entity/relationship IDs when present and emit stable UUID values"
-                " (existing `uuid` or new UUID5 signatures). Every entity and relationship must have"
-                " both `id` and `uuid` fields."
-            ) + "\n\n" + json.dumps(payload, ensure_ascii=False)
-            return base_system, user_prompt, response_schema
+    return GuardReport(ok=not errors, errors=errors, warnings=warnings, checks={})
 
-        if stage_key == "compose.entity_brief":
-            payload = _payload_dict(
-                case_metadata=case_metadata,
-                entity_hints=entity_hints,
-                graph=graph_payload,
-                timeline=timeline_payload,
-            )
-            user_prompt = (
-                "Draft a Markdown briefing summarizing principal entities, their roles, and notable relationships."
-                " Organize content into 'Primary Parties', 'Supporting Participants', and 'Key Relationships'."
-                " Reference timestamps or timeline event IDs when available."
-            ) + "\n\n" + json.dumps(payload, ensure_ascii=False)
-            return base_system, user_prompt, None
 
-        if stage_key == "compose.graph_visual":
-            response_schema = cast(
-                ResponseFormat,
-                {
-                    "type": "json_schema",
-                    "json_schema": {
-                        "name": "compose_graph_visual_response",
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "embed_html": {"type": "string"},
-                                "alt_text": {"type": "string"},
-                                "size_hint": {
-                                    "type": "object",
-                                    "properties": {
-                                        "width": {"type": "string"},
-                                        "height": {"type": "string"},
-                                    },
-                                },
-                                "notes": {"type": "string"},
-                            },
-                            "required": ["embed_html", "alt_text"],
-                        },
-                    },
-                },
-            )
-            payload = _payload_dict(
-                case_metadata=case_metadata,
-                graph=graph_payload,
-                existing_visual=graph_visual,
-            )
-            user_prompt = (
-                "Plan an embeddable relationship graph snippet."
-                " Return responsive HTML (max-width 100%), clear alt text summarizing the network,"
-                " and optional notes with styling guidance or next actions (PNG export, etc.)."
-            ) + "\n\n" + json.dumps(payload, ensure_ascii=False)
-            return base_system, user_prompt, response_schema
+def _compliance_report(document: str) -> GuardReport:
+    errors: list[str] = []
+    warnings: list[str] = []
+    for line in document.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith(">"):  # quoted transcript or order
+            continue
+        lowered = stripped.lower()
+        if lowered.startswith(("order:", "court order:", "epo:", "directive:")):
+            continue
+        for pattern in _ADVICE_PATTERNS:
+            if pattern.search(lowered):
+                errors.append(f"Disallowed advice language: '{stripped}'")
+        for pattern, label in _RISKY_PATTERNS:
+            if pattern.search(lowered):
+                warnings.append(f"{label}: '{stripped}'")
+    return GuardReport(ok=not errors, errors=errors, warnings=warnings, checks={})
 
-        if stage_key == "compose.client_brief":
-            payload = _payload_dict(
-                compose_context=case_brief,
-                timeline=timeline_payload,
-                graph=graph_payload,
-                summary_text=summary_markdown,
-                staff_report=staff_report,
-                intake=intake,
-                case_metadata=case_metadata,
-                timeline_summary=timeline_summary,
-                entity_brief=entity_brief,
-                graph_visual=graph_visual,
-            )
-            user_prompt = (
-                "Use the ComposeContext and supporting artifacts to draft the full Client Summary. "
-                "Follow the system prompt exactly, do not add new facts, and output plain text with the required headings."
-            ) + "\n\n" + json.dumps(payload, ensure_ascii=False)
-            return CLIENT_COMPOSER_SYSTEM_PROMPT, user_prompt, None
 
-        if stage_key == "compose.lawyer_brief":
-            payload = _payload_dict(
-                compose_context=case_brief,
-                timeline=timeline_payload,
-                graph=graph_payload,
-                summary_text=summary_markdown,
-                case_metadata=case_metadata,
-                timeline_summary=timeline_summary,
-                entity_brief=entity_brief,
-                graph_visual=graph_visual,
-            )
-            user_prompt = (
-                "Use the ComposeContext and supporting artifacts to draft the full Lawyer Brief. "
-                "Follow the system prompt exactly, stay neutral, and output plain text with the required headings."
-            ) + "\n\n" + json.dumps(payload, ensure_ascii=False)
-            return LAWYER_COMPOSER_SYSTEM_PROMPT, user_prompt, None
+def _factuality_report(
+    document: str,
+    *,
+    claimable_atoms: Sequence[str],
+    timeline_events: Sequence[JSONObject],
+    min_timestamp_references: int,
+) -> GuardReport:
+    sentences = [candidate.strip() for candidate in re.split(r"(?<=[.!?])\s+|\n", document) if candidate.strip()]
+    atoms = [atom.lower() for atom in claimable_atoms if atom]
+    errors: list[str] = []
+    warnings: list[str] = []
 
-        if stage_key == "compose.qa_review":
-            response_schema = cast(
-                ResponseFormat,
-                {
-                    "type": "json_schema",
-                    "json_schema": {
-                        "name": "compose_qa_response",
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "status": {"type": "string"},
-                                "alerts": {"type": "array", "items": {"type": "string"}},
-                                "recommendations": {"type": "array", "items": {"type": "string"}},
-                            },
-                            "required": ["status"],
-                        },
-                    },
-                },
-            )
-            payload = _payload_dict(
-                case_brief=case_brief,
-                timeline=timeline_payload,
-                graph=graph_payload,
-                client_markdown=client_markdown,
-                lawyer_markdown=lawyer_markdown,
-                case_metadata=case_metadata,
-                timeline_summary=timeline_summary,
-                entity_brief=entity_brief,
-                graph_visual=graph_visual,
-                attachments=list(attachments),
-            )
-            user_prompt = (
-                "Review the compose outputs for completeness and compliance. Respond with JSON describing status, alerts, and recommendations."
-            ) + "\n\n" + json.dumps(payload, ensure_ascii=False)
-            return base_system, user_prompt, response_schema
+    references_found = len(re.findall(r"\[(\d{2}:\d{2})\]", document))
+    required_refs = min(len(list(timeline_events)), min_timestamp_references)
+    if references_found < required_refs:
+        errors.append(f"Found {references_found} timestamp references; expected at least {required_refs}")
 
-        raise ComposeStageError(stage_key, "Unknown stage")
+    for sentence in sentences:
+        lowered = sentence.lower()
+        if lowered.startswith("## ") or lowered.startswith("information not provided"):
+            continue
+        if lowered.startswith(('- ', '* ')):
+            continue
+        if re.search(r"\[(\d{2}:\d{2})\]", sentence):
+            continue
+        if len(lowered) < 24:
+            continue
+        if atoms and any(atom in lowered or SequenceMatcher(None, atom, lowered).ratio() >= 0.82 for atom in atoms):
+            continue
+        errors.append(f"Unsupported assertion: '{sentence}'")
 
-    def _parse_stage_output(self, stage_key: str, content: str) -> JSONValue:
-        if stage_key in {
-            "compose.context_builder",
-            "compose.timeline_builder",
-            "compose.graph_builder",
-            "compose.graph_visual",
-            "compose.qa_review",
-        }:
-            try:
-                parsed = parse_json_object(content, context=f"{stage_key} response")
-            except ValueError as exc:
-                raise ComposeStageError(stage_key, str(exc))
-            return parsed
+    event_ids = [coerce_str(event.get("id")) or "" for event in timeline_events]
+    referenced_ids = {
+        event_id
+        for event_id in event_ids
+        if event_id and re.search(rf"\b{re.escape(event_id)}\b", document)
+    }
+    missing_ids = [event_id for event_id in event_ids if event_id and event_id not in referenced_ids]
+    if missing_ids:
+        warnings.append(f"Timeline events not referenced: {', '.join(sorted(missing_ids))}")
 
-        if stage_key == "compose.client_brief":
-            normalized = content.strip()
-            _validate_client_brief(normalized)
-            return normalized
+    return GuardReport(ok=not errors, errors=errors, warnings=warnings, checks={})
 
-        if stage_key == "compose.lawyer_brief":
-            normalized = content.strip()
-            _validate_lawyer_brief(normalized)
-            return normalized
 
-        return content
+def _build_revision_brief(
+    lane: str,
+    structure: GuardReport,
+    compliance: GuardReport,
+    factuality: GuardReport,
+) -> str:
+    sections: list[str] = []
+    if structure.errors or structure.warnings:
+        sections.append("Structure:")
+        for item in structure.errors:
+            sections.append(f"- {item}")
+        for item in structure.warnings:
+            sections.append(f"- (warning) {item}")
+    if compliance.errors or compliance.warnings:
+        sections.append("Compliance:")
+        for item in compliance.errors:
+            sections.append(f"- {item}")
+        for item in compliance.warnings:
+            sections.append(f"- (warning) {item}")
+    if factuality.errors or factuality.warnings:
+        sections.append("Factuality:")
+        for item in factuality.errors:
+            sections.append(f"- {item}")
+        for item in factuality.warnings:
+            sections.append(f"- (warning) {item}")
+    if not sections:
+        sections.append("No issues detected; maintain required style and references.")
+    header = REVISION_HEADER_TEMPLATE.format(lane=lane)
+    return "\n".join([header, *sections])
+
+
+# ----------------------------------------------------------------------
+# Context assembly
+
+
+def _assemble_context(inputs: ComposeInputs, min_timestamp_references: int) -> ComposeContext:
+    summary_data = inputs.summary_data
+    parties = _extract_parties(summary_data)
+    issues = _collect_alias_items(summary_data, "issues", "key_issues")
+    facts = _collect_alias_items(summary_data, "facts", "key_facts")
+    deadlines = _extract_deadlines(summary_data)
+    orders = _extract_orders(summary_data)
+    exhibits = _extract_exhibits(summary_data)
+
+    events: list[JSONObject] = []
+    for index, item in enumerate(inputs.timeline_seeds):
+        event = coerce_json_object(item)
+        event_id = coerce_str(event.get("id")) or f"event-{index + 1}"
+        summary = coerce_str(event.get("summary")) or coerce_str(event.get("title")) or ""
+        ts_start = coerce_float(event.get("ts_start"))
+        ts_end = coerce_float(event.get("ts_end"))
+        speakers = coerce_str_list(event.get("speakers"))
+        references = coerce_str_list(event.get("references"))
+        speakers_json = cast(list[JSONValue], list(speakers))
+        references_json = cast(list[JSONValue], list(references))
+        events.append(
+            {
+                "id": event_id,
+                "summary": summary,
+                "ts_start": ts_start,
+                "ts_end": ts_end,
+                "speakers": speakers_json,
+                "references": references_json,
+            }
+        )
+
+    for hint in coerce_object_list(inputs.entity_hints.get("entities")):
+        parties.append(coerce_json_object(hint))
+
+    claimable: set[str] = set()
+    for fact in facts:
+        text = coerce_str(fact.get("text")) or coerce_str(fact.get("summary")) or ""
+        trimmed = _trim_atom(text)
+        if trimmed:
+            claimable.add(trimmed)
+    for event in events:
+        trimmed = _trim_atom(coerce_str(event.get("summary")) or "")
+        if trimmed:
+            claimable.add(trimmed)
+    for deadline in deadlines:
+        trimmed = _trim_atom(coerce_str(deadline.get("text")) or coerce_str(deadline.get("label")) or "")
+        if trimmed:
+            claimable.add(trimmed)
+    for order in orders:
+        trimmed = _trim_atom(coerce_str(order.get("text")) or "")
+        if trimmed:
+            claimable.add(trimmed)
+
+    for line in inputs.summary_markdown.splitlines():
+        if line.strip().startswith("#"):
+            continue
+        trimmed = _trim_atom(line)
+        if trimmed:
+            claimable.add(trimmed)
+
+    procedural = _coerce_optional_object(summary_data.get("procedural"))
+    if inputs.intake:
+        procedural = {**procedural, **inputs.intake}
+    if inputs.case_metadata:
+        procedural = {**procedural, **inputs.case_metadata}
+
+    return ComposeContext(
+        parties=parties,
+        issues=issues,
+        facts=facts,
+        events=events,
+        deadlines=deadlines,
+        orders=orders,
+        exhibits=exhibits,
+        procedural=procedural,
+        claimable_atoms=sorted(claimable),
+    )
+
+
+def _serialize_context(context: ComposeContext) -> str:
+    payload = {
+        "parties": context.parties,
+        "issues": context.issues,
+        "facts": context.facts,
+        "events": context.events,
+        "deadlines": context.deadlines,
+        "orders": context.orders,
+        "exhibits": context.exhibits,
+        "procedural": context.procedural,
+        "claimable_atoms": context.claimable_atoms,
+    }
+    return json.dumps(payload, ensure_ascii=False, indent=2)
+
+
+# ----------------------------------------------------------------------
+# QA Report rendering
+
+
+def _render_qa_markdown(state: ComposeState) -> str:
+    qa = state.qa
+    assert qa is not None
+    lines = ["# QA Review", ""]
+    lines.append(f"**Status:** {qa.status}")
+    if qa.alerts:
+        lines.append("## Alerts")
+        lines.extend([f"- {alert}" for alert in qa.alerts])
+    if qa.recommendations:
+        lines.append("")
+        lines.append("## Recommendations")
+        lines.extend([f"- {rec}" for rec in qa.recommendations])
+
+    def _lane_section(lane_key: str, title: str, outcome: LaneOutcome) -> None:
+        lines.append("")
+        lines.append(f"## {title} Lane")
+        lines.append(f"- Attempts: {outcome.attempts}")
+        lines.append(f"- Structure: {'ok' if outcome.structure_report.ok else 'fail'}")
+        if outcome.structure_report.errors:
+            lines.extend([f"  - {error}" for error in outcome.structure_report.errors])
+        lines.append(f"- Compliance: {'ok' if outcome.compliance_report.ok else 'fail'}")
+        if outcome.compliance_report.errors:
+            lines.extend([f"  - {error}" for error in outcome.compliance_report.errors])
+        lines.append(f"- Factuality: {'ok' if outcome.factuality_report.ok else 'fail'}")
+        if outcome.factuality_report.errors:
+            lines.extend([f"  - {error}" for error in outcome.factuality_report.errors])
+
+    _lane_section("client", "Client", state.lanes["client"])
+    _lane_section("lawyer", "Lawyer", state.lanes["lawyer"])
+
+    lines.append("")
+    lines.append("## Staff Report")
+    lines.append(qa.staff_report.strip())
+    return "\n".join(lines).strip() + "\n"
+
+
+# ----------------------------------------------------------------------
+# DOCX template rendering (optional)
+
+
+def _render_docx_from_template(template_path: Path, markdown: str, output_path: Path) -> bool:
+    try:
+        doc_obj = cast(Any, Document(str(template_path)))
+    except Exception:  # pragma: no cover - template issues
+        return False
+    placeholder = "{{CONTENT}}"
+    replaced = False
+    for paragraph in doc_obj.paragraphs:
+        if placeholder in paragraph.text:
+            paragraph.text = paragraph.text.replace(placeholder, markdown)
+            replaced = True
+    if not replaced:
+        # Fallback to simple append at the end
+        doc_obj.add_paragraph(markdown)
+    try:
+        doc_obj.save(str(output_path))
+    except Exception:  # pragma: no cover - write issues
+        return False
+    return True
+
+
+# ----------------------------------------------------------------------
+# Utility
+
+
+def _emit(
+    progress: Optional[Callable[[str, str, JSONObject], None]],
+    stage: str,
+    event: str,
+    payload: JSONObject,
+) -> None:
+    if progress is None:
+        logger.debug("compose.stage", extra={"stage": stage, "event": event, "payload": payload})
+        return
+    try:
+        progress(stage, event, payload)
+    except Exception:  # pragma: no cover - defensive
+        logger.debug("compose.progress_callback_failed", exc_info=True)
+
+
+def _lane_history_payload(history: Sequence[LaneAttempt]) -> list[JSONObject]:
+    serialized: list[JSONObject] = []
+    for attempt in history:
+        structure_payload: JSONObject = {
+            "ok": attempt.structure.ok,
+            "errors": cast(list[JSONValue], list(attempt.structure.errors)),
+            "warnings": cast(list[JSONValue], list(attempt.structure.warnings)),
+        }
+        compliance_payload: JSONObject = {
+            "ok": attempt.compliance.ok,
+            "errors": cast(list[JSONValue], list(attempt.compliance.errors)),
+            "warnings": cast(list[JSONValue], list(attempt.compliance.warnings)),
+        }
+        factual_payload: JSONObject = {
+            "ok": attempt.factuality.ok,
+            "errors": cast(list[JSONValue], list(attempt.factuality.errors)),
+            "warnings": cast(list[JSONValue], list(attempt.factuality.warnings)),
+        }
+        serialized.append(
+            {
+                "attempt": attempt.attempt_number,
+                "structure": structure_payload,
+                "compliance": compliance_payload,
+                "factuality": factual_payload,
+            }
+        )
+    return serialized
+
+
+def _load_sequence(path: Optional[Path]) -> list[JSONObject]:
+    if path is None or not path.exists():
+        return []
+    try:
+        payload = load_json_value(path, context=str(path))
+    except ValueError:
+        return []
+    if isinstance(payload, Mapping):
+        events = coerce_object_list(payload.get("events"))
+        return [coerce_json_object(item) for item in events]
+    if isinstance(payload, Sequence):
+        return [coerce_json_object(item) for item in payload if isinstance(item, Mapping)]
+    return []
+
+
+def _read_text(path: Optional[Path]) -> str:
+    if path is None:
+        return ""
+    try:
+        return path.read_text(encoding="utf-8")
+    except Exception:  # pragma: no cover - defensive
+        return ""
+
+
+def _read_json(path: Optional[Path]) -> JSONObject:
+    if path is None or not path.exists():
+        return {}
+    try:
+        return load_json_object(path, context=str(path))
+    except Exception:  # pragma: no cover - defensive
+        return {}
+
+
+def _lane_user_prompt(lane: str, context: ComposeContext, revision_brief: Optional[str]) -> str:
+    serialized_context = _serialize_context(context)
+    payload: dict[str, JSONValue] = {
+        "context": json.loads(serialized_context),
+        "lane": lane,
+    }
+    if revision_brief:
+        instruction = (
+            CLIENT_REVISION_USER_INSTRUCTION if lane == "client" else LAWYER_REVISION_USER_INSTRUCTION
+        )
+        payload["revision_brief"] = revision_brief
+        payload["instruction"] = instruction
+        return json.dumps(payload, ensure_ascii=False)
+    instruction = (
+        CLIENT_DRAFT_USER_INSTRUCTION if lane == "client" else LAWYER_DRAFT_USER_INSTRUCTION
+    )
+    payload["instruction"] = instruction
+    return json.dumps(payload, ensure_ascii=False)
 
 
 __all__ = [
     "ComposeAgent",
     "ComposeConfig",
     "ComposeResult",
-    "ComposeStageError",
     "ComposeArtifacts",
+    "ComposeStageError",
 ]
