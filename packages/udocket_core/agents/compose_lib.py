@@ -11,7 +11,7 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Optional, Sequence, cast
 
-from docx import Document  # type: ignore[import]
+from docxtpl import DocxTemplate  # type: ignore[import]
 from langgraph.graph import END, START, StateGraph  # type: ignore[import]
 
 from packages.udocket_core.json_utils import (
@@ -958,24 +958,48 @@ class ComposeAgent:
         artifacts.staff_report = staff_report_path
 
         qa_report_path = next_versioned(docs_dir / f"{job_id}__compose_qa_report_v1.md")
-        qa_report_path.write_text(_render_qa_markdown(state), encoding="utf-8")
+        qa_report_text = _render_qa_markdown(state)
+        qa_report_path.write_text(qa_report_text, encoding="utf-8")
         artifacts.qa_report = qa_report_path
+
+        shared_context = _docx_placeholder_context(
+            bundle=bundle,
+            staff_report=qa_result.staff_report,
+            qa_report=qa_report_text,
+        )
+        client_context = dict(shared_context)
+        client_context["client_summary"] = state.lanes["client"].document
+        lawyer_context = dict(shared_context)
+        lawyer_context["lawyer_brief"] = state.lanes["lawyer"].document
 
         artifacts.client_docx = self._write_docx(
             markdown=state.lanes["client"].document,
             output_prefix=docs_dir / f"{job_id}__compose_client_v1",
+            template_key="client_summary",
+            docx_context=client_context,
         )
         artifacts.lawyer_docx = self._write_docx(
             markdown=state.lanes["lawyer"].document,
             output_prefix=docs_dir / f"{job_id}__compose_lawyer_v1",
+            template_key="lawyer_brief",
+            docx_context=lawyer_context,
         )
 
         return artifacts
 
-    def _write_docx(self, *, markdown: str, output_prefix: Path) -> Optional[Path]:
+    def _write_docx(
+        self,
+        *,
+        markdown: str,
+        output_prefix: Path,
+        template_key: str,
+        docx_context: Mapping[str, str],
+    ) -> Optional[Path]:
         output_path = next_versioned(output_prefix.with_suffix(".docx"))
-        if self.config.doc_template_path and Document is not None and self.config.doc_template_path.exists():
-            if _render_docx_from_template(self.config.doc_template_path, markdown, output_path):
+        if self.config.doc_template_path and self.config.doc_template_path.exists():
+            context = dict(docx_context)
+            context[template_key] = markdown
+            if _render_docx_from_template(self.config.doc_template_path, context, output_path):
                 return output_path
         paragraphs = _markdown_paragraphs(markdown)
         write_basic_docx(paragraphs=paragraphs, output_path=output_path, title=output_prefix.name)
@@ -1403,25 +1427,69 @@ def _render_qa_markdown(state: ComposeState) -> str:
 # DOCX template rendering (optional)
 
 
-def _render_docx_from_template(template_path: Path, markdown: str, output_path: Path) -> bool:
+def _docx_placeholder_context(**sections: str) -> dict[str, str]:
+    base: dict[str, str] = {
+        "client_summary": "",
+        "lawyer_brief": "",
+        "bundle": "",
+        "staff_report": "",
+        "qa_report": "",
+    }
+    for key, value in sections.items():
+        base[key] = value
+    return base
+
+
+def _render_docx_from_template(
+    template_path: Path,
+    sections: Mapping[str, str],
+    output_path: Path,
+) -> bool:
     try:
-        doc_obj = cast(Any, Document(str(template_path)))
+        template = cast(Any, DocxTemplate(str(template_path)))
     except Exception:  # pragma: no cover - template issues
         return False
-    placeholder = "{{CONTENT}}"
-    replaced = False
-    for paragraph in doc_obj.paragraphs:
-        if placeholder in paragraph.text:
-            paragraph.text = paragraph.text.replace(placeholder, markdown)
-            replaced = True
-    if not replaced:
-        # Fallback to simple append at the end
-        doc_obj.add_paragraph(markdown)
+
+    context: dict[str, Any] = {}
+    for key, value in _docx_placeholder_context().items():
+        provided = sections.get(key, value)
+        context[f"{key}_plain"] = provided
+        if provided.strip():
+            context[key] = _markdown_to_subdoc(template, provided)
+        else:
+            context[key] = ""
+
     try:
-        doc_obj.save(str(output_path))
-    except Exception:  # pragma: no cover - write issues
+        template.render(context)
+        template.save(str(output_path))
+    except Exception:  # pragma: no cover - rendering issues
         return False
     return True
+
+
+def _markdown_to_subdoc(template: Any, markdown: str) -> Any:
+    subdoc: Any = template.new_subdoc()
+    lines = markdown.splitlines()
+    if not lines:
+        subdoc.add_paragraph("")
+        return subdoc
+    for raw_line in lines:
+        line = raw_line.rstrip("\r")
+        stripped = line.strip()
+        if not stripped:
+            subdoc.add_paragraph("")
+            continue
+        if stripped.startswith("### "):
+            subdoc.add_paragraph(stripped[4:].strip(), style="Heading 3")
+            continue
+        if stripped.startswith("## "):
+            subdoc.add_paragraph(stripped[3:].strip(), style="Heading 2")
+            continue
+        if stripped.startswith(("- ", "* ")):
+            subdoc.add_paragraph(stripped[2:].strip(), style="List Bullet")
+            continue
+        subdoc.add_paragraph(stripped)
+    return subdoc
 
 
 # ----------------------------------------------------------------------

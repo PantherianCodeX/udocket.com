@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from typing import Dict, Tuple
 
+from docx import Document as DocxDocument  # type: ignore[import]
+
 from packages.udocket_core.agents.compose_lib import ComposeAgent, ComposeConfig, ComposeResult
 from packages.udocket_core.json_utils import JSONObject
 from tests._typing import MonkeyPatch
@@ -88,7 +90,6 @@ def test_compose_agent_parallel_lanes(tmp_path: Path, monkeypatch: MonkeyPatch) 
         max_lawyer_attempts=2,
         min_timestamp_references=1,
         qa_required=True,
-        enable_parallel_lanes=True,
         debug=True,
     )
     agent = ComposeAgent(config)
@@ -153,7 +154,7 @@ The case conference is scheduled, and the parties must exchange updated financia
             return response, {"prompt_tokens": 80, "completion_tokens": 40}, "stub"
         raise AssertionError(f"Unexpected stage: {stage}")
 
-    monkeypatch.setattr(ComposeAgent, "_invoke_llm", fake_invoke)  # type: ignore[arg-type]
+    monkeypatch.setattr(ComposeAgent, "_invoke_llm", fake_invoke)
 
     result: ComposeResult = agent.compose(
         case_id="CASE-001",
@@ -168,8 +169,10 @@ The case conference is scheduled, and the parties must exchange updated financia
 
     assert result.status == "ok"
     artifacts = result.artifacts
-    assert artifacts.bundle_path and artifacts.bundle_path.exists()
-    bundle_text = artifacts.bundle_path.read_text(encoding="utf-8")
+    bundle_path = artifacts.bundle_path
+    assert bundle_path is not None
+    assert bundle_path.exists()
+    bundle_text = bundle_path.read_text(encoding="utf-8")
     assert "Part 1 – Client Summary" in bundle_text
     assert "Part 2 – Lawyer Brief" in bundle_text
     assert artifacts.client_markdown and artifacts.client_markdown.exists()
@@ -204,7 +207,6 @@ def test_compose_agent_revision_cycle(tmp_path: Path, monkeypatch: MonkeyPatch) 
         max_lawyer_attempts=1,
         min_timestamp_references=1,
         qa_required=True,
-        enable_parallel_lanes=False,
         debug=True,
     )
     agent = ComposeAgent(config)
@@ -285,7 +287,7 @@ The case conference is scheduled, and the parties must exchange updated financia
             return response, {"prompt_tokens": 30, "completion_tokens": 30}, "stub"
         raise AssertionError(f"Unexpected stage: {stage}")
 
-    monkeypatch.setattr(ComposeAgent, "_invoke_llm", fake_invoke)  # type: ignore[arg-type]
+    monkeypatch.setattr(ComposeAgent, "_invoke_llm", fake_invoke)
 
     result = agent.compose(
         case_id="CASE-REV",
@@ -303,5 +305,107 @@ The case conference is scheduled, and the parties must exchange updated financia
     assert meta["lawyer_attempts"] == 1
     assert call_counts["compose.client.draft"] == 1
     assert call_counts["compose.client.revise"] == 1
-    bundle_text = result.artifacts.bundle_path.read_text(encoding="utf-8")
+    bundle_path = result.artifacts.bundle_path
+    assert bundle_path is not None
+    bundle_text = bundle_path.read_text(encoding="utf-8")
     assert "Next Steps / Preparation Notes" in bundle_text
+
+
+def test_compose_agent_docx_template(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
+    case_dir = tmp_path / "case"
+    docs_dir = case_dir / "docs"
+    ops_dir = case_dir / "ops"
+    docs_dir.mkdir(parents=True)
+    ops_dir.mkdir(parents=True)
+
+    summary_json, summary_md, timeline_json = _write_inputs(docs_dir)
+
+    template_path = tmp_path / "compose_template.docx"
+    template_doc = DocxDocument()
+    template_doc.add_heading("Client Summary", level=2)
+    template_doc.add_paragraph("{{ client_summary }}")
+    template_doc.add_heading("Lawyer Brief", level=2)
+    template_doc.add_paragraph("{{ lawyer_brief }}")
+    template_doc.add_heading("Staff Notes", level=2)
+    template_doc.add_paragraph("{{ staff_report_plain }}")
+    template_doc.save(template_path)
+
+    config = ComposeConfig(
+        provider_chain=["stub"],
+        temperature=0.2,
+        lawyer_temperature=0.2,
+        max_output_tokens=2048,
+        max_client_attempts=2,
+        max_lawyer_attempts=2,
+        min_timestamp_references=1,
+        qa_required=True,
+        debug=True,
+        doc_template_path=template_path,
+    )
+    agent = ComposeAgent(config)
+
+    client_doc = """## Case Overview
+The judge reviewed the interim custody order at [00:01] and confirmed it remained active. The hearing record at [02:00] notes the court expects continued compliance while scheduling the next appearance.
+"""
+
+    lawyer_doc = """## Case Summary
+This matter involves interim custody arrangements reviewed on January 5, 2024 at [00:01]. The transcript at [02:00] confirms the interim order remains active while the parties organise updated disclosure.
+"""
+
+    def fake_invoke(
+        self: ComposeAgent,
+        *,
+        stage: str,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float,
+        provider_credentials: JSONObject,
+    ) -> ClientResponse:
+        if stage == "compose.client.draft":
+            return client_doc, {"prompt_tokens": 80, "completion_tokens": 120}, "stub"
+        if stage == "compose.lawyer.draft":
+            return lawyer_doc, {"prompt_tokens": 90, "completion_tokens": 130}, "stub"
+        if stage == "compose.qa_reviewer":
+            response = json.dumps(
+                {
+                    "status": "ok",
+                    "alerts": [],
+                    "recommendations": [],
+                    "staff_report": "# Staff Report\n\nAll checks passed.",
+                }
+            )
+            return response, {"prompt_tokens": 60, "completion_tokens": 30}, "stub"
+        raise AssertionError(stage)
+
+    monkeypatch.setattr(ComposeAgent, "_invoke_llm", fake_invoke)
+
+    result = agent.compose(
+        case_id="CASE-003",
+        case_dir=case_dir,
+        job_id="JOB-003",
+        summary_json_path=summary_json,
+        summary_markdown_path=summary_md,
+        transcript_path=None,
+        timeline_seed_path=timeline_json,
+        entity_hint_path=None,
+    )
+
+    client_docx_path = result.artifacts.client_docx
+    assert client_docx_path is not None
+    assert client_docx_path.exists()
+    client_render = DocxDocument(str(client_docx_path))
+    client_text = "\n".join(paragraph.text for paragraph in client_render.paragraphs)
+    assert "Client Summary" in client_text
+    assert "The judge reviewed the interim custody order" in client_text
+    assert "All checks passed." in client_text
+    assert "{{" not in client_text
+
+    lawyer_docx_path = result.artifacts.lawyer_docx
+    assert lawyer_docx_path is not None
+    assert lawyer_docx_path.exists()
+    lawyer_render = DocxDocument(str(lawyer_docx_path))
+    lawyer_text = "\n".join(paragraph.text for paragraph in lawyer_render.paragraphs)
+    assert "Lawyer Brief" in lawyer_text
+    assert "interim custody arrangements reviewed" in lawyer_text
+    assert "All checks passed." in lawyer_text
+    assert "{{" not in lawyer_text
