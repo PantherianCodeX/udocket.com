@@ -31,8 +31,19 @@ function run_with_retries() {
   done
 }
 
-if [[ "${SKIP_PLATFORM_BOOTSTRAP:-0}" != "1" ]]; then
+RUN_PLATFORM_MIGRATIONS=${RUN_PLATFORM_MIGRATIONS:-1}
+RUN_PLATFORM_BOOTSTRAP=${RUN_PLATFORM_BOOTSTRAP:-1}
+
+if [[ "${SKIP_PLATFORM_BOOTSTRAP:-0}" == "1" ]]; then
+  RUN_PLATFORM_MIGRATIONS=0
+  RUN_PLATFORM_BOOTSTRAP=0
+fi
+
+if [[ "${RUN_PLATFORM_MIGRATIONS}" == "1" ]]; then
   run_with_retries
+fi
+
+if [[ "${RUN_PLATFORM_BOOTSTRAP}" == "1" ]]; then
   run_manage_cmd enable_rls || true
   run_manage_cmd bootstrap_defaults || true
 fi

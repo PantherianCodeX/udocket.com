@@ -19,6 +19,7 @@ services:
       context: .
       dockerfile: infra/docker/Dockerfile.platform
     develop: *platform-watch
+    restart: unless-stopped
     env_file: .env
     environment:
       DJANGO_SETTINGS_MODULE: apps.platform.config.settings.prod
@@ -26,20 +27,25 @@ services:
       REDIS_URL: redis://redis:6379/1
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: django-db
+      RUN_PLATFORM_MIGRATIONS: "1"
+      RUN_PLATFORM_BOOTSTRAP: "1"
     volumes:
       - ./storage:/app/storage
       - ./.env:/app/.env:ro
     ports:
       - "8000:8000"
     depends_on:
-      - redis
-      - postgres
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
 
   platform_worker:
     build:
       context: .
       dockerfile: infra/docker/Dockerfile.platform
     develop: *platform-watch
+    restart: unless-stopped
     env_file: .env
     environment:
       DJANGO_SETTINGS_MODULE: apps.platform.config.settings.prod
@@ -47,6 +53,8 @@ services:
       REDIS_URL: redis://redis:6379/1
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: django-db
+      RUN_PLATFORM_MIGRATIONS: "0"
+      RUN_PLATFORM_BOOTSTRAP: "0"
     command: >-
       sh -lc "python -c 'import time; time.sleep(2)' &&
       celery -A apps.platform.config.celery worker -l ${CELERY_LOG_LEVEL:-info} --events"
@@ -54,14 +62,19 @@ services:
       - ./storage:/app/storage
       - ./.env:/app/.env:ro
     depends_on:
-      - redis
-      - postgres
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      platform:
+        condition: service_started
 
   platform_beat:
     build:
       context: .
       dockerfile: infra/docker/Dockerfile.platform
     develop: *platform-watch
+    restart: unless-stopped
     env_file: .env
     environment:
       DJANGO_SETTINGS_MODULE: apps.platform.config.settings.prod
@@ -69,18 +82,31 @@ services:
       REDIS_URL: redis://redis:6379/1
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: django-db
+      RUN_PLATFORM_MIGRATIONS: "0"
+      RUN_PLATFORM_BOOTSTRAP: "0"
     command: sh -lc "python -c 'import time; time.sleep(2)' && celery -A apps.platform.config.celery beat -l ${CELERY_LOG_LEVEL:-info}"
     volumes:
       - ./storage:/app/storage
       - ./.env:/app/.env:ro
     depends_on:
-      - redis
-      - postgres
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      platform:
+        condition: service_started
 
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
 
   postgres:
     image: postgres:15-alpine
@@ -107,6 +133,11 @@ services:
       POSTGRES_DB: keycloak
       POSTGRES_USER: keycloak
       POSTGRES_PASSWORD: keycloakpass
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     volumes:
       - keycloak-db-data:/var/lib/postgresql/data
     ports:
@@ -123,7 +154,6 @@ services:
       KC_DB_URL_DATABASE: keycloak
       KC_DB_USERNAME: keycloak
       KC_DB_PASSWORD: keycloakpass
-      # Expose on 8085 and advertise browser-accessible hostname (localhost)
       KC_HOSTNAME: localhost
       KC_HOSTNAME_PORT: 8085
       KC_HOSTNAME_STRICT: "false"
@@ -133,8 +163,10 @@ services:
     volumes:
       - ./infra/docker/keycloak/udocker-realm.json:/opt/keycloak/data/import/udocker-realm.json:ro
     depends_on:
-      - postgres-keycloak
-      - redis
+      postgres-keycloak:
+        condition: service_started
+      redis:
+        condition: service_healthy
 
 volumes:
   keycloak-db-data:
