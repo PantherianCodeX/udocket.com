@@ -15,7 +15,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic_settings.sources import DotEnvSettingsSource, EnvSettingsSource, PydanticBaseSettingsSource
 
 
-FALLBACK_STORAGE_ROOT = Path(__file__).resolve().parents[2] / "storage"
+FALLBACK_STORAGE_ROOT = Path(__file__).resolve().parents[1] / "storage"
 
 
 def _read_text(path: Path) -> str | None:
@@ -94,12 +94,33 @@ def _normalize_redis_url(value: object) -> str | None:
     return f"redis://{text}"
 
 
+def _as_bool(value: object, *, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    text = str(value).strip().lower()
+    if not text:
+        return default
+    if text in {"1", "true", "yes", "y", "on"}:
+        return True
+    if text in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
 def _safe_mkdir(path: Path) -> bool:
     try:
         path.mkdir(parents=True, exist_ok=True)
     except Exception:
         return False
-    return path.exists()
+    if not path.exists():
+        return False
+    if not os.access(path, os.W_OK | os.X_OK):
+        return False
+    return True
 
 
 def _normalize_storage_values(
@@ -600,8 +621,20 @@ class Settings(BaseSettings):
             db_url = db_url_value
         else:
             db_url = "sqlite:///__AUTO__"
+        allow_sqlite_raw = data_dict.get("ALLOW_SQLITE_DEV_FALLBACK")
+        if allow_sqlite_raw is None and "ALLOW_SQLITE_DEV_FALLBACK" in cls.model_fields:
+            allow_sqlite_raw = cls.model_fields["ALLOW_SQLITE_DEV_FALLBACK"].default
+        allow_sqlite = _as_bool(allow_sqlite_raw, default=False)
         if db_url == "sqlite:///__AUTO__":
-            data_dict["DATABASE_URL"] = f"sqlite:///{storage_root / 'udocket.db'}"
+            if allow_sqlite:
+                data_dict["DATABASE_URL"] = f"sqlite:///{storage_root / 'udocket.db'}"
+            else:
+                raise ValueError(
+                    "DATABASE_URL must be configured (Postgres recommended). "
+                    "Set ALLOW_SQLITE_DEV_FALLBACK=1 to opt into the development SQLite fallback."
+                )
+        elif isinstance(db_url_value, str):
+            data_dict["DATABASE_URL"] = db_url_value
         return data_dict
 
     @model_validator(mode="after")

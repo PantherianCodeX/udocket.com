@@ -13,6 +13,7 @@ from apps.platform.authorization.models import (
     PresetCapability,
     Role,
 )
+from apps.platform.authorization.capabilities import DEFAULT_CAPS
 
 
 class Command(BaseCommand):
@@ -34,6 +35,25 @@ class Command(BaseCommand):
         bindings = data.get("bindings") or {}
 
         with transaction.atomic():
+            # Ensure baseline roles exist so bindings succeed on fresh databases.
+            base_role_names = set(DEFAULT_CAPS.keys()) | set(bindings.keys())
+            for role_name in sorted(base_role_names):
+                role, created = Role.objects.get_or_create(
+                    name=role_name,
+                    organization=None,
+                    defaults={
+                        "description": f"System role: {role_name.title()}",
+                        "system": True,
+                    },
+                )
+                if not created and (role.system is False or role.description == ""):
+                    role.system = True
+                    if not role.description:
+                        role.description = f"System role: {role_name.title()}"
+                    role.save(update_fields=["system", "description"])
+                if created:
+                    self.stdout.write(self.style.SUCCESS(f"Role '{role_name}' created."))
+
             for p in presets:
                 org = None
                 org_slug = p.get("organization")
