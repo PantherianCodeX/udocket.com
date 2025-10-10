@@ -60,13 +60,15 @@ RUN if [ "$DEV_TOOLS" = "1" ]; then \
 
 WORKDIR /app
 
-# Install platform requirements first for better layer caching
-COPY apps/platform/requirements.txt /tmp/requirements.txt
+# Install Python dependencies with better layer caching
+COPY apps/platform/requirements.txt /tmp/platform-requirements.txt
+COPY packages/udocket_core/requirements.txt /tmp/udocket-core-requirements.txt
 RUN python -m pip install --upgrade pip \
-    && pip install -r /tmp/requirements.txt \
+    && pip install -r /tmp/platform-requirements.txt \
+    && pip install -r /tmp/udocket-core-requirements.txt \
     && pip install pyright \
     && pip install git+https://github.com/PantherianCodeX/typewiz@main \
-    && rm -f /tmp/requirements.txt
+    && rm -f /tmp/platform-requirements.txt /tmp/udocket-core-requirements.txt
 
 # Copy project
 COPY . /app

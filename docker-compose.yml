@@ -10,6 +10,8 @@ x-develop:
       - action: rebuild
         path: apps/platform/requirements.txt
       - action: rebuild
+        path: packages/udocket_core/requirements.txt
+      - action: rebuild
         path: infra/docker/Dockerfile.platform
 
 services:

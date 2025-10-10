@@ -12,6 +12,8 @@ services:
           action: rebuild
         - path: apps/platform/requirements.txt
           action: rebuild
+        - path: packages/udocket_core/requirements.txt
+          action: rebuild
 
   platform_worker:
     volumes:
@@ -26,6 +28,8 @@ services:
           action: rebuild
         - path: apps/platform/requirements.txt
           action: rebuild
+        - path: packages/udocket_core/requirements.txt
+          action: rebuild
 
   platform_beat:
     volumes:
@@ -39,4 +43,6 @@ services:
         - path: infra/docker/Dockerfile.platform
           action: rebuild
         - path: apps/platform/requirements.txt
+          action: rebuild
+        - path: packages/udocket_core/requirements.txt
           action: rebuild
