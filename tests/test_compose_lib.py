@@ -23,6 +23,7 @@ from packages.udocket_core.agents.compose_lib import (
     _stable_doc_fingerprint,
     ComposeInputs,
     LANE_CONFIGS,
+    QA_REVIEWER_STATUS_OK,
 )
 from packages.udocket_core.agents.compose.state import QAReviewerResult, _merge_lane_outcomes
 from packages.udocket_core.agents.compose.orchestrator import ComposeOrchestrator
@@ -623,6 +624,152 @@ def test_compose_agent_resume_from_snapshot(tmp_path: Path, monkeypatch: MonkeyP
     latest_manifest = snapshot_dir / "latest.json"
     assert latest_manifest.exists()
 
+
+def test_compose_agent_async_mode(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
+    case_dir = tmp_path / "case"
+    docs_dir = case_dir / "docs"
+    ops_dir = case_dir / "ops"
+    docs_dir.mkdir(parents=True)
+    ops_dir.mkdir(parents=True)
+
+    summary_json, summary_md, timeline_json = _write_inputs(docs_dir)
+
+    config = ComposeConfig(provider_chain=["stub"], qa_required=True, enable_async=True)
+    agent = ComposeAgent(config)
+
+    guard = GuardReport(ok=True, errors=[], warnings=[], checks={})
+
+    async def _dummy_run_async(
+        self: ComposeOrchestrator,
+        *,
+        state: ComposeState,
+        provider_credentials: Mapping[str, JSONObject],
+        progress: Optional[Callable[[str, str, JSONObject], None]],
+    ) -> ComposeState:
+        client_runtime = LaneRuntimeState(
+            lane="client",
+            config=LANE_CONFIGS["client"],
+            max_attempts=2,
+        )
+        client_runtime.document = "Client deliverable"
+        client_runtime.structure_report = guard
+        client_runtime.compliance_report = guard
+        client_runtime.factuality_report = guard
+        lawyer_runtime = LaneRuntimeState(
+            lane="lawyer",
+            config=LANE_CONFIGS["lawyer"],
+            max_attempts=2,
+        )
+        lawyer_runtime.document = "Lawyer deliverable"
+        lawyer_runtime.structure_report = guard
+        lawyer_runtime.compliance_report = guard
+        lawyer_runtime.factuality_report = guard
+        lane_outcome_client = LaneOutcome(
+            document="Client deliverable",
+            structure_report=guard,
+            compliance_report=guard,
+            factuality_report=guard,
+            attempts=1,
+            history=[],
+            stage_usage={},
+            token_usage={},
+            providers=[],
+            models=[],
+            stage_durations={},
+        )
+        lane_outcome_lawyer = LaneOutcome(
+            document="Lawyer deliverable",
+            structure_report=guard,
+            compliance_report=guard,
+            factuality_report=guard,
+            attempts=1,
+            history=[],
+            stage_usage={},
+            token_usage={},
+            providers=[],
+            models=[],
+            stage_durations={},
+        )
+        qa_actions = {
+            "client": LaneActionDirective(action="none"),
+            "lawyer": LaneActionDirective(action="none"),
+        }
+        qa = QAReviewerResult(
+            status="ok",
+            alerts=[],
+            recommendations=[],
+            staff_report="# Staff Report\n\nAll clear.",
+            provider="stub",
+            lane_actions=qa_actions,
+            global_notes="",
+        )
+        return ComposeState(
+            inputs=state.inputs,
+            client=client_runtime,
+            lawyer=lawyer_runtime,
+            context=state.context,
+            lanes={"client": lane_outcome_client, "lawyer": lane_outcome_lawyer},
+            qa=qa,
+            qa_lane_results={},
+            stage_usage={},
+            qa_iterations=1,
+            stage_durations={},
+        )
+
+    class DummyOrchestrator(ComposeOrchestrator):
+        called_async = False
+
+        async def run_async(
+            self,
+            *,
+            state: ComposeState,
+            provider_credentials: Mapping[str, JSONObject],
+            progress: Optional[Callable[[str, str, JSONObject], None]],
+        ) -> ComposeState:
+            DummyOrchestrator.called_async = True
+            return await _dummy_run_async(
+                self,
+                state=state,
+                provider_credentials=provider_credentials,
+                progress=progress,
+            )
+
+        def run(  # pragma: no cover - guard against synchronous fallback
+            self,
+            *,
+            state: ComposeState,
+            provider_credentials: Mapping[str, JSONObject],
+            progress: Optional[Callable[[str, str, JSONObject], None]],
+        ) -> ComposeState:
+            raise AssertionError("Synchronous run should not be used when async is enabled")
+
+    monkeypatch.setattr(
+        ComposeAgent,
+        "_new_orchestrator",
+        lambda self, compose_run=None: DummyOrchestrator(
+            config=self.config,
+            settings=self.settings,
+            logger=self.logger,
+            qa_ok_status=QA_REVIEWER_STATUS_OK,
+            prompts=self.prompts,
+            compose_run=compose_run,
+        ),
+    )
+
+    result = agent.compose(
+        case_id="CASE-ASYNC",
+        case_dir=case_dir,
+        job_id="JOB-ASYNC",
+        summary_json_path=summary_json,
+        summary_markdown_path=summary_md,
+        timeline_seed_path=timeline_json,
+        entity_hint_path=None,
+    )
+    assert result.status == "ok"
+    assert DummyOrchestrator.called_async is True
+    client_doc = result.artifacts.client_markdown
+    assert client_doc is not None and client_doc.exists()
+    assert "Client deliverable" in client_doc.read_text(encoding="utf-8")
 
 def _guard_ok() -> GuardReport:
     return GuardReport(ok=True, errors=[], warnings=[], checks={})

@@ -89,6 +89,7 @@ class ComposeConfig:
     prompt_config_path: Path = field(default_factory=_default_prompt_config_path)
     llm_retry_attempts: int = 2
     llm_retry_initial_delay_seconds: float = 2.0
+    enable_async: bool = False
 
     @classmethod
     def from_env(cls) -> "ComposeConfig":
@@ -126,6 +127,7 @@ class ComposeConfig:
             0.5,
             _safe_float(os.getenv("COMPOSE_LLM_RETRY_DELAY_SECONDS"), 2.0),
         )
+        enable_async = _truthy(os.getenv("COMPOSE_ENABLE_ASYNC"), False)
         return cls(
             provider_chain=providers,
             temperature=temperature,
@@ -145,6 +147,7 @@ class ComposeConfig:
             prompt_config_path=prompt_config_path,
             llm_retry_attempts=llm_retry_attempts,
             llm_retry_initial_delay_seconds=llm_retry_initial_delay_seconds,
+            enable_async=enable_async,
         )
 
 

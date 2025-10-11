@@ -2,6 +2,7 @@ from __future__ import annotations
 
 # pyright: strict
 
+import asyncio
 import logging
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Sequence
@@ -245,11 +246,33 @@ class ComposeAgent:
             run_tracker.record("compose.resume", state)
 
         orchestrator = self._new_orchestrator(compose_run=run_tracker)
-        state = orchestrator.run(
-            state=state,
-            provider_credentials=provider_credentials_map,
-            progress=progress_proxy,
-        )
+        if self.config.enable_async:
+            async def _invoke_async() -> ComposeState:
+                return await orchestrator.run_async(
+                    state=state,
+                    provider_credentials=provider_credentials_map,
+                    progress=progress_proxy,
+                )
+
+            try:
+                state = asyncio.run(_invoke_async())
+            except RuntimeError:
+                self.logger.debug(
+                    "compose.run.async_unavailable",
+                    exc_info=True,
+                    extra={"compose": {"case_id": case_id, "job_id": job_id}},
+                )
+                state = orchestrator.run(
+                    state=state,
+                    provider_credentials=provider_credentials_map,
+                    progress=progress_proxy,
+                )
+        else:
+            state = orchestrator.run(
+                state=state,
+                provider_credentials=provider_credentials_map,
+                progress=progress_proxy,
+            )
 
         if state.qa is None:
             raise ComposeStageError("compose.qa_reviewer", "QA reviewer did not execute")

@@ -78,18 +78,30 @@ class ComposeOrchestrator:
             progress=progress,
         )
 
-    # ------------------------------------------------------------------
-    # Orchestration
-
-    def _run_graph(
+    async def run_async(
         self,
         *,
         state: ComposeState,
         provider_credentials: Mapping[str, JSONObject],
         progress: Optional[Callable[[str, str, JSONObject], None]],
     ) -> ComposeState:
-        graph: Any = StateGraph(ComposeState)
+        return await self._run_graph_async(
+            state=state,
+            provider_credentials=provider_credentials,
+            progress=progress,
+        )
 
+    # ------------------------------------------------------------------
+    # Orchestration
+
+    def _setup_graph(
+        self,
+        graph: Any,
+        *,
+        state: ComposeState,
+        provider_credentials: Mapping[str, JSONObject],
+        progress: Optional[Callable[[str, str, JSONObject], None]],
+    ) -> None:
         def context_node(current: ComposeState) -> dict[str, object]:
             return self._context_assembler(current, progress)
 
@@ -299,8 +311,47 @@ class ComposeOrchestrator:
         graph.add_edge("QAJoin", "ReleaseGate")
         graph.add_edge("ReleaseGate", END)
 
+    def _run_graph(
+        self,
+        *,
+        state: ComposeState,
+        provider_credentials: Mapping[str, JSONObject],
+        progress: Optional[Callable[[str, str, JSONObject], None]],
+    ) -> ComposeState:
+        graph: Any = StateGraph(ComposeState)
+        self._setup_graph(
+            graph,
+            state=state,
+            provider_credentials=provider_credentials,
+            progress=progress,
+        )
         compiled = graph.compile()
         result_state = compiled.invoke(state)
+        if isinstance(result_state, ComposeState):
+            return result_state
+        if isinstance(result_state, dict):
+            result_mapping = cast(dict[str, object], result_state)
+            for key, value in result_mapping.items():
+                setattr(state, key, value)
+            return state
+        raise ComposeStageError("compose.graph", f"Unexpected graph result type: {type(result_state)!r}")
+
+    async def _run_graph_async(
+        self,
+        *,
+        state: ComposeState,
+        provider_credentials: Mapping[str, JSONObject],
+        progress: Optional[Callable[[str, str, JSONObject], None]],
+    ) -> ComposeState:
+        graph: Any = StateGraph(ComposeState)
+        self._setup_graph(
+            graph,
+            state=state,
+            provider_credentials=provider_credentials,
+            progress=progress,
+        )
+        compiled = graph.compile()
+        result_state = await compiled.ainvoke(state)
         if isinstance(result_state, ComposeState):
             return result_state
         if isinstance(result_state, dict):

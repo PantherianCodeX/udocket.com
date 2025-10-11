@@ -37,20 +37,27 @@ class ComposeRun:
         self.snapshot_dir.mkdir(parents=True, exist_ok=True)
         self._sequence = self._discover_latest_sequence()
 
+    def _log_event(self, level: int, event: str, extra: Mapping[str, object] | None = None) -> None:
+        payload: dict[str, object] = {"case_id": self.case_id, "job_id": self.job_id}
+        if extra:
+            payload.update(dict(extra))
+        try:
+            self.logger.log(level, event, extra={"compose": payload})
+        except Exception:  # pragma: no cover - defensive
+            self.logger.debug("compose.run.logging_failed", exc_info=True)
+
     def reset(self) -> None:
         """Remove existing snapshots when starting a fresh run."""
         if not self.snapshot_dir.exists():
             self.snapshot_dir.mkdir(parents=True, exist_ok=True)
+        self._log_event(logging.INFO, "compose.run.reset_begin", {"snapshot_dir": str(self.snapshot_dir)})
         for path in self.snapshot_dir.glob("*.json"):
             try:
                 path.unlink()
             except Exception:
-                self.logger.debug(
-                    "compose.run.reset.failed",
-                    extra={"path": str(path)},
-                    exc_info=True,
-                )
+                self._log_event(logging.DEBUG, "compose.run.reset_failed", {"path": str(path)})
         self._sequence = 0
+        self._log_event(logging.INFO, "compose.run.reset_complete", {"snapshot_dir": str(self.snapshot_dir)})
 
     def record(self, stage: str, state: ComposeState) -> None:
         if not self.enabled:
@@ -70,18 +77,16 @@ class ComposeRun:
         try:
             target.write_text(json.dumps(envelope, ensure_ascii=False, indent=2), encoding="utf-8")
         except Exception:
-            self.logger.warning(
-                "compose.run.snapshot_failed",
-                extra={"stage": stage, "path": str(target)},
-                exc_info=True,
-            )
+            self._log_event(logging.WARNING, "compose.run.snapshot_failed", {"stage": stage, "path": str(target)})
             return
         timestamp = coerce_str(envelope.get("timestamp")) or datetime.now(tz=timezone.utc).isoformat()
         self._write_manifest(stage=stage, sequence=self._sequence, filename=filename, timestamp=timestamp)
+        self._log_event(logging.INFO, "compose.run.snapshot_recorded", {"stage": stage, "sequence": self._sequence, "path": str(target)})
 
     def restore_latest(self) -> ComposeRunSnapshot | None:
         manifest_path = self.snapshot_dir / LATEST_MANIFEST
         if not manifest_path.exists():
+            self._log_event(logging.DEBUG, "compose.run.restore_manifest_missing", {"snapshot_dir": str(self.snapshot_dir)})
             return None
         try:
             manifest_raw = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -92,17 +97,15 @@ class ComposeRun:
                     manifest_map[str(key)] = cast(JSONValue, value)
             manifest = coerce_json_object(manifest_map)
         except Exception:
-            self.logger.warning(
-                "compose.run.manifest_read_failed",
-                extra={"path": str(manifest_path)},
-                exc_info=True,
-            )
+            self._log_event(logging.WARNING, "compose.run.manifest_read_failed", {"path": str(manifest_path)})
             return None
         filename = coerce_str(manifest.get("path")) or ""
         if not filename:
+            self._log_event(logging.DEBUG, "compose.run.restore_manifest_empty", {"path": str(manifest_path)})
             return None
         snapshot_path = self.snapshot_dir / filename
         if not snapshot_path.exists():
+            self._log_event(logging.DEBUG, "compose.run.restore_snapshot_missing", {"path": str(snapshot_path)})
             return None
         try:
             snapshot_raw = json.loads(snapshot_path.read_text(encoding="utf-8"))
@@ -113,11 +116,7 @@ class ComposeRun:
                     snapshot_map[str(key)] = cast(JSONValue, value)
             snapshot = coerce_json_object(snapshot_map)
         except Exception:
-            self.logger.warning(
-                "compose.run.snapshot_read_failed",
-                extra={"path": str(snapshot_path)},
-                exc_info=True,
-            )
+            self._log_event(logging.WARNING, "compose.run.snapshot_read_failed", {"path": str(snapshot_path)})
             return None
         state_payload = snapshot.get("state")
         if not isinstance(state_payload, Mapping):
@@ -126,6 +125,11 @@ class ComposeRun:
         sequence = _int_from_json(manifest.get("sequence")) or _int_from_json(snapshot.get("sequence"))
         stage = coerce_str(manifest.get("stage")) or coerce_str(snapshot.get("stage")) or "unknown"
         self._sequence = max(self._sequence, sequence)
+        self._log_event(
+            logging.INFO,
+            "compose.run.snapshot_restored",
+            {"stage": stage, "sequence": sequence, "path": str(snapshot_path)},
+        )
         return ComposeRunSnapshot(stage=stage, sequence=sequence, path=snapshot_path, state=state)
 
     def _write_manifest(self, *, stage: str, sequence: int, filename: str, timestamp: str) -> None:
@@ -141,10 +145,12 @@ class ComposeRun:
         try:
             manifest_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         except Exception:
-            self.logger.debug(
-                "compose.run.manifest_write_failed",
-                extra={"path": str(manifest_path)},
-                exc_info=True,
+            self._log_event(logging.DEBUG, "compose.run.manifest_write_failed", {"path": str(manifest_path)})
+        else:
+            self._log_event(
+                logging.INFO,
+                "compose.run.manifest_written",
+                {"stage": stage, "sequence": sequence, "path": str(manifest_path)},
             )
 
     def _discover_latest_sequence(self) -> int:
