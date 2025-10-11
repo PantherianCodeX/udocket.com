@@ -459,6 +459,7 @@ class ComposeConfig:
     client_editor_model: Optional[str] = None
     lawyer_editor_model: Optional[str] = None
     qa_iteration_limit: int = 3
+    locale: str = "en-CA"
 
     @classmethod
     def from_env(cls) -> "ComposeConfig":
@@ -476,6 +477,7 @@ class ComposeConfig:
         client_editor_model = os.getenv("COMPOSE_CLIENT_EDITOR_MODEL") or None
         lawyer_editor_model = os.getenv("COMPOSE_LAWYER_EDITOR_MODEL") or None
         qa_iteration_limit = _safe_int(os.getenv("COMPOSE_QA_MAX_ITERATIONS"), 3)
+        locale = os.getenv("COMPOSE_LOCALE", "en-CA")
         template_env = os.getenv(DOC_TEMPLATE_ENV)
         template_path = Path(template_env).resolve() if template_env else None
         if template_path and not template_path.exists():
@@ -498,6 +500,7 @@ class ComposeConfig:
             client_editor_model=client_editor_model,
             lawyer_editor_model=lawyer_editor_model,
             qa_iteration_limit=qa_iteration_limit,
+            locale=locale,
         )
 
 
@@ -995,7 +998,12 @@ class ComposeAgent:
         document, usage, provider, model = self._invoke_llm(
             stage=stage_name,
             system_prompt=lane_system_prompt(lane, revision=is_revision),
-            user_prompt=_lane_user_prompt(lane, context, lane_state.revision_brief),
+            user_prompt=_lane_user_prompt(
+                lane,
+                context,
+                lane_state.revision_brief,
+                locale=self.config.locale,
+            ),
             temperature=temperature,
             provider_credentials=provider_credentials,
         )
@@ -1047,10 +1055,28 @@ class ComposeAgent:
             "start",
             {"attempt": lane_state.attempts, "lane": lane, "source": lane_state.current_source},
         )
+        per_section_min = None
+        per_section_max = None
+        if lane_state.config.lane == "client":
+            from .compose.llm_profiles import (
+                CLIENT_MAX_WORDS_BY_SECTION as _PS_MAX,
+                CLIENT_MIN_WORDS_BY_SECTION as _PS_MIN,
+            )
+            per_section_min = _PS_MIN
+            per_section_max = _PS_MAX
+        elif lane_state.config.lane == "lawyer":
+            from .compose.llm_profiles import (
+                LAWYER_MAX_WORDS_BY_SECTION as _PS_MAX,
+                LAWYER_MIN_WORDS_BY_SECTION as _PS_MIN,
+            )
+            per_section_min = _PS_MIN
+            per_section_max = _PS_MAX
         report = _markdown_structure_report(
             document,
             lane_state.config.headings,
             min_words=lane_state.config.min_words,
+            per_section_min=per_section_min,
+            per_section_max=per_section_max,
         )
         if lane_state.config.readability_limit is not None:
             readability = _sentence_length_report(
@@ -1429,6 +1455,7 @@ class ComposeAgent:
         }
         if revision_brief:
             base_payload["revision_brief"] = revision_brief
+        base_payload["locale"] = self.config.locale
         system_prompt = CLIENT_EDITOR_SYSTEM_PROMPT if lane == "client" else LAWYER_EDITOR_SYSTEM_PROMPT
         instruction = CLIENT_EDITOR_USER_INSTRUCTION if lane == "client" else LAWYER_EDITOR_USER_INSTRUCTION
         base_payload["instruction"] = instruction
@@ -1462,6 +1489,12 @@ class ComposeAgent:
                     normalized = item.strip()
                     if normalized:
                         change_log.append(normalized)
+        if not change_log:
+            raise ComposeStageError(stage_name, "Editor returned empty change_log", lane=lane, provider=provider, model=model)
+        allowed_tags = ("[format]", "[grammar]", "[compliance]", "[timestamp]", "[clarity]")
+        normalized_log = [entry.lower().strip() for entry in change_log]
+        if not any(any(tag in entry for tag in allowed_tags) for entry in normalized_log):
+            _emit(progress, stage_name, "warning", {"lane": lane, "note": "change_log lacks standard tags"})
         new_hash = _stable_doc_fingerprint(new_document)
         if lane_state.last_document_hash is not None and new_hash == lane_state.last_document_hash:
             raise ComposeStageError(stage_name, "Editor produced no changes", lane=lane, provider=provider, model=model)
@@ -1573,6 +1606,9 @@ class ComposeAgent:
                     model=model,
                 )
             revision_brief = (coerce_str(directive_obj.get("revision_brief")) or "").strip()
+            reason = (coerce_str(directive_obj.get("reason")) or "").strip()
+            if normalized_action != "none" and not reason:
+                raise ComposeStageError(stage_name, f"QA action '{normalized_action}' for lane '{lane}' missing 'reason'")
             lane_actions[lane] = LaneActionDirective(action=normalized_action, revision_brief=revision_brief)
 
         qa_result = QAReviewerResult(
@@ -1813,13 +1849,17 @@ _ADVICE_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\bi advise\b", re.IGNORECASE),
     re.compile(r"\bwe recommend\b", re.IGNORECASE),
     re.compile(r"\bwe advise\b", re.IGNORECASE),
+    re.compile(r"\bseek legal (help|advice|counsel)\b", re.IGNORECASE),
+    re.compile(r"\bfile (an?|the) (claim|complaint|motion)\b", re.IGNORECASE),
+    re.compile(r"\byou (need|ought)\b", re.IGNORECASE),
 )
-
 
 _RISKY_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"\bshould consider\b", re.IGNORECASE), "Suggestive wording"),
     (re.compile(r"\blikely\b", re.IGNORECASE), "Speculative wording"),
     (re.compile(r"\bprobably\b", re.IGNORECASE), "Speculative wording"),
+    (re.compile(r"\bstrong case\b", re.IGNORECASE), "Speculative wording"),
+    (re.compile(r"\bgood chance\b", re.IGNORECASE), "Speculative wording"),
 )
 
 
@@ -1838,7 +1878,14 @@ def _split_markdown_sections(document: str) -> list[tuple[str, str]]:
     return sections
 
 
-def _markdown_structure_report(document: str, required: Sequence[str], *, min_words: int) -> GuardReport:
+def _markdown_structure_report(
+    document: str,
+    required: Sequence[str],
+    *,
+    min_words: int,
+    per_section_min: Optional[Mapping[str, int]] = None,
+    per_section_max: Optional[Mapping[str, int]] = None,
+) -> GuardReport:
     text = document.strip()
     if not text:
         return GuardReport(ok=False, errors=["Document is empty"], warnings=[], checks={})
@@ -1870,10 +1917,13 @@ def _markdown_structure_report(document: str, required: Sequence[str], *, min_wo
     for heading in required:
         content = section_map.get(heading, "")
         word_count = len(re.findall(r"\b\w+\b", content))
-        if word_count < min_words:
-            errors.append(
-                f"Section '{heading}' too short (has {word_count} words, expected at least {min_words})"
-            )
+        floor = per_section_min.get(heading, min_words) if per_section_min else min_words
+        if word_count < floor:
+            errors.append(f"Section '{heading}' too short (has {word_count}, expected ≥ {floor})")
+        if per_section_max and heading in per_section_max:
+            cap = per_section_max[heading]
+            if word_count > cap:
+                errors.append(f"Section '{heading}' too long (has {word_count}, expected ≤ {cap})")
 
     return GuardReport(ok=not errors, errors=errors, warnings=warnings, checks={})
 
@@ -1906,40 +1956,66 @@ def _factuality_report(
     timeline_events: Sequence[JSONObject],
     min_timestamp_references: int,
 ) -> GuardReport:
-    sentences = [candidate.strip() for candidate in re.split(r"(?<=[.!?])\s+|\n", document) if candidate.strip()]
-    atoms = [atom.lower() for atom in claimable_atoms if atom]
+    # Normalize and split
+    lines = document.replace("\r\n", "\n").split("\n")
+    text = document.strip()
+    if not text:
+        return GuardReport(ok=False, errors=["Document is empty"], warnings=[], checks={})
+
+    # Prepare lookups
+    atom_set = {atom.lower() for atom in claimable_atoms if atom}
+    event_ids = [coerce_str(e.get("id")) or "" for e in timeline_events]
+    event_id_set = {eid for eid in event_ids if eid}
+
+    # Timestamp patterns [m:ss], [mm:ss], [h:mm:ss], [hh:mm:ss]
+    ts_pattern = r"\[(?:\d{1,2}:\d{2}(?::\d{2})?)\]"
+    ts_regex = re.compile(ts_pattern)
+
+    # Count total timestamp cites
+    total_ts = len(ts_regex.findall(document))
+    required_refs = min(len(list(timeline_events)), min_timestamp_references)
+
     errors: list[str] = []
     warnings: list[str] = []
 
-    ts_pattern = r"\[(\d{1,2}:\d{2}(?::\d{2})?)\]"
-    references_found = len(re.findall(ts_pattern, document))
-    required_refs = min(len(list(timeline_events)), min_timestamp_references)
-    if references_found < required_refs:
-        errors.append(f"Found {references_found} timestamp references; expected at least {required_refs}")
+    if total_ts < required_refs:
+        errors.append(f"Found {total_ts} timestamp references; expected at least {required_refs}")
 
-    for sentence in sentences:
-        lowered = sentence.lower()
-        if lowered.startswith("## ") or lowered.startswith("information not provided"):
-            continue
-        if lowered.startswith(('- ', '* ')):
-            continue
-        if re.search(ts_pattern, sentence):
-            continue
-        if len(lowered) < 24:
-            continue
-        if atoms and any(atom in lowered or SequenceMatcher(None, atom, lowered).ratio() >= 0.82 for atom in atoms):
-            continue
-        errors.append(f"Unsupported assertion: '{sentence}'")
+    # Track referenced event IDs
+    referenced_ids: set[str] = set()
+    for eid in event_id_set:
+        if re.search(rf"(?<!\w){re.escape(eid)}(?!\w)", document):
+            referenced_ids.add(eid)
 
-    event_ids = [coerce_str(event.get("id")) or "" for event in timeline_events]
-    referenced_ids = {
-        event_id
-        for event_id in event_ids
-        if event_id and re.search(rf"(?<!\w){re.escape(event_id)}(?!\w)", document)
-    }
-    missing_ids = [event_id for event_id in event_ids if event_id and event_id not in referenced_ids]
+    # Sentence-level scan for unsupported assertions
+    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+|\n", document) if s.strip()]
+    for s in sentences:
+        lower = s.lower()
+
+        # Exemptions
+        if lower.startswith("## "):
+            continue
+        if lower == "information not provided.":
+            continue
+        if lower.startswith(("- ", "* ")):
+            # Allow bullets (esp. under Evidence / Supporting Facts)
+            continue
+        if ts_regex.search(s):
+            continue
+
+        # Atom or event-ID backed?
+        atom_hit = any(a in lower or SequenceMatcher(None, a, lower).ratio() >= 0.82 for a in atom_set) if atom_set else False
+        event_hit = any(re.search(rf"(?<!\w){re.escape(eid)}(?!\w)", s) for eid in event_id_set)
+
+        if not (atom_hit or event_hit):
+            # short fragments are often headings or labels already filtered
+            if len(lower) >= 24:
+                errors.append(f"Unsupported assertion: '{s}'")
+
+    # Warn on unreferenced timeline events (best-effort)
+    missing_ids = sorted(eid for eid in event_id_set if eid and eid not in referenced_ids)
     if missing_ids:
-        warnings.append(f"Timeline events not referenced: {', '.join(sorted(missing_ids))}")
+        warnings.append(f"Timeline events not referenced: {', '.join(missing_ids)}")
 
     return GuardReport(ok=not errors, errors=errors, warnings=warnings, checks={})
 
@@ -2280,11 +2356,18 @@ def _read_json(path: Optional[Path]) -> JSONObject:
         return {}
 
 
-def _lane_user_prompt(lane: str, context: ComposeContext, revision_brief: Optional[str]) -> str:
+def _lane_user_prompt(
+    lane: str,
+    context: ComposeContext,
+    revision_brief: Optional[str],
+    *,
+    locale: str = "en-CA",
+) -> str:
     serialized_context = _serialize_context(context)
     payload: dict[str, JSONValue] = {
         "context": json.loads(serialized_context),
         "lane": lane,
+        "locale": locale,
     }
     if revision_brief:
         instruction = (

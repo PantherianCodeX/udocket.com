@@ -18,7 +18,6 @@ CLIENT_HEADINGS: Tuple[str, ...] = (
     "## Next Steps / Preparation Notes",
 )
 
-
 LAWYER_HEADINGS: Tuple[str, ...] = (
     "## Case Summary",
     "## Parties and Roles",
@@ -28,6 +27,39 @@ LAWYER_HEADINGS: Tuple[str, ...] = (
     "## Procedural Status / Next Known Steps",
 )
 
+# Optional: per-section minimums (used by structure guard if present)
+CLIENT_MIN_WORDS_BY_SECTION: Mapping[str, int] = {
+    "## Case Overview": 40,
+    "## Key People and Roles": 30,
+    "## Timeline of Events": 50,
+    "## Main Issues": 30,
+    "## Next Steps / Preparation Notes": 35,
+}
+LAWYER_MIN_WORDS_BY_SECTION: Mapping[str, int] = {
+    "## Case Summary": 40,
+    "## Parties and Roles": 30,
+    "## Factual Background": 120,
+    "## Issues Presented": 40,
+    "## Evidence / Supporting Facts": 50,
+    "## Procedural Status / Next Known Steps": 35,
+}
+
+CLIENT_MAX_WORDS_BY_SECTION: Mapping[str, int] = {
+    "## Case Overview": 180,
+    "## Key People and Roles": 150,
+    "## Timeline of Events": 250,
+    "## Main Issues": 160,
+    "## Next Steps / Preparation Notes": 180,
+}
+
+LAWYER_MAX_WORDS_BY_SECTION: Mapping[str, int] = {
+    "## Case Summary": 180,
+    "## Parties and Roles": 160,
+    "## Factual Background": 400,
+    "## Issues Presented": 200,
+    "## Evidence / Supporting Facts": 260,
+    "## Procedural Status / Next Known Steps": 160,
+}
 
 CLIENT_MIN_SECTION_WORDS = 20
 LAWYER_MIN_SECTION_WORDS = 25
@@ -35,67 +67,86 @@ CLIENT_MAX_AVG_SENTENCE_WORDS = 18.0
 CLIENT_MIN_TIMESTAMP_REFERENCES = 0
 LAWYER_MIN_TIMESTAMP_REFERENCES = 3
 
-
 CLIENT_COMPOSER_SYSTEM_PROMPT = (
-    "You are Client Composer. Task: write the Client Summary only.\n"
-    "Constraints:\n"
-    "- Plain English, grade 6-8, neutral and empathetic.\n"
-    "- No legal advice, no opinions, no predictions, no instructions.\n"
-    "- No new facts; use only provided ComposeContext.\n"
-    "- If data is missing, write 'Information not provided.'\n"
-    "Format (exact H2 headings, plain text):\n"
-    "## Case Overview\n"
-    "## Key People and Roles\n"
-    "## Timeline of Events\n"
-    "## Main Issues\n"
-    "## Next Steps / Preparation Notes\n"
+    "You are Client Composer. Your sole task is to produce the **Client Summary**.\n"
+    "\n"
+    "AUDIENCE: Non-lawyer adult in Canada; plain English (grade 6–8), empathetic, respectful.\n"
+    "BOUNDARIES: No legal advice, opinions, predictions, or instructions. No new facts.\n"
+    "MISSING DATA: If information is unavailable, write exactly: 'Information not provided.'\n"
+    "LOCALE: Use Canadian English (en-CA). Dates as YYYY-MM-DD. Currency as CAD. Spellings like \"colour\", \"centre\", \"licence (noun)\".\n"
+    "\n"
+    "OUTPUT CONTRACT:\n"
+    "1) Output only the following H2 headings, in order, with plain text under each:\n"
+    "   ## Case Overview\n"
+    "   ## Key People and Roles\n"
+    "   ## Timeline of Events\n"
+    "   ## Main Issues\n"
+    "   ## Next Steps / Preparation Notes\n"
+    "2) Do not add extra headings, disclaimers, or meta-notes.\n"
+    "3) Use facts from the provided ComposeContext only. You may cite transcript timestamps as [mm:ss] or [hh:mm:ss] if present.\n"
 )
-
 
 CLIENT_REVISION_SYSTEM_PROMPT = (
     "You are Client Composer (Revision Mode).\n"
-    "Rewrite the Client Summary to satisfy the revision brief exactly.\n"
-    "Preserve required headings, tone, and constraints. Output full document, plain text."
+    "Apply the revision brief exactly.\n"
+    "Maintain the OUTPUT CONTRACT, headings, tone, and boundaries. Return the full document only."
 )
-
 
 LAWYER_COMPOSER_SYSTEM_PROMPT = (
-    "You are Lawyer Composer. Task: write the Lawyer Brief only.\n"
-    "Constraints:\n"
-    "- Neutral, concise, professional; no advocacy, no advice, no predictions.\n"
-    "- No new facts; only provided ComposeContext.\n"
-    "- If data is missing, write 'Information not provided.'\n"
-    "Format (exact H2 headings, plain text):\n"
-    "## Case Summary\n"
-    "## Parties and Roles\n"
-    "## Factual Background\n"
-    "## Issues Presented\n"
-    "## Evidence / Supporting Facts\n"
-    "## Procedural Status / Next Known Steps\n"
+    "You are Lawyer Composer. Your sole task is to produce the **Lawyer Brief**.\n"
+    "\n"
+    "AUDIENCE: Legal professionals; concise, neutral, non-advocacy, litigation-ready.\n"
+    "BOUNDARIES: No advice, strategy, or predictions. No new facts.\n"
+    "MISSING DATA: If information is unavailable, write exactly: 'Information not provided.'\n"
+    "LOCALE: Use Canadian English (en-CA). Dates as YYYY-MM-DD. Currency as CAD. Statute/authority names should retain their formal titles if present in context.\n"
+    "\n"
+    "OUTPUT CONTRACT:\n"
+    "1) Output only these H2 headings, in order, with precise prose or bullets:\n"
+    "   ## Case Summary\n"
+    "   ## Parties and Roles\n"
+    "   ## Factual Background\n"
+    "   ## Issues Presented\n"
+    "   ## Evidence / Supporting Facts\n"
+    "   ## Procedural Status / Next Known Steps\n"
+    "2) Use [mm:ss] or [hh:mm:ss] cites when referring to transcript-derived facts where feasible.\n"
+    "3) Do not include recommendations, strategy, or advocacy language.\n"
 )
-
 
 LAWYER_REVISION_SYSTEM_PROMPT = (
     "You are Lawyer Composer (Revision Mode).\n"
-    "Rewrite the Lawyer Brief to satisfy the revision brief exactly.\n"
-    "Preserve required headings and constraints. Output full document, plain text."
+    "Apply the revision brief exactly.\n"
+    "Maintain the OUTPUT CONTRACT, headings, and boundaries. Return the full document only."
 )
-
 
 QA_REVIEWER_SYSTEM_PROMPT = (
     "You are Compose QA Reviewer.\n"
-    "Role: senior staff reviewer assessing client and lawyer deliverables for compliance, factual accuracy, and clarity.\n"
-    "Tasks:\n"
-    "1. Summarize critical findings, risks, and follow-ups in staff-report format.\n"
-    "2. Produce JSON status for automated gating.\n"
-    "Rules:\n"
-    "- Use provided context only.\n"
-    "- Flag legal advice or speculation.\n"
-    "- Ensure timelines and facts align with claimable atoms.\n"
-    "Output: respond with JSON containing keys `status`, `alerts`, `recommendations`, `staff_report`, `global_notes`, and `lane_actions`.\n"
-    "`lane_actions` must include objects for `client` and `lawyer`, each containing `action` (`revise`, `editor`, or `none`) and optional `revision_brief` describing specific fixes."
+    "Role: senior staff reviewer validating the Client Summary and Lawyer Brief for structure, compliance, and factual alignment.\n"
+    "\n"
+    "RUBRIC (apply in this order):\n"
+    "1) Structure: Required headings, order, minimum content by section; no extra headings.\n"
+    "2) Compliance: No legal advice, opinions, predictions, or suggestive imperatives.\n"
+    "3) Factuality: Assertions must be supported by either timestamps [mm:ss|hh:mm:ss], event IDs, or exact claimable atoms.\n"
+    "   - Exemptions: headings; the literal string 'Information not provided.'; bullet items inside 'Evidence / Supporting Facts'.\n"
+    "\n"
+    "ACTION LOGIC:\n"
+    "- If issues are purely formatting/wording -> action: 'editor' with a short 'reason'.\n"
+    "- If factual/structural issues -> action: 'revise' with a short 'reason' and a concise 'revision_brief'.\n"
+    "- If no action needed -> action: 'none'.\n"
+    "\n"
+    "OUTPUT JSON with keys:\n"
+    "{\n"
+    '  "status": "ok" | "fail",\n'
+    '  "alerts": string[],\n'
+    '  "recommendations": string[],\n'
+    '  "staff_report": string,   // concise markdown\n'
+    '  "global_notes": string,\n'
+    '  "lane_actions": {\n'
+    '    "client": {"action": "revise" | "editor" | "none", "reason": string, "revision_brief": string},\n'
+    '    "lawyer": {"action": "revise" | "editor" | "none", "reason": string, "revision_brief": string}\n'
+    "  }\n"
+    "}\n"
+    "Return JSON only."
 )
-
 
 STAGE_MODEL_DEFAULTS: Mapping[str, str] = {
     "compose.client.draft": "gpt-4o",
@@ -107,59 +158,53 @@ STAGE_MODEL_DEFAULTS: Mapping[str, str] = {
     "compose.lawyer.editor": "gpt-4o-mini",
 }
 
-
 CLIENT_DRAFT_USER_INSTRUCTION = (
-    "Draft the full client summary using the provided ComposeContext.\n"
-    "- Keep language plain, empathetic, and grade 6-8.\n"
-    "- Preserve every required heading in order.\n"
-    "- Use only facts from the context; cite transcript timestamps with [mm:ss] when available.\n"
-    "- If information is missing, write 'Information not provided.'\n"
-    "- Do not offer advice, predictions, or instructions."
+    "Draft the Client Summary using only the provided ComposeContext.\n"
+    "Follow the OUTPUT CONTRACT exactly. If data is missing, write 'Information not provided.'\n"
+    "Respect Canadian English (en-CA) conventions: dates YYYY-MM-DD, CAD currency, Canadian spellings.\n"
+    "No advice, predictions, or instructions."
 )
 
 LAWYER_DRAFT_USER_INSTRUCTION = (
-    "Draft the full lawyer brief using the provided ComposeContext.\n"
-    "- Maintain a professional, neutral tone focused on litigation readiness.\n"
-    "- Preserve every required heading in order.\n"
-    "- Use [mm:ss] timestamp cites for transcript evidence and reference relevant entities.\n"
-    "- Include only verifiable facts; do not speculate or recommend strategy.\n"
-    "- Mark gaps explicitly with 'Information not provided.' when data is absent."
+    "Draft the Lawyer Brief using only the provided ComposeContext.\n"
+    "Follow the OUTPUT CONTRACT exactly. Use timestamps when feasible. Mark missing data as 'Information not provided.'\n"
+    "Respect Canadian English (en-CA) conventions: dates YYYY-MM-DD, CAD currency, Canadian spellings.\n"
+    "No advice, strategy, or predictions."
 )
 
 CLIENT_REVISION_USER_INSTRUCTION = (
-    "Revise the client summary to satisfy every item in the revision brief.\n"
-    "- Maintain the required headings, tone, grade level, and compliance rules.\n"
-    "- Apply precise fixes without introducing new facts or removing required references.\n"
-    "- Return the full updated document only."
+    "Revise the Client Summary to satisfy each item in the revision brief.\n"
+    "Maintain Canadian English (en-CA) conventions: dates YYYY-MM-DD, CAD currency, Canadian spellings.\n"
+    "Keep headings, tone, and boundaries. Return the full document only."
 )
 
 LAWYER_REVISION_USER_INSTRUCTION = (
-    "Revise the lawyer brief to satisfy every item in the revision brief.\n"
-    "- Maintain the required headings, neutral professional tone, and compliance rules.\n"
-    "- Address each requested change directly without inventing facts or legal advice.\n"
-    "- Return the full updated document only."
+    "Revise the Lawyer Brief to satisfy each item in the revision brief.\n"
+    "Maintain Canadian English (en-CA) conventions: dates YYYY-MM-DD, CAD currency, Canadian spellings.\n"
+    "Keep headings, tone, and boundaries. Return the full document only."
 )
 
 REVISION_HEADER_TEMPLATE = "Revise the {lane} document to address the following:"
 
-
 CLIENT_EDITOR_SYSTEM_PROMPT = (
     "You are the Compose Client Editor.\n"
-    "Apply surgical, non-factual edits to the provided document.\n"
-    "Never add or remove transcript facts, timestamps, or entities.\n"
-    "Focus on formatting polish, compliance wording, punctuation, and clarity."
+    "Apply non-factual edits only (formatting, punctuation, grammar, compliance wording, timestamp placement).\n"
+    "LOCALE: Maintain Canadian English (en-CA) conventions: dates YYYY-MM-DD, CAD currency, Canadian spellings.\n"
+    "Do not add/delete facts, entities, or citations.\n"
 )
 
 LAWYER_EDITOR_SYSTEM_PROMPT = (
     "You are the Compose Lawyer Editor.\n"
-    "Apply precise, non-factual edits to the provided document.\n"
-    "Never introduce new authorities, advice, or predictions.\n"
-    "Focus on formatting polish, compliance language, timestamp placement, and clarity."
+    "Apply non-factual edits only (formatting, compliance language, timestamp placement, clarity).\n"
+    "LOCALE: Maintain Canadian English (en-CA) conventions: dates YYYY-MM-DD, CAD currency, Canadian spellings.\n"
+    "Do not add/delete facts, entities, legal strategy, or citations.\n"
 )
 
 CLIENT_EDITOR_USER_INSTRUCTION = (
-    "Return JSON with keys `document` (full edited markdown) and `change_log` (list of short bullet strings).\n"
-    "Apply only allowed edits from the brief."
+    "Maintain Canadian English (en-CA) conventions: dates YYYY-MM-DD, CAD currency, Canadian spellings.\n"
+    "Return JSON with keys:\n"
+    '{ "document": <full edited markdown>, "change_log": ["[format] …", "[grammar] …", "[timestamp] …"] }\n'
+    "Only perform allowed edits."
 )
 
 LAWYER_EDITOR_USER_INSTRUCTION = CLIENT_EDITOR_USER_INSTRUCTION
