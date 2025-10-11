@@ -223,7 +223,7 @@ def test_compose_agent_parallel_lanes(tmp_path: Path, monkeypatch: MonkeyPatch) 
                 "## Procedural Status / Next Known Steps\nQA confirmed clarity.",
             )
             return revised_lawyer, {"prompt_tokens": 110, "completion_tokens": 205}, "stub", "stub-model"
-        if stage == "compose.qa_reviewer":
+        if stage == "compose.qa_reviewer" or stage.endswith(".qa_reviewer"):
             response = json.dumps(
                 {
                     "status": "ok",
@@ -340,7 +340,7 @@ This section omits required references and headings.
             return lawyer_doc, {"prompt_tokens": 40, "completion_tokens": 60}, "stub", "stub-model"
         if stage == "compose.lawyer.revise":
             return lawyer_doc, {"prompt_tokens": 45, "completion_tokens": 65}, "stub", "stub-model"
-        if stage == "compose.qa_reviewer":
+        if stage == "compose.qa_reviewer" or stage.endswith(".qa_reviewer"):
             response = json.dumps(
                 {
                     "status": "ok",
@@ -446,7 +446,7 @@ def test_compose_agent_docx_template(tmp_path: Path, monkeypatch: MonkeyPatch) -
         if stage == "compose.lawyer.revise":
             revised_lawyer = lawyer_doc + "\nRevision note recorded."
             return revised_lawyer, {"prompt_tokens": 85, "completion_tokens": 120}, "stub", "stub-model"
-        if stage == "compose.qa_reviewer":
+        if stage == "compose.qa_reviewer" or stage.endswith(".qa_reviewer"):
             response = json.dumps(
                 {
                     "status": "ok",
@@ -636,6 +636,7 @@ def test_editor_rejects_unchanged_document(monkeypatch: MonkeyPatch) -> None:
     ):
         monkeypatch.setattr(target, fake_invoke)
 
+    fake_qa_step = _make_fake_qa_step("# Staff Report\n\nAll checks passed.")
     monkeypatch.setattr(
         "packages.udocket_core.agents.compose.orchestrator.ComposeOrchestrator._qa_reviewer_step",
         fake_qa_step,

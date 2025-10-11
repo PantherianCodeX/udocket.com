@@ -17,8 +17,17 @@ class LanePrompts(BaseModel):
     editor_instruction: str = Field(..., description="Instruction payload for editor passes")
 
 
+class QALanePrompts(BaseModel):
+    system_prompt: str = Field(..., description="System prompt for the lane QA reviewer model")
+
+
 class QAReviewPrompts(BaseModel):
-    system_prompt: str = Field(..., description="System prompt for QA reviewer model")
+    client: QALanePrompts
+    lawyer: QALanePrompts
+    final_system_prompt: str | None = Field(
+        default=None,
+        description="Optional system prompt for a final joiner summary",
+    )
 
 
 class ComposePromptConfig(BaseModel):
@@ -35,10 +44,35 @@ def load_prompt_config(path: Path) -> ComposePromptConfig:
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
     except Exception as exc:  # pragma: no cover - defensive
         raise RuntimeError(f"Failed to read prompt config from {path}: {exc}") from exc
+    if not isinstance(data, dict):
+        raise RuntimeError(f"Invalid prompt configuration at {path}: expected mapping root")
+    data = dict(data)
+    qa_section = data.get("qa")
+    if isinstance(qa_section, dict):
+        qa_section = dict(qa_section)
+        if "client" not in qa_section and "lawyer" not in qa_section:
+            system_prompt = qa_section.get("system_prompt")
+            if isinstance(system_prompt, str) and system_prompt.strip():
+                qa_section = {
+                    "client": {"system_prompt": system_prompt},
+                    "lawyer": {"system_prompt": system_prompt},
+                }
+        data["qa"] = qa_section
+    elif isinstance(qa_section, str):
+        data["qa"] = {
+            "client": {"system_prompt": qa_section},
+            "lawyer": {"system_prompt": qa_section},
+        }
     try:
         return ComposePromptConfig.model_validate(data)
     except ValidationError as exc:  # pragma: no cover - defensive
         raise RuntimeError(f"Invalid prompt configuration at {path}: {exc}") from exc
 
 
-__all__ = ["ComposePromptConfig", "LanePrompts", "QAReviewPrompts", "load_prompt_config"]
+__all__ = [
+    "ComposePromptConfig",
+    "LanePrompts",
+    "QAReviewPrompts",
+    "QALanePrompts",
+    "load_prompt_config",
+]

@@ -85,6 +85,25 @@ def _merge_lane_outcomes(
     return merged
 
 
+def _lane_qa_result_map_factory() -> dict[str, "LaneQAResult"]:
+    return {}
+
+def _merge_lane_qa_results(
+    existing: Optional[dict[str, "LaneQAResult"]],
+    update: Optional[dict[str, Optional["LaneQAResult"]]],
+) -> dict[str, "LaneQAResult"]:
+    merged: dict[str, LaneQAResult] = {}
+    if existing:
+        merged = {lane: result for lane, result in existing.items()}
+    if update:
+        for lane, result in update.items():
+            if result is None:
+                merged.pop(lane, None)
+            else:
+                merged[lane] = result
+    return merged
+
+
 def _latest_lane_state(
     existing: Optional["LaneRuntimeState"],
     update: Optional["LaneRuntimeState"],
@@ -231,6 +250,17 @@ class QAReviewerResult:
 
 
 @dataclass(slots=True)
+class LaneQAResult:
+    status: str
+    alerts: list[str]
+    recommendations: list[str]
+    staff_report: str
+    provider: str
+    action: LaneActionDirective
+    global_notes: str = ""
+
+
+@dataclass(slots=True)
 class ComposeArtifacts:
     client_markdown: Optional[Path] = None
     lawyer_markdown: Optional[Path] = None
@@ -268,6 +298,7 @@ class ComposeState:
     context: Optional[ComposeContext] = None
     lanes: Annotated[dict[str, LaneOutcome], _merge_lane_outcomes] = field(default_factory=_lane_outcome_map_factory)
     qa: Optional[QAReviewerResult] = None
+    qa_lane_results: Annotated[dict[str, LaneQAResult], _merge_lane_qa_results] = field(default_factory=_lane_qa_result_map_factory)
     stage_usage: Annotated[dict[str, dict[str, int]], _merge_stage_usage] = field(default_factory=stage_usage_factory)
     qa_iterations: int = 0
     stage_durations: Annotated[dict[str, float], _merge_stage_durations] = field(default_factory=float_usage_factory)
@@ -365,6 +396,18 @@ def lane_action_to_json(action: LaneActionDirective) -> JSONObject:
     }
 
 
+def lane_qa_result_to_json(result: LaneQAResult) -> JSONObject:
+    return {
+        "status": result.status,
+        "alerts": list(result.alerts),
+        "recommendations": list(result.recommendations),
+        "staff_report": result.staff_report,
+        "provider": result.provider,
+        "global_notes": result.global_notes,
+        "action": lane_action_to_json(result.action),
+    }
+
+
 def qa_result_to_json(result: QAReviewerResult) -> JSONObject:
     return {
         "status": result.status,
@@ -412,6 +455,7 @@ def serialize_compose_state(state: ComposeState) -> JSONObject:
         "context": compose_context_to_json(state.context),
         "lanes": {lane: lane_outcome_to_json(outcome) for lane, outcome in state.lanes.items()},
         "qa": qa_result_to_json(state.qa) if state.qa else None,
+        "qa_lane_results": {lane: lane_qa_result_to_json(result) for lane, result in state.qa_lane_results.items()},
         "stage_usage": {stage: dict(values) for stage, values in state.stage_usage.items()},
         "qa_iterations": state.qa_iterations,
         "stage_durations": {stage: float(value) for stage, value in state.stage_durations.items()},
@@ -429,6 +473,7 @@ __all__ = [
     "LaneAttempt",
     "LaneOutcome",
     "LaneRuntimeState",
+    "LaneQAResult",
     "QAReviewerResult",
     "clone_guard_report",
     "lane_history_payload",

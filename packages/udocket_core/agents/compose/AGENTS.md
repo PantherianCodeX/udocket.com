@@ -20,10 +20,10 @@ Compose uses LangGraph 0.6 with explicit reducers to avoid in-place mutation iss
 | `ClientComplianceGuard` / `LawyerComplianceGuard` | `compose.client.compliance`, `compose.lawyer.compliance` | Check for disallowed content and missing sections. |
 | `ClientFactualityGate` / `LawyerFactualityGate` | `compose.client.factuality`, `compose.lawyer.factuality` | Validate timestamp coverage and factual accuracy; captures attempt history. |
 | `ClientRevision` / `LawyerRevision` | `compose.client.revision`, `compose.lawyer.revision` | Deterministically build revision briefs when guards fail and retries remain. |
-| `QAReviewer` | `compose.qa_reviewer` | Run the QA LLM pass that emits status, alerts, recommendations, and per-lane directives (revise/editor/none). |
-| `ClientQARevision` / `LawyerQARevision` | `compose.client.qa_revision`, `compose.lawyer.qa_revision` | Apply QA revision directives, then clear lane outcomes to force a re-run. |
-| `ClientQAEditor` / `LawyerQAEditor` | `compose.client.editor`, `compose.lawyer.editor` | Optional editor passes that apply surgical edits when QA requests them. |
-| `ComposeJoin`, `WaitForClientLane`, `WaitForLawyerLane` | — | Flow control nodes ensuring both lanes are complete before QA executes. |
+| `QAReviewer` | `compose.qa_reviewer` | Run the **lane-specific** QA pass immediately after guards, emitting status, alerts, recommendations, and directives (revise/editor/none). |
+| `ClientQARevision` / `LawyerQARevision` | `compose.client.qa_revision`, `compose.lawyer.qa_revision` | Apply QA revision directives, then clear lane outcomes to force a re-run of the lane pipeline. |
+| `ClientQAEditor` / `LawyerQAEditor` | `compose.client.editor`, `compose.lawyer.editor` | Optional editor passes that apply surgical edits when QA requests them; the lane re-enters QA afterwards. |
+| `ComposeJoin`, `WaitForClientLane`, `WaitForLawyerLane` | — | Flow control nodes ensuring both lanes finish QA before the combined QA join and release gate execute. |
 | `ReleaseGate` | `compose.release_gate` | Final guard: both lanes must pass all checks and QA status must be acceptable. |
 
 Reducers (`_merge_stage_usage`, `_merge_lane_outcomes`, `_latest_lane_state`) guarantee that concurrent node writes remain conflict-free. All progress is reported via `_emit`, and the compose service streams those events into ops JSON / JSONL.

@@ -177,10 +177,13 @@ def docx_placeholder_context(**sections: str) -> dict[str, str]:
         "lawyer_brief": "",
         "bundle": "",
         "staff_report": "",
+        "staff_report_plain": "",
         "qa_report": "",
     }
     for key, value in sections.items():
         base[key] = value
+        if key == "staff_report" and not sections.get("staff_report_plain"):
+            base["staff_report_plain"] = value
     return base
 
 
