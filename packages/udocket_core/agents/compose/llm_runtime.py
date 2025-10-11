@@ -2,6 +2,9 @@ from __future__ import annotations
 
 # pyright: strict
 
+import logging
+import random
+import time
 from typing import Any, Mapping, Tuple, cast
 
 from packages.udocket_core.json_utils import JSONObject
@@ -10,6 +13,29 @@ from packages.udocket_core.llm.runtime import ChatClientError, build_chat_client
 from .errors import ComposeStageError
 from .settings import ComposeConfig, DEFAULT_PROVIDER_CHAIN, normalize_provider_chain
 from .llm_profiles import STAGE_MODEL_DEFAULTS
+
+logger = logging.getLogger("udocket.compose.llm_runtime")
+
+_NON_RETRYABLE_TOKENS: tuple[str, ...] = (
+    "status 400",
+    "status code: 400",
+    '"status_code":400',
+    "status 401",
+    "status code: 401",
+    '"status_code":401',
+    "status 403",
+    "status code: 403",
+    '"status_code":403',
+    "status 404",
+    "status code: 404",
+    '"status_code":404',
+    "invalid api key",
+    "unknown provider",
+    "no model configured",
+    "unsupported provider",
+    "requires an api key",
+    "temperature only the default",
+)
 
 
 def invoke_llm(
@@ -66,20 +92,84 @@ def invoke_llm(
         raise ComposeStageError(stage, str(exc), provider=provider_name, model=model_name) from exc
 
     try:
-        content, usage = client.chat(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=temperature,
-            max_tokens=config.max_output_tokens,
-            response_format=None,
-        )
-    except ChatClientError as exc:
-        raise ComposeStageError(stage, str(exc), provider=provider_name, model=model_name) from exc
+        attempts = max(1, 1 + max(0, config.llm_retry_attempts))
+        delay_seconds = max(0.5, config.llm_retry_initial_delay_seconds)
+    except AttributeError:
+        # Backwards compatibility if config lacks retry fields
+        attempts = 1
+        delay_seconds = 1.0
 
-    usage_map = {key: value for key, value in usage.items() if isinstance(value, int)}
-    return content, usage_map, provider_name, model_name
+    payload_messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
+    last_error: Exception | None = None
+
+    for attempt in range(1, attempts + 1):
+        try:
+            content, usage = client.chat(
+                messages=payload_messages,
+                temperature=temperature,
+                max_tokens=config.max_output_tokens,
+                response_format=None,
+            )
+            usage_map = {key: value for key, value in usage.items() if isinstance(value, int)}
+            if attempt > 1:
+                logger.info(
+                    "compose.llm.retry_recovered",
+                    extra={
+                        "compose": {
+                            "stage": stage,
+                            "attempt": attempt,
+                            "provider": provider_name,
+                            "model": model_name,
+                        }
+                    },
+                )
+            return content, usage_map, provider_name, model_name
+        except ChatClientError as exc:
+            last_error = exc
+            if not _should_retry(exc) or attempt >= attempts:
+                raise ComposeStageError(stage, str(exc), provider=provider_name, model=model_name) from exc
+        except RuntimeError as exc:
+            last_error = exc
+            if not _should_retry(exc) or attempt >= attempts:
+                raise ComposeStageError(stage, str(exc), provider=provider_name, model=model_name) from exc
+
+        jitter = random.uniform(0.0, min(0.5, delay_seconds * 0.25))
+        sleep_time = delay_seconds + jitter
+        logger.warning(
+            "compose.llm.retry_scheduled",
+            extra={
+                "compose": {
+                    "stage": stage,
+                    "attempt": attempt,
+                    "max_attempts": attempts,
+                    "provider": provider_name,
+                    "model": model_name,
+                    "delay_seconds": round(sleep_time, 2),
+                    "error": str(last_error),
+                }
+            },
+        )
+        time.sleep(sleep_time)
+        delay_seconds = min(delay_seconds * 2.0, 60.0)
+
+    assert last_error is not None
+    raise ComposeStageError(
+        stage,
+        f"LLM invocation failed after {attempts} attempts: {last_error}",
+        provider=provider_name,
+        model=model_name,
+    ) from last_error
+
+
+def _should_retry(exc: Exception) -> bool:
+    message = str(exc).lower()
+    for token in _NON_RETRYABLE_TOKENS:
+        if token in message:
+            return False
+    return True
 
 
 __all__ = ["invoke_llm"]

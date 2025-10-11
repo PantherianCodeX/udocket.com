@@ -53,7 +53,9 @@ Case artifacts are registered from these files with deterministic titles; never 
 ## Key Behaviours & Guardrails
 - **Lane attempts**: Each lane tracks attempts, models, usage, and history. Revisions reset guard reports; if maximum attempts are reached, a `ComposeStageError` is raised.
 - **QA loop**: QA increments `qa_iterations` and can route back to revision or editor nodes per lane. The release gate refuses to emit success until QA status is one of `ok|pass|approved`. `COMPOSE_QA_MAX_ITERATIONS` caps cycles.
+- **LLM resilience**: Chat calls retry transient failures up to `COMPOSE_LLM_RETRY_ATTEMPTS` with exponential backoff starting at `COMPOSE_LLM_RETRY_DELAY_SECONDS`; configuration issues and other 4xx responses still fail immediately.
 - **Event telemetry**: Graph nodes emit progress envelopes (`stage`, `event`, `lane`, `attempt`, etc.). The compose service writes these into both the per-run ops JSON and `ops_compose.jsonl`.
+- **Stage timing**: Each LangGraph node records elapsed seconds under `stage_durations` so ops metadata can surface per-stage latency trends.
 - **Usage accounting**: Every LLM touch returns `{"stage_usage": {stage: token_usage}}`; reducers aggregate totals so ops metadata exposes full usage per stage.
 - **Canadian regions only**: Provider selections must resolve to Canadian Azure deployments. The agent fails fast if assignments point elsewhere.
 - **Docx rendering**: When `COMPOSE_DOCX_TEMPLATE` is set, the renderer injects Markdown via docxtpl subdocuments and exposes `*_plain` values for template fallbacks.
@@ -65,6 +67,7 @@ See `.env.example` for the supported keys:
 - `COMPOSE_MAX_OUTPUT_TOKENS`, `COMPOSE_MAX_CLIENT_ATTEMPTS`, `COMPOSE_MAX_LAWYER_ATTEMPTS`
 - `COMPOSE_MIN_TIMESTAMP_REFERENCES`, `COMPOSE_QA_REQUIRED`
 - `COMPOSE_ENABLE_EDITOR`, `COMPOSE_QA_MAX_ITERATIONS`
+- `COMPOSE_LLM_RETRY_ATTEMPTS`, `COMPOSE_LLM_RETRY_DELAY_SECONDS`
 - Optional `COMPOSE_CLIENT_EDITOR_MODEL`, `COMPOSE_LAWYER_EDITOR_MODEL`, `COMPOSE_DOCX_TEMPLATE`
 - `COMPOSE_PROMPT_CONFIG` (optional): absolute path to a YAML file following `packages/udocket_core/config/compose_prompts.yaml`. If unset, the agent requires that packaged default file; missing files raise immediately (no fallback).
 

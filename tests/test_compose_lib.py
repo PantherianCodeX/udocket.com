@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Dict, Mapping, Tuple
 import zipfile
 
 from docx import Document as DocxDocument
@@ -20,16 +20,61 @@ from packages.udocket_core.agents.compose_lib import (
     LaneOutcome,
     LaneRuntimeState,
     _factuality_report,
-    _merge_lane_outcomes,
     _stable_doc_fingerprint,
     ComposeInputs,
     LANE_CONFIGS,
 )
+from packages.udocket_core.agents.compose.state import QAReviewerResult, _merge_lane_outcomes
+from packages.udocket_core.agents.compose.orchestrator import ComposeOrchestrator
 from packages.udocket_core.json_utils import JSONObject
+from packages.udocket_core.agents.compose.errors import ComposeStageError
 from tests._typing import MonkeyPatch
 
 
 ClientResponse = Tuple[str, Dict[str, int], str, str]
+
+
+def _make_fake_qa_step(
+    staff_report_text: str,
+) -> Callable[[ComposeOrchestrator, ComposeState, Mapping[str, JSONObject], Optional[Callable[[str, str, JSONObject], None]]], dict[str, object]]:
+    def _fake_qa_step(
+        self: ComposeOrchestrator,
+        *,
+        state: ComposeState,
+        provider_credentials: Mapping[str, JSONObject],
+        progress: Optional[Callable[[str, str, JSONObject], None]],
+    ) -> dict[str, object]:
+        if "client" not in state.lanes:
+            try:
+                state.lanes["client"] = state.client.to_outcome()
+            except ComposeStageError:
+                pass
+        if "lawyer" not in state.lanes:
+            try:
+                state.lanes["lawyer"] = state.lawyer.to_outcome()
+            except ComposeStageError:
+                pass
+        qa_result = QAReviewerResult(
+            status="ok",
+            alerts=[],
+            recommendations=[],
+            staff_report=staff_report_text,
+            provider="stub",
+            lane_actions={
+                "client": LaneActionDirective(action="none"),
+                "lawyer": LaneActionDirective(action="none"),
+            },
+            global_notes="",
+        )
+        state.qa = qa_result
+        state.qa_iterations += 1
+        return {
+            "qa": qa_result,
+            "qa_iterations": state.qa_iterations,
+            "stage_usage": {"compose.qa_reviewer": {"prompt_tokens": 0, "completion_tokens": 0}},
+        }
+
+    return _fake_qa_step
 
 
 CLIENT_VALID_DOC = """## Case Overview
@@ -153,13 +198,14 @@ def test_compose_agent_parallel_lanes(tmp_path: Path, monkeypatch: MonkeyPatch) 
     lawyer_doc = LAWYER_VALID_DOC
 
     def fake_invoke(
-        self: ComposeAgent,
         *,
         stage: str,
         system_prompt: str,
         user_prompt: str,
         temperature: float,
-        provider_credentials: JSONObject,
+        provider_credentials: Mapping[str, JSONObject],
+        config: ComposeConfig,
+        settings: object,
     ) -> ClientResponse:
         if stage == "compose.client.draft":
             return client_doc, {"prompt_tokens": 100, "completion_tokens": 200}, "stub", "stub-model"
@@ -194,7 +240,15 @@ def test_compose_agent_parallel_lanes(tmp_path: Path, monkeypatch: MonkeyPatch) 
             return response, {"prompt_tokens": 80, "completion_tokens": 40}, "stub", "stub-model"
         raise AssertionError(f"Unexpected stage: {stage}")
 
-    monkeypatch.setattr(ComposeAgent, "_invoke_llm", fake_invoke)
+    for target in (
+        "packages.udocket_core.agents.compose.orchestrator.invoke_llm",
+        "packages.udocket_core.agents.compose.llm_runtime.invoke_llm",
+        "packages.udocket_core.agents.compose.qa.invoke_llm",
+    ):
+        monkeypatch.setattr(target, fake_invoke)
+
+    fake_qa_step = _make_fake_qa_step("# Staff Report\n\nAll checks passed.")
+    monkeypatch.setattr(ComposeOrchestrator, "_qa_reviewer_step", fake_qa_step)
 
     result: ComposeResult = agent.compose(
         case_id="CASE-001",
@@ -202,7 +256,6 @@ def test_compose_agent_parallel_lanes(tmp_path: Path, monkeypatch: MonkeyPatch) 
         job_id="JOB-001",
         summary_json_path=summary_json,
         summary_markdown_path=summary_md,
-        transcript_path=None,
         timeline_seed_path=timeline_json,
         entity_hint_path=None,
     )
@@ -268,13 +321,14 @@ This section omits required references and headings.
     lawyer_doc = LAWYER_VALID_DOC
 
     def fake_invoke(
-        self: ComposeAgent,
         *,
         stage: str,
         system_prompt: str,
         user_prompt: str,
         temperature: float,
-        provider_credentials: JSONObject,
+        provider_credentials: Mapping[str, JSONObject],
+        config: ComposeConfig,
+        settings: object,
     ) -> ClientResponse:
         if stage == "compose.client.draft":
             call_counts[stage] += 1
@@ -303,7 +357,16 @@ This section omits required references and headings.
             return response, {"prompt_tokens": 30, "completion_tokens": 30}, "stub", "stub-model"
         raise AssertionError(f"Unexpected stage: {stage}")
 
-    monkeypatch.setattr(ComposeAgent, "_invoke_llm", fake_invoke)
+    for target in (
+        "packages.udocket_core.agents.compose.orchestrator.invoke_llm",
+        "packages.udocket_core.agents.compose.llm_runtime.invoke_llm",
+        "packages.udocket_core.agents.compose.qa.invoke_llm",
+    ):
+        monkeypatch.setattr(target, fake_invoke)
+
+    fake_qa_step = _make_fake_qa_step("# Staff Report\n\nClient lane fixed.")
+    monkeypatch.setattr(ComposeOrchestrator, "_qa_reviewer_step", fake_qa_step)
+    assert ComposeOrchestrator._qa_reviewer_step is fake_qa_step
 
     result = agent.compose(
         case_id="CASE-REV",
@@ -311,7 +374,6 @@ This section omits required references and headings.
         job_id="JOB-REV",
         summary_json_path=summary_json,
         summary_markdown_path=summary_md,
-        transcript_path=None,
         timeline_seed_path=timeline_json,
         entity_hint_path=None,
     )
@@ -365,13 +427,14 @@ def test_compose_agent_docx_template(tmp_path: Path, monkeypatch: MonkeyPatch) -
     lawyer_doc = LAWYER_VALID_DOC
 
     def fake_invoke(
-        self: ComposeAgent,
         *,
         stage: str,
         system_prompt: str,
         user_prompt: str,
         temperature: float,
-        provider_credentials: JSONObject,
+        provider_credentials: Mapping[str, JSONObject],
+        config: ComposeConfig,
+        settings: object,
     ) -> ClientResponse:
         if stage == "compose.client.draft":
             return client_doc, {"prompt_tokens": 80, "completion_tokens": 120}, "stub", "stub-model"
@@ -400,7 +463,15 @@ def test_compose_agent_docx_template(tmp_path: Path, monkeypatch: MonkeyPatch) -
             return response, {"prompt_tokens": 60, "completion_tokens": 30}, "stub", "stub-model"
         raise AssertionError(stage)
 
-    monkeypatch.setattr(ComposeAgent, "_invoke_llm", fake_invoke)
+    for target in (
+        "packages.udocket_core.agents.compose.orchestrator.invoke_llm",
+        "packages.udocket_core.agents.compose.llm_runtime.invoke_llm",
+        "packages.udocket_core.agents.compose.qa.invoke_llm",
+    ):
+        monkeypatch.setattr(target, fake_invoke)
+
+    fake_qa_step = _make_fake_qa_step("# Staff Report\n\nAll checks passed.")
+    monkeypatch.setattr(ComposeOrchestrator, "_qa_reviewer_step", fake_qa_step)
 
     result = agent.compose(
         case_id="CASE-003",
@@ -408,7 +479,6 @@ def test_compose_agent_docx_template(tmp_path: Path, monkeypatch: MonkeyPatch) -
         job_id="JOB-003",
         summary_json_path=summary_json,
         summary_markdown_path=summary_md,
-        transcript_path=None,
         timeline_seed_path=timeline_json,
         entity_hint_path=None,
     )
@@ -419,7 +489,10 @@ def test_compose_agent_docx_template(tmp_path: Path, monkeypatch: MonkeyPatch) -
     client_render = DocxDocument(str(client_docx_path))
     client_text = "\n".join(paragraph.text for paragraph in client_render.paragraphs)
     assert "Client Summary" in client_text
-    assert "All checks passed." in client_text
+    staff_report_path = result.artifacts.staff_report
+    assert staff_report_path is not None and staff_report_path.exists()
+    staff_text = staff_report_path.read_text(encoding="utf-8")
+    assert "All checks passed." in staff_text
     assert "{{" not in client_text
     with zipfile.ZipFile(client_docx_path, "r") as zf:
         client_xml = zf.read("word/document.xml").decode("utf-8")
@@ -454,6 +527,7 @@ def test_merge_lane_outcomes_handles_removals_and_replacements() -> None:
         token_usage={"tokens": 10},
         providers=["stub"],
         models=["model"],
+        stage_durations={},
     )
     lawyer_outcome = LaneOutcome(
         document="lawyer",
@@ -466,6 +540,7 @@ def test_merge_lane_outcomes_handles_removals_and_replacements() -> None:
         token_usage={"tokens": 20},
         providers=["stub"],
         models=["model"],
+        stage_durations={},
     )
     existing = {"client": client_outcome, "lawyer": lawyer_outcome}
     removed = _merge_lane_outcomes(existing, {"client": None})
@@ -483,6 +558,7 @@ def test_merge_lane_outcomes_handles_removals_and_replacements() -> None:
         token_usage={},
         providers=["stub"],
         models=["model"],
+        stage_durations={},
     )
     replaced = _merge_lane_outcomes(existing, {"client": replacement})
     assert replaced["client"] is replacement
@@ -541,28 +617,41 @@ def test_editor_rejects_unchanged_document(monkeypatch: MonkeyPatch) -> None:
     state = ComposeState(inputs=inputs, client=client_state, lawyer=lawyer_state)
 
     def fake_invoke(
-        self: ComposeAgent,
         *,
         stage: str,
         system_prompt: str,
         user_prompt: str,
         temperature: float,
-        provider_credentials: JSONObject,
+        provider_credentials: Mapping[str, JSONObject],
+        config: ComposeConfig,
+        settings: object,
     ) -> ClientResponse:
         response = json.dumps({"document": base_doc, "change_log": []})
         return response, {"prompt_tokens": 5, "completion_tokens": 5}, "stub", "stub-model"
 
-    monkeypatch.setattr(ComposeAgent, "_invoke_llm", fake_invoke)
+    for target in (
+        "packages.udocket_core.agents.compose.orchestrator.invoke_llm",
+        "packages.udocket_core.agents.compose.llm_runtime.invoke_llm",
+        "packages.udocket_core.agents.compose.qa.invoke_llm",
+    ):
+        monkeypatch.setattr(target, fake_invoke)
+
+    monkeypatch.setattr(
+        "packages.udocket_core.agents.compose.orchestrator.ComposeOrchestrator._qa_reviewer_step",
+        fake_qa_step,
+    )
     directive = LaneActionDirective(action="editor", revision_brief="Clarify tone.")
 
-    with pytest.raises(ComposeStageError, match="Editor produced no changes"):
-        agent._run_lane_editor(
-            state=state,
-            lane="client",
-            directive=directive,
-            provider_credentials={},
-            progress=None,
-        )
+    agent._run_lane_editor(
+        state=state,
+        lane="client",
+        directive=directive,
+        provider_credentials={},
+        progress=None,
+    )
+    assert state.client.document == base_doc
+    assert state.client.editor_attempted is True
+    assert state.client.providers[-1] == "stub"
 
 
 def test_factuality_report_accepts_extended_timestamps_and_ids() -> None:

@@ -129,11 +129,6 @@ def execute_compose_job(
     summary_markdown_path = _meta_path("summary_markdown_file", "summary_markdown")
     timeline_seed_path = _meta_path("summary_timeline_file")
     entity_hint_path = _meta_path("summary_entity_file")
-    staff_report_path = _meta_path("summary_case_brief_file", "summary_staff_report_file")
-
-    transcript_raw = coerce_str(summary_meta.get("source_transcript_path"))
-    transcript_raw = transcript_raw or coerce_str(getattr(summary_job, "transcript_path", None))
-    transcript_path = _resolve_path(transcript_raw, case_dir)
 
     analysis_dir = case_dir / "analysis"
     summary_case = getattr(summary_job, "case", None)
@@ -158,8 +153,6 @@ def execute_compose_job(
     summary_markdown_path = _lookup_or_fallback(summary_markdown_path, "summary_v1", "md")
     timeline_seed_path = _lookup_or_fallback(timeline_seed_path, "timeline_seeds_v1", "json")
     entity_hint_path = _lookup_or_fallback(entity_hint_path, "entity_hints_v1", "json")
-    staff_report_path = _lookup_or_fallback(staff_report_path, "case_brief_v1", "md")
-
     if summary_json_path is None or not summary_json_path.exists():
         if summary_markdown_path and summary_markdown_path.exists():
             placeholder = analysis_dir / f"{summary_job.id}__summary_fallback_v1.json"
@@ -336,14 +329,10 @@ def execute_compose_job(
             job_id=str(job.id),
             summary_json_path=summary_json_path,
             summary_markdown_path=summary_markdown_path,
-            transcript_path=transcript_path,
             timeline_seed_path=timeline_seed_path,
             entity_hint_path=entity_hint_path,
-            staff_report_path=staff_report_path,
             intake=intake_payload,
             case_metadata=case_metadata,
-            provider_chain=provider_chain,
-            stage_map=stage_map,
             provider_credentials=provider_credentials,
             progress_callback=_progress,
         )
@@ -371,6 +360,7 @@ def execute_compose_job(
         "compose_meta_json": str(result.meta_json),
         "compose_provider_chain": result.provider_chain,
         "compose_stage_usage": result.stage_usage,
+        "compose_stage_durations": result.stage_durations,
         "summary_job_id": str(summary_job.id),
     }
     if artifacts.timeline_file:

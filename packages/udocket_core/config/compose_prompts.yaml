@@ -1,4 +1,4 @@
-revision_header_template: Revise the {lane} document to address the following:
+revision_header_template: "Revise the {lane} document to address the following:"
 
 client:
   system_prompt: |-

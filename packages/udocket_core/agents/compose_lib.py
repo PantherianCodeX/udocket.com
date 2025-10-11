@@ -20,13 +20,25 @@ from packages.udocket_core.json_utils import (
 from .common import append_jsonl, ensure_dir
 from ..llm import LLMSettings, load_llm_settings
 from .compose.errors import ComposeStageError
+from .compose.guards import factuality_report
 from .compose.io import ArtifactWriter
 from .compose.llm_profiles import LANE_CONFIGS
-from .compose.orchestrator import ComposeOrchestrator
+from .compose.llm_runtime import invoke_llm
+from .compose.orchestrator import ComposeOrchestrator, stable_doc_fingerprint
 from .compose.prompt_config import ComposePromptConfig, load_prompt_config
 from .compose.run import ComposeRun
 from .compose.settings import ComposeConfig
-from .compose.state import ComposeArtifacts, ComposeInputs, ComposeResult, ComposeState, LaneRuntimeState, lane_history_payload
+from .compose.state import (
+    ComposeArtifacts,
+    ComposeInputs,
+    ComposeResult,
+    ComposeState,
+    GuardReport,
+    LaneActionDirective,
+    LaneOutcome,
+    LaneRuntimeState,
+    lane_history_payload,
+)
 
 
 logger = logging.getLogger("udocket.compose.agent")
@@ -35,12 +47,96 @@ logger = logging.getLogger("udocket.compose.agent")
 QA_REVIEWER_STATUS_OK = {"ok", "pass", "approved"}
 
 
+def _stable_doc_fingerprint(document: str) -> str:
+    return stable_doc_fingerprint(document)
+
+
+def _factuality_report(
+    document: str,
+    *,
+    claimable_atoms: Sequence[str],
+    timeline_events: Sequence[JSONObject],
+    min_timestamp_references: int,
+) -> GuardReport:
+    return factuality_report(
+        document,
+        claimable_atoms=claimable_atoms,
+        timeline_events=timeline_events,
+        min_timestamp_references=min_timestamp_references,
+    )
+
 class ComposeAgent:
     def __init__(self, config: Optional[ComposeConfig] = None) -> None:
         self.config = config or ComposeConfig.from_env()
         self.settings: LLMSettings = load_llm_settings()
         self.logger = logger
         self.prompts: ComposePromptConfig = load_prompt_config(self.config.prompt_config_path)
+
+    def _new_orchestrator(self, *, compose_run: ComposeRun | None = None) -> ComposeOrchestrator:
+        return ComposeOrchestrator(
+            config=self.config,
+            settings=self.settings,
+            logger=self.logger,
+            qa_ok_status=QA_REVIEWER_STATUS_OK,
+            prompts=self.prompts,
+            compose_run=compose_run,
+        )
+
+    # ------------------------------------------------------------------
+    # Backwards-compatible helpers for tests and maintenance scripts
+
+    def _invoke_llm(
+        self,
+        *,
+        stage: str,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float,
+        provider_credentials: Mapping[str, JSONObject],
+    ) -> tuple[str, dict[str, int], str, str]:
+        return invoke_llm(
+            stage=stage,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            temperature=temperature,
+            provider_credentials=provider_credentials,
+            config=self.config,
+            settings=self.settings,
+        )
+
+    def _qa_reviewer_step(
+        self,
+        *,
+        state: ComposeState,
+        provider_credentials: Mapping[str, JSONObject],
+        progress: Optional[Callable[[str, str, JSONObject], None]],
+    ) -> dict[str, object]:
+        orchestrator = self._new_orchestrator()
+        qa_step = getattr(orchestrator, "_qa_reviewer_step")
+        return qa_step(
+            state=state,
+            provider_credentials=provider_credentials,
+            progress=progress,
+        )
+
+    def _run_lane_editor(
+        self,
+        *,
+        state: ComposeState,
+        lane: str,
+        directive: LaneActionDirective,
+        provider_credentials: Mapping[str, JSONObject],
+        progress: Optional[Callable[[str, str, JSONObject], None]],
+    ) -> dict[str, object]:
+        orchestrator = self._new_orchestrator()
+        editor_step = getattr(orchestrator, "_run_lane_editor")
+        return editor_step(
+            state=state,
+            lane=lane,
+            directive=directive,
+            provider_credentials=provider_credentials,
+            progress=progress,
+        )
 
     def compose(
         self,
@@ -111,14 +207,7 @@ class ComposeAgent:
             if progress_callback:
                 progress_callback(stage, event, envelope)
 
-        orchestrator = ComposeOrchestrator(
-            config=self.config,
-            settings=self.settings,
-            logger=self.logger,
-            qa_ok_status=QA_REVIEWER_STATUS_OK,
-            compose_run=run_tracker,
-            prompts=self.prompts,
-        )
+        orchestrator = self._new_orchestrator(compose_run=run_tracker)
         state = orchestrator.run(
             state=state,
             provider_credentials=provider_credentials_map,
@@ -172,6 +261,7 @@ class ComposeAgent:
             "qa_iterations": state.qa_iterations,
             "provider_chain": list(self.config.provider_chain),
             "stage_usage": {stage: dict(values) for stage, values in state.stage_usage.items()},
+            "stage_durations": {stage: float(value) for stage, value in state.stage_durations.items()},
             "events": events_payload,
             "bundle_path": str(artifacts.bundle_path) if artifacts.bundle_path else None,
             "client_markdown": str(artifacts.client_markdown) if artifacts.client_markdown else None,
@@ -233,6 +323,7 @@ class ComposeAgent:
             audit_jsonl=audit_jsonl,
             provider_chain=list(self.config.provider_chain),
             stage_usage={stage: dict(values) for stage, values in state.stage_usage.items()},
+            stage_durations={stage: float(value) for stage, value in state.stage_durations.items()},
         )
         try:
             self.logger.info(
@@ -291,4 +382,13 @@ __all__ = [
     "ComposeResult",
     "ComposeArtifacts",
     "ComposeStageError",
+    "ComposeState",
+    "ComposeInputs",
+    "LaneRuntimeState",
+    "LaneOutcome",
+    "LaneActionDirective",
+    "GuardReport",
+    "LANE_CONFIGS",
+    "_factuality_report",
+    "_stable_doc_fingerprint",
 ]

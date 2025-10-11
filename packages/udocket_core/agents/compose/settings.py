@@ -87,6 +87,8 @@ class ComposeConfig:
     qa_iteration_limit: int = 3
     locale: str = "en-CA"
     prompt_config_path: Path = field(default_factory=_default_prompt_config_path)
+    llm_retry_attempts: int = 2
+    llm_retry_initial_delay_seconds: float = 2.0
 
     @classmethod
     def from_env(cls) -> "ComposeConfig":
@@ -119,6 +121,11 @@ class ComposeConfig:
         if not providers:
             providers = list(DEFAULT_PROVIDER_CHAIN)
         prompt_config_path = _default_prompt_config_path()
+        llm_retry_attempts = max(0, _safe_int(os.getenv("COMPOSE_LLM_RETRY_ATTEMPTS"), 2))
+        llm_retry_initial_delay_seconds = max(
+            0.5,
+            _safe_float(os.getenv("COMPOSE_LLM_RETRY_DELAY_SECONDS"), 2.0),
+        )
         return cls(
             provider_chain=providers,
             temperature=temperature,
@@ -136,6 +143,8 @@ class ComposeConfig:
             qa_iteration_limit=qa_iteration_limit,
             locale=locale,
             prompt_config_path=prompt_config_path,
+            llm_retry_attempts=llm_retry_attempts,
+            llm_retry_initial_delay_seconds=llm_retry_initial_delay_seconds,
         )
 
 

@@ -12,6 +12,7 @@ from packages.udocket_core.json_utils import JSONObject
 
 from ..common.factories import (
     int_usage_factory,
+    float_usage_factory,
     json_object_factory,
     json_object_list_factory,
     stage_usage_factory,
@@ -40,6 +41,19 @@ def _merge_stage_usage(
         bucket = merged.setdefault(stage, {})
         for key, value in usage.items():
             bucket[key] = bucket.get(key, 0) + int(value)
+    return merged
+
+
+def _merge_stage_durations(
+    existing: Optional[dict[str, float]],
+    update: Optional[dict[str, float]],
+) -> dict[str, float]:
+    merged: dict[str, float] = {}
+    if existing:
+        merged = {stage: float(value) for stage, value in existing.items()}
+    if update:
+        for stage, duration in update.items():
+            merged[stage] = merged.get(stage, 0.0) + float(duration)
     return merged
 
 
@@ -146,6 +160,7 @@ class LaneOutcome:
     token_usage: dict[str, int]
     providers: list[str]
     models: list[str]
+    stage_durations: dict[str, float]
 
 
 @dataclass(slots=True)
@@ -167,11 +182,17 @@ class LaneRuntimeState:
     providers: list[str] = field(default_factory=str_list_factory)
     models: list[str] = field(default_factory=str_list_factory)
     editor_attempted: bool = False
+    stage_durations: dict[str, float] = field(default_factory=float_usage_factory)
 
     def record_usage(self, stage: str, usage: Mapping[str, int]) -> None:
         _merge_usage(self.stage_usage, stage, usage)
         for key, value in usage.items():
             self.token_usage[key] = self.token_usage.get(key, 0) + int(value)
+
+    def record_duration(self, stage: str, duration: float) -> None:
+        if duration <= 0:
+            return
+        self.stage_durations[stage] = self.stage_durations.get(stage, 0.0) + float(duration)
 
     def to_outcome(self) -> "LaneOutcome":
         if (
@@ -194,6 +215,7 @@ class LaneRuntimeState:
             token_usage=dict(self.token_usage),
             providers=list(self.providers),
             models=list(self.models),
+            stage_durations={stage: float(value) for stage, value in self.stage_durations.items()},
         )
 
 
@@ -217,6 +239,14 @@ class ComposeArtifacts:
     bundle_path: Optional[Path] = None
     qa_report: Optional[Path] = None
     staff_report: Optional[Path] = None
+    timeline_file: Optional[Path] = None
+    graph_file: Optional[Path] = None
+    entities_file: Optional[Path] = None
+    timeline_summary: Optional[Path] = None
+    entity_brief: Optional[Path] = None
+    graph_visual_json: Optional[Path] = None
+    graph_html: Optional[Path] = None
+    graph_image: Optional[Path] = None
 
 
 @dataclass(slots=True)
@@ -227,6 +257,7 @@ class ComposeResult:
     audit_jsonl: Path
     provider_chain: list[str]
     stage_usage: dict[str, dict[str, int]]
+    stage_durations: dict[str, float]
 
 
 @dataclass(slots=True)
@@ -239,6 +270,7 @@ class ComposeState:
     qa: Optional[QAReviewerResult] = None
     stage_usage: Annotated[dict[str, dict[str, int]], _merge_stage_usage] = field(default_factory=stage_usage_factory)
     qa_iterations: int = 0
+    stage_durations: Annotated[dict[str, float], _merge_stage_durations] = field(default_factory=float_usage_factory)
 
 
 def clone_guard_report(report: GuardReport) -> GuardReport:
@@ -297,6 +329,7 @@ def lane_outcome_to_json(outcome: LaneOutcome) -> JSONObject:
         "token_usage": dict(outcome.token_usage),
         "providers": list(outcome.providers),
         "models": list(outcome.models),
+        "stage_durations": {stage: float(value) for stage, value in outcome.stage_durations.items()},
     }
 
 
@@ -319,6 +352,7 @@ def lane_runtime_state_to_json(runtime: LaneRuntimeState) -> JSONObject:
         "providers": list(runtime.providers),
         "models": list(runtime.models),
         "editor_attempted": runtime.editor_attempted,
+        "stage_durations": {stage: float(value) for stage, value in runtime.stage_durations.items()},
     }
 
 
@@ -380,6 +414,7 @@ def serialize_compose_state(state: ComposeState) -> JSONObject:
         "qa": qa_result_to_json(state.qa) if state.qa else None,
         "stage_usage": {stage: dict(values) for stage, values in state.stage_usage.items()},
         "qa_iterations": state.qa_iterations,
+        "stage_durations": {stage: float(value) for stage, value in state.stage_durations.items()},
     }
 
 

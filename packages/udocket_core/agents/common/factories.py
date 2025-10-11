@@ -35,10 +35,17 @@ def int_usage_factory() -> dict[str, int]:
     return {}
 
 
+def float_usage_factory() -> dict[str, float]:
+    """Return a new float usage mapping for dataclass default factories."""
+
+    return {}
+
+
 __all__ = [
     "json_object_factory",
     "json_object_list_factory",
     "str_list_factory",
     "stage_usage_factory",
     "int_usage_factory",
+    "float_usage_factory",
 ]
