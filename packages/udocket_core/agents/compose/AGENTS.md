@@ -69,6 +69,7 @@ See `.env.example` for the supported keys:
 - `COMPOSE_MIN_TIMESTAMP_REFERENCES`, `COMPOSE_QA_REQUIRED`
 - `COMPOSE_ENABLE_EDITOR`, `COMPOSE_QA_MAX_ITERATIONS`
 - `COMPOSE_LLM_RETRY_ATTEMPTS`, `COMPOSE_LLM_RETRY_DELAY_SECONDS`
+- `COMPOSE_ENABLE_ASYNC` (default off): when set to `1`, Compose runs client and lawyer lanes using LangGraph's async runner. The agent falls back to sync automatically if the runtime doesn't permit an event loop.
 - Optional `COMPOSE_CLIENT_EDITOR_MODEL`, `COMPOSE_LAWYER_EDITOR_MODEL`, `COMPOSE_DOCX_TEMPLATE`
 - `COMPOSE_PROMPT_CONFIG` (optional): absolute path to a YAML file following `packages/udocket_core/config/compose_prompts.yaml`. If unset, the agent requires that packaged default file; missing files raise immediately (no fallback).
 
