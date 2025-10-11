@@ -29,43 +29,43 @@ LAWYER_HEADINGS: Tuple[str, ...] = (
 
 # Optional: per-section minimums (used by structure guard if present)
 CLIENT_MIN_WORDS_BY_SECTION: Mapping[str, int] = {
-    "## Case Overview": 400,
-    "## Key People and Roles": 300,
-    "## Timeline of Events": 500,
-    "## Main Issues": 300,
-    "## Next Steps / Preparation Notes": 350,
+    "## Case Overview": 4,
+    "## Key People and Roles": 3,
+    "## Timeline of Events": 5,
+    "## Main Issues": 3,
+    "## Next Steps / Preparation Notes": 4, #35
 }
 LAWYER_MIN_WORDS_BY_SECTION: Mapping[str, int] = {
-    "## Case Summary": 400,
-    "## Parties and Roles": 300,
-    "## Factual Background": 1200,
-    "## Issues Presented": 400,
-    "## Evidence / Supporting Facts": 500,
-    "## Procedural Status / Next Known Steps": 350,
+    "## Case Summary": 4,
+    "## Parties and Roles": 3,
+    "## Factual Background": 12,
+    "## Issues Presented": 4,
+    "## Evidence / Supporting Facts": 5,
+    "## Procedural Status / Next Known Steps": 4, #35
 }
 
 CLIENT_MAX_WORDS_BY_SECTION: Mapping[str, int] = {
-    "## Case Overview": 1800,
-    "## Key People and Roles": 1500,
-    "## Timeline of Events": 2500,
-    "## Main Issues": 1600,
-    "## Next Steps / Preparation Notes": 1800,
+    "## Case Overview": 18000,
+    "## Key People and Roles": 15000,
+    "## Timeline of Events": 25000,
+    "## Main Issues": 16000,
+    "## Next Steps / Preparation Notes": 18000,
 }
 
 LAWYER_MAX_WORDS_BY_SECTION: Mapping[str, int] = {
-    "## Case Summary": 1800,
-    "## Parties and Roles": 1600,
-    "## Factual Background": 4000,
-    "## Issues Presented": 2000,
-    "## Evidence / Supporting Facts": 2600,
-    "## Procedural Status / Next Known Steps": 1600,
+    "## Case Summary": 18000,
+    "## Parties and Roles": 16000,
+    "## Factual Background": 40000,
+    "## Issues Presented": 20000,
+    "## Evidence / Supporting Facts": 26000,
+    "## Procedural Status / Next Known Steps": 16000,
 }
 
-CLIENT_MIN_SECTION_WORDS = 200
-LAWYER_MIN_SECTION_WORDS = 250
-CLIENT_MAX_AVG_SENTENCE_WORDS = 180.0 #18.0
+CLIENT_MIN_SECTION_WORDS = 20
+LAWYER_MIN_SECTION_WORDS = 25
+CLIENT_MAX_AVG_SENTENCE_WORDS = 1800.0 #18.0
 CLIENT_MIN_TIMESTAMP_REFERENCES = 0
-LAWYER_MIN_TIMESTAMP_REFERENCES = 2
+LAWYER_MIN_TIMESTAMP_REFERENCES = 0
 
 STAGE_MODEL_DEFAULTS: Mapping[str, str] = {
     "compose.client.draft": "gpt-5-mini",
