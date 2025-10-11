@@ -55,6 +55,7 @@ Case artifacts are registered from these files with deterministic titles; never 
 - **QA loop**: QA increments `qa_iterations` and can route back to revision or editor nodes per lane. The release gate refuses to emit success until QA status is one of `ok|pass|approved`. `COMPOSE_QA_MAX_ITERATIONS` caps cycles.
 - **LLM resilience**: Chat calls retry transient failures up to `COMPOSE_LLM_RETRY_ATTEMPTS` with exponential backoff starting at `COMPOSE_LLM_RETRY_DELAY_SECONDS`; configuration issues and other 4xx responses still fail immediately.
 - **Event telemetry**: Graph nodes emit progress envelopes (`stage`, `event`, `lane`, `attempt`, etc.). The compose service writes these into both the per-run ops JSON and `ops_compose.jsonl`.
+- **Snapshots & resume**: `ComposeRun` records every stage under `ops/<job_id>__compose_run/`. Calling `ComposeAgent.compose(..., resume=True)` rehydrates the latest snapshot so failed runs can restart without losing lane history.
 - **Stage timing**: Each LangGraph node records elapsed seconds under `stage_durations` so ops metadata can surface per-stage latency trends.
 - **Usage accounting**: Every LLM touch returns `{"stage_usage": {stage: token_usage}}`; reducers aggregate totals so ops metadata exposes full usage per stage.
 - **Canadian regions only**: Provider selections must resolve to Canadian Azure deployments. The agent fails fast if assignments point elsewhere.

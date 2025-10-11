@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import yaml
 from pathlib import Path
+from typing import Any, MutableMapping, cast
 
 from pydantic import BaseModel, Field, ValidationError
 
@@ -41,23 +42,29 @@ def load_prompt_config(path: Path) -> ComposePromptConfig:
     if not path.exists():
         raise FileNotFoundError(f"Compose prompt config not found at {path}")
     try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
     except Exception as exc:  # pragma: no cover - defensive
         raise RuntimeError(f"Failed to read prompt config from {path}: {exc}") from exc
-    if not isinstance(data, dict):
+    if not isinstance(loaded, MutableMapping):
         raise RuntimeError(f"Invalid prompt configuration at {path}: expected mapping root")
-    data = dict(data)
+    raw_data = cast(MutableMapping[Any, Any], loaded)
+    data: dict[str, Any] = {}
+    for key, value in raw_data.items():
+        data[str(key)] = value
     qa_section = data.get("qa")
-    if isinstance(qa_section, dict):
-        qa_section = dict(qa_section)
-        if "client" not in qa_section and "lawyer" not in qa_section:
-            system_prompt = qa_section.get("system_prompt")
+    if isinstance(qa_section, MutableMapping):
+        qa_mapping = cast(MutableMapping[Any, Any], qa_section)
+        qa_map: dict[str, Any] = {}
+        for key, value in qa_mapping.items():
+            qa_map[str(key)] = value
+        if "client" not in qa_map and "lawyer" not in qa_map:
+            system_prompt = qa_map.get("system_prompt")
             if isinstance(system_prompt, str) and system_prompt.strip():
-                qa_section = {
+                qa_map = {
                     "client": {"system_prompt": system_prompt},
                     "lawyer": {"system_prompt": system_prompt},
                 }
-        data["qa"] = qa_section
+        data["qa"] = qa_map
     elif isinstance(qa_section, str):
         data["qa"] = {
             "client": {"system_prompt": qa_section},

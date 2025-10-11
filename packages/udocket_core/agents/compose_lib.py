@@ -152,6 +152,7 @@ class ComposeAgent:
         case_metadata: Optional[Mapping[str, Any]] = None,
         provider_credentials: Optional[Mapping[str, Mapping[str, Any]]] = None,
         progress_callback: Optional[Callable[[str, str, JSONObject], None]] = None,
+        resume: bool = False,
     ) -> ComposeResult:
         case_dir = Path(case_dir)
         docs_dir = case_dir / "docs"
@@ -172,20 +173,6 @@ class ComposeAgent:
             case_metadata=coerce_json_object(case_metadata) if case_metadata else {},
         )
 
-        state = ComposeState(
-            inputs=inputs,
-            client=LaneRuntimeState(
-                lane="client",
-                config=LANE_CONFIGS["client"],
-                max_attempts=self.config.max_client_attempts,
-            ),
-            lawyer=LaneRuntimeState(
-                lane="lawyer",
-                config=LANE_CONFIGS["lawyer"],
-                max_attempts=self.config.max_lawyer_attempts,
-            ),
-        )
-
         provider_credentials_map: Mapping[str, JSONObject] = {
             name: coerce_json_object(payload)
             for name, payload in (provider_credentials or {}).items()
@@ -199,13 +186,36 @@ class ComposeAgent:
             snapshot_dir=ops_dir / f"{job_id}__compose_run",
             logger=self.logger,
         )
-        run_tracker.record("compose.init", state)
+        restored_snapshot = run_tracker.restore_latest() if resume else None
+        if restored_snapshot is None:
+            run_tracker.reset()
+            state = ComposeState(
+                inputs=inputs,
+                client=LaneRuntimeState(
+                    lane="client",
+                    config=LANE_CONFIGS["client"],
+                    max_attempts=self.config.max_client_attempts,
+                ),
+                lawyer=LaneRuntimeState(
+                    lane="lawyer",
+                    config=LANE_CONFIGS["lawyer"],
+                    max_attempts=self.config.max_lawyer_attempts,
+                ),
+            )
+        else:
+            state = restored_snapshot.state
+            state.inputs = inputs
 
         def progress_proxy(stage: str, event: str, payload: JSONObject) -> None:
             envelope = coerce_json_object({"stage": stage, "event": event, **payload})
             collected_events.append(envelope)
             if progress_callback:
                 progress_callback(stage, event, envelope)
+
+        if restored_snapshot is None:
+            run_tracker.record("compose.init", state)
+        else:
+            run_tracker.record("compose.resume", state)
 
         orchestrator = self._new_orchestrator(compose_run=run_tracker)
         state = orchestrator.run(

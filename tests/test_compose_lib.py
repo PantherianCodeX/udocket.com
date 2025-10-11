@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Dict, Mapping, Tuple
+from typing import Callable, Dict, Mapping, Optional, Tuple
 import zipfile
 
 from docx import Document as DocxDocument
@@ -509,6 +509,119 @@ def test_compose_agent_docx_template(tmp_path: Path, monkeypatch: MonkeyPatch) -
     with zipfile.ZipFile(lawyer_docx_path, "r") as zf:
         lawyer_xml = zf.read("word/document.xml").decode("utf-8")
     assert "interim custody arrangements reviewed" in lawyer_xml
+
+
+def test_compose_agent_resume_from_snapshot(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
+    case_dir = tmp_path / "case"
+    docs_dir = case_dir / "docs"
+    ops_dir = case_dir / "ops"
+    docs_dir.mkdir(parents=True)
+    ops_dir.mkdir(parents=True)
+
+    summary_json, summary_md, timeline_json = _write_inputs(docs_dir)
+
+    config = ComposeConfig(provider_chain=["stub"], qa_required=True)
+    agent = ComposeAgent(config)
+
+    client_doc = CLIENT_VALID_DOC
+    lawyer_doc = LAWYER_VALID_DOC
+    qa_response = json.dumps(
+        {
+            "status": "ok",
+            "alerts": [],
+            "recommendations": [],
+            "staff_report": "# Staff Report\n\nAll checks passed.",
+            "global_notes": "",
+            "action": "none",
+            "reason": "",
+            "revision_brief": "",
+        }
+    )
+
+    failure_once = {"raised": False}
+
+    def failing_invoke(
+        *,
+        stage: str,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float,
+        provider_credentials: Mapping[str, JSONObject],
+        config: ComposeConfig,
+        settings: object,
+    ) -> ClientResponse:
+        if stage == "compose.client.draft":
+            return client_doc, {"prompt_tokens": 80, "completion_tokens": 150}, "stub", "stub-model"
+        if stage == "compose.lawyer.draft":
+            return lawyer_doc, {"prompt_tokens": 90, "completion_tokens": 160}, "stub", "stub-model"
+        if stage.endswith(".qa_reviewer"):
+            if not failure_once["raised"]:
+                failure_once["raised"] = True
+                raise ComposeStageError(stage, "synthetic QA failure")
+            return qa_response, {"prompt_tokens": 40, "completion_tokens": 20}, "stub", "stub-model"
+        return qa_response, {"prompt_tokens": 10, "completion_tokens": 5}, "stub", "stub-model"
+
+    for target in (
+        "packages.udocket_core.agents.compose.orchestrator.invoke_llm",
+        "packages.udocket_core.agents.compose.llm_runtime.invoke_llm",
+        "packages.udocket_core.agents.compose.qa.invoke_llm",
+    ):
+        monkeypatch.setattr(target, failing_invoke)
+
+    with pytest.raises(ComposeStageError):
+        agent.compose(
+            case_id="CASE-RESUME",
+            case_dir=case_dir,
+            job_id="JOB-RESUME",
+            summary_json_path=summary_json,
+            summary_markdown_path=summary_md,
+            timeline_seed_path=timeline_json,
+            entity_hint_path=None,
+        )
+    assert failure_once["raised"] is True
+    snapshot_dir = ops_dir / "JOB-RESUME__compose_run"
+    assert snapshot_dir.exists()
+    assert any(path.name.endswith(".json") for path in snapshot_dir.iterdir())
+
+    def resume_invoke(
+        *,
+        stage: str,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float,
+        provider_credentials: Mapping[str, JSONObject],
+        config: ComposeConfig,
+        settings: object,
+    ) -> ClientResponse:
+        if stage == "compose.client.draft":
+            return client_doc, {"prompt_tokens": 80, "completion_tokens": 150}, "stub", "stub-model"
+        if stage == "compose.lawyer.draft":
+            return lawyer_doc, {"prompt_tokens": 90, "completion_tokens": 160}, "stub", "stub-model"
+        if stage.endswith(".qa_reviewer"):
+            return qa_response, {"prompt_tokens": 40, "completion_tokens": 20}, "stub", "stub-model"
+        return qa_response, {"prompt_tokens": 10, "completion_tokens": 5}, "stub", "stub-model"
+
+    for target in (
+        "packages.udocket_core.agents.compose.orchestrator.invoke_llm",
+        "packages.udocket_core.agents.compose.llm_runtime.invoke_llm",
+        "packages.udocket_core.agents.compose.qa.invoke_llm",
+    ):
+        monkeypatch.setattr(target, resume_invoke)
+
+    resumed_agent = ComposeAgent(config)
+    result = resumed_agent.compose(
+        case_id="CASE-RESUME",
+        case_dir=case_dir,
+        job_id="JOB-RESUME",
+        summary_json_path=summary_json,
+        summary_markdown_path=summary_md,
+        timeline_seed_path=timeline_json,
+        entity_hint_path=None,
+        resume=True,
+    )
+    assert result.status == "ok"
+    latest_manifest = snapshot_dir / "latest.json"
+    assert latest_manifest.exists()
 
 
 def _guard_ok() -> GuardReport:

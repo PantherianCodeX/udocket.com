@@ -53,7 +53,7 @@ from .guards import (
     sentence_length_report,
 )
 from .qa import run_lane_qa_review
-from .run import ComposeRun
+from .run import ComposeRun, ComposeRunSnapshot
 
 __all__: list[str] = [
     "COMPOSE_STAGE_PROFILES",
@@ -96,6 +96,7 @@ __all__: list[str] = [
     "render_docx_from_template",
     "render_qa_markdown",
     "ComposeRun",
+    "ComposeRunSnapshot",
     "run_lane_qa_review",
     "ComposePromptConfig",
     "LanePrompts",

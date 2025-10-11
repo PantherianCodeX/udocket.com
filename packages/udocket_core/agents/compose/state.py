@@ -8,7 +8,7 @@ from typing import Mapping, Optional, Sequence
 
 from typing_extensions import Annotated
 
-from packages.udocket_core.json_utils import JSONObject
+from packages.udocket_core.json_utils import JSONObject, JSONValue, coerce_json_object, coerce_str
 
 from ..common.factories import (
     int_usage_factory,
@@ -19,7 +19,7 @@ from ..common.factories import (
     str_list_factory,
 )
 from .errors import ComposeStageError
-from .llm_profiles import LaneConfig
+from .llm_profiles import LaneConfig, LANE_CONFIGS
 
 
 def _merge_usage(target: dict[str, dict[str, int]], stage: str, usage: Mapping[str, int]) -> None:
@@ -447,6 +447,320 @@ def compose_context_to_json(context: Optional[ComposeContext]) -> Optional[JSONO
     }
 
 
+def _json_str_list(value: JSONValue) -> list[str]:
+    results: list[str] = []
+    if isinstance(value, (list, tuple)):
+        for item in value:
+            text = coerce_str(item)
+            if text:
+                results.append(text)
+    return results
+
+
+def _json_object_list(value: JSONValue) -> list[JSONObject]:
+    results: list[JSONObject] = []
+    if isinstance(value, (list, tuple)):
+        for item in value:
+            if isinstance(item, Mapping):
+                results.append(coerce_json_object(item))
+    return results
+
+
+def _int_from_json(value: JSONValue) -> int:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(float(value))
+        except ValueError:
+            return 0
+    return 0
+
+
+def _float_from_json(value: JSONValue) -> float:
+    if isinstance(value, bool):
+        return float(value)
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return 0.0
+    return 0.0
+
+
+def _guard_report_from_json(value: JSONValue) -> GuardReport | None:
+    if not isinstance(value, Mapping):
+        return None
+    errors = _json_str_list(value.get("errors"))
+    warnings = _json_str_list(value.get("warnings"))
+    checks_raw = value.get("checks")
+    checks = coerce_json_object(checks_raw) if isinstance(checks_raw, Mapping) else {}
+    return GuardReport(
+        ok=bool(value.get("ok")),
+        errors=errors,
+        warnings=warnings,
+        checks=checks,
+    )
+
+
+def _lane_action_from_json(value: JSONValue) -> LaneActionDirective:
+    if not isinstance(value, Mapping):
+        return LaneActionDirective(action="none")
+    action = coerce_str(value.get("action")) or "none"
+    directive = LaneActionDirective(
+        action=action,
+        revision_brief=coerce_str(value.get("revision_brief")) or None,
+        reason=coerce_str(value.get("reason")) or None,
+    )
+    original = coerce_str(value.get("original_action"))
+    if original:
+        directive.original_action = original
+    return directive
+
+
+def _lane_attempt_from_json(value: JSONValue) -> LaneAttempt:
+    if not isinstance(value, Mapping):
+        raise ComposeStageError("compose.resume", "Lane attempt payload malformed")
+    structure = _guard_report_from_json(value.get("structure"))
+    compliance = _guard_report_from_json(value.get("compliance"))
+    factuality = _guard_report_from_json(value.get("factuality"))
+    structure_report = structure or GuardReport(ok=False, errors=[], warnings=[], checks={})
+    compliance_report = compliance or GuardReport(ok=False, errors=[], warnings=[], checks={})
+    factuality_report = factuality or GuardReport(ok=False, errors=[], warnings=[], checks={})
+    return LaneAttempt(
+        attempt_number=_int_from_json(value.get("attempt")),
+        source=coerce_str(value.get("source")) or "draft",
+        document=coerce_str(value.get("document")) or "",
+        structure=structure_report,
+        compliance=compliance_report,
+        factuality=factuality_report,
+    )
+
+
+def _lane_outcome_from_json(value: JSONValue) -> LaneOutcome:
+    if not isinstance(value, Mapping):
+        raise ComposeStageError("compose.resume", "Lane outcome payload malformed")
+    structure_report = _guard_report_from_json(value.get("structure_report"))
+    compliance_report = _guard_report_from_json(value.get("compliance_report"))
+    factuality_report = _guard_report_from_json(value.get("factuality_report"))
+    history_raw = value.get("history")
+    history: list[LaneAttempt] = []
+    if isinstance(history_raw, (list, tuple)):
+        for item in history_raw:
+            history.append(_lane_attempt_from_json(item))
+    stage_usage_raw = value.get("stage_usage")
+    stage_usage: dict[str, dict[str, int]] = {}
+    if isinstance(stage_usage_raw, Mapping):
+        for stage, metrics in stage_usage_raw.items():
+            if isinstance(metrics, Mapping):
+                stage_metrics: dict[str, int] = {}
+                for metric_key, metric_value in metrics.items():
+                    stage_metrics[str(metric_key)] = _int_from_json(metric_value)
+                stage_usage[str(stage)] = stage_metrics
+    token_usage_raw = value.get("token_usage")
+    token_usage: dict[str, int] = {}
+    if isinstance(token_usage_raw, Mapping):
+        for key, token_value in token_usage_raw.items():
+            token_usage[str(key)] = _int_from_json(token_value)
+    stage_durations_raw = value.get("stage_durations")
+    stage_durations: dict[str, float] = {}
+    if isinstance(stage_durations_raw, Mapping):
+        for stage, duration in stage_durations_raw.items():
+            stage_durations[str(stage)] = _float_from_json(duration)
+    providers = _json_str_list(value.get("providers"))
+    models = _json_str_list(value.get("models"))
+    return LaneOutcome(
+        document=coerce_str(value.get("document")) or "",
+        structure_report=structure_report or GuardReport(ok=False, errors=[], warnings=[], checks={}),
+        compliance_report=compliance_report or GuardReport(ok=False, errors=[], warnings=[], checks={}),
+        factuality_report=factuality_report or GuardReport(ok=False, errors=[], warnings=[], checks={}),
+        attempts=_int_from_json(value.get("attempts")),
+        history=history,
+        stage_usage=stage_usage,
+        token_usage=token_usage,
+        providers=providers,
+        models=models,
+        stage_durations=stage_durations,
+    )
+
+
+def _lane_runtime_state_from_json(value: JSONValue) -> LaneRuntimeState:
+    if not isinstance(value, Mapping):
+        raise ComposeStageError("compose.resume", "Lane runtime payload malformed")
+    lane_name = coerce_str(value.get("lane")) or "client"
+    config_payload = value.get("config")
+    config_lane_value: JSONValue | None = None
+    if isinstance(config_payload, Mapping):
+        config_lane_value = config_payload.get("lane")
+    config_lane = coerce_str(config_lane_value) or lane_name
+    lane_config = LANE_CONFIGS.get(config_lane)
+    if lane_config is None:
+        raise ComposeStageError("compose.resume", f"Unknown lane configuration '{config_lane}'")
+    history_raw = value.get("history")
+    history: list[LaneAttempt] = []
+    if isinstance(history_raw, (list, tuple)):
+        for item in history_raw:
+            history.append(_lane_attempt_from_json(item))
+    stage_usage_raw = value.get("stage_usage")
+    stage_usage: dict[str, dict[str, int]] = {}
+    if isinstance(stage_usage_raw, Mapping):
+        for stage, metrics in stage_usage_raw.items():
+            if isinstance(metrics, Mapping):
+                metric_bucket: dict[str, int] = {}
+                for metric_key, metric_value in metrics.items():
+                    metric_bucket[str(metric_key)] = _int_from_json(metric_value)
+                stage_usage[str(stage)] = metric_bucket
+    token_usage_raw = value.get("token_usage")
+    token_usage: dict[str, int] = {}
+    if isinstance(token_usage_raw, Mapping):
+        for key, token_value in token_usage_raw.items():
+            token_usage[str(key)] = _int_from_json(token_value)
+    stage_durations_raw = value.get("stage_durations")
+    stage_durations: dict[str, float] = {}
+    if isinstance(stage_durations_raw, Mapping):
+        for stage, duration in stage_durations_raw.items():
+            stage_durations[str(stage)] = _float_from_json(duration)
+    structure_report = _guard_report_from_json(value.get("structure_report"))
+    compliance_report = _guard_report_from_json(value.get("compliance_report"))
+    factuality_report = _guard_report_from_json(value.get("factuality_report"))
+    providers = _json_str_list(value.get("providers"))
+    models = _json_str_list(value.get("models"))
+    return LaneRuntimeState(
+        lane=lane_name,
+        config=lane_config,
+        max_attempts=_int_from_json(value.get("max_attempts")),
+        attempts=_int_from_json(value.get("attempts")),
+        current_source=coerce_str(value.get("current_source")) or "draft",
+        revision_brief=coerce_str(value.get("revision_brief")) or None,
+        last_document_hash=coerce_str(value.get("last_document_hash")) or None,
+        document=coerce_str(value.get("document")) or None,
+        structure_report=structure_report,
+        compliance_report=compliance_report,
+        factuality_report=factuality_report,
+        history=history,
+        stage_usage=stage_usage,
+        token_usage=token_usage,
+        providers=providers,
+        models=models,
+        editor_attempted=bool(value.get("editor_attempted")),
+        stage_durations=stage_durations,
+    )
+
+
+def _qa_result_from_json(value: JSONValue) -> QAReviewerResult | None:
+    if not isinstance(value, Mapping):
+        return None
+    lane_actions_raw = value.get("lane_actions")
+    lane_actions: dict[str, LaneActionDirective] = {}
+    if isinstance(lane_actions_raw, Mapping):
+        for lane, directive in lane_actions_raw.items():
+            lane_actions[str(lane)] = _lane_action_from_json(directive)
+    return QAReviewerResult(
+        status=coerce_str(value.get("status")) or "unknown",
+        alerts=_json_str_list(value.get("alerts")),
+        recommendations=_json_str_list(value.get("recommendations")),
+        staff_report=coerce_str(value.get("staff_report")) or "",
+        provider=coerce_str(value.get("provider")) or "",
+        lane_actions=lane_actions,
+        global_notes=coerce_str(value.get("global_notes")) or "",
+    )
+
+
+def _lane_qa_result_from_json(value: JSONValue) -> LaneQAResult:
+    if not isinstance(value, Mapping):
+        raise ComposeStageError("compose.resume", "Lane QA result payload malformed")
+    return LaneQAResult(
+        status=coerce_str(value.get("status")) or "unknown",
+        alerts=_json_str_list(value.get("alerts")),
+        recommendations=_json_str_list(value.get("recommendations")),
+        staff_report=coerce_str(value.get("staff_report")) or "",
+        provider=coerce_str(value.get("provider")) or "",
+        action=_lane_action_from_json(value.get("action")),
+        global_notes=coerce_str(value.get("global_notes")) or "",
+    )
+
+
+def compose_context_from_json(value: Optional[JSONValue]) -> Optional[ComposeContext]:
+    if not isinstance(value, Mapping):
+        return None
+    return ComposeContext(
+        parties=_json_object_list(value.get("parties")),
+        issues=_json_object_list(value.get("issues")),
+        facts=_json_object_list(value.get("facts")),
+        events=_json_object_list(value.get("events")),
+        deadlines=_json_object_list(value.get("deadlines")),
+        orders=_json_object_list(value.get("orders")),
+        exhibits=_json_object_list(value.get("exhibits")),
+        procedural=coerce_json_object(value.get("procedural")) if isinstance(value.get("procedural"), Mapping) else {},
+        claimable_atoms=_json_str_list(value.get("claimable_atoms")),
+    )
+
+
+def compose_inputs_from_json(value: JSONValue) -> ComposeInputs:
+    if not isinstance(value, Mapping):
+        raise ComposeStageError("compose.resume", "Compose inputs payload malformed")
+    timeline_seeds = _json_object_list(value.get("timeline_seeds"))
+    return ComposeInputs(
+        summary_markdown=coerce_str(value.get("summary_markdown")) or "",
+        summary_data=coerce_json_object(value.get("summary_data")) if isinstance(value.get("summary_data"), Mapping) else {},
+        timeline_seeds=timeline_seeds,
+        entity_hints=coerce_json_object(value.get("entity_hints")) if isinstance(value.get("entity_hints"), Mapping) else {},
+        intake=coerce_json_object(value.get("intake")) if isinstance(value.get("intake"), Mapping) else {},
+        case_metadata=coerce_json_object(value.get("case_metadata")) if isinstance(value.get("case_metadata"), Mapping) else {},
+    )
+
+
+def compose_state_from_json(payload: Mapping[str, JSONValue]) -> ComposeState:
+    inputs = compose_inputs_from_json(payload.get("inputs"))
+    client_state = _lane_runtime_state_from_json(payload.get("client"))
+    lawyer_state = _lane_runtime_state_from_json(payload.get("lawyer"))
+    context = compose_context_from_json(payload.get("context"))
+    lanes_raw = payload.get("lanes")
+    lanes: dict[str, LaneOutcome] = {}
+    if isinstance(lanes_raw, Mapping):
+        for lane, data in lanes_raw.items():
+            lanes[str(lane)] = _lane_outcome_from_json(data)
+    qa_result = _qa_result_from_json(payload.get("qa"))
+    qa_lane_results_raw = payload.get("qa_lane_results")
+    qa_lane_results: dict[str, LaneQAResult] = {}
+    if isinstance(qa_lane_results_raw, Mapping):
+        for lane, data in qa_lane_results_raw.items():
+            qa_lane_results[str(lane)] = _lane_qa_result_from_json(data)
+    stage_usage_raw = payload.get("stage_usage")
+    stage_usage: dict[str, dict[str, int]] = {}
+    if isinstance(stage_usage_raw, Mapping):
+        for stage, metrics in stage_usage_raw.items():
+            if isinstance(metrics, Mapping):
+                metric_bucket: dict[str, int] = {}
+                for metric_key, metric_value in metrics.items():
+                    metric_bucket[str(metric_key)] = _int_from_json(metric_value)
+                stage_usage[str(stage)] = metric_bucket
+    stage_durations_raw = payload.get("stage_durations")
+    stage_durations: dict[str, float] = {}
+    if isinstance(stage_durations_raw, Mapping):
+        for stage, duration in stage_durations_raw.items():
+            stage_durations[str(stage)] = _float_from_json(duration)
+    qa_iterations = _int_from_json(payload.get("qa_iterations"))
+    return ComposeState(
+        inputs=inputs,
+        client=client_state,
+        lawyer=lawyer_state,
+        context=context,
+        lanes=lanes,
+        qa=qa_result,
+        qa_lane_results=qa_lane_results,
+        stage_usage=stage_usage,
+        qa_iterations=qa_iterations,
+        stage_durations=stage_durations,
+    )
+
+
 def serialize_compose_state(state: ComposeState) -> JSONObject:
     return {
         "inputs": compose_inputs_to_json(state.inputs),
@@ -485,5 +799,8 @@ __all__ = [
     "qa_result_to_json",
     "compose_inputs_to_json",
     "compose_context_to_json",
+    "compose_inputs_from_json",
+    "compose_context_from_json",
     "serialize_compose_state",
+    "compose_state_from_json",
 ]
