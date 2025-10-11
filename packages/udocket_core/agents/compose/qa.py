@@ -9,7 +9,6 @@ from typing import Mapping, Optional, Tuple
 from packages.udocket_core.json_utils import JSONObject, JSONValue, coerce_json_object, coerce_str
 
 from .errors import ComposeStageError
-from .llm_profiles import QA_REVIEWER_SYSTEM_PROMPT
 from .llm_runtime import invoke_llm
 from .state import ComposeState, LaneActionDirective, QAReviewerResult
 from ...llm import LLMSettings
@@ -25,6 +24,7 @@ def run_qa_review(
     settings: LLMSettings,
     provider_credentials: Mapping[str, JSONObject],
     logger: logging.Logger,
+    system_prompt: str,
 ) -> Tuple[QAReviewerResult, dict[str, int], str, str]:
     """Call the QA reviewer LLM with resilient JSON parsing."""
 
@@ -40,7 +40,7 @@ def run_qa_review(
         user_prompt = json.dumps(payload, ensure_ascii=False)
         response, usage, provider, model = invoke_llm(
             stage="compose.qa_reviewer",
-            system_prompt=QA_REVIEWER_SYSTEM_PROMPT,
+            system_prompt=system_prompt,
             user_prompt=user_prompt,
             temperature=0.0,
             provider_credentials=provider_credentials,

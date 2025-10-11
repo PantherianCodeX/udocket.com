@@ -27,19 +27,8 @@ from .guards import (
     markdown_structure_report,
     sentence_length_report,
 )
-from .llm_profiles import (
-    CLIENT_DRAFT_USER_INSTRUCTION,
-    CLIENT_EDITOR_SYSTEM_PROMPT,
-    CLIENT_EDITOR_USER_INSTRUCTION,
-    CLIENT_REVISION_USER_INSTRUCTION,
-    LAWYER_DRAFT_USER_INSTRUCTION,
-    LAWYER_EDITOR_SYSTEM_PROMPT,
-    LAWYER_EDITOR_USER_INSTRUCTION,
-    LAWYER_REVISION_USER_INSTRUCTION,
-    REVISION_HEADER_TEMPLATE,
-    lane_system_prompt,
-)
 from .llm_runtime import invoke_llm
+from .prompt_config import ComposePromptConfig, LanePrompts
 from .run import ComposeRun
 from .settings import ComposeConfig
 from .qa import run_qa_review
@@ -55,12 +44,14 @@ class ComposeOrchestrator:
         settings: LLMSettings,
         logger: logging.Logger,
         qa_ok_status: set[str],
+        prompts: ComposePromptConfig,
         compose_run: ComposeRun | None = None,
     ) -> None:
         self.config: ComposeConfig = config
         self.settings: LLMSettings = settings
         self.logger = logger
         self._qa_ok_status = frozenset(status.lower() for status in qa_ok_status)
+        self.prompts = prompts
         self._run_tracker = compose_run
 
     def run(
@@ -261,6 +252,13 @@ class ComposeOrchestrator:
             return state.lawyer
         raise ComposeStageError(f"compose.{lane}", "Unknown lane")
 
+    def _lane_prompts(self, lane: str) -> LanePrompts:
+        if lane == "client":
+            return self.prompts.client
+        if lane == "lawyer":
+            return self.prompts.lawyer
+        raise ComposeStageError(f"compose.{lane}", "Unknown lane")
+
     def _context_assembler(
         self,
         state: ComposeState,
@@ -298,17 +296,25 @@ class ComposeOrchestrator:
         self._log(logging.INFO, stage_name, "start", dict(start_payload))
         emit(progress, stage_name, "start", start_payload)
         lane_state.attempts = next_attempt
+        lane_prompts = self._lane_prompts(lane)
         temperature = self.config.temperature if lane == "client" else self.config.lawyer_temperature
         if is_revision:
             temperature = lane_state.config.revision_temperature
+        system_prompt = (
+            lane_prompts.revision_system_prompt if is_revision else lane_prompts.system_prompt
+        )
+        instruction = (
+            lane_prompts.revision_instruction if is_revision else lane_prompts.draft_instruction
+        )
         document, usage, provider, model = invoke_llm(
             stage=stage_name,
-            system_prompt=lane_system_prompt(lane, revision=is_revision),
+            system_prompt=system_prompt,
             user_prompt=lane_user_prompt(
                 lane,
                 context,
                 lane_state.revision_brief,
                 locale=self.config.locale,
+                instruction=instruction,
             ),
             temperature=temperature,
             provider_credentials=provider_credentials,
@@ -339,6 +345,7 @@ class ComposeOrchestrator:
         self._log(logging.INFO, stage_name, "complete", dict(complete_payload))
         result: dict[str, object] = {}
         result[lane] = lane_state
+        result["stage_usage"] = {stage_name: dict(usage)}
         self._snapshot(stage_name, state)
         return result
 
@@ -571,6 +578,7 @@ class ComposeOrchestrator:
         if lane_state.structure_report is None or lane_state.compliance_report is None or lane_state.factuality_report is None:
             raise ComposeStageError(stage_name, "Revision requested before guard reports computed")
         revision_brief = build_revision_brief(
+            self.prompts.revision_header_template,
             lane,
             lane_state.structure_report,
             lane_state.compliance_report,
@@ -595,12 +603,13 @@ class ComposeOrchestrator:
         provider_credentials: Mapping[str, JSONObject],
         progress: Optional[Callable[[str, str, JSONObject], None]],
     ) -> dict[str, object]:
+        stage_name = "compose.qa_reviewer"
+        self._log(logging.INFO, stage_name, "start", {"iteration": state.qa_iterations})
         if state.qa_iterations >= self.config.qa_iteration_limit:
             raise ComposeStageError(
                 "compose.qa_reviewer",
                 "QA iteration limit exceeded",
             )
-        stage_name = "compose.qa_reviewer"
         emit(
             progress,
             stage_name,
@@ -613,6 +622,7 @@ class ComposeOrchestrator:
             settings=self.settings,
             provider_credentials=provider_credentials,
             logger=self.logger,
+            system_prompt=self.prompts.qa.system_prompt,
         )
         qa_emit_payload = coerce_json_object(
             {
@@ -785,6 +795,7 @@ class ComposeOrchestrator:
         lane_state.current_source = "editor"
         revision_brief = (directive.revision_brief or "").strip()
         known_issues = known_issues_from_brief(revision_brief)
+        lane_prompts = self._lane_prompts(lane)
         constraints_payload = coerce_json_object(
             {
                 "headings": list(lane_state.config.headings),
@@ -813,9 +824,8 @@ class ComposeOrchestrator:
         if revision_brief:
             base_payload["revision_brief"] = revision_brief
         base_payload["locale"] = self.config.locale
-        system_prompt = CLIENT_EDITOR_SYSTEM_PROMPT if lane == "client" else LAWYER_EDITOR_SYSTEM_PROMPT
-        instruction = CLIENT_EDITOR_USER_INSTRUCTION if lane == "client" else LAWYER_EDITOR_USER_INSTRUCTION
-        base_payload["instruction"] = instruction
+        system_prompt = lane_prompts.editor_system_prompt
+        base_payload["instruction"] = lane_prompts.editor_instruction
         payload = coerce_json_object(base_payload)
         user_prompt = json.dumps(payload, ensure_ascii=False)
         self._log(
@@ -942,7 +952,8 @@ def lane_user_prompt(
     context: ComposeContext,
     revision_brief: Optional[str],
     *,
-    locale: str = "en-CA",
+    locale: str,
+    instruction: str,
 ) -> str:
     payload: dict[str, JSONValue] = {
         "context": coerce_json_object(
@@ -959,15 +970,7 @@ def lane_user_prompt(
         "locale": locale,
     }
     if revision_brief:
-        instruction = (
-            CLIENT_REVISION_USER_INSTRUCTION if lane == "client" else LAWYER_REVISION_USER_INSTRUCTION
-        )
         payload["revision_brief"] = revision_brief
-        payload["instruction"] = instruction
-        return json.dumps(payload, ensure_ascii=False)
-    instruction = (
-        CLIENT_DRAFT_USER_INSTRUCTION if lane == "client" else LAWYER_DRAFT_USER_INSTRUCTION
-    )
     payload["instruction"] = instruction
     return json.dumps(payload, ensure_ascii=False)
 
@@ -978,6 +981,7 @@ def stable_doc_fingerprint(text: str) -> str:
 
 
 def build_revision_brief(
+    template: str,
     lane: str,
     structure: GuardReport,
     compliance: GuardReport,
@@ -1004,7 +1008,7 @@ def build_revision_brief(
             sections.append(f"- (warning) {item}")
     if not sections:
         sections.append("No issues detected; maintain required style and references.")
-    header = REVISION_HEADER_TEMPLATE.format(lane=lane)
+    header = template.format(lane=lane)
     return "\n".join([header, *sections])
 
 

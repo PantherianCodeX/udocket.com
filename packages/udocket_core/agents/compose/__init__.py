@@ -21,6 +21,7 @@ from .io import (
     render_docx_from_template,
     render_qa_markdown,
 )
+from .prompt_config import ComposePromptConfig, LanePrompts, QAReviewPrompts, load_prompt_config
 from .state import (
     ComposeArtifacts,
     ComposeContext,
@@ -96,6 +97,10 @@ __all__: list[str] = [
     "render_qa_markdown",
     "ComposeRun",
     "run_qa_review",
+    "ComposePromptConfig",
+    "LanePrompts",
+    "QAReviewPrompts",
+    "load_prompt_config",
     "compliance_report",
     "factuality_report",
     "markdown_structure_report",

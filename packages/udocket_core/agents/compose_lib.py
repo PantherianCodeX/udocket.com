@@ -23,6 +23,7 @@ from .compose.errors import ComposeStageError
 from .compose.io import ArtifactWriter
 from .compose.llm_profiles import LANE_CONFIGS
 from .compose.orchestrator import ComposeOrchestrator
+from .compose.prompt_config import ComposePromptConfig, load_prompt_config
 from .compose.run import ComposeRun
 from .compose.settings import ComposeConfig
 from .compose.state import ComposeArtifacts, ComposeInputs, ComposeResult, ComposeState, LaneRuntimeState, lane_history_payload
@@ -39,6 +40,7 @@ class ComposeAgent:
         self.config = config or ComposeConfig.from_env()
         self.settings: LLMSettings = load_llm_settings()
         self.logger = logger
+        self.prompts: ComposePromptConfig = load_prompt_config(self.config.prompt_config_path)
 
     def compose(
         self,
@@ -115,6 +117,7 @@ class ComposeAgent:
             logger=self.logger,
             qa_ok_status=QA_REVIEWER_STATUS_OK,
             compose_run=run_tracker,
+            prompts=self.prompts,
         )
         state = orchestrator.run(
             state=state,

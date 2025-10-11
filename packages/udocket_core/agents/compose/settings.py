@@ -19,6 +19,7 @@ logger = logging.getLogger("udocket.compose.config")
 
 DOC_TEMPLATE_ENV = "COMPOSE_DOCX_TEMPLATE"
 DEFAULT_PROVIDER_CHAIN: list[str] = ["azure"]
+DEFAULT_PROMPT_CONFIG_ENV = "COMPOSE_PROMPT_CONFIG"
 
 
 def _truthy(value: Optional[str], default: bool) -> bool:
@@ -53,6 +54,13 @@ def normalize_provider_chain(values: Iterable[str]) -> list[str]:
     return ordered
 
 
+def _default_prompt_config_path() -> Path:
+    env_path = os.getenv(DEFAULT_PROMPT_CONFIG_ENV)
+    if env_path:
+        return Path(env_path).expanduser().resolve()
+    return (Path("config") / "compose_prompts.toml").resolve()
+
+
 @dataclass(slots=True)
 class ComposeConfig:
     provider_chain: list[str] = field(default_factory=lambda: list(DEFAULT_PROVIDER_CHAIN))
@@ -70,6 +78,7 @@ class ComposeConfig:
     lawyer_editor_model: Optional[str] = None
     qa_iteration_limit: int = 3
     locale: str = "en-CA"
+    prompt_config_path: Path = field(default_factory=_default_prompt_config_path)
 
     @classmethod
     def from_env(cls) -> "ComposeConfig":
@@ -101,6 +110,7 @@ class ComposeConfig:
             template_path = None
         if not providers:
             providers = list(DEFAULT_PROVIDER_CHAIN)
+        prompt_config_path = _default_prompt_config_path()
         return cls(
             provider_chain=providers,
             temperature=temperature,
@@ -117,6 +127,7 @@ class ComposeConfig:
             lawyer_editor_model=lawyer_editor_model,
             qa_iteration_limit=qa_iteration_limit,
             locale=locale,
+            prompt_config_path=prompt_config_path,
         )
 
 
