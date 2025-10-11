@@ -207,21 +207,22 @@ def build_analyze_graph(impl):
 
 
 ## Compose Stage Configuration
-- Compose runs sequential stages matching the keys in `packages/udocket_core/agents/compose/AGENTS.md` and `config/llm_assignments.json`.
-- Stage roles:
-  1. `compose.context_builder` → synthesize the case brief JSON from summary/staff report inputs.
-  2. `compose.timeline_builder` → promote timeline seeds into timeline_v2 while preserving upstream UUIDs.
-  3. `compose.timeline_summary` → narrate the normalized timeline for downstream briefs.
-  4. `compose.graph_builder` → expand entity hints into graph_v2, keeping stable UUIDs and evidence back-pointers.
-  5. `compose.entity_brief` → summarize key parties and relationships for quick reference sections.
-  6. `compose.graph_visual` → plan embeddable visuals (HTML + alt text) for the relationship graph.
-  7. `compose.client_brief` → draft client Markdown at grade-six reading level with timeline highlights.
-  8. `compose.lawyer_brief` → draft counsel Markdown organized by issues and evidence references.
-  9. `compose.qa_review` → emit JSON QA status (temperature forced to 0 for deterministic checks).
-- Each stage receives Analyze outputs plus the live case intake payload and a `case_metadata` bundle (case id/title, organization, composing job ids) so prompts remain grounded in the current matter context.
-- Timeline summary, entity briefing, and graph visual planner stages emit Markdown/JSON artifacts that downstream writers embed alongside the primary briefs.
-- Azure (Canada regions) is the default provider; org-specific overrides are supplied via `LLMConfiguration` provider chains or stage maps. Stages must not fall back to alternate providers/models—fail fast with a descriptive error that links back to Org Settings so operators can resolve configuration issues quickly.
-- Structured outputs (`timeline_v2`, `graph_v2`, `entities_v2`) must retain incoming `uuid` values when present and derive UUID5 fallbacks otherwise.
+- Compose uses a LangGraph 0.6 workflow with explicit reducers and two parallel "lanes" (client and lawyer). Nodes fan-out after the shared context step and rejoin ahead of QA.
+- Node roles:
+  1. `compose.context` (`ContextAssembler`) — deterministic context JSON built from Analyze outputs, intake metadata, and staff report content.
+  2. `compose.client.draft` / `compose.lawyer.draft` (`ClientComposer` / `LawyerComposer`) — primary drafting passes powered by Azure LLMs.
+  3. `compose.client.revise` / `compose.lawyer.revise` — revision drafts when lane-specific briefs exist.
+  4. `compose.client.structure`, `compose.client.compliance`, `compose.client.factuality` (and corresponding lawyer stages) — deterministic guards that validate headings, prohibited content, and factual references. Factuality snapshots capture attempt history.
+  5. `compose.client.revision`, `compose.lawyer.revision` — deterministic revision brief assembly when guards fail and attempts remain.
+  6. `ComposeJoin` + `WaitForClientLane` + `WaitForLawyerLane` — control nodes that synchronise lane completion before QA runs.
+  7. `compose.qa_reviewer` (`QAReviewer`) — QA LLM stage emitting status, alerts, staff report, and per-lane directives (`revise`, `editor`, or `none`).
+  8. `compose.client.qa_revision`, `compose.lawyer.qa_revision` — apply QA revision directives and clear lane outcomes to force reruns.
+  9. `compose.client.editor`, `compose.lawyer.editor` — optional zero-temperature editor passes returning JSON `{document, change_log}` to satisfy QA polish directives.
+  10. `compose.release_gate` — final deterministic gate ensuring both lanes passed all guards and QA status is acceptable.
+- All lanes share reducers (`_latest_lane_state`, `_merge_lane_outcomes`, `_merge_stage_usage`) to avoid concurrent write collisions. Nodes return updates instead of mutating state in place.
+- Progress is surfaced by emitting envelopes via `_emit(stage, event, payload)`. The compose service streams these into ops JSON (`<job_id>__compose_log.json`) and audit JSONL (`ops_compose.jsonl`).
+- Provider configuration defaults to Azure Canadian deployments; overrides use `LLMConfiguration` records and `config/llm_assignments.json`. Compose must fail loudly if assignments target unsupported regions or models.
+- Outputs are limited to client/lawyer Markdown + DOCX deliverables, QA reports, staff report, and telemetry. Timeline/graph generation now lives in Analyze; Compose consumes seeds for factuality checks rather than emitting `timeline_v2`/`graph_v2`.
 
 
 ## Backward Compatibility

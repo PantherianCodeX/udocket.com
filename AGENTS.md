@@ -30,7 +30,8 @@ Quick index of AGENTS guides in this repo:
   - `audio/` original uploads as `<job_id>__<original_name>`
   - `transcript/` transcript files as `<job_id>__transcript.txt`
   - `ops/` logs, metadata, and ops audit files
-  - Proposed for analysis agents: `analysis/` (see below)
+  - `analysis/` Analyze agent outputs (summaries, seeds, hints, staff reports)
+  - `docs/` Compose agent deliverables (Markdown, DOCX, QA bundle)
 - Database: SQLite by default (or Postgres) with tables `cases`, `jobs`
 
 ## Agent Contract (all agents)
@@ -85,16 +86,16 @@ The repository hosts agents that consume transcripts and emit analysis artifacts
   - Stdout (success): `{ "status":"ok", "summary_file":"<abs_path>", "words":1234, "source_transcript":"<abs_path>" }`
 
 - Compose agent (final assembly)
-  - Purpose: generate final, audience-specific deliverables; timeline and relationships are produced within this pipeline (LLM-only).
-  - Inputs: `summary_v1.json`, `timeline_v2.json` (or transcript), `entities_v2.json`/`graph_v2.json` (or transcript), intake data, and case artifacts (letters, statements, forms).
+  - Purpose: generate final, audience-specific deliverables using a LangGraph pipeline with dedicated client and lawyer lanes plus QA gating.
+  - Inputs: `summary_v1.json`/`summary_v1.md`, optional timeline seeds & entity hints, intake data, case metadata, and organization-specific provider/template configuration.
   - Outputs:
-    - Client deliverable (grade 6, in-client voice): `analysis/<job_id>__compose_client_v1.md` and `.docx`
-    - Lawyer deliverable (professional legal): `analysis/<job_id>__compose_lawyer_v1.md` and `.docx`
-    - Timeline: `analysis/<job_id>__timeline_v2.json` (+ `...html` and optional `...png`)
-    - Graph: `analysis/<job_id>__graph_v2.json` + deterministic `...graph_v2.html` and `...graph_v2.png`
+    - Client deliverable (grade 6, in-client voice): `docs/<job_id>__compose_client_v1.md` and `.docx`
+    - Lawyer deliverable (professional legal): `docs/<job_id>__compose_lawyer_v1.md` and `.docx`
+    - Bundle excerpt: `docs/<job_id>__compose_bundle_v1.md`
+    - QA artifacts: `docs/<job_id>__compose_staff_report_v1.md`, `docs/<job_id>__compose_qa_report_v1.md`
     - Ops JSON (per run): `ops/<job_id>__compose_log.json`
     - Ops audit JSONL: `ops/ops_compose.jsonl`
-  - Notes: per‑org DOCX template selection with uDocket default fallback; no offline fallbacks; fail fast on missing credentials.
+  - Notes: per‑org DOCX template selection with uDocket default fallback; LangGraph reducers prevent concurrent write conflicts; QA loops until status is acceptable or iteration limits are reached.
 
 - Cross-artifact conventions
   - Versioning: use `_v2`, `_v3`, etc. when regenerating artifacts without overwriting previous outputs.
@@ -112,7 +113,7 @@ To avoid future confusion, the table below captures the canonical naming convent
 |--------------|----------------------|---------------------------|----------------------------------------|-------|
 | Transcribe   | `Transcribe` / `transcribe` | `transcription` | `transcript/<job_id>__transcript.txt`, ops logs | Produces audio conversions when needed. |
 | Analyze      | `Analyze` / `analyze` | `analyze` | Stage outputs written under `analysis/` (summary JSON+MD, outline, timeline seeds, entity hints, case brief, optional staff report). Approved outputs generate individual artifacts automatically. | Stage outputs are stored on disk immediately; artifacts are promoted versions exposed in the UI once approved. |
-| Compose      | `Compose` / `compose` | `compose` | Client & lawyer deliverables (`compose_client_v1.*`, `compose_lawyer_v1.*`), timeline v2, graph v2, HTML/PNG renderings, compose ops logs | Consumes summaries plus other analysis artifacts. |
+| Compose      | `Compose` / `compose` | `compose` | Client & lawyer deliverables (`compose_client_v1.*`, `compose_lawyer_v1.*`), bundle/QA reports, compose ops logs | LangGraph pipeline with parallel lanes, guard rails, and QA gating. |
 | Timeline (future standalone) | `Timeline` / `timeline` | `timeline` | To-be-defined `timeline_v2.*` assets | When run independently, should still read latest summary outputs. |
 
 General guidelines:

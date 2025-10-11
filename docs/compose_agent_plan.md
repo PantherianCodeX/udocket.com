@@ -1,106 +1,68 @@
-# Compose Agent LLM Plan
+# Compose Agent LangGraph Plan
 
-This document defines the Compose pipeline stages, the LLM responsibilities for each step, and the contract for generating timeline and relationship graph artifacts. It aligns with the root **AGENTS.md**, `docs/ROADMAP.md`, and `docs/AGENTS_LANGGRAPH.md` requirements.
+This plan captures the responsibilities, data contracts, and LangGraph orchestration strategy for the Compose agent. It reflects the current implementation in `packages/udocket_core/agents/compose_lib.py` and should stay in sync with the `packages/udocket_core/agents/compose/AGENTS.md` guide and the operations service.
 
 ## Objectives
-- Assemble client- and lawyer-facing deliverables from approved transcripts and summaries without leaving Canadian regions.
-- Generate timeline (`timeline_v2.*`) and relationship graph (`graph_v2.*`) artifacts inside the Compose pipeline.
-- Produce deterministic, versioned outputs with per-run ops JSON, audit JSONL entries, and SHA-256 hashes.
-- Fail fast on missing credentials or artifacts; never fall back to non-LLM heuristics for narrative content.
+- Assemble client- and lawyer-facing deliverables from Analyze outputs without leaving Canadian Azure regions.
+- Provide deterministic guard rails (structure, compliance, factuality, QA) that loop until documents meet release criteria.
+- Emit rich telemetry (LLM usage, guard results, QA directives) for ops JSON and audit JSONL consumers.
+- Render Markdown and DOCX artifacts using per-organization templates while retaining additive `_vN` versioning.
 
-## Inputs
-- Latest approved transcript and summary (`analysis/<job_id>__summary_v1.*`).
-- Optional staff report, timeline seeds, and entity hints from the Analyze agent.
-- Intake metadata (court, parties, relief sought, deadlines) and attached case artifacts (letters, statements, forms).
-- Organization configuration: LLM provider chain, stage map overrides, DOCX templates.
+## Inputs & Context
+- **Analyze artifacts**: latest approved summary Markdown and JSON (`analysis/<summary_job_id>__summary_v1.*`). Timeline seeds and entity hints are optional but improve factuality checks.
+- **Case metadata**: intake payload, organization-scoped configuration, and resolved provider credentials via `LLMSettings`.
+- **Transcript reference**: stored primarily for provenance; drafting relies on the Analyze outputs and claimable atoms.
+- **Environment switches**: see `.env.example` for `COMPOSE_*` defaults (temperature, attempts, QA requirements, editor toggles, DOCX template path).
 
-## Stage Overview
-The Compose agent orchestrates the following stages. LLM-powered nodes are prefixed with **LLM**.
+## Graph Architecture
+Compose uses LangGraph 0.6 with explicit reducers. Nodes fan out into client and lawyer “lanes” that operate independently until a join syncs them for QA.
 
-1. **input_discovery** (deterministic)
-   - Locate the primary transcript, approved summary, intake metadata, and auxiliary artifacts.
-   - Validate dependencies (summary approval, transcript availability) and hydrate shared state.
+| Node | Stage names | Purpose | Notes |
+|------|-------------|---------|-------|
+| `ContextAssembler` | `compose.context` | Build shared `ComposeContext` from Analyze data, intake metadata, and staff report. | Deterministic; no LLM. |
+| `ClientComposer` / `LawyerComposer` | `compose.client.draft`, `compose.client.revise`, `compose.lawyer.draft`, `compose.lawyer.revise` | Draft or revise Markdown using Azure models. | Attempts tracked per lane; revision briefs loaded when present. |
+| `ClientStructureValidator` / `LawyerStructureValidator` | `compose.client.structure`, `compose.lawyer.structure` | Check headings, minimum word counts, readability. | Deterministic guard reports. |
+| `ClientComplianceGuard` / `LawyerComplianceGuard` | `compose.client.compliance`, `compose.lawyer.compliance` | Flag disallowed content and missing sections. | Deterministic guard reports. |
+| `ClientFactualityGate` / `LawyerFactualityGate` | `compose.client.factuality`, `compose.lawyer.factuality` | Validate timestamp references and reconcile with claimable atoms. | Records attempt history for ops logs. |
+| `ClientRevision` / `LawyerRevision` | `compose.client.revision`, `compose.lawyer.revision` | Build revision briefs when guards fail and attempts remain. | Deterministic string assembly. |
+| `ComposeJoin`, `WaitForClientLane`, `WaitForLawyerLane` | — | Ensure both lanes complete guard cycles before QA runs. | Pure control nodes. |
+| `QAReviewer` | `compose.qa_reviewer` | LLM QA pass; emits status, alerts, recommendations, staff report, and lane directives (`revise`, `editor`, `none`). | Temperature forced low (`gpt-4o-mini` default). |
+| `ClientQARevision` / `LawyerQARevision` | `compose.client.qa_revision`, `compose.lawyer.qa_revision` | Apply QA revision directives and clear lane outcomes to force reruns. | Deterministic. |
+| `ClientQAEditor` / `LawyerQAEditor` | `compose.client.editor`, `compose.lawyer.editor` | Optional LLM “editor” pass for surgical edits when QA requests it. | Uses zero-temperature, JSON-formatted responses. |
+| `ReleaseGate` | `compose.release_gate` | Final validation that both lanes passed guards and QA status is acceptable. | Raises descriptive failure messages when blocking. |
 
-2. **parse_sources** (deterministic)
-   - Parse transcript segments, summary outline, and staff report into structured payloads.
-   - Collect references for timeline/graph grounding (timestamps, speakers, issue tags).
+Reducers: `_latest_lane_state` ensures the most recent lane runtime state wins; `_merge_lane_outcomes` tracks released outcomes; `_merge_stage_usage` accumulates per-stage token usage.
 
-3. **LLM `compose.context_builder`**
-   - Analyze intake details, key issues, parties, and outstanding questions into a compact brief.
-   - Output JSON `{ parties, issues, court, division, relief, risks, questionnaire_flags }`.
+## QA & Revision Loop
+1. Lanes run draft → guard sequence. Failed guards generate revision briefs while attempts remain.
+2. Successful guard passes store a `LaneOutcome`. Both outcomes are required before QA executes.
+3. QA can: (a) approve (`status` in `ok`, `pass`, `approved`), (b) request lane revision (`lane_actions[lane].action == "revise"`), or (c) request the editor pass.
+4. Revision/editor directives clear the lane outcome, allowing the graph to rerun the lane from the composer node. `COMPOSE_QA_MAX_ITERATIONS` caps QA cycles.
+5. The release gate double-checks guard status and QA result before returning success.
 
-4. **LLM `compose.timeline_builder`**
-   - Produce a normalized event list referencing transcript timestamps and speakers.
-   - Output JSON schema `events[{ ts_start, ts_end?, speaker?, label, summary, evidences[] }]`.
-   - Write to `analysis/<job_id>__timeline_v2.json`, plus optional HTML snapshot.
+## Artifacts & Telemetry
+- Markdown: `docs/<job_id>__compose_client_v1.md`, `docs/<job_id>__compose_lawyer_v1.md`, plus a combined bundle Markdown.
+- DOCX: client and lawyer deliverables rendered via docxtpl if `COMPOSE_DOCX_TEMPLATE` is defined, otherwise through basic Markdown conversion.
+- QA deliverables: `docs/<job_id>__compose_staff_report_v1.md`, `docs/<job_id>__compose_qa_report_v1.md`.
+- Ops metadata: `ops/<job_id>__compose_log.json` (includes stage usage, guard summaries, QA directives, artifact paths).
+- Audit lines: appended to `ops/ops_compose.jsonl` for every emitted progress event plus a final job summary.
+- Token usage: every LLM-producing node returns `{"stage_usage": {stage: usage_map}}` so totals aggregate cleanly.
 
-5. **LLM `compose.graph_builder`**
-   - Extract entities (people, organizations, locations, documents) and relationship edges with evidence.
-   - Output JSON schema `{ entities[], relationships[] }` with timeline refs.
-   - Write to `analysis/<job_id>__graph_v2.json` and optional HTML/PNG render metadata.
-
-6. **LLM `compose.client_brief`**
-   - Draft a client-facing Markdown deliverable (grade-6 reading level, empathetic tone) referencing timeline events.
-   - Output Markdown stored at `analysis/<job_id>__compose_client_v1.md`.
-
-7. **LLM `compose.lawyer_brief`**
-   - Draft a professional, issue-organized Markdown deliverable for legal counsel.
-   - Output Markdown stored at `analysis/<job_id>__compose_lawyer_v1.md`.
-
-8. **LLM `compose.qa_review`**
-   - Verify mandatory sections, cross-check against context brief, and flag missing references.
-   - Emit structured QA findings appended to ops JSON.
-
-9. **render_artifacts** (deterministic)
-   - Convert Markdown outputs to DOCX using per-org templates.
-   - Persist Markdown/DOCX pairs, timeline/graph JSON (and optional HTML/PNG), ops JSON, and audit JSONL with SHA-256 hashes.
-
-10. **ops_finalize** (deterministic)
-    - Write `ops/<job_id>__compose_log.json`, append `ops/ops_compose.jsonl`, emit websocket events.
-
-## Data Contracts
-- Timeline schema upgrades to `v2` with richer labels and evidence arrays. Ops metadata records schema version, event count, checksum, and source inputs.
-- Graph schema upgrades to `v2` capturing entity roles, relationship categories, and evidence pointers to both transcript timestamps and timeline event IDs.
-- Every timeline event, entity, and relationship must expose a stable `uuid` (UUIDv5 over canonical content) alongside any human-readable identifiers to preserve cross-run referential integrity.
-- Markdown deliverables must embed source references (`[TS 00:12:30]`) for traceability; QA stage validates reference density.
-- Ops JSON stores: `case_id`, `job_id`, `artifacts`, `checksums`, `provider_chain`, `stage_results`, `timeline_file`, `graph_file`, `source_summary`, timestamps, and tool/library versions.
-- Audit JSONL lines include `compose_client_md`, `compose_lawyer_md`, `timeline_v2`, `graph_v2`, `duration_s`, and guardian verdict summaries when applied.
-
-## Stage Profiles & Token Budgets
-Default token guidance (configurable per org via stage map overrides):
-
-| Stage Key | Purpose | Recommended Context Tokens | Output Reserve |
-|-----------|---------|----------------------------|----------------|
-| `compose.context_builder` | Intake + summary condensation | 32k | 2k |
-| `compose.timeline_builder` | Event extraction | 64k | 4k |
-| `compose.graph_builder` | Entity/relationship synthesis | 64k | 4k |
-| `compose.client_brief` | Client deliverable | 80k | 6k |
-| `compose.lawyer_brief` | Lawyer deliverable | 100k | 8k |
-| `compose.qa_review` | QA & discrepancy detection | 32k | 2k |
-
-These limits inform stage profile hints and default `max_tokens` when configuring providers.
-
-## Provider Chain Defaults
-- Default provider chain: `['azure', 'openai']` with Azure deployments required for production (Canada Central/East).
-- Stages inherit provider/model defaults from `config/llm_assignments.json` but remain overrideable per organization via LLM configuration records.
-- Timeline and graph stages share the same defaults so standalone Timeline/Graph tools remain consistent with Compose outputs.
+## Model & Token Defaults
+- Default provider chain: `["azure"]` (overrideable via `COMPOSE_PROVIDER_CHAIN` or `LLMConfiguration` records).
+- Stage-to-model defaults live in `packages/udocket_core/agents/compose/llm_profiles.py` and `config/llm_assignments.json` (e.g., `compose.client.draft` → `gpt-4o`).
+- Temperature: client drafts use `COMPOSE_TEMPERATURE` (0.6 default), lawyer drafts use `COMPOSE_LAWYER_TEMPERATURE` (0.4 default). Revisions and QA use cooler temperatures for determinism.
+- Editors run at temperature `0.0` and must return JSON with `document` and `change_log`.
 
 ## Failure Handling
-- Missing transcript or summary → raise `MissingDependencyError` before invoking LLMs.
-- LLM failures → bubble descriptive `ComposeStageError` with stage name, provider, model, attempt count.
-- If timeline/graph stages fail, mark compose job failed; downstream deliverables must not proceed without them.
-- QA failures flag the job and write actionable guidance to ops JSON; guardian enforcement runs post-render via the existing Guardian agent.
+- Guard or QA failures after exhausting attempts raise `ComposeStageError` with stage, lane, provider, model, and attempt number.
+- Missing inputs lead to deterministic placeholder artifacts (e.g., empty summary JSON) before LLM invocation to maintain predictable file sets.
+- Hitting the QA iteration cap results in an explicit failure message specifying the iteration limit.
+- Release gate errors include guard status summaries (structure/compliance/factuality per lane) to speed up debugging.
 
-## Outputs & Storage Layout
-- Markdown: `analysis/<job_id>__compose_client_v1.md`, `analysis/<job_id>__compose_lawyer_v1.md`.
-- DOCX: `analysis/<job_id>__compose_client_v1.docx`, `analysis/<job_id>__compose_lawyer_v1.docx`.
-- Timeline: `analysis/<job_id>__timeline_v2.json`, optional `..._v2.html`, `..._v2.png`.
-- Graph: `analysis/<job_id>__graph_v2.json`, optional `..._v2.html`, `..._v2.png`.
-- Ops JSON: `ops/<job_id>__compose_log.json`.
-- Audit JSONL: `ops/ops_compose.jsonl`.
+## Ops & Testing Expectations
+- Every progress event is captured via `progress_callback`; services should stream them to real-time UI updates and ops JSONL.
+- Add regression tests when introducing new nodes or reducers. Focus on: lane attempt accounting, QA loop routing, docx rendering, and audit log shape.
+- Integration tests in the operations service should verify metadata updates (`compose_status`, artifact registration) and guardian triggers once compose succeeds.
 
-## Next Steps
-1. Implement `packages/udocket_core/agents/compose_lib.py` mirroring the Analyze agent structure with stage orchestrator and deterministic writers.
-2. Extend `config/llm_assignments.json` with the Compose stage defaults listed above.
-3. Update UI stage cards and ops telemetry to surface timeline/graph outputs generated by Compose.
-4. Add Celery task `compose_job` to coordinate Compose agent execution, artifact creation, and guardian review triggers.
+Keeping this plan current ensures Compose remains reliable, observable, and consistent with the rest of the agent ecosystem that relies on LangGraph orchestration.

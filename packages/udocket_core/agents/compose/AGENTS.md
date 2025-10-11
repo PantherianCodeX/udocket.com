@@ -1,71 +1,81 @@
 # Compose Agent Guide
 
-This guide covers the Compose agent pipeline that generates case deliverables (client & lawyer briefs), normalized timeline v2 artifacts, and relationship graph assets. Follow these conventions together with the root `AGENTS.md` and the area guides located alongside the UI and operations code.
+This guide documents the LangGraph-driven Compose agent that assembles client and lawyer deliverables from approved Analyze outputs. Read this alongside the root `AGENTS.md`, `docs/AGENTS_LANGGRAPH.md`, and the operations/UI area guides when touching Compose-related code.
 
 ## Purpose
-- Consume approved Analyze outputs (summary JSON/Markdown, timeline seeds, entity hints, case brief) plus transcript excerpts and intake metadata.
-- Produce deterministic artifacts housed under `storage/media/cases/<CASE>/analysis/` with `_vN` suffix versioning and append-only ops logs under `ops/`.
-- Maintain stable UUIDs for every structured record (timeline events, entities, relationships) and reserve user-facing titles for presenter helpers via `unique_title`.
-- Hydrate stages with the current case metadata (case identifiers, organization, job titles) alongside Analyze outputs so prompts stay grounded in the matter context.
+- Consume approved Analyze artifacts (summary Markdown/JSON, timeline seeds, entity hints) plus intake metadata and case context.
+- Draft client-facing and lawyer-facing Markdown deliverables, steer them through guard rails, and render DOCX versions.
+- Produce deterministic, versioned files under `storage/media/cases/<CASE>/docs/` and append structured telemetry to `storage/media/cases/<CASE>/ops/`.
+- Keep every LLM interaction in Canadian Azure regions; fail fast if credentials or provider assignments are missing.
 
-## Stage Plan
-The Compose pipeline runs sequential stages. Stage keys align with `config/llm_assignments.json` and `packages/udocket_core/agents/compose/profiles.py`.
+## LangGraph Overview
+Compose uses LangGraph 0.6 with explicit reducers to avoid in-place mutation issues. The graph fan-outs client and lawyer work into dedicated “lanes” that loop until guard and QA checks succeed.
 
-| Stage key | Role | Inputs | Output | Notes |
-|-----------|------|--------|--------|-------|
-| `compose.context_builder` | Case Brief Synthesizer | Intake payload, case metadata, summary JSON/Markdown, staff report, transcript excerpt | JSON case brief (`parties`, `issues`, `posture`, `risks`, `next_steps`, `key_facts`) | Must return structured JSON; feeds downstream prompts. |
-| `compose.timeline_builder` | Timeline Author | Case brief, timeline seeds, case metadata, summary data, transcript excerpt | `timeline_v2` JSON `{"events": [...]}` | Preserve provided `id`/`uuid` values when present; derive UUID5 otherwise. |
-| `compose.timeline_summary` | Timeline Narrator | Case metadata, timeline_v2 JSON, summary data | Markdown narrative of key milestones | Feeds both briefs and QA with human-readable highlights. |
-| `compose.graph_builder` | Relationship Cartographer | Case brief, entity hints, timeline, case metadata, summary data, transcript excerpt | Graph JSON `{entities, relationships}` | Every entity/relationship returns stable `uuid` + `id`; include evidence pointers. |
-| `compose.entity_brief` | Entity Briefing Specialist | Case metadata, graph payload, entity hints, timeline | Markdown briefing covering parties and relationships | Used by both client and lawyer deliverables for quick reference. |
-| `compose.graph_visual` | Graph Visual Planner | Case metadata, graph payload | JSON instructions with alt text, sizing, and styling notes | Feeds deterministic renderer that produces HTML + PNG artifacts. |
-| `compose.client_brief` | Client Brief Drafter | Case brief, timeline, graph, summary Markdown, staff report, intake, case metadata | Markdown deliverable at grade-six reading level | Tone: empathetic/explanatory. |
-| `compose.lawyer_brief` | Counsel Brief Drafter | Case brief, timeline, graph, summary Markdown, case metadata | Professional Markdown with issue/evidence organization | Lower temperature (`COMPOSE_LAWYER_TEMPERATURE`). |
-| `compose.qa_review` | QA Reviewer | Case brief, timeline, graph, client & lawyer Markdown, case metadata | JSON QA payload (`status`, `alerts`, `recommendations`) | Temperature forced to 0; no generative text. |
+| Node | Stage name(s) | Role |
+|------|---------------|------|
+| `ContextAssembler` | `compose.context` | Build the shared `ComposeContext` from Analyze outputs, intake metadata, and staff report. |
+| `ClientComposer` / `LawyerComposer` | `compose.client.draft`, `compose.client.revise`, `compose.lawyer.draft`, `compose.lawyer.revise` | Draft (or revise) lane Markdown via Azure deployments. Attempts are capped per lane. |
+| `ClientStructureValidator` / `LawyerStructureValidator` | `compose.client.structure`, `compose.lawyer.structure` | Deterministic guard reports on headings, word counts, readability. |
+| `ClientComplianceGuard` / `LawyerComplianceGuard` | `compose.client.compliance`, `compose.lawyer.compliance` | Check for disallowed content and missing sections. |
+| `ClientFactualityGate` / `LawyerFactualityGate` | `compose.client.factuality`, `compose.lawyer.factuality` | Validate timestamp coverage and factual accuracy; captures attempt history. |
+| `ClientRevision` / `LawyerRevision` | `compose.client.revision`, `compose.lawyer.revision` | Deterministically build revision briefs when guards fail and retries remain. |
+| `QAReviewer` | `compose.qa_reviewer` | Run the QA LLM pass that emits status, alerts, recommendations, and per-lane directives (revise/editor/none). |
+| `ClientQARevision` / `LawyerQARevision` | `compose.client.qa_revision`, `compose.lawyer.qa_revision` | Apply QA revision directives, then clear lane outcomes to force a re-run. |
+| `ClientQAEditor` / `LawyerQAEditor` | `compose.client.editor`, `compose.lawyer.editor` | Optional editor passes that apply surgical edits when QA requests them. |
+| `ComposeJoin`, `WaitForClientLane`, `WaitForLawyerLane` | — | Flow control nodes ensuring both lanes are complete before QA executes. |
+| `ReleaseGate` | `compose.release_gate` | Final guard: both lanes must pass all checks and QA status must be acceptable. |
 
-All stages rely on Canadian-region Azure OpenAI deployments by default. Configure per-organization overrides through LLM assignments.
-
-## LLM Configuration
-- Default provider chain: `azure`. Organizations can override via `provider_chain` or per-stage `stage_map` entries in `LLMConfiguration` records. Use the stage keys above.
-- Recommended default models (see `config/llm_assignments.json`):
-  - Context/Timeline/Graph/QA → `gpt-4o-mini`
-  - Client/Lawyer briefs → `gpt-4o`
-- Stage profiles defined in `profiles.py` set context window guidance and reserved output tokens. Respect these when selecting custom models.
-- `ComposeAgent.compose()` automatically merges provider chains and loads provider credentials via `get_provider_secret_with_metadata`.
+Reducers (`_merge_stage_usage`, `_merge_lane_outcomes`, `_latest_lane_state`) guarantee that concurrent node writes remain conflict-free. All progress is reported via `_emit`, and the compose service streams those events into ops JSON / JSONL.
 
 ## Inputs
-- Summary artifacts: JSON + Markdown (latest `_vN` files) resolved from Analyze job metadata or directory search.
-- Timeline seeds: `{job_id}__timeline_seeds_v1.json` (analysis dir) with UUID-bearing events.
-- Entity hints: `{job_id}__entity_hints_v1.json` with entities/relations and UUIDs.
-- Staff report / case brief: `{job_id}__case_brief_v1.{json|md}` if present.
-- Transcript: latest `.txt` transcript to provide excerpt context.
+- Summary Markdown and JSON (`analysis/<summary_job_id>__summary_v1.*`) from the Analyze job metadata or fallback discovery.
+- Optional timeline seeds and entity hints to enrich factual checks (`timeline_seeds_v1.json`, `entity_hints_v1.json`).
+- Intake metadata and case metadata payloads supplied by the operations service.
+- Organization-level LLM configuration (provider chain, stage models) resolved through `LLMSettings`.
+- Optional DOCX template path (`COMPOSE_DOCX_TEMPLATE`) for rendering deliverables with organization branding.
 
 ## Outputs
-- `analysis/<job_id>__timeline_v2.json`
-- `analysis/<job_id>__graph_v2.json`
-- `analysis/<job_id>__entities_v2.json` (entity list derived from graph payload)
-- `analysis/<job_id>__compose_timeline_v1.md` (timeline narrative)
-- `analysis/<job_id>__compose_entities_v1.md` (entity briefing)
-- `analysis/<job_id>__graph_v2.html`
-- `analysis/<job_id>__graph_v2.png`
-- `analysis/<job_id>__compose_graph_visual_v1.json` (graph visual instructions retained for provenance)
-- `analysis/<job_id>__compose_client_v1.{md,docx}`
-- `analysis/<job_id>__compose_lawyer_v1.{md,docx}`
-- Ops log: `ops/<job_id>__compose_log.json`
-- Audit stream: `ops/ops_compose.jsonl`
+Compose writes additive artifacts with `_vN` suffixing via `next_versioned`:
 
-All structured outputs MUST include a `uuid` field, preserving incoming UUIDs when supplied and generating UUID5 signatures from canonical content otherwise. Do not expose UUIDs in UI titles; presenters build human labels with `unique_title` in the operations task layer.
+- `docs/<job_id>__compose_client_v1.md`
+- `docs/<job_id>__compose_lawyer_v1.md`
+- `docs/<job_id>__compose_client_v1.docx` (template-driven when configured, otherwise basic Markdown-to-DOCX)
+- `docs/<job_id>__compose_lawyer_v1.docx`
+- `docs/<job_id>__compose_bundle_v1.md` (combined excerpt of both briefs)
+- `docs/<job_id>__compose_staff_report_v1.md` (QA reviewer staff narrative)
+- `docs/<job_id>__compose_qa_report_v1.md` (structured QA summary)
+- Ops metadata: `ops/<job_id>__compose_log.json`
+- Audit trail: `ops/ops_compose.jsonl`
+
+Case artifacts are registered from these files with deterministic titles; never overwrite existing artifacts—reruns append `_v2`, `_v3`, etc.
+
+## Key Behaviours & Guardrails
+- **Lane attempts**: Each lane tracks attempts, models, usage, and history. Revisions reset guard reports; if maximum attempts are reached, a `ComposeStageError` is raised.
+- **QA loop**: QA increments `qa_iterations` and can route back to revision or editor nodes per lane. The release gate refuses to emit success until QA status is one of `ok|pass|approved`. `COMPOSE_QA_MAX_ITERATIONS` caps cycles.
+- **Event telemetry**: Graph nodes emit progress envelopes (`stage`, `event`, `lane`, `attempt`, etc.). The compose service writes these into both the per-run ops JSON and `ops_compose.jsonl`.
+- **Usage accounting**: Every LLM touch returns `{"stage_usage": {stage: token_usage}}`; reducers aggregate totals so ops metadata exposes full usage per stage.
+- **Canadian regions only**: Provider selections must resolve to Canadian Azure deployments. The agent fails fast if assignments point elsewhere.
+- **Docx rendering**: When `COMPOSE_DOCX_TEMPLATE` is set, the renderer injects Markdown via docxtpl subdocuments and exposes `*_plain` values for template fallbacks.
+
+## Environment Configuration
+See `.env.example` for the supported keys:
+
+- `COMPOSE_PROVIDER_CHAIN`, `COMPOSE_TEMPERATURE`, `COMPOSE_LAWYER_TEMPERATURE`
+- `COMPOSE_MAX_OUTPUT_TOKENS`, `COMPOSE_MAX_CLIENT_ATTEMPTS`, `COMPOSE_MAX_LAWYER_ATTEMPTS`
+- `COMPOSE_MIN_TIMESTAMP_REFERENCES`, `COMPOSE_QA_REQUIRED`
+- `COMPOSE_ENABLE_EDITOR`, `COMPOSE_QA_MAX_ITERATIONS`
+- Optional `COMPOSE_CLIENT_EDITOR_MODEL`, `COMPOSE_LAWYER_EDITOR_MODEL`, `COMPOSE_DOCX_TEMPLATE`
+
+Org-specific overrides are handled through `LLMConfiguration` records and `config/llm_assignments.json`.
 
 ## Failure Handling
-- Any stage failure raises `ComposeStageError` with stage-qualified message. Caller (Celery task) records `compose_status="failed"` in job metadata and surfaces the error.
-- Missing prerequisite artifacts cause early validation errors before LLM calls. Compose does not silently regenerate Analyze outputs.
+- All user-visible failures raise `ComposeStageError` with the stage name, lane, provider/model, and attempt count to aid triage.
+- Missing prerequisite artifacts are detected before LLM calls, with deterministic fallback placeholders written when possible (e.g., synthetic empty summary JSON).
+- Hitting the QA iteration cap, guard failures after max attempts, or QA returning a blocking status will fail the job and annotate ops metadata.
 
 ## Testing Guidance
-- Use `tests/test_compose_lib.py` for unit coverage of helper normalization utilities and artifact creation.
-- End-to-end flow coverage lives in `tests/test_platform_flow.py` (Compose section). When adding new outputs, extend both tests.
+- Add unit coverage for helper utilities, reducers, and artifact writers under `tests/llm/` (mirror the patterns used by the Azure client tests).
+- Extend operations/service integration tests whenever Compose service inputs or outputs change.
+- When introducing new LangGraph nodes, add regression tests that exercise reducer behaviour and verify emitted events.
 
-## Integration Notes
-- Celery task `apps.platform.operations.tasks.compose_job` resolves inputs, builds provider credential map, and registers artifacts with deterministic titles (`unique_title`).
-- UI presenters consume artifact metadata from `CaseArtifact` records; ensure metadata fields include source summary filenames for audit linking.
-
-Following this plan keeps Compose aligned with the Analyze pipeline and maintains deterministic, auditable artifacts across reruns.
+Maintaining these conventions keeps the Compose agent safe to rerun, easy to observe, and compatible with the broader LangGraph orchestration strategy shared across agents.

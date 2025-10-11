@@ -222,17 +222,6 @@ def _merge_stage_usage(
     return merged
 
 
-def _append_events(
-    existing: Optional[list[JSONObject]],
-    update: Optional[list[JSONObject]],
-) -> list[JSONObject]:
-    if not existing:
-        return list(update or [])
-    if not update:
-        return list(existing)
-    return [*existing, *update]
-
-
 def _markdown_paragraphs(markdown_text: str) -> list[str]:
     lines = markdown_text.splitlines()
     buffer: list[str] = []
@@ -498,7 +487,6 @@ class ComposeState:
     qa: Optional[QAReviewerResult] = None
     stage_usage: Annotated[dict[str, dict[str, int]], _merge_stage_usage] = field(default_factory=dict)
     qa_iterations: int = 0
-    events: Annotated[list[JSONObject], _append_events] = field(default_factory=list)
 
 
 class ComposeAgent:
@@ -592,10 +580,7 @@ class ComposeAgent:
             job_id=job_id,
         )
 
-        combined_events: list[JSONObject] = []
-        combined_events.extend(state.events)
-        combined_events.extend(collected_events)
-        events_payload: JSONArray = [coerce_json_object(event) for event in combined_events]
+        events_payload: JSONArray = [coerce_json_object(event) for event in collected_events]
         qa_lane_actions_payload: dict[str, JSONObject] = {
             lane: coerce_json_object(
                 {
@@ -950,9 +935,9 @@ class ComposeAgent:
     ) -> dict[str, object]:
         stage_name = "compose.context"
         _emit(progress, stage_name, "start", {})
-        state.context = _assemble_context(state.inputs, self.config.min_timestamp_references)
+        context = _assemble_context(state.inputs, self.config.min_timestamp_references)
         _emit(progress, stage_name, "complete", {})
-        return {"context": state.context}
+        return {"context": context}
 
     def _draft_lane(
         self,
@@ -1017,20 +1002,6 @@ class ComposeAgent:
         return {
             lane: lane_state,
             "stage_usage": {stage_name: dict(usage)},
-            "events": [
-                coerce_json_object(
-                    {
-                        "stage": stage_name,
-                        "event": "complete",
-                        "lane": lane,
-                        "attempt": lane_state.attempts,
-                        "provider": provider,
-                        "model": model,
-                        "usage": dict(usage),
-                        "source": lane_state.current_source,
-                    }
-                )
-            ],
         }
 
     def _structure_guard(
@@ -1077,16 +1048,7 @@ class ComposeAgent:
                 "warnings": list(report.warnings),
             },
         )
-        event_payload = coerce_json_object(
-            {
-                "stage": stage_name,
-                "event": "complete",
-                "lane": lane,
-                "attempt": lane_state.attempts,
-                "guards": {"structure": "ok" if report.ok else "fail"},
-            }
-        )
-        return {lane: lane_state, "events": [event_payload]}
+        return {lane: lane_state}
 
     def _compliance_guard(
         self,
@@ -1120,16 +1082,7 @@ class ComposeAgent:
                 "warnings": list(report.warnings),
             },
         )
-        event_payload = coerce_json_object(
-            {
-                "stage": stage_name,
-                "event": "complete",
-                "lane": lane,
-                "attempt": lane_state.attempts,
-                "guards": {"compliance": "ok" if report.ok else "fail"},
-            }
-        )
-        return {lane: lane_state, "events": [event_payload]}
+        return {lane: lane_state}
 
     def _factuality_gate(
         self,
@@ -1194,16 +1147,7 @@ class ComposeAgent:
             and report.ok
         ):
             lanes_update = {lane: lane_state.to_outcome()}
-        event_payload = coerce_json_object(
-            {
-                "stage": stage_name,
-                "event": "complete",
-                "lane": lane,
-                "attempt": lane_state.attempts,
-                "guards": {"factuality": "ok" if report.ok else "fail"},
-            }
-        )
-        updates: dict[str, object] = {lane: lane_state, "events": [event_payload]}
+        updates: dict[str, object] = {lane: lane_state}
         if lanes_update:
             updates["lanes"] = lanes_update
         return updates
@@ -1255,18 +1199,32 @@ class ComposeAgent:
         )
         client_outcome = state.lanes.get("client")
         lawyer_outcome = state.lanes.get("lawyer")
+        def lane_status(outcome: Optional[LaneOutcome]) -> str:
+            if outcome is None:
+                return "missing"
+            return (
+                f"structure={'ok' if outcome.structure_report.ok else 'fail'}, "
+                f"compliance={'ok' if outcome.compliance_report.ok else 'fail'}, "
+                f"factuality={'ok' if outcome.factuality_report.ok else 'fail'}"
+            )
         if client_outcome is None or not (
             client_outcome.structure_report.ok
             and client_outcome.compliance_report.ok
             and client_outcome.factuality_report.ok
         ):
-            raise ComposeStageError(stage_name, "Client lane did not pass all guards")
+            raise ComposeStageError(
+                stage_name,
+                f"Client lane did not pass all guards ({lane_status(client_outcome)})",
+            )
         if lawyer_outcome is None or not (
             lawyer_outcome.structure_report.ok
             and lawyer_outcome.compliance_report.ok
             and lawyer_outcome.factuality_report.ok
         ):
-            raise ComposeStageError(stage_name, "Lawyer lane did not pass all guards")
+            raise ComposeStageError(
+                stage_name,
+                f"Lawyer lane did not pass all guards ({lane_status(lawyer_outcome)})",
+            )
         if state.qa is None:
             raise ComposeStageError(stage_name, "QA results missing")
         qa_status = state.qa.status
@@ -1278,15 +1236,7 @@ class ComposeAgent:
             "complete",
             {"qa_status": qa_status, "qa_iterations": state.qa_iterations},
         )
-        event_payload = coerce_json_object(
-            {
-                "stage": stage_name,
-                "event": "complete",
-                "qa_status": qa_status,
-                "qa_iterations": state.qa_iterations,
-            }
-        )
-        return {"events": [event_payload]}
+        return {}
 
     def _qa_reviewer_step(
         self,
@@ -1300,17 +1250,16 @@ class ComposeAgent:
                 "compose.qa_reviewer",
                 "QA iteration limit exceeded",
             )
-        state.qa_iterations += 1
-        qa_result, usage, provider, model, event_payload = self._execute_qa(
+        qa_result, usage = self._execute_qa(
             state=state,
             provider_credentials=provider_credentials,
             progress=progress,
         )
+        state.qa_iterations += 1
         return {
             "qa": qa_result,
             "qa_iterations": state.qa_iterations,
             "stage_usage": {"compose.qa_reviewer": dict(usage)},
-            "events": [event_payload],
         }
 
     @staticmethod
@@ -1366,14 +1315,6 @@ class ComposeAgent:
         lane_state.factuality_report = None
         lane_state.editor_attempted = False
         directive.action = "none"
-        event_payload = coerce_json_object(
-            {
-                "stage": stage_name,
-                "event": "complete",
-                "lane": lane,
-                "revision_brief": revision_brief,
-            }
-        )
         _emit(
             progress,
             stage_name,
@@ -1383,7 +1324,7 @@ class ComposeAgent:
         return {
             lane: lane_state,
             "lanes": {lane: None},
-            "events": [event_payload],
+            "qa": qa,
         }
 
     def _qa_lane_editor(
@@ -1509,17 +1450,6 @@ class ComposeAgent:
         lane_state.providers.append(provider)
         lane_state.models.append(model)
         lane_state.record_usage(stage_name, usage)
-        event_payload = coerce_json_object(
-            {
-                "stage": stage_name,
-                "event": "complete",
-                "lane": lane,
-                "provider": provider,
-                "model": model,
-                "usage": dict(usage),
-                "change_log": [coerce_json_value(entry) for entry in change_log],
-            }
-        )
         _emit(
             progress,
             stage_name,
@@ -1532,12 +1462,14 @@ class ComposeAgent:
                 "change_log": [coerce_json_value(entry) for entry in change_log],
             },
         )
-        return {
+        updates: dict[str, object] = {
             lane: lane_state,
             "lanes": {lane: None},
             "stage_usage": {stage_name: dict(usage)},
-            "events": [event_payload],
         }
+        if state.qa is not None:
+            updates["qa"] = state.qa
+        return updates
 
     def _execute_qa(
         self,
@@ -1545,7 +1477,7 @@ class ComposeAgent:
         state: ComposeState,
         provider_credentials: Mapping[str, JSONObject],
         progress: Optional[Callable[[str, str, JSONObject], None]],
-    ) -> tuple[QAReviewerResult, dict[str, int], str, str, JSONObject]:
+    ) -> tuple[QAReviewerResult, dict[str, int]]:
         stage_name = "compose.qa_reviewer"
         _emit(
             progress,
@@ -1635,18 +1567,6 @@ class ComposeAgent:
                 "alerts": list(qa_result.alerts),
             }
         )
-        event_payload = coerce_json_object(
-            {
-                "stage": stage_name,
-                "event": "complete",
-                "iteration": state.qa_iterations,
-                "status": status,
-                "provider": provider,
-                "model": model,
-                "usage": dict(usage),
-                "qa": qa_emit_payload,
-            }
-        )
         _emit(
             progress,
             stage_name,
@@ -1660,7 +1580,7 @@ class ComposeAgent:
                 "qa": qa_emit_payload,
             },
         )
-        return qa_result, dict(usage), provider, model, event_payload
+        return qa_result, dict(usage)
 
     # ------------------------------------------------------------------
     # Artifact writing
@@ -2210,11 +2130,14 @@ def _render_docx_from_template(
     except Exception:  # pragma: no cover - template issues
         return False
 
+    base_context = _docx_placeholder_context()
     context: dict[str, Any] = {}
-    for key, value in _docx_placeholder_context().items():
-        provided = sections.get(key, value)
+    for key, default_value in base_context.items():
+        provided = sections.get(key, default_value)
+        if not isinstance(provided, str):
+            provided = str(provided)
         context[f"{key}_plain"] = provided
-        context[key] = provided
+        context[key] = _markdown_to_subdoc(template, provided)
 
     try:
         template.render(context)
