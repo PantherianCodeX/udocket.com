@@ -2,7 +2,7 @@ from __future__ import annotations
 
 # pyright: strict
 
-import tomllib
+import yaml
 from pathlib import Path
 
 from pydantic import BaseModel, Field, ValidationError
@@ -32,7 +32,7 @@ def load_prompt_config(path: Path) -> ComposePromptConfig:
     if not path.exists():
         raise FileNotFoundError(f"Compose prompt config not found at {path}")
     try:
-        data = tomllib.loads(path.read_text(encoding="utf-8"))
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
     except Exception as exc:  # pragma: no cover - defensive
         raise RuntimeError(f"Failed to read prompt config from {path}: {exc}") from exc
     try:
