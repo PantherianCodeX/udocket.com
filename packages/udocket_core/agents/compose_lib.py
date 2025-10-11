@@ -32,6 +32,13 @@ from packages.udocket_core.json_utils import (
 )
 
 from .common import append_jsonl, ensure_dir, next_versioned
+from .common.factories import (
+    int_usage_factory,
+    json_object_factory,
+    json_object_list_factory,
+    stage_usage_factory,
+    str_list_factory,
+)
 from .common.docx import write_basic_docx
 from ..llm import LLMSettings, load_llm_settings
 from ..llm.runtime import ChatClientError, build_chat_client, build_provider_runtime_config
@@ -222,6 +229,23 @@ def _merge_stage_usage(
     return merged
 
 
+def _stable_doc_fingerprint(text: str) -> int:
+    normalized = re.sub(r"\s+", " ", text.strip().lower())
+    return hash(normalized)
+
+
+def _lane_attempt_list_factory() -> list["LaneAttempt"]:
+    return []
+
+
+def _lane_action_map_factory() -> dict[str, "LaneActionDirective"]:
+    return {}
+
+
+def _lane_outcome_map_factory() -> dict[str, "LaneOutcome"]:
+    return {}
+
+
 def _markdown_paragraphs(markdown_text: str) -> list[str]:
     lines = markdown_text.splitlines()
     buffer: list[str] = []
@@ -269,23 +293,23 @@ class ComposeInputs:
 
 @dataclass(slots=True)
 class ComposeContext:
-    parties: list[JSONObject] = field(default_factory=list)
-    issues: list[JSONObject] = field(default_factory=list)
-    facts: list[JSONObject] = field(default_factory=list)
-    events: list[JSONObject] = field(default_factory=list)
-    deadlines: list[JSONObject] = field(default_factory=list)
-    orders: list[JSONObject] = field(default_factory=list)
-    exhibits: list[JSONObject] = field(default_factory=list)
-    procedural: JSONObject = field(default_factory=dict)
-    claimable_atoms: list[str] = field(default_factory=list)
+    parties: list[JSONObject] = field(default_factory=json_object_list_factory)
+    issues: list[JSONObject] = field(default_factory=json_object_list_factory)
+    facts: list[JSONObject] = field(default_factory=json_object_list_factory)
+    events: list[JSONObject] = field(default_factory=json_object_list_factory)
+    deadlines: list[JSONObject] = field(default_factory=json_object_list_factory)
+    orders: list[JSONObject] = field(default_factory=json_object_list_factory)
+    exhibits: list[JSONObject] = field(default_factory=json_object_list_factory)
+    procedural: JSONObject = field(default_factory=json_object_factory)
+    claimable_atoms: list[str] = field(default_factory=str_list_factory)
 
 
 @dataclass(slots=True)
 class GuardReport:
     ok: bool
-    errors: list[str] = field(default_factory=list)
-    warnings: list[str] = field(default_factory=list)
-    checks: JSONObject = field(default_factory=dict)
+    errors: list[str] = field(default_factory=str_list_factory)
+    warnings: list[str] = field(default_factory=str_list_factory)
+    checks: JSONObject = field(default_factory=json_object_factory)
 
 
 @dataclass(slots=True)
@@ -329,7 +353,7 @@ def _merge_lane_outcomes(
         for lane, outcome in update.items():
             if outcome is None:
                 merged.pop(lane, None)
-            elif isinstance(outcome, LaneOutcome):
+            else:
                 merged[lane] = outcome
     return merged
 
@@ -358,11 +382,11 @@ class LaneRuntimeState:
     structure_report: Optional[GuardReport] = None
     compliance_report: Optional[GuardReport] = None
     factuality_report: Optional[GuardReport] = None
-    history: list[LaneAttempt] = field(default_factory=list)
-    stage_usage: dict[str, dict[str, int]] = field(default_factory=dict)
-    token_usage: dict[str, int] = field(default_factory=dict)
-    providers: list[str] = field(default_factory=list)
-    models: list[str] = field(default_factory=list)
+    history: list[LaneAttempt] = field(default_factory=_lane_attempt_list_factory)
+    stage_usage: dict[str, dict[str, int]] = field(default_factory=stage_usage_factory)
+    token_usage: dict[str, int] = field(default_factory=int_usage_factory)
+    providers: list[str] = field(default_factory=str_list_factory)
+    models: list[str] = field(default_factory=str_list_factory)
     editor_attempted: bool = False
 
     def record_usage(self, stage: str, usage: Mapping[str, int]) -> None:
@@ -394,7 +418,7 @@ class QAReviewerResult:
     recommendations: list[str]
     staff_report: str
     provider: str
-    lane_actions: dict[str, LaneActionDirective] = field(default_factory=dict)
+    lane_actions: dict[str, LaneActionDirective] = field(default_factory=_lane_action_map_factory)
     global_notes: str = ""
 
 
@@ -483,9 +507,9 @@ class ComposeState:
     client: Annotated[LaneRuntimeState, _latest_lane_state]
     lawyer: Annotated[LaneRuntimeState, _latest_lane_state]
     context: Optional[ComposeContext] = None
-    lanes: Annotated[dict[str, LaneOutcome], _merge_lane_outcomes] = field(default_factory=dict)
+    lanes: Annotated[dict[str, LaneOutcome], _merge_lane_outcomes] = field(default_factory=_lane_outcome_map_factory)
     qa: Optional[QAReviewerResult] = None
-    stage_usage: Annotated[dict[str, dict[str, int]], _merge_stage_usage] = field(default_factory=dict)
+    stage_usage: Annotated[dict[str, dict[str, int]], _merge_stage_usage] = field(default_factory=stage_usage_factory)
     qa_iterations: int = 0
 
 
@@ -915,7 +939,8 @@ class ComposeAgent:
         if isinstance(result_state, ComposeState):
             return result_state
         if isinstance(result_state, dict):
-            for key, value in result_state.items():
+            result_mapping = cast(dict[str, object], result_state)
+            for key, value in result_mapping.items():
                 setattr(state, key, value)
             return state
         raise ComposeStageError("compose.graph", f"Unexpected graph result type: {type(result_state)!r}")
@@ -976,7 +1001,7 @@ class ComposeAgent:
         )
         lane_state.revision_brief = None
         lane_state.document = document
-        doc_hash = hash(document.strip().lower())
+        doc_hash = _stable_doc_fingerprint(document)
         if is_revision and lane_state.last_document_hash is not None and doc_hash == lane_state.last_document_hash:
             raise ComposeStageError(stage_name, "Revision produced no changes", lane=lane, attempt=lane_state.attempts)
         lane_state.last_document_hash = doc_hash
@@ -1437,7 +1462,7 @@ class ComposeAgent:
                     normalized = item.strip()
                     if normalized:
                         change_log.append(normalized)
-        new_hash = hash(new_document.strip().lower())
+        new_hash = _stable_doc_fingerprint(new_document)
         if lane_state.last_document_hash is not None and new_hash == lane_state.last_document_hash:
             raise ComposeStageError(stage_name, "Editor produced no changes", lane=lane, provider=provider, model=model)
         lane_state.editor_attempted = True
@@ -1466,9 +1491,8 @@ class ComposeAgent:
             lane: lane_state,
             "lanes": {lane: None},
             "stage_usage": {stage_name: dict(usage)},
+            "qa": state.qa,
         }
-        if state.qa is not None:
-            updates["qa"] = state.qa
         return updates
 
     def _execute_qa(
@@ -1887,7 +1911,8 @@ def _factuality_report(
     errors: list[str] = []
     warnings: list[str] = []
 
-    references_found = len(re.findall(r"\[(\d{2}:\d{2})\]", document))
+    ts_pattern = r"\[(\d{1,2}:\d{2}(?::\d{2})?)\]"
+    references_found = len(re.findall(ts_pattern, document))
     required_refs = min(len(list(timeline_events)), min_timestamp_references)
     if references_found < required_refs:
         errors.append(f"Found {references_found} timestamp references; expected at least {required_refs}")
@@ -1898,7 +1923,7 @@ def _factuality_report(
             continue
         if lowered.startswith(('- ', '* ')):
             continue
-        if re.search(r"\[(\d{2}:\d{2})\]", sentence):
+        if re.search(ts_pattern, sentence):
             continue
         if len(lowered) < 24:
             continue
@@ -1910,7 +1935,7 @@ def _factuality_report(
     referenced_ids = {
         event_id
         for event_id in event_ids
-        if event_id and re.search(rf"\b{re.escape(event_id)}\b", document)
+        if event_id and re.search(rf"(?<!\w){re.escape(event_id)}(?!\w)", document)
     }
     missing_ids = [event_id for event_id in event_ids if event_id and event_id not in referenced_ids]
     if missing_ids:
@@ -2134,8 +2159,6 @@ def _render_docx_from_template(
     context: dict[str, Any] = {}
     for key, default_value in base_context.items():
         provided = sections.get(key, default_value)
-        if not isinstance(provided, str):
-            provided = str(provided)
         context[f"{key}_plain"] = provided
         context[key] = _markdown_to_subdoc(template, provided)
 

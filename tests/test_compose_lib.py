@@ -3,10 +3,28 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Dict, Tuple
+import zipfile
 
 from docx import Document as DocxDocument
 
-from packages.udocket_core.agents.compose_lib import ComposeAgent, ComposeConfig, ComposeResult
+import pytest
+
+from packages.udocket_core.agents.compose_lib import (
+    ComposeAgent,
+    ComposeConfig,
+    ComposeResult,
+    ComposeStageError,
+    ComposeState,
+    GuardReport,
+    LaneActionDirective,
+    LaneOutcome,
+    LaneRuntimeState,
+    _factuality_report,
+    _merge_lane_outcomes,
+    _stable_doc_fingerprint,
+    ComposeInputs,
+    LANE_CONFIGS,
+)
 from packages.udocket_core.json_utils import JSONObject
 from tests._typing import MonkeyPatch
 
@@ -458,9 +476,11 @@ The case conference is scheduled, and the parties must exchange updated financia
     client_render = DocxDocument(str(client_docx_path))
     client_text = "\n".join(paragraph.text for paragraph in client_render.paragraphs)
     assert "Client Summary" in client_text
-    assert "The judge reviewed the interim custody order" in client_text
     assert "All checks passed." in client_text
     assert "{{" not in client_text
+    with zipfile.ZipFile(client_docx_path, "r") as zf:
+        client_xml = zf.read("word/document.xml").decode("utf-8")
+    assert "The judge reviewed the interim custody order" in client_xml
 
     lawyer_docx_path = result.artifacts.lawyer_docx
     assert lawyer_docx_path is not None
@@ -468,6 +488,154 @@ The case conference is scheduled, and the parties must exchange updated financia
     lawyer_render = DocxDocument(str(lawyer_docx_path))
     lawyer_text = "\n".join(paragraph.text for paragraph in lawyer_render.paragraphs)
     assert "Lawyer Brief" in lawyer_text
-    assert "interim custody arrangements reviewed" in lawyer_text
     assert "All checks passed." in lawyer_text
     assert "{{" not in lawyer_text
+    with zipfile.ZipFile(lawyer_docx_path, "r") as zf:
+        lawyer_xml = zf.read("word/document.xml").decode("utf-8")
+    assert "interim custody arrangements reviewed" in lawyer_xml
+
+
+def _guard_ok() -> GuardReport:
+    return GuardReport(ok=True, errors=[], warnings=[], checks={})
+
+
+def test_merge_lane_outcomes_handles_removals_and_replacements() -> None:
+    client_outcome = LaneOutcome(
+        document="client",
+        structure_report=_guard_ok(),
+        compliance_report=_guard_ok(),
+        factuality_report=_guard_ok(),
+        attempts=1,
+        history=[],
+        stage_usage={"stage": {"tokens": 10}},
+        token_usage={"tokens": 10},
+        providers=["stub"],
+        models=["model"],
+    )
+    lawyer_outcome = LaneOutcome(
+        document="lawyer",
+        structure_report=_guard_ok(),
+        compliance_report=_guard_ok(),
+        factuality_report=_guard_ok(),
+        attempts=1,
+        history=[],
+        stage_usage={"stage": {"tokens": 20}},
+        token_usage={"tokens": 20},
+        providers=["stub"],
+        models=["model"],
+    )
+    existing = {"client": client_outcome, "lawyer": lawyer_outcome}
+    removed = _merge_lane_outcomes(existing, {"client": None})
+    assert "client" not in removed
+    assert removed["lawyer"] is lawyer_outcome
+
+    replacement = LaneOutcome(
+        document="client-new",
+        structure_report=_guard_ok(),
+        compliance_report=_guard_ok(),
+        factuality_report=_guard_ok(),
+        attempts=2,
+        history=[],
+        stage_usage={},
+        token_usage={},
+        providers=["stub"],
+        models=["model"],
+    )
+    replaced = _merge_lane_outcomes(existing, {"client": replacement})
+    assert replaced["client"] is replacement
+    assert replaced["lawyer"] is lawyer_outcome
+
+
+def test_qa_iteration_limit_enforced() -> None:
+    config = ComposeConfig(provider_chain=["stub"], qa_iteration_limit=1)
+    agent = ComposeAgent(config)
+    inputs = ComposeInputs(
+        summary_markdown="",
+        summary_data={},
+        timeline_seeds=[],
+        entity_hints={},
+        intake={},
+        case_metadata={},
+    )
+    client_state = LaneRuntimeState(
+        lane="client", config=LANE_CONFIGS["client"], max_attempts=1
+    )
+    lawyer_state = LaneRuntimeState(
+        lane="lawyer", config=LANE_CONFIGS["lawyer"], max_attempts=1
+    )
+    state = ComposeState(inputs=inputs, client=client_state, lawyer=lawyer_state)
+    state.qa_iterations = 1
+
+    with pytest.raises(ComposeStageError):
+        agent._qa_reviewer_step(
+            state=state,
+            provider_credentials={},
+            progress=None,
+        )
+
+
+def test_editor_rejects_unchanged_document(monkeypatch: MonkeyPatch) -> None:
+    config = ComposeConfig(provider_chain=["stub"], enable_editor=True)
+    agent = ComposeAgent(config)
+    base_doc = "## Heading\n\nContent with [00:01] reference."
+    inputs = ComposeInputs(
+        summary_markdown="",
+        summary_data={},
+        timeline_seeds=[],
+        entity_hints={},
+        intake={},
+        case_metadata={},
+    )
+    client_state = LaneRuntimeState(
+        lane="client", config=LANE_CONFIGS["client"], max_attempts=2
+    )
+    client_state.document = base_doc
+    client_state.last_document_hash = _stable_doc_fingerprint(base_doc)
+
+    lawyer_state = LaneRuntimeState(
+        lane="lawyer", config=LANE_CONFIGS["lawyer"], max_attempts=2
+    )
+    state = ComposeState(inputs=inputs, client=client_state, lawyer=lawyer_state)
+
+    def fake_invoke(
+        self: ComposeAgent,
+        *,
+        stage: str,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float,
+        provider_credentials: JSONObject,
+    ) -> ClientResponse:
+        response = json.dumps({"document": base_doc, "change_log": []})
+        return response, {"prompt_tokens": 5, "completion_tokens": 5}, "stub", "stub-model"
+
+    monkeypatch.setattr(ComposeAgent, "_invoke_llm", fake_invoke)
+    directive = LaneActionDirective(action="editor", revision_brief="Clarify tone.")
+
+    with pytest.raises(ComposeStageError, match="Editor produced no changes"):
+        agent._run_lane_editor(
+            state=state,
+            lane="client",
+            directive=directive,
+            provider_credentials={},
+            progress=None,
+        )
+
+
+def test_factuality_report_accepts_extended_timestamps_and_ids() -> None:
+    document = """## Case Overview
+Event event-1 discussed at [00:01] with context.
+Further details about evt-2 appear at [01:02:03].
+"""
+    report = _factuality_report(
+        document,
+        claimable_atoms=[],
+        timeline_events=[
+            {"id": "event-1"},
+            {"id": "evt-2"},
+        ],
+        min_timestamp_references=2,
+    )
+    assert report.ok
+    assert not report.errors
+    assert not report.warnings
