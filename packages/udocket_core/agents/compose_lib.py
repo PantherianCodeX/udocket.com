@@ -186,6 +186,13 @@ class ComposeAgent:
             snapshot_dir=ops_dir / f"{job_id}__compose_run",
             logger=self.logger,
         )
+        run_context: dict[str, object] = {
+            "case_id": case_id,
+            "job_id": job_id,
+            "summary_json": str(summary_json_path) if summary_json_path else None,
+            "summary_markdown": str(summary_markdown_path) if summary_markdown_path else None,
+            "resume_requested": resume,
+        }
         restored_snapshot = run_tracker.restore_latest() if resume else None
         if restored_snapshot is None:
             run_tracker.reset()
@@ -205,6 +212,26 @@ class ComposeAgent:
         else:
             state = restored_snapshot.state
             state.inputs = inputs
+            run_context["resume_stage"] = restored_snapshot.stage
+            run_context["resume_sequence"] = restored_snapshot.sequence
+            self.logger.info(
+                "compose.run.resumed",
+                extra={
+                    "compose": {
+                        "case_id": case_id,
+                        "job_id": job_id,
+                        "stage": restored_snapshot.stage,
+                        "sequence": restored_snapshot.sequence,
+                    }
+                },
+            )
+
+        self.logger.info("compose.run.start", extra={"compose": run_context})
+        if resume and restored_snapshot is None:
+            self.logger.info(
+                "compose.run.resume_unavailable",
+                extra={"compose": {"case_id": case_id, "job_id": job_id}},
+            )
 
         def progress_proxy(stage: str, event: str, payload: JSONObject) -> None:
             envelope = coerce_json_object({"stage": stage, "event": event, **payload})
