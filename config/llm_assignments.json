@@ -43,7 +43,7 @@
       "providers": [
         "azure"
       ],
-      "model": "gpt-5"
+      "model": "gpt-5-mini"
     },
     "analyze.qa_and_finalize": {
       "target": "analyze",
@@ -115,7 +115,7 @@
       "providers": [
         "azure"
       ],
-      "model": "gpt-5"
+      "model": "gpt-5-mini"
     },
     "compose.lawyer_brief": {
       "target": "compose",
@@ -124,7 +124,7 @@
       "providers": [
         "azure"
       ],
-      "model": "gpt-5"
+      "model": "gpt-5-mini"
     },
     "compose.qa_review": {
       "target": "compose",
