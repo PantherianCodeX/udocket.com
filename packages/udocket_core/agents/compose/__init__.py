@@ -51,6 +51,7 @@ from .guards import (
     markdown_structure_report,
     sentence_length_report,
 )
+from .qa import run_qa_review
 from .run import ComposeRun
 
 __all__: list[str] = [
@@ -94,6 +95,7 @@ __all__: list[str] = [
     "render_docx_from_template",
     "render_qa_markdown",
     "ComposeRun",
+    "run_qa_review",
     "compliance_report",
     "factuality_report",
     "markdown_structure_report",

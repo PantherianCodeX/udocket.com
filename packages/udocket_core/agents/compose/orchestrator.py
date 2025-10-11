@@ -28,7 +28,6 @@ from .guards import (
     sentence_length_report,
 )
 from .llm_profiles import (
-    QA_REVIEWER_SYSTEM_PROMPT,
     CLIENT_DRAFT_USER_INSTRUCTION,
     CLIENT_EDITOR_SYSTEM_PROMPT,
     CLIENT_EDITOR_USER_INSTRUCTION,
@@ -43,7 +42,8 @@ from .llm_profiles import (
 from .llm_runtime import invoke_llm
 from .run import ComposeRun
 from .settings import ComposeConfig
-from .state import ComposeContext, ComposeState, GuardReport, LaneActionDirective, LaneAttempt, LaneOutcome, LaneRuntimeState, QAReviewerResult, clone_guard_report
+from .qa import run_qa_review
+from .state import ComposeContext, ComposeState, GuardReport, LaneActionDirective, LaneAttempt, LaneOutcome, LaneRuntimeState, clone_guard_report
 from ...llm import LLMSettings
 
 
@@ -600,11 +600,51 @@ class ComposeOrchestrator:
                 "compose.qa_reviewer",
                 "QA iteration limit exceeded",
             )
-        qa_result, usage = self._execute_qa(
-            state=state,
-            provider_credentials=provider_credentials,
-            progress=progress,
+        stage_name = "compose.qa_reviewer"
+        emit(
+            progress,
+            stage_name,
+            "start",
+            {"iteration": state.qa_iterations},
         )
+        qa_result, usage, provider, model = run_qa_review(
+            state=state,
+            config=self.config,
+            settings=self.settings,
+            provider_credentials=provider_credentials,
+            logger=self.logger,
+        )
+        qa_emit_payload = coerce_json_object(
+            {
+                "status": qa_result.status,
+                "lane_actions": {
+                    lane: coerce_json_object(
+                        {
+                            "action": directive.original_action,
+                            "current_action": directive.action,
+                            "reason": directive.reason,
+                        }
+                    )
+                    for lane, directive in qa_result.lane_actions.items()
+                },
+                "alerts": list(qa_result.alerts),
+            }
+        )
+        emit(
+            progress,
+            stage_name,
+            "complete",
+            {
+                "iteration": state.qa_iterations,
+                "status": qa_result.status,
+                "provider": provider,
+                "model": model,
+                "usage": dict(usage),
+                "qa": qa_emit_payload,
+            },
+        )
+        state.qa = qa_result
+        self._snapshot(stage_name, state)
         state.qa_iterations += 1
         actions = {lane: (directive.action or "none") for lane, directive in qa_result.lane_actions.items()}
         level = logging.INFO if all(action == "none" for action in actions.values()) else logging.WARNING
@@ -841,137 +881,6 @@ class ComposeOrchestrator:
         result[lane] = lane_state
         self._snapshot(stage_name, state)
         return result
-
-    def _execute_qa(
-        self,
-        *,
-        state: ComposeState,
-        provider_credentials: Mapping[str, JSONObject],
-        progress: Optional[Callable[[str, str, JSONObject], None]],
-    ) -> tuple[QAReviewerResult, dict[str, int]]:
-        stage_name = "compose.qa_reviewer"
-        emit(
-            progress,
-            stage_name,
-            "start",
-            {"iteration": state.qa_iterations},
-        )
-
-        if state.context is None:
-            raise ComposeStageError(stage_name, "Compose context missing")
-        if "client" not in state.lanes or "lawyer" not in state.lanes:
-            raise ComposeStageError(
-                stage_name,
-                "QA reviewer invoked before lane outcomes ready",
-            )
-
-        payload = coerce_json_object(
-            {
-                "compose_context": state.context.procedural,
-                "claimable_atoms": state.context.claimable_atoms,
-                "client_brief": state.lanes["client"].document,
-                "lawyer_brief": state.lanes["lawyer"].document,
-            }
-        )
-        user_prompt = json.dumps(payload, ensure_ascii=False)
-        response, usage, provider, model = invoke_llm(
-            stage=stage_name,
-            system_prompt=QA_REVIEWER_SYSTEM_PROMPT,
-            user_prompt=user_prompt,
-            temperature=0.0,
-            provider_credentials=provider_credentials,
-            config=self.config,
-            settings=self.settings,
-        )
-
-        try:
-            parsed = json.loads(response)
-        except json.JSONDecodeError as exc:  # pragma: no cover - defensive
-            raise ComposeStageError(stage_name, f"Invalid QA reviewer response: {exc}") from exc
-
-        status = coerce_str(parsed.get("status")) or "unknown"
-        alerts = [coerce_str(item) or "" for item in parsed.get("alerts", []) if isinstance(item, str)]
-        recommendations = [
-            coerce_str(item) or ""
-            for item in parsed.get("recommendations", [])
-            if isinstance(item, str)
-        ]
-        staff_report = coerce_str(parsed.get("staff_report")) or ""
-        if not staff_report.strip():
-            staff_report = "# Staff Report\n\nNo staff report returned."
-        global_notes = coerce_str(parsed.get("global_notes")) or ""
-        lane_actions_payload = parsed.get("lane_actions")
-        lane_actions: dict[str, LaneActionDirective] = {}
-        allowed_actions = {"revise", "editor", "none"}
-        lane_mapping: Mapping[str, JSONValue]
-        if isinstance(lane_actions_payload, Mapping):
-            lane_mapping = cast(Mapping[str, JSONValue], lane_actions_payload)
-        else:
-            lane_mapping = cast(Mapping[str, JSONValue], {})
-        for lane in ("client", "lawyer"):
-            directive_raw = lane_mapping.get(lane)
-            directive_obj = coerce_json_object(directive_raw) if isinstance(directive_raw, Mapping) else {}
-            action_value = coerce_str(directive_obj.get("action")) or "none"
-            normalized_action = action_value.strip().lower()
-            if normalized_action not in allowed_actions:
-                raise ComposeStageError(
-                    stage_name,
-                    f"Unsupported action '{action_value}' for lane '{lane}'",
-                    lane=lane,
-                    provider=provider,
-                    model=model,
-                )
-            revision_brief = (coerce_str(directive_obj.get("revision_brief")) or "").strip()
-            reason = (coerce_str(directive_obj.get("reason")) or "").strip()
-            if normalized_action != "none" and not reason:
-                raise ComposeStageError(stage_name, f"QA action '{normalized_action}' for lane '{lane}' missing 'reason'")
-            lane_actions[lane] = LaneActionDirective(
-                action=normalized_action,
-                revision_brief=revision_brief,
-                reason=reason or None,
-            )
-
-        qa_result = QAReviewerResult(
-            status=status,
-            alerts=[item for item in alerts if item],
-            recommendations=[item for item in recommendations if item],
-            staff_report=staff_report,
-            provider=provider,
-            lane_actions=lane_actions,
-            global_notes=global_notes,
-        )
-        qa_emit_payload = coerce_json_object(
-            {
-                "status": status,
-                "lane_actions": {
-                    lane: coerce_json_object(
-                        {
-                            "action": directive.original_action,
-                            "current_action": directive.action,
-                            "reason": directive.reason,
-                        }
-                    )
-                    for lane, directive in lane_actions.items()
-                },
-                "alerts": list(qa_result.alerts),
-            }
-        )
-        emit(
-            progress,
-            stage_name,
-            "complete",
-            {
-                "iteration": state.qa_iterations,
-                "status": status,
-                "provider": provider,
-                "model": model,
-                "usage": dict(usage),
-                "qa": qa_emit_payload,
-            },
-        )
-        state.qa = qa_result
-        self._snapshot(stage_name, state)
-        return qa_result, dict(usage)
 
     def _release_gate(
         self,
