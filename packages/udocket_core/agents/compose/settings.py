@@ -54,11 +54,19 @@ def normalize_provider_chain(values: Iterable[str]) -> list[str]:
     return ordered
 
 
+def _resolve_prompt_path(path: Path) -> Path:
+    resolved = path.expanduser().resolve()
+    if not resolved.exists():
+        raise FileNotFoundError(f"Compose prompt config missing at {resolved}")
+    return resolved
+
+
 def _default_prompt_config_path() -> Path:
     env_path = os.getenv(DEFAULT_PROMPT_CONFIG_ENV)
     if env_path:
-        return Path(env_path).expanduser().resolve()
-    return (Path("config") / "compose_prompts.yaml").resolve()
+        return _resolve_prompt_path(Path(env_path))
+    package_path = Path(__file__).resolve().parent.parent.parent / "config" / "compose_prompts.yaml"
+    return _resolve_prompt_path(package_path)
 
 
 @dataclass(slots=True)

@@ -7,6 +7,7 @@ This guide documents the LangGraph-driven Compose agent that assembles client an
 - Draft client-facing and lawyer-facing Markdown deliverables, steer them through guard rails, and render DOCX versions.
 - Produce deterministic, versioned files under `storage/media/cases/<CASE>/docs/` and append structured telemetry to `storage/media/cases/<CASE>/ops/`.
 - Keep every LLM interaction in Canadian Azure regions; fail fast if credentials or provider assignments are missing.
+- Prompt templates are versioned inside `packages/udocket_core/config/compose_prompts.yaml`. The agent loads that file by default and aborts if it is missing unless `COMPOSE_PROMPT_CONFIG` explicitly points elsewhere.
 
 ## LangGraph Overview
 Compose uses LangGraph 0.6 with explicit reducers to avoid in-place mutation issues. The graph fan-outs client and lawyer work into dedicated “lanes” that loop until guard and QA checks succeed.
@@ -65,6 +66,7 @@ See `.env.example` for the supported keys:
 - `COMPOSE_MIN_TIMESTAMP_REFERENCES`, `COMPOSE_QA_REQUIRED`
 - `COMPOSE_ENABLE_EDITOR`, `COMPOSE_QA_MAX_ITERATIONS`
 - Optional `COMPOSE_CLIENT_EDITOR_MODEL`, `COMPOSE_LAWYER_EDITOR_MODEL`, `COMPOSE_DOCX_TEMPLATE`
+- `COMPOSE_PROMPT_CONFIG` (optional): absolute path to a YAML file following `packages/udocket_core/config/compose_prompts.yaml`. If unset, the agent requires that packaged default file; missing files raise immediately (no fallback).
 
 Org-specific overrides are handled through `LLMConfiguration` records and `config/llm_assignments.json`.
 
