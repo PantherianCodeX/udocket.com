@@ -58,7 +58,7 @@ def _default_prompt_config_path() -> Path:
     env_path = os.getenv(DEFAULT_PROMPT_CONFIG_ENV)
     if env_path:
         return Path(env_path).expanduser().resolve()
-    return (Path("config") / "compose_prompts.toml").resolve()
+    return (Path("config") / "compose_prompts.yaml").resolve()
 
 
 @dataclass(slots=True)
