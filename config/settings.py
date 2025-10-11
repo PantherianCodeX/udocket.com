@@ -393,8 +393,8 @@ class Settings(BaseSettings):
     def __init__(self, **values: Any) -> None:
         env_file_value = values.get("_env_file")
         env_encoding = values.get("_env_file_encoding")
-        if isinstance(env_file_value, (str, os.PathLike)):
-            env_path = Path(env_file_value)
+        if env_file_value is not None:
+            env_path = Path(str(env_file_value))
             overrides = _parse_env_file(env_path, encoding=env_encoding)
             for key, raw in overrides.items():
                 if key not in values:

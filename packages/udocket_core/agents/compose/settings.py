@@ -1,0 +1,128 @@
+from __future__ import annotations
+
+# pyright: strict
+
+import logging
+import os
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Iterable, Optional
+
+from .llm_profiles import (
+    DEFAULT_LAWYER_TEMPERATURE,
+    DEFAULT_MAX_OUTPUT_TOKENS,
+    DEFAULT_TEMPERATURE,
+)
+
+
+logger = logging.getLogger("udocket.compose.config")
+
+DOC_TEMPLATE_ENV = "COMPOSE_DOCX_TEMPLATE"
+DEFAULT_PROVIDER_CHAIN: list[str] = ["azure"]
+
+
+def _truthy(value: Optional[str], default: bool) -> bool:
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _safe_float(value: Optional[str], fallback: float) -> float:
+    try:
+        return float(value) if value else fallback
+    except (TypeError, ValueError):
+        return fallback
+
+
+def _safe_int(value: Optional[str], fallback: int) -> int:
+    try:
+        return int(value) if value else fallback
+    except (TypeError, ValueError):
+        return fallback
+
+
+def normalize_provider_chain(values: Iterable[str]) -> list[str]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for raw in values:
+        name = (raw or "").strip().lower()
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        ordered.append(name)
+    return ordered
+
+
+@dataclass(slots=True)
+class ComposeConfig:
+    provider_chain: list[str] = field(default_factory=lambda: list(DEFAULT_PROVIDER_CHAIN))
+    temperature: float = DEFAULT_TEMPERATURE
+    lawyer_temperature: float = DEFAULT_LAWYER_TEMPERATURE
+    max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS
+    max_client_attempts: int = 2
+    max_lawyer_attempts: int = 2
+    min_timestamp_references: int = 3
+    qa_required: bool = True
+    debug: bool = False
+    doc_template_path: Optional[Path] = None
+    enable_editor: bool = True
+    client_editor_model: Optional[str] = None
+    lawyer_editor_model: Optional[str] = None
+    qa_iteration_limit: int = 3
+    locale: str = "en-CA"
+
+    @classmethod
+    def from_env(cls) -> "ComposeConfig":
+        providers_env = os.getenv("COMPOSE_PROVIDER_CHAIN", "")
+        providers = (
+            normalize_provider_chain(providers_env.split(","))
+            if providers_env
+            else list(DEFAULT_PROVIDER_CHAIN)
+        )
+        temperature = _safe_float(os.getenv("COMPOSE_TEMPERATURE"), DEFAULT_TEMPERATURE)
+        lawyer_temperature = _safe_float(
+            os.getenv("COMPOSE_LAWYER_TEMPERATURE"), DEFAULT_LAWYER_TEMPERATURE
+        )
+        max_tokens = _safe_int(os.getenv("COMPOSE_MAX_OUTPUT_TOKENS"), DEFAULT_MAX_OUTPUT_TOKENS)
+        max_client_attempts = _safe_int(os.getenv("COMPOSE_MAX_CLIENT_ATTEMPTS"), 2)
+        max_lawyer_attempts = _safe_int(os.getenv("COMPOSE_MAX_LAWYER_ATTEMPTS"), 2)
+        min_timestamp_references = _safe_int(os.getenv("COMPOSE_MIN_TIMESTAMP_REFERENCES"), 3)
+        qa_required = _truthy(os.getenv("COMPOSE_QA_REQUIRED"), True)
+        debug = _truthy(os.getenv("DEBUG"), False)
+        enable_editor = _truthy(os.getenv("COMPOSE_ENABLE_EDITOR"), True)
+        client_editor_model = os.getenv("COMPOSE_CLIENT_EDITOR_MODEL") or None
+        lawyer_editor_model = os.getenv("COMPOSE_LAWYER_EDITOR_MODEL") or None
+        qa_iteration_limit = _safe_int(os.getenv("COMPOSE_QA_MAX_ITERATIONS"), 3)
+        locale = os.getenv("COMPOSE_LOCALE", "en-CA")
+        template_env = os.getenv(DOC_TEMPLATE_ENV)
+        template_path = Path(template_env).resolve() if template_env else None
+        if template_path and not template_path.exists():
+            logger.warning("compose.doc_template.missing", extra={"path": str(template_path)})
+            template_path = None
+        if not providers:
+            providers = list(DEFAULT_PROVIDER_CHAIN)
+        return cls(
+            provider_chain=providers,
+            temperature=temperature,
+            lawyer_temperature=lawyer_temperature,
+            max_output_tokens=max_tokens,
+            max_client_attempts=max_client_attempts,
+            max_lawyer_attempts=max_lawyer_attempts,
+            min_timestamp_references=min_timestamp_references,
+            qa_required=qa_required,
+            debug=debug,
+            doc_template_path=template_path,
+            enable_editor=enable_editor,
+            client_editor_model=client_editor_model,
+            lawyer_editor_model=lawyer_editor_model,
+            qa_iteration_limit=qa_iteration_limit,
+            locale=locale,
+        )
+
+
+__all__ = [
+    "ComposeConfig",
+    "DEFAULT_PROVIDER_CHAIN",
+    "DOC_TEMPLATE_ENV",
+    "normalize_provider_chain",
+]
