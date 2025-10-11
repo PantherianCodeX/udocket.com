@@ -24,6 +24,7 @@ def compose_job(
     job_id: str,
     summary_job_id: str,
     llm_config_id: str | None = None,
+    resume: bool = False,
 ) -> dict[str, object]:
     case_id = str(case_id)
     job_id = str(job_id)
@@ -59,6 +60,7 @@ def compose_job(
         summary_job=summary_job,
         case_id=case_id,
         llm_config_id=llm_config_id,
+        resume=resume,
     )
 
     send_job_update(

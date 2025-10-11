@@ -368,6 +368,7 @@ def recover_stale_jobs(self: TaskProtocol) -> dict[str, object]:
                         "job_id": job_id,
                         "summary_job_id": summary_job_id,
                         "llm_config_id": llm_cfg,
+                        "resume": True,
                     }
                 )
                 new_task_id = str(getattr(result, "id", "") or "")

@@ -102,6 +102,7 @@ def test_compose_job_uses_summary_outputs(monkeypatch: MonkeyPatch, settings: Se
                     "entity_hint_path": entity_hint_path,
                     "provider_chain": provider_chain,
                     "stage_map": stage_map,
+                    "resume": _kwargs.get("resume"),
                 }
             )
             docs_dir = case_dir / "docs"
@@ -142,6 +143,7 @@ def test_compose_job_uses_summary_outputs(monkeypatch: MonkeyPatch, settings: Se
                 audit_jsonl=audit_jsonl,
                 provider_chain=["dummy"],
                 stage_usage={"compose.client.draft": {"prompt_tokens": 12}},
+                stage_durations={"compose.client.draft": 1.2},
             )
 
     monkeypatch.setattr(compose_service, "ComposeAgent", DummyComposeAgent)

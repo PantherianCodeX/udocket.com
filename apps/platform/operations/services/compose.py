@@ -93,6 +93,7 @@ def execute_compose_job(
     summary_job: Job,
     case_id: str,
     llm_config_id: str | None,
+    resume: bool = False,
 ) -> dict[str, Any]:
     job_case = getattr(job, "case", None)
     org_value = cast(UUID | None, getattr(job, "organization_id", None))
@@ -111,7 +112,7 @@ def execute_compose_job(
     )
     log.info(
         "Compose service starting",
-        extra=job_context.extra(event="compose.service.start"),
+        extra=job_context.extra(event="compose.service.start", resume=resume),
     )
 
     summary_meta = read_job_meta(case_id, org_id, str(summary_job.id))
@@ -181,15 +182,18 @@ def execute_compose_job(
             "summary_job_id": str(summary_job.id),
             "summary_json": str(summary_json_path) if summary_json_path else None,
             "summary_markdown": str(summary_markdown_path) if summary_markdown_path else None,
+            "compose_resume": resume,
         },
         drop_empty_keys=True,
         drop_nullish_values=True,
     )
+    start_message = "Worker resumed compose pipeline" if resume else "Worker started compose pipeline"
     runtime.start(
         status=Job.Status.RUNNING,
-        log_message="Worker started compose pipeline",
+        log_message=start_message,
         event="job.started",
         meta_updates=compose_started_meta,
+        job_event_payload={"resume": resume},
     )
 
     llm_settings: LLMSettings = load_llm_settings()
@@ -321,6 +325,7 @@ def execute_compose_job(
                 provider_chain=provider_chain,
                 summary_json=str(summary_json_path) if summary_json_path else None,
                 summary_markdown=str(summary_markdown_path) if summary_markdown_path else None,
+                resume=resume,
             ),
         )
         result = compose_agent.compose(
@@ -335,6 +340,7 @@ def execute_compose_job(
             case_metadata=case_metadata,
             provider_credentials=provider_credentials,
             progress_callback=_progress,
+            resume=resume,
         )
     except Exception as exc:  # noqa: BLE001
         log.error(
