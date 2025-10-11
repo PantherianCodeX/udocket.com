@@ -1,6 +1,7 @@
 # uDocket — Agent Team (LangGraph) Plan
 
 Scope: entire agentic stack across transcription, summary, timeline, and entities/graph. This plan defines roles, goals, backstories, LangGraph node design, shared state, prompts, and integration points so we can implement a reliable, Canadian‑region compliant agent graph.
+LangGraph is a core dependency for Analyze and Compose orchestration; all environments must install and wire LangGraph before developing agent features.
 
 
 ## North Star
@@ -165,22 +166,16 @@ attempts: dict[str, int]
 3) Ensure versioned outputs and ops logs; register CaseArtifact for summary.
 4) Extend timeline/graph tasks to optionally read `timeline_seeds`/`entity_hints` if present.
 5) Add unit tests for transcript parsing, versioned filenames, and schema shapes; keep flow test passing without Azure.
-6) Optional: create `packages/udocket_core/agents/langgraph_orchestrator.py` to wire nodes when `langgraph` is installed.
+6) Implement `packages/udocket_core/agents/langgraph_orchestrator.py` using LangGraph for node orchestration; LangGraph is a required dependency in the agent stack.
 
 
-## Optional: LangGraph Skeleton
-Below is a minimal sketch; keep import optional to avoid hard dependency.
+## LangGraph Skeleton
+Below is a minimal sketch; LangGraph is assumed to be available in all environments.
 ```
-try:
-    from langgraph.graph import StateGraph, END
-except Exception:  # optional dependency
-    StateGraph = None
-    END = None
+from langgraph.graph import StateGraph, END
 
 def build_analyze_graph(impl):
     # `impl` provides python callables for each node, operating on a mutable dict state
-    if StateGraph is None:
-        raise RuntimeError("langgraph not installed")
     g = StateGraph(dict)
     g.add_node("input_discovery", impl.input_discovery)
     g.add_node("parse_transcript", impl.parse_transcript)

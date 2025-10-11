@@ -2,6 +2,7 @@ from __future__ import annotations
 
 # pyright: strict
 
+import hashlib
 import json
 import logging
 import os
@@ -229,9 +230,10 @@ def _merge_stage_usage(
     return merged
 
 
-def _stable_doc_fingerprint(text: str) -> int:
+def _stable_doc_fingerprint(text: str) -> str:
     normalized = re.sub(r"\s+", " ", text.strip().lower())
-    return hash(normalized)
+    digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+    return digest
 
 
 def _lane_attempt_list_factory() -> list["LaneAttempt"]:
@@ -316,6 +318,11 @@ class GuardReport:
 class LaneActionDirective:
     action: str
     revision_brief: Optional[str] = None
+    reason: Optional[str] = None
+    original_action: str = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.original_action = self.action
 
 
 @dataclass(slots=True)
@@ -377,7 +384,7 @@ class LaneRuntimeState:
     attempts: int = 0
     current_source: str = "draft"
     revision_brief: Optional[str] = None
-    last_document_hash: Optional[int] = None
+    last_document_hash: Optional[str] = None
     document: Optional[str] = None
     structure_report: Optional[GuardReport] = None
     compliance_report: Optional[GuardReport] = None
@@ -611,8 +618,10 @@ class ComposeAgent:
         qa_lane_actions_payload: dict[str, JSONObject] = {
             lane: coerce_json_object(
                 {
-                    "action": directive.action,
+                    "action": directive.original_action,
+                    "current_action": directive.action,
                     "revision_brief": directive.revision_brief,
+                    "reason": directive.reason,
                 }
             )
             for lane, directive in state.qa.lane_actions.items()
@@ -1357,7 +1366,12 @@ class ComposeAgent:
             progress,
             stage_name,
             "start",
-            {"lane": lane, "attempt": lane_state.attempts + 1, "revision_brief": revision_brief},
+            {
+                "lane": lane,
+                "attempt": lane_state.attempts + 1,
+                "revision_brief": revision_brief,
+                "reason": directive.reason,
+            },
         )
         lane_state.revision_brief = revision_brief
         lane_state.current_source = "revise"
@@ -1370,7 +1384,7 @@ class ComposeAgent:
             progress,
             stage_name,
             "complete",
-            {"lane": lane, "revision_brief": revision_brief},
+            {"lane": lane, "revision_brief": revision_brief, "reason": directive.reason},
         )
         return {
             lane: lane_state,
@@ -1465,7 +1479,7 @@ class ComposeAgent:
             progress,
             stage_name,
             "start",
-            {"lane": lane, "attempt": lane_state.attempts, "revision_brief": revision_brief},
+            {"lane": lane, "attempt": lane_state.attempts, "revision_brief": revision_brief, "reason": directive.reason},
         )
         response, usage, provider, model = self._invoke_llm(
             stage=stage_name,
@@ -1490,7 +1504,7 @@ class ComposeAgent:
                     if normalized:
                         change_log.append(normalized)
         if not change_log:
-            raise ComposeStageError(stage_name, "Editor returned empty change_log", lane=lane, provider=provider, model=model)
+            raise ComposeStageError(stage_name, "Editor produced no changes", lane=lane, provider=provider, model=model)
         allowed_tags = ("[format]", "[grammar]", "[compliance]", "[timestamp]", "[clarity]")
         normalized_log = [entry.lower().strip() for entry in change_log]
         if not any(any(tag in entry for tag in allowed_tags) for entry in normalized_log):
@@ -1609,7 +1623,11 @@ class ComposeAgent:
             reason = (coerce_str(directive_obj.get("reason")) or "").strip()
             if normalized_action != "none" and not reason:
                 raise ComposeStageError(stage_name, f"QA action '{normalized_action}' for lane '{lane}' missing 'reason'")
-            lane_actions[lane] = LaneActionDirective(action=normalized_action, revision_brief=revision_brief)
+            lane_actions[lane] = LaneActionDirective(
+                action=normalized_action,
+                revision_brief=revision_brief,
+                reason=reason or None,
+            )
 
         qa_result = QAReviewerResult(
             status=status,
@@ -1623,7 +1641,16 @@ class ComposeAgent:
         qa_emit_payload = coerce_json_object(
             {
                 "status": status,
-                "lane_actions": {lane: directive.action for lane, directive in lane_actions.items()},
+                "lane_actions": {
+                    lane: coerce_json_object(
+                        {
+                            "action": directive.original_action,
+                            "current_action": directive.action,
+                            "reason": directive.reason,
+                        }
+                    )
+                    for lane, directive in lane_actions.items()
+                },
                 "alerts": list(qa_result.alerts),
             }
         )
@@ -1957,7 +1984,7 @@ def _factuality_report(
     min_timestamp_references: int,
 ) -> GuardReport:
     # Normalize and split
-    lines = document.replace("\r\n", "\n").split("\n")
+    # lines = document.replace("\r\n", "\n").split("\n")
     text = document.strip()
     if not text:
         return GuardReport(ok=False, errors=["Document is empty"], warnings=[], checks={})
@@ -2175,11 +2202,14 @@ def _render_qa_markdown(state: ComposeState) -> str:
         lines.append("")
         lines.append("## Lane Actions")
         for lane, directive in qa.lane_actions.items():
-            action_text = directive.action or "none"
+            action_text = directive.original_action or "none"
             brief = directive.revision_brief or ""
+            reason = directive.reason or ""
             lines.append(f"- {lane.title()}: {action_text}")
             if brief:
                 lines.append(f"  - Brief: {brief}")
+            if reason:
+                lines.append(f"  - Reason: {reason}")
 
     def _lane_section(lane_key: str, title: str, outcome: LaneOutcome) -> None:
         lines.append("")

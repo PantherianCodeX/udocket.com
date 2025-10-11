@@ -16,6 +16,7 @@ class _FakeResponse:
         self._payload = payload
         self.status_code = 200
         self.text = json.dumps(payload)
+        self.headers: Dict[str, str] = {}
 
     def raise_for_status(self) -> None:  # pragma: no cover - parity with requests.Response
         return None
@@ -23,21 +24,67 @@ class _FakeResponse:
     def json(self) -> Dict[str, Any]:
         return self._payload
 
+    def iter_lines(self, decode_unicode: bool = False):
+        chunk = json.dumps(self._payload)
+        line = f"data: {chunk}"
+        done = "data: [DONE]"
+        if decode_unicode:
+            yield line
+            yield done
+        else:
+            yield line.encode("utf-8")
+            yield done.encode("utf-8")
+
+
+class _FakeSession:
+    def __init__(self, payload: Dict[str, Any]) -> None:
+        self._payload = payload
+        self.calls: list[Dict[str, Any]] = []
+
+    def post(
+        self,
+        url: str,
+        *,
+        params: Dict[str, Any] | None = None,
+        headers: Dict[str, Any] | None = None,
+        json: Any = None,
+        stream: bool | None = None,
+        timeout: Any = None,
+    ) -> _FakeResponse:
+        self.calls.append(
+            {
+                "url": url,
+                "params": params,
+                "headers": headers,
+                "json": json,
+                "stream": stream,
+                "timeout": timeout,
+            }
+        )
+        return _FakeResponse(self._payload)
+
+    def close(self) -> None:
+        return None
+
+
+class _FakeSessionManager:
+    def __init__(self, payload: Dict[str, Any]) -> None:
+        self.session = _FakeSession(payload)
+
+    def session_for(self, endpoint: str) -> _FakeSession:
+        return self.session
+
+    def reset_session(self, endpoint: str) -> None:
+        return None
+
 
 def _client(monkeypatch: pytest.MonkeyPatch, payload: Dict[str, Any]) -> AzureChatClient:
-    def _fake_post(*args: Any, **kwargs: Any) -> _FakeResponse:
-        return _FakeResponse(payload)
-
-    from packages.udocket_core.agents.common import azure_client
-
-    monkeypatch.setattr(azure_client.requests, "post", _fake_post)
-
     config = AzureClientConfig(
         endpoint="https://example.canadaeast.cognitiveservices.azure.com",  # allowed region
         key="test-key",
         deployment="gpt-4o-mini",
     )
-    return AzureChatClient(config)
+    return AzureChatClient(config, session_manager=_FakeSessionManager(payload))
 
 
 def test_chat_combines_fragmented_content(monkeypatch: pytest.MonkeyPatch) -> None:

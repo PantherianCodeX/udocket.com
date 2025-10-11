@@ -8,7 +8,7 @@ import pytest
 
 import packages.udocket_core.agents.analyze_lib as analyze_lib
 
-from packages.udocket_core.agents import build_analyze_graph
+from packages.udocket_core.agents import build_analyze_graph, langgraph_orchestrator
 from packages.udocket_core.agents.analyze_lib import (
     LLM_STAGE_KEYS,
     ANALYZE_STAGE_PROFILES,
@@ -883,7 +883,7 @@ def test_summary_stage_uses_json_mode():
     assert result.usage["total_tokens"] == 2
 
 
-def test_build_analyze_graph_requires_langgraph():
+def test_build_analyze_graph_requires_langgraph(monkeypatch: pytest.MonkeyPatch):
     class Dummy:
         def input_discovery(self, state):
             return state
@@ -891,5 +891,7 @@ def test_build_analyze_graph_requires_langgraph():
         parse_transcript = context_builder = extract_outline = build_timeline_seeds = build_entity_hints = draft_markdown = qa_and_finalize = write_ops_and_artifacts = input_discovery
 
     dummy = Dummy()
+    monkeypatch.setattr(langgraph_orchestrator, "STATE_GRAPH_FACTORY", None)
+    monkeypatch.setattr(langgraph_orchestrator, "LANGGRAPH_END", None)
     with pytest.raises(RuntimeError):
         build_analyze_graph(dummy)

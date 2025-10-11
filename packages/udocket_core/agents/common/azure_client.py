@@ -634,6 +634,10 @@ class AzureChatClient:
                     if isinstance(message_value, Mapping):
                         message_obj = _require_json_object(message_value, context="stream message")
                         content_value = message_obj.get("content")
+                        tool_text = _content_from_tool_calls(message_obj.get("tool_calls"))
+                        annotation_text = _content_from_annotations(message_obj.get("annotations"))
+                        appended_annotations = False
+                        appended_tools = False
                         if isinstance(content_value, str):
                             content_parts.append(content_value)
                         elif isinstance(content_value, Sequence) and not isinstance(
@@ -641,8 +645,16 @@ class AzureChatClient:
                         ):
                             content_parts.append(_content_from_parts(content_value))
                         else:
-                            content_parts.append(_content_from_tool_calls(message_obj.get("tool_calls")))
-                            content_parts.append(_content_from_annotations(message_obj.get("annotations")))
+                            if annotation_text:
+                                content_parts.append(annotation_text)
+                                appended_annotations = True
+                            if tool_text:
+                                content_parts.append(tool_text)
+                                appended_tools = True
+                        if annotation_text and not appended_annotations:
+                            content_parts.append(annotation_text)
+                        if tool_text and not appended_tools:
+                            content_parts.append(tool_text)
 
             usage_value = chunk.get("usage")
             if isinstance(usage_value, Mapping):

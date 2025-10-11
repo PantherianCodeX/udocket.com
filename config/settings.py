@@ -15,7 +15,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic_settings.sources import DotEnvSettingsSource, EnvSettingsSource, PydanticBaseSettingsSource
 
 
-FALLBACK_STORAGE_ROOT = Path(__file__).resolve().parents[1] / "storage"
+FALLBACK_STORAGE_ROOT = Path(__file__).resolve().parents[2] / "storage"
 
 
 def _read_text(path: Path) -> str | None:
@@ -27,6 +27,21 @@ def _read_text(path: Path) -> str | None:
         return None
     return data.strip()
 
+def _parse_env_file(path: Path, encoding: str | None = None) -> dict[str, str]:
+    try:
+        text = path.read_text(encoding=encoding or "utf-8")
+    except OSError:
+        return {}
+    overrides: dict[str, str] = {}
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        key, sep, value = line.partition("=")
+        if not sep:
+            continue
+        overrides[key.strip()] = value.strip()
+    return overrides
 
 def _collect_iter_items(value: IterableABC[object]) -> list[str]:
     result: list[str] = []
@@ -375,6 +390,17 @@ class OIDCConfig:
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(extra="ignore", populate_by_name=True, env_ignore_empty=True)
 
+    def __init__(self, **values: Any) -> None:
+        env_file_value = values.get("_env_file")
+        env_encoding = values.get("_env_file_encoding")
+        if isinstance(env_file_value, (str, os.PathLike)):
+            env_path = Path(env_file_value)
+            overrides = _parse_env_file(env_path, encoding=env_encoding)
+            for key, raw in overrides.items():
+                if key not in values:
+                    values[key] = raw
+        super().__init__(**values)
+
     @classmethod
     def settings_customise_sources(
         cls,
@@ -426,6 +452,20 @@ class Settings(BaseSettings):
                     return _json_or_split_int_list(str(value))
                 return super().decode_complex_value(field_name, field, value)
 
+            def __call__(self) -> dict[str, Any]:
+                data = super().__call__()
+                try:
+                    env_vars = getattr(self, "env_vars", {}) or {}
+                except Exception:
+                    env_vars = {}
+                if env_vars:
+                    for key, raw in env_vars.items():
+                        if not isinstance(key, str):
+                            continue
+                        normalized = key.upper()
+                        data[normalized] = raw
+                return data
+
         dotenv_kwargs: dict[str, Any] = {}
         for attr in (
             "env_file",
@@ -440,13 +480,13 @@ class Settings(BaseSettings):
             attr_value = getattr(dotenv_settings, attr, None)
             if attr_value is not None:
                 dotenv_kwargs[attr] = attr_value
-
-        return (
+        sources_tuple = (
             init_settings,
             _CsvEnvSource(settings_cls, **env_kwargs),
             _CsvDotenvSource(settings_cls, **dotenv_kwargs),
             file_secret_settings,
         )
+        return sources_tuple
 
     # Azure Speech + Agents
     AZURE_SPEECH_KEY: SecretStr = Field(default=SecretStr("dev-placeholder"))
@@ -459,7 +499,7 @@ class Settings(BaseSettings):
 
     # Database
     DATABASE_URL: str = "sqlite:///__AUTO__"
-    ALLOW_SQLITE_DEV_FALLBACK: bool = False
+    ALLOW_SQLITE_DEV_FALLBACK: bool = True
     TEST_DATABASE_URL: str | None = None
 
     # Security / files
@@ -538,6 +578,14 @@ class Settings(BaseSettings):
         if value not in allowed:
             raise ValueError("AZURE_SPEECH_REGION must be canadacentral or canadaeast")
         return value
+
+    @field_validator("DJANGO_ALLOWED_HOSTS", "CSRF_TRUSTED_ORIGINS", mode="before")
+    @classmethod
+    def parse_csv_lists(cls, value: object, info: ValidationInfo) -> list[str]:
+        items = _json_or_split_str_list(value)
+        if info.field_name == "DJANGO_ALLOWED_HOSTS":
+            return items or ["*"]
+        return items
 
     @field_validator("DJANGO_ALLOWED_HOSTS", mode="before")
     @classmethod

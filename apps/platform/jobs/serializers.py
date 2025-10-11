@@ -1,6 +1,7 @@
 from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, Optional, Protocol, cast
+from weakref import WeakKeyDictionary
 
 from django.conf import settings
 from rest_framework import serializers
@@ -246,6 +247,11 @@ class JobSerializer(serializers.ModelSerializer):
     case_id: CharField = CharField(read_only=True)
     audio_input: SerializerMethodField = SerializerMethodField()
     transcript_path: SerializerMethodField = SerializerMethodField()
+    _permission_cache: WeakKeyDictionary[Job, tuple[bool, bool]]
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        super().__init__(*args, **kwargs)
+        self._permission_cache = WeakKeyDictionary()
 
     class Meta:
         model = Job
@@ -277,24 +283,41 @@ class JobSerializer(serializers.ModelSerializer):
             "finished_at",
         ]
 
-    def get_audio_input(self, obj: Job) -> str | None:
+    def _permission_flags(self, obj: Job) -> tuple[bool, bool]:
+        cached = self._permission_cache.get(obj)
+        if cached is not None:
+            return cached
         request = self.context.get("request") if hasattr(self, "context") else None
         user = getattr(request, "user", None)
         dev_open = bool(getattr(settings, "PLATFORM_DEV_OPEN", True))
+        allow_audio = False
+        allow_transcript = False
         if not user or not getattr(user, "is_authenticated", False):
-            return obj.audio_input if dev_open else None
-        case_id = str(getattr(obj, "case_id", ""))
-        if case_id and has_capability(user, case_id, "artifact.download"):
-            return obj.audio_input
-        return None
+            if dev_open:
+                allow_audio = True
+                allow_transcript = True
+        else:
+            case_id = str(getattr(obj, "case_id", ""))
+            if case_id:
+                allow_audio = has_capability(user, case_id, "artifact.download")
+                allow_transcript = has_capability(user, case_id, "artifact.field.path.view")
+        flags = (allow_audio, allow_transcript)
+        self._permission_cache[obj] = flags
+        return flags
+
+    def get_audio_input(self, obj: Job) -> str | None:
+        allow_audio, _ = self._permission_flags(obj)
+        return obj.audio_input if allow_audio else None
 
     def get_transcript_path(self, obj: Job) -> str | None:
-        request = self.context.get("request") if hasattr(self, "context") else None
-        user = getattr(request, "user", None)
-        dev_open = bool(getattr(settings, "PLATFORM_DEV_OPEN", True))
-        if not user or not getattr(user, "is_authenticated", False):
-            return obj.transcript_path or None if dev_open else None
-        case_id = str(getattr(obj, "case_id", ""))
-        if case_id and has_capability(user, case_id, "artifact.field.path.view"):
-            return obj.transcript_path or None
-        return None
+        _, allow_transcript = self._permission_flags(obj)
+        return (obj.transcript_path or None) if allow_transcript else None
+
+    def to_representation(self, instance: Job) -> Dict[str, Any]:
+        data = super().to_representation(instance)
+        allow_audio, allow_transcript = self._permission_flags(instance)
+        if not allow_audio:
+            data.pop("audio_input", None)
+        if not allow_transcript:
+            data.pop("transcript_path", None)
+        return data

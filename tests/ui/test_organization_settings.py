@@ -200,7 +200,7 @@ def test_organization_settings_config_create_deduplicates_name(settings: Setting
     assert any(name != "Test Config" for name in names)
 
 @pytest.mark.django_db
-def test_provider_test_action_reports_status(settings: SettingsFixture):
+def test_provider_test_action_reports_status(settings: SettingsFixture, monkeypatch: pytest.MonkeyPatch):
     settings.PLATFORM_DEV_OPEN = True
     org = Organization.objects.create(name="Test Org")
     user = User.objects.create_user(username="tester", password="password")
@@ -224,6 +224,15 @@ def test_provider_test_action_reports_status(settings: SettingsFixture):
             "metadata_json": "{\"azure_deployment\": \"gpt-4o\"}",
             "is_enabled": "on",
         },
+    )
+
+    monkeypatch.setattr(
+        "apps.platform.ui.views.settings.evaluate_provider_setup",
+        lambda *, provider, endpoint, has_api_key, metadata, models: {"ready": True, "issues": []},
+    )
+    monkeypatch.setattr(
+        "apps.platform.ui.views.settings.run_provider_live_test",
+        lambda *, provider, endpoint, api_key, metadata, models: {"content": "OK", "model": "stub-model"},
     )
 
     resp = client.post(

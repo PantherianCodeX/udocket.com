@@ -152,7 +152,8 @@ def enable_langgraph_debug_logging(force: bool = False) -> None:
     """Ensure langgraph/langchain loggers emit DEBUG output to the console."""
 
     global _langgraph_debug_initialized
-    if _langgraph_debug_initialized:
+    already_initialized = globals().get("_LANGGRAPH_DEBUG_INITIALIZED", _langgraph_debug_initialized)
+    if already_initialized:
         return
 
     env_flag = os.getenv(_LANGGRAPH_TRACE_ENV, "").strip().lower() in _LANGGRAPH_DEBUG_ENV

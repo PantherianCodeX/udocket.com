@@ -32,6 +32,42 @@ from tests._typing import MonkeyPatch
 ClientResponse = Tuple[str, Dict[str, int], str, str]
 
 
+CLIENT_VALID_DOC = """## Case Overview
+At [00:01] the judge confirmed the interim custody order stayed active for both parents. Counsel at [00:01] reminded everyone that earlier schedules still govern each exchange. At [02:00] the clerk reviewed disclosure timelines and reiterated expectations for continued compliance. At [02:00] the judge requested frequent progress updates so the next conference remains productive. Counsel also noted at [02:00] that maintaining predictable routines helps the children adapt calmly.
+
+## Key People and Roles
+Alex at [00:01] described handling school drop-offs, medical visits, and bedtime routines every week. He added at [00:01] that grandparents assist daily so obligations remain balanced. Morgan at [02:00] confirmed disclosure tasks are pending but promised detailed weekly reports. She stated at [02:00] that extended family coordinate travel to avoid missed exchanges. Counsel at [02:00] committed to logging every support person involved with the schedule.
+
+## Timeline of Events
+At [00:01] the hearing opened with a recap of earlier interim orders and compliance history. Around [00:30] counsel listed affidavits and exhibits that still awaited review. At [01:10] the parties described cooperative steps and flagged remaining disclosure gaps from the prior month. Near [01:40] the judge summarised expectations for document exchanges before upcoming deadlines. By [02:00] the court restated the operative order and mapped deadlines for the next appearance.
+
+## Main Issues
+At [00:01] the court questioned whether interim custody terms should change before the next conference. At [02:00] compliance delays raised concerns about readiness for motions and long term settlement tasks. Counsel also noted at [02:00] that any adjustment must respect the children’s routine stability.
+
+## Next Steps / Preparation Notes
+At [02:00] counsel must gather financial statements, education reports, and parenting calendars before the next conference. Teams should log cooperation noted at [00:01] to keep status updates accurate. Everyone prepares concise notes linking each outstanding obligation to transcript timestamps such as [02:00] before filing. The parties also agreed at [02:00] to share weekly progress summaries with the clerk.
+"""
+
+LAWYER_VALID_DOC = """## Case Summary
+This matter involves interim custody arrangements reviewed on January 5, 2024 at [00:01], where the court confirmed the existing order remained in force pending additional disclosure. The transcript at [02:00] records the judge’s expectation that both parties continue cooperation while preparing for the next settlement-focused appearance, emphasising accuracy and timeliness.
+
+## Parties and Roles
+Alex, the Applicant, presented evidence about parenting schedules at [00:01] and outlined travel logistics for school and extracurricular commitments. Morgan, the Respondent, discussed at [02:00] how disclosure will be completed, identified supporting relatives who assist with exchanges, and confirmed continued participation in case management discussions.
+
+## Factual Background
+The hearing at [00:01] opened with the judge recounting prior orders, including the interim custody decision that balanced weekday and weekend responsibilities between the parties. Counsel reviewed affidavits, financial statements, and parenting time notes at [00:45] to confirm the written record matched the oral conditions previously delivered. Shortly afterward, around [00:45], the parties debated outstanding document production, prompting the court to reiterate at [00:45] that disclosure must remain on schedule. By [01:20], Alex described daily routines, medical appointments, and childcare arrangements that depended on the interim terms, while Morgan acknowledged at [01:20] the need to supplement evidence with updated income details. At [02:00] the judge summarised the expectations: maintain the interim order, exchange missing disclosure promptly, and prepare a comprehensive joint update before the next conference. The transcript at [02:00] further notes that both parties accepted these directives without objection, providing a stable framework for continued negotiations.
+
+## Issues Presented
+Key issues include whether any material change since [00:01] justifies altering the interim custody order, and how the disclosure delays highlighted at [02:00] affect readiness for conferences or motions. The court also needs clarity at [02:00] on scheduling conflicts and the feasibility of future attendance dates given the family’s logistical commitments.
+
+## Evidence / Supporting Facts
+Transcript excerpts at [00:01], [00:45], and [02:00] document the judge’s oral reasons and the parties’ acknowledgements of ongoing duties. Counsel referenced undertakings, email correspondence, and previously filed statements at [02:00] to substantiate compliance, and they agreed to provide supplemental summaries tying each obligation to specific exhibits and time-stamped transcript passages.
+
+## Procedural Status / Next Known Steps
+The case conference remains scheduled following the directives issued at [02:00], and the parties must exchange updated financial materials, medical summaries, and childcare plans beforehand. The court also requested written updates at [02:00] detailing progress on disclosure, coordination with support services, and confirmation that interim arrangements continue without disruption.
+"""
+
+
 def _write_inputs(base_dir: Path) -> tuple[Path, Path, Path]:
     summary_json = base_dir / "summary.json"
     summary_json.write_text(
@@ -112,40 +148,9 @@ def test_compose_agent_parallel_lanes(tmp_path: Path, monkeypatch: MonkeyPatch) 
     )
     agent = ComposeAgent(config)
 
-    client_doc = """## Case Overview
-The judge reviewed the interim custody order at [00:01] and confirmed it remained active. The hearing record at [02:00] notes the court expects continued compliance while scheduling the next appearance.
+    client_doc = CLIENT_VALID_DOC
 
-## Key People and Roles
-Alex, the Applicant, described day-to-day parenting responsibilities documented at [00:01]. Morgan, the Respondent, acknowledged disclosure duties at [02:00] and agreed to provide additional materials before the next date.
-
-## Timeline of Events
-At [00:01] the hearing opened with the judge summarising prior orders and confirming attendance. By [02:00] the court restated the interim order and set expectations for preparing the next conference.
-
-## Main Issues
-Interim custody arrangements discussed at [00:01] remain the central topic for the parties. Compliance with prior disclosure obligations at [02:00] continues to affect scheduling and preparation work.
-
-## Next Steps / Preparation Notes
-Gather additional financial disclosures before the next conference at [02:00], including updated income details and childcare schedules. Follow the existing order until further direction from the court and keep notes of cooperation at [00:01].
-"""
-
-    lawyer_doc = """## Case Summary
-This matter involves interim custody arrangements reviewed on January 5, 2024 at [00:01]. The transcript at [02:00] confirms the interim order remains active while the parties organise updated disclosure.
-
-## Parties and Roles
-Alex (Applicant) presented evidence about parenting schedules at [00:01] and discussed timelines for exchanges. Morgan (Respondent) addressed compliance topics at [02:00] and confirmed availability for upcoming conferences.
-
-## Factual Background
-At [00:01] the hearing opened with a review of prior orders. The court confirmed at [02:00] that the interim order remains in effect and that disclosure obligations continue.
-
-## Issues Presented
-Whether the interim order should remain in effect based on remarks at [02:00] remains under consideration. Scheduling of disclosure deadlines discussed at [00:01] also needs coordination with counsel and the parties.
-
-## Evidence / Supporting Facts
-Transcript segments at [00:01] and [02:00] summarise the oral reasons and confirm the judge’s expectations. Counsel also referenced disclosure undertakings at [02:00] to support the status quo.
-
-## Procedural Status / Next Known Steps
-The case conference is scheduled, and the parties must exchange updated financial materials before the next appearance at [02:00]. The court also requested written updates that track commitments made at [00:01] and [02:00].
-"""
+    lawyer_doc = LAWYER_VALID_DOC
 
     def fake_invoke(
         self: ComposeAgent,
@@ -258,40 +263,9 @@ This section omits required references and headings.
 - Missing sections cause failure.
 """
 
-    good_client_doc = """## Case Overview
-The interim order remains active as described at [00:01], and the court reiterated those terms at [02:00] while planning the next steps.
+    good_client_doc = CLIENT_VALID_DOC
 
-## Key People and Roles
-Alex, the Applicant, outlined weekly parenting responsibilities at [00:01] with support plans. Morgan, the Respondent, agreed at [02:00] to deliver additional disclosure and continue cooperation before the next court date.
-
-## Timeline of Events
-The hearing noted at [00:01] contextualised prior orders, while [02:00] documented the judge’s expectation that parties maintain the interim regime.
-
-## Main Issues
-Interim custody arrangements discussed at [00:01] remain unresolved and require updates. Disclosure compliance tracked at [02:00] directly affects scheduling for the next appearance.
-
-## Next Steps / Preparation Notes
-Prepare updated disclosure documents referencing commitments at [02:00] and summarise cooperation highlights from [00:01] so counsel can brief the court efficiently.
-"""
-
-    lawyer_doc = """## Case Summary
-This matter involves interim custody arrangements reviewed on January 5, 2024 at [00:01]. The transcript at [02:00] confirms the interim order remains active while the parties organise updated disclosure.
-
-## Parties and Roles
-Alex (Applicant) presented evidence about parenting schedules at [00:01] and discussed timelines for exchanges. Morgan (Respondent) addressed compliance topics at [02:00] and confirmed availability for upcoming conferences.
-
-## Factual Background
-At [00:01] the hearing opened with a review of prior orders. The court confirmed at [02:00] that the interim order remains in effect and that disclosure obligations continue.
-
-## Issues Presented
-Whether the interim order should remain in effect based on remarks at [02:00] remains under consideration. Scheduling of disclosure deadlines discussed at [00:01] also needs coordination with counsel and the parties.
-
-## Evidence / Supporting Facts
-Transcript segments at [00:01] and [02:00] summarise the oral reasons and confirm the judge’s expectations. Counsel also referenced disclosure undertakings at [02:00] to support the status quo.
-
-## Procedural Status / Next Known Steps
-The case conference is scheduled, and the parties must exchange updated financial materials before the next appearance at [02:00]. The court also requested written updates that track commitments made at [00:01] and [02:00].
-"""
+    lawyer_doc = LAWYER_VALID_DOC
 
     def fake_invoke(
         self: ComposeAgent,
@@ -386,40 +360,9 @@ def test_compose_agent_docx_template(tmp_path: Path, monkeypatch: MonkeyPatch) -
     )
     agent = ComposeAgent(config)
 
-    client_doc = """## Case Overview
-The judge reviewed the interim custody order at [00:01] and confirmed it remained active. The hearing record at [02:00] notes the court expects continued compliance while scheduling the next appearance.
+    client_doc = CLIENT_VALID_DOC
 
-## Key People and Roles
-Alex, the Applicant, described day-to-day parenting responsibilities documented at [00:01]. Morgan, the Respondent, acknowledged disclosure duties at [02:00] and agreed to provide additional materials before the next date.
-
-## Timeline of Events
-At [00:01] the hearing opened with the judge summarising prior orders and confirming attendance. By [02:00] the court restated the interim order and set expectations for preparing the next conference.
-
-## Main Issues
-Interim custody arrangements discussed at [00:01] remain the central topic for the parties. Compliance with prior disclosure obligations at [02:00] continues to affect scheduling and preparation work.
-
-## Next Steps / Preparation Notes
-Gather additional financial disclosures before the next conference at [02:00], including updated income details and childcare schedules. Follow the existing order until further direction from the court and keep notes of cooperation at [00:01].
-"""
-
-    lawyer_doc = """## Case Summary
-This matter involves interim custody arrangements reviewed on January 5, 2024 at [00:01]. The transcript at [02:00] confirms the interim order remains active while the parties organise updated disclosure.
-
-## Parties and Roles
-Alex (Applicant) presented evidence about parenting schedules at [00:01] and discussed timelines for exchanges. Morgan (Respondent) addressed compliance topics at [02:00] and confirmed availability for upcoming conferences.
-
-## Factual Background
-At [00:01] the hearing opened with a review of prior orders. The court confirmed at [02:00] that the interim order remains in effect and that disclosure obligations continue.
-
-## Issues Presented
-Whether the interim order should remain in effect based on remarks at [02:00] remains under consideration. Scheduling of disclosure deadlines discussed at [00:01] also needs coordination with counsel and the parties.
-
-## Evidence / Supporting Facts
-Transcript segments at [00:01] and [02:00] summarise the oral reasons and confirm the judge’s expectations. Counsel also referenced disclosure undertakings at [02:00] to support the status quo.
-
-## Procedural Status / Next Known Steps
-The case conference is scheduled, and the parties must exchange updated financial materials before the next appearance at [02:00]. The court also requested written updates that track commitments made at [00:01] and [02:00].
-"""
+    lawyer_doc = LAWYER_VALID_DOC
 
     def fake_invoke(
         self: ComposeAgent,
@@ -480,7 +423,7 @@ The case conference is scheduled, and the parties must exchange updated financia
     assert "{{" not in client_text
     with zipfile.ZipFile(client_docx_path, "r") as zf:
         client_xml = zf.read("word/document.xml").decode("utf-8")
-    assert "The judge reviewed the interim custody order" in client_xml
+    assert "the judge confirmed the interim custody order stayed active" in client_xml.lower()
 
     lawyer_docx_path = result.artifacts.lawyer_docx
     assert lawyer_docx_path is not None
