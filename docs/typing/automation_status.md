@@ -3371,118 +3371,118 @@ pyright 1.1.392
 /home/user/Code/uDocket/udocket.com/tests/test_settings_validators.py
   /home/user/Code/uDocket/udocket.com/tests/test_settings_validators.py:20:9 - error: No parameter named "_env_file" (reportCallIssue)
   /home/user/Code/uDocket/udocket.com/tests/test_settings_validators.py:21:9 - error: No parameter named "_env_file_encoding" (reportCallIssue)
-/home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:23:5 - error: "_normalize_stage_map" is private and used outside of the module in which it is declared (reportPrivateUsage)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:68:5 - warning: Type of "summary_payload" is partially unknown
+/home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:23:5 - error: "_normalize_stage_map" is private and used outside of the module in which it is declared (reportPrivateUsage)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:68:5 - warning: Type of "summary_payload" is partially unknown
     Type of "summary_payload" is "dict[str, dict[str, str | list[str]] | dict[str, list[str]] | list[dict[str, str | list[Unknown]]] | list[dict[str, str]]]" (reportUnknownVariableType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:99:9 - warning: Type of "outline" is partially unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:99:9 - warning: Type of "outline" is partially unknown
     Type of "outline" is "dict[str, dict[str, dict[str, str] | list[Unknown]] | list[dict[str, str | None]]]" (reportUnknownVariableType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:122:35 - warning: Argument of type "dict[str, dict[str, dict[str, str] | list[Unknown]] | list[dict[str, str | None]]]" cannot be assigned to parameter "outline" of type "JSONObject" in function "__init__"
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:122:35 - warning: Argument of type "dict[str, dict[str, dict[str, str] | list[Unknown]] | list[dict[str, str | None]]]" cannot be assigned to parameter "outline" of type "JSONObject" in function "__init__"
     "dict[str, dict[str, dict[str, str] | list[Unknown]] | list[dict[str, str | None]]]" is not assignable to "dict[str, JSONValue]"
       Type parameter "_VT@dict" is invariant, but "dict[str, dict[str, str] | list[Unknown]] | list[dict[str, str | None]]" is not the same as "JSONValue"
       Consider switching from "dict" to "Mapping" which is covariant in the value type (reportArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:139:9 - warning: Type of "hints" is partially unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:139:9 - warning: Type of "hints" is partially unknown
     Type of "hints" is "dict[str, list[dict[str, str | list[Unknown]]]]" (reportUnknownVariableType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:163:34 - warning: Argument type is partially unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:163:34 - warning: Argument type is partially unknown
     Argument corresponds to parameter "hints" in function "__init__"
     Argument type is "dict[str, list[dict[str, str | list[Unknown]]]]" (reportUnknownArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:167:18 - warning: Argument of type "dict[str, dict[str, str | list[str]] | dict[str, list[str]] | list[dict[str, str | list[Unknown]]] | list[dict[str, str]]]" cannot be assigned to parameter "data" of type "JSONObject" in function "__init__"
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:167:18 - warning: Argument of type "dict[str, dict[str, str | list[str]] | dict[str, list[str]] | list[dict[str, str | list[Unknown]]] | list[dict[str, str]]]" cannot be assigned to parameter "data" of type "JSONObject" in function "__init__"
     "dict[str, dict[str, str | list[str]] | dict[str, list[str]] | list[dict[str, str | list[Unknown]]] | list[dict[str, str]]]" is not assignable to "dict[str, JSONValue]"
       Type parameter "_VT@dict" is invariant, but "dict[str, str | list[str]] | dict[str, list[str]] | list[dict[str, str | list[Unknown]]] | list[dict[str, str]]" is not the same as "JSONValue"
       Consider switching from "dict" to "Mapping" which is covariant in the value type (reportArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:208:55 - warning: Type of parameter "tmp_path" is unknown (reportUnknownParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:208:55 - error: Type annotation is missing for parameter "tmp_path" (reportMissingParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:209:5 - warning: Type of "transcript" is unknown (reportUnknownVariableType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:211:9 - warning: Argument type is unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:208:55 - warning: Type of parameter "tmp_path" is unknown (reportUnknownParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:208:55 - error: Type annotation is missing for parameter "tmp_path" (reportMissingParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:209:5 - warning: Type of "transcript" is unknown (reportUnknownVariableType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:211:9 - warning: Argument type is unknown
     Argument corresponds to parameter "path" in function "_write_transcript" (reportUnknownArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:215:31 - warning: Argument type is unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:215:31 - warning: Argument type is unknown
     Argument corresponds to parameter "path" in function "parse_transcript" (reportUnknownArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:223:51 - warning: Type of parameter "tmp_path" is unknown (reportUnknownParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:223:51 - error: Type annotation is missing for parameter "tmp_path" (reportMissingParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:224:5 - warning: Type of "transcript" is unknown (reportUnknownVariableType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:225:23 - warning: Argument type is unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:223:51 - warning: Type of parameter "tmp_path" is unknown (reportUnknownParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:223:51 - error: Type annotation is missing for parameter "tmp_path" (reportMissingParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:224:5 - warning: Type of "transcript" is unknown (reportUnknownVariableType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:225:23 - warning: Argument type is unknown
     Argument corresponds to parameter "path" in function "_write_transcript" (reportUnknownArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:227:31 - warning: Argument type is unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:227:31 - warning: Argument type is unknown
     Argument corresponds to parameter "path" in function "parse_transcript" (reportUnknownArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:234:67 - warning: Type of parameter "tmp_path" is unknown (reportUnknownParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:234:67 - error: Type annotation is missing for parameter "tmp_path" (reportMissingParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:235:5 - warning: Type of "case_dir" is unknown (reportUnknownVariableType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:236:5 - warning: Type of "transcript_dir" is unknown (reportUnknownVariableType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:237:5 - warning: Type of "transcript_path" is unknown (reportUnknownVariableType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:239:9 - warning: Argument type is unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:234:67 - warning: Type of parameter "tmp_path" is unknown (reportUnknownParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:234:67 - error: Type annotation is missing for parameter "tmp_path" (reportMissingParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:235:5 - warning: Type of "case_dir" is unknown (reportUnknownVariableType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:236:5 - warning: Type of "transcript_dir" is unknown (reportUnknownVariableType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:237:5 - warning: Type of "transcript_path" is unknown (reportUnknownVariableType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:239:9 - warning: Argument type is unknown
     Argument corresponds to parameter "path" in function "_write_transcript" (reportUnknownArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:243:26 - warning: Argument of type "MonkeyPatch" cannot be assigned to parameter "monkeypatch" of type "MonkeyPatch" in function "_install_stage_stubs"
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:243:26 - warning: Argument of type "MonkeyPatch" cannot be assigned to parameter "monkeypatch" of type "MonkeyPatch" in function "_install_stage_stubs"
     "MonkeyPatchProtocol" is not assignable to "MonkeyPatch" (reportArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:247:18 - warning: Argument type is unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:247:18 - warning: Argument type is unknown
     Argument corresponds to parameter "case_dir" in function "analyze" (reportUnknownArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:282:68 - warning: Type of parameter "tmp_path" is unknown (reportUnknownParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:282:68 - error: Type annotation is missing for parameter "tmp_path" (reportMissingParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:283:5 - warning: Type of "case_dir" is unknown (reportUnknownVariableType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:284:5 - warning: Type of "transcript_dir" is unknown (reportUnknownVariableType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:285:5 - warning: Type of "transcript_path" is unknown (reportUnknownVariableType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:287:9 - warning: Argument type is unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:282:68 - warning: Type of parameter "tmp_path" is unknown (reportUnknownParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:282:68 - error: Type annotation is missing for parameter "tmp_path" (reportMissingParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:283:5 - warning: Type of "case_dir" is unknown (reportUnknownVariableType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:284:5 - warning: Type of "transcript_dir" is unknown (reportUnknownVariableType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:285:5 - warning: Type of "transcript_path" is unknown (reportUnknownVariableType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:287:9 - warning: Argument type is unknown
     Argument corresponds to parameter "path" in function "_write_transcript" (reportUnknownArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:291:26 - warning: Argument of type "MonkeyPatch" cannot be assigned to parameter "monkeypatch" of type "MonkeyPatch" in function "_install_stage_stubs"
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:291:26 - warning: Argument of type "MonkeyPatch" cannot be assigned to parameter "monkeypatch" of type "MonkeyPatch" in function "_install_stage_stubs"
     "MonkeyPatchProtocol" is not assignable to "MonkeyPatch" (reportArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:295:18 - warning: Argument type is unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:295:18 - warning: Argument type is unknown
     Argument corresponds to parameter "case_dir" in function "analyze" (reportUnknownArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:301:18 - warning: Argument type is unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:301:18 - warning: Argument type is unknown
     Argument corresponds to parameter "case_dir" in function "analyze" (reportUnknownArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:319:53 - warning: Type of parameter "tmp_path" is unknown (reportUnknownParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:319:53 - error: Type annotation is missing for parameter "tmp_path" (reportMissingParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:320:5 - warning: Type of "case_dir" is unknown (reportUnknownVariableType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:321:5 - warning: Type of "transcript_dir" is unknown (reportUnknownVariableType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:322:5 - warning: Type of "transcript_path" is unknown (reportUnknownVariableType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:324:9 - warning: Argument type is unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:319:53 - warning: Type of parameter "tmp_path" is unknown (reportUnknownParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:319:53 - error: Type annotation is missing for parameter "tmp_path" (reportMissingParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:320:5 - warning: Type of "case_dir" is unknown (reportUnknownVariableType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:321:5 - warning: Type of "transcript_dir" is unknown (reportUnknownVariableType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:322:5 - warning: Type of "transcript_path" is unknown (reportUnknownVariableType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:324:9 - warning: Argument type is unknown
     Argument corresponds to parameter "path" in function "_write_transcript" (reportUnknownArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:333:22 - warning: Argument type is unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:333:22 - warning: Argument type is unknown
     Argument corresponds to parameter "case_dir" in function "analyze" (reportUnknownArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:338:70 - warning: Type of parameter "tmp_path" is unknown (reportUnknownParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:338:70 - error: Type annotation is missing for parameter "tmp_path" (reportMissingParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:339:5 - warning: Type of "case_dir" is unknown (reportUnknownVariableType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:340:5 - warning: Type of "transcript_dir" is unknown (reportUnknownVariableType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:341:5 - warning: Type of "transcript_path" is unknown (reportUnknownVariableType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:343:9 - warning: Argument type is unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:338:70 - warning: Type of parameter "tmp_path" is unknown (reportUnknownParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:338:70 - error: Type annotation is missing for parameter "tmp_path" (reportMissingParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:339:5 - warning: Type of "case_dir" is unknown (reportUnknownVariableType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:340:5 - warning: Type of "transcript_dir" is unknown (reportUnknownVariableType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:341:5 - warning: Type of "transcript_path" is unknown (reportUnknownVariableType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:343:9 - warning: Argument type is unknown
     Argument corresponds to parameter "path" in function "_write_transcript" (reportUnknownArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:347:26 - warning: Argument of type "MonkeyPatch" cannot be assigned to parameter "monkeypatch" of type "MonkeyPatch" in function "_install_stage_stubs"
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:347:26 - warning: Argument of type "MonkeyPatch" cannot be assigned to parameter "monkeypatch" of type "MonkeyPatch" in function "_install_stage_stubs"
     "MonkeyPatchProtocol" is not assignable to "MonkeyPatch" (reportArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:351:18 - warning: Argument type is unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:351:18 - warning: Argument type is unknown
     Argument corresponds to parameter "case_dir" in function "analyze" (reportUnknownArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:384:35 - warning: Type of "lower" is unknown (reportUnknownMemberType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:384:53 - warning: Type of "value" is unknown (reportUnknownVariableType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:384:62 - warning: "object" is not iterable
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:384:35 - warning: Type of "lower" is unknown (reportUnknownMemberType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:384:53 - warning: Type of "value" is unknown (reportUnknownVariableType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:384:62 - warning: "object" is not iterable
     "__iter__" method not defined (reportGeneralTypeIssues)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:388:78 - warning: Type of parameter "tmp_path" is unknown (reportUnknownParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:388:78 - error: Type annotation is missing for parameter "tmp_path" (reportMissingParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:389:5 - warning: Type of "case_dir" is unknown (reportUnknownVariableType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:390:5 - warning: Type of "transcript" is unknown (reportUnknownVariableType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:391:23 - warning: Argument type is unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:388:78 - warning: Type of parameter "tmp_path" is unknown (reportUnknownParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:388:78 - error: Type annotation is missing for parameter "tmp_path" (reportMissingParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:389:5 - warning: Type of "case_dir" is unknown (reportUnknownVariableType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:390:5 - warning: Type of "transcript" is unknown (reportUnknownVariableType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:391:23 - warning: Argument type is unknown
     Argument corresponds to parameter "path" in function "_write_transcript" (reportUnknownArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:393:26 - warning: Argument of type "MonkeyPatch" cannot be assigned to parameter "monkeypatch" of type "MonkeyPatch" in function "_install_stage_stubs"
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:393:26 - warning: Argument of type "MonkeyPatch" cannot be assigned to parameter "monkeypatch" of type "MonkeyPatch" in function "_install_stage_stubs"
     "MonkeyPatchProtocol" is not assignable to "MonkeyPatch" (reportArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:399:38 - warning: Argument of type "Any | None" cannot be assigned to parameter "object" of type "float" in function "append"
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:399:38 - warning: Argument of type "Any | None" cannot be assigned to parameter "object" of type "float" in function "append"
     Type "Any | None" is not assignable to type "float"
       "None" is not assignable to "float" (reportArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:400:36 - warning: Argument of type "Any | None" cannot be assigned to parameter "object" of type "int" in function "append"
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:400:36 - warning: Argument of type "Any | None" cannot be assigned to parameter "object" of type "int" in function "append"
     Type "Any | None" is not assignable to type "int"
       "None" is not assignable to "int" (reportArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:407:5 - error: Argument missing for parameter "value" (reportCallIssue)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:415:18 - warning: Argument type is unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:407:5 - error: Argument missing for parameter "value" (reportCallIssue)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:415:18 - warning: Argument type is unknown
     Argument corresponds to parameter "case_dir" in function "analyze" (reportUnknownArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:417:15 - warning: Argument type is unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:417:15 - warning: Argument type is unknown
     Argument corresponds to parameter "input" in function "analyze" (reportUnknownArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:451:13 - warning: Type of "prompt" is unknown (reportUnknownVariableType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:453:13 - warning: Type of "chunk_text" is unknown (reportUnknownVariableType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:453:26 - warning: Type of "split" is unknown (reportUnknownMemberType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:454:30 - warning: Argument type is partially unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:451:13 - warning: Type of "prompt" is unknown (reportUnknownVariableType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:453:13 - warning: Type of "chunk_text" is unknown (reportUnknownVariableType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:453:26 - warning: Type of "split" is unknown (reportUnknownMemberType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:454:30 - warning: Argument type is partially unknown
     Argument corresponds to parameter "obj" in function "len"
     Argument type is "list[Unknown]" (reportUnknownArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:454:40 - warning: Type of "line" is unknown (reportUnknownVariableType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:454:48 - warning: Type of "splitlines" is unknown (reportUnknownMemberType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:454:75 - warning: Type of "strip" is unknown (reportUnknownMemberType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:460:13 - warning: Type of "payload" is partially unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:454:40 - warning: Type of "line" is unknown (reportUnknownVariableType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:454:48 - warning: Type of "splitlines" is unknown (reportUnknownMemberType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:454:75 - warning: Type of "strip" is unknown (reportUnknownMemberType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:460:13 - warning: Type of "payload" is partially unknown
     Type of "payload" is "dict[str, dict[str, dict[str, str] | list[Unknown]] | list[dict[str, str | None]]]" (reportUnknownVariableType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:492:20 - warning: Argument of type "FailingClient" cannot be assigned to parameter "llm_client" of type "ChatClient | None" in function "generate_outline"
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:492:20 - warning: Argument of type "FailingClient" cannot be assigned to parameter "llm_client" of type "ChatClient | None" in function "generate_outline"
     Type "FailingClient" is not assignable to type "ChatClient | None"
       "FailingClient" is incompatible with protocol "ChatClient"
         "chat" is an incompatible type
@@ -3492,89 +3492,89 @@ pyright 1.1.392
             Parameter "response_format" is missing default argument
             Function return type "tuple[str, dict[str, int]]" is incompatible with type "tuple[str, TokenUsage]"
     ... (reportArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:502:47 - warning: Type of parameter "tmp_path" is unknown (reportUnknownParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:502:47 - error: Type annotation is missing for parameter "tmp_path" (reportMissingParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:503:5 - warning: Type of "transcript" is unknown (reportUnknownVariableType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:505:9 - warning: Argument type is unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:502:47 - warning: Type of parameter "tmp_path" is unknown (reportUnknownParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:502:47 - error: Type annotation is missing for parameter "tmp_path" (reportMissingParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:503:5 - warning: Type of "transcript" is unknown (reportUnknownVariableType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:505:9 - warning: Argument type is unknown
     Argument corresponds to parameter "path" in function "_write_transcript" (reportUnknownArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:509:30 - warning: Argument type is unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:509:30 - warning: Argument type is unknown
     Argument corresponds to parameter "path" in function "parse_transcript" (reportUnknownArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:532:9 - warning: Return type is unknown (reportUnknownParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:532:28 - warning: Type of parameter "input_path" is unknown (reportUnknownParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:532:28 - error: Type annotation is missing for parameter "input_path" (reportMissingParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:532:40 - warning: Type of parameter "case_dir" is unknown (reportUnknownParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:532:40 - error: Type annotation is missing for parameter "case_dir" (reportMissingParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:533:16 - warning: Return type is unknown (reportUnknownVariableType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:538:18 - warning: Argument type is unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:532:9 - warning: Return type is unknown (reportUnknownParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:532:28 - warning: Type of parameter "input_path" is unknown (reportUnknownParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:532:28 - error: Type annotation is missing for parameter "input_path" (reportMissingParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:532:40 - warning: Type of parameter "case_dir" is unknown (reportUnknownParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:532:40 - error: Type annotation is missing for parameter "case_dir" (reportMissingParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:533:16 - warning: Return type is unknown (reportUnknownVariableType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:538:18 - warning: Argument type is unknown
     Argument corresponds to parameter "case_dir" in function "__init__" (reportUnknownArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:542:28 - warning: Argument type is partially unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:542:28 - warning: Argument type is partially unknown
     Argument corresponds to parameter "resolve_transcript" in function "__init__"
     Argument type is "(input_path: Unknown, case_dir: Unknown) -> Unknown" (reportUnknownArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:555:12 - error: Operator "<=" not supported for types "int" and "int | None"
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:555:12 - error: Operator "<=" not supported for types "int" and "int | None"
     Operator "<=" not supported for types "int" and "None" (reportOperatorIssue)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:558:27 - error: Operator "+" not supported for "None" (reportOptionalOperand)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:561:74 - warning: Type of parameter "tmp_path" is unknown (reportUnknownParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:561:74 - error: Type annotation is missing for parameter "tmp_path" (reportMissingParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:562:26 - warning: Argument of type "MonkeyPatch" cannot be assigned to parameter "monkeypatch" of type "MonkeyPatch" in function "_install_stage_stubs"
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:558:27 - error: Operator "+" not supported for "None" (reportOptionalOperand)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:561:74 - warning: Type of parameter "tmp_path" is unknown (reportUnknownParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:561:74 - error: Type annotation is missing for parameter "tmp_path" (reportMissingParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:562:26 - warning: Argument of type "MonkeyPatch" cannot be assigned to parameter "monkeypatch" of type "MonkeyPatch" in function "_install_stage_stubs"
     "MonkeyPatchProtocol" is not assignable to "MonkeyPatch" (reportArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:567:5 - error: Argument missing for parameter "value" (reportCallIssue)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:572:5 - warning: Type of "case_dir" is unknown (reportUnknownVariableType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:573:5 - warning: Type of "transcript_dir" is unknown (reportUnknownVariableType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:574:5 - warning: Type of "transcript_path" is unknown (reportUnknownVariableType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:576:9 - warning: Argument type is unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:567:5 - error: Argument missing for parameter "value" (reportCallIssue)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:572:5 - warning: Type of "case_dir" is unknown (reportUnknownVariableType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:573:5 - warning: Type of "transcript_dir" is unknown (reportUnknownVariableType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:574:5 - warning: Type of "transcript_path" is unknown (reportUnknownVariableType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:576:9 - warning: Argument type is unknown
     Argument corresponds to parameter "path" in function "_write_transcript" (reportUnknownArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:585:22 - warning: Argument type is unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:585:22 - warning: Argument type is unknown
     Argument corresponds to parameter "case_dir" in function "analyze" (reportUnknownArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:592:80 - warning: Type of parameter "tmp_path" is unknown (reportUnknownParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:592:80 - error: Type annotation is missing for parameter "tmp_path" (reportMissingParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:612:26 - warning: Argument of type "MonkeyPatch" cannot be assigned to parameter "monkeypatch" of type "MonkeyPatch" in function "_install_stage_stubs"
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:592:80 - warning: Type of parameter "tmp_path" is unknown (reportUnknownParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:592:80 - error: Type annotation is missing for parameter "tmp_path" (reportMissingParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:612:26 - warning: Argument of type "MonkeyPatch" cannot be assigned to parameter "monkeypatch" of type "MonkeyPatch" in function "_install_stage_stubs"
     "MonkeyPatchProtocol" is not assignable to "MonkeyPatch" (reportArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:614:5 - warning: Type of "case_dir" is unknown (reportUnknownVariableType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:615:5 - warning: Type of "transcript" is unknown (reportUnknownVariableType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:616:23 - warning: Argument type is unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:614:5 - warning: Type of "case_dir" is unknown (reportUnknownVariableType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:615:5 - warning: Type of "transcript" is unknown (reportUnknownVariableType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:616:23 - warning: Argument type is unknown
     Argument corresponds to parameter "path" in function "_write_transcript" (reportUnknownArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:622:22 - warning: Argument type is unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:622:22 - warning: Argument type is unknown
     Argument corresponds to parameter "case_dir" in function "analyze" (reportUnknownArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:630:72 - warning: Type of parameter "tmp_path" is unknown (reportUnknownParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:630:72 - error: Type annotation is missing for parameter "tmp_path" (reportMissingParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:649:9 - warning: Return type is unknown (reportUnknownParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:655:10 - error: "ProviderRuntimeConfig" is not defined (reportUndefinedVariable)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:661:9 - warning: Argument type is partially unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:630:72 - warning: Type of parameter "tmp_path" is unknown (reportUnknownParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:630:72 - error: Type annotation is missing for parameter "tmp_path" (reportMissingParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:649:9 - warning: Return type is unknown (reportUnknownParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:655:10 - error: "ProviderRuntimeConfig" is not defined (reportUndefinedVariable)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:661:9 - warning: Argument type is partially unknown
     Argument corresponds to parameter "value" in function "setattr"
     Argument type is "(*, provider: LLMProvider, model_name: str, credential_payload: Dict[str, Any] | None, options: Dict[str, Any] | None) -> Unknown" (reportUnknownArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:664:26 - warning: Argument of type "MonkeyPatch" cannot be assigned to parameter "monkeypatch" of type "MonkeyPatch" in function "_install_stage_stubs"
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:664:26 - warning: Argument of type "MonkeyPatch" cannot be assigned to parameter "monkeypatch" of type "MonkeyPatch" in function "_install_stage_stubs"
     "MonkeyPatchProtocol" is not assignable to "MonkeyPatch" (reportArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:666:5 - warning: Type of "case_dir" is unknown (reportUnknownVariableType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:667:5 - warning: Type of "transcript" is unknown (reportUnknownVariableType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:668:23 - warning: Argument type is unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:666:5 - warning: Type of "case_dir" is unknown (reportUnknownVariableType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:667:5 - warning: Type of "transcript" is unknown (reportUnknownVariableType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:668:23 - warning: Argument type is unknown
     Argument corresponds to parameter "path" in function "_write_transcript" (reportUnknownArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:674:22 - warning: Argument type is unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:674:22 - warning: Argument type is unknown
     Argument corresponds to parameter "case_dir" in function "analyze" (reportUnknownArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:688:48 - warning: Type of parameter "tmp_path" is unknown (reportUnknownParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:688:48 - error: Type annotation is missing for parameter "tmp_path" (reportMissingParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:718:18 - warning: Argument type is unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:688:48 - warning: Type of parameter "tmp_path" is unknown (reportUnknownParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:688:48 - error: Type annotation is missing for parameter "tmp_path" (reportMissingParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:718:18 - warning: Argument type is unknown
     Argument corresponds to parameter "case_dir" in function "__init__" (reportUnknownArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:730:22 - error: Type "MutableMapping[str, Any]" is not assignable to declared type "Dict[str, Any]"
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:730:22 - error: Type "MutableMapping[str, Any]" is not assignable to declared type "Dict[str, Any]"
     "MutableMapping[str, Any]" is not assignable to "Dict[str, Any]" (reportAssignmentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:744:18 - warning: Argument type is unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:744:18 - warning: Argument type is unknown
     Argument corresponds to parameter "case_dir" in function "__init__" (reportUnknownArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:756:19 - error: Type "MutableMapping[str, Any]" is not assignable to declared type "Dict[str, Any]"
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:756:19 - error: Type "MutableMapping[str, Any]" is not assignable to declared type "Dict[str, Any]"
     "MutableMapping[str, Any]" is not assignable to "Dict[str, Any]" (reportAssignmentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:759:33 - error: "_char_limit_for_stage" is protected and used outside of the class in which it is declared (reportPrivateUsage)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:791:27 - warning: Type of parameter "messages" is unknown (reportUnknownParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:791:27 - error: Type annotation is missing for parameter "messages" (reportMissingParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:791:37 - warning: Type of parameter "temperature" is unknown (reportUnknownParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:791:37 - error: Type annotation is missing for parameter "temperature" (reportMissingParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:791:50 - warning: Type of parameter "max_tokens" is unknown (reportUnknownParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:791:50 - error: Type annotation is missing for parameter "max_tokens" (reportMissingParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:791:62 - warning: Type of parameter "response_format" is partially unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:759:33 - error: "_char_limit_for_stage" is protected and used outside of the class in which it is declared (reportPrivateUsage)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:791:27 - warning: Type of parameter "messages" is unknown (reportUnknownParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:791:27 - error: Type annotation is missing for parameter "messages" (reportMissingParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:791:37 - warning: Type of parameter "temperature" is unknown (reportUnknownParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:791:37 - error: Type annotation is missing for parameter "temperature" (reportMissingParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:791:50 - warning: Type of parameter "max_tokens" is unknown (reportUnknownParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:791:50 - error: Type annotation is missing for parameter "max_tokens" (reportMissingParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:791:62 - warning: Type of parameter "response_format" is partially unknown
     Parameter type is "Unknown | None" (reportUnknownParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:791:62 - error: Type annotation is missing for parameter "response_format" (reportMissingParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:792:13 - warning: Type of "response_format" is partially unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:791:62 - error: Type annotation is missing for parameter "response_format" (reportMissingParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:792:13 - warning: Type of "response_format" is partially unknown
     Type of "response_format" is "Unknown | None" (reportUnknownMemberType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:793:13 - warning: Type of "sample" is partially unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:793:13 - warning: Type of "sample" is partially unknown
     Type of "sample" is "dict[str, dict[str, str | list[str]] | dict[str, list[str]] | dict[str, str | list[Unknown]] | list[Unknown]]" (reportUnknownVariableType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:820:20 - warning: Argument of type "DummyJSONClient" cannot be assigned to parameter "llm_client" of type "ChatClient | None" in function "generate_summary_payload"
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:820:20 - warning: Argument of type "DummyJSONClient" cannot be assigned to parameter "llm_client" of type "ChatClient | None" in function "generate_summary_payload"
     Type "DummyJSONClient" is not assignable to type "ChatClient | None"
       "DummyJSONClient" is incompatible with protocol "ChatClient"
         "chat" is an incompatible type
@@ -3583,39 +3583,39 @@ pyright 1.1.392
             Parameter "max_tokens" is missing default argument
             Function return type "tuple[str, dict[str, int]]" is incompatible with type "tuple[str, TokenUsage]"
       "DummyJSONClient" is not assignable to "None" (reportArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:825:12 - warning: Type of "response_format" is partially unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:825:12 - warning: Type of "response_format" is partially unknown
     Type of "response_format" is "Unknown | None" (reportUnknownMemberType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:826:12 - error: "__getitem__" method not defined on type "int" (reportIndexIssue)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:826:12 - error: "__getitem__" method not defined on type "float" (reportIndexIssue)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:826:12 - error: "__getitem__" method not defined on type "bool" (reportIndexIssue)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:826:12 - warning: Argument of type "Literal['overview']" cannot be assigned to parameter "key" of type "SupportsIndex | slice[Any, Any, Any]" in function "__getitem__"
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:826:12 - error: "__getitem__" method not defined on type "int" (reportIndexIssue)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:826:12 - error: "__getitem__" method not defined on type "float" (reportIndexIssue)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:826:12 - error: "__getitem__" method not defined on type "bool" (reportIndexIssue)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:826:12 - warning: Argument of type "Literal['overview']" cannot be assigned to parameter "key" of type "SupportsIndex | slice[Any, Any, Any]" in function "__getitem__"
     Type "Literal['overview']" is not assignable to type "SupportsIndex | slice[Any, Any, Any]"
       "Literal['overview']" is incompatible with protocol "SupportsIndex"
         "__index__" is not present
       "Literal['overview']" is not assignable to "slice[Any, Any, Any]" (reportArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:826:12 - error: Object of type "None" is not subscriptable (reportOptionalSubscript)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:826:12 - error: No overloads for "__getitem__" match the provided arguments (reportCallIssue)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:826:12 - warning: Argument of type "Literal['overview']" cannot be assigned to parameter "s" of type "slice[Any, Any, Any]" in function "__getitem__"
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:826:12 - error: Object of type "None" is not subscriptable (reportOptionalSubscript)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:826:12 - error: No overloads for "__getitem__" match the provided arguments (reportCallIssue)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:826:12 - warning: Argument of type "Literal['overview']" cannot be assigned to parameter "s" of type "slice[Any, Any, Any]" in function "__getitem__"
     "Literal['overview']" is not assignable to "slice[Any, Any, Any]" (reportArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:832:13 - warning: Return type is unknown (reportUnknownParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:832:35 - warning: Type of parameter "state" is unknown (reportUnknownParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:832:35 - error: Type annotation is missing for parameter "state" (reportMissingParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:833:20 - warning: Return type is unknown (reportUnknownVariableType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:835:9 - warning: Type of "parse_transcript" is partially unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:832:13 - warning: Return type is unknown (reportUnknownParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:832:35 - warning: Type of parameter "state" is unknown (reportUnknownParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:832:35 - error: Type annotation is missing for parameter "state" (reportMissingParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:833:20 - warning: Return type is unknown (reportUnknownVariableType)
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:835:9 - warning: Type of "parse_transcript" is partially unknown
     Type of "parse_transcript" is "(self: Self@Dummy, state: Unknown) -> Unknown" (reportUnknownVariableType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:835:28 - warning: Type of "context_builder" is partially unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:835:28 - warning: Type of "context_builder" is partially unknown
     Type of "context_builder" is "(self: Self@Dummy, state: Unknown) -> Unknown" (reportUnknownVariableType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:835:46 - warning: Type of "extract_outline" is partially unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:835:46 - warning: Type of "extract_outline" is partially unknown
     Type of "extract_outline" is "(self: Self@Dummy, state: Unknown) -> Unknown" (reportUnknownVariableType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:835:64 - warning: Type of "build_timeline_seeds" is partially unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:835:64 - warning: Type of "build_timeline_seeds" is partially unknown
     Type of "build_timeline_seeds" is "(self: Self@Dummy, state: Unknown) -> Unknown" (reportUnknownVariableType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:835:87 - warning: Type of "build_entity_hints" is partially unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:835:87 - warning: Type of "build_entity_hints" is partially unknown
     Type of "build_entity_hints" is "(self: Self@Dummy, state: Unknown) -> Unknown" (reportUnknownVariableType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:835:108 - warning: Type of "draft_markdown" is partially unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:835:108 - warning: Type of "draft_markdown" is partially unknown
     Type of "draft_markdown" is "(self: Self@Dummy, state: Unknown) -> Unknown" (reportUnknownVariableType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:835:125 - warning: Type of "qa_and_finalize" is partially unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:835:125 - warning: Type of "qa_and_finalize" is partially unknown
     Type of "qa_and_finalize" is "(self: Self@Dummy, state: Unknown) -> Unknown" (reportUnknownVariableType)
-  /home/user/Code/uDocket/udocket.com/tests/test_summarize_lib.py:835:143 - warning: Type of "write_ops_and_artifacts" is partially unknown
+  /home/user/Code/uDocket/udocket.com/tests/test_analyze_lib.py:835:143 - warning: Type of "write_ops_and_artifacts" is partially unknown
     Type of "write_ops_and_artifacts" is "(self: Self@Dummy, state: Unknown) -> Unknown" (reportUnknownVariableType)
 /home/user/Code/uDocket/udocket.com/tests/accounts/test_admin_wizard.py
   /home/user/Code/uDocket/udocket.com/tests/accounts/test_admin_wizard.py:25:5 - warning: Type of "user" is unknown (reportUnknownVariableType)
@@ -4293,73 +4293,73 @@ pyright 1.1.392
   /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_guardian_task.py:149:65 - error: Type of parameter "__" is partially unknown (reportUnknownLambdaType)
   /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_guardian_task.py:151:36 - error: Cannot access attribute "run" for class "function"
     Attribute "run" is unknown (reportFunctionMemberAccess)
-/home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:19:118 - warning: Type of parameter "tmp_path" is unknown (reportUnknownParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:19:118 - error: Type annotation is missing for parameter "tmp_path" (reportMissingParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:20:5 - warning: Type of "media_root" is unknown (reportUnknownVariableType)
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:21:5 - warning: Type of "mkdir" is unknown (reportUnknownMemberType)
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:22:14 - warning: Cannot assign to attribute "MEDIA_ROOT" for class "SettingsFixture"
+/home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:19:118 - warning: Type of parameter "tmp_path" is unknown (reportUnknownParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:19:118 - error: Type annotation is missing for parameter "tmp_path" (reportMissingParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:20:5 - warning: Type of "media_root" is unknown (reportUnknownVariableType)
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:21:5 - warning: Type of "mkdir" is unknown (reportUnknownMemberType)
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:22:14 - warning: Cannot assign to attribute "MEDIA_ROOT" for class "SettingsFixture"
     Attribute "MEDIA_ROOT" is unknown (reportAttributeAccessIssue)
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:22:31 - warning: Argument type is unknown
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:22:31 - warning: Argument type is unknown
     Argument corresponds to parameter "object" in function "__new__" (reportUnknownArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:35:52 - warning: Argument type is partially unknown
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:35:52 - warning: Argument type is partially unknown
     Argument corresponds to parameter "value" in function "setattr"
     Argument type is "(*_: Unknown, **__: Unknown) -> None" (reportUnknownArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:35:60 - error: Type of parameter "_" is partially unknown (reportUnknownLambdaType)
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:35:65 - error: Type of parameter "__" is partially unknown (reportUnknownLambdaType)
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:36:52 - warning: Argument type is partially unknown
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:35:60 - error: Type of parameter "_" is partially unknown (reportUnknownLambdaType)
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:35:65 - error: Type of parameter "__" is partially unknown (reportUnknownLambdaType)
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:36:52 - warning: Argument type is partially unknown
     Argument corresponds to parameter "value" in function "setattr"
     Argument type is "(*_: Unknown, **__: Unknown) -> None" (reportUnknownArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:36:60 - error: Type of parameter "_" is partially unknown (reportUnknownLambdaType)
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:36:65 - error: Type of parameter "__" is partially unknown (reportUnknownLambdaType)
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:37:46 - warning: Argument type is partially unknown
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:36:60 - error: Type of parameter "_" is partially unknown (reportUnknownLambdaType)
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:36:65 - error: Type of parameter "__" is partially unknown (reportUnknownLambdaType)
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:37:46 - warning: Argument type is partially unknown
     Argument corresponds to parameter "value" in function "setattr"
     Argument type is "(*_: Unknown, **__: Unknown) -> None" (reportUnknownArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:37:54 - error: Type of parameter "_" is partially unknown (reportUnknownLambdaType)
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:37:59 - error: Type of parameter "__" is partially unknown (reportUnknownLambdaType)
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:41:47 - error: Type of parameter "_" is partially unknown (reportUnknownLambdaType)
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:46:9 - warning: Argument type is partially unknown
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:37:54 - error: Type of parameter "_" is partially unknown (reportUnknownLambdaType)
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:37:59 - error: Type of parameter "__" is partially unknown (reportUnknownLambdaType)
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:41:47 - error: Type of parameter "_" is partially unknown (reportUnknownLambdaType)
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:46:9 - warning: Argument type is partially unknown
     Argument corresponds to parameter "value" in function "setattr"
     Argument type is "(organization_id: Unknown, config_id: Unknown, target: Unknown) -> dict[str, str | list[str] | dict[Unknown, Unknown]]" (reportUnknownArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:46:16 - error: Type of parameter "organization_id" is unknown (reportUnknownLambdaType)
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:46:33 - error: Type of parameter "config_id" is unknown (reportUnknownLambdaType)
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:46:44 - error: Type of parameter "target" is unknown (reportUnknownLambdaType)
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:46:52 - error: Return type of lambda, "dict[str, str | list[str] | dict[Unknown, Unknown]]", is partially unknown (reportUnknownLambdaType)
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:51:9 - warning: Argument type is partially unknown
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:46:16 - error: Type of parameter "organization_id" is unknown (reportUnknownLambdaType)
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:46:33 - error: Type of parameter "config_id" is unknown (reportUnknownLambdaType)
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:46:44 - error: Type of parameter "target" is unknown (reportUnknownLambdaType)
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:46:52 - error: Return type of lambda, "dict[str, str | list[str] | dict[Unknown, Unknown]]", is partially unknown (reportUnknownLambdaType)
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:51:9 - warning: Argument type is partially unknown
     Argument corresponds to parameter "value" in function "setattr"
     Argument type is "(**_kwargs: Unknown) -> dict[str, str | list[str] | dict[Unknown, Unknown]]" (reportUnknownArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:51:18 - error: Type of parameter "_kwargs" is partially unknown (reportUnknownLambdaType)
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:51:27 - error: Return type of lambda, "dict[str, str | list[str] | dict[Unknown, Unknown]]", is partially unknown (reportUnknownLambdaType)
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:53:69 - warning: Argument type is partially unknown
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:51:18 - error: Type of parameter "_kwargs" is partially unknown (reportUnknownLambdaType)
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:51:27 - error: Return type of lambda, "dict[str, str | list[str] | dict[Unknown, Unknown]]", is partially unknown (reportUnknownLambdaType)
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:53:69 - warning: Argument type is partially unknown
     Argument corresponds to parameter "value" in function "setattr"
     Argument type is "(*_args: Unknown, **_kwargs: Unknown) -> dict[Unknown, Unknown]" (reportUnknownArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:53:77 - error: Type of parameter "_args" is partially unknown (reportUnknownLambdaType)
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:53:86 - error: Type of parameter "_kwargs" is partially unknown (reportUnknownLambdaType)
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:53:95 - error: Return type of lambda, "dict[Unknown, Unknown]", is partially unknown (reportUnknownLambdaType)
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:57:9 - warning: Argument type is partially unknown
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:53:77 - error: Type of parameter "_args" is partially unknown (reportUnknownLambdaType)
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:53:86 - error: Type of parameter "_kwargs" is partially unknown (reportUnknownLambdaType)
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:53:95 - error: Return type of lambda, "dict[Unknown, Unknown]", is partially unknown (reportUnknownLambdaType)
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:57:9 - warning: Argument type is partially unknown
     Argument corresponds to parameter "value" in function "setattr"
     Argument type is "(*_args: Unknown, **_kwargs: Unknown) -> list[str]" (reportUnknownArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:57:17 - error: Type of parameter "_args" is partially unknown (reportUnknownLambdaType)
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:57:26 - error: Type of parameter "_kwargs" is partially unknown (reportUnknownLambdaType)
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:90:28 - warning: Type of parameter "config" is unknown (reportUnknownParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:90:28 - error: Type annotation is missing for parameter "config" (reportMissingParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:93:30 - warning: Type of parameter "input" is unknown (reportUnknownParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:93:30 - error: Type annotation is missing for parameter "input" (reportMissingParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:93:37 - warning: Type of parameter "case_dir" is unknown (reportUnknownParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:93:37 - error: Type annotation is missing for parameter "case_dir" (reportMissingParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:93:47 - warning: Type of parameter "job_id" is unknown (reportUnknownParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:93:47 - error: Type annotation is missing for parameter "job_id" (reportMissingParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:93:57 - warning: Type of parameter "_kwargs" is unknown (reportUnknownParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:93:57 - error: Type annotation is missing for parameter "_kwargs" (reportMissingParameterType)
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:94:31 - warning: Argument type is unknown
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:57:17 - error: Type of parameter "_args" is partially unknown (reportUnknownLambdaType)
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:57:26 - error: Type of parameter "_kwargs" is partially unknown (reportUnknownLambdaType)
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:90:28 - warning: Type of parameter "config" is unknown (reportUnknownParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:90:28 - error: Type annotation is missing for parameter "config" (reportMissingParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:93:30 - warning: Type of parameter "input" is unknown (reportUnknownParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:93:30 - error: Type annotation is missing for parameter "input" (reportMissingParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:93:37 - warning: Type of parameter "case_dir" is unknown (reportUnknownParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:93:37 - error: Type annotation is missing for parameter "case_dir" (reportMissingParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:93:47 - warning: Type of parameter "job_id" is unknown (reportUnknownParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:93:47 - error: Type annotation is missing for parameter "job_id" (reportMissingParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:93:57 - warning: Type of parameter "_kwargs" is unknown (reportUnknownParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:93:57 - error: Type annotation is missing for parameter "_kwargs" (reportMissingParameterType)
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:94:31 - warning: Argument type is unknown
     Argument corresponds to parameter "args" in function "__new__" (reportUnknownArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:97:59 - warning: Argument type is unknown
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:97:59 - warning: Argument type is unknown
     Argument corresponds to parameter "args" in function "__new__" (reportUnknownArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:97:74 - warning: Argument type is unknown
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:97:74 - warning: Argument type is unknown
     Argument corresponds to parameter "object" in function "__new__" (reportUnknownArgumentType)
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:101:23 - error: Cannot access attribute "run" for class "function"
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:101:23 - error: Cannot access attribute "run" for class "function"
     Attribute "run" is unknown (reportFunctionMemberAccess)
-  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_summarize_task.py:102:23 - error: Cannot access attribute "run" for class "function"
+  /home/user/Code/uDocket/udocket.com/tests/platform/operations/test_analyze_task.py:102:23 - error: Cannot access attribute "run" for class "function"
     Attribute "run" is unknown (reportFunctionMemberAccess)
 /home/user/Code/uDocket/udocket.com/tests/tenancy/test_scope_helpers.py
   /home/user/Code/uDocket/udocket.com/tests/tenancy/test_scope_helpers.py:22:5 - warning: Type of "user_a" is unknown (reportUnknownVariableType)

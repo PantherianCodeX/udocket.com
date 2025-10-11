@@ -6,7 +6,7 @@ from django.urls import reverse
 
 from apps.platform.cases.models import Case
 from packages.udocket_core.agents.compose import COMPOSE_STAGE_PROFILES
-from packages.udocket_core.agents.analyze_lib import SUMMARIZE_STAGE_PROFILES, AnalyzeConfig
+from packages.udocket_core.agents.analyze_lib import ANALYZE_STAGE_PROFILES, AnalyzeConfig
 from packages.udocket_core.llm import load_llm_settings
 from packages.udocket_core.json_utils import stringify_json
 
@@ -34,7 +34,7 @@ def collect_provider_chain(provider_chain: Sequence[str], default_chain: Sequenc
 
 def _stage_profile_hint(stage_key: str, *, target: str) -> Dict[str, Any] | None:
     if target in {"summary", "analyze"}:
-        profile = SUMMARIZE_STAGE_PROFILES.get(stage_key)
+        profile = ANALYZE_STAGE_PROFILES.get(stage_key)
     elif target == "compose":
         profile = COMPOSE_STAGE_PROFILES.get(stage_key)
     else:

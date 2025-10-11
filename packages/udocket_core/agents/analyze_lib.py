@@ -323,7 +323,7 @@ class StageProfile:
     resource_notes: str
 
 
-SUMMARIZE_STAGE_PROFILES: dict[str, StageProfile] = {
+ANALYZE_STAGE_PROFILES: dict[str, StageProfile] = {
     "analyze.context_builder": StageProfile(
         stage_key="analyze.context_builder",
         label="Context Builder",
@@ -388,7 +388,7 @@ SUMMARIZE_STAGE_PROFILES: dict[str, StageProfile] = {
 
 
 def _stage_profile(stage_key: str) -> StageProfile:
-    return SUMMARIZE_STAGE_PROFILES.get(
+    return ANALYZE_STAGE_PROFILES.get(
         stage_key,
         StageProfile(
             stage_key=stage_key,
@@ -564,7 +564,7 @@ class AnalyzeAgent:
     def stage_catalog(self) -> dict[str, StageCatalogEntry]:
         settings = _load_llm_settings()
         catalog: dict[str, StageCatalogEntry] = {}
-        for stage_key, profile in SUMMARIZE_STAGE_PROFILES.items():
+        for stage_key, profile in ANALYZE_STAGE_PROFILES.items():
             eligible_models: list[StageModelInfo] = []
             for provider_name, provider in settings.providers.items():
                 for model_name, model in provider.models.items():

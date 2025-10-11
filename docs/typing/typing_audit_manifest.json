@@ -4199,7 +4199,7 @@
           ]
         },
         {
-          "path": "tests/test_summarize_lib.py",
+          "path": "tests/test_analyze_lib.py",
           "errors": 13,
           "warnings": 14,
           "information": 0,
@@ -5939,7 +5939,7 @@
           ]
         },
         {
-          "path": "tests/platform/operations/test_summarize_task.py",
+          "path": "tests/platform/operations/test_analyze_task.py",
           "errors": 2,
           "warnings": 1,
           "information": 0,
@@ -9273,7 +9273,7 @@
           ]
         },
         {
-          "path": "tests/test_summarize_lib.py",
+          "path": "tests/test_analyze_lib.py",
           "depth": 2,
           "errors": 13,
           "warnings": 14,

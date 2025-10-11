@@ -11,7 +11,7 @@ import packages.udocket_core.agents.analyze_lib as analyze_lib
 from packages.udocket_core.agents import build_analyze_graph
 from packages.udocket_core.agents.analyze_lib import (
     LLM_STAGE_KEYS,
-    SUMMARIZE_STAGE_PROFILES,
+    ANALYZE_STAGE_PROFILES,
     StageRuntime,
     AnalyzeAgent,
     AnalyzeConfig,
@@ -571,7 +571,7 @@ def test_build_context_respects_config_limits(tmp_path):
 
     stage_runtimes: Dict[str, StageRuntime] = {}
     for stage_key in LLM_STAGE_KEYS.values():
-        profile = SUMMARIZE_STAGE_PROFILES[stage_key]
+        profile = ANALYZE_STAGE_PROFILES[stage_key]
         stage_runtimes[stage_key] = StageRuntime(
             stage_key=stage_key,
             providers=["azure"],
@@ -742,7 +742,7 @@ def test_stage_provider_initialization_error(monkeypatch: MonkeyPatch, tmp_path)
 
 
 def test_prompt_limits_respect_config_defaults(tmp_path):
-    stage_profile = SUMMARIZE_STAGE_PROFILES["analyze.draft_markdown"]
+    stage_profile = ANALYZE_STAGE_PROFILES["analyze.draft_markdown"]
     runtime = StageRuntime(
         stage_key="analyze.draft_markdown",
         providers=["azure"],
