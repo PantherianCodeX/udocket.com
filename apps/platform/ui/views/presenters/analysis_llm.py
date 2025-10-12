@@ -8,7 +8,7 @@ from apps.platform.cases.models import Case
 from packages.udocket_core.agents.compose import COMPOSE_STAGE_PROFILES
 from packages.udocket_core.agents.analyze_lib import ANALYZE_STAGE_PROFILES, AnalyzeConfig
 from packages.udocket_core.llm import load_llm_settings
-from packages.udocket_core.json_utils import stringify_json
+from packages.udocket_core.utils.json import stringify_json
 
 from apps.platform.operations.llm import (
     build_provider_registry,

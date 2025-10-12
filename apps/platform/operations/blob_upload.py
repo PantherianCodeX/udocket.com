@@ -12,7 +12,7 @@ from urllib.parse import quote
 
 from django.conf import settings
 
-from packages.udocket_core.time_utils import utc_now
+from packages.udocket_core.utils.time import utc_now
 
 log = logging.getLogger("apps.platform.operations.blob")
 

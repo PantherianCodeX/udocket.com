@@ -22,7 +22,7 @@ from apps.platform.jobs.models import Job
 from apps.platform.operations.channels import send_job_update
 from apps.platform.operations.storage import ensure_case_dirs
 from apps.platform.operations.utils import append_job_log, update_job_meta
-from packages.udocket_core.json_utils import parse_json_value
+from packages.udocket_core.utils.json import parse_json_value
 
 from ..auth import ensure_authenticated
 from ..contexts import user_can_review_case
@@ -30,7 +30,7 @@ from ..selectors import job_telemetry_payload
 from ..transcripts import ensure_transcript_artifact
 
 
-FIXTURE_ROOT = Path(settings.BASE_DIR) / "tests" / "fixtures" / "transcripts" / "CASE-DEMO" / "transcript"
+FIXTURE_ROOT = Path(settings.BASE_DIR) / "tests" / "udocket_core" / "fixtures" / "transcripts" / "CASE-DEMO" / "transcript"
 DEFAULT_LANGUAGE = "en-CA"
 MAX_UPLOAD_BYTES = 512 * 1024  # 512 KiB for dev fixtures
 

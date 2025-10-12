@@ -39,9 +39,9 @@ from apps.platform.operations.guardian import (
     save_guardian_instructions,
 )
 from packages.udocket_core.llm import LLMSettings, load_llm_settings
-from packages.udocket_core.json_utils import normalize_json_object, stringify_pretty
+from packages.udocket_core.utils.json import normalize_json_object, stringify_pretty
 from packages.udocket_core.llm.runtime import ChatClientError
-from packages.udocket_core.json_utils import parse_json_value
+from packages.udocket_core.utils.json import parse_json_value
 
 from .auth import ensure_authenticated
 from config.settings import settings as app_settings

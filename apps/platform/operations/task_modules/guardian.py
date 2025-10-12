@@ -31,7 +31,7 @@ from apps.platform.operations.runtime import (
 )
 from apps.platform.operations.utils import read_job_meta
 from packages.udocket_core.agents.guardian_lib import GuardianVerdict
-from packages.udocket_core.json_utils import JSONObject, normalize_json_object
+from packages.udocket_core.utils.json import JSONObject, normalize_json_object
 from packages.udocket_core.logging.context import LogContext
 
 log = logging.getLogger("apps.platform.operations.tasks.guardian")

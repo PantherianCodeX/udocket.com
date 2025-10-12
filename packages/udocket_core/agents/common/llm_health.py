@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Callable
 
-from packages.udocket_core.llm.runtime import SupportsHealthCheck
+from .llm.runtime import SupportsHealthCheck
 
 
 def ensure_llm_client_health(

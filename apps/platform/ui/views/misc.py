@@ -9,7 +9,7 @@ from django.http import HttpRequest, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 
 log = logging.getLogger("apps.platform.ui")
-from packages.udocket_core.json_utils import parse_json_value
+from packages.udocket_core.utils.json import parse_json_value
 
 
 def favicon(request: HttpRequest) -> HttpResponse:

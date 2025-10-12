@@ -8,7 +8,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Optional
 
-from packages.udocket_core.json_utils import (
+from ..utils.json import (
     JSONObject,
     JSONValue,
     coerce_json_object,
@@ -16,16 +16,16 @@ from packages.udocket_core.json_utils import (
     coerce_str,
     parse_json_object,
 )
-from packages.udocket_core.llm import LLMSettings, load_llm_settings
-from packages.udocket_core.llm.config import LLMProvider
-from packages.udocket_core.llm.runtime import (
+from ..llm import LLMSettings, load_llm_settings
+from ..llm.config import LLMProvider
+from ..llm.runtime import (
     ChatClient,
     ChatClientError,
     build_chat_client,
     build_provider_runtime_config,
 )
 from .common.llm_health import ensure_llm_client_health
-from packages.udocket_core.logging.context import LogContext
+from ..logging.context import LogContext
 
 logger = logging.getLogger("udocket.guardian")
 

@@ -8,7 +8,7 @@ from typing import Mapping, Optional, Sequence
 
 from typing_extensions import Annotated
 
-from packages.udocket_core.json_utils import JSONObject, JSONValue, coerce_json_object, coerce_str
+from ...utils.json import JSONObject, JSONValue, coerce_json_object, coerce_str
 
 from ..common.factories import (
     int_usage_factory,

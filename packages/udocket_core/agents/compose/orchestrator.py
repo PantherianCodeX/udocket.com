@@ -11,7 +11,7 @@ from typing import Any, Callable, Mapping, Optional, cast
 
 from langgraph.graph import END, START, StateGraph  # type: ignore[import]
 
-from packages.udocket_core.json_utils import (
+from ...utils.json import (
     JSONArray,
     JSONObject,
     JSONValue,

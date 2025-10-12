@@ -9,7 +9,7 @@ from typing import Any, TypedDict, cast
 
 from apps.platform.cases.models import Case
 from apps.platform.operations.storage import ensure_case_dirs, ops_dir as storage_ops_dir
-from packages.udocket_core.json_utils import (
+from packages.udocket_core.utils.json import (
     JSONObject,
     coerce_json_object,
     coerce_object_list,

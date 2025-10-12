@@ -35,7 +35,7 @@ from apps.platform.operations.services import (
 from apps.platform.operations.services.files import sha256_file
 from apps.platform.operations.utils import read_job_meta
 from packages.udocket_core.agents import AnalyzeAgent as _AnalyzeAgent, AnalyzeConfig
-from packages.udocket_core.json_utils import JSONObject, coerce_json_object, read_json_object
+from packages.udocket_core.utils.json import JSONObject, coerce_json_object, read_json_object
 from packages.udocket_core.llm.config import load_llm_settings as _load_llm_settings
 
 

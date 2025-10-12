@@ -8,7 +8,7 @@ from dataclasses import dataclass
 
 from ...common.io import TranscriptParse
 from ...common.normalization import coerce_sequence
-from packages.udocket_core.json_utils import (
+from .utils.json import (
     JSONObject,
     JSONValue,
     coerce_json_object,
@@ -17,7 +17,7 @@ from packages.udocket_core.json_utils import (
     coerce_str_list,
     parse_json_object,
 )
-from packages.udocket_core.llm.runtime import ChatClient
+from .llm.runtime import ChatClient
 
 
 @dataclass(frozen=True)

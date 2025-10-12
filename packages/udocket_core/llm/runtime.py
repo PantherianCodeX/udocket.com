@@ -8,12 +8,12 @@ import os
 from dataclasses import dataclass
 from typing import Mapping, Protocol, Sequence, cast, runtime_checkable
 
-from packages.udocket_core.agents.common.azure_client import (
+from ..agents.common.azure_client import (
     AzureChatClient,
     AzureClientConfig,
 )
-from packages.udocket_core.agents.common.http_client import HTTPRetryConfig
-from packages.udocket_core.json_utils import (
+from ..agents.common.http_client import HTTPRetryConfig
+from ..utils.json import (
     JSONObject,
     JSONValue,
     coerce_bool,
@@ -25,7 +25,7 @@ from packages.udocket_core.json_utils import (
     coerce_str_dict,
     merge_json_objects,
 )
-from packages.udocket_core.llm.config import LLMProvider, LLMProviderModel
+from ..llm.config import LLMProvider, LLMProviderModel
 
 logger = logging.getLogger("udocket.llm.runtime")
 

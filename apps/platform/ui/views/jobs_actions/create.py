@@ -17,7 +17,7 @@ from apps.platform.jobs.models import Job
 from apps.platform.jobs.utils import unique_title
 from apps.platform.operations.storage import ensure_case_dirs, ops_dir as storage_ops_dir
 from apps.platform.operations.utils import update_job_meta
-from packages.udocket_core.json_utils import read_json_object
+from packages.udocket_core.utils.json import read_json_object
 
 from ..auth import ensure_authenticated
 from ..common import JobRow

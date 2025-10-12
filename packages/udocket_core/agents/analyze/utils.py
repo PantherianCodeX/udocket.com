@@ -19,7 +19,7 @@ from ..common import (
     sequence_length,
     sha256_file,
 )
-from packages.udocket_core.json_utils import write_json_object
+from .utils.json import write_json_object
 from .stages import (
     EntityStageResult,
     OutlineStageResult,

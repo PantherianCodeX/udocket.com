@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, cast
 
-from packages.udocket_core.json_utils import JSONObject, JSONValue, coerce_json_object, coerce_str
+from ...utils.json import JSONObject, JSONValue, coerce_json_object, coerce_str
 
 from .logging_utils import ComposeLogContext, format_run_message
 

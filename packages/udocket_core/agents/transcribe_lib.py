@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Optional
 
 from ..audio import probe_audio_metadata
-from ..json_utils import (
+from ..utils.json import (
     JSONObject,
     coerce_json_object,
     coerce_json_value,
@@ -23,7 +23,7 @@ from ..json_utils import (
     read_json_object,
     write_json_object,
 )
-from ..time_utils import format_utc
+from ..utils.time import format_utc
 from .common import append_jsonl
 from .common.azure_speech import AzureSpeechClient, AzureSpeechClientConfig, AzureSpeechError
 

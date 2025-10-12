@@ -1,6 +1,6 @@
 # JSON Normalization Adoption — Tracking List
 
-This checklist tracks where to adopt the shared helpers from `packages/udocket_core/json_utils.py`:
+This checklist tracks where to adopt the shared helpers from `packages/udocket_core/utils.json.py`:
 - `normalize_json_object` — trim keys, optionally drop empty keys and nullish values
 - `coerce_json_object` — coerce to JSON shape without dropping data
 

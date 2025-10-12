@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from packages.udocket_core.json_utils import (
+from ..utils.json import (
     JSONObject,
     JSONValue,
     coerce_bool,

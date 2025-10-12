@@ -9,7 +9,7 @@ Purpose: generate layered, legally‑useful summaries from approved transcripts,
 - Deterministic, reproducible outputs with per‑run metadata and audit logging.
 - Privacy and locality: process only transcripts and metadata; never upload audio; ensure Canadian residency when Azure is used.
 - Composable pipeline: multiple “sub‑agents” produce structured JSON at each stage and a cohesive Markdown summary assembled last.
-- Provider-agnostic orchestration: provider/model selection flows from the active `LLMConfiguration`, and chat clients are constructed dynamically via `packages.udocket_core.llm.runtime` (Azure, OpenAI-compatible, Anthropic, Ollama, etc.).
+- Provider-agnostic orchestration: provider/model selection flows from the active `LLMConfiguration`, and chat clients are constructed dynamically via `.llm.runtime` (Azure, OpenAI-compatible, Anthropic, Ollama, etc.).
 - Stage-level tuning: per-stage output limits, temperature, and deployment overrides are stored in `LLMConfiguration.stage_map` and configured through the platform UI.
 - First‑class integration with Celery tasks and UI panels; no overwrites (versioned filenames).
 - Long-context friendly: allow entire interviews to flow through by tuning prompt limits and stage model/token overrides instead of truncating aggressively.
@@ -229,7 +229,7 @@ Audit line in `ops/ops_summary.jsonl` mirrors the above in a single JSON object 
 ## CLI (Optional)
 You may expose a thin CLI under `scripts/`:
 ```
-python -m packages.udocket_core.agents.analyze_lib \
+python -m .agents.analyze_lib \
   --case <CASE_ID> \
   --case-dir /app/storage/media/cases/<CASE_ID> \
   --job <JOB_ID> \

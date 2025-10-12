@@ -8,7 +8,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import TypedDict
 
-from packages.udocket_core.json_utils import (
+from ..utils.json import (
     JSONObject,
     JSONValue,
     coerce_json_object,

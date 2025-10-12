@@ -2,7 +2,7 @@ from __future__ import annotations
 
 # pyright: strict
 
-from packages.udocket_core.json_utils import JSONObject
+from .utils.json import JSONObject
 
 
 def json_object_factory() -> JSONObject:

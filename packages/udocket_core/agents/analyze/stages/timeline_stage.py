@@ -17,8 +17,8 @@ from ...common.chunking import (
     should_retry_for_length,
     split_for_retry,
 )
-from packages.udocket_core.llm.runtime import ChatClient, ResponseFormat
-from ....json_utils import parse_json_value
+from .llm.runtime import ChatClient, ResponseFormat
+from ....utils.json import parse_json_value
 
 logger = logging.getLogger("udocket.analyze.timeline_stage")
 

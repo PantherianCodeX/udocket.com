@@ -7,9 +7,9 @@ import random
 import time
 from typing import Any, Mapping, Tuple, cast
 
-from packages.udocket_core.json_utils import JSONObject
-from packages.udocket_core.llm import LLMSettings
-from packages.udocket_core.llm.runtime import ChatClientError, build_chat_client, build_provider_runtime_config
+from ...utils.json import JSONObject
+from ...llm import LLMSettings
+from ...llm.runtime import ChatClientError, build_chat_client, build_provider_runtime_config
 from .errors import ComposeStageError
 from .settings import ComposeConfig, DEFAULT_PROVIDER_CHAIN, normalize_provider_chain
 from .llm_profiles import STAGE_MODEL_DEFAULTS

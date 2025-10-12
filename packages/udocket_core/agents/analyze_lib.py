@@ -14,7 +14,7 @@ from .common import parse_transcript, TranscriptParse
 from .common.io import TranscriptSegment
 from .langgraph_orchestrator import build_analyze_graph, enable_langgraph_debug_logging
 from .analyze.utils import FinalizedOutputs, AnalyzePipeline
-from ..json_utils import coerce_json_object, coerce_object_dict, read_json_object
+from ..utils.json import coerce_json_object, coerce_object_dict, read_json_object
 from ..llm import LLMSettings, load_llm_settings
 from ..llm.runtime import (
     ChatClient,

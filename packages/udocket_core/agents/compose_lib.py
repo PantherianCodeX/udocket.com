@@ -7,7 +7,7 @@ import logging
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Sequence
 
-from packages.udocket_core.json_utils import (
+from .utils.json import (
     JSONArray,
     JSONObject,
     coerce_json_object,

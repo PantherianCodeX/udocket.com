@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import sys
 
-from packages.udocket_core.json_utils import JSONObject, JSONValue, coerce_json_value, stringify_json
+from ..utils.json import JSONObject, JSONValue, coerce_json_value, stringify_json
 
 
 def log(event: str, **kwargs: JSONValue) -> None:

@@ -10,7 +10,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Mapping, Sequence
 
-from packages.udocket_core.json_utils import (
+from .utils.json import (
     JSONObject,
     JSONValue,
     coerce_json_object,

@@ -15,7 +15,7 @@ from django.db import transaction
 
 from apps.platform.accounts.models import Organization, OrganizationMembership, User
 from apps.platform.accounts.utils import sync_user_access_flags
-from packages.udocket_core.json_utils import load_json_value
+from packages.udocket_core.utils.json import load_json_value
 
 logger = logging.getLogger(__name__)
 

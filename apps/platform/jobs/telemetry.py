@@ -13,7 +13,7 @@ from django.utils.functional import cached_property
 
 from apps.platform.jobs.models import Job
 from apps.platform.operations.storage import ops_dir as storage_ops_dir
-from packages.udocket_core.json_utils import read_json_object
+from packages.udocket_core.utils.json import read_json_object
 
 
 def _ops_json_path(job: Job) -> Path:
