@@ -1,0 +1,250 @@
+{
+  "schema": "udocket.reference.catalog.bundle.v1",
+  "db": {
+    "type": "postgresql",
+    "tables": {
+      "jurisdictions": {
+        "table": "jurisdictions",
+        "pk": ["country", "subnational"],
+        "unique": [["country", "subnational"]]
+      },
+      "courts": {
+        "table": "courts",
+        "pk": ["key"],
+        "fk": { "jurisdictions": ["country", "subnational"] },
+        "unique": [["country", "subnational", "key"]],
+        "indexes": [["country", "subnational"]]
+      },
+      "court_locations": {
+        "table": "court_locations",
+        "pk": ["court_key", "slug"],
+        "fk": { "courts": ["court_key"] },
+        "indexes": [["is_base_point"], ["admin_base_slug"]]
+      },
+      "hearing_codes": {
+        "table": "hearing_codes",
+        "pk": ["code"],
+        "indexes": [["category"], ["court_key"]]
+      },
+      "filing_codes": {
+        "table": "filing_codes",
+        "pk": ["code"],
+        "indexes": [["category"], ["court_key"]]
+      },
+      "order_codes": {
+        "table": "order_codes",
+        "pk": ["code"],
+        "indexes": [["category"], ["court_key"]]
+      }
+    }
+  },
+  "data": [
+    {
+      "country": "CA",
+      "subnational": "AB",
+      "note": "ACJ civil jurisdiction up to $100,000; ABCA registry routing: north of Red Deer files in Edmonton, Red Deer & south in Calgary.",
+      "courts": {
+        "CA-AB-ACJ": {
+          "key": "CA-AB-ACJ",
+          "country": "CA",
+          "subnational": "AB",
+          "level": "TRIAL_PROVINCIAL",
+          "formal_name": "Alberta Court of Justice",
+          "short_name": "ACJ",
+          "divisions": ["CIVIL", "FAMILY", "CRIMINAL", "YOUTH", "TRAFFIC"],
+          "locations": [
+            { "slug": "airdrie", "display_name": "Airdrie", "is_base_point": false, "admin_base_slug": "calgary" },
+            { "slug": "alexis", "display_name": "Alexis", "is_base_point": false },
+            { "slug": "athabasca", "display_name": "Athabasca", "is_base_point": false },
+            { "slug": "barrhead", "display_name": "Barrhead", "is_base_point": false, "admin_base_slug": "st-albert" },
+            { "slug": "bonnyville", "display_name": "Bonnyville", "is_base_point": false },
+            { "slug": "boyle", "display_name": "Boyle", "is_base_point": false },
+            { "slug": "breton", "display_name": "Breton", "is_base_point": false },
+            { "slug": "brooks", "display_name": "Brooks", "is_base_point": false, "admin_base_slug": "medicine-hat" },
+            { "slug": "calgary", "display_name": "Calgary", "is_base_point": true },
+            { "slug": "camrose", "display_name": "Camrose", "is_base_point": false },
+            { "slug": "canmore", "display_name": "Canmore", "is_base_point": false },
+            { "slug": "cardston", "display_name": "Cardston", "is_base_point": false, "admin_base_slug": "lethbridge" },
+            { "slug": "chateh", "display_name": "Chateh", "is_base_point": false },
+            { "slug": "cochrane", "display_name": "Cochrane", "is_base_point": false, "admin_base_slug": "calgary" },
+            { "slug": "cold-lake", "display_name": "Cold Lake", "is_base_point": false },
+            { "slug": "coronation", "display_name": "Coronation", "is_base_point": false, "admin_base_slug": "red-deer" },
+            { "slug": "diamond-valley", "display_name": "Diamond Valley", "is_base_point": false, "admin_base_slug": "calgary" },
+            { "slug": "didsbury", "display_name": "Didsbury", "is_base_point": false },
+            { "slug": "drayton-valley", "display_name": "Drayton Valley", "is_base_point": false, "admin_base_slug": "leduc" },
+            { "slug": "drumheller", "display_name": "Drumheller", "is_base_point": false },
+            { "slug": "edmonton", "display_name": "Edmonton", "is_base_point": true },
+            { "slug": "edson", "display_name": "Edson", "is_base_point": false },
+            { "slug": "evansburg", "display_name": "Evansburg", "is_base_point": false },
+            { "slug": "fairview", "display_name": "Fairview", "is_base_point": false, "admin_base_slug": "peace-river" },
+            { "slug": "falher", "display_name": "Falher", "is_base_point": false },
+            { "slug": "fort-chipewyan", "display_name": "Fort Chipewyan", "is_base_point": false },
+            { "slug": "fort-macleod", "display_name": "Fort Macleod", "is_base_point": false },
+            { "slug": "fort-mcmurray", "display_name": "Fort McMurray", "is_base_point": true },
+            { "slug": "fort-saskatchewan", "display_name": "Fort Saskatchewan", "is_base_point": false },
+            { "slug": "fort-vermilion", "display_name": "Fort Vermilion", "is_base_point": false },
+            { "slug": "fox-creek", "display_name": "Fox Creek", "is_base_point": false, "admin_base_slug": "grande-prairie" },
+            { "slug": "grande-cache", "display_name": "Grande Cache", "is_base_point": false, "admin_base_slug": "hinton" },
+            { "slug": "grande-prairie", "display_name": "Grande Prairie", "is_base_point": true },
+            { "slug": "hanna", "display_name": "Hanna", "is_base_point": false },
+            { "slug": "high-level", "display_name": "High Level", "is_base_point": false },
+            { "slug": "high-prairie", "display_name": "High Prairie", "is_base_point": true },
+            { "slug": "hinton", "display_name": "Hinton", "is_base_point": true },
+            { "slug": "jasper", "display_name": "Jasper", "is_base_point": false },
+            { "slug": "killam", "display_name": "Killam", "is_base_point": false },
+            { "slug": "lac-la-biche", "display_name": "Lac La Biche", "is_base_point": false },
+            { "slug": "leduc", "display_name": "Leduc", "is_base_point": true },
+            { "slug": "lethbridge", "display_name": "Lethbridge", "is_base_point": true },
+            { "slug": "lloydminster", "display_name": "Lloydminster", "is_base_point": false },
+            { "slug": "mayerthorpe", "display_name": "Mayerthorpe", "is_base_point": false },
+            { "slug": "medicine-hat", "display_name": "Medicine Hat", "is_base_point": true },
+            { "slug": "morinville", "display_name": "Morinville", "is_base_point": false },
+            { "slug": "okotoks", "display_name": "Okotoks", "is_base_point": false, "admin_base_slug": "calgary" },
+            { "slug": "peace-river", "display_name": "Peace River", "is_base_point": true },
+            { "slug": "pincher-creek", "display_name": "Pincher Creek", "is_base_point": false },
+            { "slug": "ponoka", "display_name": "Ponoka", "is_base_point": false, "admin_base_slug": "wetaskiwin" },
+            { "slug": "red-deer", "display_name": "Red Deer", "is_base_point": true },
+            { "slug": "red-earth-creek", "display_name": "Red Earth Creek", "is_base_point": false, "admin_base_slug": "high-prairie" },
+            { "slug": "rimbey", "display_name": "Rimbey", "is_base_point": false },
+            { "slug": "rocky-mountain-house", "display_name": "Rocky Mountain House", "is_base_point": false, "admin_base_slug": "red-deer" },
+            { "slug": "sherwood-park", "display_name": "Sherwood Park", "is_base_point": false },
+            { "slug": "siksika-nation", "display_name": "Siksika Nation", "is_base_point": false },
+            { "slug": "slave-lake", "display_name": "Slave Lake", "is_base_point": false },
+            { "slug": "st-albert", "display_name": "St. Albert", "is_base_point": true },
+            { "slug": "st-paul", "display_name": "St. Paul", "is_base_point": false },
+            { "slug": "stettler", "display_name": "Stettler", "is_base_point": false },
+            { "slug": "stony-plain", "display_name": "Stony Plain", "is_base_point": false },
+            { "slug": "strathmore", "display_name": "Strathmore", "is_base_point": false },
+            { "slug": "taber", "display_name": "Taber", "is_base_point": false, "admin_base_slug": "lethbridge" },
+            { "slug": "tsuutina-nation", "display_name": "Tsuut’ina Nation", "is_base_point": false },
+            { "slug": "valleyview", "display_name": "Valleyview", "is_base_point": false, "admin_base_slug": "grande-prairie" },
+            { "slug": "vegreville", "display_name": "Vegreville", "is_base_point": false },
+            { "slug": "vermilion", "display_name": "Vermilion", "is_base_point": true },
+            { "slug": "wabasca-desmarais", "display_name": "Wabasca-Desmarais", "is_base_point": false },
+            { "slug": "wainwright", "display_name": "Wainwright", "is_base_point": false, "admin_base_slug": "vermilion" },
+            { "slug": "westlock", "display_name": "Westlock", "is_base_point": false, "admin_base_slug": "st-albert" },
+            { "slug": "wetaskiwin", "display_name": "Wetaskiwin", "is_base_point": true },
+            { "slug": "whitecourt", "display_name": "Whitecourt", "is_base_point": false }
+          ],
+          "hearing_codes": [
+            { "code": { "code": "CA.AB.ACJ.HRG.CIV.CHAMBERS.REG" }, "label": "Regular Chambers", "category": "CIV_CHAMBERS_REGULAR", "divisions": ["CIVIL", "FAMILY"] },
+            { "code": { "code": "CA.AB.ACJ.HRG.CIV.CHAMBERS.SPEC" }, "label": "Special Chambers", "category": "CIV_CHAMBERS_SPECIAL", "divisions": ["CIVIL", "FAMILY"] },
+            { "code": { "code": "CA.AB.ACJ.HRG.FAM.DOCKET" }, "label": "Family Docket", "category": "FAM_DOCKET", "divisions": ["FAMILY"] },
+            { "code": { "code": "CA.AB.ACJ.HRG.CRIM.DOCKET" }, "label": "Criminal Docket", "category": "CRIM_DOCKET", "divisions": ["CRIMINAL"] },
+            { "code": { "code": "CA.AB.ACJ.HRG.CRIM.BAIL" }, "label": "Bail Hearing", "category": "CRIM_BAIL", "divisions": ["CRIMINAL"] },
+            { "code": { "code": "CA.AB.ACJ.HRG.CRIM.PRELIM" }, "label": "Preliminary Inquiry", "category": "CRIM_PRELIM_INQUIRY", "divisions": ["CRIMINAL"] },
+            { "code": { "code": "CA.AB.ACJ.HRG.CRIM.ARRAIGN" }, "label": "Arraignment", "category": "CRIM_ARRAIGNMENT", "divisions": ["CRIMINAL"] },
+            { "code": { "code": "CA.AB.ACJ.HRG.CRIM.TRIAL.JUDGE" }, "label": "Criminal Trial (Judge Alone)", "category": "CRIM_TRIAL_JUDGE", "divisions": ["CRIMINAL"] },
+            { "code": { "code": "CA.AB.ACJ.HRG.CRIM.TRIAL.JURY" }, "label": "Criminal Trial (Jury)", "category": "CRIM_TRIAL_JURY", "divisions": ["CRIMINAL"] },
+            { "code": { "code": "CA.AB.ACJ.HRG.CRIM.SENTENCE" }, "label": "Sentencing", "category": "CRIM_SENTENCING", "divisions": ["CRIMINAL"] },
+            { "code": { "code": "CA.AB.ACJ.HRG.TRAFFIC.DOCKET" }, "label": "Traffic Docket", "category": "TRAFFIC_DOCKET", "divisions": ["TRAFFIC"] },
+            { "code": { "code": "CA.AB.ACJ.HRG.SPEC.DAC" }, "label": "Domestic Abuse Court", "category": "SPEC_DOMESTIC_ABUSE", "divisions": ["CRIMINAL"] },
+            { "code": { "code": "CA.AB.ACJ.HRG.SPEC.DTC" }, "label": "Drug Treatment Court", "category": "SPEC_DRUG_TREATMENT", "divisions": ["CRIMINAL"] },
+            { "code": { "code": "CA.AB.ACJ.HRG.SPEC.MHC" }, "label": "Mental Health Court", "category": "SPEC_MENTAL_HEALTH", "divisions": ["CRIMINAL"] },
+            { "code": { "code": "CA.AB.ACJ.HRG.SPEC.INDIGENOUS" }, "label": "Indigenous Court", "category": "SPEC_INDIGENOUS", "divisions": ["CRIMINAL"] }
+          ],
+          "filing_codes": [
+            { "code": { "code": "CA.AB.ACJ.FILE.CIV.STATEMENT_OF_CLAIM" }, "label": "Statement of Claim", "category": "PLEADING_CLAIM" },
+            { "code": { "code": "CA.AB.ACJ.FILE.CIV.STATEMENT_OF_DEFENCE" }, "label": "Statement of Defence", "category": "PLEADING_DEFENCE" },
+            { "code": { "code": "CA.AB.ACJ.FILE.CIV.COUNTERCLAIM" }, "label": "Counterclaim", "category": "PLEADING_COUNTERCLAIM" },
+            { "code": { "code": "CA.AB.ACJ.FILE.CIV.REPLY" }, "label": "Reply", "category": "PLEADING_REPLY" },
+            { "code": { "code": "CA.AB.ACJ.FILE.CIV.ORIGINATING_APPLICATION" }, "label": "Originating Application", "category": "ORIGINATING_APPLICATION" },
+            { "code": { "code": "CA.AB.ACJ.FILE.CIV.APPLICATION" }, "label": "Application", "category": "INTERLOCUTORY_APPLICATION" },
+            { "code": { "code": "CA.AB.ACJ.FILE.CIV.AFFIDAVIT" }, "label": "Affidavit", "category": "AFFIDAVIT" },
+            { "code": { "code": "CA.AB.ACJ.FILE.CIV.RECORDS" }, "label": "List/Affidavit of Records", "category": "LIST_OR_AFFIDAVIT_OF_RECORDS" },
+            { "code": { "code": "CA.AB.ACJ.FILE.CIV.BRIEF" }, "label": "Brief/Memorandum", "category": "BRIEF_OR_MEMO" },
+            { "code": { "code": "CA.AB.ACJ.FILE.GEN.ORDER" }, "label": "Order", "category": "ORDER" },
+            { "code": { "code": "CA.AB.ACJ.FILE.GEN.JUDGMENT" }, "label": "Judgment", "category": "JUDGMENT" }
+          ],
+          "order_codes": [
+            { "code": { "code": "CA.AB.ACJ.ORD.SCHED.END" }, "label": "Scheduling Endorsement", "category": "SCHEDULING_ENDORSEMENT" },
+            { "code": { "code": "CA.AB.ACJ.ORD.INTERIM" }, "label": "Interim Order", "category": "INTERIM_ORDER" },
+            { "code": { "code": "CA.AB.ACJ.ORD.FINAL" }, "label": "Final Order", "category": "FINAL_ORDER" },
+            { "code": { "code": "CA.AB.ACJ.ORD.CONSENT" }, "label": "Consent Order", "category": "CONSENT_ORDER" },
+            { "code": { "code": "CA.AB.ACJ.ORD.REASONS" }, "label": "Reasons for Judgment", "category": "REASONS_FOR_JUDGMENT" },
+            { "code": { "code": "CA.AB.ACJ.ORD.MINUTE" }, "label": "Minute Entry", "category": "MINUTE_ENTRY" }
+          ]
+        },
+
+        "CA-AB-KB": {
+          "key": "CA-AB-KB",
+          "country": "CA",
+          "subnational": "AB",
+          "level": "TRIAL_SUPERIOR",
+          "formal_name": "Court of King's Bench of Alberta",
+          "short_name": "ABKB",
+          "divisions": ["CIVIL", "FAMILY", "CRIMINAL", "SURROGATE", "APPLICATIONS", "COMMERCIAL"],
+          "locations": [
+            { "slug": "kb-calgary", "display_name": "Calgary (KB)", "is_base_point": true, "divisions_served": ["CIVIL", "FAMILY", "CRIMINAL", "SURROGATE", "APPLICATIONS", "COMMERCIAL"] },
+            { "slug": "kb-edmonton", "display_name": "Edmonton (KB)", "is_base_point": true, "divisions_served": ["CIVIL", "FAMILY", "CRIMINAL", "SURROGATE", "APPLICATIONS", "COMMERCIAL"] }
+          ],
+          "hearing_codes": [
+            { "code": { "code": "CA.AB.KB.HRG.CIV.CHAMBERS.REG" }, "label": "Justice Chambers – Regular", "category": "CIV_CHAMBERS_REGULAR", "divisions": ["CIVIL", "FAMILY"] },
+            { "code": { "code": "CA.AB.KB.HRG.CIV.CHAMBERS.SPEC" }, "label": "Justice Chambers – Special", "category": "CIV_CHAMBERS_SPECIAL", "divisions": ["CIVIL", "FAMILY"] },
+            { "code": { "code": "CA.AB.KB.HRG.CIV.JDR" }, "label": "Judicial Dispute Resolution", "category": "CIV_JDR", "divisions": ["CIVIL", "FAMILY"] },
+            { "code": { "code": "CA.AB.KB.HRG.CIV.TRIAL.JUDGE" }, "label": "Civil Trial (Judge Alone)", "category": "CIV_TRIAL_JUDGE", "divisions": ["CIVIL"] },
+            { "code": { "code": "CA.AB.KB.HRG.CIV.TRIAL.JURY" }, "label": "Civil Trial (Jury)", "category": "CIV_TRIAL_JURY", "divisions": ["CIVIL"] }
+          ],
+          "filing_codes": [
+            { "code": { "code": "CA.AB.KB.FILE.CIV.ORIGINATING_APPLICATION" }, "label": "Originating Application", "category": "ORIGINATING_APPLICATION" }
+          ],
+          "order_codes": [
+            { "code": { "code": "CA.AB.KB.ORD.FINAL" }, "label": "Final Order", "category": "FINAL_ORDER" }
+          ]
+        },
+
+        "CA-AB-ABCA": {
+          "key": "CA-AB-ABCA",
+          "country": "CA",
+          "subnational": "AB",
+          "level": "APPEAL",
+          "formal_name": "Court of Appeal of Alberta",
+          "short_name": "ABCA",
+          "divisions": ["APPEALS", "APPLICATIONS"],
+          "locations": [
+            { "slug": "abca-calgary", "display_name": "Calgary (ABCA)", "is_base_point": true, "notes": "Red Deer & south: file in Calgary registry." },
+            { "slug": "abca-edmonton", "display_name": "Edmonton (ABCA)", "is_base_point": true, "notes": "North of Red Deer: file in Edmonton registry." }
+          ],
+          "hearing_codes": [
+            { "code": { "code": "CA.AB.ABCA.HRG.APP.APPLICATIONS_LIST" }, "label": "Applications List", "category": "APP_APPLICATIONS_LIST", "divisions": ["APPLICATIONS"] },
+            { "code": { "code": "CA.AB.ABCA.HRG.APP.SINGLE_JUDGE" }, "label": "Single Judge Application", "category": "APP_SINGLE_JUDGE_APP", "divisions": ["APPLICATIONS"] },
+            { "code": { "code": "CA.AB.ABCA.HRG.APP.APPEAL_HEARING" }, "label": "Appeal Hearing", "category": "APP_HEARING", "divisions": ["APPEALS"] }
+          ],
+          "filing_codes": [
+            { "code": { "code": "CA.AB.ABCA.FILE.APP.NOTICE_OF_APPEAL" }, "label": "Notice of Appeal", "category": "NOTICE_OF_APPEAL" },
+            { "code": { "code": "CA.AB.ABCA.FILE.APP.APPEAL_RECORD" }, "label": "Appeal Record", "category": "APPEAL_RECORD" },
+            { "code": { "code": "CA.AB.ABCA.FILE.APP.FACTUM" }, "label": "Factum", "category": "FACTUM" },
+            { "code": { "code": "CA.AB.ABCA.FILE.APP.EKE" }, "label": "Extracts of Key Evidence", "category": "EXTRACTS_KEY_EVIDENCE" },
+            { "code": { "code": "CA.AB.ABCA.FILE.APP.BOA" }, "label": "Book of Authorities", "category": "BOOK_OF_AUTHORITIES" }
+          ],
+          "order_codes": [
+            { "code": { "code": "CA.AB.ABCA.ORD.REASONS" }, "label": "Reasons for Judgment", "category": "REASONS_FOR_JUDGMENT" }
+          ]
+        }
+      }
+    }
+  ],
+  "meta": {
+    "source_urls": [
+      "https://albertacourts.ca/cj/court-practice-and-schedules/Contact",
+      "https://albertacourts.ca/cj/court-practice-and-schedules/locations-map/location-detail/airdrie",
+      "https://albertacourts.ca/cj/court-practice-and-schedules/locations-map/location-detail/westlock",
+      "https://albertacourts.ca/cj/court-practice-and-schedules/locations-map/location-detail/grande-cache",
+      "https://albertacourts.ca/cj/court-practice-and-schedules/locations-map/location-detail/valleyview",
+      "https://albertacourts.ca/cj/court-practice-and-schedules/locations-map/location-detail/fox-creek",
+      "https://albertacourts.ca/cj/court-practice-and-schedules/locations-map/location-detail/coronation",
+      "https://albertacourts.ca/cj/court-practice-and-schedules/locations-map/location-detail/rocky-mountain-house",
+      "https://albertacourts.ca/cj/court-practice-and-schedules/locations-map/location-detail/fairview",
+      "https://albertacourts.ca/cj/court-practice-and-schedules/locations-map/location-detail/red-earth-creek",
+      "https://albertacourts.ca/cj/court-practice-and-schedules/locations-map/location-detail/brooks",
+      "https://albertacourts.ca/cj/court-practice-and-schedules/locations-map/location-detail/ponoka",
+      "https://albertacourts.ca/cj/court-practice-and-schedules/locations-map/location-detail/taber",
+      "https://albertacourts.ca/cj/court-practice-and-schedules/locations-map/location-detail/cardston",
+      "https://albertacourts.ca/ca/registry/about",
+      "https://albertacourts.ca/ca/registry/filing",
+      "https://albertacourts.ca/cj/home",
+      "https://albertacourts.ca/cj/areas-of-law/criminal/special-courts"
+    ],
+    "notes": "All data here mirrors official ACJ/KB/ABCA sources as of 2025-10-12. Monetary limit for ACJ Civil = $100,000."
+  }
+}
