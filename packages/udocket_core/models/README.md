@@ -381,7 +381,7 @@ from .base import CatalogBundle, JurisdictionCatalog
 from .plugin_protocol import validate_catalogs
 
 # Directory walking is data-only. No code-defined data.
-# Override search root with UDOCKET_DATA_DIR if you want to ship data out-of-package.
+# Override search root with COURT_CATALOG_ROOT if you want to ship data out-of-package.
 DEFAULT_DATA_ROOT = Path(__file__).resolve().parents[2] / "data" / "reference"
 
 def _iter_bundle_files(root: Path | None = None) -> List[Path]:
@@ -394,7 +394,7 @@ def _load_bundle(p: Path) -> CatalogBundle:
     return CatalogBundle.model_validate(raw)
 
 def discover_catalogs(data_root: str | Path | None = None) -> List[JurisdictionCatalog]:
-    root = Path(data_root) if data_root else Path(os.getenv("UDOCKET_DATA_DIR", DEFAULT_DATA_ROOT))
+    root = Path(data_root) if data_root else Path(os.getenv("COURT_CATALOG_ROOT", DEFAULT_DATA_ROOT))
     bundles = [_load_bundle(p) for p in _iter_bundle_files(root)]
     catalogs: List[JurisdictionCatalog] = []
     for b in bundles:

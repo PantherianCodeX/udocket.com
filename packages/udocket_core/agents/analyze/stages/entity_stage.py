@@ -17,13 +17,13 @@ from ...common.chunking import (
     should_retry_for_length,
     split_for_retry,
 )
-from .utils.json import (
+from ....utils.json import (
     coerce_object_list,
     coerce_str_list,
     json_object_to_dict,
     parse_json_object,
 )
-from .llm.runtime import ChatClient, ResponseFormat
+from ....llm.runtime import ChatClient, ResponseFormat
 
 logger = logging.getLogger("udocket.analyze.entity_stage")
 

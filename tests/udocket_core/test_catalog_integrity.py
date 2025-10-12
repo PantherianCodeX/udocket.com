@@ -4,13 +4,13 @@ from packages.udocket_core.models.reference.registry import discover_catalogs
 
 def test_all_catalogs_load_and_validate():
     # Allow overriding data dir in CI; otherwise default package data is used
-    data_root = os.getenv("UDOCKET_DATA_DIR", None)
+    data_root = os.getenv("COURT_CATALOG_ROOT", None)
     catalogs = discover_catalogs(data_root)
     assert len(catalogs) > 0
 
 def test_ab_acj_locations_present_if_available():
     # This is a sanity check that our reference data is intact.
-    data_root = os.getenv("UDOCKET_DATA_DIR", None)
+    data_root = os.getenv("COURT_CATALOG_ROOT", None)
     catalogs = discover_catalogs(data_root)
     ab = next((c for c in catalogs if c.country.value == "CA" and c.subnational == "AB"), None)
     if not ab:

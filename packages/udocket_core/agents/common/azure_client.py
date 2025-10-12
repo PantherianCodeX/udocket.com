@@ -54,7 +54,7 @@ else:
 
 requests: _RequestsProtocol | None = _requests_module
 
-from .utils.json import (
+from ...utils.json import (
     JSONObject,
     JSONValue,
     coerce_json_value,

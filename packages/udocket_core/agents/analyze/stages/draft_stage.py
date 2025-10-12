@@ -8,7 +8,7 @@ from dataclasses import dataclass
 
 from ...common.io import TranscriptParse
 from ...common.normalization import coerce_sequence
-from .utils.json import (
+from ....utils.json import (
     JSONObject,
     JSONValue,
     coerce_json_object,
@@ -17,7 +17,7 @@ from .utils.json import (
     coerce_str_list,
     parse_json_object,
 )
-from .llm.runtime import ChatClient
+from ....llm.runtime import ChatClient
 
 
 @dataclass(frozen=True)

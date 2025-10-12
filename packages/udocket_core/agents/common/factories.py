@@ -2,7 +2,7 @@ from __future__ import annotations
 
 # pyright: strict
 
-from .utils.json import JSONObject
+from ...utils.json import JSONObject
 
 
 def json_object_factory() -> JSONObject:

@@ -16,7 +16,7 @@ from ...common.chunking import (
     split_for_retry,
 )
 from ...common.io import TranscriptParse
-from .utils.json import (
+from ....utils.json import (
     JSONObject,
     JSONValue,
     coerce_json_object,
@@ -24,7 +24,7 @@ from .utils.json import (
     coerce_str,
     parse_json_object,
 )
-from .llm.runtime import ChatClient
+from ....llm.runtime import ChatClient
 
 OUTLINE_SCHEMA: JSONObject = {
     "type": "object",

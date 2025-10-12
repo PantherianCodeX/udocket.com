@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
 
-from .utils.json import JSONObject, JSONValue, stringify_json
+from ...utils.json import JSONObject, JSONValue, stringify_json
 
 
 @dataclass
