@@ -54,88 +54,28 @@
       ],
       "model": "gpt-5-mini"
     },
-    "compose.context_builder": {
+    "compose.client.qa_reviewer": {
       "target": "compose",
-      "label": "Context Builder",
-      "description": "Condenses intake metadata and approved analyses into a case brief for downstream stages.",
-      "providers": [
-        "azure"
-      ],
-      "model": "gpt-5-mini"
-    },
-    "compose.timeline_builder": {
-      "target": "compose",
-      "label": "Timeline Builder",
-      "description": "Generates normalized timeline events with timestamp references using analysis seeds and transcript context.",
-      "providers": [
-        "azure"
-      ],
-      "model": "gpt-5-mini"
-    },
-    "compose.timeline_summary": {
-      "target": "compose",
-      "label": "Timeline Narrative",
-      "description": "Summarizes the normalized timeline into a narrative section with key timestamps and parties.",
-      "providers": [
-        "azure"
-      ],
-      "model": "gpt-5-mini"
-    },
-    "compose.graph_builder": {
-      "target": "compose",
-      "label": "Graph Builder",
-      "description": "Extracts entities and relationships with evidence links, grounding against analysis hints and timelines.",
-      "providers": [
-        "azure"
-      ],
-      "model": "gpt-5-mini"
-    },
-    "compose.entity_brief": {
-      "target": "compose",
-      "label": "Entity Briefing",
-      "description": "Produces a concise briefing of principal entities, roles, and relationship highlights.",
-      "providers": [
-        "azure"
-      ],
-      "model": "gpt-5-mini"
-    },
-    "compose.graph_visual": {
-      "target": "compose",
-      "label": "Graph Visual Planner",
-      "description": "Plans embeddable graph visuals with sizing guidance and accessibility copy.",
-      "providers": [
-        "azure"
-      ],
-      "model": "gpt-5-mini"
-    },
-    "compose.client_brief": {
-      "target": "compose",
-      "label": "Client Brief Drafter",
-      "description": "Drafts client-facing deliverables at a grade-six reading level with timeline references.",
-      "providers": [
-        "azure"
-      ],
-      "model": "gpt-5-mini"
-    },
-    "compose.lawyer_brief": {
-      "target": "compose",
-      "label": "Lawyer Brief Drafter",
-      "description": "Drafts professional deliverables for counsel, organized by legal issues and evidence.",
-      "providers": [
-        "azure"
-      ],
-      "model": "gpt-5-mini"
-    },
-    "compose.qa_review": {
-      "target": "compose",
-      "label": "QA Reviewer",
-      "description": "Performs compliance checks on compose outputs and records discrepancies for ops logs.",
+      "label": "Client Lane QA Reviewer",
+      "description": "Evaluates structure, compliance, and factuality for the client brief.",
       "providers": [
         "azure"
       ],
       "model": "gpt-5-mini",
       "options": {
-        "temperature": "1.0"
+        "temperature": "0.0"
+      }
+    },
+    "compose.lawyer.qa_reviewer": {
+      "target": "compose",
+      "label": "Lawyer Lane QA Reviewer",
+      "description": "Evaluates structure, compliance, and factuality for the lawyer brief.",
+      "providers": [
+        "azure"
+      ],
+      "model": "gpt-5-mini",
+      "options": {
+        "temperature": "0.0"
       }
     },
     "guardian.review": {
@@ -149,6 +89,69 @@
       "options": {
         "temperature": "1.0"
       }
+    },
+    "compose.context": {
+      "target": "compose",
+      "label": "Context Assembler",
+      "description": "Builds the ComposeContext payload from approved analyses, intake, and metadata.",
+      "providers": [
+        "azure"
+      ],
+      "model": "gpt-5-mini"
+    },
+    "compose.client.draft": {
+      "target": "compose",
+      "label": "Client Draft Composer",
+      "description": "Drafts the client-facing brief with required headings and tone.",
+      "providers": [
+        "azure"
+      ],
+      "model": "gpt-5-mini"
+    },
+    "compose.client.revise": {
+      "target": "compose",
+      "label": "Client Revision Composer",
+      "description": "Applies revision briefs to the client deliverable when guards fail.",
+      "providers": [
+        "azure"
+      ],
+      "model": "gpt-5-mini"
+    },
+    "compose.client.editor": {
+      "target": "compose",
+      "label": "Client Lane Editor",
+      "description": "Executes limited, non-factual edits requested by QA for the client brief.",
+      "providers": [
+        "azure"
+      ],
+      "model": "gpt-5-mini"
+    },
+    "compose.lawyer.draft": {
+      "target": "compose",
+      "label": "Lawyer Draft Composer",
+      "description": "Drafts the lawyer-facing brief with legal framing and evidence cites.",
+      "providers": [
+        "azure"
+      ],
+      "model": "gpt-5-mini"
+    },
+    "compose.lawyer.revise": {
+      "target": "compose",
+      "label": "Lawyer Revision Composer",
+      "description": "Applies revision briefs to the lawyer deliverable when guards fail.",
+      "providers": [
+        "azure"
+      ],
+      "model": "gpt-5-mini"
+    },
+    "compose.lawyer.editor": {
+      "target": "compose",
+      "label": "Lawyer Lane Editor",
+      "description": "Executes limited, non-factual edits requested by QA for the lawyer brief.",
+      "providers": [
+        "azure"
+      ],
+      "model": "gpt-5-mini"
     }
   }
 }

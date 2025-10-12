@@ -68,8 +68,7 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
-      platform:
-        condition: service_started
+
 
   platform_beat:
     build:
@@ -95,8 +94,7 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
-      platform:
-        condition: service_started
+
 
   redis:
     image: redis:7-alpine

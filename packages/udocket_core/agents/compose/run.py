@@ -11,6 +11,8 @@ from typing import Any, Mapping, cast
 
 from packages.udocket_core.json_utils import JSONObject, JSONValue, coerce_json_object, coerce_str
 
+from .logging_utils import ComposeLogContext, format_run_message
+
 from .state import ComposeState, compose_state_from_json, serialize_compose_state
 
 LATEST_MANIFEST = "latest.json"
@@ -30,19 +32,33 @@ class ComposeRun:
     job_id: str
     snapshot_dir: Path
     logger: logging.Logger
+    log_context: ComposeLogContext = field(default_factory=lambda: ComposeLogContext(case_id="unknown", job_id="unknown"))
     enabled: bool = True
     _sequence: int = field(init=False, default=0)
 
     def __post_init__(self) -> None:
         self.snapshot_dir.mkdir(parents=True, exist_ok=True)
         self._sequence = self._discover_latest_sequence()
+        if self.log_context.case_id == "unknown":
+            self.log_context = ComposeLogContext(case_id=self.case_id, job_id=self.job_id)
 
     def _log_event(self, level: int, event: str, extra: Mapping[str, object] | None = None) -> None:
         payload: dict[str, object] = {"case_id": self.case_id, "job_id": self.job_id}
         if extra:
             payload.update(dict(extra))
         try:
-            self.logger.log(level, event, extra={"compose": payload})
+            serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+            message = format_run_message(self.log_context, event, payload)
+            self.logger.log(
+                level,
+                message,
+                extra={
+                    "compose": payload,
+                    "event": event,
+                    "component": "compose.run",
+                    "serialized": serialized,
+                },
+            )
         except Exception:  # pragma: no cover - defensive
             self.logger.debug("compose.run.logging_failed", exc_info=True)
 
@@ -81,7 +97,7 @@ class ComposeRun:
             return
         timestamp = coerce_str(envelope.get("timestamp")) or datetime.now(tz=timezone.utc).isoformat()
         self._write_manifest(stage=stage, sequence=self._sequence, filename=filename, timestamp=timestamp)
-        self._log_event(logging.INFO, "compose.run.snapshot_recorded", {"stage": stage, "sequence": self._sequence, "path": str(target)})
+        # self._log_event(logging.INFO, "compose.run.snapshot_recorded", {"stage": stage, "sequence": self._sequence, "path": str(target)})
 
     def restore_latest(self) -> ComposeRunSnapshot | None:
         manifest_path = self.snapshot_dir / LATEST_MANIFEST
@@ -146,12 +162,12 @@ class ComposeRun:
             manifest_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         except Exception:
             self._log_event(logging.DEBUG, "compose.run.manifest_write_failed", {"path": str(manifest_path)})
-        else:
-            self._log_event(
-                logging.INFO,
-                "compose.run.manifest_written",
-                {"stage": stage, "sequence": sequence, "path": str(manifest_path)},
-            )
+        # else:
+        #     self._log_event(
+        #         logging.INFO,
+        #         "compose.run.manifest_written",
+        #         {"stage": stage, "sequence": sequence, "path": str(manifest_path)},
+        #     )
 
     def _discover_latest_sequence(self) -> int:
         max_sequence = 0

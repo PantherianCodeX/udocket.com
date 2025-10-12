@@ -70,10 +70,11 @@ LAWYER_MIN_TIMESTAMP_REFERENCES = 0
 STAGE_MODEL_DEFAULTS: Mapping[str, str] = {
     "compose.client.draft": "gpt-5-mini",
     "compose.client.revise": "gpt-5-mini",
+    "compose.client.qa_reviewer": "gpt-5-mini",
+    "compose.client.editor": "gpt-5-mini",
     "compose.lawyer.draft": "gpt-5-mini",
     "compose.lawyer.revise": "gpt-5-mini",
-    "compose.qa_reviewer": "gpt-5-mini",
-    "compose.client.editor": "gpt-5-mini",
+    "compose.lawyer.qa_reviewer": "gpt-5-mini",
     "compose.lawyer.editor": "gpt-5-mini",
 }
 

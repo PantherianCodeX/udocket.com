@@ -450,7 +450,7 @@ class AzureChatClient:
                 )
                 response = cast(_ResponseProtocol, _resp)
                 logger.debug(
-                    "azure request",
+                    "Azure OpenAI chat request issued",
                     extra={
                         "endpoint": url,
                         "deployment": self.config.deployment,
@@ -472,7 +472,7 @@ class AzureChatClient:
                     and not self._require_default_temperature
                 ):
                     logger.warning(
-                        "azure temperature fallback",
+                        "Azure OpenAI forcing default temperature",
                         extra={
                             "endpoint": url,
                             "deployment": self.config.deployment,
@@ -494,7 +494,7 @@ class AzureChatClient:
                     and max_tokens is not None
                 ):
                     logger.info(
-                        "retrying without max_output_tokens parameter",
+                        "Azure OpenAI retry without max_output_tokens",
                         extra={
                             "endpoint": url,
                             "deployment": self.config.deployment,
@@ -511,7 +511,7 @@ class AzureChatClient:
                 if detail:
                     error_message += f"\n{detail}"
                 logger.error(
-                    "azure request failed",
+                    "Azure OpenAI chat request failed",
                     extra={
                         "endpoint": url,
                         "deployment": self.config.deployment,

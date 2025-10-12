@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, cast
 from uuid import UUID
@@ -20,7 +21,7 @@ from apps.platform.operations.llm import (
     get_provider_secret_with_metadata,
 )
 from apps.platform.operations.runtime import JobRuntimeContext
-from apps.platform.operations.utils import read_job_meta, update_job_meta
+from apps.platform.operations.utils import append_job_log, read_job_meta, update_job_meta
 from apps.platform.jobs.utils import unique_title
 
 from .analysis import (
@@ -40,6 +41,64 @@ from packages.udocket_core.json_utils import (
 from packages.udocket_core.logging.context import LogContext
 
 log = logging.getLogger("apps.platform.operations.compose_service")
+
+
+class _ComposeJobLogHandler(logging.Handler):
+    def __init__(self, *, case_id: str, organization_id: str | None, job_id: str) -> None:
+        super().__init__(level=logging.DEBUG)
+        self._case_id = case_id
+        self._organization_id = organization_id
+        self._job_id = job_id
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            message = self.format(record)
+        except Exception:
+            message = record.getMessage()
+        if not message:
+            return
+        level_name = record.levelname.upper()
+        try:
+            append_job_log(
+                self._case_id,
+                self._organization_id,
+                self._job_id,
+                message,
+                level=level_name,
+            )
+        except Exception:
+            # Best-effort logging; never raise from emit
+            return
+
+
+@contextmanager
+def _capture_compose_logs(
+    *,
+    case_id: str,
+    organization_id: str | None,
+    job_id: str,
+) -> Iterator[None]:
+    handler = _ComposeJobLogHandler(case_id=case_id, organization_id=organization_id, job_id=job_id)
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    logger_names = (
+        "udocket.compose.agent",
+        "udocket.compose.llm_runtime",
+        "udocket.compose.config",
+        "apps.platform.operations.compose_service",
+    )
+    configured: list[tuple[logging.Logger, int]] = []
+    for name in logger_names:
+        logger_obj = logging.getLogger(name)
+        configured.append((logger_obj, logger_obj.level))
+        logger_obj.addHandler(handler)
+        logger_obj.setLevel(logging.DEBUG)
+    try:
+        yield
+    finally:
+        for logger_obj, original_level in configured:
+            logger_obj.removeHandler(handler)
+            logger_obj.setLevel(original_level)
+        handler.close()
 
 
 def _resolve_path(value: str | None, case_dir: Path) -> Path | None:
@@ -328,20 +387,21 @@ def execute_compose_job(
                 resume=resume,
             ),
         )
-        result = compose_agent.compose(
-            case_id=case_id,
-            case_dir=case_dir,
-            job_id=str(job.id),
-            summary_json_path=summary_json_path,
-            summary_markdown_path=summary_markdown_path,
-            timeline_seed_path=timeline_seed_path,
-            entity_hint_path=entity_hint_path,
-            intake=intake_payload,
-            case_metadata=case_metadata,
-            provider_credentials=provider_credentials,
-            progress_callback=_progress,
-            resume=resume,
-        )
+        with _capture_compose_logs(case_id=case_id, organization_id=org_id, job_id=str(job.id)):
+            result = compose_agent.compose(
+                case_id=case_id,
+                case_dir=case_dir,
+                job_id=str(job.id),
+                summary_json_path=summary_json_path,
+                summary_markdown_path=summary_markdown_path,
+                timeline_seed_path=timeline_seed_path,
+                entity_hint_path=entity_hint_path,
+                intake=intake_payload,
+                case_metadata=case_metadata,
+                provider_credentials=provider_credentials,
+                progress_callback=_progress,
+                resume=resume,
+            )
     except Exception as exc:  # noqa: BLE001
         log.error(
             "Compose agent raised an exception",

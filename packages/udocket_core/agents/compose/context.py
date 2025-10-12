@@ -91,6 +91,21 @@ def _trim_atom(text: str) -> Optional[str]:
     return sanitized[:280]
 
 
+def _collect_claimable_text(value: JSONValue, bucket: set[str]) -> None:
+    if isinstance(value, str):
+        trimmed = _trim_atom(value)
+        if trimmed:
+            bucket.add(trimmed)
+        return
+    if isinstance(value, Mapping):
+        for child in value.values():
+            _collect_claimable_text(child, bucket)
+        return
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        for element in value:
+            _collect_claimable_text(element, bucket)
+
+
 def assemble_context(inputs: ComposeInputs) -> ComposeContext:
     summary_data = inputs.summary_data
     parties = _extract_parties(summary_data)
@@ -158,6 +173,11 @@ def assemble_context(inputs: ComposeInputs) -> ComposeContext:
         procedural = {**procedural, **inputs.intake}
     if inputs.case_metadata:
         procedural = {**procedural, **inputs.case_metadata}
+
+    if inputs.intake:
+        _collect_claimable_text(inputs.intake, claimable)
+    if inputs.case_metadata:
+        _collect_claimable_text(inputs.case_metadata, claimable)
 
     return ComposeContext(
         parties=parties,

@@ -66,7 +66,7 @@ See `.env.example` for the supported keys:
 
 - `COMPOSE_PROVIDER_CHAIN`, `COMPOSE_TEMPERATURE`, `COMPOSE_LAWYER_TEMPERATURE`
 - `COMPOSE_MAX_OUTPUT_TOKENS`, `COMPOSE_MAX_CLIENT_ATTEMPTS`, `COMPOSE_MAX_LAWYER_ATTEMPTS`
-- `COMPOSE_MIN_TIMESTAMP_REFERENCES`, `COMPOSE_QA_REQUIRED`
+- `COMPOSE_MIN_TIMESTAMP_REFERENCES`, `COMPOSE_QA_ENFORCED`
 - `COMPOSE_ENABLE_EDITOR`, `COMPOSE_QA_MAX_ITERATIONS`
 - `COMPOSE_LLM_RETRY_ATTEMPTS`, `COMPOSE_LLM_RETRY_DELAY_SECONDS`
 - `COMPOSE_ENABLE_ASYNC` (default off): when set to `1`, Compose runs client and lawyer lanes using LangGraph's async runner. The agent falls back to sync automatically if the runtime doesn't permit an event loop.

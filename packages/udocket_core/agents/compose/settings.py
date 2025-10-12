@@ -78,7 +78,7 @@ class ComposeConfig:
     max_client_attempts: int = 2
     max_lawyer_attempts: int = 2
     min_timestamp_references: int = 3
-    qa_required: bool = True
+    qa_enforced: bool = True
     debug: bool = False
     doc_template_path: Optional[Path] = None
     enable_editor: bool = True
@@ -107,7 +107,7 @@ class ComposeConfig:
         max_client_attempts = _safe_int(os.getenv("COMPOSE_MAX_CLIENT_ATTEMPTS"), 2)
         max_lawyer_attempts = _safe_int(os.getenv("COMPOSE_MAX_LAWYER_ATTEMPTS"), 2)
         min_timestamp_references = _safe_int(os.getenv("COMPOSE_MIN_TIMESTAMP_REFERENCES"), 3)
-        qa_required = _truthy(os.getenv("COMPOSE_QA_REQUIRED"), True)
+        qa_enforced = _truthy(os.getenv("COMPOSE_QA_ENFORCED"), True)
         debug = _truthy(os.getenv("DEBUG"), False)
         enable_editor = _truthy(os.getenv("COMPOSE_ENABLE_EDITOR"), True)
         client_editor_model = os.getenv("COMPOSE_CLIENT_EDITOR_MODEL") or None
@@ -136,7 +136,7 @@ class ComposeConfig:
             max_client_attempts=max_client_attempts,
             max_lawyer_attempts=max_lawyer_attempts,
             min_timestamp_references=min_timestamp_references,
-            qa_required=qa_required,
+            qa_enforced=qa_enforced,
             debug=debug,
             doc_template_path=template_path,
             enable_editor=enable_editor,

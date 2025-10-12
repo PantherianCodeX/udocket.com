@@ -31,6 +31,7 @@ from .guards import (
 from .llm_runtime import invoke_llm
 from .prompt_config import ComposePromptConfig, LanePrompts, QALanePrompts
 from .qa import run_lane_qa_review
+from .logging_utils import ComposeLogContext, format_stage_message
 from .run import ComposeRun
 from .settings import ComposeConfig
 from .state import (
@@ -40,6 +41,7 @@ from .state import (
     LaneActionDirective,
     LaneAttempt,
     LaneOutcome,
+    LaneQAResult,
     LaneRuntimeState,
     QAReviewerResult,
     clone_guard_report,
@@ -57,6 +59,7 @@ class ComposeOrchestrator:
         qa_ok_status: set[str],
         prompts: ComposePromptConfig,
         compose_run: ComposeRun | None = None,
+        log_context: ComposeLogContext | None = None,
     ) -> None:
         self.config: ComposeConfig = config
         self.settings: LLMSettings = settings
@@ -64,6 +67,12 @@ class ComposeOrchestrator:
         self._qa_ok_status = frozenset(status.lower() for status in qa_ok_status)
         self.prompts = prompts
         self._run_tracker = compose_run
+        if log_context is not None:
+            self._log_context = log_context
+        elif compose_run is not None:
+            self._log_context = compose_run.log_context
+        else:
+            self._log_context = ComposeLogContext(case_id="unknown", job_id="unknown")
 
     def run(
         self,
@@ -213,10 +222,10 @@ class ComposeOrchestrator:
             return {}
 
         def wait_for_client_node(current: ComposeState) -> dict[str, object]:
-            return {}
+            return {"stage_usage": {}}
 
         def wait_for_lawyer_node(current: ComposeState) -> dict[str, object]:
-            return {}
+            return {"stage_usage": {}}
 
         def qa_join_node(current: ComposeState) -> dict[str, object]:
             return self._qa_join(current, progress=progress)
@@ -413,6 +422,7 @@ class ComposeOrchestrator:
         progress: Optional[Callable[[str, str, JSONObject], None]],
     ) -> dict[str, object]:
         lane_state = self._lane_state(state, lane)
+        start_time = time.perf_counter()
         context = state.context
         if context is None:
             raise ComposeStageError(f"compose.{lane}.draft", "Compose context missing")
@@ -421,7 +431,34 @@ class ComposeOrchestrator:
         start_time = time.perf_counter()
         next_attempt = lane_state.attempts + 1
         if next_attempt > lane_state.max_attempts:
-            raise ComposeStageError(stage_name, "Maximum attempts exhausted", lane=lane, attempt=lane_state.attempts)
+            self._log(
+                logging.ERROR,
+                stage_name,
+                "max_attempts_exhausted",
+                {
+                    "lane": lane,
+                    "attempts": lane_state.attempts,
+                    "max_attempts": lane_state.max_attempts,
+                    "structure": self._guard_summary(lane_state.structure_report),
+                    "compliance": self._guard_summary(lane_state.compliance_report),
+                    "factuality": self._guard_summary(lane_state.factuality_report),
+                },
+            )
+            emit(
+                progress,
+                stage_name,
+                "max_attempts_exhausted",
+                coerce_json_object(
+                    {
+                        "lane": lane,
+                        "attempts": lane_state.attempts,
+                        "max_attempts": lane_state.max_attempts,
+                    }
+                ),
+            )
+            if self.config.qa_enforced:
+                raise ComposeStageError(stage_name, "Maximum attempts exhausted", lane=lane, attempt=lane_state.attempts)
+        
         lane_state.current_source = "revise" if is_revision else "draft"
         start_payload: JSONObject = {"attempt": next_attempt, "lane": lane, "source": lane_state.current_source}
         self._log(logging.INFO, stage_name, "start", dict(start_payload))
@@ -496,7 +533,12 @@ class ComposeOrchestrator:
             raise ComposeStageError(f"compose.{lane}.structure", "No draft available")
         stage_name = f"compose.{lane}.structure"
         start_time = time.perf_counter()
-        self._log(logging.INFO, stage_name, "start", {"lane": lane, "attempt": lane_state.attempts})
+        self._log(
+            logging.INFO,
+            stage_name,
+            "start",
+            {"lane": lane, "attempt": lane_state.attempts, "source": lane_state.current_source},
+        )
         emit(
             progress,
             stage_name,
@@ -555,9 +597,9 @@ class ComposeOrchestrator:
             "complete",
             {
                 "lane": lane,
-                "ok": report.ok,
-                "errors": len(report.errors),
-                "warnings": len(report.warnings),
+                "attempt": lane_state.attempts,
+                "source": lane_state.current_source,
+                **self._guard_summary(report),
             },
         )
         result: dict[str, object] = {lane: cast(object, lane_state)}
@@ -579,7 +621,12 @@ class ComposeOrchestrator:
             raise ComposeStageError(f"compose.{lane}.compliance", "No draft available")
         stage_name = f"compose.{lane}.compliance"
         start_time = time.perf_counter()
-        self._log(logging.INFO, stage_name, "start", {"lane": lane, "attempt": lane_state.attempts})
+        self._log(
+            logging.INFO,
+            stage_name,
+            "start",
+            {"lane": lane, "attempt": lane_state.attempts, "source": lane_state.current_source},
+        )
         emit(
             progress,
             stage_name,
@@ -606,9 +653,9 @@ class ComposeOrchestrator:
             "complete",
             {
                 "lane": lane,
-                "ok": report.ok,
-                "errors": len(report.errors),
-                "warnings": len(report.warnings),
+                "attempt": lane_state.attempts,
+                "source": lane_state.current_source,
+                **self._guard_summary(report),
             },
         )
         result: dict[str, object] = {lane: cast(object, lane_state)}
@@ -631,7 +678,13 @@ class ComposeOrchestrator:
             raise ComposeStageError(f"compose.{lane}.factuality", "Missing draft or context")
         stage_name = f"compose.{lane}.factuality"
         start_time = time.perf_counter()
-        self._log(logging.INFO, stage_name, "start", {"lane": lane, "attempt": lane_state.attempts})
+        current_source = lane_state.current_source
+        self._log(
+            logging.INFO,
+            stage_name,
+            "start",
+            {"lane": lane, "attempt": lane_state.attempts, "source": current_source},
+        )
         emit(
             progress,
             stage_name,
@@ -679,9 +732,9 @@ class ComposeOrchestrator:
             "complete",
             {
                 "lane": lane,
-                "ok": report.ok,
-                "errors": len(report.errors),
-                "warnings": len(report.warnings),
+                "attempt": lane_state.attempts,
+                "source": current_source,
+                **self._guard_summary(report),
             },
         )
         lanes_update: Optional[dict[str, LaneOutcome]] = None
@@ -775,21 +828,134 @@ class ComposeOrchestrator:
         progress: Optional[Callable[[str, str, JSONObject], None]],
     ) -> dict[str, object]:
         stage_name = f"compose.{lane}.qa_reviewer"
-        if state.qa_iterations >= self.config.qa_iteration_limit:
-            raise ComposeStageError(stage_name, "QA iteration limit exceeded", lane=lane)
         lane_state = self._lane_state(state, lane)
+        start_time = time.perf_counter()
+        start_payload: JSONObject = {
+            "lane": lane,
+            "iteration": state.qa_iterations,
+            "qa_enforced": self.config.qa_enforced,
+        }
+        self._log(logging.INFO, stage_name, "start", dict(start_payload))
+        emit(progress, stage_name, "start", start_payload)
+        if self.config.qa_enforced and state.qa_iterations >= self.config.qa_iteration_limit:
+            reason = "QA iteration limit reached; manual review recommended."
+            lane_result = LaneQAResult(
+                status="iteration_limit",
+                alerts=["QA iteration limit reached."],
+                recommendations=[],
+                staff_report="# Staff Report\n\nQA iteration limit reached; manual review recommended.",
+                provider="limit",
+                action=LaneActionDirective(action="none", reason=reason),
+                global_notes=reason,
+            )
+            state.qa_lane_results[lane] = lane_result
+            lane_outcome_update: dict[str, LaneOutcome] | None = None
+            if (
+                lane_state.structure_report
+                and lane_state.compliance_report
+                and lane_state.factuality_report
+            ):
+                lane_outcome_update = {lane: lane_state.to_outcome()}
+            emit(
+                progress,
+                stage_name,
+                "complete",
+                {
+                    "lane": lane,
+                    "status": "iteration_limit",
+                    "iteration": state.qa_iterations,
+                    "limit": self.config.qa_iteration_limit,
+                },
+            )
+            self._log(
+                logging.WARNING,
+                stage_name,
+                "complete",
+                {
+                    "lane": lane,
+                    "status": "iteration_limit",
+                    "iteration": state.qa_iterations,
+                    "limit": self.config.qa_iteration_limit,
+                },
+            )
+            self._snapshot(stage_name, state)
+            self._register_stage_duration(
+                state,
+                stage_name,
+                time.perf_counter() - start_time,
+                lane_state=lane_state,
+            )
+            updates: dict[str, object] = {
+                lane: cast(object, lane_state),
+                "qa_lane_results": {lane: lane_result},
+                "stage_usage": cast(object, {stage_name: {}}),
+            }
+            if lane_outcome_update:
+                updates["lanes"] = cast(object, lane_outcome_update)
+            return updates
         document = lane_state.document
         if document is None:
             raise ComposeStageError(stage_name, "Draft missing", lane=lane)
-        prompts = self._lane_qa_prompts(lane)
-        start_time = time.perf_counter()
-        self._log(logging.INFO, stage_name, "start", {"lane": lane, "iteration": state.qa_iterations})
-        emit(
-            progress,
-            stage_name,
-            "start",
-            {"lane": lane, "iteration": state.qa_iterations},
-        )
+        prompts = self._lane_qa_prompts(lane) if self.config.qa_enforced else None
+        if not self.config.qa_enforced:
+            lane_result = LaneQAResult(
+                status="skipped",
+                alerts=[],
+                recommendations=[],
+                staff_report="# Staff Report\n\nQA disabled by configuration.",
+                provider="disabled",
+                action=LaneActionDirective(action="none"),
+                global_notes="QA disabled by configuration.",
+            )
+            state.qa_lane_results[lane] = lane_result
+            lane_outcome_update: dict[str, LaneOutcome] | None = None
+            if (
+                lane_state.structure_report
+                and lane_state.compliance_report
+                and lane_state.factuality_report
+            ):
+                lane_outcome_update = {lane: lane_state.to_outcome()}
+            emit(
+                progress,
+                stage_name,
+                "complete",
+                {
+                    "lane": lane,
+                    "status": lane_result.status,
+                    "action": lane_result.action.action,
+                    "provider": "disabled",
+                    "model": "n/a",
+                },
+            )
+            self._log(
+                logging.INFO,
+                stage_name,
+                "complete",
+                {
+                    "lane": lane,
+                    "status": lane_result.status,
+                    "action": lane_result.action.action,
+                    "provider": "disabled",
+                    "model": "n/a",
+                    "alerts": 0,
+                    "recommendations": 0,
+                },
+            )
+            self._snapshot(stage_name, state)
+            self._register_stage_duration(
+                state,
+                stage_name,
+                time.perf_counter() - start_time,
+                lane_state=lane_state,
+            )
+            updates: dict[str, object] = {
+                lane: cast(object, lane_state),
+                "qa_lane_results": {lane: lane_result},
+                "stage_usage": cast(object, {stage_name: {}}),
+            }
+            if lane_outcome_update:
+                updates["lanes"] = cast(object, lane_outcome_update)
+            return updates
         lane_result, usage, provider, model = run_lane_qa_review(
             state=state,
             lane=lane,
@@ -798,7 +964,7 @@ class ComposeOrchestrator:
             settings=self.settings,
             provider_credentials=provider_credentials,
             logger=self.logger,
-            system_prompt=prompts.system_prompt,
+            system_prompt=prompts.system_prompt if prompts else "",
         )
         lane_state.record_usage(stage_name, usage)
         lane_state.providers.append(provider)
@@ -819,6 +985,21 @@ class ComposeOrchestrator:
                 "usage": dict(usage),
             },
         )
+        self._log(
+            logging.INFO,
+            stage_name,
+            "complete",
+            {
+                "lane": lane,
+                "status": lane_result.status,
+                "action": lane_result.action.action,
+                "reason": lane_result.action.reason,
+                "provider": provider,
+                "model": model,
+                "alerts": len(lane_result.alerts),
+                "recommendations": len(lane_result.recommendations),
+            },
+        )
         self._snapshot(stage_name, state)
         self._register_stage_duration(state, stage_name, time.perf_counter() - start_time, lane_state=lane_state)
         return {
@@ -829,10 +1010,25 @@ class ComposeOrchestrator:
 
     def _lane_qa_routing(self, state: ComposeState, lane: str) -> str:
         lane_result = state.qa_lane_results.get(lane)
-        if lane_result is None:
+        if lane_result is None or not self.config.qa_enforced:
             return "next"
         action = (lane_result.action.action or "none").strip().lower()
         if action == "revise":
+            lane_state = self._lane_state(state, lane)
+            if lane_state.attempts >= lane_state.max_attempts:
+                reason = "Maximum lane attempts reached; releasing without QA revision."
+                lane_result.action.reason = reason
+                self._log(
+                    logging.WARNING,
+                    f"compose.{lane}.qa_reviewer",
+                    "revision_skipped_max_attempts",
+                    {
+                        "lane": lane,
+                        "attempts": lane_state.attempts,
+                        "max_attempts": lane_state.max_attempts,
+                    },
+                )
+                return "next"
             return "revise"
         if action == "editor":
             return "editor"
@@ -1179,12 +1375,51 @@ class ComposeOrchestrator:
         except Exception:  # pragma: no cover - defensive
             self.logger.debug("compose.snapshot_failed", extra={"stage": stage}, exc_info=True)
 
+    @staticmethod
+    def _json_default(value: object) -> str:
+        return repr(value)
+
     def _log(self, level: int, stage: str, event: str, details: Mapping[str, object]) -> None:
+        payload: dict[str, object] = {"stage": stage, "event": event}
+        payload.update(dict(details))
         try:
-            payload = {**details, "stage": stage, "event": event}
-            self.logger.log(level, "compose.stage", extra={"compose": payload})
+            serialized = json.dumps(
+                payload,
+                ensure_ascii=False,
+                sort_keys=True,
+                default=self._json_default,
+            )
+            message = format_stage_message(self._log_context, stage, event, payload)
+            self.logger.log(
+                level,
+                message,
+                extra={
+                    "compose": payload,
+                    "event": f"{stage}.{event}",
+                    "component": stage,
+                    "serialized": serialized,
+                },
+            )
         except Exception:  # pragma: no cover - defensive
             self.logger.debug("compose.logging_failed", extra={"stage": stage, "event": event}, exc_info=True)
+
+    @staticmethod
+    def _guard_summary(report: GuardReport | None) -> dict[str, object]:
+        if report is None:
+            return {
+                "ok": None,
+                "error_count": 0,
+                "warning_count": 0,
+                "errors": [],
+                "warnings": [],
+            }
+        return {
+            "ok": report.ok,
+            "error_count": len(report.errors),
+            "warning_count": len(report.warnings),
+            "errors": list(report.errors)[:5],
+            "warnings": list(report.warnings)[:5],
+        }
 
     def _register_stage_duration(
         self,

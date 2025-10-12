@@ -9,6 +9,7 @@ from docx import Document as DocxDocument
 
 import pytest
 
+from packages.udocket_core.agents.compose.context import assemble_context
 from packages.udocket_core.agents.compose_lib import (
     ComposeAgent,
     ComposeConfig,
@@ -76,6 +77,20 @@ def _make_fake_qa_step(
         }
 
     return _fake_qa_step
+
+
+def test_assemble_context_claimable_includes_intake() -> None:
+    inputs = ComposeInputs(
+        summary_markdown="",
+        summary_data={},
+        timeline_seeds=[],
+        entity_hints={},
+        intake={"safety_notes": "Exchanges occur at Calgary Public Library."},
+        case_metadata={"case_title": "Sample Case", "hearing_location": "Calgary Courthouse"},
+    )
+    context = assemble_context(inputs)
+    assert any("Calgary Public Library" in atom for atom in context.claimable_atoms)
+    assert any("Calgary Courthouse" in atom for atom in context.claimable_atoms)
 
 
 CLIENT_VALID_DOC = """## Case Overview
@@ -189,7 +204,7 @@ def test_compose_agent_parallel_lanes(tmp_path: Path, monkeypatch: MonkeyPatch) 
         max_client_attempts=2,
         max_lawyer_attempts=2,
         min_timestamp_references=1,
-        qa_required=True,
+        qa_enforced=True,
         debug=True,
     )
     agent = ComposeAgent(config)
@@ -300,7 +315,7 @@ def test_compose_agent_revision_cycle(tmp_path: Path, monkeypatch: MonkeyPatch) 
         max_client_attempts=2,
         max_lawyer_attempts=1,
         min_timestamp_references=1,
-        qa_required=True,
+        qa_enforced=True,
         debug=True,
     )
     agent = ComposeAgent(config)
@@ -417,7 +432,7 @@ def test_compose_agent_docx_template(tmp_path: Path, monkeypatch: MonkeyPatch) -
         max_client_attempts=2,
         max_lawyer_attempts=2,
         min_timestamp_references=1,
-        qa_required=True,
+        qa_enforced=True,
         debug=True,
         doc_template_path=template_path,
     )
@@ -521,7 +536,7 @@ def test_compose_agent_resume_from_snapshot(tmp_path: Path, monkeypatch: MonkeyP
 
     summary_json, summary_md, timeline_json = _write_inputs(docs_dir)
 
-    config = ComposeConfig(provider_chain=["stub"], qa_required=True)
+    config = ComposeConfig(provider_chain=["stub"], qa_enforced=True)
     agent = ComposeAgent(config)
 
     client_doc = CLIENT_VALID_DOC
@@ -634,7 +649,7 @@ def test_compose_agent_async_mode(tmp_path: Path, monkeypatch: MonkeyPatch) -> N
 
     summary_json, summary_md, timeline_json = _write_inputs(docs_dir)
 
-    config = ComposeConfig(provider_chain=["stub"], qa_required=True, enable_async=True)
+    config = ComposeConfig(provider_chain=["stub"], qa_enforced=True, enable_async=True)
     agent = ComposeAgent(config)
 
     guard = GuardReport(ok=True, errors=[], warnings=[], checks={})
@@ -746,13 +761,14 @@ def test_compose_agent_async_mode(tmp_path: Path, monkeypatch: MonkeyPatch) -> N
     monkeypatch.setattr(
         ComposeAgent,
         "_new_orchestrator",
-        lambda self, compose_run=None: DummyOrchestrator(
+        lambda self, compose_run=None, log_context=None: DummyOrchestrator(
             config=self.config,
             settings=self.settings,
             logger=self.logger,
             qa_ok_status=QA_REVIEWER_STATUS_OK,
             prompts=self.prompts,
             compose_run=compose_run,
+            log_context=log_context,
         ),
     )
 
@@ -845,12 +861,27 @@ def test_qa_iteration_limit_enforced() -> None:
     state = ComposeState(inputs=inputs, client=client_state, lawyer=lawyer_state)
     state.qa_iterations = 1
 
-    with pytest.raises(ComposeStageError):
-        agent._qa_reviewer_step(
-            state=state,
-            provider_credentials={},
-            progress=None,
-        )
+    updates = agent._qa_reviewer_step(
+        state=state,
+        provider_credentials={},
+        progress=None,
+    )
+
+    client_result = state.qa_lane_results["client"]
+    lawyer_result = state.qa_lane_results["lawyer"]
+    assert client_result.status == "iteration_limit"
+    assert lawyer_result.status == "iteration_limit"
+    assert client_result.action.action == "none"
+    assert lawyer_result.action.action == "none"
+    assert (
+        client_result.action.reason
+        == "QA iteration limit reached; manual review recommended."
+    )
+    assert (
+        lawyer_result.action.reason
+        == "QA iteration limit reached; manual review recommended."
+    )
+    assert state.qa_iterations == 1
 
 
 def test_editor_rejects_unchanged_document(monkeypatch: MonkeyPatch) -> None:
@@ -932,3 +963,160 @@ Further details about evt-2 appear at [01:02:03].
     assert report.ok
     assert not report.errors
     assert not report.warnings
+
+def test_compose_agent_without_qa(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
+    case_dir = tmp_path / "case"
+    docs_dir = case_dir / "docs"
+    ops_dir = case_dir / "ops"
+    docs_dir.mkdir(parents=True)
+    ops_dir.mkdir(parents=True)
+
+    summary_json, summary_md, timeline_json = _write_inputs(docs_dir)
+
+    config = ComposeConfig(
+        provider_chain=["stub"],
+        temperature=0.2,
+        lawyer_temperature=0.2,
+        max_output_tokens=2048,
+        max_client_attempts=2,
+        max_lawyer_attempts=2,
+        min_timestamp_references=1,
+        qa_enforced=False,
+        debug=True,
+    )
+    agent = ComposeAgent(config)
+
+    def fake_invoke(
+        *,
+        stage: str,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float,
+        provider_credentials: Mapping[str, JSONObject],
+        config: ComposeConfig,
+        settings: object,
+    ) -> ClientResponse:
+        if stage == "compose.client.draft":
+            return CLIENT_VALID_DOC, {"prompt_tokens": 80, "completion_tokens": 160}, "stub", "stub-model"
+        if stage == "compose.client.revise":
+            return CLIENT_VALID_DOC, {"prompt_tokens": 70, "completion_tokens": 150}, "stub", "stub-model"
+        if stage == "compose.lawyer.draft":
+            return LAWYER_VALID_DOC, {"prompt_tokens": 90, "completion_tokens": 170}, "stub", "stub-model"
+        if stage == "compose.lawyer.revise":
+            return LAWYER_VALID_DOC, {"prompt_tokens": 85, "completion_tokens": 165}, "stub", "stub-model"
+        if stage.endswith(".qa_reviewer"):
+            pytest.fail("QA reviewer should not be invoked when qa_enforced is False")
+        raise AssertionError(f"Unexpected stage: {stage}")
+
+    for target in (
+        "packages.udocket_core.agents.compose.orchestrator.invoke_llm",
+        "packages.udocket_core.agents.compose.llm_runtime.invoke_llm",
+        "packages.udocket_core.agents.compose.qa.invoke_llm",
+    ):
+        monkeypatch.setattr(target, fake_invoke)
+
+    result = agent.compose(
+        case_id="CASE-NO-QA",
+        case_dir=case_dir,
+        job_id="JOB-NO-QA",
+        summary_json_path=summary_json,
+        summary_markdown_path=summary_md,
+        timeline_seed_path=timeline_json,
+        entity_hint_path=None,
+    )
+
+    meta = json.loads(result.meta_json.read_text(encoding="utf-8"))
+    assert meta["qa_status"] == "ok"
+    assert "disabled" in (meta.get("qa_provider") or "")
+    assert meta["qa_iterations"] == 0
+    assert meta["client_attempts"] == 1
+    assert meta["lawyer_attempts"] == 1
+    assert Path(meta["client_markdown"]).exists()
+    assert Path(meta["lawyer_markdown"]).exists()
+
+
+def test_compose_agent_releases_when_qa_attention_persists(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
+    case_dir = tmp_path / "case"
+    docs_dir = case_dir / "docs"
+    ops_dir = case_dir / "ops"
+    docs_dir.mkdir(parents=True)
+    ops_dir.mkdir(parents=True)
+
+    summary_json, summary_md, timeline_json = _write_inputs(docs_dir)
+
+    config = ComposeConfig(
+        provider_chain=["stub"],
+        temperature=0.2,
+        lawyer_temperature=0.2,
+        max_output_tokens=2048,
+        max_client_attempts=1,
+        max_lawyer_attempts=1,
+        min_timestamp_references=1,
+        qa_enforced=True,
+        debug=True,
+    )
+    agent = ComposeAgent(config)
+
+    def fake_invoke(
+        *,
+        stage: str,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float,
+        provider_credentials: Mapping[str, JSONObject],
+        config: ComposeConfig,
+        settings: object,
+    ) -> ClientResponse:
+        if stage == "compose.client.draft":
+            return CLIENT_VALID_DOC, {"prompt_tokens": 70, "completion_tokens": 140}, "stub", "stub-model"
+        if stage == "compose.lawyer.draft":
+            return LAWYER_VALID_DOC, {"prompt_tokens": 75, "completion_tokens": 150}, "stub", "stub-model"
+        if stage.endswith(".qa_reviewer"):
+            lane = "client" if "client" in stage else "lawyer"
+            response = json.dumps(
+                {
+                    "status": "attention",
+                    "alerts": [
+                        "Client document needs manual polish."
+                        if lane == "client"
+                        else "Lawyer brief still has gaps.",
+                    ],
+                    "recommendations": ["Manual reviewer should inspect."],
+                    "staff_report": "# Staff Report\n\nQA requested revisions beyond automatic attempts.",
+                    "global_notes": "Max attempts reached.",
+                    "action": "revise",
+                    "reason": "Revision required beyond automated attempts.",
+                    "revision_brief": (
+                        "Clarify overview."
+                        if lane == "client"
+                        else "Expand procedural notes."
+                    ),
+                }
+            )
+            return response, {"prompt_tokens": 60, "completion_tokens": 30}, "stub", "stub-model"
+        raise AssertionError(f"Unexpected stage: {stage}")
+
+    for target in (
+        "packages.udocket_core.agents.compose.orchestrator.invoke_llm",
+        "packages.udocket_core.agents.compose.llm_runtime.invoke_llm",
+        "packages.udocket_core.agents.compose.qa.invoke_llm",
+    ):
+        monkeypatch.setattr(target, fake_invoke)
+
+    result = agent.compose(
+        case_id="CASE-QA-ATTENTION",
+        case_dir=case_dir,
+        job_id="JOB-QA-ATTENTION",
+        summary_json_path=summary_json,
+        summary_markdown_path=summary_md,
+        timeline_seed_path=timeline_json,
+        entity_hint_path=None,
+    )
+
+    meta = json.loads(result.meta_json.read_text(encoding="utf-8"))
+    assert meta["qa_status"] == "attention"
+    assert meta["qa_lane_actions"]["client"]["reason"] == "Maximum lane attempts reached; releasing without QA revision."
+    assert meta["qa_lane_actions"]["lawyer"]["reason"] == "Maximum lane attempts reached; releasing without QA revision."
+    assert meta["qa_iterations"] == 0
+    assert Path(meta["client_markdown"]).exists()
+    assert Path(meta["lawyer_markdown"]).exists()

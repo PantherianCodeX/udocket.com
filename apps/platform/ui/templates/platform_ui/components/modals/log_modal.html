@@ -8,6 +8,43 @@
   {% endwith %}
 {% endblock %}
 
+{% block modal_body %}
+  {% with text_id=modal_text_id|default:'modal-text' %}
+    {% if modal_log_entries %}
+      <div class="mb-3 flex flex-wrap items-center gap-2" data-log-level-controls>
+        <button type="button" class="inline-flex items-center gap-2 rounded border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-200 transition hover:border-primary-400 hover:text-white" data-log-level-reset="1">
+          Show all
+        </button>
+        {% for level in modal_log_levels %}
+          <button type="button" class="inline-flex items-center gap-2 rounded border border-white/30 bg-white/20 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-white transition hover:border-primary-400 hover:text-white" data-log-level-toggle="{{ level }}" data-log-level-active="1" aria-pressed="true">
+            {{ level|title }}
+          </button>
+        {% endfor %}
+      </div>
+      <div class="max-h-[28rem] overflow-y-auto rounded border border-white/10 bg-black/40" data-log-scroll>
+        <ul data-log-entries class="divide-y divide-white/5 text-left text-xs font-mono">
+          {% for entry in modal_log_entries %}
+            <li data-log-entry data-log-level="{{ entry.level }}" class="px-3 py-2">
+              <div class="flex flex-wrap items-start gap-x-3 gap-y-1">
+                {% if entry.timestamp %}
+                  <span class="text-slate-500">{{ entry.timestamp }}</span>
+                {% endif %}
+                <span class="inline-flex min-w-[4rem] uppercase tracking-wide {{ entry.level_class }}">{{ entry.level }}</span>
+                <span class="flex-1 whitespace-pre-wrap break-words text-slate-100">{{ entry.message }}</span>
+              </div>
+            </li>
+          {% endfor %}
+        </ul>
+      </div>
+      <pre id="{{ text_id }}" data-modal-text class="sr-only" aria-hidden="true">{{ modal_text }}</pre>
+    {% elif modal_text %}
+      <pre id="{{ text_id }}" data-modal-text class="whitespace-pre-wrap break-words">{{ modal_text }}</pre>
+    {% else %}
+      <p class="text-sm text-slate-400">{{ modal_empty_text|default:'No log entries recorded for this job yet.' }}</p>
+    {% endif %}
+  {% endwith %}
+{% endblock %}
+
 {% block modal_actions %}
   {% if modal_download_url|default:download_url %}
     <a href="{{ modal_download_url|default:download_url }}" class="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/5 px-3 py-1.5 font-semibold text-slate-100 transition hover:border-primary-400 hover:text-white" download>

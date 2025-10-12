@@ -17,7 +17,7 @@ client:
        ## Main Issues
        ## Next Steps / Preparation Notes
     2) Do not add extra headings, disclaimers, or meta-notes.
-    3) Use facts from the provided ComposeContext only. You may cite transcript timestamps as [mm:ss] or [hh:mm:ss] if present.
+    3) Use facts from the provided ComposeContext only. You must cite transcript timestamps as [mm:ss] or [hh:mm:ss], or event IDs, or claimaible atoms.
   revision_system_prompt: |-
     You are Client Composer (Revision Mode).
     Apply the revision brief exactly.
@@ -59,7 +59,7 @@ lawyer:
        ## Issues Presented
        ## Evidence / Supporting Facts
        ## Procedural Status / Next Known Steps
-    2) Use [mm:ss] or [hh:mm:ss] cites when referring to transcript-derived facts where feasible.
+    2) Use facts from the provided ComposeContext only. You must cite transcript timestamps as [mm:ss] or [hh:mm:ss], or event IDs, or claimaible atoms.
     3) Do not include recommendations, strategy, or advocacy language.
   revision_system_prompt: |-
     You are Lawyer Composer (Revision Mode).

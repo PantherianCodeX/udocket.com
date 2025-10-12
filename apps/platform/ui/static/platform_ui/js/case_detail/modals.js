@@ -36,6 +36,64 @@
     return null;
   }
 
+  function bindLogLevelToggles(modal) {
+    if (!modal) return;
+    const entriesContainer = modal.querySelector('[data-log-entries]');
+    const toggleButtons = Array.from(modal.querySelectorAll('[data-log-level-toggle]'));
+    if (!entriesContainer || !toggleButtons.length) return;
+    const resetButton = modal.querySelector('[data-log-level-reset]');
+    const activeClasses = ['border-white/30', 'bg-white/20', 'text-white'];
+    const inactiveClasses = ['border-white/20', 'bg-white/5', 'text-slate-300', 'opacity-60'];
+
+    function setButtonState(button, isActive) {
+      button.dataset.logLevelActive = isActive ? '1' : '0';
+      button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+      activeClasses.forEach((cls) => button.classList.toggle(cls, isActive));
+      inactiveClasses.forEach((cls) => button.classList.toggle(cls, !isActive));
+    }
+
+    toggleButtons.forEach((button) => {
+      setButtonState(button, button.dataset.logLevelActive !== '0');
+    });
+
+    function applyFilter() {
+      const activeLevels = new Set(
+        toggleButtons
+          .filter((button) => button.dataset.logLevelActive !== '0')
+          .map((button) => (button.getAttribute('data-log-level-toggle') || '').toUpperCase())
+          .filter((value) => value),
+      );
+      const entries = entriesContainer.querySelectorAll('[data-log-entry]');
+      entries.forEach((entry) => {
+        const entryLevel = (entry.getAttribute('data-log-level') || '').toUpperCase();
+        const shouldShow = activeLevels.size === 0 ? false : activeLevels.has(entryLevel);
+        entry.classList.toggle('hidden', !shouldShow);
+        if (shouldShow) {
+          entry.removeAttribute('hidden');
+        } else {
+          entry.setAttribute('hidden', 'hidden');
+        }
+      });
+    }
+
+    toggleButtons.forEach((button) => {
+      button.addEventListener('click', () => {
+        const nextState = button.dataset.logLevelActive === '0';
+        setButtonState(button, nextState);
+        applyFilter();
+      });
+    });
+
+    if (resetButton) {
+      resetButton.addEventListener('click', () => {
+        toggleButtons.forEach((button) => setButtonState(button, true));
+        applyFilter();
+      });
+    }
+
+    applyFilter();
+  }
+
   function message(options = {}) {
     if (!ctx) return global.Promise.resolve();
     if (typeof ctx.modalApi.message === 'function') {
@@ -76,7 +134,9 @@
       if (!modal) {
         console.error('Job log modal missing [data-modal] wrapper');
         showErrorModal('Log content unavailable', text);
+        return;
       }
+      bindLogLevelToggles(modal);
     } catch (error) {
       console.error('Job log modal failed', jobId, error);
       showErrorModal('Unable to load job log', error && error.message ? error.message : String(error));

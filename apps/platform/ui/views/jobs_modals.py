@@ -30,6 +30,52 @@ def _dict_list(value: Any) -> List[Dict[str, Any]]:
     return typed_items
 
 
+_LEVEL_PRIORITY: Dict[str, int] = {
+    "CRITICAL": 0,
+    "ERROR": 1,
+    "WARNING": 2,
+    "INFO": 3,
+    "DEBUG": 4,
+}
+
+_LEVEL_STYLE_MAP: Dict[str, str] = {
+    "CRITICAL": "text-red-200 font-semibold",
+    "ERROR": "text-red-300",
+    "WARNING": "text-amber-300",
+    "INFO": "text-sky-300",
+    "DEBUG": "text-slate-400",
+}
+
+
+def _parse_log_entries(log_text: str) -> List[Dict[str, str]]:
+    entries: List[Dict[str, str]] = []
+    for raw_line in log_text.splitlines():
+        stripped_line = raw_line.rstrip("\n")
+        if not stripped_line.strip():
+            continue
+        prefix, separator, remainder = stripped_line.partition("|")
+        prefix_value = prefix.strip()
+        message = remainder.strip() if separator else stripped_line.strip()
+        timestamp = ""
+        level = "INFO"
+        if prefix_value:
+            prefix_parts = prefix_value.split()
+            if len(prefix_parts) >= 2:
+                timestamp = " ".join(prefix_parts[:-1])
+                level = prefix_parts[-1].upper()
+            else:
+                timestamp = prefix_parts[0]
+        normalized_level = level.upper()
+        entry: Dict[str, str] = {
+            "timestamp": timestamp,
+            "level": normalized_level,
+            "message": message,
+            "level_class": _LEVEL_STYLE_MAP.get(normalized_level, "text-slate-300"),
+        }
+        entries.append(entry)
+    return entries
+
+
 def _resolve_job_or_404(case_id: str, job_id: UUID, request: HttpRequest) -> Job:
     case, _ = get_case_and_org(request, case_id)
     job = (
@@ -101,6 +147,7 @@ def case_job_logs_modal(request: HttpRequest, case_id: str, job_id: UUID) -> Htt
     job = _resolve_job_or_404(case_id, job_id, request)
 
     log_path = job_log_path(str(job.case_id), getattr(job, "organization_id", None), str(job.id))
+    log_entries: List[Dict[str, str]] = []
     if not log_path.exists():
         log_text = "No log entries recorded for this job yet."
     else:
@@ -112,6 +159,7 @@ def case_job_logs_modal(request: HttpRequest, case_id: str, job_id: UUID) -> Htt
             text = text[-50000:]
             text = "…" + text
         log_text = text
+        log_entries = _parse_log_entries(log_text)
 
     telemetry_dict = job_telemetry_payload(job, request, ui_mode=True)
     friendly_title = friendly_job_title(job, telemetry_dict, None)
@@ -119,6 +167,17 @@ def case_job_logs_modal(request: HttpRequest, case_id: str, job_id: UUID) -> Htt
     meta_items: List[Dict[str, Any]] = []
     if log_path.exists():
         meta_items.append({"label": "Log path", "copy_text": str(log_path), "display": str(log_path)})
+    modal_log_levels: List[str] = []
+    if log_entries:
+        seen_levels: set[str] = set()
+        for entry in log_entries:
+            level_value = entry.get("level", "INFO").upper()
+            entry["level"] = level_value
+            entry["level_class"] = _LEVEL_STYLE_MAP.get(level_value, "text-slate-300")
+            if level_value not in seen_levels:
+                seen_levels.add(level_value)
+                modal_log_levels.append(level_value)
+        modal_log_levels.sort(key=lambda value: _LEVEL_PRIORITY.get(value, 99))
     context = {
         "title": friendly_title,
         "job_id": str(job.id),
@@ -133,6 +192,8 @@ def case_job_logs_modal(request: HttpRequest, case_id: str, job_id: UUID) -> Htt
         "modal_close_label": "Close",
         "modal_empty_text": "No log entries recorded for this job.",
         "modal_meta_items": meta_items,
+        "modal_log_entries": log_entries,
+        "modal_log_levels": modal_log_levels,
     }
     return render(request, "platform_ui/components/modals/log_modal.html", context)
 
