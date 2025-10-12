@@ -133,15 +133,15 @@ def _extract_json_candidate(text: str) -> str:
     stripped = text.strip()
     if not stripped:
         return stripped
-    fence = re.search(r"```(?:json)?\s*(.*?)```", stripped, flags=re.DOTALL | re.IGNORECASE)
+    fence = re.search(r"^```(?:json)?\s*(.*?)```$", stripped, flags=re.DOTALL | re.IGNORECASE)
     if fence:
         inner = fence.group(1).strip()
-        if inner:
-            return inner
-    match = re.search(r"([\[{].*[\]}])", stripped, flags=re.DOTALL)
-    if match:
-        return match.group(1).strip()
+        return inner if inner else stripped
+    # Only treat it as JSON if it starts with a bracket
+    if stripped.startswith("{") or stripped.startswith("["):
+        return stripped
     return stripped
+
 
 def _iter_mappings(payload: object) -> Iterable[Mapping[str, object]]:
     if isinstance(payload, Mapping):
@@ -660,9 +660,10 @@ class AzureChatClient:
             if isinstance(usage_value, Mapping):
                 usage = _require_json_object(usage_value, context="usage metadata")
 
-        content = "".join(part for part in content_parts if part).strip()
-        if content:
-            content = _extract_json_candidate(content)
+        content = "".join(part for part in content_parts if part)
+        candidate = _extract_json_candidate(content)
+        if candidate:
+            content = candidate.rstrip()
 
         if not content:
             logger.error(
@@ -684,6 +685,8 @@ class AzureChatClient:
                 "usage": usage,
             },
         )
+
+        logger.debug("azure.client.final_prefix=%r len=%d", content[:200], len(content))
 
         return content, usage
 

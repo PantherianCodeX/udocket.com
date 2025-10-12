@@ -263,6 +263,7 @@ class ComposeOrchestrator:
         graph.add_edge(START, "ContextAssembler")
         graph.add_edge("ContextAssembler", "ClientComposer")
         graph.add_edge("ContextAssembler", "LawyerComposer")
+        
         graph.add_edge("ClientComposer", "ClientStructureValidator")
         graph.add_edge("ClientStructureValidator", "ClientComplianceGuard")
         graph.add_edge("ClientComplianceGuard", "ClientFactualityGate")
@@ -474,16 +475,31 @@ class ComposeOrchestrator:
         instruction = (
             lane_prompts.revision_instruction if is_revision else lane_prompts.draft_instruction
         )
+        user_prompt: str
+        if is_revision:
+            user_prompt = lane_user_prompt(
+                lane, context, lane_state.revision_brief,
+                locale=self.config.locale,
+                instruction=instruction,
+                previous_document=lane_state.document,
+                headings=list(lane_state.config.headings),
+                min_words=lane_state.config.min_words,
+                min_timestamp_references=lane_state.config.min_timestamp_references,
+            )
+        else:
+            user_prompt = lane_user_prompt(
+                lane, context, None,
+                locale=self.config.locale,
+                instruction=instruction,
+                headings=list(lane_state.config.headings),
+                min_words=lane_state.config.min_words,
+                min_timestamp_references=lane_state.config.min_timestamp_references,
+            )
+
         document, usage, provider, model = invoke_llm(
             stage=stage_name,
             system_prompt=system_prompt,
-            user_prompt=lane_user_prompt(
-                lane,
-                context,
-                lane_state.revision_brief,
-                locale=self.config.locale,
-                instruction=instruction,
-            ),
+            user_prompt=user_prompt,
             temperature=temperature,
             provider_credentials=provider_credentials,
             config=self.config,
@@ -718,14 +734,14 @@ class ComposeOrchestrator:
         )
         lane_state.history.append(attempt_record)
         lane_state.current_source = "draft"
-        payload: JSONObject = {
+        user_prompt: JSONObject = {
             "lane": lane,
             "attempt": lane_state.attempts,
             "guards": {"factuality": "ok" if report.ok else "fail"},
             "errors": list(report.errors),
             "warnings": list(report.warnings),
         }
-        emit(progress, stage_name, "complete", payload)
+        emit(progress, stage_name, "complete", user_prompt)
         self._log(
             logging.INFO,
             stage_name,
@@ -1270,8 +1286,8 @@ class ComposeOrchestrator:
         base_payload["locale"] = self.config.locale
         system_prompt = lane_prompts.editor_system_prompt
         base_payload["instruction"] = lane_prompts.editor_instruction
-        payload = coerce_json_object(base_payload)
-        user_prompt = json.dumps(payload, ensure_ascii=False)
+        user_prompt = coerce_json_object(base_payload)
+        user_prompt = json.dumps(user_prompt, ensure_ascii=False)
         self._log(
             logging.INFO,
             stage_name,
@@ -1380,21 +1396,21 @@ class ComposeOrchestrator:
         return repr(value)
 
     def _log(self, level: int, stage: str, event: str, details: Mapping[str, object]) -> None:
-        payload: dict[str, object] = {"stage": stage, "event": event}
-        payload.update(dict(details))
+        user_prompt: dict[str, object] = {"stage": stage, "event": event}
+        user_prompt.update(dict(details))
         try:
             serialized = json.dumps(
-                payload,
+                user_prompt,
                 ensure_ascii=False,
                 sort_keys=True,
                 default=self._json_default,
             )
-            message = format_stage_message(self._log_context, stage, event, payload)
+            message = format_stage_message(self._log_context, stage, event, user_prompt)
             self.logger.log(
                 level,
                 message,
                 extra={
-                    "compose": payload,
+                    "compose": user_prompt,
                     "event": f"{stage}.{event}",
                     "component": stage,
                     "serialized": serialized,
@@ -1455,8 +1471,12 @@ def lane_user_prompt(
     *,
     locale: str,
     instruction: str,
+    previous_document: Optional[str] = None,
+    headings: Optional[list[str]] = None,
+    min_words: Optional[int] = None,
+    min_timestamp_references: Optional[int] = None,
 ) -> str:
-    payload: dict[str, JSONValue] = {
+    user_prompt: dict[str, JSONValue] = {
         "context": coerce_json_object(
             {
                 "claimable_atoms": context.claimable_atoms,
@@ -1469,11 +1489,19 @@ def lane_user_prompt(
         ),
         "lane": lane,
         "locale": locale,
+        "instruction": instruction,
     }
     if revision_brief:
-        payload["revision_brief"] = revision_brief
-    payload["instruction"] = instruction
-    return json.dumps(payload, ensure_ascii=False)
+        user_prompt["revision_brief"] = revision_brief
+    if previous_document:
+        user_prompt["previous_document"] = previous_document
+    if headings:
+        user_prompt["headings"] = coerce_json_value(headings)
+    if min_words is not None:
+        user_prompt["min_words"] = min_words
+    if min_timestamp_references is not None:
+        user_prompt["min_timestamp_references"] = min_timestamp_references
+    return json.dumps(user_prompt, ensure_ascii=False)
 
 
 def stable_doc_fingerprint(text: str) -> str:
@@ -1535,15 +1563,15 @@ def emit(
     progress: Optional[Callable[[str, str, JSONObject], None]],
     stage: str,
     event: str,
-    payload: JSONObject,
+    user_prompt: JSONObject,
 ) -> None:
     envelope: JSONObject = {"stage": stage, "event": event}
-    for key, value in payload.items():
+    for key, value in user_prompt.items():
         envelope[key] = value
     if progress is None:
         logging.getLogger("udocket.compose.agent").debug(
             "compose.stage",
-            extra={"stage": stage, "event": event, "payload": envelope},
+            extra={"stage": stage, "event": event, "user_prompt": envelope},
         )
         return
     try:

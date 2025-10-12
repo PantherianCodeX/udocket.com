@@ -113,6 +113,11 @@ def invoke_llm(
                 max_tokens=config.max_output_tokens,
                 response_format=None,
             )
+            logger.debug(
+                "compose.llm.raw_prefix stage=%s provider=%s model=%s prefix=%r len=%d",
+                stage, provider_name, model_name, content[:200], len(content),
+            )
+
             usage_map = {key: value for key, value in usage.items() if isinstance(value, int)}
             if attempt > 1:
                 logger.info(

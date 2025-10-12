@@ -443,6 +443,10 @@ class _AzureChatAdapter:
             max_tokens=max_tokens,
             response_format=response_format,
         )
+        logger.debug(
+            "azure.adapter.raw_prefix prefix=%r len=%d", content[:200], len(content)
+        )
+
         usage: TokenUsage = {
             "prompt_tokens": coerce_int(usage_payload.get("prompt_tokens")),
             "completion_tokens": coerce_int(usage_payload.get("completion_tokens")),
