@@ -7,7 +7,7 @@ from .plugin_protocol import validate_catalogs
 from ..utils import safe_dump  # NEW
 
 # Directory walking is data-only. Override with COURT_CATALOG_ROOT to point elsewhere.
-DEFAULT_DATA_ROOT = Path(__file__).resolve().parents[2] / "data" / "reference"
+DEFAULT_DATA_ROOT = Path(__file__).resolve().parents[3] / "reference" / "court_catalogs"
 
 def _iter_bundle_files(root: Path | None = None) -> List[Path]:
     base = Path(root) if root else DEFAULT_DATA_ROOT

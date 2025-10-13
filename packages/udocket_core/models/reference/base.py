@@ -173,7 +173,7 @@ class CatalogDBInfo(BaseModel):
     tables: Mapping[str, DBTableHint]  # e.g., 'jurisdictions', 'courts', etc.
 
 class CatalogMeta(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="allow")
     source_urls: List[str] = Field(default_factory=list)
     version: str | None = None
     last_updated: str | None = None
@@ -189,4 +189,4 @@ class CatalogBundle(BaseModel):
     )
     db: CatalogDBInfo
     data: List[JurisdictionCatalog]
-    meta: CatalogMeta | None = None
+    meta: CatalogMeta = Field(default_factory=CatalogMeta)
