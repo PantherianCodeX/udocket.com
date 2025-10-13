@@ -749,35 +749,35 @@
             },
             {
               "code": {
-                "code": "CA.AB.ACJ.ORDER.APPLICATIONS.INTERIM_ORDER"
+                "code": "CA.AB.ACJ.ORDER.APPLICATIONS"
               },
               "label": "Interim Order",
               "category": "INTERIM_ORDER"
             },
             {
               "code": {
-                "code": "CA.AB.ACJ.ORDER.APPLICATIONS.FINAL_ORDER"
+                "code": "CA.AB.ACJ.ORDER.APPLICATIONS"
               },
               "label": "Final Order",
               "category": "FINAL_ORDER"
             },
             {
               "code": {
-                "code": "CA.AB.ACJ.ORDER.APPLICATIONS.CONSENT_ORDER"
+                "code": "CA.AB.ACJ.ORDER.APPLICATIONS"
               },
               "label": "Consent Order",
               "category": "CONSENT_ORDER"
             },
             {
               "code": {
-                "code": "CA.AB.ACJ.ORDER.APPLICATIONS.REASONS_FOR_JUDGMENT"
+                "code": "CA.AB.ACJ.ORDER.APPLICATIONS"
               },
               "label": "Reasons for Judgment",
               "category": "REASONS_FOR_JUDGMENT"
             },
             {
               "code": {
-                "code": "CA.AB.ACJ.ORDER.APPLICATIONS.MINUTE_ENTRY"
+                "code": "CA.AB.ACJ.ORDER.APPLICATIONS"
               },
               "label": "Minute Entry",
               "category": "MINUTE_ENTRY"
@@ -894,7 +894,7 @@
           "order_codes": [
             {
               "code": {
-                "code": "CA.AB.KB.ORDER.APPLICATIONS.FINAL_ORDER"
+                "code": "CA.AB.KB.ORDER.APPLICATIONS"
               },
               "label": "Final Order",
               "category": "FINAL_ORDER"
@@ -998,7 +998,7 @@
           "order_codes": [
             {
               "code": {
-                "code": "CA.AB.ABCA.ORDER.APPEALS.REASONS_FOR_JUDGMENT"
+                "code": "CA.AB.ABCA.ORDER.APPEALS"
               },
               "label": "Reasons for Judgment",
               "category": "REASONS_FOR_JUDGMENT"

@@ -172,6 +172,13 @@ class CatalogDBInfo(BaseModel):
     type: str = Field(..., pattern=r"^(postgresql)$")
     tables: Mapping[str, DBTableHint]  # e.g., 'jurisdictions', 'courts', etc.
 
+class CatalogMeta(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    source_urls: List[str] = Field(default_factory=list)
+    version: str | None = None
+    last_updated: str | None = None
+    notes: str | None = Field(default=None, description="Notes about scope, limits, etc.")
+
 class CatalogBundle(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
     schema_id: str = Field(
@@ -182,4 +189,4 @@ class CatalogBundle(BaseModel):
     )
     db: CatalogDBInfo
     data: List[JurisdictionCatalog]
-    meta: Dict[str, str] | None = None
+    meta: CatalogMeta | None = None
