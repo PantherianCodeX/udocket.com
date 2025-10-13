@@ -2,7 +2,7 @@
 
 This package separates **Pydantic v2 models** (validation) from **JSON data** (content).
 The **core models** live under `udocket_models/core/…`. All **reference catalogs** are JSON
-bundles under `udocket_models/data/reference/<COUNTRY>/<REGION>/catalog.json`.
+bundles under `udocket_core/data/courts/<COUNTRY>/<REGION>/court_catalog.json`.
 
 ## Why this design?
 - **Zero code-data coupling**: add or update any jurisdiction by editing JSON only.
@@ -19,9 +19,9 @@ bundles under `udocket_models/data/reference/<COUNTRY>/<REGION>/catalog.json`.
 ---
 
 ## File conventions
-`udocket_models/data/reference/<COUNTRY-ISO2>/<REGION>/catalog.json`
-- Example: `CA/AB/catalog.json` (Alberta), `CA/FED/catalog.json` (Canada Federal),
-  `US/NY/catalog.json` (New York State).
+`udocket_core/data/courts/<COUNTRY-ISO2>/<REGION>/court_catalog.json`
+- Example: `CA/AB/court_catalog.json` (Alberta), `CA/FED/court_catalog.json` (Canada Federal),
+  `US/NY/court_catalog.json` (New York State).
 - Each file is a **CatalogBundle**:
   ```json
   { "schema":"udocket.reference.catalog.bundle.v1", "db":{...}, "data":[ JurisdictionCatalog... ], "meta":{...} }
@@ -74,10 +74,10 @@ udocket_models/
 ├─ data/
 │  └─ reference/
 │     ├─ CA/
-│     │  ├─ AB/catalog.json     # ACJ/KB/ABCA with full ACJ locations, circuit→base rules
-│     │  └─ FED/catalog.json    # Federal Courts (FC/FCA/TCC) minimal
+│     │  ├─ AB/court_catalog.json     # ACJ/KB/ABCA with full ACJ locations, circuit→base rules
+│     │  └─ FED/court_catalog.json    # Federal Courts (FC/FCA/TCC) minimal
 │     └─ US/
-│        └─ NY/catalog.json     # NY Supreme – ComDiv (NY County) minimal
+│        └─ NY/court_catalog.json     # NY Supreme – ComDiv (NY County) minimal
 ├─ agents/
 │  └─ compose/
 │     └─ model.py               # writer/compose schema moved here
@@ -386,7 +386,7 @@ DEFAULT_DATA_ROOT = Path(__file__).resolve().parents[2] / "data" / "reference"
 
 def _iter_bundle_files(root: Path | None = None) -> List[Path]:
     base = Path(root) if root else DEFAULT_DATA_ROOT
-    return sorted([p for p in base.rglob("*.json") if p.name.endswith("catalog.json")])
+    return sorted([p for p in base.rglob("*.json") if p.name.endswith("court_catalog.json")])
 
 def _load_bundle(p: Path) -> CatalogBundle:
     with p.open("r", encoding="utf-8") as f:
@@ -463,7 +463,7 @@ class Order(BaseModel):
 
 ---
 
-### `udocket_models/data/reference/CA/AB/catalog.json`
+### `udocket_core/data/courts/CA/AB/court_catalog.json`
 
 ```json
 {
@@ -725,7 +725,7 @@ class Order(BaseModel):
 
 ---
 
-### `udocket_models/data/reference/CA/FED/catalog.json`
+### `udocket_core/data/courts/CA/FED/court_catalog.json`
 
 ```json
 {
@@ -819,7 +819,7 @@ class Order(BaseModel):
 
 ---
 
-### `udocket_models/data/reference/US/NY/catalog.json`
+### `udocket_core/data/courts/US/NY/court_catalog.json`
 
 ```json
 {
@@ -888,7 +888,7 @@ class Order(BaseModel):
 
 This package separates **Pydantic v2 models** (validation) from **JSON data** (content).
 The **core models** live under `udocket_models/core/…`. All **reference catalogs** are JSON
-bundles under `udocket_models/data/reference/<COUNTRY>/<REGION>/catalog.json`.
+bundles under `udocket_core/data/courts/<COUNTRY>/<REGION>/court_catalog.json`.
 
 ## Why this design?
 - **Zero code-data coupling**: add or update any jurisdiction by editing JSON only.
@@ -907,11 +907,11 @@ bundles under `udocket_models/data/reference/<COUNTRY>/<REGION>/catalog.json`.
 ## File conventions
 ```
 
-udocket_models/data/reference/<COUNTRY-ISO2>/<REGION>/catalog.json
+udocket_core/data/courts/<COUNTRY-ISO2>/<REGION>/court_catalog.json
 
 ````
-- Example: `CA/AB/catalog.json` (Alberta), `CA/FED/catalog.json` (Canada Federal),
-  `US/NY/catalog.json` (New York State).
+- Example: `CA/AB/court_catalog.json` (Alberta), `CA/FED/court_catalog.json` (Canada Federal),
+  `US/NY/court_catalog.json` (New York State).
 - Each file is a **CatalogBundle**:
   ```json
   { "schema":"udocket.reference.catalog.bundle.v1", "db":{...}, "data":[ JurisdictionCatalog... ], "meta":{...} }
@@ -942,7 +942,7 @@ payload = export_registry_json("/path/to/your/json/data")
 
 ## Expanding jurisdictions (Step-by-step)
 
-1. **Create a new JSON bundle**: `udocket_models/data/reference/<COUNTRY>/<REGION>/catalog.json`.
+1. **Create a new JSON bundle**: `udocket_core/data/courts/<COUNTRY>/<REGION>/court_catalog.json`.
 2. Add a `JurisdictionCatalog` with one or more `Court` objects:
    * Populate `locations` (`is_base_point` where applicable; set `admin_base_slug` for circuits
      *only if an official page says so*).
@@ -969,7 +969,7 @@ payload = export_registry_json("/path/to/your/json/data")
   **“Continue to send all court documents to …”** (see `meta.source_urls` inside the bundle).
 * ABCA registry routing: **north of Red Deer → Edmonton; Red Deer & south → Calgary**.
 
-(See the catalog.json `meta.source_urls` for links.)
+(See the court_court_catalog.json `meta.source_urls` for links.)
 
 **Citations**: Civil limit & ACJ list. :contentReference[oaicite:13]{index=13}
 
@@ -982,3 +982,32 @@ ab = next(i for i in j["items"] if i["country"]=="CA" and i.get("subnational")==
 acj = ab["courts"]["CA-AB-ACJ"]
 assert len(acj["locations"]) == 72  # ACJ locations
 ```
+
+## 🧩 TODO: Still Missing / To Complete the System
+**Case Number Validation** - 🚧 Needed
+- Regex-based validators per court
+
+**Cross-linking Cases → Courts** - 🚧 Needed
+- Allow automatic inference of `court` from case number pattern
+
+**Filing Type → Division Consistency Rules** - 🚧 Needed
+- e.g., CR (Criminal) filings only in Criminal Division
+
+**Hearing & Order code cross-mapping** - 🚧 Valuable
+- Ensure order codes correspond to valid hearing types
+
+**Province-level registry** - 🚧 Needed
+- Aggregate all courts under `CA-AB` into one canonical `CatalogBundle` with meta stats
+
+**JSON Schema export** - 🚧 Recommended
+- Auto-export of your Pydantic models to JSON Schema for external validation
+
+**Documentation / Developer Guide** - 🚧 Needed
+- “How to add a new province/court” doc + schema examples
+
+**Tests for invalid case numbers** - 🚧 Needed
+- Negative test suite to confirm regex rejects malformed values
+
+**Data lineage tracking** - ✅ Partial, needs normalization
+- Add `source_urls`, `last_updated`, and `version` metadata per JSON
+

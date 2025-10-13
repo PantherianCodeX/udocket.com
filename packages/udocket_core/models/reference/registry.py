@@ -11,7 +11,7 @@ DEFAULT_DATA_ROOT = Path(__file__).resolve().parents[3] / "reference" / "court_c
 
 def _iter_bundle_files(root: Path | None = None) -> List[Path]:
     base = Path(root) if root else DEFAULT_DATA_ROOT
-    return sorted([p for p in base.rglob("*.json") if p.name.endswith("catalog.json")])
+    return sorted([p for p in base.rglob("*.json") if p.name.endswith("court_catalog.json")])
 
 def _load_bundle(p: Path) -> CatalogBundle:
     with p.open("r", encoding="utf-8") as f:

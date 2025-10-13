@@ -87,7 +87,7 @@
           "locations": [
             {
               "slug": "fc-ottawa",
-              "display_name": "Ottawa (CAS – 90 Sparks St / Thomas D'Arcy McGee)",
+              "display_name": "Ottawa (CAS \u2013 90 Sparks St / Thomas D'Arcy McGee)",
               "is_base_point": true,
               "divisions_served": [
                 "CIVIL",
@@ -96,7 +96,7 @@
             },
             {
               "slug": "fc-toronto",
-              "display_name": "Toronto (CAS – 180 Queen St W)",
+              "display_name": "Toronto (CAS \u2013 180 Queen St W)",
               "is_base_point": true,
               "divisions_served": [
                 "CIVIL",
@@ -222,6 +222,8 @@
       "https://www.cas-satj.gc.ca/en/pages/registry/offices/ottawa",
       "https://www.cas-satj.gc.ca/en/pages/registry/offices/toronto"
     ],
-    "notes": "CAS registry network as of 2025-10-12."
+    "notes": "CAS registry network as of 2025-10-12.",
+    "last_updated": "1970-01-01",
+    "version": "0.0.0"
   }
 }

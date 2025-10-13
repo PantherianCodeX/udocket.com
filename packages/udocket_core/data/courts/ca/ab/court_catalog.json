@@ -459,7 +459,7 @@
             },
             {
               "slug": "tsuutina-nation",
-              "display_name": "Tsuut’ina Nation",
+              "display_name": "Tsuut\u2019ina Nation",
               "is_base_point": false
             },
             {
@@ -832,7 +832,7 @@
               "code": {
                 "code": "CA.AB.KB.HEARING.CIVIL.CHAMBERS.REG"
               },
-              "label": "Justice Chambers – Regular",
+              "label": "Justice Chambers \u2013 Regular",
               "category": "CIV_MOTIONS_REGULAR",
               "divisions": [
                 "CIVIL",
@@ -843,7 +843,7 @@
               "code": {
                 "code": "CA.AB.KB.HEARING.CIVIL.CHAMBERS.SPEC"
               },
-              "label": "Justice Chambers – Special",
+              "label": "Justice Chambers \u2013 Special",
               "category": "CIV_MOTIONS_SPECIAL",
               "divisions": [
                 "CIVIL",
@@ -1029,6 +1029,8 @@
       "https://albertacourts.ca/cj/home",
       "https://albertacourts.ca/cj/areas-of-law/criminal/special-courts"
     ],
-    "notes": "All data here mirrors official ACJ/KB/ABCA sources as of 2025-10-12. Monetary limit for ACJ Civil = $100,000."
+    "notes": "All data here mirrors official ACJ/KB/ABCA sources as of 2025-10-12. Monetary limit for ACJ Civil = $100,000.",
+    "last_updated": "1970-01-01",
+    "version": "0.0.0"
   }
 }

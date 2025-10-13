@@ -1,0 +1,83 @@
+{
+  "schema": "udocket.case_number.schemes.v1",
+  "meta": {
+    "source_urls": [
+      "https://albertacourts.ca/",
+      "https://albertacourts.ca/kb/",
+      "https://albertacourts.ca/ca/"
+    ],
+    "last_updated": "2025-10-13",
+    "version": "1.0.0"
+  },
+  "data": [
+    {
+      "key": "udocket.case_number.v1/CA-AB-KB",
+      "kind": "CASE_NUMBER",
+      "court_key": "CA-AB-KB",
+      "rules": [
+        {
+          "pattern": "^(?P<year>\\d{2})(?P<loc>\\d{2})-(?P<seq>\\d{6})$",
+          "flags": [],
+          "transforms": [ { "op": "TRIM" } ]
+        }
+      ],
+      "constraints": [
+        { "kind": "year_range", "group": "year", "min": 0, "max": 99 },
+        { "kind": "in_catalog_location_codes", "group": "loc" },
+        { "kind": "length", "group": "seq", "min": 6, "max": 6 }
+      ],
+      "derivations": [
+        { "kind": "YEAR_2_TO_4", "src": "year", "century_floor": 1980, "dest": "year4" },
+        { "kind": "JOIN", "src": ["year4", "loc", "seq"], "sep": "-", "dest": "normalized" }
+      ],
+      "examples_valid": ["2301-123456", "9902-000001"],
+      "examples_invalid": ["2301-12345", "230-123456", "2399-ABCDEF"]
+    },
+    {
+      "key": "udocket.case_number.v1/CA-AB-ACJ",
+      "kind": "CASE_NUMBER",
+      "court_key": "CA-AB-ACJ",
+      "rules": [
+        {
+          "pattern": "^(?P<year>\\d{2})(?P<loc>\\d{2})-(?P<seq>\\d{5,7})$",
+          "flags": [],
+          "transforms": [ { "op": "TRIM" } ]
+        }
+      ],
+      "constraints": [
+        { "kind": "year_range", "group": "year", "min": 0, "max": 99 },
+        { "kind": "in_catalog_location_codes", "group": "loc" },
+        { "kind": "length", "group": "seq", "min": 5, "max": 7 }
+      ],
+      "derivations": [
+        { "kind": "YEAR_2_TO_4", "src": "year", "century_floor": 1980, "dest": "year4" },
+        { "kind": "JOIN", "src": ["year4", "loc", "seq"], "sep": "-", "dest": "normalized" }
+      ],
+      "examples_valid": ["2301-12345", "2301-123456", "2301-1234567"],
+      "examples_invalid": ["2301-1234", "230-123456", "2399-ABC12"]
+    },
+    {
+      "key": "udocket.case_number.v1/CA-AB-ABCA",
+      "kind": "CASE_NUMBER",
+      "court_key": "CA-AB-ABCA",
+      "rules": [
+        {
+          "pattern": "^(?P<year>\\d{2})(?P<loc>\\d{2})-(?P<seq>\\d{4,6})$",
+          "flags": [],
+          "transforms": [ { "op": "TRIM" } ]
+        }
+      ],
+      "constraints": [
+        { "kind": "year_range", "group": "year", "min": 0, "max": 99 },
+        { "kind": "in_catalog_location_codes", "group": "loc" },
+        { "kind": "length", "group": "seq", "min": 4, "max": 6 }
+      ],
+      "derivations": [
+        { "kind": "YEAR_2_TO_4", "src": "year", "century_floor": 1980, "dest": "year4" },
+        { "kind": "JOIN", "src": ["year4", "loc", "seq"], "sep": "-", "dest": "normalized" }
+      ],
+      "examples_valid": ["2301-0123", "2301-12345", "2301-123456"],
+      "examples_invalid": ["23-01-0123", "2301-ABC1", "2301-123"]
+    }
+  ]
+}
