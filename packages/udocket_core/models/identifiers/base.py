@@ -49,7 +49,7 @@ class DerivationDecl(BaseModel):
     mapping: Optional[Dict[str, str]] = None
     sep: Optional[str] = None
 
-class IdentifierScheme(BaseModel):
+class CaseNumberScheme(BaseModel):
     """Generic scheme describing a jurisdiction’s case number format."""
     model_config = ConfigDict(extra="forbid")
 
@@ -66,7 +66,7 @@ class SchemeBundle(BaseModel):
     """Container for a set of schemes (JSON overlay)."""
     model_config = ConfigDict(populate_by_name=True, extra="allow")
     schema_id: str = Field(alias="schema")
-    data: List[IdentifierScheme]
+    data: List[CaseNumberScheme]
     meta: Dict[str, Any] = Field(default_factory=dict)  # source_urls, last_updated, version, etc.
 
 class CaseNumber(BaseModel):

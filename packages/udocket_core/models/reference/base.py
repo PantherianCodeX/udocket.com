@@ -11,7 +11,7 @@ from ..taxonomy.namespace import LocalCode
 # Core reference models
 # -------------------------
 
-class CourtLocation(BaseModel):
+class Location(BaseModel):
     model_config = ConfigDict(extra="forbid")
     slug: str = Field(..., pattern=r"^[a-z0-9]+(?:[-_][a-z0-9]+)*$")
     display_name: str
@@ -23,20 +23,20 @@ class CourtLocation(BaseModel):
     divisions_served: Set[Division] = Field(default_factory=set)
     notes: Optional[str] = None
 
-class LocalHearingType(BaseModel):
+class HearingCode(BaseModel):
     model_config = ConfigDict(extra="forbid")
     code: LocalCode
     label: str
     category: HearingCategory
     divisions: Set[Division] = Field(default_factory=set)
 
-class LocalFilingType(BaseModel):
+class FilingCode(BaseModel):
     model_config = ConfigDict(extra="forbid")
     code: LocalCode
     label: str
     category: FilingCategory
 
-class LocalOrderType(BaseModel):
+class OrderCode(BaseModel):
     model_config = ConfigDict(extra="forbid")
     code: LocalCode
     label: str
@@ -56,14 +56,14 @@ class Court(BaseModel):
     formal_name: str
     short_name: str
     divisions: Set[Division] = Field(default_factory=set)
-    locations: List[CourtLocation] = Field(default_factory=list)
-    hearing_codes: List[LocalHearingType] = Field(default_factory=list)
-    filing_codes:  List[LocalFilingType]  = Field(default_factory=list)
-    order_codes:   List[LocalOrderType]   = Field(default_factory=list)
+    locations: List[Location] = Field(default_factory=list)
+    hearing_codes: List[HearingCode] = Field(default_factory=list)
+    filing_codes:  List[FilingCode]  = Field(default_factory=list)
+    order_codes:   List[OrderCode]   = Field(default_factory=list)
 
     @field_validator("locations")
     @classmethod
-    def _no_duplicate_slugs(cls, v: List[CourtLocation]) -> List[CourtLocation]:
+    def _no_duplicate_slugs(cls, v: List[Location]) -> List[Location]:
         seen = set()
         for loc in v:
             if loc.slug in seen:
@@ -125,7 +125,7 @@ class Court(BaseModel):
 
         return self
 
-class JurisdictionCatalog(BaseModel):
+class CourtCatalog(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     country: CountryCode
@@ -142,7 +142,7 @@ class JurisdictionCatalog(BaseModel):
         return v
 
     @model_validator(mode="after")
-    def _prefix_enforced(self) -> "JurisdictionCatalog":
+    def _prefix_enforced(self) -> "CourtCatalog":
         """
         Ensure Court.key prefix matches country/subnational: f"{country}-{subnational}-"
         When subnational is None, we only enforce the country prefix.
@@ -188,5 +188,5 @@ class CatalogBundle(BaseModel):
         description="JSON schema identifier; serialized/deserialized as 'schema'.",
     )
     db: CatalogDBInfo
-    data: List[JurisdictionCatalog]
+    data: List[CourtCatalog]
     meta: CatalogMeta = Field(default_factory=CatalogMeta)

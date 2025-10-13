@@ -2,7 +2,7 @@ from __future__ import annotations
 import json, os
 from pathlib import Path
 from typing import Dict, Any, List, Tuple
-from .base import CatalogBundle, JurisdictionCatalog, Court
+from .base import CatalogBundle, CourtCatalog, Court
 from .plugin_protocol import validate_catalogs
 from ..utils import safe_dump  # NEW
 
@@ -18,7 +18,7 @@ def _load_bundle(p: Path) -> CatalogBundle:
         raw = json.load(f)
     return CatalogBundle.model_validate(raw)
 
-def _check_cross_catalog_localcode_uniqueness(catalogs: List[JurisdictionCatalog]) -> None:
+def _check_cross_catalog_localcode_uniqueness(catalogs: List[CourtCatalog]) -> None:
     """
     Enforce that LocalCodes are unique *across* courts (strong guard).
     If you need to allow a shared code across two courts, set env UDOCKET_ALLOW_LOCALCODE_DUPLICATES=1.
@@ -49,10 +49,10 @@ def _check_cross_catalog_localcode_uniqueness(catalogs: List[JurisdictionCatalog
     if errors:
         raise ValueError("Cross-catalog LocalCode duplicates detected:\n- " + "\n- ".join(errors))
 
-def discover_catalogs(data_root: str | Path | None = None) -> List[JurisdictionCatalog]:
+def discover_catalogs(data_root: str | Path | None = None) -> List[CourtCatalog]:
     root = Path(data_root) if data_root else Path(os.getenv("COURT_CATALOG_ROOT", DEFAULT_DATA_ROOT))
     bundles = [_load_bundle(p) for p in _iter_bundle_files(root)]
-    catalogs: List[JurisdictionCatalog] = []
+    catalogs: List[CourtCatalog] = []
     for b in bundles:
         catalogs.extend(b.data)
 

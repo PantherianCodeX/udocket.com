@@ -6,7 +6,7 @@ from pydantic import ValidationError
 
 from .base import (
     CaseNumber,
-    IdentifierScheme,
+    CaseNumberScheme,
     RegexRule,
     Transform,
     ConstraintDecl,
@@ -15,6 +15,44 @@ from .base import (
 from .registry import all_schemes, schemes_by_court
 from ..reference.base import CatalogBundle
 from ..reference.registry import discover_catalogs  # existing loader for court catalogs
+
+
+class CaseNumberEngine:
+    """
+    Small helper to work with a fixed set of schemes (useful in services).
+    """
+    def __init__(self, schemes: Optional[List[CaseNumberScheme]] = None) -> None:
+        self._schemes = schemes or list(all_schemes())
+
+    def match(self, value: str, court_key_hint: Optional[str] = None) -> Optional[CaseNumber]:
+        if court_key_hint:
+            for s in schemes_by_court().get(court_key_hint, []):
+                try:
+                    res = _try_scheme(value, s)
+                    if res:
+                        return res
+                except Exception:
+                    continue
+            return None
+
+        for s in self._schemes:
+            try:
+                res = _try_scheme(value, s)
+                if res:
+                    return res
+            except Exception:
+                continue
+        return None
+
+    def validate(self, value: str, court_key_hint: Optional[str] = None) -> CaseNumber:
+        if court_key_hint:
+            for s in schemes_by_court().get(court_key_hint, []):
+                res = _try_scheme(value, s)
+                if res:
+                    return res
+            raise ValidationError([ValueError("No scheme matched for hinted court")], CaseNumber)
+        # fall back to global validator for detailed errors
+        return validate_case_number(value)
 
 
 def _compile_flags(flags: Sequence[str]) -> int:
@@ -108,7 +146,7 @@ def _apply_derivations(parts: Dict[str, str], derivs: List[DerivationDecl]) -> D
             out[d.dest] = (d.sep or "").join(seq)
     return out
 
-def _try_scheme(value: str, scheme: IdentifierScheme) -> Optional[CaseNumber]:
+def _try_scheme(value: str, scheme: CaseNumberScheme) -> Optional[CaseNumber]:
     for r in scheme.rules:
         normalized, pat = _normalize(value, r)
         m = pat.match(normalized)
@@ -153,3 +191,17 @@ def validate_case_number(value: str, court_key_hint: Optional[str] = None) -> Ca
             errors.append(f"{s.key}: {e}")
 
     raise ValidationError([ValueError("; ".join(errors) or "No scheme matched")], CaseNumber)
+
+# --- Convenience wrappers -----------------------------------------------------
+
+def load_case_number_schemes() -> List[CaseNumberScheme]:
+    """Return all registered schemes (wrapper around registry)."""
+    return list(all_schemes())
+
+def match_case_number(value: str, court_key_hint: Optional[str] = None) -> Optional[CaseNumber]:
+    """Like validate_case_number but returns None instead of raising."""
+    try:
+        return validate_case_number(value, court_key_hint=court_key_hint)
+    except ValidationError:
+        return None
+    

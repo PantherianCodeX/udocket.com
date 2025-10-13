@@ -24,12 +24,12 @@ bundles under `udocket_core/data/courts/<COUNTRY>/<REGION>/court_catalog.json`.
   `US/NY/court_catalog.json` (New York State).
 - Each file is a **CatalogBundle**:
   ```json
-  { "schema":"udocket.reference.catalog.bundle.v1", "db":{...}, "data":[ JurisdictionCatalog... ], "meta":{...} }
+  { "schema":"udocket.reference.catalog.bundle.v1", "db":{...}, "data":[ CourtCatalog... ], "meta":{...} }
   ```
   
 ## Keys & naming
 - `Court.key`: `CC-REGION-COURT` (e.g., `CA-AB-ACJ`).
-- `CourtLocation.slug`: kebab-case (e.g., `st-albert`, `wabasca-desmarais`).
+- `Location.slug`: kebab-case (e.g., `st-albert`, `wabasca-desmarais`).
 - `LocalCode.code`: `"CC.REGION.COURT.DOMAIN.SPEC"` (regex-validated).
 
 
@@ -253,7 +253,7 @@ from ..taxonomy.namespace import LocalCode
 # Core reference models
 # -------------------------
 
-class CourtLocation(BaseModel):
+class Location(BaseModel):
     model_config = ConfigDict(extra="forbid")
     slug: str = Field(..., pattern=r"^[a-z0-9]+(?:[-_][a-z0-9]+)*$")
     display_name: str
@@ -265,20 +265,20 @@ class CourtLocation(BaseModel):
     divisions_served: Set[Division] = Field(default_factory=set)
     notes: Optional[str] = None
 
-class LocalHearingType(BaseModel):
+class HearingCode(BaseModel):
     model_config = ConfigDict(extra="forbid")
     code: LocalCode
     label: str
     category: HearingCategory
     divisions: Set[Division] = Field(default_factory=set)
 
-class LocalFilingType(BaseModel):
+class FilingCode(BaseModel):
     model_config = ConfigDict(extra="forbid")
     code: LocalCode
     label: str
     category: FilingCategory
 
-class LocalOrderType(BaseModel):
+class OrderCode(BaseModel):
     model_config = ConfigDict(extra="forbid")
     code: LocalCode
     label: str
@@ -293,14 +293,14 @@ class Court(BaseModel):
     formal_name: str
     short_name: str
     divisions: Set[Division] = Field(default_factory=set)
-    locations: List[CourtLocation] = Field(default_factory=list)
-    hearing_codes: List[LocalHearingType] = Field(default_factory=list)
-    filing_codes:  List[LocalFilingType]  = Field(default_factory=list)
-    order_codes:   List[LocalOrderType]   = Field(default_factory=list)
+    locations: List[Location] = Field(default_factory=list)
+    hearing_codes: List[HearingCode] = Field(default_factory=list)
+    filing_codes:  List[FilingCode]  = Field(default_factory=list)
+    order_codes:   List[OrderCode]   = Field(default_factory=list)
 
     @field_validator("locations")
     @classmethod
-    def _no_duplicate_slugs(cls, v: List[CourtLocation]) -> List[CourtLocation]:
+    def _no_duplicate_slugs(cls, v: List[Location]) -> List[Location]:
         seen = set()
         for loc in v:
             if loc.slug in seen:
@@ -308,7 +308,7 @@ class Court(BaseModel):
             seen.add(loc.slug)
         return v
 
-class JurisdictionCatalog(BaseModel):
+class CourtCatalog(BaseModel):
     model_config = ConfigDict(extra="forbid")
     country: CountryCode
     subnational: Optional[str] = None
@@ -342,7 +342,7 @@ class CatalogBundle(BaseModel):
     model_config = ConfigDict(extra="forbid")
     schema: str = Field(..., pattern=r"^udocket\.reference\.catalog\.bundle\.v1$")
     db: CatalogDBInfo
-    data: List[JurisdictionCatalog]
+    data: List[CourtCatalog]
     meta: Dict[str, str] | None = None
 ```
 
@@ -354,14 +354,14 @@ class CatalogBundle(BaseModel):
 from __future__ import annotations
 from typing import Iterable
 from ..taxonomy.categories import CountryCode
-from .base import JurisdictionCatalog
+from .base import CourtCatalog
 
 EXPORT_FN_NAME = "export_catalogs"  # kept for compatibility (if you ever export from code)
 
-def validate_catalogs(catalogs: Iterable[JurisdictionCatalog]) -> None:
+def validate_catalogs(catalogs: Iterable[CourtCatalog]) -> None:
     for c in catalogs:
         assert isinstance(c.country, CountryCode)
-        assert c.courts, "JurisdictionCatalog must contain at least one Court."
+        assert c.courts, "CourtCatalog must contain at least one Court."
         for key, court in c.courts.items():
             assert court.locations, f"Court {key} missing locations."
             for lt in (court.hearing_codes + court.filing_codes + court.order_codes):
@@ -377,7 +377,7 @@ from __future__ import annotations
 import json, os
 from pathlib import Path
 from typing import Dict, Any, List
-from .base import CatalogBundle, JurisdictionCatalog
+from .base import CatalogBundle, CourtCatalog
 from .plugin_protocol import validate_catalogs
 
 # Directory walking is data-only. No code-defined data.
@@ -393,10 +393,10 @@ def _load_bundle(p: Path) -> CatalogBundle:
         raw = json.load(f)
     return CatalogBundle.model_validate(raw)
 
-def discover_catalogs(data_root: str | Path | None = None) -> List[JurisdictionCatalog]:
+def discover_catalogs(data_root: str | Path | None = None) -> List[CourtCatalog]:
     root = Path(data_root) if data_root else Path(os.getenv("COURT_CATALOG_ROOT", DEFAULT_DATA_ROOT))
     bundles = [_load_bundle(p) for p in _iter_bundle_files(root)]
-    catalogs: List[JurisdictionCatalog] = []
+    catalogs: List[CourtCatalog] = []
     for b in bundles:
         catalogs.extend(b.data)
     validate_catalogs(catalogs)
@@ -914,13 +914,13 @@ udocket_core/data/courts/<COUNTRY-ISO2>/<REGION>/court_catalog.json
   `US/NY/court_catalog.json` (New York State).
 - Each file is a **CatalogBundle**:
   ```json
-  { "schema":"udocket.reference.catalog.bundle.v1", "db":{...}, "data":[ JurisdictionCatalog... ], "meta":{...} }
+  { "schema":"udocket.reference.catalog.bundle.v1", "db":{...}, "data":[ CourtCatalog... ], "meta":{...} }
 ````
 
 ### Keys & naming
 
 * `Court.key`: `CC-REGION-COURT` (e.g., `CA-AB-ACJ`).
-* `CourtLocation.slug`: kebab-case (e.g., `st-albert`, `wabasca-desmarais`).
+* `Location.slug`: kebab-case (e.g., `st-albert`, `wabasca-desmarais`).
 * `LocalCode.code`: `"CC.REGION.COURT.DOMAIN.SPEC"` (regex-validated).
 
 ---
@@ -943,7 +943,7 @@ payload = export_registry_json("/path/to/your/json/data")
 ## Expanding jurisdictions (Step-by-step)
 
 1. **Create a new JSON bundle**: `udocket_core/data/courts/<COUNTRY>/<REGION>/court_catalog.json`.
-2. Add a `JurisdictionCatalog` with one or more `Court` objects:
+2. Add a `CourtCatalog` with one or more `Court` objects:
    * Populate `locations` (`is_base_point` where applicable; set `admin_base_slug` for circuits
      *only if an official page says so*).
    * Add `hearing_codes` / `filing_codes` / `order_codes` with **LocalCode** strings mapping to **global categories**.
