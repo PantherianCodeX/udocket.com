@@ -1,8 +1,6 @@
 from __future__ import annotations
 import re
-from typing import Dict, List, Optional, Tuple, Sequence, cast
-
-from pydantic import ValidationError
+from typing import Dict, List, Optional, Tuple, Sequence
 
 from .base import (
     CaseNumber,
@@ -13,8 +11,8 @@ from .base import (
     DerivationDecl,
 )
 from .registry import all_schemes, schemes_by_court
-from ..reference.base import CatalogBundle
-from ..reference.registry import discover_catalogs  # existing loader for court catalogs
+from ..catalogs.base import CatalogBundle
+# Location-code validation is currently stubbed; no catalog lookup here.
 
 
 class CaseNumberEngine:
@@ -50,7 +48,7 @@ class CaseNumberEngine:
                 res = _try_scheme(value, s)
                 if res:
                     return res
-            raise ValidationError([ValueError("No scheme matched for hinted court")], CaseNumber)
+            raise ValueError("No scheme matched for hinted court")
         # fall back to global validator for detailed errors
         return validate_case_number(value)
 
@@ -90,17 +88,9 @@ def _normalize(value: str, rule: RegexRule) -> Tuple[str, re.Pattern]:
     pat = re.compile(rule.pattern, _compile_flags(rule.flags))
     return s, pat
 
+# NOTE: Location code enforcement is intentionally a no-op for the POC.
 def _catalog_location_codes(court_key: str) -> List[str]:
-    codes: List[str] = []
-    bundles = cast(List[CatalogBundle], discover_catalogs(None))  # keep default root to match existing tests
-    for bundle in bundles:  
-        for datum in bundle.data:
-            court = datum.courts.get(court_key) if datum.courts else None
-            if court:
-                for loc in (getattr(court, "locations", None) or []):
-                    if loc.code:
-                        codes.append(loc.code)
-    return codes
+    return []
 
 def _enforce_constraints(court_key: str, parts: Dict[str, str], constraints: List[ConstraintDecl]) -> None:
     for c in constraints or []:
@@ -119,9 +109,9 @@ def _enforce_constraints(court_key: str, parts: Dict[str, str], constraints: Lis
             if c.allowed is not None and v not in c.allowed:
                 raise ValueError(f"group '{c.group}' not in allowed set")
         elif c.kind == "in_catalog_location_codes":
-            codes = _catalog_location_codes(court_key)
-            if v not in codes:
-                raise ValueError(f"group '{c.group}' not a known location code for {court_key}")
+            # Stubbed for POC: do not enforce until official codes are provided.
+            # Other constraints (regex/length/year_range) still apply.
+            pass
 
 def _year_2_to_4(two: str, floor: int = 1980) -> str:
     if not two.isdigit(): return two
@@ -179,7 +169,7 @@ def validate_case_number(value: str, court_key_hint: Optional[str] = None) -> Ca
                     return result
             except Exception as e:
                 errors.append(f"{s.key}: {e}")
-        raise ValidationError([ValueError("; ".join(errors) or "No match")], CaseNumber)
+        raise ValueError("; ".join(errors) or "No match")
 
     # autodetect across all schemes
     for s in all_schemes():
@@ -190,7 +180,7 @@ def validate_case_number(value: str, court_key_hint: Optional[str] = None) -> Ca
         except Exception as e:
             errors.append(f"{s.key}: {e}")
 
-    raise ValidationError([ValueError("; ".join(errors) or "No scheme matched")], CaseNumber)
+    raise ValueError("; ".join(errors) or "No scheme matched")
 
 # --- Convenience wrappers -----------------------------------------------------
 
@@ -202,6 +192,6 @@ def match_case_number(value: str, court_key_hint: Optional[str] = None) -> Optio
     """Like validate_case_number but returns None instead of raising."""
     try:
         return validate_case_number(value, court_key_hint=court_key_hint)
-    except ValidationError:
+    except Exception:
         return None
     

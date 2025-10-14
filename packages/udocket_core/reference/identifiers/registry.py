@@ -6,8 +6,9 @@ from typing import Dict, Iterable, List, Optional
 
 from .base import SchemeBundle, CaseNumberScheme
 
-# Keep jurisdiction data co-located under /data/courts/**/
-DEFAULT_SCHEMES_ROOT = Path(__file__).resolve().parents[3] / "data" / "courts"
+# Keep jurisdiction data co-located under reference/data/**
+# __file__ is .../reference/identifiers/registry.py, so parents[1] is .../reference
+DEFAULT_SCHEMES_ROOT = Path(__file__).resolve().parents[1] / "data"
 
 def _iter_scheme_files(root: Path) -> Iterable[Path]:
     for p in root.rglob("case_number_schemes.json"):

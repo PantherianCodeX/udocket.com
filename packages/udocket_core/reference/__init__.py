@@ -1,8 +1,8 @@
 from .version import __version__
 # Keep the models surface small, stable, and accurate.
-from .reference.registry import discover_catalogs
+from .catalogs.registry import discover_catalogs
 
-from .reference.base import (
+from .catalogs.base import (
     CatalogBundle,
     CourtCatalog,
     Court,

@@ -3,9 +3,9 @@ import json
 from pathlib import Path
 import pytest
 
-from packages.udocket_core.models.identifiers.engine import validate_case_number
+from packages.udocket_core.reference.identifiers.engine import validate_case_number
 
-SCHEMES = Path("packages/udocket_core/data/courts/ca/ab/case_number_schemes.json")
+SCHEMES = Path("packages/udocket_core/reference/data/ca/ab/case_number_schemes.json")
 
 @pytest.mark.parametrize("court_key", ["CA-AB-KB", "CA-AB-ACJ", "CA-AB-ABCA"])
 def test_examples_valid_and_invalid(court_key: str):

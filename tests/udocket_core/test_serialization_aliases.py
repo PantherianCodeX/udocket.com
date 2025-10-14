@@ -1,7 +1,7 @@
 from __future__ import annotations
 from pathlib import Path
-from packages.udocket_core.models.reference.base import CatalogBundle
-from packages.udocket_core.models.utils import safe_dump
+from packages.udocket_core.reference.catalogs.base import CatalogBundle
+from packages.udocket_core.reference.utils import safe_dump
 
 def test_catalogbundle_uses_schema_alias(tmp_path: Path):
     # Minimal bundle instance round-trip to ensure 'schema' alias is honored

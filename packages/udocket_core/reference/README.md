@@ -1,4 +1,4 @@
-# udocket_models v4 (models-only + JSON data)
+# udocket_models v0.1.0 (models-only + JSON data)
 
 This package separates **Pydantic v2 models** (validation) from **JSON data** (content).
 The **core models** live under `udocket_models/core/…`. All **reference catalogs** are JSON
@@ -382,7 +382,7 @@ from .plugin_protocol import validate_catalogs
 
 # Directory walking is data-only. No code-defined data.
 # Override search root with COURT_CATALOG_ROOT if you want to ship data out-of-package.
-DEFAULT_DATA_ROOT = Path(__file__).resolve().parents[2] / "data" / "reference"
+DEFAULT_DATA_ROOT = Path(__file__).resolve().parents[2] / "data"
 
 def _iter_bundle_files(root: Path | None = None) -> List[Path]:
     base = Path(root) if root else DEFAULT_DATA_ROOT
@@ -884,7 +884,7 @@ class Order(BaseModel):
 ### `udocket_models/README.md`
 
 ```md
-# udocket_models v4 (models-only + JSON data)
+# udocket_models v0.1.0 (models-only + JSON data)
 
 This package separates **Pydantic v2 models** (validation) from **JSON data** (content).
 The **core models** live under `udocket_models/core/…`. All **reference catalogs** are JSON
@@ -928,7 +928,7 @@ udocket_core/data/courts/<COUNTRY-ISO2>/<REGION>/court_catalog.json
 ## Load & validate at runtime
 
 ```python
-from udocket_models.core.reference.registry import export_registry_json, discover_catalogs
+from packages.udocket_core.reference.catalog.registry import export_registry_json, discover_catalogs
 
 # Load all bundles under the default data folder:
 payload = export_registry_json()
