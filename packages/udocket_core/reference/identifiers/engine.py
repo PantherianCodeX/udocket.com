@@ -11,9 +11,6 @@ from .base import (
     DerivationDecl,
 )
 from .registry import all_schemes, schemes_by_court
-from ..catalogs.base import CatalogBundle
-# Location-code validation is currently stubbed; no catalog lookup here.
-
 
 class CaseNumberEngine:
     """
@@ -87,10 +84,6 @@ def _normalize(value: str, rule: RegexRule) -> Tuple[str, re.Pattern]:
         s = _apply_transform(s, tr)
     pat = re.compile(rule.pattern, _compile_flags(rule.flags))
     return s, pat
-
-# NOTE: Location code enforcement is intentionally a no-op for the POC.
-def _catalog_location_codes(court_key: str) -> List[str]:
-    return []
 
 def _enforce_constraints(court_key: str, parts: Dict[str, str], constraints: List[ConstraintDecl]) -> None:
     for c in constraints or []:
