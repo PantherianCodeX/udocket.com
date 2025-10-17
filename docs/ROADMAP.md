@@ -4,7 +4,7 @@ Context
 - The repository now ships the Django platform (`apps/platform`) Artifacts continue to live under `storage/media/cases/<CASE_ID>/...` on disk while Postgres stores metadata (`cases`, `jobs`, etc.).
 
 Target End State (Option 3)
-- A single Django 4.2 LTS project providing both admin UI and public APIs (via Django REST Framework) with asynchronous updates delivered through Django Channels.
+- A single Django 5.2 LTS project providing both admin UI and public APIs (via Django REST Framework) with asynchronous updates delivered through Django Channels.
 - Authentication and session management delegated to an external IAM (Keycloak on Azure) using OpenID Connect for the browser/admin UI and bearer‑token validation for the APIs.
 - A centralized authorization layer powered by Oso (Polar policies) backed by our capability catalog, replacing ad-hoc checks while preserving defense-in-depth with Postgres row-level security.
 - A normalized relational schema that captures core case workflow plus extensible artifacts (summaries, timelines, relationship graphs, exhibits, etc.) while retaining the existing on‑disk storage contract for binary artifacts.
@@ -17,7 +17,7 @@ All roadmap slices must maintain or improve our strong typing baseline—see `do
    - Maintain the root `manage.py`, `apps/platform/config/` settings package, and Django apps (`accounts`, `cases`, `artifacts`, `operations`, etc.).
 
 2) Dependencies & Tooling
-   - Update requirements to include: Django 4.2, django‑environ, djangorestframework, drf‑spectacular, django‑filter.
+   - Update requirements to include: Django 5.2, django‑environ, djangorestframework, drf‑spectacular, django‑filter.
    - Authorization: `oso`, `django-oso` (primary policy runtime); keep `django-guardian` only if object-level fallback remains required.
    - IAM/SSO: `mozilla-django-oidc` (or `python-keycloak` + `django-keycloak-auth`) for Keycloak SSO; pair with `djangorestframework-simplejwt[crypto]` for validating API tokens.
    - Realtime: `channels` 4, `channels-redis`, `asgiref`, Redis.

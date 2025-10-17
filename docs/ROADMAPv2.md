@@ -14,7 +14,7 @@ This roadmap consolidates every planning artefact in `docs/`, the agents guides,
    - Django project under `apps/platform`, maintain `manage.py`, settings package.
    - Ensure per-tenant storage layout under `MEDIA_ROOT/tenants/<org>/cases/<case_id>/`.
 2. **Dependencies & tooling** (§2)
-   - Django 4.2, DRF, Channels, Celery, django-environ, django-filter, drf-spectacular, pytest stack.
+   - Django 5.2, DRF, Channels, Celery, django-environ, django-filter, drf-spectacular, pytest stack.
    - Policy/Audit: Oso, django-simple-history, django-auditlog.
    - IAM: Keycloak OIDC + JWT validation.
    - LLM SDKs: azure-openai, anthropic, openai-compatible variants; add stubs where missing.
