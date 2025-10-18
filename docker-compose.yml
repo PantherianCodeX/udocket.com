@@ -144,7 +144,7 @@ services:
       - "5433:5432"
 
   keycloak:
-    image: quay.io/keycloak/keycloak:24.0.1
+    image: quay.io/keycloak/keycloak:26.4
     command: start-dev --import-realm --http-port=8085
     env_file: .env
     environment:

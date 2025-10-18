@@ -24,6 +24,14 @@ class Organization(models.Model):
         editable=False,
     )
     name: models.CharField[str, str] = models.CharField(max_length=200)
+    kc_organization_id: models.CharField[Optional[str], Optional[str]] = models.CharField(
+        max_length=128,
+        unique=True,
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="Keycloak organization identifier.",
+    )
     display_name: models.CharField[str, str] = models.CharField(max_length=200, blank=True)
     address_line1: models.CharField[str, str] = models.CharField(max_length=200, blank=True)
     address_line2: models.CharField[str, str] = models.CharField(max_length=200, blank=True)

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 import logging
 
@@ -12,7 +12,7 @@ import jwt
 from rest_framework.authentication import BaseAuthentication, get_authorization_header
 from rest_framework import exceptions
 
-from apps.platform.cases.models import CaseMembership, Case
+from apps.platform.accounts.utils import apply_claim_mappings
 
 
 log = logging.getLogger("apps.platform.accounts.auth")
@@ -74,48 +74,20 @@ class KeycloakOIDCBackend(OIDCAuthenticationBackend):
         sub = claims.get("sub")
         email = claims.get("email")
         name = claims.get("name") or f"{claims.get('given_name','')} {claims.get('family_name','')}".strip()
-        if hasattr(user, "kc_sub"):
+        updates: list[str] = []
+        if hasattr(user, "kc_sub") and getattr(user, "kc_sub", None) != sub:
             setattr(user, "kc_sub", sub)
-        if email and not getattr(user, "email", None):
-            user.email = email
-        if name and hasattr(user, "display_name"):
+            updates.append("kc_sub")
+        if email:
+            if getattr(user, "email", None) != email:
+                user.email = email
+                updates.append("email")
+        if name and hasattr(user, "display_name") and getattr(user, "display_name", None) != name:
             user.display_name = name
-        # Optional staff mapping: mark staff if user is in admin group
-        is_staff = getattr(user, "is_staff", False)
-        try:
-            groups = claims.get("groups") or []
-            if any(g in ("/udocket-admin", "udocket-admin", "admin") for g in groups):
-                is_staff = True
-        except Exception:
-            pass
-        user.is_staff = is_staff
-        user.save()
-        # Optional: sync memberships from group claims (format: case:<CASE_ID>:<ROLE>)
-        if getattr(settings, "OIDC_SYNC_MEMBERSHIPS", False):
-            groups = claims.get("groups") or []
-            prefix = getattr(settings, "OIDC_CASE_GROUP_PREFIX", "case:")
-            sep = getattr(settings, "OIDC_CASE_GROUP_SEPARATOR", ":")
-            for g in groups:
-                if not isinstance(g, str) or not g.startswith(prefix):
-                    continue
-                try:
-                    rest = g[len(prefix):]
-                    parts = rest.split(sep)
-                    case_id = parts[0]
-                    role = (parts[1] if len(parts) > 1 else getattr(settings, "OIDC_CASE_DEFAULT_ROLE", "REVIEWER")).upper()
-                    # Only sync if case exists
-                    try:
-                        c = Case.objects.filter(pk=case_id).first()
-                    except Exception:
-                        c = None
-                    if not c:
-                        continue
-                    cm, _ = CaseMembership.objects.get_or_create(case=c, user=user, defaults={"role": role})
-                    if cm.role != role:
-                        cm.role = role
-                        cm.save(update_fields=["role"])
-                except Exception:
-                    continue
+            updates.append("display_name")
+        if updates:
+            user.save(update_fields=list(dict.fromkeys(updates)))
+        apply_claim_mappings(user, claims, sync_cases=getattr(settings, "OIDC_SYNC_MEMBERSHIPS", False))
         return user
 
 
@@ -190,12 +162,7 @@ class KeycloakJWTAuthentication(BaseAuthentication):
             except Exception:
                 pass
 
-        # Optionally sync memberships from group claims
-        if getattr(settings, "OIDC_SYNC_MEMBERSHIPS", False):
-            try:
-                KeycloakOIDCBackend().update_user(user, claims)
-            except Exception:
-                pass
+        apply_claim_mappings(user, claims, sync_cases=getattr(settings, "OIDC_SYNC_MEMBERSHIPS", False))
         log.info(
             "JWT authentication succeeded",
             extra={

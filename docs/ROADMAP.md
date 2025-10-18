@@ -51,10 +51,10 @@ All roadmap slices must maintain or improve our strong typing baseline—see `do
 5) Authentication & IAM Integration
    - Provision Keycloak realm, clients, and roles for the MVP (Azure-managed Postgres backend, Keycloak Operator on AKS).
    - Configure Django to use OIDC:
-     - Browser sessions: integrate `mozilla-django-oidc` for login/logout. Map Keycloak roles/groups to local Role bindings and feed them into Oso context.
+   - Browser sessions: integrate `mozilla-django-oidc` for login/logout. Map Keycloak organization roles to local Role bindings and feed them into Oso context.
      - API access: configure DRF authentication classes to validate JWT access tokens from Keycloak using SimpleJWT with remote JWKs.
      - Service-to-service: create Keycloak service accounts for agents/workers and store credentials in Azure Key Vault.
-   - Middleware syncs Keycloak claims (roles, groups, MFA status) into local User and CaseMembership on each login so Polar policies can evaluate up-to-date membership.
+   - Middleware syncs Keycloak claims (organization memberships, case membership ids/roles, MFA status) into local User and CaseMembership on each login so Polar policies can evaluate up-to-date membership.
    - Enforce session timeout, reauth, and CSRF; rely on Keycloak for MFA/policy but add `django-axes` as fallback if local login ever enabled.
 
 6) Authorization Overhaul (High Security / High Isolation)
