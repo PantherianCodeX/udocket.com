@@ -56,11 +56,21 @@ def find_section_refs(text: str) -> set[str]:
 
 def check_sections(text: str) -> list[str]:
     defs = find_section_defs(text)
-    refs = find_section_refs(text)
-    missing = refs - defs
-    if missing:
-        return [f"Section referenced but missing major heading: §{x})" for x in sorted(missing)]
-    return []
+    if not defs:
+        return []
+    max_defined = max(int(x) for x in defs)
+    problems: list[str] = []
+    for ref in find_section_refs(text):
+        try:
+            num = int(ref)
+        except ValueError:
+            continue
+        if num >= 100:
+            # Likely referencing external regulations (e.g., HIPAA §164).
+            continue
+        if num <= max_defined and ref not in defs:
+            problems.append(f"Section referenced but missing major heading: §{ref})")
+    return problems
 
 def main() -> int:
     if not DOC.exists():

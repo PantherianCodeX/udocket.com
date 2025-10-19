@@ -19,7 +19,7 @@ python scripts/docs/lint_docs.py
 
 The aggregator runs:
 
-1. `mdformat --check --wrap 0 docs/TDDv7.md`
+1. `mdformat --check --wrap no docs/TDDv7.md`
 2. `markdownlint-cli2 docs/TDDv7.md` (skipped if the CLI is not on `PATH`)
 3. `scripts/docs/check_settings_keys.py` to ensure Appendix E only lists
    keys that actually exist in the codebase
@@ -58,6 +58,10 @@ manually or via the lint script above.
 
 - Run `python scripts/docs/lint_docs.py` before committing large edits to
   catch slips in numbering, appendix references, or settings names.
+- If Appendix E must mention a configuration key that is not implemented
+  yet, add it to `docs/settings_key_skip.txt` together with a short code
+  comment referencing the follow-up work. Remove entries once the code
+  ships so the key list stays authoritative.
 - Use `pipx`/`npm install --location=global` if you prefer keeping tooling
   isolated from project virtual environments.
 - Set `STRICT_DOCS=0` when invoking `link_check.py` directly if you only want

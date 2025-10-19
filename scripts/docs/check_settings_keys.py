@@ -20,6 +20,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 DOC_PATH = ROOT / "docs" / "TDDv7.md"
+SKIP_FILE = ROOT / "docs" / "settings_key_skip.txt"
 
 
 def extract_keys(text: str) -> list[str]:
@@ -69,6 +70,13 @@ def main() -> int:
     keys = extract_keys(text)
     skip_env = os.getenv("SKIP_KEYS", "")
     skip = {k.strip() for k in skip_env.split(",") if k.strip()}
+    if SKIP_FILE.exists():
+        skip_from_file = {
+            line.strip()
+            for line in SKIP_FILE.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.startswith("#")
+        }
+        skip.update(skip_from_file)
 
     missing = find_missing(keys, skip)
     if missing:
@@ -83,4 +91,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
