@@ -1,144 +1,451 @@
-# **uDocket — Technical Description Document (TDD)**
-
-> Note: `docs/TDDv7.md` now carries the fully ported structure and content (see Appendix P parity log). This legacy document is retained for historical reference until Architecture/Security approvals flip authority per the migration criteria.
-
-**Audience:** Engineering, Security, QA, Ops, Product
-**Purpose:** Authoritative implementation plan derived from the PRD; specifies architecture, data models, interfaces, pipelines, controls, and operational procedures sufficient to build the system end-to-end.
-
 ---
+status: implementable
+last_updated: 2025-10-19
+owners:
+  - Platform Architecture
+  - Security Engineering
+approvers:
+  - Architecture Steering Committee
+  - Security Review Board
+reviewers:
+  - QA Engineering Lead
+  - SRE Manager
+adr_index: docs/adr/README.md
+related_adrs:
+  - ADR-0001-guardian-ready-quarantine.md
+  - ADR-0003-api-versioning-and-sunset.md
+---
+
+# **uDocket — Technical Description Document (TDD Outline)**
+
+**Audience:** Engineering, Security, QA, Ops, Product\
+**Purpose:** Target outline for the next major TDD revision. Optimized for fast LLM parsing (stable identifiers, shallow nesting) and for human navigation during reviews.
+
+______________________________________________________________________
 
 ## Document controls
-| Field | Value |
-| --- | --- |
-| Version | 0.1-draft |
-| Status | Legacy reference (awaiting Architecture/Security archival sign-off) |
-| Last updated | 2025-10-19 |
-| Primary owners | Platform Architecture, Security Engineering |
-| Source PRD | Product strategy baseline (internal) |
-| Related references | Root `AGENTS.md`, area `AGENTS.md` files, `docs/typing-roadmap.md`, `docs/typing_refactor_plan.md`, `docs/privacy/residency/` |
 
-### Revision history
-| Date | Version | Author | Notes |
-| --- | --- | --- | --- |
-| 2025-10-19 | 0.1-draft | Platform Architecture | Baseline architecture, security, and pipeline contract captured. |
-| 2025-10-19 | 0.1-draft | Codex automation audit | Structural normalization, document controls, heading corrections. |
+| Field           | Value                                                                                                       |
+| --------------- | ----------------------------------------------------------------------------------------------------------- |
+| Version         | 0.1-draft                                                                                                   |
+| Status          | Implementable (mirrors front matter `status`; KEP lifecycle applies: Provisional → Implementable → Implemented) |
+| Last updated    | 2025-10-19 (source of truth is the front matter `last_updated`)                                             |
+| Primary owners  | Platform Architecture, Security Engineering                                                                 |
+| Approvers       | Architecture Steering Committee; Security Review Board                                                      |
+| Reviewers       | QA Engineering Lead; SRE Manager                                                                            |
+| ADR index       | `docs/adr/README.md` (immutable ADRs referenced in front matter `related_adrs`)                             |
+| Migration plan  | Supersede prior TDD versions once Architecture/Security approvals are recorded (parity verified 2025-10-19) |
+| Docs validation | `python scripts/docs/lint_docs.py` (see `docs/README.md` for tooling)                                       |
+| Link lint       | `python scripts/docs/link_check.py --strict` (CI `docs-link-check` stage blocks unresolved §/App./ADR refs) |
 
----
+______________________________________________________________________
 
-## 1) Architectural overview
+## 0) Reading guide
 
-### 1.1 Principles
-* **Single Source of Truth:** All case files and structured outputs are **artifacts** with immutable **content** and **SHA-256** integrity.
-* **Guardian:** Guardian is the last line of defence against policy violations and potential lawsuits. It decides **READY** vs **QUARANTINED** for **artifacts**.
-* **Approval gating:** Downstream stages accept **APPROVED** artifacts only; human Review promotes `READY → APPROVED`.
- * **Deterministic IDs; non-deterministic content:** Analyze/Compose **do not** guarantee byte-identical content. **Primary keys use UUIDv7.** We generate **deterministic UUIDv8 only for derived, in-document entities** and guarantee **stable control surfaces** (settings snapshot, model versioning, recorded prompts). Content is validated by **schema and referential invariants**, not byte equality.
-* **Isolation by design:** Keycloak RBAC + PostgreSQL RLS + **case membership** enforce strict per-org/per-case segregation (operators default to “own cases”).
-* **Region allowlists:** Processing and storage are bound to per-org policies and **fail closed** on non-compliance.
-* **Observability:** Jobs, decisions, transitions emit structured telemetry with correlation IDs.
-* **Zero-trust by default:** All service-to-service traffic is mutually authenticated (mTLS) and authorized by workload identity; no plaintext intra-cluster traffic is permitted. Certificates are short-lived and rotated automatically (see §1.3, §24).
-* **Operational safety defaults:** DB sessions pin `search_path`, enforce sane timeouts, and fail closed if RLS GUCs are missing (details §2.2.2).
-* **Settings as a platform:** Central **Settings Service** (system/org/case scopes) governs effective configuration; versioned, auditable, and snapshot-embedded in jobs.
-* **Real-time transport policy:** **SSE** for one-way server→client updates (status/progress). **Django Channels** for two-way live controls and collaborative editing.
-* **Policy-driven RBAC:** All row/field access is **deny-by-default** and policy-driven from **Settings** (system→org→case). The **only hardcoded exception** is the realm `sysadmin` role, which retains full access. Field-level visibility is enforced via security-barrier views and serializers; no hardcoded per-role logic in queries.
+- **Scope:** Entire platform lifecycle (design → operations → governance).
+- **Structure:** Numbered sections with ≤3 levels of depth; appendices mirror section numbers for reference artifacts.
+- **Cross-references:** Use `§<number>` for sections and `App.<letter>` for appendices.
+- **LLM hint:** Each subsection starts with a one-line purpose statement before implementation details.
+- **Maintenance:** Run `python scripts/docs/lint_docs.py` (or see `docs/README.md`) before submitting edits to keep references, formatting, and settings keys synchronized with the codebase.
 
+______________________________________________________________________
 
-### 1.2 Logical components
-* **Web App (ASGI/Django):** Staff UI, client portal, REST APIs, **SSE** endpoints, case/artifact management, reviews.
-* **Channels (Django Channels):** Two-way collaboration (editors, approvals, live controls).
-* **Workers (Celery):** Long tasks: media normalization, transcription orchestration, Analyze, Compose, Assembly, Delivery, Destruction, Ingestion.
-* **Guardian Service (FastAPI):** Artifact **READY/QUARANTINED**; reads org/case **settings** from Settings Service (never caller overrides).
-* **Digital Signature Service (FastAPI):** PDF/A signing & verification; manifest; LTV (OCSP/CRL/TSA).
-* **LLM Provider Registry:** Provider/model catalog, health, selection, fallback, quotas (Settings-backed).
-* **Reference Engine:** International court catalogs, validators, questionnaire layering & versioning.
-* **Notification Service:** Outbox → providers (email/SMS/in-app); delivery receipts.
-* **Settings Service:** Definitions, bundles, precedence resolution, caching, pub/sub invalidation.
-* **Storage Layer:** PostgreSQL (RLS), Object Storage (artifacts & media), Redis (broker/cache).
-* **Observability Fabric:** logs/metrics/traces/alerts and runbooks.
+## 1) Executive summary
 
+### 1.1 Mission & problem statement
 
-### 1.3 Deployment topology
-* **Kubernetes**; per-env namespaces. Deployments: `web`, `channels`, `workers`, `guardian`, `signer`, `llm-registry`, `reference`, `notifications`, `settings`, `ingress`, `redis`, object-storage connector, log/metrics agents.
-* **Ingress TLS**; **egress policies** restrict provider regions.
-* **Service-to-service mTLS with workload identity** (SPIFFE/SPIRE or service mesh equivalent) is **binding**; plaintext intra-cluster calls are denied by policy.
-  * **Mesh requirements:** If Istio/Linkerd is used, enforce **STRICT** mTLS, SDS-delivered certs with **TTL ≤ 24h**, and automatic rotation with jitter; deny policy on certs older than 48h.
-  * **Certificate SLOs:** 99.9% of cert rotations complete within 5 minutes of expiry; alert if >15 minutes to rotate.
-* **Time sync:** Nodes run chrony/NTP with max drift ±100ms; TSA drift checks in §6 depend on this.
-* **TLS policy (ingress):** TLS 1.3 preferred and default; TLS 1.2 allowed only where legacy interop is required.
-  * **Ciphers:** TLS_AES_128_GCM_SHA256, TLS_AES_256_GCM_SHA384, ECDHE-ECDSA-AES128-GCM-SHA256, ECDHE-RSA-AES128-GCM-SHA256. OCSP stapling enabled.
-* **Managed secrets:** Vault/Key Vault.
-* **Object storage:** Azure Blob or S3-compatible (MinIO for dev).
-* **Broker:** Redis. **DB:** PostgreSQL with RLS.
+*Purpose: State why uDocket exists and which pain points it solves.*
 
----
+- Deliver a secure, auditable case automation platform that converts unstructured inputs (audio, exhibits, staff notes) into consumable legal artifacts without sacrificing compliance.
+- Replace ad hoc transcription and summarization processes that lack residency controls, approval gating, or defensible audit trails.
+- Empower multidisciplinary users (intake, operators, reviewers, counsel) with coordinated workflows backed by deterministic settings and artifacts.
 
-## 2) Identity, tenancy & RBAC
+### 1.2 Solution overview
 
-### 2.1 Keycloak
-* **Realm:** `udocket`
-* **Clients:** `staff-ui`, `client-portal`, `service-api`, `guardian`, `signer`, `settings`, `notifications`, `llm-registry`, `reference`
-* **Organizations:** **Keycloak Organizations** are authoritative for org membership and org-scoped roles.
-* **Roles**
-  * **Realm-scoped:** `sysadmin`, `auditor` (cross-org per policy).
-  * **Org-scoped:** `org_admin`, `org_manager`, `org_operator`, `org_reviewer`, `org_external_counsel`, `org_client`.
-* **Token claims (protocol mappers)**
-  * `sub`, `email`, `name`
-  * `org_ids[]` — Organization UUIDs the user belongs to
-  * `active_org_id` — **scalar** UUID the token is minted for
-  * `active_org_roles[]` — roles effective in `active_org_id`
-  * (optional) `org_directory[]` — `{id, name}` for switcher UX
-* **Auth middleware**
-  * Trusts only the token: `active_org_id ∈ org_ids[]` and uses `active_org_roles[] ∪ realm_roles[]`.
-  * Sets `request.ctx.active_org_id` (no `X-Org-ID` headers accepted for authZ).
-  * Populates per-request role context for handlers and RLS.
-* **Token lifetimes & step-up**
-  * Access tokens: ≤ 15m; Refresh tokens: ≤ 12h (staff) / ≤ 2h (portal). Offline tokens disabled by default; allowlist exceptions only.
-  * Step-up MFA asserted via OIDC `acr` claim; server validates `acr` on endpoints flagged as step-up (see §2.3).
+*Purpose: Summarize the end-to-end approach at one glance.*
 
+- Web platform (Django + Channels) for staff/clients, Celery workers for long-running jobs, and dedicated Guardian & Signing services enforcing READY/QUARANTINED and digital seal policies.
+- Agent pipeline: Transcribe → Analyze → Compose, each producing immutable artifacts under Guardian review, enriched with manifests and ops telemetry.
+- Zero-trust foundation: mTLS between services, Postgres RLS with policy-driven RBAC, object storage with SHA-256 integrity, and centralized Settings snapshots for every job.
 
-### 2.2 RLS & case membership
-* All tenant tables include `org_id UUID NOT NULL`.
-* **RLS** binds each DB session to `active_org_id` from the token.
-* **Case scoping:** `case_member (user_id, case_id, role)` governs per-case access within the active org.
-* **Default visibility:** Operators see only their own cases; settings may widen to “all org cases”.
-* **Policy-driven allow:** Row and field access are decided by policy compiled from Settings (see **§2.7** & **§36**), with a single hardcoded bypass for the realm `sysadmin` role.
+### 1.3 Out-of-scope items
+
+*Purpose: Clarify boundaries to prevent scope creep.*
+
+- No generic e-discovery, enterprise DMS migration tooling, or third-party redaction services; integrations focus on Azure Speech, selected LLM providers, and in-house signing.
+- Hardware devices, telephony capture, and in-person interview tooling remain outside MVP scope (ingest assumes digital uploads).
+- Non-Canadian speech regions and unrestricted LLM model bring-your-own configurations are disabled pending future waivers.
+
+### 1.4 Success metrics & KPIs
+
+*Purpose: Define measurable signals for program health.*
+
+- `transcription_cycle_time` ≤ 30 minutes P95 for batch jobs (case-ready transcript).
+- ≥ 95% Guardian pass rate on first submission with \< 1% false negatives per quarter.
+- FinOps: LLM spend per case maintained within org-defined monthly caps; ≥ 90% forecast accuracy.
+- Platform reliability: Web/worker availability ≥ 99.5%, no Sev-1 incidents triggered by residency or RBAC violations.
+
+### 1.5 Document readers & decision checkpoints
+
+*Purpose: Identify stakeholders and when they must engage.*
+
+- **Architecture & Security:** approve changes to principles, Guardian rules, and Settings service contracts.
+
+- **Engineering leads:** align sprint plans with agent, API, and storage sections; sign off before major releases.
+
+- **Product & Ops:** review executive summary and operations sections before customer onboarding waves.
+
+- Trigger checkpoints: pre-production launch, regulator readiness reviews, significant provider changes, or artifact schema revisions.
+
+- RACI assignments for each domain live in App.S and govern who signs off on changes or exceptions.
+
+- **Source material:** `§1`, `§35` overview blurbs
+
+- **Priority:** High (front-matter defines narrative used by PRD/TDD consumers)
+
+### 1.6 Customer-facing SLAs
+
+*Purpose: Publish external commitments distinct from internal SLOs and make escalation paths obvious to buyers and auditors.*
+
+- **Availability:** 99.5 % rolling 30 day for staff UI/API; 99.0 % for client portal. Breaches trigger customer notice within 24 h and a public incident postmortem within 5 business days (`App.H` templates).
+- **Support response:** Severity 1 (production outage/legal exposure) acknowledged ≤ 1 hour, mitigated or workaround shared ≤ 4 hours; Sev 2 ≤ 4 hour acknowledgement, Sev 3/4 within one business day. Support queue owned by Platform Support with SRE on-call backup.
+- **Restore targets:** RTO ≤ 1 hour for Postgres/object storage (see §12.4) and ≤ 4 hours for Guardian/Signer; RPO ≤ 15 minutes. Manual fallback playbooks in §12.10 describe degraded operations while restoration proceeds.
+- **Escalation:** Customer SLA breaches escalate to Duty Manager + SRE on-call + Product within 30 minutes; regulators and contractual stakeholders notified per §12.3 templates. Decision log entries capture SLA breaches and remediation commitments (§15.3).
+
+______________________________________________________________________
+
+## 2) Core principles & constraints
+
+### 2.1 Guiding principles (immutability, determinism, zero-trust)
+
+*Purpose: Anchor architecture decisions to explicit tenets.*
+
+- Artifacts are immutable, content-addressed, and versioned; human approvals elevate READY → APPROVED.
+- Guardian gating: the Guardian service is the decision authority for READY/QUARANTINED; downstream stages accept APPROVED artifacts only.
+- Deterministic controls over non-deterministic LLM output: UUIDv7 row IDs, UUIDv8-HMAC (draft) derived IDs per §6.7, Settings snapshots, prompt/version capture.
+- Zero-trust for every hop: deny-by-default RBAC, workload identities, enforced mTLS, and per-request DB GUC binding.
+- Observability and auditability as first-class: every job/action emits structured telemetry with correlation IDs.
+- Settings as a platform: a centralized Settings Service defines effective configuration (system/org/case), is versioned/audited, and snapshots embed into every job.
+- Operational safety defaults: database sessions pin `search_path`, enforce timeouts, and fail closed when required RLS GUCs are missing.
+- Real-time transport policy: SSE for one-way server→client status, Channels for bidirectional collaboration and controls.
+
+### 2.2 Regulatory & contractual constraints (Canada residency, SOC2, privacy)
+
+*Purpose: Spell out compliance rails enforced across the stack.*
+
+- Data residency: compute and storage restricted to canadacentral/canadaeast; cross-region requires dual-approved waiver stamped in manifests.
+- SOC 2 / ISO controls: change management, incident response, and logging mapped to specific sections (`§20`, `§24`, `App.E`).
+- Privacy commitments: DPIA/RoPA artifacts, entity masking, retention baselines, HIPAA override mode (stricter access + retention).
+- HIPAA override mode: disabled by default (`privacy.hipaa.enabled=false`). When enabled, enforces per-org field encryption (`security.field_encryption.enabled=true`, `security.field_encryption.key_scope='per_org'`), requires WebAuthn for privileged roles (`security.mfa.webauthn_required_roles` includes `org_admin|org_manager|org_operator|org_reviewer`), blocks evidence-store prompt excerpts (`evidence_store.redacted_excerpts.enabled=false`), shortens retention windows (Appendix C), and disallows portal delivery of PHI-tagged attachments unless a waiver is recorded. Uploads carrying `PHI=true` are rejected with `POLICY_BLOCK` when HIPAA mode is off.
+- The `PHI=true` marker is collected at upload via a staff-facing “Contains PHI” toggle (default false) and may also be asserted by the post-upload classifier; both paths write the flag to artifact metadata. If a downstream classifier later upgrades an artifact to PHI while HIPAA mode is disabled, the artifact is retro-quarantined, downstream approvals are invalidated, and portal links are revoked until an organization enables HIPAA mode or files a waiver.
+- Portal enforcement: portal fetches hitting PHI-tagged artifacts while HIPAA mode is disabled return `403` with `code="POLICY_BLOCK"` and copy key `portal.hipaa.blocked_download`. The invalidation SSE event includes `reason="HIPAA_REQUIRED"` so clients surface consistent messaging.
+- Evidence-store hygiene: enabling HIPAA mode kicks off `scripts/privacy/purge_evidence_store.py`, which removes legacy prompt excerpts, reindexes redactable artifacts, and records a completion artifact (`PRIVACY_PURGE_REPORT`) before the org can ingest PHI. The command refuses to flip the setting if purge verification fails.
+- Rationale: the platform blocks PHI ingestion unless an org explicitly enables HIPAA mode, preventing accidental handling outside approved compliance footing.
+- Legal hold and destruction policies align with jurisdictional obligations captured in Appendix C.
+- Audit linkage: DPIA/RoPA records referenced in audit seals (`§14.2`, Appendix N); HIPAA override activations require Compliance approval and manifest tagging.
+
+### 2.3 Non-functional requirements (SLOs, latency budgets, availability)
+
+*Purpose: Capture performance and reliability expectations.*
+
+- Guardian decisions ≤ 5 minutes P95; Compose jobs complete ≤ 45 minutes P95 under nominal load.
+- Service availability: web/channels 99.5%, Guardian 99.9%, Settings API 99.9% (due to policy enforcement criticality).
+- Latency targets: SSE job progress updates \< 1s lag; artifact download start \< 500ms for approved documents.
+- Error budgets tie directly to deploy gates (`§41.7`)—breaches block releases until burn rate stabilizes.
+
+### 2.4 Assumptions & dependencies
+
+*Purpose: Make explicit the foundational inputs the solution relies on.*
+
+- Identity provider: Keycloak with Organizations feature remains authoritative; no secondary IdP fallback.
+
+- Cloud dependencies: Azure Speech (Canada), Azure Blob/S3-compatible storage with versioning, managed Redis/Postgres.
+
+- DevOps baseline: Kubernetes with mesh or workload identity capable of enforcing strict mTLS and egress controls.
+
+- Client orgs commit to providing language/region selections that map to policy allowlists; Settings activation enforces this.
+
+- **Source material:** `§1.1`, `§2`, `§29`, `§34`, `§41`
+
+- **Priority:** High (feeds platform policies, approval reviews)
+
+______________________________________________________________________
+
+## 3) Platform architecture overview
+
+### 3.1 High-level system context diagram
+
+*Purpose: Orient readers to major components and trust boundaries before diving into detail.*
+
+- Staff users, reviewers, and clients interact with the **Web App** (Django ASGI) via browser connections protected by TLS 1.3; SSE provides status streaming while Channels enables bidirectional collaboration. SSE payloads include only IDs and metadata already permitted by RLS—no raw PII or artifact bodies traverse the channel.
+- Background processing occurs in the **Worker cluster** (Celery) which orchestrates agent pipelines, storage operations, and notifications.
+- Supporting services—**Guardian**, **Digital Signer**, **Settings**, **LLM Registry**, **Reference Engine**, and **Notifications**—communicate over mTLS within the cluster and persist state to Postgres with RLS.
+- External dependencies (Azure Speech, LLM providers, TSA/OCSP authorities, email/SMS gateways) sit outside the trusted cluster and are accessed under strict egress policies.
+- Visual: see `App.A` for the full context diagram and sequence overlays.
+
+### 3.2 Deployment topology (environments, Kubernetes primitives)
+
+*Purpose: Capture the runtime footprint and security guardrails applied per environment.*
+
+- Kubernetes namespaces per environment (`dev`, `staging`, `prod`, `audit`) host Deployments for `web`, `channels`, `workers`, `guardian`, `signer`, `llm-registry`, `reference`, `notifications`, `settings`, ingress controllers, Redis broker/cache, and object-storage sidecars.
+- Service mesh or SPIFFE/SPIRE workload identity enforces strict mTLS; certificates rotate with TTL ≤ 24h and SLO of 99.9% renewals within five minutes of expiry. Certificates that exceed `security.tls.cert_ttl_minutes + 5` minutes trigger a hard fail (traffic denied) and page on-call; soft warnings fire 30 minutes before TTL expiry to allow proactive rotation. Mutating RPCs must satisfy both mutual TLS **and** HMAC headers: the mesh validates SANs against SPIFFE IDs (`spiffe://udocket/<service>`) or an allowlisted CN, and the receiving service reconstructs the shared-secret signature (Appendix F). Calls missing either layer are rejected with `401 AUTH_ERROR` and recorded via `auth_layer_violation_total`.
+- Network policy: ingress terminates TLS (TLS 1.3 preferred; limited TLS 1.2 fallback). Egress is default-deny aside from kube-dns and the Istio egress gateway; the gateway enforces the Canadian Azure and third-party allowlists rendered from the `network.egress.allowed_hosts` Settings bundle, and drift detection nightly resolves each FQDN (e.g., `*.blob.core.windows.net`, `*.table.core.windows.net`, `*.queue.core.windows.net`, TSA/OCSP hosts) to compare against SAN lists.
+- TLS details: TLS 1.3 relies on the platform default cipher selection; only TLS 1.2 fallback suites are configured explicitly (`{'ECDHE-ECDSA-AES128-GCM-SHA256','ECDHE-RSA-AES128-GCM-SHA256','ECDHE-ECDSA-AES256-GCM-SHA384','ECDHE-RSA-AES256-GCM-SHA384'}`). OCSP stapling remains enabled on ingress. Fallback may be enabled via `security.tls.legacy_exceptions[]` entries that include endpoint name, justification, and an expiry ≤ 30 days out; Settings activation validator rejects longer windows, and an alert fires seven days before expiry to force review. CHACHA20-Poly1305 is supported only under TLS 1.3, satisfying mobile performance needs without weakening the FIPS posture. Production ingress treats TLS 1.3 as the FIPS boundary; `security.tls.min_version` defaults to `TLSv1.3` and downgrades require Security approval and updated attestation for the impacted environment.
+- Platform services leverage managed secrets (Vault or Azure Key Vault). Nodes run chrony/NTP with ±100 ms drift to support TSA validation. Redis handles broker/cache needs; Postgres (regional HA) stores relational data.
+- Object storage: Azure Blob (prod) or S3-compatible (dev) buckets configured for versioning, SSE-KMS, and immutable retention for audit sinks.
+
+#### 3.2.1 Policy manifests (illustrative)
+
+*Purpose: Show concrete Kubernetes/service-mesh policies to enforce topology constraints.*
+
+AuthorizationPolicy (Istio)
+
+```yaml
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata: { name: mesh-egress-allowlist, namespace: platform }
+spec:
+  action: ALLOW
+  rules:
+    - to:
+        - operation:
+            hosts: ["*.canadacentral.azure.com", "*.canadaeast.azure.com"]
+    - to:
+        - operation:
+            hosts: ["tsa.example.ca", "ocsp.example.ca"]
+```
+
+- Illustrative host list; production values are rendered from the `network.egress.allowed_hosts` Settings bundle (SYSTEM scope) so environments stay in lockstep with approved endpoints.
+
+NetworkPolicy (Kubernetes)
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: mesh-egress-baseline, namespace: platform }
+spec:
+  podSelector: { matchLabels: { mesh: enabled } }
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector: { matchLabels: { kube-system: "true" } }
+          podSelector: { matchLabels: { k8s-app: kube-dns } }
+      ports:
+        - protocol: UDP
+          port: 53
+    - to:
+        - namespaceSelector: { matchLabels: { istio: control-plane } }
+          podSelector: { matchLabels: { app: istio-egressgateway } }
+    # External destinations are mediated by the service mesh AuthorizationPolicy allowlist.
+```
+
+AdmissionPolicy (prevent PgBouncer statement pooling)
+
+```yaml
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata: { name: deny-statement-pooling }
+spec:
+  rules:
+    - name: block-statement-pooling
+      match: { resources: { kinds: ["Deployment"], namespaces: ["platform"] } }
+      validate:
+        message: "PgBouncer must not use statement pooling"
+        foreach:
+          - list: "spec/template/spec/containers"
+            preconditions:
+              - key: "{{ element.name }}"
+                operator: Equals
+                value: pgbouncer
+            deny:
+              conditions:
+                - key: "{{ element.env[?name=='POOL_MODE'].value | default('session') }}"
+                  operator: Equals
+                  value: statement
+```
+
+- PgBouncer is permitted to run only in `transaction` (default) or `session` pooling modes as published through the `db.pgbouncer.pool_mode` Setting; statement pooling remains blocked to preserve per-request GUCs. Workers and web pods expose a `/healthz/pgbouncer-mode` probe that executes `SHOW pool_mode` via PgBouncer admin and fails closed if the reported mode drifts from the allowlist, aligning with §4.4 RLS guarantees.
+
+Ingress TLS policy (snippet)
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: platform
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-protocols: "TLSv1.3 TLSv1.2"
+    nginx.ingress.kubernetes.io/ssl-ciphers: "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384"
+```
+
+- TLS 1.3 cipher suites are implicit; the annotation lists only the TLS 1.2 fallback suites the gateway permits.
+- Authoritative TLS policy is driven by `security.tls.min_version` (default `TLSv1.3`) and `security.tls.cipher_profile` Settings bundles; any TLS 1.2 exposure must be explicitly listed in `security.tls.legacy_exceptions[]` with documented review and expiry. Mesh and ingress templates consume the same settings so routing surfaces stay consistent.
+
+Pod Security Admission (namespace labels)
+
+```yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: platform
+  labels:
+    pod-security.kubernetes.io/enforce: "restricted"
+    pod-security.kubernetes.io/enforce-version: "latest"
+```
+
+### 3.3 Service inventory table (role, tech stack, scaling)
+
+*Purpose: Provide a tabular summary for capacity planning and onboarding.*
+
+| Service              | Runtime                          | Responsibilities                                                                | Scaling & notes                                             | Observability anchors                                            |
+| -------------------- | -------------------------------- | ------------------------------------------------------------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------- |
+| Web                  | Django ASGI (uvicorn + gunicorn) | REST APIs, staff UI, client portal, SSE endpoints, approval workflows           | HPA on CPU+request latency; sticky sessions avoided         | `web_http_*`, `frontend_latency_seconds`, `audit_event_total`    |
+| Channels             | Django Channels (Redis-backed)   | Real-time editors, approvals, QA feedback                                       | Separate Deployment with autoscale on WS connections        | `channels_active_connections`, `channels_msg_latency_seconds`    |
+| Workers              | Celery (prefork)                 | Media normalization, agent orchestration, notifications, ingestion, destruction | Queue length auto-scaling; dedicated queues per agent class | `celery_queue_depth`, `job_duration_seconds`, `task_retry_total` |
+| Guardian             | FastAPI                          | Artifact READY/QUARANTINED decisions, policy evaluation, audit history          | Pod HPA on latency; 99.9% SLO                               | `guardian_decision_latency_seconds`, `guardian_ready_ratio`      |
+| Digital Signer       | FastAPI                          | PDF/A signing, OCSP/CRL/TSA validation, bundle creation                         | Scales with signing queues; relies on KMS/TSA connectors    | `signer_request_latency_seconds`, `tsa_drift_seconds`            |
+| LLM Registry         | FastAPI                          | Provider catalog, health probes, token accounting, fallback logic               | Low QPS; run ≥2 replicas                                    | `llm_provider_health`, `llm_circuit_state`                       |
+| Settings Service     | FastAPI                          | Hierarchical settings APIs, bundle activation, diff previews                    | Autoscale on QPS; Redis pub/sub for cache invalidation      | `settings_activation_total`, `settings_cache_hit_ratio`          |
+| Reference Engine     | FastAPI + worker cron            | International court catalogs, validators, questionnaires                        | Scheduled updates; horizontal scale minimal                 | `reference_sync_duration_seconds`, `catalog_version`             |
+| Notification Service | Celery beat + worker             | Outbox delivery (email/SMS/in-app), receipt tracking                            | Scales with delivery volume; provider specific adapters     | `delivery_success_ratio`, `delivery_retry_total`                 |
+| Storage adapters     | Sidecar / init jobs              | Object storage integrity checks, audio normalization caching                    | Scoped per namespace                                        | `storage_hash_mismatch_total`, `object_store_latency_seconds`    |
+
+- **Stack note:** Web and Channels services run on Django 5.2.x (ASGI via uvicorn + gunicorn) and Django Channels 4.1.x, both pinned in `apps/platform/requirements.txt`; SBOM gates block implicit minor upgrades.
+
+### 3.4 Data flows between services
+
+*Purpose: Describe the critical sequences that tie services together.*
+
+- **Upload → Guardian → Approval:** Web accepts uploads, stages to object storage, inserts DRAFT artifacts, calls Guardian for readiness, then surfaces for reviewer approval (sequence in `App.A.2`).
+- **Agent pipeline:** Workers fetch inputs (audio/transcripts), execute Transcribe/Analyze/Compose stages, write artifacts + manifests, and notify Guardian & SSE. Settings snapshots travel alongside each job to guarantee reproducibility.
+- **Notification loop:** Worker pushes delivery requests to Notification Service; receipts update artifact manifests and audit events. Portal fetches approved deliverables via signed URLs with guardian-enforced readiness.
+- **Telemetry stream:** All services emit logs/metrics/traces to the Observability Fabric (Elastic/OTel stack). Guardian decisions and settings activations append to ops audit JSONL under each case.
+- **Settings change propagation:** Activations in Settings Service publish invalidation events; consuming services flush caches and rehydrate GUC policies on next request/task.
+
+### 3.5 External integrations (Azure Speech, LLM providers, TSA/OCSP)
+
+*Purpose: Catalog regulated touchpoints subject to policy and audit.*
+
+- **Azure Speech (canadacentral/canadaeast):** Batch transcription via SAS URLs and on-demand streaming; operations include hashing uploads, enforcing PCM normalization, and monitoring quotas.
+
+- **LLM providers:** Restricted to org-approved regions and models; Selection algorithm honors `fallback_priority`. Evidence store records prompts, redaction metrics, and envelope metadata per call.
+
+- **Digital trust services:** TSA and OCSP/CRL endpoints defined in settings (`sign.trust_roots[]`); signer enforces drift ≤ ±5s and caches responses ≤12h.
+
+- **Notification channels:** Email/SMS providers configured per organization; webhook adapters log request/response pairs with PII masking.
+
+- **Reference Engine:** Maintains international court catalogs with localized labels, validator rules, and questionnaire templates; scheduled sync jobs update per jurisdiction and publish catalog versions for downstream services.
+
+- **Optional analytics sinks:** Metrics exported to Grafana/Prometheus; FinOps dashboards consume cost metrics for monthly guardrails.
+
+- Sub-processor directory: see App.Q for approved vendors, residency posture, and DPA commitments.
+
+- **Source material:** `§1.2`, `§1.3`, `App.A`, `§3`, `§24`
+
+- **Priority:** High (core architecture reference)
+
+______________________________________________________________________
+
+### 3.6 Region allowlist enforcement & egress policies (binding)
+
+*Purpose: Enforce Canada-only compute/storage and control outbound traffic to providers.*
+
+- Settings define allowlists per org: `regions.allowlist.compute = ['canadacentral','canadaeast']`, `regions.allowlist.storage = ['canadacentral','canadaeast']`. Activation lints reject disallowed regions.
+- Network layer: Kubernetes `NetworkPolicy`/service mesh `AuthorizationPolicy` denies egress to non-allowlisted CIDRs/hostnames; provider endpoints pinned by FQDN and SAN match with mTLS.
+- Providers: Azure Speech endpoints restricted to Canadian regions; LLM runtime filters models by allowed regions before selection; cross-region requires dual-approved waiver stamped in manifests and Guardian rules log.
+- Storage: object buckets created in approved regions; replication outside allowlist disabled unless waiver present; replication metadata recorded in manifests.
+- Drift detection: nightly job resolves each configured host, validates SAN entries against `network.egress.allowed_hosts`, and compares resulting CIDRs to the allowlist; deviations alert and auto-disable offending endpoints.
+- Telemetry: `residency_block_total` increments on blocks; audit records include `RESIDENCY_POLICY_BLOCK` reason and settings snapshot hash.
+
+______________________________________________________________________
+
+### 3.7 C4 containers & STRIDE dataflows (binding)
+
+*Purpose: Provide an explicit container-level view with threat annotations that build on the context diagram.*
+
+- Container and component diagrams live beside this document (`docs/diagrams/c4/container-platform-v1.mmd`, `docs/diagrams/c4/component-platform-v1.mmd`, and rendered SVG/PNG artefacts). Updates must ship with schema or service changes so reviewers can reason about new dataflows before approving agent or infra work.
+- The platform threat DFD (`docs/diagrams/threat/dfd-platform-stride-v1.mmd`) applies STRIDE categories per dataflow: ingress/egress gateways, service-mesh mTLS, Guardian/Signer decision loops, and outbound provider calls. Appendix B enumerates the detailed scenarios; this subsection records the binding between the DFD and container view.
+- Container threats and mitigations:
+
+| Container / trust boundary | Primary dataflows & STRIDE focus                                   | Key mitigations & references                                                                                              |
+| -------------------------- | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Web & Channels (staff + portal) | Browser ↔ ASGI over TLS (`Spoofing`, `Tampering`, `Information disclosure`) | mTLS terminates at ingress; HSTS/CSP (§11.5); SSE token binding (§10.8); RLS GUC canaries (§4.4); App.B Spoofing mitigations |
+| Worker cluster (Celery)    | Jobs ↔ storage/LLM providers (`Tampering`, `Repudiation`, `DoS`)    | Settings snapshots (§6.1), audit JSONL (§6.3/§6.4), advisory locks (§5.4/App.H RB-LOCK-006), FinOps guard (§8.7/§13.5)      |
+| Guardian & Signer services | Artifact promotion, digital seals (`Tampering`, `Repudiation`)      | FOR SHARE parent guard (§7.1), immutable audit sink (§12.1), OCSP/TSA verification (§7.2), ADR-0001 READY/QUARANTINED rules |
+| Settings service + policy compiler | Config activation across tenants (`Spoofing`, `Elevation of privilege`) | HMAC-signed requests (§7.3), dual approval (§9.3/§9.11), compiled RLS tables (§4.4), activation lock advisory key (§9.8)    |
+| External providers (Azure Speech/OpenAI/TSA) | Controlled egress (`Information disclosure`, `DoS`) | Mesh AuthorizationPolicy (§3.6), residency waivers (App.O), LLM safety harness (§8.4), provider circuit breakers (§8.1, App.H RB-LLM-003) |
+
+- Threat reviews must reference both the container diagram and DFD; new services may not progress past **Provisional** until they document ingress/egress paths, STRIDE analysis, and mitigations in Appendix B.
+
+______________________________________________________________________
+
+## 4) Identity, tenancy & access control
+
+### 4.1 AuthN provider (Keycloak) and realm configuration
+
+*Purpose: Define the identity backbone and token contract consumed by all services.*
+
+- Realm `udocket` with clients `staff-ui`, `client-portal`, `service-api`, `guardian`, `signer`, `settings`, `notifications`, `llm-registry`, `reference`.
+- Roles split into realm (`sysadmin`, `auditor`) and organization scope (`org_admin`, `org_manager`, `org_operator`, `org_reviewer`, `org_external_counsel`, `org_client`).
+- Tokens include `org_ids[]`, `active_org_id`, `active_org_roles[]`, optional `org_directory[]`. Middleware rejects any request where `active_org_id ∉ org_ids[]`.
+- Access tokens ≤15 minutes, refresh tokens 12h (staff) / 2h (portal); offline tokens disabled unless security approves exceptions. Step-up MFA signaled via OIDC `acr` claim for sensitive endpoints.
+- Login flow for org switching triggers re-authentication to mint new tokens bound to the selected organization—no custom headers for impersonation allowed.
+
+### 4.2 Org/case membership model and RBAC lattice
+
+*Purpose: Explain how authorization decisions resolve across org and case scopes.*
+
+- `organization` table is the root tenant; `case` rows reference `org_id`. Users gain visibility through Keycloak Organizations; the platform mirrors minimal metadata for labels.
+- `case_member(user_id, case_id, role)` narrows access within an organization; default operator scope is “own cases.” Org settings can widen to “all org cases” with policy approval.
+- Effective permissions compile from Settings bundles into `effective_permission` (resource/action/role/field). `udocket_can(...)` function enforces deny-by-default, with only `sysadmin` realm role as hardcoded bypass.
+- Policies drive field-level allowances (`field_mask_rule`) and exclusivity (e.g., artifact types). Settings activation pipeline validates coverage before publishing changes.
+
+### 4.3 Session management & token binding
+
+*Purpose: Prevent token misuse and session fixation across services and clients.*
+
+- Middleware sets per-request context (`active_org_id`, `active_user`, roles) and stores them via `set_config(..., true)` to bind DB sessions. Missing context triggers 403 with `RLS_CONTEXT_MISSING`.
+- Access tokens bind to device fingerprint hashes; switching orgs invalidates active SSE/WebSocket connections to prevent cross-org leakage.
+- Device fingerprint derivation (binding): `ua_hash = sha256(lower(user-agent))`, IP normalized (`IPv4 /24`, `IPv6 /48`), `device_fp = sha256(f\"{ua_hash}:{ip_prefix}\")`; tokens carry `device_fp` claim and mismatches trigger re-auth/step-up flows.
+- Org settings `security.session.device_bind.ip_prefix_len_v4|ip_prefix_len_v6` control those prefix lengths (defaults `/24` and `/48`); mobile-heavy orgs may widen prefixes to reduce unnecessary prompts while retaining auditability. `security.session.device_bind.mode` selects `\"soft\"` (default) or `\"hard\"`: soft mode logs mismatches as `DEVICE_FP_MISMATCH_SOFT` audit events and prompts step-up only after three events within 24h, while hard mode terminates sessions immediately with `code=\"AUTH_ERROR\"`, records `DEVICE_FP_MISMATCH_HARD`, and requires privileged WebAuthn re-auth before retry. Behind trusted corporate NATs or CDN proxies the IP prefix remains a soft signal, and ingress trusts `X-Forwarded-For` only from mesh-managed gateway CIDRs declared in `security.session.trusted_proxy_cidrs[]`.
+- Refresh tokens are device-bound when enabled per org policy; defaults disable long-lived offline tokens except where Security approves exceptions.
+- Break-glass endpoints require step-up MFA at activation **and** closure, justification, and explicit expiry (configurable 5–60 minutes); generated `BreakGlassEvent` entries include approver IDs and are audited for post-hoc review.
+- Org switch to higher privileges defaults to requiring step-up MFA (`security.org_switch.step_up_required=true`), overridable only with documented risk acceptance.
+- HIPAA mode extends step-up MFA by enforcing WebAuthn for privileged roles (`security.mfa.webauthn_required_roles`) before approvals or portal deliveries touching HIPAA-classed artifacts.
+
+### 4.4 Database RLS and GUC enforcement
+
+*Purpose: Describe how data-layer access rules enforce the same contract as the API tier.*
+
+- All tenant tables carry `org_id`; Postgres RLS policies require per-connection GUCs (`udocket.active_org`, `active_user`, `active_roles`, `realm_roles`, `operator_scope`).
+
+- Helper functions (`udocket_has_realm_role`, `udocket_is_case_member`, `udocket_can`) centralize policy evaluation. Any query without GUC setup is denied; the `/healthz/pgbouncer-mode` probe confirms PgBouncer stays in approved `transaction` or `session` pooling modes (statement pooling remains blocked) so per-request GUCs remain intact.
+
+- Runtime guard (binding): every connection must satisfy `rls_context_ok()` immediately after checkout. Web middleware and Celery task bootstrap call `SELECT rls_context_assert();` which wraps `rls_context_ok()` and raises when `active_org`, `active_user`, `active_roles`, `realm_roles`, `operator_scope`, or `search_path` are unset or contain unexpected values. Violations emit a structured log with code `RLS_CONTEXT_MISSING`, record the offending connection id, and hard-fail the request with HTTP 500. The guard also confirms `current_setting('search_path') = 'pg_catalog, public'::text` to prevent implicit table access.
+
+- Secure views (`*_secure`) act as the only read surfaces; application role lacks direct SELECT on base tables. CI lints ensure ORM queries reference views, and production deployments rely on compiled helper tables (e.g., `field_mask_rule_effective`) to avoid per-row subqueries inside those views.
+- CI guardrails (binding): `pytest -k test_secure_view_usage` runs a static query-inspection test that fails if any Django queryset or raw SQL in `apps/platform` references base tables instead of `*_secure` views. The lint feeds the release gate and prevents regressions when new endpoints are added.
+
+- Advisory locks (`udlock` schema) encapsulate concurrency primitives with heartbeat registries and GC routines.
+
+- Normative SQL (binding):
 
 ```sql
--- Per-connection GUCs set by middleware using active_org_id from token + settings
-SELECT set_config('udocket.active_org', :active_org_uuid::text, true);
-SELECT set_config('udocket.active_user', :active_user_uuid::text, true);
-SELECT set_config('udocket.active_roles', :active_roles_csv, true); -- e.g. 'org_admin,org_operator'
-SELECT set_config('udocket.realm_roles', :realm_roles_csv, true);   -- e.g. 'sysadmin'
-SELECT set_config('udocket.operator_scope', :operator_scope, true); -- 'own_cases' | 'all_org_cases'
-
--- Realm role helper (for sysadmin bypass)
-CREATE OR REPLACE FUNCTION udocket_has_realm_role(role text)
-RETURNS boolean LANGUAGE sql STABLE AS $$
-  SELECT position(',' || role || ',' IN ',' || coalesce(current_setting('udocket.realm_roles', true),'') || ',') > 0
-$$;
-
--- Case membership helper
-CREATE OR REPLACE FUNCTION udocket_is_case_member(p_case uuid)
-RETURNS boolean LANGUAGE sql STABLE AS $$
-  WITH v_user AS (
-    SELECT NULLIF(current_setting('udocket.active_user', true),'')::uuid AS uid
-  )
-  SELECT EXISTS (
-    SELECT 1
-      FROM case_member cm, v_user u
-     WHERE cm.case_id = p_case
-       AND cm.user_id = u.uid
-  );
-$$;
-
--- Policy tables (compiled by Settings activation job) — see §3.2 for DDL
+-- Policy tables (compiled by Settings activation job)
 -- effective_permission(org_id, resource, action, role, field NULLABLE)
 -- field_mask_rule(org_id, resource, field, mask, allowed_role)
 
 -- Central allow function (deny-by-default; sysadmin bypass)
-CREATE OR REPLACE FUNCTION udocket_can(p_resource text, p_action text, p_case uuid, p_artifact uuid, p_field text DEFAULT NULL)
+CREATE OR REPLACE FUNCTION udocket_can(
+  p_resource text,
+  p_action   text,
+  p_case     uuid,
+  p_artifact uuid,
+  p_field    text DEFAULT NULL
+)
 RETURNS boolean
 LANGUAGE plpgsql STABLE AS $$
-DECLARE v_org uuid := NULLIF(current_setting('udocket.active_org', true), '')::uuid;
+DECLARE v_org   uuid := NULLIF(current_setting('udocket.active_org',   true), '')::uuid;
 DECLARE v_roles text := coalesce(current_setting('udocket.active_roles', true),'');
 DECLARE v_scope text := coalesce(current_setting('udocket.operator_scope', true),'own_cases');
 DECLARE r text;
@@ -146,12 +453,14 @@ BEGIN
   IF udocket_has_realm_role('sysadmin') THEN RETURN true; END IF;
   IF v_org IS NULL THEN RETURN false; END IF;
 
-  -- Enforce operator scope: when scoped to own_cases and a case is in play, deny if caller is not a member
+  -- Enforce operator scope: when scoped to own_cases and a case is in play,
+  -- deny if caller is not a member (realm sysadmin already handled above)
   IF p_case IS NOT NULL AND v_scope <> 'all_org_cases' THEN
     IF NOT udocket_is_case_member(p_case) THEN
-      RETURN false;  -- short-circuit deny (realm sysadmin already handled above)
+      RETURN false;
     END IF;
   END IF;
+
   FOR r IN SELECT regexp_split_to_table(v_roles, ',') LOOP
     IF EXISTS (
       SELECT 1
@@ -187,7 +496,7 @@ DROP POLICY IF EXISTS artifact_visibility ON artifact;
 CREATE POLICY artifact_visibility ON artifact
 USING (
   org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
-  AND EXISTS (SELECT 1 FROM "case" c WHERE c.id=artifact.case_id)
+  AND EXISTS (SELECT 1 FROM "case" c WHERE c.id = artifact.case_id)
   AND udocket_can('ARTIFACT','read',artifact.case_id,artifact.id,NULL)
 )
 WITH CHECK (
@@ -242,1855 +551,2470 @@ USING (
 );
 
 -- Enforce RLS even for table owners (unchanged)
-ALTER TABLE "case"     FORCE ROW LEVEL SECURITY;
-ALTER TABLE artifact   FORCE ROW LEVEL SECURITY;
-ALTER TABLE job        FORCE ROW LEVEL SECURITY;
-ALTER TABLE qa_log     FORCE ROW LEVEL SECURITY;
-ALTER TABLE delivery_receipt FORCE ROW LEVEL SECURITY;
+ALTER TABLE "case"                  FORCE ROW LEVEL SECURITY;
+ALTER TABLE artifact                FORCE ROW LEVEL SECURITY;
+ALTER TABLE job                     FORCE ROW LEVEL SECURITY;
+ALTER TABLE qa_log                  FORCE ROW LEVEL SECURITY;
+ALTER TABLE delivery_receipt        FORCE ROW LEVEL SECURITY;
 ALTER TABLE guardian_decision_history FORCE ROW LEVEL SECURITY;
 ```
 
-> Instruction (unchanged): Middleware must set all GUCs per connection. If a GUC is missing, `current_setting(..., true)` returns NULL, which safely denies access.
+- Binding breadcrumbs:
 
-**Session hardening (binding)**
-* On every request/worker task start, set:
-  * `SET LOCAL search_path = pg_catalog, public;`  -- prevent malicious implicit name resolution
-  * `SET LOCAL statement_timeout = '30s';`
-  * `SET LOCAL idle_in_transaction_session_timeout = '15s';`
-  * `SET LOCAL lock_timeout = '5s';`
-  * `SET LOCAL deadlock_timeout = '200ms';`
-* Enforce `ALTER DEFAULT PRIVILEGES` for `udocket_app` to avoid accidental base table grants.
+  | Binding | Implementation | Test | Observability |
+  | ------- | -------------- | ---- | ------------- |
+  | `rls_context_assert()` guard | Implementation: `apps/platform/db/guards.py::assert_rls_context` | Test: `tests/platform/db/test_rls_guard.py::test_rls_context_asserts_missing_gucs` | Observability: Grafana “DB Session Guards” panel (`rls_context_missing_total`) |
+  | Secure-view only access | Implementation: `scripts/staticlint/enforce_secure_views.py` (invoked via `make lint-db`) | Test: `tests/platform/db/test_secure_view_usage.py::test_no_base_table_queries` | Observability: Release job `lint-db` output (Buildkite step) |
 
+- Session hardening (binding):
 
-#### 2.2.1 Field-level masking views
-Use security-barrier views for field controls; all read paths must select from these views:
+  - `SET LOCAL search_path = pg_catalog, public;` (prevent implicit resolution)
+  - `SET LOCAL statement_timeout = '30s';`
+  - `SET LOCAL idle_in_transaction_session_timeout = '15s';`
+  - `SET LOCAL lock_timeout = '5s';`
+  - `SET LOCAL deadlock_timeout = '200ms';`
+  - Enforce `ALTER DEFAULT PRIVILEGES` for the application role to prevent accidental base table grants.
+
+- Priority: High (security gating and policy determinism)
+
+- RLS and masking policies enforced even for table owners via `ALTER TABLE ... FORCE ROW LEVEL SECURITY`, ensuring administrative sessions respect policies.
+
+- Operational canaries verify GUC presence and pooling mode; see `App.J` for SQL snippets (`rls_context_ok` check, boot probe, search_path/timeout guard).
+
+### 4.5 Field-level masking, auditing, and break-glass procedures
+
+*Purpose: Detail how sensitive data exposure is minimized while retaining auditability.*
+
+- `udocket_mask` and `udocket_mask_json` functions apply redaction, hashing, or nulling per `field_mask_rule`. JSON fields support only REDACT/NULL; policy compiler blocks invalid masks.
+- Masked views (`case_secure`, `artifact_secure`, `qa_log_secure`, etc.) prevent bypass; application role granted SELECT only on these views. Sysadmin role remains the sole bypass for investigations.
+- Audit trail essentials: `audit_event` captures every significant change; `entitlement_snapshot` records token issuance with device fingerprints.
+- Break-glass usage logs justification, duration, and triggers watchdog that terminates sessions on expiry. Post-event review queues ensure accountability.
+- All read/write paths emit structured logging with correlation IDs and case/job references; anomaly detectors alert on unusual access patterns.
+
+Masking helpers (normative)
+
 ```sql
--- Enable pgcrypto for HASH mask
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
-
--- Masking helper (uses field_mask_rule; sysadmin sees cleartext)
-CREATE OR REPLACE FUNCTION udocket_mask(p_resource text, p_field text, p_value text)
-RETURNS text
-LANGUAGE plpgsql STABLE AS $$
-DECLARE v_org uuid := NULLIF(current_setting('udocket.active_org', true),'')::uuid;
-DECLARE v_roles text := coalesce(current_setting('udocket.active_roles', true),'');
-DECLARE r text;
+CREATE OR REPLACE FUNCTION udocket_mask(value text, mask text)
+RETURNS text LANGUAGE plpgsql STABLE AS $$
 BEGIN
-  IF udocket_has_realm_role('sysadmin') THEN RETURN p_value; END IF;
-  FOR r IN SELECT regexp_split_to_table(v_roles, ',') LOOP
-    IF EXISTS (SELECT 1 FROM field_mask_rule f
-               WHERE f.org_id=v_org AND f.resource=p_resource AND f.field=p_field AND f.allowed_role=r) THEN
-      RETURN p_value;
-	END IF;
-  END LOOP;
-  CASE (SELECT f.mask FROM field_mask_rule f
-        WHERE f.org_id=v_org AND f.resource=p_resource AND f.field=p_field LIMIT 1)
-    WHEN 'REDACT' THEN
-      RETURN '[REDACTED]';
-    WHEN 'HASH'   THEN
-      RETURN encode(digest(coalesce(p_value,''), 'sha256'), 'hex');
-    WHEN 'LAST4'  THEN
-      RETURN right(p_value, 4);
-    WHEN 'NULL'   THEN
-      RETURN NULL;
-    ELSE
-      RETURN NULL;
+  CASE mask
+    WHEN 'REDACT' THEN RETURN '[REDACTED]';
+    WHEN 'HASH' THEN RETURN encode(digest(coalesce(value,''), 'sha256'),'hex');
+    WHEN 'NULL' THEN RETURN NULL;
+    ELSE RAISE EXCEPTION 'Invalid mask %', mask;
   END CASE;
 END $$;
 
-CREATE VIEW case_secure WITH (security_barrier=true) AS
-SELECT
-  id, org_id, title, representation_type, status, legal_hold,
-  udocket_mask('CASE','legal_hold_reason', legal_hold_reason) AS legal_hold_reason,
-  legal_hold_since, created_at
-FROM "case";
+CREATE OR REPLACE FUNCTION udocket_mask_json(value jsonb, mask text)
+RETURNS jsonb LANGUAGE plpgsql STABLE AS $$
+BEGIN
+  CASE mask
+    WHEN 'REDACT' THEN RETURN '"[REDACTED]"'::jsonb;
+    WHEN 'NULL' THEN RETURN 'null'::jsonb;
+    ELSE RAISE EXCEPTION 'Invalid JSON mask %', mask;
+  END CASE;
+END $$;
+```
 
+Secure view example (security barrier)
+
+```sql
 CREATE VIEW artifact_secure WITH (security_barrier=true) AS
-SELECT
-  id, org_id, case_id, type, state, archived, archived_at, archived_by,
-  udocket_mask('ARTIFACT','content_sha256', content_sha256) AS content_sha256,
-  -- Use JSON-aware masking to avoid invalid casts when masking occurs
-  udocket_mask_json('ARTIFACT','manifest', manifest) AS manifest,
-  content_uri, created_by, created_at, approved_at, approved_by, rejected_at, rejected_by, review_reason, version
-FROM artifact;
-
--- JSON masking helper: only REDACT/NULL are supported for JSON fields.
--- Policy compile MUST reject HASH/LAST4 masks on JSON columns.
-CREATE OR REPLACE FUNCTION udocket_mask_json(p_resource text, p_field text, p_value jsonb)
-RETURNS jsonb
-LANGUAGE plpgsql STABLE AS $$
-DECLARE v text;
-BEGIN
-  v := udocket_mask(p_resource, p_field, p_value::text);
-  IF v IS NULL THEN
-    RETURN NULL;
-  ELSIF v = '[REDACTED]' THEN
-    RETURN to_jsonb(v);
-  ELSE
-    RETURN p_value;     -- visible
-  END IF;
-END $$;
+SELECT id, org_id, case_id, type, state, content_sha256,
+       CASE WHEN (SELECT 1 FROM field_mask_rule r
+                   WHERE r.org_id = artifact.org_id
+                     AND r.resource='ARTIFACT' AND r.field='content_uri'
+                     AND NOT udocket_can('ARTIFACT','read',artifact.case_id,artifact.id,'content_uri')
+                ) IS NULL
+            THEN content_uri
+            ELSE udocket_mask(content_uri,'REDACT') END AS content_uri,
+       manifest
+  FROM artifact;
 ```
 
-> Instruction: Middleware must set all four GUCs per connection. If a GUC is missing, current_setting(..., true) returns NULL, which safely denies access via the policy.
-> Use a request-scoped transaction and `set_config(..., true)` (LOCAL) at the **start** of each request/worker task. With PgBouncer, avoid “statement” pooling; use “session/transaction” pooling to ensure GUC visibility per transaction.
+- Settings activation maintains `CREATE INDEX field_mask_rule_org_resource_field ON field_mask_rule(org_id, resource, field)` and precomputes effective allowlists into helper tables so hot paths avoid repeated subqueries; helpers refresh atomically with each activation.
 
+### 4.6 Field-level encryption (selected columns)
 
-##### 2.2.1.1 DB privileges & secure views (binding)
-* To prevent accidental bypass of masking/RLS, the application role must not `SELECT` base tables.
-* All reads go through `*_secure` **security-barrier** views.
+*Purpose: Protect sensitive fields at rest beyond masking/secure views, with clear key management and performance caveats.*
 
-```sql
--- Application role (adjust name if different in your env)
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'udocket_app') THEN
-    CREATE ROLE udocket_app NOINHERIT;
-  END IF;
-END $$;
+- Scope: selected columns (e.g., PII in `case`, contact data) encrypted using application or DB functions (e.g., `pgcrypto`), with keys managed via KMS and rotated on schedule.
 
--- Pass-through secure views for tables without masked fields (still security-barrier)
-CREATE VIEW qa_log_secure WITH (security_barrier=true) AS
-SELECT id, org_id, case_id, job_id, scope, lane_or_section, notes_md, issues_json, source_artifacts,
-       created_by, created_at
-  FROM qa_log;
+- Design:
 
-CREATE VIEW guardian_decision_history_secure WITH (security_barrier=true) AS
-SELECT id, artifact_id, org_id, idempotency_key, decision, reasons, rules_version,
-       settings_snapshot_sha256, decided_at
-  FROM guardian_decision_history;
+  - Keys: per‑env root in KMS; per‑org data keys derived/sealed; app decrypts only for authorized roles and purposes.
+  - Indexing: avoid plaintext indexes; use deterministic hashing or search surrogates; document limits.
+  - Migrations: backfill jobs with progress logs; dual‑write period until switchover; metrics/traces around decrypt errors.
 
-CREATE VIEW delivery_receipt_secure WITH (security_barrier=true) AS
-SELECT id, artifact_id, org_id, channel, recipient, status, details, created_at, provider_event_id
-  FROM delivery_receipt;
+- Operations: rotation procedure with cutover windows; break‑glass audit trail; performance budgets documented.
 
--- Revoke direct reads from base tables; grant reads only on secure views
-REVOKE SELECT ON TABLE "case", artifact, qa_log, guardian_decision_history, delivery_receipt FROM udocket_app;
-GRANT  SELECT ON case_secure, artifact_secure,
-                  qa_log_secure, guardian_decision_history_secure, delivery_receipt_secure
-       TO udocket_app;
--- Allow resolving view names in the schema, but not base tables
-GRANT USAGE ON SCHEMA public TO udocket_app;
-```
+- Source material: `§29.2`, `§29.5`, `App.C` classification
 
-**ORM rule (binding):** DAL/ORM query builders MUST reference `*_secure` views for reads.
-CI enforces this with a linter that rejects `FROM "case"` or `FROM artifact` in app code (migrations/tests excluded).
+- **Source material:** `§2` (all subsections), `§29.6`, `§29.7`
 
+- **Priority:** High (security gating)
 
-#### 2.2.2 RLS/GUC operational canaries (fail-closed)
-* **Connect guard:** all authenticated web/worker requests must first set GUCs and execute:
+______________________________________________________________________
+
+## 5) Data model & storage layer
+
+### 5.1 Relational schema (cases, jobs, artifacts, settings)
+
+*Purpose: Establish the canonical schema used by agents, reviewers, and audit tooling.*
+
+- **organization:** UUIDv7 `id`, `name`, JSONB `settings`, `region_allowlist`, timestamps (`created_at`, `archived_at`). Enforces residency policy inputs.
+- **user_account:** UUIDv7 `id`, `keycloak_sub`, contact fields, optional `default_org_id`. Keeps reference integrity without duplicating org membership logic.
+- **case:** UUIDv7 `id`, `org_id` FK, `title`, `representation_type`, `status`, legal hold fields, audit columns. Write-once invariants enforced via triggers (legal hold reason mask applied via secure view).
+- **case_member:** Composite PK `(user_id, case_id)` storing per-case role; informs `udocket_is_case_member`.
+- **artifact:** UUIDv7 `id`, `org_id`, `case_id`, `type`, `state`, `content_uri`, `content_sha256`, JSONB `manifest`, OCC `version`, review metadata (`approved_at/by`, etc.). Trigger `artifact_immutable_check` blocks changes to immutable fields.
+- Immutability trigger (binding):
   ```sql
-  SELECT current_setting('udocket.active_org', true) IS NOT NULL
-       AND current_setting('udocket.active_user', true) IS NOT NULL
-       AND current_setting('udocket.active_roles', true) IS NOT NULL
-    AS rls_context_ok;
+  CREATE OR REPLACE FUNCTION artifact_immutable_check()
+  RETURNS trigger LANGUAGE plpgsql AS $$
+  BEGIN
+    IF TG_OP = 'UPDATE' AND NEW.state <> 'DRAFT' THEN
+      IF NEW.org_id <> OLD.org_id
+         OR NEW.case_id <> OLD.case_id
+         OR NEW.type <> OLD.type
+         OR NEW.content_uri <> OLD.content_uri
+         OR NEW.content_sha256 <> OLD.content_sha256
+         OR NEW.manifest <> OLD.manifest THEN
+        RAISE EXCEPTION 'Immutable artifact fields cannot change once promoted';
+      END IF;
+    END IF;
+    RETURN NEW;
+  END;
+  $$;
+  CREATE TRIGGER artifact_immutable_trg
+    BEFORE UPDATE ON artifact
+    FOR EACH ROW EXECUTE FUNCTION artifact_immutable_check();
   ```
-* If `rls_context_ok=false` → **403** and log `RLS_CONTEXT_MISSING`.
-* **PgBouncer guard (binding):** On startup, each service executes a RLS-gated probe under a fresh connection. If the probe succeeds while `pool_mode=statement`, the process **exits non-zero** with error `PGB_STRICT_MODE_REQUIRED`. A Kubernetes **AdmissionPolicy** rejects Pods configured with PgBouncer statement pooling.
-  ```text
-  Boot probe:
-    SELECT 1 FROM "case" WHERE org_id = current_setting('udocket.active_org', true)::uuid;
-    Expectation: ERROR (missing GUCs) unless transaction/session pooling is in use.
-  Policy: Pod Admission denies PgBouncer with pool_mode=statement.
+- **job**, **job_task**, **job_checkpoint:** Track orchestration progress, settings snapshot hashes, checkpoint JSONB, and OCC versions to support retries.
+- **guardian_decision_history**, **qa_log**, **delivery_receipt**, **audit_event**, **entitlement_snapshot** provide governance history with RLS and secure views.
+- **settings bundles:** Stored via Settings Service (see §9) but referenced in jobs (`settings_snapshot_sha256`) and manifests for traceability.
+- ERD lives in `App.G`; state diagrams in `App.J` illustrate artifact/job lifecycles.
+
+- Binding breadcrumbs:
+
+  | Binding | Implementation | Test | Observability |
+  | ------- | -------------- | ---- | ------------- |
+  | Artifact immutability trigger | Implementation: `apps/platform/artifacts/migrations/0024_artifact_immutable_trigger.py` | Test: `tests/platform/artifacts/test_immutability.py::test_update_blocked_after_draft` | Observability: Audit event `ARTIFACT_IMMUTABILITY_VIOLATION` (Alert: “Artifact Immutable Breach”) |
+
+### 5.2 Artifact lifecycle and state machine semantics
+
+*Purpose: Define how artifacts progress and how exclusivity & approvals apply.*
+
+- States: `DRAFT` (agent output awaiting Guardian), `READY` (Guardian pass), `QUARANTINED` (Guardian fail), `APPROVED` (human reviewer), `REJECTED` (terminal). `ARCHIVED` flag hides without altering state.
+- Guardian transitions only mutate `DRAFT` or `READY`; `QUARANTINED` sticks unless a new submit succeeds. Reviewers promote `READY → APPROVED` and demote any prior approved artifact of the same exclusive type.
+- Exclusive types enforced via unique index `one_approved_per_case_type` (state=`APPROVED`, `archived=false`). Settings maintain the type allowlist.
+- Manifests capture provenance: schema and graph versions, source artifacts, settings snapshot hash, regions, template versions, and optional SHA pins for dependencies.
+- Ops logging: each run writes human-readable `.log`, structured `.json`, and appends to case-level `ops_<agent>.jsonl`.
+- Data lineage: App.R documents end-to-end traceability from source artifacts to signed deliverables, aligning manifest fields with Guardian decisions.
+
+### 5.3 Object storage layout & integrity guarantees
+
+*Purpose: Define canonical paths, hashing, and security controls for artifacts and media.*
+
+- Canonical case root: `storage/media/<ORG_ID>/cases/<CASE_ID>/` with categories:
+  - `audio/<job_id>__<original>` — original uploads and normalized audio
+  - `transcript/<job_id>__transcript.txt` — primary transcripts
+  - `analysis/` — Analyze outputs (summaries, outlines, seeds, hints, staff reports)
+  - `docs/` — Compose deliverables (client/lawyer, bundle, QA/staff reports) and portal messaging attachments (`ATTACHMENT_*`)
+  - `ops/` — human logs, per-run JSON, and append-only `ops_<agent>.jsonl` audit streams
+- Integrity: compute and persist `content_sha256` for all immutable artifacts; manifests include SHA-256 of outputs and `settings_snapshot_sha256` for provenance. Batch mode may record remote hashes (`BATCH_HASH_REMOTE=1`, `BATCH_HASH_MAX_MB`).
+- Versioning: reruns must not overwrite prior outputs; suffix filenames with `_v{n}` and update manifests. Object storage buckets enable versioning for rollback and audit defense.
+- Security: buckets are private by default with server-side encryption (SSE-KMS). Access via short-lived signed URLs; range requests supported for large downloads. Egress and region policies enforce Canada-only storage.
+- Normalization: audio inputs normalized to PCM 16 kHz mono when feasible (ffmpeg); normalized copies stored with job-prefixed names for reproducibility and reprocessing.
+- Immutability: artifacts are treated as write-once; update attempts to immutable fields are rejected by database triggers. Deletions rely on retention/legal-hold settings (see §14.2).
+- Telemetry: object storage latency and hash mismatch counters exported; nightly integrity sweeps sample-verify SHA-256 and bucket versioning state.
+- Path template: `storage/media/<ORG_ID>/cases/<CASE_ID>/artifacts/<ARTIFACT_ID>/content.bin|manifest.json`; case-level directories include `audio/`, `transcript/`, `analysis/`, `docs/`, `ops/`. Legacy `storage/media/cases/<CASE_ID>/` layouts are deprecated and blocked in new deployments.
+- Upload staging uses `upload_session` records with expected hashes and single-use tokens; finalize promotes staged object into artifact storage.
+- `upload_session` (transient) table persists resumable upload metadata and scan status: `{id UUID PK, org_id, case_id, status ENUM('PENDING','UPLOADED','SCANNING','FINALIZED','ABORTED'), staging_uri, expected_sha256, expires_at, created_at}`. Workers purge expired rows hourly and hard-delete the corresponding staging objects.
+- SHA-256 computed at write; persisted in `artifact.content_sha256`. Reads recompute and quarantine inconsistencies (`ARTIFACT_INTEGRITY_MISMATCH`).
+- Buckets enable versioning + object lock for immutable audit sinks (per §20.1). KMS keys scoped per org when configured (`storage.kms.key_scoping='per_org'`).
+- QA diagnostics stored separately under `/job/{job}/qa_logs/{qa_log}/` to keep non-artifact notes; reviewer-visible QA reports remain Guardian-gated artifacts under `docs/`.
+
+### 5.4 Advisory locking & concurrency controls
+
+*Purpose: Prevent double-processing and ensure idempotent behavior across workers.*
+
+- `udlock` schema implements hashed advisory locks (`scope:key`) with helpers for session and transaction locks, plus registry tables capturing holder PIDs, node IDs, and heartbeat timestamps.
+- Instrumented wrappers (`udlock.try_lock_i`, `udlock.xact_lock_i`) update registry for observability; `udlock.gc_registry()` cleans orphaned entries by cross-referencing `pg_locks`.
+- Job orchestration acquires locks before emitting artifacts (`analyze:lifecycle:{job_id}`, `compose:section:{job_id}:{section}`) to avoid duplicates on retries.
+- Upload finalization and approval flows use OCC versions to guarantee single-writer semantics; concurrent approval attempts fail with version mismatch requiring refresh.
+
+#### 5.4.1 Exclusive approval swap (binding)
+
+*Purpose: Enforce at most one APPROVED artifact per `(case_id,type)` and make approvals idempotent and race-free.*
+
+- Unique index (binding):
+  ```sql
+  CREATE UNIQUE INDEX one_approved_per_case_type
+      ON artifact (case_id, type)
+   WHERE state='APPROVED' AND archived=false;
   ```
-* **Health canary:** `/readyz` performs a read against a known canary table under RLS and fails if rows visible ≠ expected.
-* **Worker scoping:** Celery tasks **must** open a new DB connection (or reset session) per task and set GUCs before any query. Reuse only with **transaction pooling**.
+- Approval algorithm (transaction; READ COMMITTED):
+  1. Acquire case/type lock: `udlock.xact_lock('case-approval', CONCAT(:org_id,'/',:case_id,'/',:type))`.
+  1. Demote any existing `APPROVED` for `(org_id, case_id, type)` to `READY`.
+  1. Approve target only if `state='READY'` and `version=:expected_version`; increment `version`.
+  1. If no row updated but target already `APPROVED` → return 200 idempotent; else 409 conflict.
+  1. Emit audit + SSE. See §11.2.1 for portal invalidation behavior.
 
-* **Search-path & timeout canary:** `/readyz` verifies `show search_path` returns exactly `pg_catalog, public` and `statement_timeout >= 30s`; mismatch → fail readiness.
+Notes
 
-```
-Runtime invariant (normative): Any Postgres query executed without GUCs MUST be denied by RLS. If PgBouncer switches to statement pooling, health checks fail and ingress returns 503.
-```
+- Prefer OCC columns (`version INT NOT NULL DEFAULT 0`) on hot rows; use advisory locks only for cross-row invariants like the exclusive swap.
+- Settings may define additional exclusive types; the baseline index above remains in place, with settings activation validating coverage.
+- This procedure is normative; API behaviours in §10.3.2 defer to it to avoid divergence.
 
+- Binding breadcrumbs:
 
-### 2.3 MFA & step-up
-* **MFA required for:** `sysadmin`, `org_admin`, `org_manager`, `org_reviewer`.
-* **Step-up MFA** for: break-glass, template/policy activation, certificate issuance, client signoff initiation.
+  | Binding | Implementation | Test | Observability |
+  | ------- | -------------- | ---- | ------------- |
+  | Concurrent approval swap | Implementation: `packages/udocket_core/approvals/service.py::approve_artifact` | Test: `tests/platform/artifacts/test_approval_swap.py::test_concurrent_approvals_single_winner` | Observability: Alert `approval_swap_conflict_total` (Grafana “Approvals” panel) |
 
+### 5.5 Partitioning, indexing, and performance considerations
 
-### 2.4 Break-glass
-* Endpoint requires step-up MFA + justification + duration; emits `BreakGlassEvent`
-* **Enforced auto-expiry** at DB (CHECK on `expires_at > now()`) with watchdog that terminates sessions at expiry
-* Post-hoc review queue.
+*Purpose: Ensure data scale aligns with operational SLOs.*
 
+- Time-series tables (`audit_event`, `delivery_receipt`, `guardian_decision_history`) partitioned by month (`created_at`/`decided_at`); ops job rotates partitions ahead of time.
 
-### 2.5 Multi-org behavior & org switcher
-* **UI switcher:** Uses `org_directory[]` (`{id, name}`) from token claims when present; otherwise calls a read-only directory endpoint to resolve names for `org_ids[]`. Selecting an org triggers **OIDC re-auth** to mint a token with that `active_org_id`.
-* **Security:**
-  * Switching to an org that increases effective privilege **requires step-up MFA by default**
-    (`security.org_switch.step_up_required=true` at SYSTEM scope; orgs may relax only with a documented risk acceptance).
-  * Emit `audit_event('ORG_SWITCH', {from_org, to_org})`.
-* **Real-time:** On org switch, **close SSE/WS** connections and re-establish with the new token to prevent cross-org leakage.
-* **APIs:** No custom org headers; authorization derives solely from `active_org_id` in the token.
+- Targeted indexes support hot paths: `artifact_consumable`, `job_org_case_kind_status`, GIN on `qa_log.issues_json`, etc. Guardian history unique index prevents duplicate idempotency keys.
 
-> **Note:** We do **not** maintain a `user_org_membership` DB table; Keycloak Organizations are the source of truth. We only mirror Organization metadata (id/name) for FK/labels and rely on token claims for enforcement.
+- Autovacuum tuned for high-churn partitions (`vacuum_scale_factor=0.05`, `analyze_scale_factor=0.02`, `naptime=30s`). Monitoring alerts on `pg_stat_all_tables.n_dead_tup` spikes.
 
+- Search path locked to `pg_catalog, public` per session; statement/lock/idle timeouts enforced (`30s`, `5s`, `15s`, `200ms` deadlock).
 
-#### 2.5.1 Token binding & session fixation
-* Access tokens are **bound** to `active_org_id` and a device fingerprint hash; on org switch we mint a new token and invalidate WS/SSE for the prior token.
-  * **Device fingerprint derivation (binding):**  
-    `ua_hash = SHA256(lower(User-Agent))` (canonicalized)  
-    `ip_fingerprint = IPv4 /24, IPv6 /48` (NAT-tolerant)  
-    `device_fp = SHA256(ua_hash || ':' || ip_fingerprint)`
-  * Tokens include a `device_fp` **claim**; servers verify it against the derived fingerprint and reject on mismatch (step-up or full re-auth required on mismatch).
-* Session fixation: after org switch, the server rotates session identifiers and CSRF tokens; clients MUST discard old tokens.
-* UX: switching into an org that increases privileges displays a step-up MFA interstitial with a summary of **new effective roles**.
-* **Replay guard:** server echoes `Idempotency-Key` and `X-Request-ID` on successful mutating requests to bind UI flows to a single session/token.
+- Capacity planning uses metrics from §12 to size Postgres/Redis; cross-region replicas considered only for read-heavy analytics with strict RLS enforcement.
 
+- **Source material:** `§3`, `§4`, `§10.3`, `§29.5`, `App.J`, `App.G`
 
-### 2.6 Locking strategy & concurrency helpers (global)
-**Goal:** Maximize throughput while preventing race conditions. Prefer constraints and atomic predicates; add OCC on hot rows; reserve advisory locks for cross-row, multi-statement invariants. Default isolation: **READ COMMITTED**.
+- **Priority:** High (feeds DB migrations, data governance)
 
-**Hierarchy & order:** Always acquire locks in the order **org → case → artifact/job/subject**.
+### 5.6 Artifact manifest schema (normative)
 
-**Primitives:**
-1. **Constraints & atomic updates** (first choice): `UNIQUE`/partial indexes, `CHECK`, FK; `UPDATE ... WHERE <state_predicates>`.
-2. **Optimistic Concurrency Control (OCC):** `version INT NOT NULL DEFAULT 0`; `... AND version=:expected_version` + `version=version+1`.
-3. **Row locks** when read→compute→write on a *single row*: `SELECT ... FOR UPDATE`.
-4. **Advisory locks** only for cross-row invariants (e.g., exclusive approval swap; job single-flight). Use two-key locks scoped by org.
-5. **Instrumented locks (watchdog-ready):** use `udlock.*_i(...)` wrappers (see §3.3) to emit lock registry rows + heartbeats for **session-scoped** advisory locks; xact-scoped locks remain lightweight but are visible to the watchdog via `pg_locks`.
+*Purpose: Define a consistent, verifiable manifest format for artifacts.* Schema (JSON Schema draft 2020-12)
 
-**Two-key advisory lock helper (SQL):**
-```sql
--- lock_key1: org UUID high 64 bits; lock_key2: scoped hash
-SELECT pg_advisory_xact_lock(
-  (("x" || replace(:org_id::text, '-', ''))::bit(128)::bigint >> 64),
-  hashtextextended(:scope_key, 0)
-);
-```
-
-**Python helper (psycopg3):**
-```python
-from contextlib import contextmanager
-
-@contextmanager
-def advisory_lock(cur, org_id: str, scope_key: str):
-    cur.execute(
-        """
-        SELECT pg_advisory_xact_lock(
-          (("x" || replace(%s, '-', ''))::bit(128)::bigint >> 64),
-          hashtextextended(%s, 0)
-        );
-        """,
-        [org_id, scope_key],
-    )
-    yield  # released on tx end
-```
-
-**Canonical scopes (helpers):**
-* `with_artifact_lock(org_id, artifact_id)` → `scope_key = 'artifact:'||artifact_id`
-* `with_case_type_lock(org_id, case_id, type)` → `scope_key = case_id||'/type:'||type`
-* `with_job_kind_lock(org_id, case_id, kind)` → `scope_key = case_id||'/jobkind:'||kind`
-* `with_idempotency_lock(org_id, scope, key)` → `scope_key = scope||':'||key`
-* `with_settings_activate_lock(org_id?, scope, case_id?)` → `scope_key = 'settings:activate:'||scope||'/'||coalesce(case_id,'-')||'/'||coalesce(org_id,'-')`
-
-**Where to apply which:**
-* **Artifact transitions**: atomic predicates + OCC; advisory lock only for *exclusive-swap*.
-* **Reviews (approve/reject)**: advisory case/type lock + OCC on target artifact.
-* **Job lifecycle**: OCC on `job`; advisory `with_job_kind_lock` to single-flight `case×kind`.
-* **Outbox**: OCC on `outbox_delivery` to avoid worker/webhook races.
-* **Advisory-lock hygiene**: session-scoped locks must be **short-lived (< max_hold_s)** and created through `udlock.try_lock_i(...)` so the watchdog can attribute/alert (§41.8).
-* **Settings activation**: advisory `with_settings_activate_lock` + OCC on `setting_bundle`.
-* **Download tokens & integrity queue**: rely on atomic `UPDATE ... WHERE` and `ON CONFLICT DO NOTHING`.
-
-
-### 2.7 Policy-driven RBAC & Field Controls
-* **Source of truth:** Settings (system→org→case) define resource actions and field masks.
-* **Compilation:** On settings activation, a job compiles JSON policy into compact DB tables `effective_permission` and `field_mask_rule` for fast RLS decisions.
-* **Lint:** Reject `field_mask_rule` entries that apply `HASH` or `LAST4` to JSON fields; only `REDACT`/`NULL` are valid for JSON.
-* **Deny-by-default:** Absence or parse failure of policy denies access; `sysadmin` (realm role) is the only built-in bypass.
-* **Enforcement:** RLS uses `udocket_can(...)`; field visibility via `*_secure` views and the `udocket_mask(...)` helper; serializers must not bypass views.
-* **Caching:** Web/workers keep a hot cache (LRU) for permission checks; invalidated by `settings.changed` pub/sub.
-**Note:** Compiled policies **must** include auditor visibility for `ENTITLEMENT_HISTORY.read` (e.g., `auditor|sysadmin`), otherwise entitlement snapshots will be invisible under RLS.
-
----
-
-## 3) Data model (relational)
-
-### 3.1 Conventions
-* **Primary keys:** `UUIDv7` (app-generated) for artifacts and other row identities.
-* **Deterministic derived IDs:** `UUIDv8` for in-document derived entities (Analyze/Compose), using HMAC salt (see §27).
-* **Timestamps:** `created_at TIMESTAMPTZ`, `updated_at TIMESTAMPTZ`.
-* **Artifact immutability:** `content_uri`, `content_sha256`, and `manifest` are write-once per artifact row.
-* **Artifact states (approval-gated):**
-  `DRAFT` → `READY` → `APPROVED` (consumable) or `REJECTED`; `QUARANTINED` on Guardian failure.
-  **State semantics:**
-  - `REJECTED` is **terminal**; to proceed, emit a **new artifact** (content is immutable).
-  - `QUARANTINED` is **not terminal**; the same artifact may transition to `READY` after a **successful re-evaluation by Guardian** (e.g., rule/policy corrections). If remediation requires content change, create a new artifact per immutability.
-* **Exclusive types:** Enforced at **approval time** (not by Guardian). At most one `APPROVED` artifact per `(case_id,type)`.
-* **Archived flag:** `archived BOOLEAN DEFAULT FALSE` hides from defaults without changing state.
-* **Manifests:** Pydantic-validated at API boundary.
-* **Indices:** composite org/case keys; GIN on JSONB; FTS as needed.
-* **OCC columns:** Hot rows carry `version INT NOT NULL DEFAULT 0` (artifact, job, outbox_delivery, setting_bundle).
-
-### 3.2 Core tables (selected)
-```sql
--- Policy compilation targets (settings → DB)
-CREATE TABLE effective_permission (
-  org_id UUID NOT NULL,
-  resource TEXT NOT NULL,
-  action   TEXT NOT NULL,
-  role     TEXT NOT NULL,
-  field    TEXT NULL,
-  PRIMARY KEY (org_id, resource, action, role, field)
-);
-CREATE INDEX effperm_lookup ON effective_permission (org_id, resource, action, role);
-
-CREATE TABLE field_mask_rule (
-  org_id UUID NOT NULL,
-  resource TEXT NOT NULL,
-  field    TEXT NOT NULL,
-  mask     TEXT NOT NULL CHECK (mask IN ('REDACT','NULL','HASH','LAST4')),
-  allowed_role TEXT NOT NULL,
-  PRIMARY KEY (org_id, resource, field, allowed_role)
-);
-CREATE INDEX fieldmask_lookup ON field_mask_rule (org_id, resource, field);
-
--- Manifest versioning fields (add to ArtifactManifest in §4.1 and DB manifest content)
--- Add (conceptually) to JSON: { "schema_version": "analyze@1.0", "graph_version": "analyze@v1" }
-
--- FK ON DELETE policies (documented practice)
--- organization(id) -> RESTRICT (except directory sync archival flag)
--- case(id) -> RESTRICT by default; destruction flow handles deletes
--- user_account(id) -> SET NULL for created_by/approved_by/rejected_by to keep artifacts viewable
-
--- Dynamic exclusivity index
--- If settings.artifact.exclusive_types[] expands, we maintain a generated index per type pattern.
--- Baseline index remains (one_approved_per_case_type); settings activation job validates coverage.
-```
-
-
-```sql
-CREATE TABLE organization (
-  id          UUID PRIMARY KEY,
-  name        TEXT NOT NULL,
-  settings    JSONB NOT NULL DEFAULT '{}'::jsonb,
-  region_allowlist JSONB NOT NULL DEFAULT '{}'::jsonb,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-  archived_at TIMESTAMPTZ NULL
-);
-
-CREATE TABLE user_account (
-  id             UUID PRIMARY KEY,           -- UUIDv7
-  keycloak_sub   TEXT UNIQUE NOT NULL,
-  email          TEXT NOT NULL,
-  display_name   TEXT,
-  default_org_id UUID NULL,
-  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
-  archived_at    TIMESTAMPTZ NULL,
-  archived_by    UUID NULL
-);
-
-CREATE TABLE case (
-  id            UUID PRIMARY KEY,            -- UUIDv7
-  org_id        UUID NOT NULL REFERENCES organization(id),
-  title         TEXT NOT NULL,
-  representation_type TEXT NOT NULL,         -- validated by Settings
-  status        TEXT NOT NULL,               -- validated by Settings
-  created_by    UUID NULL REFERENCES user_account(id),
-  legal_hold    BOOLEAN NOT NULL DEFAULT FALSE,
-  legal_hold_reason TEXT,
-  legal_hold_since  TIMESTAMPTZ,
-  archived      BOOLEAN NOT NULL DEFAULT FALSE,
-  archived_at   TIMESTAMPTZ NULL,
-  archived_by   UUID NULL,
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE TABLE case_member (
-  user_id    UUID NOT NULL REFERENCES user_account(id),
-  case_id    UUID NOT NULL REFERENCES "case"(id),
-  role       TEXT NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  PRIMARY KEY (user_id, case_id)
-);
-
-CREATE TABLE artifact (
-  id               UUID PRIMARY KEY,         -- UUIDv7
-  org_id           UUID NOT NULL REFERENCES organization(id),
-  case_id          UUID NOT NULL REFERENCES "case"(id),
-  type             TEXT NOT NULL CHECK (type ~ '^[A-Z0-9_]+$'),
-  state            TEXT NOT NULL CHECK (state IN ('DRAFT','READY','APPROVED','REJECTED','QUARANTINED')),
-  archived         BOOLEAN NOT NULL DEFAULT FALSE,
-  archived_at      TIMESTAMPTZ NULL,
-  archived_by      UUID NULL,
-  content_uri      TEXT NOT NULL,            -- write-once
-  content_sha256   CHAR(64) NOT NULL,        -- write-once
-  manifest         JSONB NOT NULL DEFAULT '{}'::jsonb,  -- write-once
-  created_by       UUID NOT NULL REFERENCES user_account(id),
-  created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
-  -- review metadata (for audit & UX)
-  approved_at      TIMESTAMPTZ NULL,
-  approved_by      UUID NULL REFERENCES user_account(id),
-  rejected_at      TIMESTAMPTZ NULL,
-  rejected_by      UUID NULL REFERENCES user_account(id),
-  review_reason    TEXT NULL,
-  -- OCC
-  version          INT NOT NULL DEFAULT 0
-);
-```
-
-```sql
--- Prevent post-write mutations of immutable columns
-CREATE OR REPLACE FUNCTION artifact_immutable_check()
-RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  IF TG_OP='UPDATE' AND (
-    NEW.content_uri    IS DISTINCT FROM OLD.content_uri OR
-    NEW.content_sha256 IS DISTINCT FROM OLD.content_sha256 OR
-    NEW.manifest       IS DISTINCT FROM OLD.manifest
-  ) THEN
-    RAISE EXCEPTION 'artifact immutable fields cannot change';
-  END IF;
-  RETURN NEW;
-END; $$;
-
-CREATE TRIGGER artifact_immutable_trg
-  BEFORE UPDATE ON artifact
-  FOR EACH ROW EXECUTE FUNCTION artifact_immutable_check();
-```
-
-```sql
-CREATE TABLE guardian_decision_history (
-  id UUID PRIMARY KEY,
-  artifact_id UUID NOT NULL REFERENCES artifact(id),
-  org_id UUID NOT NULL REFERENCES organization(id),
-  idempotency_key TEXT NULL,
-  decision TEXT NOT NULL CHECK (decision IN ('READY','QUARANTINED')),
-  reasons JSONB,
-  rules_version TEXT,
-  settings_snapshot_sha256 CHAR(64),
-  decided_at TIMESTAMPTZ NOT NULL DEFAULT now()
-)
-PARTITION BY RANGE (decided_at);
-
-CREATE UNIQUE INDEX gdh_idem_unique
-  ON guardian_decision_history (org_id, artifact_id, idempotency_key)
-  WHERE idempotency_key IS NOT NULL;
-
-CREATE VIEW guardian_decision AS
-SELECT DISTINCT ON (artifact_id) *
-FROM guardian_decision_history
-ORDER BY artifact_id, decided_at DESC, id DESC;
-
--- Jobs / QA / Delivery (unchanged except for indexes below)
-```
-
-```sql
--- Entitlements history (admin/auditor)
-CREATE TABLE entitlement_snapshot (
-  id UUID PRIMARY KEY,
-  org_id UUID NOT NULL REFERENCES organization(id),
-  user_id UUID NOT NULL REFERENCES user_account(id),
-  token_id TEXT NOT NULL,
-  active_org_roles TEXT NOT NULL,     -- comma CSV
-  realm_roles TEXT NOT NULL,          -- comma CSV
-  device_fp TEXT NOT NULL,
-  ip TEXT,
-  ua_hash CHAR(64) NOT NULL,
-  minted_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-CREATE INDEX ent_snap_org_user_time ON entitlement_snapshot (org_id, user_id, minted_at DESC);
-
-ALTER TABLE entitlement_snapshot ENABLE ROW LEVEL SECURITY;
-ALTER TABLE entitlement_snapshot FORCE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS ent_hist_vis ON entitlement_snapshot;
-CREATE POLICY ent_hist_vis ON entitlement_snapshot
-USING (
-  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
-  AND udocket_can('ENTITLEMENT_HISTORY','read',NULL,NULL,NULL)
-);
-
-CREATE VIEW entitlement_snapshot_secure WITH (security_barrier=true) AS
-SELECT id, org_id, user_id, token_id, active_org_roles, realm_roles, device_fp,
-       ip, ua_hash, minted_at
-  FROM entitlement_snapshot;
-
-REVOKE SELECT ON entitlement_snapshot FROM udocket_app;
-GRANT  SELECT ON entitlement_snapshot_secure TO udocket_app;
-```
-
-**Partitioning & indexes for approval-gated/high-volume tables (binding)**
-* `audit_event`, `delivery_receipt` are partitioned by `created_at`; `guardian_decision_history` is partitioned by `decided_at`; (`qa_log` optional).
-* All time-ordered indexes are **LOCAL** to partitions to keep bloat bounded.
-
-```sql
--- Partitioning examples
-ALTER TABLE audit_event PARTITION BY RANGE (created_at);
-CREATE TABLE audit_event_2025_01 PARTITION OF audit_event
-  FOR VALUES FROM ('2025-01-01') TO ('2025-02-01');
--- Repeat monthly; ops job `ops/db/rotate_partitions.py` creates next 2 months and seals previous.
-```
-
-```sql
--- RLS for audit_event (read via secure view only)
-ALTER TABLE audit_event ENABLE ROW LEVEL SECURITY;
-ALTER TABLE audit_event FORCE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS audit_vis ON audit_event;
-CREATE POLICY audit_vis ON audit_event
-USING (
-  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
-  AND udocket_can('AUDIT_EVENT','read',NULL,NULL,NULL)
-)
-WITH CHECK (
-  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
-  AND udocket_can('AUDIT_EVENT','write',NULL,NULL,NULL)
-);
-
-CREATE VIEW audit_event_secure WITH (security_barrier=true) AS
-SELECT id, org_id, actor_user_id, actor_role, object_type, object_id, action,
-       payload, ip, ua, created_at
-  FROM audit_event;
-
-REVOKE SELECT ON audit_event FROM udocket_app;
-GRANT  SELECT ON audit_event_secure TO udocket_app;
-```
-
-```sql
--- At most one APPROVED artifact per (case, type), ignoring archived
-CREATE UNIQUE INDEX one_approved_per_case_type
-  ON artifact (org_id, case_id, type)
-  WHERE state = 'APPROVED' AND archived = FALSE;
-
--- Fast filters for consumable sets
-CREATE INDEX artifact_consumable
-  ON artifact (org_id, case_id, type, created_at DESC)
-  WHERE state = 'APPROVED' AND archived = FALSE;
-
--- Helpful extras for ops / analytics
-CREATE INDEX gdh_artifact_decided_at_desc
-  ON guardian_decision_history (artifact_id, decided_at DESC);
-CREATE INDEX delivery_receipt_artifact_status
-  ON delivery_receipt (artifact_id, status, created_at DESC);
-CREATE INDEX qa_log_job_scope ON qa_log (job_id, scope, created_at DESC);
-CREATE INDEX qa_log_case_created ON qa_log (case_id, created_at DESC);
-CREATE INDEX qa_log_issues_gin ON qa_log USING GIN (issues_json);
-CREATE INDEX job_org_case_kind_status ON job (org_id, case_id, kind, status, started_at DESC);
-CREATE INDEX artifact_case_state_created
-  ON artifact (org_id, case_id, state, created_at DESC);
-CREATE INDEX audit_event_org_created
-  ON audit_event (org_id, created_at DESC);
-CREATE INDEX qa_log_org_case_created
-  ON qa_log (org_id, case_id, created_at DESC);
-```
-
-**job**
-`id UUID PK`, `org_id FK`, `case_id FK`, `kind TEXT CHECK (...)`, `status TEXT CHECK (...)`, `settings_snapshot_sha256 CHAR(64)`, `started_at`, `finished_at`, `created_by REFERENCES user_account(id)`, `archived BOOLEAN`, **`version INT NOT NULL DEFAULT 0`**
-
-**job_task**
-`id UUID PK`, `job_id FK`, `name TEXT`, `status TEXT CHECK (...)`, `checkpoint JSONB`, `logs_uri TEXT`, `metrics JSONB`, `started_at`, `finished_at`
-
-**job_checkpoint**
-`id UUID PK`, `job_id FK`, `task_name TEXT`, `checkpoint JSONB`, `updated_at TIMESTAMPTZ`
-
-**qa_log**
-```
-id UUID PRIMARY KEY,
-org_id UUID, case_id UUID, job_id UUID,
-scope TEXT CHECK (scope IN ('ANALYZE_LANE','ANALYZE_FINAL','COMPOSE_SECTION')),
-lane_or_section TEXT,
-notes_md TEXT, issues_json JSONB,
-source_artifacts JSONB NOT NULL -- e.g., [{"id":"uuid-..."}]
-created_by UUID NULL,
-created_at TIMESTAMPTZ DEFAULT now()
-```
-
-**delivery_receipt**
-`id UUID PK`, `artifact_id UUID FK REFERENCES artifact(id)`, `org_id FK`,
-`channel TEXT CHECK (channel IN ('EMAIL','SMS','PORTAL'))`,
-`recipient TEXT`,
-`status TEXT CHECK (status IN ('SENT','DELIVERED','OPENED','DOWNLOADED','BOUNCED'))`,
-`details JSONB`, `created_at`
-
-**signature_certificate** (1:1 with SIGNATURE_CERT artifact)
-`id UUID PK`, `artifact_id UUID FK REFERENCES artifact(id)`, `org_id FK`,
-`pdf_uri TEXT`, `signature_profile JSONB`, `tsa_token BYTEA`, `ocsp_responses JSONB`, `manifest JSONB`, `created_at`
-
-**destruction_certificate** (1:1 with DESTRUCTION_CERT)
-`id UUID PK`, `artifact_id UUID FK REFERENCES artifact(id)`, `org_id FK`,
-`pdf_uri TEXT`, `manifest JSONB`, `created_at`
-
-**audit_event**
-`id UUID PK`, `org_id FK`, `actor_user_id UUID NULL`, `actor_role TEXT`,
-`object_type TEXT`, `object_id UUID`, `action TEXT`,
-`payload JSONB`, `ip TEXT`, `ua TEXT`, `created_at`
-
-**reference_catalog…**
-normalized catalog tables with `canonical_id`, `version`, `effective_from`, `deprecated_at`, `aliases JSONB`, `labels JSONB` (locale→string), `provenance JSONB`.
-
-
-### 3.3 Concurrency Helpers (DB)
-```sql
--- 64-bit stable advisory lock keys using two-part hashing to avoid collisions.
--- We standardize on <scope>:<key> (e.g., "case-approval:org/CASE/type" or "job-create:org/key").
-
-CREATE SCHEMA IF NOT EXISTS udlock;
-
-CREATE OR REPLACE FUNCTION udlock.key_parts(scope TEXT, k TEXT)
-RETURNS TABLE (k1 BIGINT, k2 BIGINT)
-LANGUAGE sql IMMUTABLE AS $$
-  SELECT
-    hashtextextended(scope, 0)::bigint,
-    hashtextextended(k, 0)::bigint
-$$;
-
-CREATE OR REPLACE FUNCTION udlock.xact_lock(scope TEXT, k TEXT)
-RETURNS VOID
-LANGUAGE plpgsql AS $$
-DECLARE a BIGINT; b BIGINT;
-BEGIN
-  SELECT * INTO a,b FROM udlock.key_parts(scope, k);
-  PERFORM pg_advisory_xact_lock(a, b);
-END $$;
-
-CREATE OR REPLACE FUNCTION udlock.try_lock(scope TEXT, k TEXT)
-RETURNS BOOLEAN
-LANGUAGE plpgsql AS $$
-DECLARE a BIGINT; b BIGINT; ok BOOLEAN;
-BEGIN
-  SELECT * INTO a,b FROM udlock.key_parts(scope, k);
-  SELECT pg_try_advisory_lock(a, b) INTO ok;
-  RETURN ok;
-END $$;
-
-CREATE OR REPLACE FUNCTION udlock.unlock(scope TEXT, k TEXT)
-RETURNS BOOLEAN
-LANGUAGE plpgsql AS $$
-DECLARE a BIGINT; b BIGINT; ok BOOLEAN;
-BEGIN
-  SELECT * INTO a,b FROM udlock.key_parts(scope, k);
-  SELECT pg_advisory_unlock(a, b) INTO ok;
-  RETURN ok;
-END $$;
-
--- Registry + instrumented wrappers + heartbeat
-CREATE TABLE IF NOT EXISTS udlock.registry (
-  scope        TEXT    NOT NULL,
-  k            TEXT    NOT NULL,
-  k1           BIGINT  NOT NULL,
-  k2           BIGINT  NOT NULL,
-  backend_pid  INT     NOT NULL,
-  node_id      TEXT    NOT NULL,            -- logical worker id / pod name
-  hold_kind    TEXT    NOT NULL CHECK (hold_kind IN ('SESSION','XACT')),
-  acquired_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-  last_heartbeat TIMESTAMPTZ NOT NULL DEFAULT now(),
-  PRIMARY KEY (k1, k2, backend_pid)
-);
-
-CREATE OR REPLACE FUNCTION udlock.registry_upsert(scope TEXT, k TEXT, hold_kind TEXT, node_id TEXT)
-RETURNS VOID
-LANGUAGE plpgsql AS $$
-DECLARE a BIGINT; b BIGINT;
-BEGIN
-  SELECT * INTO a,b FROM udlock.key_parts(scope, k);
-  INSERT INTO udlock.registry(scope,k,k1,k2,backend_pid,node_id,hold_kind)
-  VALUES (scope,k,a,b,pg_backend_pid(),node_id,hold_kind)
-  ON CONFLICT (k1,k2,backend_pid) DO UPDATE
-    SET last_heartbeat = now();
-END $$;
-
-CREATE OR REPLACE FUNCTION udlock.registry_heartbeat()
-RETURNS VOID
-LANGUAGE plpgsql AS $$
-BEGIN
-  UPDATE udlock.registry
-     SET last_heartbeat = now()
-   WHERE backend_pid = pg_backend_pid();
-END $$;
-
--- Instrumented session try-lock
-CREATE OR REPLACE FUNCTION udlock.try_lock_i(scope TEXT, k TEXT, node_id TEXT)
-RETURNS BOOLEAN
-LANGUAGE plpgsql AS $$
-DECLARE ok BOOLEAN;
-BEGIN
-  ok := udlock.try_lock(scope, k);
-  IF ok THEN
-    PERFORM udlock.registry_upsert(scope, k, 'SESSION', node_id);
-  END IF;
-  RETURN ok;
-END $$;
-
--- Instrumented xact lock
-CREATE OR REPLACE FUNCTION udlock.xact_lock_i(scope TEXT, k TEXT, node_id TEXT)
-RETURNS VOID
-LANGUAGE plpgsql AS $$
-BEGIN
-  PERFORM udlock.xact_lock(scope, k);
-  PERFORM udlock.registry_upsert(scope, k, 'XACT', node_id);
-END $$;
-
--- Cleanup helpers: drop registry rows with no matching pg_locks entry (best-effort)
-CREATE OR REPLACE FUNCTION udlock.gc_registry()
-RETURNS INTEGER
-LANGUAGE plpgsql AS $$
-DECLARE n INT;
-BEGIN
-  WITH live AS (
-    SELECT r.k1, r.k2, r.backend_pid
-      FROM udlock.registry r
-      JOIN pg_locks l
-        ON l.locktype='advisory'
-       AND ((l.classid = r.k1 AND l.objid = r.k2) OR (l.objid = r.k1 AND l.classid = r.k2))
-       AND l.pid = r.backend_pid
-  )
-  DELETE FROM udlock.registry r
-   WHERE NOT EXISTS (SELECT 1 FROM live WHERE live.k1=r.k1 AND live.k2=r.k2 AND live.backend_pid=r.backend_pid)
-  RETURNING 1 INTO n;
-  RETURN COALESCE(n,0);
-END $$;
-
--- Operational baselines (autovacuum)
--- Ensure aggressive autovacuum on hot partitions to prevent wraparound and bloat
-ALTER TABLE audit_event SET (autovacuum_vacuum_scale_factor = 0.05, autovacuum_analyze_scale_factor = 0.02);
-ALTER TABLE delivery_receipt SET (autovacuum_vacuum_scale_factor = 0.05, autovacuum_analyze_scale_factor = 0.02);
-```
-
-
-### 3.4 Upload session
-* Ephemeral staging handle; RLS by `org_id`.
-
-```sql
-CREATE TABLE upload_session (
-  id            UUID PRIMARY KEY,           -- UUIDv7
-  org_id        UUID NOT NULL REFERENCES organization(id),
-  case_id       UUID NOT NULL REFERENCES "case"(id),
-  type          TEXT NOT NULL,              -- intended artifact.type (policy-validated)
-  staging_uri   TEXT NOT NULL,
-  upload_token  TEXT NOT NULL,              -- opaque, single-use
-  expected_sha256 CHAR(64) NULL,            -- optional client-provided
-  content_type  TEXT NULL,
-  content_length BIGINT NULL,
-  status        TEXT NOT NULL CHECK (status IN ('PENDING','UPLOADED','FINALIZED','ABORTED','EXPIRED')) DEFAULT 'PENDING',
-  created_by    UUID NULL REFERENCES user_account(id),
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-  expires_at    TIMESTAMPTZ NOT NULL
-);
-
-CREATE INDEX upload_session_lookup ON upload_session (org_id, case_id, status, created_at DESC);
-```
-
-
----
-
-## 4) Storage & integrity
-
-### 4.1 Object storage layout
-```
-/org/{org}/case/{case}/artifact/{artifact_id}/
-  content.bin
-  manifest.json
-```
-
-**QA_logs** (not artifacts):
-```
-/org/{org}/case/{case}/job/{job}/qa_logs/{qa_log}/
-  notes.md
-  issues.json
-```
-
-**Common Artifact Manifest**
-```py
-class ArtifactRef(BaseModel):
-    artifact_id: UUID
-    content_sha256: str | None = None     # optional pin
-
-class ArtifactManifest(BaseModel):
-    # Versioning/control surfaces
-    schema_version: str | None = None   # e.g., "analyze@1.0" | "compose@1.0"
-    graph_version: str | None = None    # e.g., "analyze@v1"
-    # Identity & provenance
-    case_id: UUID
-    org_id: UUID
-    source_job_id: UUID | None = None
-    # Regions stamped by Policy Guard
-    compute_region: str | None = None
-    storage_region: str | None = None
-    # Rendering/context
-    template_version: str | None = None
-    language: str | None = None         # e.g., "en"
-    doc_type: str | None = None         # for COMPOSE/ASSEMBLED
-    # Linkage
-    source_artifacts: list[ArtifactRef] = []
-```
-
-### 4.2 Hashing
-
-* Compute **SHA-256** on write; store in `artifact.content_sha256`.
-
-> **Re-validate on read:** On mismatch, emit `ARTIFACT_INTEGRITY_MISMATCH` and call **Guardian quarantine** (see §5.2.1). Guardian records the decision and sets `state='QUARANTINED'`. No component other than Guardian changes artifact state.
-
-
-### 4.3 Object storage security (binding)
-* Buckets use **SSE-KMS** (per-org keys when `storage.kms.key_scoping='per_org'`).
-* **Bucket versioning & Object Lock (WORM)** enabled for the immutable audit sink and FINOPS reports; retention per §20.1.
-* Access is **content-addressable by default** (`content_sha256`) in key suffixes to simplify integrity probes.
-
----
-
-## 5) Guardian service (artifact readiness gate)
-
-### 5.1 Scope
-* Evaluate **`DRAFT` artifact → `READY`** or **`QUARANTINED`**.
-  Guardian never mutates content or performs demotions of other artifacts.
-
-
-### 5.2 API (HTTP)
-
-#### 5.2.1 Guardian Submit
-* `POST /v1/guardian/submit`
-  **Headers:**
-  `Authorization: Bearer <service token>`
-  `X-Signature-Key-Id: <key id>`
-  `X-Timestamp: <RFC3339 UTC>`
-  `X-Request-Signature: <hex>`
-  `Idempotency-Key: <opaque>`
-  (request signing per §49)
-
-  **Body:**
-  `{ "artifact_id":"UUID", "org_id":"UUID", "case_id":"UUID", "content_sha256":"hex (optional)" }`
-
-  **Behavior:**
-  * Load artifact + effective settings snapshot.
-  * If `content_sha256` provided and mismatches DB → **412 INTEGRITY_ERROR** (and quarantine).
-  * Evaluate rules; if pass → set state=`READY`; else `QUARANTINED`.
-    ```sql
-    -- Guardian state update: READY never overwrites QUARANTINED; never touches APPROVED/REJECTED
-    UPDATE artifact
-       SET state = CASE
-                     WHEN state = 'QUARANTINED' THEN 'QUARANTINED'  -- quarantine wins
-                     ELSE :decision                                 -- 'READY' or 'QUARANTINED'
-                   END,
-           version = version + 1
-     WHERE id = :artifact_id
-       AND state IN ('DRAFT','READY','QUARANTINED');
-    -- rowcount=0 → artifact in terminal review state; record decision history only.
-    ```
-  * Idempotent per `(org_id, artifact_id, idempotency_key)`.
-
-  **200 Response:**
-  `{ "decision": "READY" | "QUARANTINED", "reasons": [...], "guardian_decision_id": "UUID" }`
-
-  > If an `Idempotency-Key` is reused with a different raw body or signature (see §49), return **409 CONFLICT** and do not emit a new decision record. 
-  > A `QUARANTINED` artifact may be resubmitted after remediation (e.g., rules/settings update) to transition to `READY`; immutability prohibits changing content in place.
-  > **Decision order:** Record decision history first, then update artifact.state using the race rule above.
-
-#### 5.2.2 Guardian Quarantine
-* `POST /v1/guardian/quarantine`
-  **Headers:**
-  `Authorization: Bearer <service token>`
-  `X-Signature-Key-Id: <key id>`
-  `X-Timestamp: <RFC3339 UTC>`
-  `X-Request-Signature: <hex>`
-  `Idempotency-Key: <opaque>`
-  **Body:**
-  `{ "artifact_id":"UUID", "org_id":"UUID", "reason":"INTEGRITY_ERROR", "details":{...} }`
-  **Behavior:**
-  * Idempotent per (org_id, artifact_id, idempotency_key).
-  * Record guardian_decision_history { decision='QUARANTINED', reasons=[reason], ... }.
-  * Set artifact.state='QUARANTINED'.
-    **Response 200:**
-    `{ "decision":"QUARANTINED", "guardian_decision_id":"UUID" }`
-
-* `GET /v1/guardian/decision/{artifact_id}` → last decision or 404.
-
-* Health: `/healthz`, `/readyz`, `/rulesz`, `/synthetic/status`.
-
-
-### 5.3 Rule evaluation
-* **Policy format:** JSON by org; cached with version. Every rule set is **pinned to a source control commit SHA** and surfaced in decision traces.
-* **Inputs:** `artifact.type`, `content_sha256`, `manifest.*`, **effective settings**, type patterns.
-* **Outputs:** violated rule IDs, human-readable reasons, decision record with `rules_version` + `settings_snapshot_sha256`.
-
-
-### 5.4 Side effects & state transitions
-* On **READY**: set `artifact.state='READY'`, append to `guardian_decision_history`, emit `artifact_state` SSE.
-* On **QUARANTINED**: set `artifact.state='QUARANTINED'`; producing job may be marked `PAUSED`/`QUARANTINED` per policy.
-* **Guardian never mutates other artifacts** and never approves artifacts; exclusivity is enforced at approval time.
-* If concurrent decisions disagree, `QUARANTINED` has precedence (see update rule above).
-* **Re-evaluation path:** A previously `QUARANTINED` artifact may be **re-submitted** to Guardian. If rules/settings now pass, Guardian updates the state to `READY` (immutability preserved). `QUARANTINED` still **wins** on concurrent decisions.
-
-
-### 5.5 SLOs & budgets (binding)
-* Decision P95 ≤ **2s** (already in §41.5); error rate ≤ **0.5%/5m**; synthetic success ≥ **99%/1h**. Violations auto-scale or open circuit (see §41.6).
-
----
-
-## 6) Digital Signature Service
-
-* Produces **PDF/A** with embedded signature + **manifest**; verifies with status `{VALID, REVOKED, EXPIRED, TAMPERED, UNKNOWN}`.
-* **LTV:** TSA token + OCSP/CRL (PAdES-LTV). Verification evidence retained ≥ doc retention.
-* Keys in KMS/HSM; rotation & revocation per org.
-* **Profiles:** PDF/A-2b target; PAdES-B-LT or better depending on org policy.
-* **Clock discipline:** service nodes enforce NTP drift ≤ ±100ms; reject TSA/OCSP responses outside drift window.
-
-**Manifest (Pydantic v2):**
-```python
-class SignManifest(BaseModel):
-    case_id: UUID
-    artifact_id: UUID
-    org_id: UUID
-    document_sha256: str
-    key_version: int                      # KMS data-key version used for signature
-    tsa_cert_thumbprint: str | None = None  # hex SHA-1/256 of TSA cert for LTV
-    signed_at: datetime
-    signer: dict  # {user_id, keycloak_subject, display_name}
-    device_fingerprint: dict  # {ip, user_agent, ...}
-    context: dict  # {document_type, representation_type}
-```
-
-
-### 6.1 Trust & Revocation Policy (normative)
-* **Trusted issuers:** settings key `sign.trust_roots[]` lists CA/TSA trust anchors (PEM). Activation validator rejects unknown/expired anchors **and records trust-root version** in a public audit artifact (`SIGN_TRUST_ROOTS@<version>`).
-* **Revocation checks:** OCSP/CRL required; cache responses for `min(max-age, 12h)` with soft-fail window 30m; after 30m → **HARD-FAIL** verify requests with `SIGN_REVOKE_STATUS_UNKNOWN`.
-* **Time-stamping:** TSA drift ≤ ±5s; out-of-drift timestamps rejected.
-* **Verification behavior:**
-  * `tampered` → `TAMPERED` (hard-fail)
-  * `revoked` → `REVOKED` (hard-fail)
-  * `unknown` within soft window → `UNKNOWN_SOFT` (warn, allow preview) else **hard-fail**.
-* **Metrics:** `sign_verify_status_total{status}`, `ocsp_latency_ms`, `tsa_latency_ms`.
-
----
-
-## 7) LLM Provider & Model Management
-
-**Registry (Settings-backed, Pydantic models)**
-* `llm.providers[]`: `{ name, endpoint, auth, supported_languages[], regions[], rate_limits, pricing, default_model }`
-* `llm.models[]`: `{ model_id, provider, max_tokens, temperature_bounds, languages[], regions[], fallback_priority }`
-* **Scopes:** SYSTEM defaults; ORG overrides; CASE can refine preferences (`llm.model.preference`, token ceilings).
-
-**Health & circuit breakers**
-* Poll provider/model latency, error rates, throttling; **circuit breaker** per model.
-* **Fallback** by `fallback_priority`, filtered by region & language.
-* Selection logged (model chosen, reason, health snapshot).
-
-**Selection algorithm**
-1. Enforce **region allowlists** (Policy Guard).
-2. Filter by **language** (case/section language).
-3. Respect org/case preference if healthy; else fallback.
-4. Cap tokens by `analyze.token_ceiling` / `compose.token_ceiling`.
-5. Use variance-reduction settings (e.g., low temperature, top-p=1) where appropriate; content remains non-deterministic. Always record model/version and inputs for audit.
-
-* Outputs may vary across runs. We enforce **schema validity**, **reference resolvability**, **forbidden-pattern policies**, and **length/structure bounds**. We capture prompts, effective settings snapshot, model ID/version, and key output hashes for audit and regression analysis.
-
-**Prompt governance**
-* Pydantic-validated prompt templates with version IDs; PII redaction hooks pre-call; truncated prompt/response excerpts to secure audit store.
-* **Evidence store (separate):** Persist `{prompt_template_id, template_version, redaction_ruleset_id, redaction_stats, model_id, model_version, input_hashes, output_hashes, request_id, actor_id, case_id, timestamps}` to a hardened audit datastore with stricter retention than artifacts.
-* **Access control:** Only `auditor|sysadmin` via dedicated endpoints; all reads are audited.
-* **Retention:** Configurable (org/system); default ≥ 2× artifact retention for non-content metadata; no raw unredacted prompts stored beyond short-term troubleshooting TTL.
-
-
-### 7.1 Safety harness & evals
-* Prompt-injection redaction and structural guards applied pre-call.
-* **Residency for embeddings:** vector stores/providers must match `regions.allowlist.compute|storage`; cross-region embeddings are blocked unless waiver (see §8.1).
-* Golden-set jailbreak/bias tests run nightly; regressions block deploy. **Report metrics:** `%jailbreak_pass`, toxicity score deltas, and fairness deltas across language sets.
-
-
-### 7.2 Provider exit & replay
-* Content portability: store minimal control surfaces (model id/version, prompt template id/version, settings snapshot, input/output hashes) to re-run on alternate providers if required.
-* Exit switch can re-route models per org without code changes (settings-backed).
-* **Replay harness** verifies schema-equivalence on top-N cases monthly.
-
-
-### 7.3 Cost caps (FinOps)
-* Per-org budgets and monthly caps; calls fail with RATE_LIMIT and details when cap reached (policy-controlled).
-* Cost metrics: llm_cost_per_job, llm_cost_per_artifact; estimated cost shown before long jobs.
-
-
-### 7.4 Reproducibility Envelope (binding)
-* For each LLM call we persist the **envelope** sufficient to faithfully re-run elsewhere:
-```
-{prompt_template_id, template_version, model_id, model_version, stop_sequences, truncation_policy_version,
- temperature, top_p, presence_penalty, frequency_penalty, redaction_ruleset_id,
- input_hashes, output_hashes, token_ceiling, settings_snapshot_sha256}
-```
-* This envelope is stored in the **evidence store** (see §48) and referenced by job/artifact IDs.
-
-
-### 7.5 FinOps hard limits (enforcement)
-* **Pre-call guard:** the LLM wrapper enforces:
-  * `tokens_in <= analyze|compose.token_ceiling`
-  * `estimated_cost_mtd(org) + estimated_cost_call <= llm.finops.monthly_cap_usd`
-* **Breach mapping:** returns `429 RATE_LIMIT` with `details.reason ∈ {"TOKEN_CEILING","BUDGET_EXCEEDED"}` and `Retry-After`.
-* **Showback:** export metrics to billing: `llm_cost_estimate_total{org,case,job,model}`; monthly CSV artifacts (`FINOPS_REPORT`) are generated per org.
-
-### 7.6 Circuit breaker + fallback (normative)
-* Half-open probing every 60s with capped concurrency.
-* Fallback candidate selection honors **region**, **language**, and **preference**; decision trace recorded with reason codes: `PRIMARY_DEGRADED`, `RATE_LIMIT`, `POLICY_REGION_BLOCK`.
-
----
-
-## 8) Region allowlist enforcement (Policy Guard)
-
-* **Pre-flight checks** at job submission: transcription, LLM calls, object writes, notifications.
-* On violation → **hard fail** + `audit_event('REGION_POLICY_BLOCK')`.
-* Stamps **`compute_region`** / **`storage_region`** into `artifact.manifest`; Guardian verifies.
-* **NetworkPolicies** + egress allowlists enforce region at network layer.
-
-
-### 8.1 Canonical region tags & activation lints
-* **Tags:** `NA`, `EU`, `APAC`, plus cloud-specific granular tags (e.g., `aws-us-east-1`, `gcp-europe-west4`). Settings must map granular → macro tag.
-* **Lint rules (activation-time):**
-  1) `compute_region ∈ regions.allowlist.compute`
-  2) `storage_region ∈ regions.allowlist.storage`
-  3) Cross-region reuse: a job in region **X** **MUST NOT** consume artifacts whose `compute_region` or `storage_region` are outside the intersection of allowlists unless `settings.regions.cross_region_waiver=true` (default false). When waived, Guardian stamps `cross_region=true` into manifest and emits `REGION_WAIVER_USED`. **Waivers require dual approval** (Security + Architecture) with step-up MFA and an audit rationale.
-* **Validator API:** `/v1/settings/regions/validate` returns lint failures; activation rejects on any failure.
-* **Network egress enforcement:** Kubernetes `EgressNetworkPolicy` or cloud egress firewall rules are provisioned from the allowlist to ensure runtime parity with policy.
-
-
-### 8.2 Residency & Legal Matrix (binding)
-* **Purpose:** Bind region tags to jurisdictional constraints (data residency, transfer restrictions, breach notice SLAs) and enforce them at settings activation and job pre-flight.
-* **Matrix source:** See **Appendix G** for the authoritative matrix mapping `{region_tag → jurisdictions → constraints}`. The effective matrix version is pinned by `privacy.legal.matrix_version` (e.g., `"v1"`), which maps to a repository path such as `docs/privacy/residency/<version>/matrix.yaml`.
-* **Enforcement points:**
-  1) **Activation-time**: `settings.policy/regions.validate` rejects bundles where `regions.allowlist.*` violate the matrix for the org’s declared jurisdictions.
-  2) **Runtime pre-flight**: Policy Guard denies jobs whose `{compute_region, storage_region}` would violate matrix constraints for the **case’s** jurisdictions (case metadata `jurisdictions[]`).
-* **Signals & audit:** On denial: `audit_event('RESIDENCY_POLICY_BLOCK', {reason, region, jurisdiction})`; metric `residency_block_total{org,region,jurisdiction}`.
-* **Settings (keys)**: `privacy.legal.org_jurisdictions[]` (ORG), `case.jurisdictions[]` (CASE), `privacy.legal.matrix_version` (SYSTEM).
-* **Documentation pointers:** Appendix G summarizes constraint categories and provides examples; Appendix H outlines retention baselines referenced by residency decisions.
-
----
-
-## 9) Transcription subsystem
-
-### 9.1 Batch flow
-1. Upload → `ffprobe` → hash; artifact `TRANSCRIPT_INPUT` (DRAFT).
-2. Normalize (`ffmpeg`) → `AUDIO_NORMALIZED` (DRAFT).
-3. Submit to provider; poll.
-4. Emit `TRANSCRIPT` (text + timecodes) and `DIARIZATION` (JSON) (DRAFT).
-5. Guardian submit → **READY**; **Review promotes to APPROVED**, and **Analyze only consumes APPROVED** transcripts/diarization.
-6. WebVTT sidecar in manifest enables paragraph playback.
-
-
-### 9.2 Real-time (optional)
-* Browser stream → interim + final hypotheses; final `TRANSCRIPT` artifact; Guardian gating identical.
-
-
-### 9.3 Multi-track
-* Ingest mono/multi-channel/per-mic; merge with diarization to canonical transcript with `speaker_id`.
-
----
-
-## 10) Analyze pipeline (LangGraph)
-
-### 10.1 Derived IDs & non-deterministic content
-* Generate deterministic **UUIDv8** for derived items via HMAC with org salt and stable anchors (see §27).
-* Acceptance is by invariants (schema, references, policy) — content itself remains non-deterministic.
-
-
-### 10.2 Graph
-```
-ContextBuilder
- ├─ Events ──┐
- ├─ Timeline ─┤
- ├─ Issues ───┤─ Lane QA → (bounded Revision loop)
- ├─ Entities ─┤
- └─ Facts  ───┘
-       ↓
-    Final QA (cross-lane)
-       ↓
-    Create artifacts: ANALYZE_* (state=DRAFT)
-       ↓
-    Guardian submit → state=READY
-       ↓
-    Human review → state=APPROVED  (only APPROVED is consumable)
-```
-
-
-### 10.3 Models (Pydantic v2)
-```python
-from uuid import UUID
-from typing import Literal, Any
-from datetime import datetime, date
-from pydantic import BaseModel
-
-class SourceSpan(BaseModel):
-    start_ms: int
-    end_ms: int
-
-class TranscriptSupportRef(BaseModel):
-    artifact_id: UUID          # TRANSCRIPT artifact
-    spans: list[SourceSpan]    # one or more supporting spans
-
-class AnalyzeEvent(BaseModel):
-    id: UUID
-    title: str
-    datetime: datetime | None = None
-    participants: list[UUID] = []          # entity UUIDs
-    source_spans: list[SourceSpan] = []
-    notes: str | None = None
-
-class AnalyzeTimelineItem(BaseModel):
-    id: UUID
-    event_id: UUID
-    sequence: int
-    date: date | None = None
-    certainty: Literal['LOW','MEDIUM','HIGH'] = 'MEDIUM'
-
-class AnalyzeIssue(BaseModel):
-    id: UUID
-    label: str
-    description: str
-    related_events: list[UUID] = []        # event UUIDs
-    risk: Literal['LOW','MEDIUM','HIGH'] = 'LOW'
-
-class AnalyzeEntity(BaseModel):
-    id: UUID
-    kind: Literal['PERSON','ORG','ADDRESS','ACCOUNT','OTHER']
-    name: str
-    aliases: list[str] = []
-    attributes: dict[str, Any] = {}
-
-class AnalyzeFact(BaseModel):
-    id: UUID
-    statement: str
-    support: list[TranscriptSupportRef] = []
-    confidence: Literal['LOW','MEDIUM','HIGH'] = 'MEDIUM'
-
-class AnalyzeGapsItem(BaseModel):
-    id: UUID
-    category: Literal['MISSING_DATE','MISSING_ID','INCONSISTENT','OTHER']
-    description: str
-    proposed_question: str | None = None
-```
-
-**Lane Outputs** wrap `list[...]` plus manifest metadata.
-
-
-### 10.4 QA & review
-* Lane QA validates structure & references; results recorded in **QA_logs**.
-* **Revision loop** with directives; `analyze.max_retries` (Case/Org).
-* **Reviewers** promote `READY → APPROVED` (see §21.1 Reviews). Compose **only** reads `APPROVED` Analyze outputs.
-* **QA_logs** recorded for lane and final passes (Markdown + JSON); **internal only**.
-* Only lane artifacts + GAPS go to Guardian.
-
----
-
-## 11) Compose pipeline (LangGraph)
-
-* Inputs: **only `APPROVED`** Analyze/ingest artifacts.
-* Outputs: `COMPOSE_CLIENT` / `COMPOSE_LAWYER` as **`DRAFT` → Guardian `READY` → Reviewer `APPROVED`**.
-* **Exclusive types:** enforced on approval — at most **one `APPROVED`** per `(case_id,type)`. Approving a new one **atomically demotes** any existing `APPROVED` of that type to `READY`.
-
-```python
-class ComposeSection(BaseModel):
-    key: str
-    title: str
-    body_md: str
-    references: list[UUID] = []
-
-class ComposeDocument(BaseModel):
-    doc_type: Literal['CLIENT','LAWYER']
-    language: str | None = None
-    sections: list[ComposeSection]
-    outline: list[str]
-    analyze_refs: dict[str, list[UUID]] = {}
-```
-
-* QA performs structure/policy checks; violations block approval.
-
-**Artifacts:**
-* `COMPOSE_CLIENT` → one JSON containing **all client sections**.
-* `COMPOSE_LAWYER` → one JSON containing **all lawyer sections**.
-* Start **DRAFT** → Guardian → **READY**.
-
-**QA & revision**
-* Per-section **Structure/Policy/Factuality** checks.
-* **QA_logs** per section (`scope='COMPOSE_SECTION'`, `lane_or_section='client.<key>'| 'lawyer.<key>'`).
-* Bounded revision loop: `compose.max_retries` (Case/Org).
-
----
-
-## 12) Document Assembly
-
-1. Load **`APPROVED`** `COMPOSE_CLIENT` / `COMPOSE_LAWYER` JSON + selected **Template**.
-2. Lint placeholders; render DOCX; compute `SHA-256`; optional PDF/A conversion.
-3. Emit `ASSEMBLED_DOC_CLIENT` / `ASSEMBLED_DOC_LAWYER` as `DRAFT`.
-4. Guardian → `READY`; Reviewer → `APPROVED` (consumable/deliverable).
-5. **Exclusive types:** same approval constraint as Compose.
-
-**Template registry** (artifact `TEMPLATE`): jurisdiction/division/representation, version, brand assets, placeholder inventory.
-
----
-
-## 13) Delivery
-
-* Channels: Email (attachment or link), SMS (link), Portal (secure download).
-* Links: time-limited; single-use optional; tenant-scoped.
-* Evidence: `delivery_receipt`; bounces/complaints ingested; webhooks on open/download.
-* Signed URLs include: `artifact_id`, `content_sha256`, `state`, `expiry`. Fetch guard enforces **`state='APPROVED'`**.
-
-Accessory systems:
-* **Email:** SPF/DKIM/DMARC required; per-org verified domains; bounce/complaint webhooks ingested.
-* **DMARC policy** must be `quarantine` or `reject` for production domains; alignment verified during org onboarding.
-* **SMS:** Region-compliant sender policies; opt-in state; STOP/HELP handling; protected short links.
-
-```sql
-CREATE TABLE download_token (
-  id UUID PRIMARY KEY, artifact_id UUID NOT NULL, org_id UUID NOT NULL,
-  expires_at TIMESTAMPTZ NOT NULL, single_use BOOLEAN NOT NULL DEFAULT FALSE,
-  consumed_at TIMESTAMPTZ NULL
-);
-CREATE INDEX download_token_lookup ON download_token (artifact_id, expires_at);
-```
-
-**Fetch check (single-use):**
-```
-UPDATE download_token
-   SET consumed_at = now()
- WHERE id=:token_id
-   AND single_use = TRUE
-   AND consumed_at IS NULL
-   AND expires_at > now()
-RETURNING 1;
--- If 0 rows, reject (410/403).
--- Then validate artifact APPROVED + hash match as already specified.
-```
-
-**ETag/If-Match hardening**
-* Serve downloads with ETag = artifact.content_sha256.
-* Require If-Match = artifact.content_sha256 on GET; otherwise 412.
-* **Region re-validation on fetch (binding):** On each GET, validate that `artifact.manifest.storage_region` (and, if present, `compute_region`) remain permitted by the current effective `regions.allowlist.storage`/`compute` for the requesting org. If a previously allowed region has become disallowed due to a newer settings bundle, deny with **403 `POLICY_BLOCK`** and emit `audit_event('REGION_POLICY_BLOCK', {artifact_id, region})`.
-
-
-### 13.1 HTTP caching & range behavior (binding)
-* Responses include:
-  `Cache-Control: no-store`
-  `Pragma: no-cache`
-  `X-Content-Type-Options: nosniff`
-  `ETag: <artifact.content_sha256>`
-* **Range requests:** disallowed unless `settings.portal.downloads.allow_ranges=true`. If allowed, server validates `If-Match` against ETag for each `206` response; otherwise return `416`. **`If-Range` is not supported.**
-* **Strong match on fetch:** clients MUST provide either
-  1) `If-Match: <ETag>` **header**, **or**
-  2) a signed `etag=<ETag>` query parameter embedded in the download URL.
-  The server treats a valid signed `etag` param as equivalent to `If-Match` for browser-initiated downloads; missing/invalid match → **412**.
-* **Intermediaries:** `Cache-Control: private` when ranges are allowed; otherwise `no-store` to prevent proxy caching.
-
----
-
-## 14) Client Signoff
-
-* Client reviews artifact + manifest; signs.
-* Signer may operate **only on `APPROVED`** sources.
-* Emits `SIGNATURE_CERT` (`DRAFT` → Guardian `READY` → Reviewer `APPROVED` if required by policy).
-* Device fingerprint recorded in manifest; verification view shows status/evidence.
-
----
-
-## 15) Retention & Destruction
-
-* Scheduler selects eligible artifacts/cases from **settings**; **legal hold** blocks.
-  ```
-  Selector:
-    SELECT id FROM artifact
-     WHERE ...eligible...
-     ORDER BY created_at
-     FOR UPDATE SKIP LOCKED
-     LIMIT :batch;
-
-  Case archival:
-    SELECT id FROM "case"
-     WHERE ...eligible...
-     FOR UPDATE SKIP LOCKED
-     LIMIT :batch;
-  ```
-* Emit **DESTRUCTION_CERT** artifact on deletion; store receipts; delete objects and files; receipts stored; case `ARCHIVED`.
-* **Data posture:** Destruction removes object storage **content** and emits **DESTRUCTION_CERT**. Database rows for artifacts and decisions are **retained** for audit/provenance unless a regulatorily required purge is configured via a future compliance bundle.
-
-
-### 15.1 DSAR/Erasure Mode (Org setting)
-* When settings.compliance.erasure_mode = 'hard_purge':
-  * Purge artifacts and associated DB rows for subject scope; create an ERASURE_JOURNAL artifact capturing minimal proof (subject hash, scope, timestamps, operator).
-  * Tombstone audit links preserve chain integrity without retaining content.
-  * Legal hold supersedes erasure requests.
-
-* Settings:
-* compliance.erasure_mode ∈ {'off','hard_purge'}
-* compliance.subject_hkdf_salt (KMS-managed) for subject hashing.
-
-**ERASURE_JOURNAL manifest (schema, JSON)**
 ```json
 {
-  "schema_version": "erasure@1.0",
-  "org_id": "UUID",
-  "case_id": "UUID|null",
-  "subject_hash": "hex-64",               // HKDF salt per settings.compliance.subject_hkdf_salt
-  "scope": ["ARTIFACTS","QA_LOGS","EVIDENCE","PROMPTS"], 
-  "requested_by_user_id": "UUID",
-  "approved_by_user_ids": ["UUID","UUID"], // dual approval if policy requires
-  "justification": "string",
-  "executed_at": "RFC3339",
-  "settings_snapshot_sha256": "hex-64"
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://udocket.ca/schemas/artifact_manifest_v1.json",
+  "type": "object",
+  "required": ["schema_version","source","provenance","hashes","settings_snapshot_sha256"],
+  "properties": {
+    "schema_version": {"type":"string", "const":"1"},
+    "type": {"type":"string"},
+    "source": {
+      "type": "object",
+      "properties": {
+        "case_id": {"type":"string", "format":"uuid"},
+        "job_id": {"type":"string", "format":"uuid"},
+        "inputs": {"type":"array", "items": {"type":"string", "format":"uuid"}}
+      },
+      "required":["case_id","job_id"]
+    },
+    "provenance": {
+      "type": "object",
+      "properties": {
+        "compute_region": {"type":"string"},
+        "storage_region": {"type":"string"},
+        "tool_versions": {"type":"object"},
+        "template_version": {"type":["string","null"]}
+      },
+      "required":["compute_region","storage_region","tool_versions"]
+    },
+    "hashes": {
+      "type":"object",
+      "properties": {"content_sha256": {"type":"string"}},
+      "required":["content_sha256"]
+    },
+    "settings_snapshot_sha256": {"type":"string"}
+  }
 }
 ```
 
----
+### 5.7 Ingestion pipelines & malware/archives defenses
 
-## 16) Reference Engine & Questionnaire (international)
+*Purpose: Secure intake against malicious payloads while preserving evidence integrity.*
 
-### 16.1 Court catalogs
-* **Canonical IDs** per jurisdiction/court/division (stable GUIDs).
-* **Aliases** for historical/vernacular names.
-* **Labels** by locale (`labels { locale: string }`).
-* **Provenance**: `source_url`, `fetched_at`, `checksum`.
-* **Versioning & deprecation**: `effective_from`, `deprecated_at`; **back-compat maps** maintain historic validity.
+- Pipeline: raw uploads (`EXHIBIT_RAW`, `COURT_DOC_RAW`, `EMAIL_RFC822`, `FINANCIALS_RAW`, audio) land in staging, run through normalization/OCR/parsers to emit structured counterparts (`*_TEXT`, `EMAIL_ATTACHMENTS`, `FINANCIALS_TABLE`, `TRANSCRIPT`, `DIARIZATION`). Structured artifacts remain `DRAFT` until Guardian marks them `READY`; reviewers promote to `APPROVED`.
+- Malware scanning: scan on upload/finalize with signatures and heuristics; block/quarantine positive hits; log details to `audit_event`.
+- Archive defenses: enforce archive type allowlist, depth/ratio caps; detect zip bombs and path traversal (Zip Slip) in extractors.
+- MIME & size policies: allowlist content types; settings define max size per type; reject suspicious double extensions.
+- Evidence: record original filenames, sizes, and content hashes; store normalization provenance for audio.
+- Source material: `§37.3`, `§4.1–4.3`
 
+Example
 
-### 16.2 Validators & questionnaires
-* **Validators:** Pydantic per jurisdiction version (required fields, filing windows, ranges).
-* **Layering:** global → country → state/province → court level/division → org overrides.
-* **Localization:** questionnaire items localized; fallback to base locale if missing, flagged for admin.
-* **Case snapshot:** Instantiated `QUESTIONNAIRE` artifact (**APPROVED**) to lock effective content.
-
-
-### 16.3 Admin workflows
-* Import preview, diff viewer, sandbox validation, staged→active promotion, rollback.
-
----
-
-## 17) Notifications & communications
-
-* Outbox with retries/backoff; providers gated by region allowlists.
-* Templates tenant-brandable; PII scrubbing at render.
-* Link signing & expiry governed by settings.
-* Idempotency: Store provider external message IDs and enforce uniqueness: UNIQUE(org_id, channel, external_message_id)
-* Resends first check this key; if present, treat as delivered; do not re-send.
-
-```sql
-ALTER TABLE outbox_delivery
-  ADD COLUMN external_message_id TEXT,
-  ADD COLUMN version INT NOT NULL DEFAULT 0,
-  ADD CONSTRAINT outbox_unique_extmsg UNIQUE (org_id, channel, external_message_id);
--- Idempotent webhook consume
-ALTER TABLE delivery_receipt
-  ADD COLUMN provider_event_id TEXT,
-  ADD CONSTRAINT receipt_provider_event_unique UNIQUE (org_id, channel, provider_event_id);
+```json
+{
+  "schema_version": "1",
+  "type": "TRANSCRIPT",
+  "source": {"case_id": "...", "job_id": "...", "inputs": ["..."]},
+  "provenance": {
+    "compute_region": "canadacentral",
+    "storage_region": "canadacentral",
+    "tool_versions": {"udocket_core": "0.9.0", "azure_speech": "1.38"},
+    "template_version": null
+  },
+  "hashes": {"content_sha256": "sha256-..."},
+  "settings_snapshot_sha256": "sha256-..."
+}
 ```
 
-**Sender claim loop (with OCC):**
+## 6) Agent ecosystem
+
+### 6.1 Agent contract (inputs, outputs, manifests, ops logging)
+
+*Purpose: Define the shared behavior that keeps agents composable and observable.*
+
+- Terminology: Appendix I covers lane names, artifact states, and failure classes referenced throughout §6.
+- Agents implement the `TranscriptionAgent`-style interface: accept structured config (`TranscriptionConfig` family) rather than CLI flags, pull secrets from `.env` mirroring `config/settings.py`.
+- Return value encapsulates success data (`TranscriptionResult`/agent-specific models) and raises rich exceptions with machine-actionable codes; Celery tasks capture and surface to UI.
+- Filesystem layout: artifacts saved under `storage/media/<org_id>/cases/<case_id>/<category>/` with `job_id` prefixes; ops logs in `ops/` with per-run JSON + human-readable log, plus append-only `ops_<agent>.jsonl`.
+- Deterministic naming/versioning: reruns append `_v{n}` suffix; manifests store `settings_snapshot_sha256`, model/provider versions, compute/storage regions, and SHA-256 of outputs.
+- Audit & telemetry: each run logs structured metadata (duration, attempts, cost envelope) and writes SSE updates; metrics exported for `job_duration_seconds`, `agent_retry_total`, etc.
+
+### 6.2 Transcription agent (batch/on-demand modes)
+
+*Purpose: Summarize ingestion flow from audio to transcript artifacts.*
+
+- Modes: `on-demand` streaming for shorter recordings (local processing), `batch` for longer files via Azure Batch Transcription (HTTPS SAS URL). Canada-only regions enforced.
+- Input processing: audio uploads hashed, normalized via ffmpeg (PCM 16 kHz mono). Artifacts created: `TRANSCRIPT_INPUT`, `AUDIO_NORMALIZED`.
+- Multi-track support: batch mode can ingest stereo/multi-channel sources, splitting speakers prior to diarization; single-track on-demand relies on optional diarization metadata when available.
+- Outputs: timestamped transcript (`transcript/<job_id>__transcript.txt`) with header metadata (case, source name, hashes, language, region, duration); optional `DIARIZATION` JSON for batch mode.
+- Ops artifacts: `ops/<job_id>__transcription.log`, `ops/<job_id>__transcription_log.json`, case-level `ops_transcription.jsonl` append. Guardian invoked automatically post-write.
+- Stdout contract: single JSON line `{status, transcript_file, region, language, attempts, duration_s}` enabling CLI automation.
+- See App.D for canonical artifact types and filenames (TRANSCRIPT, AUDIO_NORMALIZED) and versioning rules.
+
+### 6.3 Analyze agent (LangGraph lanes, QA, artifacts)
+
+*Purpose: Capture the multi-lane analysis pipeline that feeds Compose and downstream tooling.*
+
+- Graph built with LangGraph; lanes include `Events`, `Timeline`, `Issues`, `Entities`, `Facts`, plus staff report generation. Each lane produces typed Pydantic outputs.
+- Inputs: latest transcript (`TRANSCRIPT`), optional `DIARIZATION`, approved exhibits (`EXHIBIT_TEXT`, etc.), and settings snapshot. Retrieval uses chunking + embeddings constrained to allowed regions.
+- Deterministic IDs: UUIDv8-HMAC (draft) values derived from transcript spans and content remain stable across reruns; references validated across lanes.
+- QA stages: per-lane validation (schema, references, policy lint, token bounds) with `qa_log` entries; final QA ensures cross-lane consistency before Guardian submission.
+- Artifacts: `analysis/<job_id>__summary_v1.md|json`, outline, timeline seeds, entity hints, staff report, plus ops JSON + JSONL audit. Failures surface via SSE with actionable errors.
+- See App.D for summary/outline/timeline/entity artifact schemas, filenames, and versioning.
+
+### 6.4 Compose agent (deliverables, QA loops, templates)
+
+*Purpose: Describe final deliverable generation and QA gating.*
+
+- LangGraph pipeline with `OutlineBuilder`, parallel `SectionWriter` nodes (client/lawyer lanes), `SectionQA`, and `FinalWeave`. Inputs include Analyze outputs, intake data, templates.
+- Templates resolved via Settings + organization-specific overrides; `unique_title` helper prevents collisions. Manifest stores template version, language, document type.
+- QA loops enforce forbidden patterns (`compose.policy.forbidden_patterns[]`), required sections, link counts, and reference integrity. Lane retries limited by `compose.max_retries`.
+- Outputs written to `docs/`: `compose_client_v1.md|docx`, `compose_lawyer_v1.md|docx`, bundle excerpt, QA/staff reports. Guardian ensures readiness before reviewer approval.
+- Envelopes capture LLM metadata (model, prompt version, region) for reproducibility; FinOps counters track token usage per section.
+- See App.D for compose deliverables and QA artifacts and their canonical filenames.
+- Model selection: stage-specific profiles defined in `config/llm_assignments.json` map Analyze/Compose lanes to settings keys (`analyze.model.id`, `compose.model.id`) so org/case overrides stay deterministic.
+
+### 6.5 Future agents (timeline, relationship graph) and integration checklist
+
+*Purpose: Provide a runway for upcoming automation without breaking contracts.*
+
+- Planned agents (Timeline, Relationship Graph) inherit the same contract: deterministic IDs, manifest provenance, Guardian gating, ops logging, and Settings-driven configuration.
+
+- Checklist for new agents: define artifact types (Appendix D), extend manifests, register Celery task + SSE events, add ops JSON/JSONL schema, wire Settings keys, update QA/approval flows, document review UX impacts.
+
+- Integration tests must include dry-run/diff of settings, policy linting, and cross-artifact dependency validation (e.g., timeline referencing approved transcripts).
+
+- Any new agent must expose FINOPS metrics, adhere to region allowlists, and update `App.E` traceability map before launch.
+
+- **Source material:** `§5`, `§9`, `§10`, `§11`, `§33`, `AGENTS.md` references
+
+- **Priority:** High (agent pipeline under active development)
+
+### 6.6 Agent failure handling & resilience
+
+*Purpose: Standardize failure classes, retries, and safeguards to avoid duplication and policy drift.*
+
+- Failure taxonomy (binding):
+  - `TRANSIENT`: upstream 429/5xx/timeouts/network. Action → exponential backoff with jitter; respect `Retry-After`; bounded attempts; trip provider circuit on threshold.
+  - `POLICY`: forbidden pattern, redaction breach, region disallow. Action → fail lane; emit Guardian quarantine if applicable; surface actionable reason codes.
+  - `INPUT`: bad media/schema. Action → fail lane; no auto-retry; record validation details in ops JSON.
+  - `INTEGRITY`: hash mismatch/content drift. Action → block downstream; require resubmit with corrected input; log `ARTIFACT_INTEGRITY_MISMATCH`.
+  - `CONCURRENCY`: OCC/version conflicts or lock contention. Action → short jittered retry; escalate if repeated; surface conflict to UI.
+  - `REGION_POLICY`: residency disallowance. Action → block and log `RESIDENCY_POLICY_BLOCK`; waivers per §3.6.
+- Retries & budgets: default 5 attempts; `backoff_factor=2`; jitter 10–20%; max delay 120s; per-agent overrides allowed via Settings.
+- Node idempotency (binding): rerunning a completed lane issues zero new provider calls; outputs identical or schema-equivalent.
+- Single-flight: use `udlock` advisory locks for job/lane scopes; hold \< `udlock.max_session_hold_seconds` with heartbeats every `udlock.heartbeat.interval_seconds`.
+- Telemetry: export `agent_retry_total`, `agent_lane_fail_total{reason}`, and duration histograms; write ops logs with `attempt`, `final_state`, `reasons[]`.
+
+### 6.7 LangGraph implementation spec (normative)
+
+*Purpose: Standardize graph runtime behavior for Analyze/Compose.*
+
+- Graph state: typed payloads; immutable inputs; explicit checkpoints.
+- Nodes & contracts: input/output schemas; side‑effect boundaries; reproducibility requirements.
+- Concurrency & ordering: deterministic ordering where needed; fan‑out/fan‑in patterns documented.
+- Checkpointing & idempotency: resume from last good node; no duplicate provider calls after success.
+- LLM call wrapper (mandatory): consistent logging, redaction, retry, and cost accounting.
+- Memory & retrieval policy: bounded context, chunking, embeddings restricted to allowed regions.
+- Error classes & actions: per §6.6 taxonomy mapped to node behaviors.
+- Source material: `§54.1–54.10`, `§56`
+
+Deterministic UUIDv8-HMAC helper (draft binding)
+
+```python
+def uuidv8_deterministic(
+    case_id: UUID,
+    lane_or_section: str,
+    anchors: dict,
+    org_salt: bytes,
+) -> UUID:
+    anchor_bytes = json.dumps(anchors, separators=(',', ':'), sort_keys=True).encode()
+    payload = {
+        "case": str(case_id),
+        "scope": lane_or_section,
+        "anchors_sha256": hashlib.sha256(anchor_bytes).hexdigest(),
+    }
+    msg = json.dumps(payload, separators=(',', ':'), sort_keys=True).encode()
+    digest = hmac.new(org_salt, msg, hashlib.sha256).digest()
+    b = bytearray(digest[:16])
+    b[6] = (b[6] & 0x0F) | (0x8 << 4)
+    b[8] = (b[8] & 0x3F) | 0x80
+    return UUID(bytes=bytes(b))
 ```
--- Claim a batch
-SELECT id FROM outbox_delivery
- WHERE status='PENDING'
- ORDER BY created_at
- FOR UPDATE SKIP LOCKED
- LIMIT 100;
 
--- Transition each to SENDING atomically
-UPDATE outbox_delivery
-   SET status='SENDING', version=version+1, last_attempt_at=now()
- WHERE id=:row_id AND status='PENDING' AND version=:expected_version;
--- rowcount=0 → another worker won the race
-```
+- Anchors must be canonicalized (sorted transcript spans, referenced Analyze UUIDs, outline positions). Staged vectors live in `spec/vectors/uuidv8.json`; CI asserts the helper reproduces vectors.
+- Implementation uses the Python 3.12 standard library `hashlib`/`hmac` exactly as pinned in the runtime container digest; no third-party crypto libraries are pulled in. `org_salt` is derived from a per-org secret stored in KMS (`uuidv8.org_salt_secret`) and materialized via HKDF; rotating the secret issues new UUIDs for future artifacts while manifests keep prior IDs immutable, ensuring replay does not re-key historical records.
+- CI test `tests/spec/test_uuidv8_vectors.py` verifies both deterministic output and correct version/variant bits for every reference vector.
 
----
+Node catalog (illustrative)
 
-## 18) Client Portal
+| Node                   | Purpose                   | Inputs                       | Outputs                 |
+| ---------------------- | ------------------------- | ---------------------------- | ----------------------- |
+| OutlineBuilder         | produce narrative outline | transcript, settings         | outline JSON            |
+| SectionWriter (client) | draft client section(s)   | outline, settings, templates | section text + metadata |
+| SectionWriter (lawyer) | draft lawyer section(s)   | outline, settings, templates | section text + metadata |
+| SectionQA              | enforce policy gates      | section text, policies       | QA notes, status        |
+| FinalWeave             | assemble deliverable      | sections, templates          | composed MD/DOCX        |
 
-* **AuthN/AuthZ:** Keycloak; clients see only their own cases.
-* **Readable artifacts:** strictly **`APPROVED`** `ASSEMBLED_DOC_*` and `SIGNATURE_CERT`.
-* **Endpoints:**
-  * `GET /portal/cases`
-  * `GET /portal/cases/{case_id}/artifacts?types=ASSEMBLED_DOC_*` (APPROVED only)
-  * `POST /portal/cases/{case_id}/corrections` → creates `MEMO_TEXT_*` (`DRAFT` → Guardian `READY` → review)
-  * `POST /portal/cases/{case_id}/sign/{artifact_id}` → Signer flow (source must be APPROVED)
-* **Fetch guard:** download links verify `artifact.state=='APPROVED'`, id/hash match, unexpired.
+### 6.8 Compose/Policy lint settings (declarative)
 
+*Purpose: Enforce structural and policy rules via settings instead of code.*
 
-### 18.1 Hardening & antifraud
-* Adaptive MFA on high-risk auth and on first download from a new device/ASN (policy-controlled).
-* Progressive challenges (captcha) after N failed logins or abnormal request rates.
-* Device-bound refresh tokens (optional per org); short-lived access tokens.
-* **Anomaly detection on downloads:** sudden spikes → auto-revoke outstanding tokens + banner.
-* **Session security:** Inactivity timeout 15 minutes (configurable); absolute session lifetime 8 hours; device-bound refresh tokens (optional per org).
+- Settings: `compose.policy.*` (forbidden patterns, required sections, link limits) and `analyze.policy.*` for lane checks.
+- Lint flow: pre‑publish checks at node and final weave; failures produce QA logs and block Guardian submission.
+- Extensibility: org overrides constrained by safety validators in Settings activation.
+- Source material: `§53`, `§6.4`
 
+### 6.9 Graph versioning & migrations
 
-### 18.2 Accessibility (WCAG 2.2 AA — binding)
-**Conformance target:** WCAG **2.2 AA** across Portal key flows (login, case list, artifact view/download, corrections, signoff).
+*Purpose: Allow safe evolution of graphs across versions.*
 
-**Requirements**
-* **Keyboard**: All interactive elements reachable in a logical order (Tab/Shift+Tab); visible focus indicator (≥ 3:1 contrast vs adjacent colors); no keyboard traps.
-* **Focus not obscured (2.4.11)**: Sticky headers/footers must not cover the focused element; ensure scroll-into-view aligns focus within the viewport.
-* **Target size (2.5.8)**: Interactive targets ≥ **24×24 CSS px** (or 44×44 where practical) unless covered by WCAG exceptions.
-* **Dragging alternatives (2.5.7)**: Any drag interaction has an equivalent **click/keyboard** alternative.
-* **Consistent help (3.2.6)**: Help entry points (e.g., “Support” link) appear consistently in the same relative location across screens.
-* **Motion/animation**: Respect `prefers-reduced-motion`; provide non-animated equivalents for loading and progress states.
-* **Color & contrast**: Text contrast ≥ **4.5:1** (normal) / **3:1** (large). Color is **not** the sole means to convey state (e.g., include icons/labels).
-* **Live regions (SSE updates)**: Use ARIA `aria-live="polite"` for non-critical updates (e.g., job progress) and `aria-live="assertive"` sparingly for critical events (e.g., `portal_link_invalidated`).
-* **Forms**: Labels bound via `for`/`id`; error messaging programmatically associated; inline guidance announced via ARIA.
-* **Auth**: MFA/step-up dialogs fully keyboard accessible; error summaries focus on first invalid field.
-* **Docs/PDFs**: Assembled PDFs tagged for accessibility (reading order, headings, alt text for images).
+- Version pins: manifests include graph version; upgrades supported via migration plan per change.
+- Compatibility: nodes may support multiple versions; deprecations follow the API deprecation policy.
+- Acceptance: migration tests verifying schema equivalence or documented deviations.
+- Source material: `§55`, `§56`
 
-**Acceptance & QA**
-* **Automated**: axe and pa11y run in CI on Portal routes; failures block merge (see §23).
-* **Manual**: Quarterly assistive tech spot checks (NVDA/JAWS/VoiceOver) on a sample; defects tracked as Sev-2 accessibility bugs.
-* **Metrics**: Track CI a11y violations count; target 0 **blocking** issues.
+### 6.10 Compose Graph details (parallels Analyze)
 
----
+*Purpose: Provide deeper detail on Compose graph structure and gates.*
 
-## 19) Search & knowledge retrieval
+- Lanes: client and lawyer lanes in parallel; optional bundle excerpt lane; shared OutlineBuilder and FinalWeave.
+- Concurrency: SectionWriter nodes run in parallel with bounded concurrency; OCC on artifact writes; udlock on section scopes.
+- Retries: per‑section retry budgets; failures summarized in QA; forbidden patterns and missing sections block FinalWeave.
+- Provenance: per section envelope logged with model/prompt versions; manifests include graph_version and template versions.
+- QA gates: enforce required sections, link counts, references, and forbidden patterns (`compose.policy.*`).
+- Source material: `§56`
 
-* PostgreSQL FTS over artifacts and normalized transcript segments.
-* RLS applies by `org_id` and **case membership**.
-* Exports include provenance (artifact IDs, hashes).
-* Index artifacts by `(id, state, type, language, created_at)` and content.
-* Exports include `(artifact_id, content_sha256)` for provenance.
+### 6.11 Agent schemas and error codes
 
----
+*Purpose: Provide typed outputs per lane and a canonical error taxonomy mapping.*
 
-## 20) Observability & logging
+- Schemas (illustrative Pydantic models):
+  - Analyze: `SummaryJSON`, `OutlineJSON`, `TimelineSeed`, `EntityHint`, `StaffReport` with `uuid`, `source_span`, `evidence_refs[]`.
+  - Compose: `SectionOutput { section_id, role: client|lawyer, text_md, envelope_id, issues[] }`.
+  - QA: `QAIssue { code, level, message, ref?, location? }`.
+- Example Pydantic models (Analyze extract):
+  ```python
+  class SourceSpan(BaseModel):
+      start_ms: int
+      end_ms: int
 
-* **Structured logs**: `ts, trace_id, org_id, case_id, user_id, job_id, artifact_id, action, result, latency_ms, settings_bundle_id`; PII redacted.
-* **Metrics:** queue depth, job durations, Guardian latency/throughput, Signer verify latency, LLM model health/circuit state, delivery rates, integrity incidents, SSE reconnect rate, `artifacts_ready_total`, `artifacts_approved_total`, `time_to_approval_ms`.
-* **FinOps metrics (unit economics):** `llm_cost_estimate_total{org,case,job,model}`, `finops_cost_per_case_usd{org,case}`, `finops_cost_per_org_usd{org,month}`, `delivery_events_total{org,channel,status}`, `finops_mom_regression_flag{org}`.
-* **Privacy/Governance metrics:** `residency_block_total`, `dpia_records_total{status}`, `ropa_records_total`, `entitlement_snapshots_total`, `policy_unsafe_activations_blocked_total`.
-* **Advisory locks:** `udlock_locks_held{scope,kind}`, `udlock_lock_age_seconds_p95{scope,kind}`, `udlock_watchdog_stale_total{action}` (`alert|terminate|ignored`), `udlock_registry_gc_total`.
-* **Traces:** correlate web → workers → Guardian/Signer/LLM.
-* **Runbooks:** backlog handling, provider degradation, integrity quarantine triage, Guardian unavailable protocol.
-* **Timers:** review pending > N hours, job stuck in RUNNING > M minutes without checkpoint, Guardian decision latency P95 > threshold.
-* **Actions:** alert + auto-reassign review, or **auto-pause** job with resume after operator acknowledgment.
-* **Request IDs:** Ingress injects `X-Request-ID` if absent; all services echo it in logs and error responses.
-* **API SLOs (Web/Portal):** Availability ≥ **99.9%/30d**; P95 latency targets — Web: **250ms** reads / **500ms** writes; Portal downloads start-to-first-byte **≤ 400ms** (in-region).
-* **RBAC metrics:** `policy_allow_total{resource,action}`, `policy_deny_total{resource,action}`, `mask_applied_total{resource,field,mask}`; audit `POLICY_ACTIVATED`.
+  class AnalyzeEvent(BaseModel):
+      id: UUID
+      title: str
+      datetime: datetime | None = None
+      participants: list[UUID] = []
+      source_spans: list[SourceSpan] = []
+      notes: str | None = None
 
-> For `action in ('APPROVE','REJECT')`, include `{prev_state, new_state}` in `payload`. Frontend already displays previous state; audit should record it too.
+  class AnalyzeIssue(BaseModel):
+      id: UUID
+      label: str
+      description: str
+      related_events: list[UUID] = []
+      risk: Literal['LOW','MEDIUM','HIGH'] = 'LOW'
+  ```
+- Compose JSON example:
+  ```python
+  class ComposeSection(BaseModel):
+      key: str
+      title: str
+      body_md: str
+      references: list[UUID] = []
 
+  class ComposeDocument(BaseModel):
+      doc_type: Literal['CLIENT','LAWYER']
+      language: str | None = None
+      sections: list[ComposeSection]
+      outline: list[str]
+      analyze_refs: dict[str, list[UUID]] = {}
+  ```
+- Error codes (binding):
+  - `E_TRANSIENT_PROVIDER` (TRANSIENT): wrap 429/5xx/timeouts; retry per §6.6.
+  - `E_POLICY_FORBIDDEN` (POLICY): forbidden pattern redaction failure; fail lane.
+  - `E_INPUT_INVALID` (INPUT): schema/media invalid; fail lane with details.
+  - `E_INTEGRITY_MISMATCH` (INTEGRITY): hash/content drift; quarantine and halt.
+  - `E_CONFLICT` (CONCURRENCY): OCC/lock conflict; short retry then surface.
+  - `E_REGION_BLOCK` (REGION_POLICY): residency disallow; block with remediation.
+- Mapping: All error codes must map to §6.6 failure taxonomy; ops JSON must include `{ code, class, message, attempt, final }`.
 
-### 20.1 Immutable audit sink
-* All audit_event writes are dual-streamed: (1) operational store (DB) and (2) WORM object storage with bucket-level retention lock.
-* Every 1h we emit an AUDIT_SEAL artifact containing a hash-chain over the last window of audit events (rolling Merkle root + prior seal hash).
-* Verification tool validates chain continuity and WORM presence.
+### 6.12 Quality KPIs & monitoring
 
-* **Metrics:** audit_worm_lag_seconds, audit_seal_errors_total
-* **Runbook:** If seal fails > 2 intervals, page on-call and halt destructive operations.
-* **Privacy artifacts:** DPIA/RoPA records are included in the audit seal inventory (by artifact id only; no PII).
+*Purpose: Make analysis, transcription, and Guardian quality targets measurable and auditable.*
 
+- **Speech accuracy:** Word Error Rate (WER) target ≤ 8 % for on-demand, ≤ 6 % for batch transcripts measured against quarterly golden sets; dashboards plot WER trend per language with alerts when ≥ 2 % regression (`metrics: transcription_wer_pct{mode,language}`).
+- **Guardian effectiveness:** False-negative rate (quarantined after customer exposure) ≤ 0.5 % per quarter, false-positive (unjustified quarantine) ≤ 5 % with remediation documented in App.H RB-GUARD-QUAR review log. Weekly sampling validates decision reasons against policy matrix.
+- **Review delta:** Reviewer change rate for Analyze/Compose deliverables \< 15 % of sections (measured via `qa_log` issue density and Manual/Agent edit diffs). Exceeding thresholds triggers regression analysis in LangGraph acceptance tests (§13.3).
+- **QA defect density:** `qa_issue_density` metric targets ≤ 0.2 blocking defects per artifact; Compose/Analyze QA lanes surface severity distribution for release gates.
+- **FinOps + quality blend:** Track tokens-per-approved artifact and rejection counts to ensure budget adherence does not degrade quality; anomalies produce decision-log entries (§15.3).
+- Quality KPIs feed quarterly leadership reviews; results archived as `QUALITY_KPI_REPORT` artifacts in Appendix D catalog.
 
-### 20.2 Named dashboards
-**Dashboards (Grafana names, owners in parentheses)**
-1. **Guardian SLO & Throughput** (SRE): decision latency P50/P95/P99, error rate, queue depth, synthetic success, SLO burn rate.
-2. **Queues & KEDA** (SRE): Celery queue depth per lane, replicas, scaling events, DLQ intake and drain.
-3. **LLM Cost & Circuit** (Platform): tokens in/out, estimated spend vs cap, circuit state per model/provider, fallback reason codes.
-4. **Audit Seal & WORM** (SecEng): seal cadence, seal errors, WORM lag, verification status.
-5. **Portal Security** (SecEng): download rate per org/user, anomaly triggers, link invalidations, adaptive MFA prompts.
-6. **Advisory Locks** (SRE): locks held by scope/kind, age percentiles, stale detections, terminations; link to §41.8 runbook.
-7. **Unit Economics & Delivery** (PM/SRE): cost per case/org; MoM deltas; top 10 expensive cases; delivery counts and failure rates; guard status.
-8. **Portal Messaging** (PM/Support): messages sent/received, open threads, attachment failures, profanity flags, rate-limit denials; SSE fan-out health.
+### 6.13 Shadow mode deployments (binding)
 
-**Alert routing (high level)**
-* Sev-1 pages on: Guardian SLO burn > 2x target 15m; audit seal missed 2 intervals; queue depth > 3× budget 10m.
-* All alerts include `dashboard_url`, and last 5 relevant traces.
+*Purpose: Let new agent behaviours soak in production safely before they become user-visible.*
 
-### 20.3 Runbooks
-**Runbooks (IDs referenced in alerts)**
-* `RB-GUARD-001` Guardian SLO breach
-* `RB-QUEUE-002` Backlog saturation & KEDA tuning
-* `RB-LLM-003` Provider degradation / circuit breaker
-* `RB-AUDIT-004` Audit seal failure
-* `RB-PORTAL-005` Download anomaly & link revoke
-* `RB-LOCK-006` Advisory lock stale detection & remediation
+- Activation: flip `agents.shadow_mode.enabled=true` (ORG/CASE scope) to run the new lane/pipeline against live inputs while suppressing downstream writes. Shadow executions read the same settings snapshot as production jobs and log outputs under `ops/<job_id>__shadow_<agent>_log.json` plus case-level JSONL streams (`ops_shadow_<agent>.jsonl`).
+- Evaluation metrics: compare shadow vs primary outputs using divergence counters (`shadow_match_rate`, `shadow_token_delta`, `shadow_runtime_ratio`) and reviewer sampling tasks. An alert (`agent_shadow_divergence_total`) fires when divergence exceeds configured tolerances.
+- Promotion checklist: (1) shadow match rate ≥ 98% over the agreed soak period, (2) no open Sev-2/3 incidents attributed to the shadow agent, (3) Product/Security sign-off recorded in the decision log, and (4) App.T traceability row updated with tests/monitors/runbooks.
+- Rollback: disable via settings toggle; purge shadow outputs with `ops/scripts/agents/cleanup_shadow.py` to avoid confusing reviewers.
+- Abuse coverage: shadow runs feed the abuse prevention detectors (§B.4) so fraud heuristics see the same traffic profile before we expose new flows to customers.
 
-**Alert routing (high level)**
-* Sev-1 pages on: Guardian SLO burn > 2x target 15m; audit seal missed 2 intervals; queue depth > 3× budget 10m.
-* All alerts include `runbook_id`, and last 5 relevant traces.
+______________________________________________________________________
 
+## 7) Digital signing & Guardian services
 
-### 20.3.1 Runbook RB-LOCK-006 — Advisory-lock stale detection & remediation
-**Purpose:** Detect and remediate session-scoped advisory locks that exceed the configured hold time without breaking correctness.
+### 7.1 Guardian decision pipeline (READY/QUARANTINED rules)
 
-**Signals (any triggers page on-call):**
-* Metric `udlock_watchdog_stale_total{action=alert}` increased in last 5m
-* Lock age P95 > `udlock.max_session_hold_seconds`
-* Repeated stale detections for the same `(scope,k)` within 15m
+*Purpose: Govern artifact readiness before human review or client exposure.*
 
-**Triage — 5-minute checklist**
-1) _Confirm scope & blast radius_
-   * Grafana → **Advisory Locks** dashboard: filter by `scope` and `node_id`.
-   * Note affected `case_id`/`job_id` if `k` is of the form `caseId/jobkind` or `org/case/type`.
-2) _Verify holder liveness_
-   * `SELECT r.scope, r.k, r.node_id, r.backend_pid, now()-r.acquired_at AS age, a.state, a.query
-        FROM udlock.registry r JOIN pg_stat_activity a ON a.pid=r.backend_pid
-       WHERE now()-r.acquired_at > make_interval(secs => :threshold_seconds)
-       ORDER BY age DESC;`
-   * If `a.state IN ('idle','idle in transaction')` or heartbeat > 2× interval → stale.
-3) _Check job/case impact_ (if `scope='jobkind'`)
-   * `SELECT id, kind, status, started_at, finished_at FROM job WHERE case_id=:case LIMIT 1;`
-   * If job still making progress (recent checkpoints) → prefer **notify** over terminate.
+- Terminology: See Appendix I for Guardian decision terms, waiver definitions, and failure categories.
+- Entry point `POST /api/v1/guardian/submit` with signed request body `{artifact_id, org_id, case_id, content_sha256?}` and optional idempotency key. Guardian retrieves artifact + effective settings snapshot.
+- Decision logic evaluates rulesets per org (JSON, versioned) using artifact metadata, manifest fields, settings posture, and optional hashes. If mismatch detected (`content_sha256` vs DB), returns 412 and sets state `QUARANTINED`.
+- State update: artifacts in `DRAFT`/`READY` transition to `READY` or remain `QUARANTINED`. Previously `QUARANTINED` artifacts stay quarantined until resubmitted with a passing decision.
+- Concurrency guard (binding): Guardian loads upstream artifacts using `SELECT ... FOR SHARE` to anchor the decision to the latest committed state; if a parent artifact is demoted in the same window, the child evaluation observes the demotion before issuing a READY verdict, preventing transient approval of stale derivatives.
+- Response includes `decision`, `reasons`, `guardian_decision_id`; idempotency ensures repeated submissions with same payload return prior decision while conflicting payloads yield 409.
+- Hard SLO: decision latency ≤ 5 minutes P95; synthetic jobs validate rule engine and database connectivity (`/synthetic/status`). Guardian merges are blocked unless `tests/guardian/test_concurrent_parent_swap.py::test_child_blocks_on_parent_swap` passes, preventing regressions to the parent-child locking guard.
 
-**Decision tree**
-* **Prod default (`udlock.watchdog.kill_stale=false`)**
-  * _Action:_ Alert only. Post a remediation note in incident channel; ask owner pod to release lock (rolling restart of that worker Deployment if needed).
-  * _Evidence:_ attach top 5 rows from the query above and last job checkpoint id.
-* **Staging / controlled prod exception** (approved by on-call SRE + service owner):
-  * _Terminate session:_ `SELECT pg_terminate_backend(:backend_pid);`
-  * _Verify release:_ lock disappears from `pg_locks`; `udlock.registry` row GC’d within 60s or by `SELECT udlock.gc_registry();`
-  * _Resume:_ If a job was blocked, it resumes on next retry loop.
+- Binding breadcrumbs:
 
-**Post-remediation**
-* Confirm metrics return to baseline (`udlock_locks_held`, `udlock_watchdog_stale_total` plateau).
-* Open a defect if the same `(scope,k)` reappears within 24h; include `node_id`, last 200 lines of the worker pod logs, and query plan of the blocking transaction (if any).
+  | Binding | Implementation | Test | Observability |
+  | ------- | -------------- | ---- | ------------- |
+| FOR SHARE parent guard | `packages/udocket_core/guardian/service.py::evaluate_artifact` | `tests/guardian/test_concurrent_parent_swap.py::test_child_blocks_on_parent_swap` (required CI gate) | Grafana “Guardian Ready Ratio” panel (`guardian_ready_parent_block_total`) |
 
-**Preventive actions**
-* Ensure all session locks are taken via `udlock.try_lock_i(...)` (instrumented) and held < `udlock.max_session_hold_seconds`.
-* Tune `udlock.heartbeat.interval_seconds` to 5–10s; avoid noisy heartbeats (<3s) in production.
-* Add a short “finally” clause in workers to call `udlock.unlock(...)` on early abort paths.
+#### 7.1.2 Reason codes (normative)
 
-**Field runbook snippets**
-* Identify pod from `node_id`: `kubectl get pod -A | grep <node_id>`
-* Bounce a single worker pod: `kubectl delete pod <pod> -n <ns> --grace-period=5`
-* Force GC registry (safe): `SELECT udlock.gc_registry();`
+*Purpose: Standardize machine-actionable reasons and remediation guidance.*
 
----
+- Categories and examples:
+  - `INTEGRITY_HASH_MISMATCH`: content SHA mismatch vs DB. Remediation: resubmit with correct content.
+  - `POLICY_FORBIDDEN_PATTERN`: content violates forbidden pattern. Remediation: edit content; re-run QA.
+  - `POLICY_REGION_BLOCK`: compute/storage region disallowed. Remediation: adjust region; or obtain waiver (§3.6).
+  - `MISSING_SECTION`: required section absent (Compose). Remediation: update template or regenerate.
+  - `SOURCE_NOT_APPROVED`: upstream artifact not APPROVED. Remediation: approve source or select valid input.
+  - `DEBUG_MODE_BLOCKED`: DEBUG enabled in production. Remediation: disable DEBUG.
+  - `RESIDENCY_WAIVER_USED`: waiver applied; flagged for audit. Remediation: verify approvals and rationale.
+- Sample decision record (guardian_decision_history):
+  ```json
+  {
+    "artifact_id": "00000000-0000-0000-0000-000000000000",
+    "org_id": "11111111-1111-1111-1111-111111111111",
+    "idempotency_key": "abc-123",
+    "decision": "QUARANTINED",
+    "reasons": ["POLICY_FORBIDDEN_PATTERN", "MISSING_SECTION"],
+    "rules_version": "2025-10-19.3",
+    "settings_snapshot_sha256": "sha256-...",
+    "decided_at": "2025-10-19T20:15:00Z"
+  }
+  ```
 
-## 21) APIs
+Reason matrix (illustrative)
 
-### 21.1 Staff & Case (REST)
+| Code                     | Category  | Human message              | Remediation                                     | Dashboard tag       |
+| ------------------------ | --------- | -------------------------- | ----------------------------------------------- | ------------------- |
+| INTEGRITY_HASH_MISMATCH  | INTEGRITY | Content integrity mismatch | Re-upload or recompute; resubmit                | integrity_mismatch  |
+| POLICY_FORBIDDEN_PATTERN | POLICY    | Forbidden content detected | Edit content; update patterns if false positive | policy_forbidden    |
+| POLICY_REGION_BLOCK      | POLICY    | Region not allowed         | Change region or obtain waiver                  | policy_region       |
+| MISSING_SECTION          | STRUCTURE | Required section missing   | Update template/prompts; regenerate             | missing_section     |
+| SOURCE_NOT_APPROVED      | STATE     | Upstream not approved      | Approve source; rebind                          | source_not_approved |
+| DEBUG_MODE_BLOCKED       | CONFIG    | Debugging mode blocked     | Disable DEBUG; redeploy                         | debug_block         |
+| RESIDENCY_WAIVER_USED    | WAIVER    | Residency waiver applied   | Verify dual approvals; audit                    | waiver_used         |
 
-#### 21.1.1 Artifacts
-**Upload protocol (with helper lock):**
-1. `POST /api/v1/cases/{case_id}/uploads`
-   * Body: `{ "type": "...", "content_type": "...", "content_length": N?, "expected_sha256": "hex"?, "manifest": {...}? }`
-   * Server creates **upload_session** (no artifact yet) and returns `{ upload_session_id, staging_put_url, upload_token }`.
-2. Client `PUT` object to `staging_put_url` (must include Content-MD5 or `x-amz-meta-sha256`/equivalent).
-3. `POST /api/v1/uploads/{upload_session_id}/finalize`
-   * Headers: `Idempotency-Key`, request signing per §49.
-   * Body: `{ "sha256": "hex", "manifest": {...}, "auto_submit_guardian": true|false }`
-   * Tx (single transaction):
-     * Acquire advisory lock `with_idempotency_lock(org, 'uploadsession', upload_session_id)`.
-     * Verify session active, not expired, and staging object exists.
-     * Verify hash (`sha256` matches header/actual); size and type within policy.
-     * **Server-side COPY** to final key: `/org/{org}/case/{case}/artifact/{new_artifact_id}/content.bin`
-     * **INSERT** into `artifact` with **all immutable columns set**, `state='DRAFT'`, `id = UUIDv7()`.
-     * Mark `upload_session.status='FINALIZED'`.
-   * Response: `{ "artifact_id": "UUID" }`
-   * If `auto_submit_guardian=true` (default), enqueue/perform `submit_guardian` immediately (idempotent).
-4. Cleanup: delete staging object.
+#### 7.1.1 Invariants & idempotency (binding)
 
-**Idempotency:** Reusing the same Idempotency-Key for the same session returns the same `artifact_id`; different signature → **409 CONFLICT** (as §49).
+*Purpose: Make Guardian behavior predictable, testable, and safe under retries.*
 
-**SSE:** Emit `artifact_state` only **after** the artifact INSERT commits.
+- Determinism: the same artifact evaluated under the same rules snapshot yields the same decision and reasons.
+- Idempotency: submitting the same artifact with the same `Idempotency-Key` returns the prior decision; conflicting payloads with the same key yield 409. Guardian caches keys for the same 24-hour TTL defined by `api.idempotency.ttl_hours` so replay windows align with API expectations.
+- Scope of mutation: Guardian only sets the state of the submitted artifact (`DRAFT↔READY` or `QUARANTINED`); it never approves artifacts and never mutates other artifacts.
+- History integrity: `guardian_decision_history` defines a unique index on `(org_id, artifact_id, idempotency_key) WHERE idempotency_key IS NOT NULL` to prevent duplicate keys; a `guardian_decision` view exposes the latest decision per artifact.
+- Residency waivers: when `regions.cross_region_waiver=true` (§3.6), Guardian stamps `cross_region=true` into the artifact manifest and logs `REGION_WAIVER_USED`; waivers require dual approval (Security + Architecture).
+- Signals: on `READY` or `QUARANTINED`, emit `artifact_state` SSE and structured audit events with correlation IDs; consumers must treat these as at-least-once.
+- Superusers: production deployments run without a runtime superuser bypass; database superuser access is reserved for break-glass workflows and audited in Appendix O.
+- Unique index (binding):
+  ```sql
+  CREATE UNIQUE INDEX guardian_decision_history_idem_idx
+      ON guardian_decision_history (org_id, artifact_id, idempotency_key)
+   WHERE idempotency_key IS NOT NULL;
+  ```
 
-**Error mapping:**
-* Hash mismatch → **412 INTEGRITY_ERROR**; session remains not finalized; nothing inserted.
-* Finalize twice → **200** with same `artifact_id` (if idem key matches) or **409** (if not).
-* Expired/aborted session → **409 CONFLICT**.
+### 7.2 Digital signature service (PDF/A, TSA, OCSP)
 
-* **Create artifact:**
-* `POST /api/v1/cases/{case_id}/artifacts`
-  Body: `{ "type": "...", "file" | "json", "manifest": {...} }`
-  → Creates **`DRAFT`**; returns `{ artifact_id }`.
+*Purpose: Produce tamper-evident deliverables with verifiable trust anchors.*
 
-* **Submit to Guardian (idempotent per artifact):**
-* `POST /api/v1/artifacts/{artifact_id}/submit_guardian`
-  Body: `{ "content_sha256": "hex" }`
-  → Guardian evaluates: **`DRAFT→READY`** or `QUARANTINED`.
+- API handles signing requests with `{artifact_id, content_uri, manifest}`; service converts to PDF/A, applies digital signature using org template, and embeds manifests.
+- Trust roots configured via settings (`sign.trust_roots[]`); activation validates certificates, expiry, and records version as audit artifact `SIGN_TRUST_ROOTS@<version>`.
+- OCSP/CRL checks performed per signature; cache responses for min(`max-age`, 12h) with a 30-minute soft-fail window. During the window the portal surfaces a “verification pending” badge, audit logs record `SIGN_VERIFY_SOFT_FAIL`, and downloads remain available. If the responder remains unreachable beyond 30 minutes the signer returns `SIGN_REVOKE_STATUS_UNKNOWN`, the artifact is quarantined from portal delivery, and on-call is paged with escalation to the TSA vendor.
+- TSA integration enforces ±5 second drift vs platform NTP; out-of-drift timestamps rejected. Metrics track `sign_verify_status_total`, `ocsp_latency_seconds`, `ocsp_staple_age_seconds`, `tsa_latency_seconds`, and `tsa_time_drift_seconds`.
+- Output artifacts include signature certificates (`SIGNATURE_CERT`) and optional destruction certificates, each referencing underlying content SHA and manifest.
+- Manifest schema (Pydantic) captures key version, TSA thumbprint, signer identity (Keycloak subject, display name), device fingerprint metadata, and document context; enforcing provenance on every signed artifact.
 
-* **Get metadata:**
-  `GET /api/v1/artifacts/{artifact_id}`
+### 7.3 Request signing and verification (HMAC)
 
-* **Download (must be APPROVED):**
-* `GET /api/v1/artifacts/{artifact_id}/download`
-  → Requires **`state='APPROVED'`**.
+*Purpose: Authenticate inter-service calls crossing trust boundaries.*
 
-* **List artifacts:**
-  `GET /api/v1/artifacts?case_id=&type=&state=&archived=&page=&page_size=`
-  `GET /api/v1/artifacts?scope=org&type=&state=&archived=&page=&page_size=`   # org-wide list, scoped by token’s active_org_id
-  * Per-case list requires **case_id**.
-  * Org-wide list uses **scope=org** (implicitly scoped by the token’s **active_org_id**). `org_id` query param is not supported.
-  * Optional: `consumable=true` (alias for `state=APPROVED`).
+- All mutating APIs (Guardian, Signer, Settings activation) require HMAC headers: `X-Signature-Key-Id`, `X-Timestamp` (RFC3339), `X-Request-Signature`, plus `Idempotency-Key` when supported.
+- Signature computed over canonical request components (`method`, `path`, `timestamp`, `body hash`) with org/service-specific shared keys stored in managed secrets.
+- Receiver validates timestamp skew (\<5 minutes), looks up key ID, recomputes signature, and rejects mismatches with `401 AUTH_ERROR`. Clients should keep system clocks within ±1 minute; retries near the boundary add ±30s random jitter to avoid flapping. Replay protection uses `Idempotency-Key` + short-lived cache.
+- Rotation handled via dual-publish of keys; clients send new key ID with overlap window. Appendix F includes request/response examples.
 
+#### 7.3.1 Key rotation flows (normative)
 
-#### 21.1.2 Jobs
-* `POST /api/v1/cases/{case_id}/jobs/{kind}` with `Idempotency-Key` (stored as `idemp:{org}:{key}` → job ID; TTL configurable, default 24h).
-* `GET /api/v1/jobs/{id}` → status + links.
-* **Control:** `POST /api/v1/jobs/{id}/pause`, `POST /api/v1/jobs/{id}/resume` (resumes from last **job_checkpoint**).
-```sql
--- Add a version column for OCC (already present in §3)
--- Example resume:
-UPDATE job
-   SET status='RUNNING', version=version+1, started_at=COALESCE(started_at, now())
- WHERE id=:job_id
-   AND status IN ('PAUSED','PENDING')
-   AND version=:expected_version;
--- If rowcount=0 → 409 CONFLICT (stale view or illegal transition).
-```
+*Purpose: Ensure safe rollovers without request loss.*
+
+- Dual-publish: maintain `{current, next}` keys; announce rotation window; accept both for N days.
+- Cutover: flip `current=next`; generate new `next`; revoke old with grace; update service configs via Settings activation.
+- Audit: record rotation events; correlate with error spikes; roll back if verification failures increase.
+- Emergency revoke: push denylist for compromised key IDs; page on-call; rotate immediately; verify traffic returns to normal.
+
+### 7.4 Audit trails and decision history models
+
+*Purpose: Provide tamper-evident records for regulators and incident response.*
+
+- `guardian_decision_history` partitioned by `decided_at`; records `artifact_id`, `org_id`, `idempotency_key`, `decision`, `reasons`, `rules_version`, `settings_snapshot_sha256`. View `guardian_decision` exposes latest decision per artifact.
+
+- Signing operations append to `audit_event` with actor metadata, IP, UA, and payload referencing trust-root version and TSA token hash.
+
+- Ops JSONL streams (`ops_transcription.jsonl`, `ops_summary.jsonl`, `ops_compose.jsonl`) capture agent-level context used by Guardian during investigation.
+
+- Break-glass events, waiver usage (cross-region), and trust-root updates require dual approval and generate dedicated audit artifacts per §14 / Appendix D.
+
+- Observability dashboards highlight Guardian decision rates, quarantine reasons, and signature verification outcomes for compliance teams.
+
+- **Source material:** `§5.2`, `§6`, `§49`, `App.A` sequence
+
+- **Priority:** High (legal compliance)
+
+______________________________________________________________________
+
+## 8) LLM governance & runtime
+
+- Glossary: Appendix I documents LLM envelope, FinOps metrics, and prompt terminology used in §8.
+
+### 8.1 Provider registry, health, and selection algorithm
+
+*Purpose: Ensure model selection obeys residency, health, and preference constraints.*
+
+- Settings-driven catalog (`llm.providers[]`, `llm.models[]`) stores endpoints, auth, supported languages, regions, rate limits, pricing, and fallback priorities.
+- Registry polls providers for latency/error rates; circuit breaker flips to OPEN when thresholds exceeded, with half-open probes every 60s.
+- Circuit transitions append to evidence store envelopes with `circuit_state_before`, `circuit_state_after`, and `sample_reason` so FinOps reviews can tie spend impact to selection decisions; the same payload feeds audit events `LLM_CIRCUIT_STATE_CHANGE`.
+- Selection steps: enforce region allowlists (`regions.allowlist.compute/storage`), filter by language/org preference, honor case-specific overrides if healthy, otherwise iterate `fallback_priority`. Token ceilings per job lane cap prompts.
+- Decision trace recorded in logs and evidence store: chosen model, reason code (`PRIMARY_DEGRADED`, `RATE_LIMIT`, `POLICY_REGION_BLOCK`), health snapshot, cost estimate.
+- **Provider data-use posture:** Registry enforces vendor toggles (`llm.providers[].log_retention=false`, `llm.providers[].train_on_data=false`) and verifies contract clauses that forbid prompt/output reuse. Health probes include periodic API checks of provider-side `x-ms-logging-enabled` (Azure) headers; deviations generate `PROVIDER_DATA_POLICY_DRIFT` alerts and block selection until remediated.
+
+### 8.2 Prompt management, redaction, and evidence store
+
+*Purpose: Control prompt content and maintain audit-friendly records.*
+
+- Prompt templates validated via Pydantic with explicit version IDs; stored under `packages/udocket_core/config/` and referenced in manifests.
+- Redaction layer strips PII before sending to providers; outcomes tracked (`redaction_stats`, `forbidden_patterns_detected`).
+- Evidence store (hardened datastore) records `{prompt_template_id, template_version, model_id, model_version, redaction_ruleset_id, input_hashes, output_hashes, request_id, actor_id, case_id, timestamps}`. Access restricted to `auditor|sysadmin`.
+- Logs include truncated prompt/response excerpts with redacted content for debugging; raw prompts never persisted outside short-lived buffers.
+- HIPAA mode: settings flip `evidence_store.redacted_excerpts.enabled=false`, preventing storage of prompt/response excerpts and requiring downstream consumers to rely on manifests, envelopes, and hashed payloads. Investigations rely on the reproducibility envelope plus redaction metrics; support teams debug provider issues by running a `llm_replay` dry-run with scrubbed synthetic inputs rather than exposing original prompts.
+- HIPAA enable guard (binding): Settings activation refuses to persist `privacy.hipaa.enabled=true` until `scripts/privacy/purge_evidence_store.py` completes and uploads a `PRIVACY_PURGE_REPORT` artifact confirming legacy excerpts were removed.
+- Sampling: at least 5 % of inference calls per model/org are reviewed daily; the audit sampler writes signed reports under `ops/security/provider_audits/YYYY-MM/` summarizing detections and confirming provider response headers.
+- Validators: nightly harness runs template checksum/linting and regeneration smoke tests; failures halt deployments until resolved. Evidence store schema validated via `udocket_core.llm.config` Pydantic models.
+- **Vendor assurances:** Contracts and runtime checks assert that Azure Speech, Azure OpenAI, and other sub-processors have “no training on customer data” flags enabled; agent wrappers set `x-ms-azureml-client-env-data-collection=false` (where supported) and audit responses for confirmation. Evidence of the most recent verification lives in `ops/security/provider_audits/`.
+
+- Binding breadcrumbs:
+
+  | Binding | Implementation | Test | Observability |
+  | ------- | -------------- | ---- | ------------- |
+  | HIPAA excerpt suppression | Implementation: `packages/udocket_core/llm/evidence_store.py::store_excerpt` | Test: `tests/udocket_core/llm/test_evidence_store.py::test_hipaa_mode_blocks_excerpts` | Observability: Audit event `HIPAA_EXCERPT_BLOCK` (Privacy dashboard) |
+
+PII posture (binding)
+
+- No raw PII in artifacts produced by LLMs; only masked content is permitted in user-visible outputs per policy.
+- Full, unredacted prompts/outputs may be stored only in the evidence store with encryption at rest, tight RBAC (`auditor|sysadmin`), and retention aligned with privacy posture.
+- Mask‑unmask maps used for redaction are never written to artifacts; they remain confined to the evidence store context.
+
+### 8.3 Cost controls and FinOps budgets
+
+*Purpose: Prevent runaway spend and provide transparency to orgs.*
+
+- Pre-call guard enforces tokens-in ≤ `analyze|compose.token_ceiling` and ensures projected cost + month-to-date ≤ `llm.finops.monthly_cap_usd`. Violations return `429 RATE_LIMIT` with reasons `TOKEN_CEILING` or `BUDGET_EXCEEDED`.
+- Metrics exported: `llm_call_count`, `llm_tokens_in/out`, `llm_cost_estimate_total{org,case,job,model}` feeding FinOps dashboards (`§57.3`).
+- Monthly CSV artifacts `FINOPS_REPORT` generated per org, listing cost breakdowns; Guardian/Reviewer approvals required for distribution.
+- Deployment gate (`§57.4`) blocks releases when month-over-month cost regression exceeds threshold (default 10%).
+
+### 8.7 FinOps deploy guard (binding)
+
+*Purpose: Prevent regressions from shipping without visibility and approval.*
+
+- Trigger: MoM cost regression beyond threshold (default 10%) or trailing 7-day burn exceeding the configured fraction of the monthly cap (default 25%), plus budget breach forecasts for top N orgs.
+- Regression formula: compare projected month-end spend (`month_to_date_actual + (run_rate_7d * remaining_days)`) against the prior full month actual. Guard fires when `(projected - prior_actual) / prior_actual ≥ llm.finops.guard.threshold` after applying a 0.5% smoothing window to ignore rounding noise.
+- Action: Block deploy; page Product/SRE; require approval or mitigation plan; annotate release.
+- CI enforcement: pipeline step `scripts/finops/check_mom_guard.py` runs during release promotion; it fails when either guard (MoM or trailing 7-day) is exceeded and emits a machine-readable report consumed by `deploy-gate:finops`. Results persist as `ops/finops/mom_guard/<release>.json`.
+- Metrics: `finops_mom_regression_flag{org}`, dashboards in §12.6; acceptance requires green state prior to release.
+- Emergency override: `llm.finops.override_until` (SYSTEM) provides a time-boxed bypass (max 72h) restricted to roles `Security Engineering Lead` + `VP Product`; overrides are logged, surface in App.K controls evidence, and expire automatically at the configured timestamp.
+- Trailing 7-day guard: trailing 7-day actual spend must stay ≤ `llm.finops.guard.trailing7d_pct` (default 25%) of the org’s configured `llm.finops.monthly_cap_usd`. Overrides are bounded between 10% and 40% and require Product + Security sign-off.
+- Default guardrail: unless overridden, the system blocks deploys if any organization’s projected month-end spend exceeds the prior month by ≥ `llm.finops.guard.threshold_pct` (default 10%). Any override still requires the checker to pass with the new ceiling.
+
+- Binding breadcrumbs:
+
+  | Binding | Implementation | Test | Observability |
+  | ------- | -------------- | ---- | ------------- |
+  | Regression calc | Implementation: `packages/udocket_core/finops/guard.py::projected_regression_pct` | Test: `tests/udocket_core/finops/test_guard.py::test_regression_formula` | Observability: Grafana “FinOps Guard” panel (`finops_mom_regression_flag`) |
+  | Override allowlist | Implementation: `apps/platform/operations/management/commands/set_finops_override.py` (role check) | Test: `tests/platform/finops/test_override_roles.py::test_only_allowlisted_roles` | Observability: Audit event `FINOPS_OVERRIDE_APPLIED` |
+
+### 8.4 Safety harness (jailbreak tests, policy enforcement)
+
+*Purpose: Guard against prompt injection, bias, and policy breaches.*
+
+- Pre-call injection filters: pattern-based sanitization, allowlist of instructions, region/language cross-check. Policy guard rejects requests hitting forbidden patterns.
+- Golden-set tests: nightly runs across languages evaluate jailbreak resistance, toxicity, fairness; regressions page on-call and block deploys. Promotion to production is blocked unless the release pipeline’s `golden_set:jailbreak` job re-runs clean within the staging window.
+- QA nodes re-validate outputs against schema, length, references, and organization-specific policies (`compose.policy.*`, `analyze.*`). Failures escalate to QA logs and SSE notifications.
+- Forbidden content detection triggers automatic Guardian quarantine request and records event in `audit_event` with reason `LLM_POLICY_BLOCK`.
+
+### 8.5 Reproducibility envelopes & replay strategy
+
+*Purpose: Allow future re-execution or provider migration without ambiguity.*
+
+- Every LLM call persists a reproducibility envelope `{prompt_template_id, template_version, model_id, model_version, stop_sequences, truncation_policy_version, temperature, top_p, penalties, redaction_ruleset_id, token_ceiling, settings_snapshot_sha256, input_hashes, output_hashes}`.
+
+- Envelope stored in evidence store and keyed by job/artifact ID; Compose/Analyze manifests reference envelope IDs for traceability.
+
+- Replay harness can re-run top cases on alternate providers, verifying schema equivalence and logging divergences; used for provider exit drills.
+
+- Fallback policy ensures deterministic IDs remain stable: same inputs + envelope guarantee same structure even if textual content varies.
+
+- Deterministic UUIDv8-HMAC helper (draft binding) defined in §6.7 ensures Events/Entities/Facts remain stable; vectors under `spec/vectors/uuidv8.json` keep CI honest.
+
+- **Source material:** `§7`, `§48`, `§57`, `§54.6-54.10`
+
+- **Priority:** High (LLM oversight is board-level risk)
+
+### 8.6 Provider matrix (illustrative; normative constraints via settings)
+
+*Purpose: Make region/model constraints explicit for ops and reviewers.*
+
+| Provider     | Model ID               | Regions                   | Max context | Notes                                        |
+| ------------ | ---------------------- | ------------------------- | ----------: | -------------------------------------------- |
+| azure_openai | gpt-4o-mini            | canadacentral, canadaeast |      128000 | Default Analyze/Compose profile; low latency |
+| azure_openai | o3-mini                | canadacentral, canadaeast |      200000 | Long-context drafting; higher cost           |
+| azure_openai | text-embedding-3-large | canadacentral, canadaeast |        8192 | Embeddings for retrieval                     |
+
+Notes
+
+- Settings `llm.models[]` define authoritative IDs and regions; this table is illustrative only. Non-Canadian regions are blocked unless waiver (§3.6). Registry health governs selection order (§8.1).
+
+______________________________________________________________________
+
+## 9) Configuration & settings platform
+
+### 9.1 Hierarchical scopes (system/org/case)
+
+*Purpose: Describe how configuration inherits and overrides safely across tenants.*
+
+- Scopes: `SYSTEM` (platform-wide defaults), `ORG` (organization-specific overrides), `CASE` (per-case refinement). Effective settings calculated by overlaying lower scopes onto SYSTEM.
+- Settings defined via Pydantic models, grouped into bundles (e.g., `analyze.*`, `compose.*`, `regions.*`). Bundles track versioning and change metadata.
+- Sensitive keys (secrets, trustroots) stored encrypted; read APIs redact values where necessary. Some keys enforce immutability at certain scopes (e.g., residency constraints cannot be relaxed at CASE level).
+- Each bundle includes validation rules referencing Appendix E for full key catalog and default values.
+
+### 9.2 Settings service APIs and SDK usage
+
+*Purpose: Provide contract for services fetching and snapshotting settings.*
+
+- FastAPI service exposes REST endpoints: `GET /api/v1/settings/<scope>` (effective values), `POST /api/v1/settings/bundles` (activation), `GET /api/v1/settings/bundles/<id>` (metadata), `/api/v1/settings/validate/*` endpoints for region/privacy lints.
+- SDK (`SettingsClient`) caches reads per request/context, supports type-safe access (`get(key, type=...)`), and snapshotting (`snapshot()`) to embed in jobs with `settings_snapshot_sha256`.
+- Authentication via service tokens + HMAC signing for mutating endpoints. Responses include `version_id`, `bundle_id`, and list of contributing scopes for auditing.
+- Clients must avoid direct `.env` reads except for bootstrapping; runtime decisions rely on Settings API to respect dual approvals.
+- Definitions expressed via Pydantic models (illustrative):
+  ```python
+  class SettingDefinition(BaseModel):
+      key: str
+      datatype: Literal['BOOL','INT','FLOAT','STRING','DURATION','ENUM','JSON','REGION','PERCENT']
+      enum_values: list[str] | None = None
+      default_value: Any
+      mutable_scope: list[Literal['SYSTEM','ORG','CASE']]
+      validation_schema: dict[str, Any] | None = None
+  ```
+  - Case-scoped keys (examples): `compose.tone`, `compose.section.length_limits`, `compose.max_retries`, `analyze.token_ceiling`, `portal.link.expiry`, `visibility.operators.scope`.
+  - Org/system keys include residency allowlists, quotas, notifications, LLM provider/model catalogs, TLS policies, `security.field_encryption.*`, `integrity.downstream_action`, request-signing keys, FinOps thresholds, and case enumerations (`case.status.enum`, `case.representation_type.enum`).
+- Privacy helpers: `/api/v1/settings/privacy/templates` exposes DPIA/RoPA template metadata by matrix version so Privacy tooling stays aligned with Appendix H.
+
+### 9.3 Activation workflow, diff preview, and dual approval
+
+*Purpose: Ensure configuration changes are intentional and auditable.*
+
+- Activation flow: proposed bundle submitted with desired overrides and metadata; Settings service computes diff against current effective values, runs validators (policy, residency, safety), and returns `unsafe_reasons[]`.
+- If `unsafe_reasons[]` populated, activation blocked unless `--force` with dual approval (Security + Architecture) and step-up MFA per `§36.10`. Forcing logs justification and attaches to bundle record.
+- Approved activations produce `settings_activation` records with signature, actor IDs, `authorized_roles`, and diff summary; propagate invalidation events over Redis pub/sub.
+- Rollback path leverages stored history; last known good bundle can be re-applied with identical diff log. Activation lock prevents concurrent modifications to same bundle (`activation_lock` advisory key).
+
+### 9.4 Caching, invalidation, and policy compilation
+
+*Purpose: Keep runtime consistent without stale policy decisions.*
+
+- Services maintain in-memory cache keyed by `(scope, org_id, case_id, bundle_id)` with TTL + version checks. Redis distributed cache optional for cross-instance sharing.
+- Invalidation: Settings service publishes `settings.changed` events `{scope, org_id, case_id, bundle_id}`; subscribers flush caches and reload on next access. Health checks verify caches clear after activation.
+- Policy compilation pipeline materializes `effective_permission` and `field_mask_rule` tables per org. Activation jobs run inside workers with transaction-scope locks to avoid race conditions.
+- Drift detection compares cached hash vs actual database values; mismatch triggers warnings and eventual forced reload.
+
+### 9.5 Settings telemetry and drift detection
+
+*Purpose: Provide visibility into config usage and anomalies.*
+
+- Metrics: `settings_cache_hit_ratio`, `settings_activation_total{result}`, `settings_validation_failure_total{reason}`, `policy_compile_duration_seconds`.
+
+- Audit events recorded for every activation, validation failure, and forced override. FinOps monitors track cost-related settings changes.
+
+- Drift detection job scans for stale `settings_snapshot_sha256` on jobs vs current effective hash; results logged and optionally flagged in UI.
+
+- Traceability matrix in Appendix E maps each critical feature (agents, Guardian, FinOps, portal) to settings keys; updates required whenever keys change.
+
+- **Source material:** `§36`, `§45`, `§42`
+
+- **Priority:** High (touches cross-platform config controls)
+
+### 9.6 Policy bundle versioning & diff preview (binding)
+
+*Purpose: Safely evolve settings with visibility and rollback.*
+
+- Version every activation; retain prior bundle; provide human‑readable diff and machine JSON diff.
+- Validate policies (RBAC writes, field unmasking, region widening) and flag `unsafe_reasons[]`.
+- Dry‑run mode compares compiled tables (`effective_permission`, `field_mask_rule`) before/after.
+
+### 9.7 Activation & rollback (binding)
+
+*Purpose: Provide guardrails for changes to take effect.*
+
+- Activation requires approvals (see §9.3) when unsafe; otherwise single approver per policy.
+- On failure or regression, roll back to prior bundle; invalidate caches; recompile policies.
+- Record activation window, approvers, and effects in audit.
+
+### 9.8 Activation lock & uniqueness (helpers + OCC)
+
+*Purpose: Prevent concurrent conflicting activations and ensure uniqueness.*
+
+- Acquire advisory lock `settings-activate:{org_id}`; enforce OCC on `setting_bundle` row.
+- Unique constraint on `ACTIVE` state per org; migrations ensure constraint; OCC update flips active bundle.
+- Source material: `§36.8–36.11`
+
+### 9.9 Enforcement points
+
+*Purpose: Enumerate where runtime must consult Settings or compiled policy.*
+
+- API: authorization (RBAC writes, approvals), CORS, rate limits, portal download guards.
+- Workers: agent configurations (models, budgets), residency policy, Guardian/Signer configs.
+- Frontend: feature flags, UI flows for approvals and messaging, locales.
+- DB: RLS policies and secure masking views referencing compiled tables.
+
+### 9.10 Acceptance
+
+*Purpose: Define completion gates for Settings platform changes.*
+
+- Unit tests: precedence, validators, compilers.
+- Integration: activation dry‑run/diff, rollback, cache invalidation.
+- Security: unsafe change rules flagged; dual approval enforced; audit records complete.
+
+### 9.11 Security review gates (binding)
+- **Immutable logging sink toggle:** activations that set `logging.immutable_sink.enabled=false` are marked **unsafe**; production validators reject the change outright, and lower environments require dual approval (Security + Architecture) with justification captured in the activation audit.
+
+*Purpose: Make governance checkpoints explicit and auditable.*
+
+- Waivers: residency cross‑region waivers require Security + Architecture approvals with step‑up MFA; manifests stamped; Appendix D/E updated.
+- Guardian rule changes: dry‑run/diff required; unsafe reasons enumerated; dual approval enforced; rollback path documented.
+- Settings activation (unsafe): requires dual approval, justification, and audit event; see §9.3 and §36.
+- Org Settings: reviewers and roles configured to reflect these gates; acceptance requires end‑to‑end drill. Governance toggles such as `settings.can_open_source` or cross-org feature pilots must follow App.H RB-GOV-008, including rollback steps and communication checklist before promotion.
+
+______________________________________________________________________
+
+## 10) APIs & integration contracts
+
+### 10.0 API contract & lifecycle governance
+
+*Purpose: Anchor the narrative TDD to machine-readable contracts and a predictable change cadence.*
+
+- Canonical OpenAPI 3.1 specifications live under `ops/openapi/` (`udocket-platform.openapi.yaml` for staff/client surfaces, with service-specific overlays). Every PR that changes endpoints must update the spec and rerun `make lint-openapi` (`npx spectral lint ops/openapi/**/*.yaml --ruleset ops/openapi/spectral.yaml`); CI blocks merges when lint or diff checks fail.
+- Breaking or materially user-visible changes require an ADR (see `docs/adr/README.md` and linked entries such as `ADR-0003-api-versioning-and-sunset.md`) approved by Architecture + Security before the change can progress from **Provisional → Implementable → Implemented**.
+- Versioning policy: monthly “compatible” releases roll on the first business Monday; clients may pin to older behaviour via `X-uDocket-API-Version: YYYY-MM`. Majors ship at most twice per year, demand 90-day notice, and use calendar-versioned prefixes (`2025-02`), while additive changes batch unless explicitly waived.
+- Deprecations follow the cadence published in `docs/api/DEPRECATIONS.md`: announce, provide migration guides, emit `Sunset` headers 90 days before removal, and confirm monitors stay green before final removal (traceability captured in App.T).
+- Deprecation headers follow RFC 9745 (e.g., `Deprecation: date="2026-04-01T00:00:00Z"`) and always pair with `Link: rel="deprecation"` to machine-readable migration notes plus RFC 8594 `Sunset` headers; Spectral rule `sunset-header` enforces the trio.
+- Stripe-style public docs and code samples render directly from the OpenAPI bundle so that examples, schemas, and error contracts stay synchronized with the source of truth.
+
+### 10.1 REST and WebSocket conventions (naming, pagination, errors)
+
+*Purpose: Standardize interface behavior across services for ease of integration.*
+
+- REST base path `/api/v1/` per service; plural resources (`/cases`, `/artifacts`). Mutations use optimistic concurrency (`version`) for idempotent semantics.
+- Pagination envelope `{items, page, page_size, total, next_page}`; sorting `?sort=field:asc`. Invalid sort or masked fields → 400.
+- Error envelope `ApiError { code, message, details?, correlation_id }`; servers always include `X-Request-ID`. Rate-limit headers exposed to browsers (see §10.5 CORS contract).
+- Real-time:
+  - SSE for jobs/cases; emit `progress|state|error|artifact_state` only after committing DB transactions. Monotonic event IDs via Redis `sse:case:{case_id}:seq`.
+  - Channels (WebSocket) for collaborative editing and controls; OIDC-authenticated; topics namespaced per case/job.
+- RBAC/masking: all reads select from `*_secure` views; serializers never “unmask” redacted fields. Gateway rejects spoof headers (`X-Org-ID`, `X-Active-Roles`); authorization derives solely from OIDC claims.
+
+List contracts (normative)
+
+- Sorting: only on whitelisted fields; multiple fields separated by comma; direction with `:asc|:desc` (default asc). Invalid field/direction → 400.
+- Filtering: query params match exact fields; masked fields are not filterable; server may return 400 if filter would breach masking.
+- Examples: `?sort=created_at:desc,type:asc&page=2&page_size=50`; `?case_id=<uuid>&type=SUMMARY_MD`.
+
+### 10.2 Artifact/job/review endpoints
+
+*Purpose: Document key CRUD operations and state transitions.*
+
+- Artifacts
+
+  - List: `GET /api/v1/artifacts?case_id=&type=&state=&archived=&page=&page_size=` (RLS-scoped). Org-wide listing via `scope=org` uses token `active_org_id`; `org_id` param not supported.
+  - Create (DRAFT): `POST /api/v1/cases/{case_id}/artifacts` with `{type, file|json, manifest}`.
+  - Submit to Guardian (idempotent per artifact): `POST /api/v1/artifacts/{artifact_id}/submit_guardian {content_sha256}` → `DRAFT→READY` or `QUARANTINED`.
+  - Get: `GET /api/v1/artifacts/{artifact_id}`; Download: `GET /api/v1/artifacts/{artifact_id}/download` (requires `APPROVED`).
+
+- Jobs
+
+  - Create: `POST /api/v1/cases/{case_id}/jobs/{kind}` with `Idempotency-Key` (TTL default 24h) → returns job id.
+  - Get: `GET /api/v1/jobs/{id}`; Control: `POST /api/v1/jobs/{id}/pause|resume` (OCC on `version`).
+  - Overlap guard: advisory lock `jobkind:{case_id}/{kind}`; conflicts → 409 `JOB_KIND_BUSY`.
+
+- Reviews (OCC + swap lock)
+
+  - Approve: `POST /api/v1/reviews/{artifact_id}/approve {note?, expected_version}`; acquire `case-approval:{org}/{case}/{type}`, demote prior APPROVED of same type, approve if `READY` and version matches; already APPROVED → 200 idempotent.
+  - Reject: `POST /api/v1/reviews/{artifact_id}/reject {note?, expected_version}` symmetrical to approve.
+
+### 10.3 Upload lifecycle & idempotency model
+
+*Purpose: Ensure uploads remain tamper-evident and recoverable.*
+
+- Flow: `POST /api/v1/cases/{case_id}/uploads` creates staging record; client uploads to SAS URL; `POST /api/v1/uploads/{id}/finalize` with `Idempotency-Key` + HMAC promotes to artifact.
+- Finalize transaction:
+  1. Acquire advisory lock via `udlock.xact_lock('uploadsession', upload_session_id)` (helper `with_idempotency_lock`).
+  1. Validate session (`status='PENDING'`, not expired) and presence of staging object.
+  1. Verify provided hash/size/type against policy.
+  1. Server-side COPY staging object to `/org/{org}/case/{case}/artifact/{artifact_id}/content.bin`.
+  1. Insert artifact row (`state='DRAFT'`, immutable fields set) with new UUIDv7 and manifest payload.
+  1. Update session `status='FINALIZED'`; optionally auto-submit to Guardian (idempotent).
+- `upload_session` rows remain short-lived; antivirus and content scanners transition `status` through `UPLOADED` and `SCANNING` before finalize. A janitor task clears `EXPIRED`/`ABORTED` sessions and deletes orphan staging blobs.
+- Idempotency: reuse key within TTL returns same `artifact_id`; reuse with different payload → 409 `IDEMPOTENCY_SIGNATURE_MISMATCH`. TTL default 24h (`api.idempotency.ttl_hours`).
+- Retention: expired keys are purged nightly (and opportunistically on insert) so the table stays bounded; retries beyond TTL must supply a fresh key.
+- Session expiry via janitor; stale sessions cleaned with `EXPIRED`. Range requests supported; all downloads require `APPROVED` state.
+
+#### 10.3.1 Idempotency keys store (binding)
+
+*Purpose: Provide a generic mechanism for safe retries across create/approve flows.*
 
 ```sql
 CREATE TABLE idempotency_keys (
   org_id UUID NOT NULL,
   scope  TEXT NOT NULL,                -- e.g., 'job:create'
   key    TEXT NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  endpoint TEXT NOT NULL,              -- canonical "METHOD:/api/v1/..." string
+  case_id UUID NULL,
+  request_hash BYTEA NOT NULL,         -- sha256 of canonicalised body+query payload
+  status TEXT NOT NULL DEFAULT 'in_progress', -- {'in_progress','succeeded','conflict'}
   result_ref TEXT NULL,                -- e.g., job_id
+  response_code INTEGER NULL,
+  response_hash BYTEA NULL,            -- sha256 of JSON response/body when persisted
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at TIMESTAMPTZ NOT NULL,
   PRIMARY KEY (org_id, scope, key)
 );
+CREATE INDEX idempotency_keys_expiry_idx
+    ON idempotency_keys (expires_at);
+CREATE UNIQUE INDEX idempotency_request_dedupe_idx
+    ON idempotency_keys (org_id, scope, endpoint, request_hash);
 ```
 
-* **Handler algorithm (job create) with helper lock:**
-```
-1) SELECT udlock.xact_lock('job-create', CONCAT(:org_id::text, '/', :key));
-2) INSERT INTO idempotency_keys (org_id,scope,key,result_ref)
-   VALUES (:org_id,'job:create',:key,:job_id)
-   ON CONFLICT (org_id,scope,key) DO NOTHING;
-3) If inserted → create job row and return it.
-   Else → load result_ref (job_id) and return existing job.
+Handler pattern
 
--- Optional overlapping-run guard:
--- BEFORE marking RUNNING:
-SELECT udlock.try_lock('jobkind', CONCAT(:case_id::text, '/', :kind)) AS ok;
--- if ok=false -> 409 JOB_KIND_BUSY; release via udlock.unlock(...) after transition or failure.
+1. `udlock.xact_lock(scope, CONCAT(:org_id,'/',:key))`.
+1. Normalise endpoint to `METHOD:/path` (path variables preserved) and compute `request_hash = sha256(canonical_request_bytes)` via `packages.udocket_core.idem.hash_request`.
+1. Insert `(org,scope,key,endpoint,case_id,request_hash,result_ref,response_code,response_hash,status,expires_at)` on first execution with `expires_at = now() + make_interval(hours => :ttl_hours)`. Conflicts where `request_hash` differs MUST raise 409 `IDEMPOTENCY_SIGNATURE_MISMATCH`; matching hashes update `last_seen_at` and return `result_ref`.
+1. Optional overlapping-run guard per case/kind: `udlock.try_lock('jobkind', CONCAT(:case_id,'/',:kind))` → 409 `JOB_KIND_BUSY` if held.
+
+- Canonical scopes (binding): `IDEMPOTENCY_SCOPES = {'job:create','job:checkpoint','artifact:approve','artifact:upload','upload:finalize'}` exported from `packages.udocket_core.idem.constants`. Services **MUST NOT** invent ad-hoc strings; CI lints specs and Python call sites to use the constant set.
+- Response contract: any API that accepts `Idempotency-Key` **MUST** echo the exact value in the response headers for success and error paths (`Idempotency-Key: <value>`) and emit `Idempotency-Status: fresh|replay|conflict`. OpenAPI lint (`ops/openapi/rules/idempotency-echo.yaml`) enforces the headers on 2xx/4xx/5xx responses.
+- Nightly janitor job `ops/idempotency/purge.py` deletes expired rows and runs `VACUUM (ANALYZE)` to keep the table bounded; `expires_at` is pinned to `api.idempotency.ttl_hours`.
+
+- Binding breadcrumbs:
+
+  | Binding | Implementation | Test | Observability |
+  | ------- | -------------- | ---- | ------------- |
+  | Canonical scope constants | Implementation: `packages/udocket_core/idem/constants.py::IDEMPOTENCY_SCOPES` | Test: `tests/udocket_core/idempotency/test_scopes.py::test_scope_constant_matches_db` | Observability: Buildkite `lint-idempotency` step (scope diff) |
+  | Response echo header | Implementation: `apps/platform/common/middleware/idempotency.py::IdempotencyHeaderMiddleware` | Test: `tests/platform/api/test_idempotency_header.py::test_response_echoes_header` | Observability: API metrics `idempotency_echo_missing_total` |
+  | Replay semantics | Implementation: `packages/udocket_core/idem/service.py::upsert_key` | Test: `tests/platform/api/test_idempotency_replay.py::test_same_key_same_body_vs_conflict` | Observability: Audit event `IDEMPOTENCY_CONFLICT` |
+
+#### 10.3.2 Reviews API (approval with OCC; binding)
+
+*Purpose: Make approval actions safe under concurrency and retries.*
+
+- `POST /api/v1/reviews/{artifact_id}/approve { note?, expected_version }` (implementation follows §5.4.1)
+  - Step 1: `udlock.xact_lock('case-approval', CONCAT(org_id,'/',case_id,'/',type))`.
+  - Step 2: demote existing `APPROVED` artifact for `(case_id,type)` (`state='READY'`, increment `version`).
+  - Step 3: `UPDATE artifact SET state='APPROVED', review_reason=:note, approved_at=now(), approved_by=:user, version=version+1 WHERE id=:artifact_id AND state='READY' AND version=:expected_version`.
+  - Step 4: if rowcount=0 but artifact already `APPROVED`, return 200 (idempotent); otherwise 409 (stale version or state).
+  - Step 5: emit audit + SSE; on demotion/invalidation trigger portal guard per §11.2.1.
+- `POST /api/v1/reviews/{artifact_id}/reject { reason, expected_version }`
+  - Acquire the same `case-approval` lock, `UPDATE artifact SET state='REJECTED', ...` when state∈{`READY`,`APPROVED`} and version matches.
+  - On success emit audit/SSE and portal invalidation events per §11.2.1; conflicts return 409.
+
+### 10.4 Guardian, Settings, and Signature APIs
+
+*Purpose: Enumerate service-specific endpoints integrations rely on.*
+
+- Guardian: `POST /api/v1/guardian/submit`, `POST /api/v1/guardian/quarantine`, readiness endpoints (`/healthz`, `/readyz`, `/rulesz`, `/synthetic/status`).
+- Settings: `GET /api/v1/settings/<scope>`, `POST /api/v1/settings/bundles`, `/api/v1/settings/validate/*` for regions/privacy, `GET /api/v1/settings/changelog`.
+- Digital Signer: `POST /api/v1/sign`, `POST /api/v1/sign/verify`, `GET /api/v1/sign/certificates/{artifact_id}`.
+- Privacy & governance: `POST /api/v1/privacy/dpia`, `POST /api/v1/privacy/ropa`, list/read endpoints (`GET /api/v1/privacy/dpia`, `/api/v1/privacy/ropa`), entitlement history (`GET /api/v1/admin/entitlements/history`). All responses include `X-Request-ID` and follow the ApiError schema; OpenAPI specs tag operations with `privacy` and enforce auditor-only access.
+- Security: HMAC signing required for all mutating operations; examples in Appendix F. SSE under `/api/v1/jobs/{id}/events`.
+
+### 10.5 OpenAPI governance, linting, and example requirements
+
+*Purpose: Keep API documentation consistent and machine-validated.*
+
+- Authoring rules (binding): new operations must reuse shared components (`ApiError`, pagination envelope, security schemes), declare response examples for 2xx/4xx, include tag + summary, document every required header, and map path parameters to UUID formats where applicable. Specs are edited via `ops/openapi/*.yaml`; commits must update corresponding changelog entries.
+- Specs: OpenAPI 3.1 with `x-stability` tags (`stable|beta|experimental`); deprecations emit RFC 9745-compliant `Deprecation` headers (e.g., `Deprecation: date="2026-04-01T00:00:00Z"`) alongside RFC 8594 `Sunset` headers (≥90 days) in accordance with §10.0 policy.
+- Spectral rules (`ops/openapi/spectral.yaml`): enforce `oidc`, `hmacSignature` on mutating ops, error envelope on 4xx/5xx, shared pagination, forbid org/role spoof headers, and fail any spec whose `openapi` field is not `3.1.*` via the `openapi-version` rule.
+- Examples must not include real PII; Spectral rule `no-pii-examples` enforces masking, and rate-limit responses (429) must include `Retry-After`/`X-RateLimit-*` headers as shown in Appendix F.
+- CORS exposure (binding): expose `X-Request-ID, X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset, Retry-After, ETag, Deprecation, Sunset`. Preflight MUST allow the header set defined in Appendix F.12 (`Authorization, Content-Type, Idempotency-Key, X-Request-Signature, X-Signature-Key-Id, X-Timestamp, If-Match, If-None-Match, If-Range, X-Style-Nonce, X-Script-Nonce`); update Appendix F.12 first and mirror it here to avoid drift. Add `Vary: Origin, Access-Control-Request-Method, Access-Control-Request-Headers`.
+- Rate limits & antifraud: per-org and per-IP thresholds; portal download caps with anomaly trip expiring active links; 429 includes rate-limit headers and `Retry-After`. Binding defaults (`api.rate_limits.web.rpm_per_org=600`, `api.rate_limits.web.rpm_per_ip=300`, `portal.download.rate_limits.user_rpm=60`, `portal.download.rate_limits.org_rpm=200`) live in Appendix E; overrides must stay within the 10–2000 RPM guardrails enforced by Settings validation.
+- Idempotency TTL (binding): default 24h; reusing keys after TTL executes anew; conflicting reuse returns 409.
+- CI: `spectral lint` and schema diff checks gate merges; examples validate. Appendix F holds canonical payloads.
+
+**Acceptance**
+
+- Unit: `make lint-openapi` (`npx spectral lint`) enforces Spectral rules (including `openapi-version`) and shared component usage.
+- Integration: `tests/e2e/test_rate_limit_headers.py::test_429_headers` runs in staging to assert rate-limit/Retry-After headers match Appendix F.12.
+- Security: `scripts/security/verify_cors_headers.py` validates the CORS exposure list in Appendix F.12 and fails on regressions; OWASP ZAP smoke confirms no over-exposed headers.
+
+Binding breadcrumbs:
+
+  | Control | Implementation | Test | Observability |
+  | ------- | -------------- | ---- | ------------- |
+  | OpenAPI 3.1 enforcement | `ops/openapi/rules/openapi-version.yaml` | `make lint-openapi` (`npx spectral lint ops/openapi/**/*.yaml`) | Buildkite `lint-openapi` stage |
+  | Rate-limit header contract | `apps/platform/api/middleware/rate_limiting.py::append_rate_limit_headers` | `tests/e2e/test_rate_limit_headers.py::test_429_headers` | Metric `api_rate_limit_header_miss_total` |
+  | CORS exposure policy | `config/settings.py::CORS_EXPOSE_HEADERS` & Settings bundle `security.cors` | `scripts/security/verify_cors_headers.py` | CI job `security-headers` / Grafana “API Security Headers” panel |
+
+- **Source material:** `§21`, `§44`, `§52`, `§21.9`, `§47`
+
+- **Priority:** High (interfaces for downstream tooling & partners)
+
+### 10.6 HTTP caching & range behavior (binding)
+
+*Purpose: Standardize safe and efficient delivery semantics for approved artifacts.*
+
+- Preconditions: downloads require `state='APPROVED'`; token or signed URL must authorize access to the case/org.
+- ETag: responses include a strong validator derived from `artifact.content_sha256` and encoded as a quoted base16 string with a `sha256:` prefix (e.g., `"sha256:0123abcd..."`). The value stays stable across full and ranged requests. Clients may use `If-None-Match` for conditional GETs (304) and `If-Range` for resumable downloads; weak validators are forbidden.
+- Range requests: support `Range: bytes=...`; respond with `206 Partial Content`, include `Content-Range`, `Accept-Ranges: bytes`, and correct `Content-Length` for the segment. Full responses remain `200 OK`.
+- Headers: include `Content-Disposition` with a safe filename; expose `ETag` via CORS (see §10.5). Signed URLs include short TTLs; servers reject expired or mismatched signatures.
+- Caching policy: emit explicit cache directives (e.g., `Cache-Control: private, no-cache` for non-PII, `private, no-store` for PHI/HIPAA artifacts) per org policy. Prefer conditional requests with ETag over long-lived caches for PII.
+- Integrity: optional segment integrity checks via store MD5/CRC when available; canonical integrity remains SHA-256 at artifact creation.
+- HEAD: support `HEAD` to return metadata (ETag, length) so clients can plan range requests.
+- Token enforcement: single-use signed URLs rely on `download_token` rows; fetching requires successful token consumption and verifies artifact hash/state plus current residency allowlists (deny with 403 `POLICY_BLOCK` if regions drift).
+- Content metadata (binding): `artifact.content_length` stores the byte length computed at write time; release tests compare it against the object store’s metadata after every deploy to catch silent truncation.
+- Contract test: staging job `tests/e2e/test_artifact_range_download.py::test_range_and_conditional_gets` performs full GET → captures the strong ETag → issues an `If-Range` request and verifies partial content → retries with `If-None-Match` expecting 304. The deploy pipeline blocks if any step fails.
+- ETag invariance: the download service recomputes SHA-256 after fulfilling range requests and compares it to `artifact.content_sha256`; mismatches raise `INTEGRITY_ERROR` and quarantine the artifact.
+
+**Acceptance**
+
+- Unit: `tests/platform/artifacts/test_content_metadata.py::test_content_length_persisted` verifies metadata persistence and ETag helpers.
+- Integration: `tests/e2e/test_artifact_range_download.py::test_range_and_conditional_gets` exercises range/conditional flows across staging object storage.
+- Security: `scripts/security/verify_download_tokens.py` validates download-token expiry, residency guards, and HIPAA cache directives prior to release.
+
+- Binding breadcrumbs:
+
+  | Binding | Implementation | Test | Observability |
+  | ------- | -------------- | ---- | ------------- |
+  | `content_length` persistence | Implementation: Migration `apps/platform/artifacts/migrations/0023_add_content_length.py` & ORM `CaseArtifact.content_length` | Test: `tests/platform/artifacts/test_content_metadata.py::test_content_length_persisted` | Observability: Grafana “Artifact Metadata Drift” panel (alerts on mismatched lengths) |
+  | Range/ETag staging test | Implementation: `tests/e2e/test_artifact_range_download.py` (GitHub Actions `deploy-gate`) | Test: `tests/e2e/test_artifact_range_download.py::test_range_and_conditional_gets` | Observability: Buildkite deploy gate log (`range-etag-contract`) |
+
+### 10.7 Error model and codes (normative)
+
+*Purpose: Provide a consistent envelope and code semantics across services.*
+
+- Envelope (binding):
+  ```python
+  class ApiError(BaseModel):
+      code: Literal[
+        "POLICY_BLOCK","QUARANTINED","INTEGRITY_ERROR",
+        "VALIDATION_ERROR","AUTH_ERROR","NOT_FOUND",
+        "CONFLICT","RATE_LIMIT","PROVIDER_DEGRADED"
+      ]
+      message: str
+      details: dict[str, Any] | None = None
+      correlation_id: str
+  ```
+  - Servers echo the `Idempotency-Key` header (if present) in responses to aid callers with safe retries.
+- HTTP mapping examples:
+  - `409 CONFLICT`: `code="CONFLICT"` (idempotency mismatch, stale OCC version, job kind busy).
+  - `412 PRECONDITION_FAILED`: `code="INTEGRITY_ERROR"` (hash mismatch) or `code="POLICY_BLOCK"` (portal invalidation).
+  - `429 TOO_MANY_REQUESTS`: `code="RATE_LIMIT"` (rate ceilings, token budgets); include `Retry-After`, rate-limit headers per §10.5 and `details.retry_after_ms` when known.
+  - `503 SERVICE_UNAVAILABLE`: `code="PROVIDER_DEGRADED"` (circuit open, dependency outage).
+- Headers: always emit `X-Request-ID`; add `Retry-After`, `Deprecation`, `Sunset`, and rate-limit headers when applicable. Error payloads are included in Spectral lint checks (§10.5).
+
+Client retry guidance (normative)
+
+| Error code                        | Typical cause                       | Client action                                                                |
+| --------------------------------- | ----------------------------------- | ---------------------------------------------------------------------------- |
+| `CONFLICT` + stale `version`      | Optimistic concurrency failure      | Re-fetch resource, apply latest state, retry with updated `expected_version` |
+| `CONFLICT` + idempotency mismatch | Replayed key with different payload | Generate a new `Idempotency-Key`; ensure request body matches original       |
+| `RATE_LIMIT`                      | Per-org/IP quota exceeded           | Honor `Retry-After` header; exponential backoff                              |
+| `POLICY_BLOCK`                    | Guardian/portal policy violation    | Surface message to operator; resolve underlying policy issue before retrying |
+| `QUARANTINED`                     | Guardian rejected artifact          | Present remediation reasons; require manual fix                              |
+| `INTEGRITY_ERROR`                 | Hash/ETag mismatch                  | Re-upload/file new hash; do not retry blindly                                |
+
+### 10.8 SSE event schema & sync snapshot (normative)
+
+*Purpose: Define canonical SSE events and replay behavior.*
+
+- Event types: `job.update`, `artifact.state`, `qa.notes`, `portal_link_invalidated`, `settings.activated`.
+- Envelope: `id` (monotonic), `event`, `data` (JSON), `retry` (ms). `data` for snapshot payloads includes `watermark_ts` to indicate the newest event timestamp included. `id` echoes in `Last-Event-ID`.
+- Sequencing: IDs are monotonic per stream (`sse:case:{case_id}` and `sse:job:{job_id}`) and minted via Redis `INCR`, ensuring ordered delivery across multiple web pods without requiring cross-stream ordering.
+- Sync snapshot: if `Last-Event-ID` predates the 15-minute/500-event replay window (whichever comes first), the server emits a snapshot (RLS‑scoped) containing the last 500 events and `watermark_ts` before tailing live updates.
+- Delivery: at‑least‑once; clients de‑dupe via `id`. Snapshots include a bounded window and `watermark_ts` so consumers know when they are live. Individual events are capped at 8 KiB payloads (post-JSON encoding) and Redis stream memory budgets target ≤ 256 MiB per environment; SREs size `stream.maxlen` accordingly.
+- Operational SLOs: 95th percentile client-perceived delivery latency (`sse_client_delivery_lag_seconds`) stays \< 2 s and 99th percentile \< 5 s; alert `alert_sse_delivery_lag_high` pages when either threshold is exceeded for five consecutive minutes.
+- Replay guardrails: snapshot builds MUST complete within 2 s and stay \< 5 MiB serialized (`sse_snapshot_build_duration_seconds`, `sse_snapshot_size_bytes`). Alert `alert_sse_snapshot_regression` fires and blocks deploys when limits are exceeded.
+- Security: events enforced by RLS; tokens bound to org/case; portal receives a subset.
+- Settings Service emits identical payloads via SSE (`settings.activated`) and Redis `settings.changed` events so workers and browser clients observe the same activation metadata.
+- Retention: SSE replay buffers keep 24 hours of events; reconnects beyond that window receive a snapshot plus the latest live tail.
+- Load testing: quarterly chaos runs (`scripts/sse/load_test.py`) fan 5k concurrent tails at 1 Hz updates to validate Redis memory ceilings and event-size caps; results feed App.L baselines.
+- Source material: `§45`, `§50`
+
+**Acceptance**
+
+- Unit: `tests/platform/realtime/test_sse_payloads.py::test_event_schema` validates canonical event envelopes and size limits.
+- Integration: `tests/e2e/test_sse_reconnect.py::test_last_event_snapshot` asserts Last-Event-ID replay + snapshot delivery in staging.
+- Security: `tests/e2e/test_sse_token_binding.py::test_disconnect_on_org_switch` confirms token expiry/org switch closes connections and emits audit events.
+
+Binding breadcrumbs:
+
+  | Control | Implementation | Test | Observability |
+  | ------- | -------------- | ---- | ------------- |
+  | SSE stream contract | `apps/platform/realtime/sse.py::StreamPublisher` | `tests/platform/realtime/test_sse_payloads.py::test_event_schema` | Metric `sse_payload_size_bytes` / Grafana “Realtime Streams” panel |
+  | Snapshot replay | `apps/platform/realtime/sse.py::snapshot_payload` | `tests/e2e/test_sse_reconnect.py::test_last_event_snapshot` | Metric `sse_snapshot_gap_seconds` |
+  | Token-bound disconnect | `apps/platform/realtime/auth.py::enforce_token_binding` | `tests/e2e/test_sse_token_binding.py::test_disconnect_on_org_switch` | Audit event `SSE_DISCONNECT_TOKEN_MISMATCH` |
+
+Payloads (illustrative)
+
+| Event                   | data fields                                                          | Notes                                                 |
+| ----------------------- | -------------------------------------------------------------------- | ----------------------------------------------------- |
+| job.update              | `{ job_id, case_id, org_id, status, progress?, error? }`             | `status ∈ {PENDING,RUNNING,PAUSED,FAILED,COMPLETED}`  |
+| artifact.state          | `{ artifact_id, case_id, org_id, type, state, previous_state?, ts }` | `state ∈ {DRAFT,READY,QUARANTINED,APPROVED,REJECTED}` |
+| qa.notes                | `{ job_id?, artifact_id?, case_id, notes:[{level,msg,ts}] }`         | Levels: INFO                                          |
+| portal_link_invalidated | `{ artifact_id, case_id, reason, ts }`                               | Portal consumes to revoke stale links                 |
+| settings.activated      | `{ scope, org_id?, case_id?, bundle_id, version_id, ts }`            | Triggers cache invalidation on clients                |
+
+Examples
+
+```json
+// job.update
+{ "id":"1024","event":"job.update","data": {"job_id":"...","case_id":"...","org_id":"...","status":"RUNNING","progress":42}}
+
+// artifact.state
+{ "id":"1030","event":"artifact.state","data": {"artifact_id":"...","case_id":"...","org_id":"...","type":"SUMMARY_MD","state":"APPROVED","previous_state":"READY","ts":"2025-10-19T21:12:00Z"}}
+
+// portal_link_invalidated
+{ "id":"1035","event":"portal_link_invalidated","data": {"artifact_id":"...","case_id":"...","reason":"APPROVAL_SWAP","ts":"2025-10-19T21:14:00Z"}}
+
+// snapshot bootstrap payload (truncated)
+{ "id":"snapshot","event":"artifact.snapshot","data": {"watermark_ts":"2025-10-19T21:14:00Z","events":[{"artifact_id":"...","state":"READY"}, {"artifact_id":"...","state":"APPROVED"}]}}
 ```
 
-* **Janitor:** delete rows older than TTL (24h) hourly.
+### 10.9 Rate limits & antifraud controls
+
+*Purpose: Prevent abusive usage while providing clear backoff guidance.*
+
+- Global throttles: `api.rate_limits.web.rpm_per_org`, `api.rate_limits.web.rpm_per_ip`; 429 responses include `Retry-After`, `X-RateLimit-*`, and support exponential backoff guidance.
+- Portal downloads: per-user/org caps (`portal.download.rate_limits.*`) with anomaly detection; exceeding triggers `portal_link_invalidated` and optional step-up MFA.
+- SSE/Channels: server disconnects on org switch or token expiry; reconnects honour backoff (`retry` field) and enforce token binding.
+- Fraud signals: repeated 4xx from a single IP escalate to security incident workflow; rate-limit spikes logged via `API_RATE_ALERT` audit events.
+- Source material: `§21.7`, `§45`
+
+### 10.10 Timezone & clock policy
+
+*Purpose: Guarantee consistent timestamps across APIs, UI, and downstream systems.*
+
+- **Storage:** All persisted timestamps use UTC (`TIMESTAMP WITH TIME ZONE`) with millisecond precision; APIs return ISO 8601 UTC (`Z`) strings. Case/portal locale rendering converts at presentation time only.
+- **Client hints:** Requests may include `X-Client-Timezone` for UX personalization; server never trusts it for persistence or policy enforcement.
+- **Clock hygiene:** Services rely on chrony/NTP with ±100 ms drift budget (aligned with TSA requirements in §3.2). Health checks fail closed if drift exceeds 250 ms; alerts page SRE.
+- **UI controls:** Date pickers default to case locale; portal displays timezone label on deliverables and approvals. Manual edits capture both UTC timestamp and operator-local zone for audit clarity.
+- **Backfills/migrations:** Jobs ensure time arithmetic uses timezone-aware APIs; tests verify `created_at`/`decided_at` fields remain UTC during bulk updates.
+
+______________________________________________________________________
+
+## 11) Frontend & client experience
+
+- Glossary: Appendix I defines approval roles, portal messaging objects, and artifact states referenced here.
+
+### 11.1 Staff UI (case workspace, approvals, analytics)
+
+*Purpose: Summarize the operator/reviewer experience and dependencies.*
+
+- Case workspace shows artifact timeline, job status, approvals queue, and Guardian outcomes; integrates with SSE for live updates and Channels for collaborative notes.
+- Approvals panel enforces multi-step review (agent output, manual edits) with OCC guardrails; components display readiness, reviewer count, and pending manual edits.
+- Analytics dashboards surface LLM cost, artifact coverage, QA issues; data sourced from `audit_event`, `ops_*` logs, and FinOps metrics.
+- Component-level permissions derived from Settings-driven policy map; UI respects field masks (e.g., masked SHA values replaced with `[REDACTED]`).
+
+### 11.2 Client portal (document delivery, messaging, access controls)
+
+*Purpose: Outline client-facing surface and data exposure guardrails.*
+
+- Portal provides read-only access to approved artifacts, messaging with staff, and signoff flows. Download links are signed and time‑bound; range support per §10.6.
+- Messaging system (see §11.6) allows secure replies; attachments stored as artifacts with Guardian review before release.
+- Access dependent on Keycloak `org_client` role; portal tokens shorter-lived with automatic step-up for approvals/signoffs.
+- Portal UI enforces cross-org isolation by closing sessions on org switch and clearing caches when token scope changes.
+
+#### 11.2.1 Portal invalidation (binding)
+
+*Purpose: Ensure clients cannot access stale or revoked artifacts after review actions.*
+
+- The platform invalidates active portal links whenever an approval swap demotes a previously `APPROVED` artifact of the same `(case,type)`, a reviewer rejects an `APPROVED` artifact, Guardian sets the artifact to `QUARANTINED`, or integrity monitoring raises `ARTIFACT_INTEGRITY_MISMATCH`.
+- Invalidations emit `portal_link_invalidated {artifact_id, reason, ts}` events and SSE notifications; subsequent downloads return `403` and the portal shows a denial banner.
+- Indexes/search hide demoted or rejected artifacts; portal lists reflect only the latest `APPROVED` artifacts per exclusive type.
+- Copy surfaced to clients is settings-driven via `i18n.portal.invalidation.message_key`, allowing Product/Legal to localize or update messaging without code changes.
+
+#### 11.2.2 Fetch-time guard (binding)
+
+*Purpose: Enforce explicit checks on every fetch to avoid stale or unauthorized content.*
+
+- Preconditions: `state='APPROVED'`, case/org membership, and fresh signed URL or token.
+- Conditional requests: clients **MUST** send `If-Match` with the last seen strong ETag (surfaced inline on the portal artifact detail panel as “Integrity tag” and embedded in the download button tooltip); mismatches or missing headers yield `412 PRECONDITION_FAILED` with guidance (`portal.download.error.etag_mismatch`) to refresh metadata before retrying.
+- Rate limits: per‑user/org caps; anomalies invalidate links and prompt step-up MFA when configured.
+
+### 11.3 Accessibility (WCAG AA) and localization strategy
+
+*Purpose: Ensure frontends meet accessibility and language requirements.*
+
+- WCAG 2.2 AA compliance: keyboard navigation, focus states, ARIA labels, color contrast checks. Automated audits run in CI; manual audits scheduled per release.
+- Localization: staff UI initially English/French; portal supports additional locales via Settings (`i18n.supported_locales[]`). Strings managed in translation files with fallback logic.
+- Date/time formatting relies on case locale; transcripts labelled with language metadata. Screenreader testing prioritized for approval flows and messaging. All new flows must ship with explicit focus order verification and accessible error messaging (ARIA `role="alert"` or equivalent) for SSR and SPA states.
+- Templates offer locale variants with placeholder linting per locale; cross-language toggle supported for courts/catalogs. RTL readiness documented for supported locales; fallback flags alert admins when translations are missing.
+- CI runs pseudolocalization suite (`scripts/i18n/pseudolocale.sh`) and axe-core screen-reader scripts; latest WCAG audit summary stored as `ACCESSIBILITY_AUDIT` artifact (referenced in App.L). Every GA release requires a pre-cut `pa11y-ci`/axe DevTools sweep documented in the release checklist. Accessibility KPI dashboard tracks open issues, assistive-technology test passes, and remediation SLAs.
+- Merge-stop checklist: accessibility reviewers block merges when (1) any keyboard trap persists, (2) focus order diverges from visible reading order, (3) form errors fail to raise an ARIA live region announcement, or (4) the automated axe/pa11y run reports level-A/AA violations without documented mitigation.
+
+### 11.4 Real-time collaboration (SSE + Channels policies)
+
+*Purpose: Govern multi-user interactions without compromising security.*
+
+- SSE streams status updates (`job.update`, `artifact.state`, `qa.notes`) to both staff and clients with token-binding; server disconnects on token expiry or org switch.
+- Channels-based editors allow Manual/Agent edits with conflict resolution; optimistic locking ensures edits create new artifact versions awaiting approval.
+- Real-time controls (pause/resume jobs, rerun Guardian) restricted to authorized roles; commands processed via Channels with audit events capturing actor and outcome.
+
+### 11.5 Security hardening (headers, anti-phishing, download guards)
+
+*Purpose: Mitigate browser threats and misuse.*
+
+- Security headers: enforced baseline CSP plus HSTS, frame, and referrer protections. Staff and portal responses MUST emit  
+  `Content-Security-Policy: default-src 'self'; frame-ancestors 'none'; script-src 'self' 'nonce-{csp-script-nonce}'; style-src 'self' 'nonce-{csp-style-nonce}'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://{api_host}; base-uri 'none'; form-action 'self'` (prod). Nonce values are generated per response, injected into rendered templates, and surfaced to the frontend build via the `X-Style-Nonce`/`X-Script-Nonce` headers so components can set matching `nonce` attributes. Lower environments may append `localhost` origins via `security.csp.extra_connect_hosts[]` and register specific hash exceptions through `security.csp.extra_style_hashes[]`; `unsafe-inline` is forbidden in prod. `Strict-Transport-Security: max-age=63072000; includeSubDomains` remains mandatory in prod, optional elsewhere. Additional headers: `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Permissions-Policy: camera=(), microphone=()`. CI test `tests/e2e/test_security_headers.py::test_csp_header_enforced` asserts the header (nonces masked but positionally present); failures block merges. Full header requirements (exposed, allowed, and prohibited) live in Appendix F.12.
+
+- Anti-phishing: link verification, suspicious message detection, `Report` workflows logging to audit event.
+
+- Downloads enforce `APPROVED` state, `If-Match` checks, and limit simultaneous downloads per user to deter scraping. Portal messaging attachments scanned via malware pipeline (§37.3).
+
+- Browser fingerprinting and anomaly detection integrate with Settings to flag suspicious access patterns.
+
+**Acceptance**
+
+- Unit: `tests/ui/test_csp_nonced.py::test_nonce_roundtrip` asserts CSP helper emits matching script/style nonces and forbids inline fragments.
+- Integration: `tests/e2e/test_security_headers.py::test_csp_header_enforced` validates production headers (including Appendix F.12 exposure) in staging; `tests/e2e/test_portal_download_guard.py::test_if_match_required` exercises download preconditions.
+- Security: `scripts/security/verify_csp_nonce.py` and `scripts/security/verify_portal_downloads.py` run in the release pipeline to confirm nonce propagation, If-Match enforcement, and HIPAA cache directives.
+
+Binding breadcrumbs:
+
+  | Control | Implementation | Test | Observability |
+  | ------- | -------------- | ---- | ------------- |
+  | CSP nonce emission | `apps/platform/ui/security/csp.py::build_csp_header` | `tests/ui/test_csp_nonced.py::test_nonce_roundtrip` | CI job `security-headers`; Grafana “Frontend CSP” panel (`csp_nonce_mismatch_total`) |
+  | Portal download guard | `apps/platform/portal/downloads.py::enforce_if_match` | `tests/e2e/test_portal_download_guard.py::test_if_match_required` | Metric `portal_412_precondition_total` / audit event `PORTAL_DOWNLOAD_PRECONDITION` |
+  | Phishing report logging | `apps/platform/notifications/phishing.py::log_report_event` | `tests/platform/notifications/test_phishing_workflow.py::test_report_logs_audit` | Audit event `PORTAL_PHISHING_REPORT`; Grafana “Abuse Signals” panel |
+
+- **Source material:** `§18`, `§11.6`, `§21.2`, `§29.4`, `§45`
+
+- **Priority:** Medium (align with UX strategy)
+
+______________________________________________________________________
+
+### 11.6 Secure portal messaging (scope, model, APIs)
+
+*Purpose: Enable secure, RLS‑enforced messaging between clients and staff with attachments.*
+
+- Scope: internal messaging only (non‑email/SMS), stored in DB + object storage; attachments are first-class artifacts (`ATTACHMENT_RAW`/`ATTACHMENT_TEXT`) so they inherit Guardian review, retention, and portal invalidation semantics.
+- Data model & RLS: `message_thread`, `message`, `message_attachment`, `message_read_receipt`; `message_attachment` stores lightweight metadata and the backing `ATTACHMENT_*` artifact id so RLS/Guardian controls apply uniformly; secure views mirror case membership policies.
+- Object storage: separate prefix for attachments; scanning pipeline; retention tied to case lifecycle.
+- APIs: list/create messages/attachments, read receipts, thread visibility; rate limits apply; signed URLs for attachments.
+- Settings: enable/disable per org; size/type allowlists; retention overrides.
+- Observability: delivery/read metrics, anomaly detection; alerts on abuse patterns.
+
+### 11.7 Manual/Agent edit flows & dual approval
+
+*Purpose: Clarify reviewer counts, state transitions, and UI prompts for edit workflows.*
+
+- Manual Edit: creates a child version (`DRAFT`); reviewers (count configurable per `reviews.required_types[]`) must approve before promotion; demotes any prior APPROVED exclusive artifact.
+- Agent Edit: interactive session produces a candidate child; same approval semantics as Manual Edit; UI shows “AI Assisted” badge with audit trail.
+- Dual approval: certain artifacts (e.g., legal deliverables) require two distinct reviewers (roles defined in Settings); UI displays remaining approvals and enforces step-up MFA when configured.
+- Database guardrails enforce distinct approvers via a partial unique index (e.g., `CREATE UNIQUE INDEX approve_once_per_user ON artifact_review (artifact_id, reviewer_id, approval_type) WHERE state IN ('PENDING','APPROVED')`), preventing the same reviewer from consuming multiple required slots.
+- i18n: all approval banners, edit prompts, and invalidation copy are localized via settings-driven strings (`i18n.*`).
+- Source material: §§11, 21; see Appendix A.8 for state diagrams
+
+### 11.8 Notifications & outbound communications
+
+*Purpose: Guarantee idempotent delivery across email/SMS/providers while preserving audit trails.*
+
+- Outbox pattern: `outbox_delivery` stores messages with `status`, OCC `version`, retry counters, and provider metadata. Workers claim batches via `FOR UPDATE SKIP LOCKED` and transition states atomically (`status='PENDING' → 'SENDING'`) with OCC checks to avoid duplicate sends.
+- Provider idempotency: unique constraint on `(org_id, channel, external_message_id)` prevents replays; delivery receipts enforce `(org_id, channel, provider_event_id)` uniqueness before updating status.
+- Webhook intake: verifies HMAC (`X-Request-Signature`), updates receipts under OCC, and writes `delivery_receipt_secure` view rows for auditor access.
+- Email deliverability: org onboarding validates SPF/DKIM alignment; DMARC policy must be `quarantine` or `reject` for production domains. Bounce/complaint webhooks feed delivery receipts and trigger follow-up tasks.
+- SMS compliance: enforce opt-in state, STOP/HELP handling, and region-specific sender policies; shortened links stay case/org scoped and inherit download-token rules.
+- Download tokens: signed URLs include `artifact_id`, hash, state, expiry, and optional single-use flag. Fetch flow validates tokens via `download_token` table before streaming.
+- Sender workers claim batches with `FOR UPDATE SKIP LOCKED` and OCC (`version` column) to ensure single flight per outbox row; helper functions encapsulate the lock usage.
+- SQL guardrails (normative):
+  ```sql
+  ALTER TABLE outbox_delivery
+    ADD COLUMN external_message_id TEXT,
+    ADD COLUMN version INT NOT NULL DEFAULT 0,
+    ADD CONSTRAINT outbox_unique_extmsg UNIQUE (org_id, channel, external_message_id);
+
+  ALTER TABLE delivery_receipt
+    ADD COLUMN provider_event_id TEXT,
+    ADD CONSTRAINT receipt_provider_event_unique UNIQUE (org_id, channel, provider_event_id);
+  ```
+- Resend logic first checks these unique keys; if a provider reports an already-sent ID, the system treats it as delivered and avoids re-sending. Audit events capture every send/receipt attempt with correlation IDs.
+- Region revalidation: on every download, ensure `artifact.manifest.storage_region` (and `compute_region`, when present) remains within the current effective allowlist; violations return 403 `POLICY_BLOCK` with audit events.
+- Source material: §17; Appendix F exemplars
+
+### 11.9 In-app notifications
+
+*Purpose: Cover real-time notifications inside the portal/staff UI.*
+
+- Channels: rendered through SSE/Channels with read receipts; stored as `IN_APP_NOTIFICATION` artifacts when audit needs persistency.
+- Rate limits: share same quotas as outbox notifications; Settings keys `notifications.in_app.rate_limit_per_minute` and `notifications.in_app.daily_cap`.
+- L10n: UI strings localized via `i18n.notifications.*`; actions link to case resources with RLS checks.
+- Observability: metrics `inapp_notification_sent_total`, `inapp_notification_click_total`; anomalies trigger `alert_notifications_inapp_anomaly` with App.H runbook reference.
+
+### 11.10 Document assembly pipeline
+
+*Purpose: Describe post-Compose rendering, linting, and approval loop.*
+
+- Inputs: latest `COMPOSE_CLIENT`/`COMPOSE_LAWYER` artifacts and organization templates (`TEMPLATE` artifacts) selected via Settings.
+- Steps: lint placeholders, render DOCX (optionally PDF/A), compute SHA-256, write `ASSEMBLED_DOC_*` artifacts (`DRAFT → READY → APPROVED`).
+- Exclusive types: approving a new assembled document demotes the prior APPROVED version atomically (same swap logic as Compose).
+- Telemetry: emit metrics `document_assembly_duration_seconds`, `document_assembly_error_total`; lint warnings recorded in ops logs for reviewer visibility.
+
+## 12) Observability, reliability & operations
+
+- Glossary: Appendix I includes observability metrics, watchdog terminology, and quota concepts cited in §12.
+
+### 12.1 Telemetry stack (logs, metrics, traces)
+
+*Purpose: Ensure platform-wide visibility, SLOs, and actionable alerts.*
+
+- Structured logs: `ts, trace_id, span_id, service, level, message, correlation_id, org_id, case_id, user_id, job_id, artifact_id, route, action, result, latency_ms, ip_prefix, ua_hash, settings_bundle_id` with PII redaction.
+- Canonical schema (binding): every log event serializes to newline-delimited JSON matching `log_schema@1`. Example:
+  ```json
+  {
+    "ts":"2025-10-20T03:12:45.183Z",
+    "level":"INFO",
+    "service":"platform-web",
+    "src":"apps.platform.jobs:update_status:142",
+    "message":"job status update",
+    "trace_id":"4f4c9f7d09e141d8be6d1f8d0d6d88e4",
+    "span_id":"5f9c48de71b2a36d",
+    "correlation_id":"req-6d4be3e4",
+    "org_id":"11111111-1111-1111-1111-111111111111",
+    "case_id":"22222222-2222-2222-2222-222222222222",
+    "job_id":"33333333-3333-3333-3333-333333333333",
+    "action":"JOB_PROGRESS",
+    "result":"ok",
+    "latency_ms":142,
+    "stream":"stdout",
+    "extras":{"queue":"compose-high"}
+  }
+  ```
+- Emission & formatting (binding): All services emit newline-delimited JSON to stdout for levels `DEBUG` through `ERROR`; only `ERROR` and higher duplicate to stderr so container runtimes and `kubectl logs`/`docker logs` tail a single canonical stream. The `src` field records the compact source location as `package.module:function:line` (max 80 characters) and extended diagnostics belong in structured keys under `extras`. Messages must remain ≤ 160 characters—richer context should be captured in dedicated fields to avoid terminal noise. Local pretty printing is opt-in via `LOG_PRETTY=1`, keeping production streams strict JSON with no ANSI colour or stacktrace spam.
+- Forbidden fields (binding): log scrubber removes `Authorization`, `Cookie`, `Set-Cookie`, `X-Request-Signature`, `X-Signature-Key-Id`, raw signed URLs, and any header matching `*-Token` before serialization. CI test `tests/logging/test_redaction.py::test_forbidden_headers_masked` asserts the mask list, and runtime metrics `logging_redaction_dropped_total` surface any attempt to log a banned key.
+- Metrics: queue depth, job durations, Guardian latency/throughput, Signer verify latency (including `sign_verify_status_total`, `ocsp_latency_seconds`, `ocsp_staple_age_seconds`, `tsa_latency_seconds`, `tsa_time_drift_seconds`), LLM health/circuit state, delivery rates, integrity incidents (`integrity_scan_queue_depth`, `integrity_quarantine_total`), SSE reconnect rate, `artifacts_ready_total`, `artifacts_approved_total`, `time_to_approval_seconds`. All Prometheus metrics use seconds for duration histograms and `_total` counters for events; legacy `*_ms` signals are deprecated and scheduled for removal in v7 GA (§12.6).
+- FinOps metrics: `llm_cost_estimate_total{org,case,job,model}`, `finops_cost_per_case_usd{org,case}`, `finops_cost_per_org_usd{org,month}`, `delivery_events_total{org,channel,status}`, `finops_mom_regression_flag{org}`.
+- Privacy/Governance: `residency_block_total`, `dpia_records_total{status}`, `ropa_records_total`, `entitlement_snapshots_total`, `policy_unsafe_activations_blocked_total`.
+- Advisory locks: `udlock_locks_held{scope,kind}`, `udlock_lock_age_seconds_p95{scope,kind}`, `udlock_watchdog_stale_total{action}`, `udlock_registry_gc_total`.
+- Traces correlate web → workers → Guardian/Signer/LLM; ingress injects `X-Request-ID` on missing. API SLOs: Availability ≥ 99.9%/30d; P95: reads 250ms, writes 500ms; Portal TTFB ≤ 400ms in-region, calculated over rolling 5-minute windows.
+- Immutable audit sink + logging immutability: dual-stream `audit_event` to DB + WORM storage and, when `logging.immutable_sink.enabled=true`, mirror structured logs to an immutable store. Hourly `AUDIT_SEAL` artifacts with rolling Merkle roots validate chain continuity. Metrics `audit_worm_lag_seconds` and `audit_seal_errors_total` back alerts; if verification fails for more than one interval, the release pipeline blocks new approvals and portal deliveries until the seal returns to green and Security signs off.
+
+#### 12.1.1 Centralized logging architecture (binding)
+
+- Services emit OpenTelemetry logs to a sidecar collector (`otel-collector`) which fans out to Fluent Bit daemons. Fluent Bit ships into the Observability Fabric (Kafka → Elasticsearch), writing indices named `logs.<env>.<service>-YYYY.MM.DD`.
+- Collectors persist local queues for at least 12 hours; `logging_queue_depth` and `logging_spool_utilization_pct` metrics guard against drops. Back-pressure alerts trigger before buffers exceed 80% utilization.
+- Records carry `tenant_hash` (HMAC of `org_id`) to drive per-tenant filters. Index lifecycle policies roll hot indices to warm/cold tiers and archive to WORM storage when cold retention lapses.
+- New services register via `ops/logging/register_service.py` so CI can enforce schema compliance and index templates.
+- Immutable pipeline: when `logging.immutable_sink.enabled=true`, collectors fork a second stream to the immutable log sink (WORM object store) with the same canonical schema so audit seals can cover operational logs as well as audit events.
+
+#### 12.1.2 Log access control & auditing (binding)
+
+- Access roles: `observability.reader` (read-only dashboards), `observability.engineer` (debug queries, pipeline tuning), and `observability.auditor` (auditor-only views). Roles map through Settings `logging.access.roles[]` and require Security + Platform approval to change.
+- Interactive queries enforce WebAuthn step-up and justification prompts; every search emits `LOG_QUERY` audit events `{actor_id, scopes, query_hash, purpose, rows_returned}`.
+- Bulk exports need dual approval, generate `LOG_EXPORT` artifacts with SHA-256 manifests, and respect per-org daily export quotas.
+
+#### 12.1.3 Data minimization & banned fields (binding)
+
+- The “never log” list extends the scrubber to bearer/API/refresh tokens, session cookies, raw request/response bodies, entire transcript or exhibit text, PHI unless HIPAA waiver enabled, full customer email addresses/phone numbers, secrets/keys, and signed URLs. Canonical HIPAA identifiers blocked from logs include (non-exhaustive) `patient_name`, `patient_dob`, `medical_record_number`, `diagnosis_codes`, `insurance_member_id`, and `provider_npi`. Violations increment `logging_neverlog_violation_total`; in production they raise Sev-1 incidents.
+- Commit checklist: structured logging only, no f-string interpolation, message templates validated with `scripts/logging/check_neverlog.py`. Large payloads move to artifacts referenced by ID (`log_ref_id`) rather than inline content.
+- HIPAA mode enforces collector-side redaction; attempts to emit PHI trigger automatic portal invalidation and Guardian quarantine of dependent artifacts.
+
+#### 12.1.4 Trace correlation & sampling (binding)
+
+- Logs, traces, and metrics share `trace_id` and `span_id` using W3C Trace Context propagated via HTTP (`traceparent`) and Celery headers. Default sampling: 15% baseline, 100% for error spans, 100% for Guardian/Signer spans; overrides require SRE approval and Settings activation.
+- `correlation_id` mirrors `X-Request-ID` for web/API traffic and `job_id` for worker spans so operators can drill from case timelines to traces.
+- Trace retention: 72 hours hot storage; dashboards alert when sampled error rate deviates by >5% from aggregate error rate.
+
+#### 12.1.5 Client & portal logging posture
+
+- Browser telemetry captures anonymized WebVitals (LCP, FID, CLS) and `error_code` aggregates only; no raw request payloads or user-entered text is shipped. Portal telemetry produces `CLIENT_TELEMETRY` artifacts gated by Guardian before reviewers can inspect.
+- Console log shipping stays disabled in production; temporary incident capture requires ticket references and must be removed within 24 hours.
+
+#### 12.1.6 Log volume & cost controls (binding)
+
+- Settings `logging.cost.daily_budget_mb_per_service` and `logging.cost.alert_threshold_pct` enforce daily budgets; collectors raise `LOG_VOLUME_BUDGET` alerts and dynamically increase sampling when projected volume exceeds 80% of budget.
+- Verbosity toggles: production defaults to `INFO`, non-prod to `DEBUG`; overrides live in `logging.level.overrides[service]` and surface via `/healthz/log-level`. Unauthorized runtime changes raise audit events and revert to the stored setting.
+
+- Log retention & sampling:
+  - Staff/API request logs retained 90 days hot, 365 days cold (object storage) with 10 % sampling for successful 2xx responses; 4xx/5xx retained in full with sensitive fields masked via `logging.redaction.enabled`.
+  - LLM evidence logs retained 365 days with `train_on_data=false` confirmation; HIPAA mode reduces retention to 180 days and forces excerpt suppression (§8.2).
+  - Masking tests run in CI (`tests/logging/test_redaction.py`) to prevent PII leakage; failures block merges (§13.7).
+
+#### 12.1.7 Stdout ergonomics & operator experience (binding)
+
+- Container images default `LOG_STDOUT_FORMAT=json` and rely solely on process stdout/stderr rather than file sinks so Kubernetes, systemd, and serverless runtimes ingest logs without extra sidecars. Setting `LOG_STDOUT_FORMAT=pretty` is allowed only for local development and surfaces annotated (but still redacted) human-friendly output without changing the structured payload.
+- Stack traces are limited to the first five frames in the top-level `stack` field, with the full trace stored under `extras.stack_full`; this keeps terminal tails compact while preserving deep diagnostics in Elasticsearch/OpenSearch.
+- Health probes and CLI utilities must emit at most one structured line per invocation—multi-line `print` statements or ad-hoc `repr(...)` dumps are prohibited. Library loggers (Python `logging`, Django, Celery) are wrapped to route through the structured adapter and to honour the stdout/stderr split above; teams must not call `print()` or write arbitrary bytes to stdout.
+
+### 12.2 Runbooks and synthetic monitors
+
+*Purpose: Ensure operational readiness and quick diagnosis.*
+
+- Synthetic checks: `/readyz` with RLS enforcement, settings cache validation, NTP drift. Guardian synthetic job ensures policy enforcement; Signer synthetic verifies TSA reachability.
+- Logging pipeline synthetic monitors assert `logging_ingest_lag_seconds < 30s`, `logging_drop_rate_pct = 0`, and index freshness; alerts route to App.H RB-LOG-007.
+- Runbooks stored in ops repo (linked in App.H) cover Guardian quarantine handling, PgBouncer pooling misconfig, artifact integrity mismatch, SSE replay issues, and logging pipeline recovery.
+- Automation: watchdog tasks auto-quarantine artifacts with integrity failures, restart pods on failed health checks, and rotate settings caches when invalidation fails.
+- Fail-closed defaults: if Guardian is unavailable, artifacts remain `DRAFT`; if Settings is unavailable, new jobs block on snapshot fetch while running jobs continue with embedded snapshots. These scenarios have dedicated alerts and runbooks in App.H.
+
+### H.5 RB-LLM-003 — Provider degradation / circuit breaker (normative)
+
+Purpose: Detect and act on degraded LLM providers to protect budgets and SLAs.
+
+Linked alert: `alert_llm_circuit_open` (Grafana: FinOps → LLM Cost & Circuit dashboard).
+
+Signals
+
+- Metrics: `llm_circuit_state{model}`, error rate > threshold (e.g., >5%/5m), latency P95 > budget, provider 429s.
+- Health probes failing; registry marks provider as `DEGRADED`.
+
+Triage (5-minute)
+
+1. Confirm models affected; inspect dashboard panels filtered by `model` and `org`.
+1. Check fallback outcomes in logs (reason `PRIMARY_DEGRADED`), and cost deltas.
+1. Verify region policy not cause (see `POLICY_REGION_BLOCK`).
+
+Decision
+
+- If OPEN circuits present: keep OPEN; allow half-open probes every 60s. Ensure fallback models are healthy and within budgets.
+- If latency/error just over threshold: raise replicas; notify Product if budget impact > X.
+
+Post-remediation
+
+- Track `llm_circuit_state` returning to CLOSED; annotate incident with timestamps and budget impact.
+- File provider incident with vendor ticket if persistent.
+
+Preventive actions
+
+- Tighten timeouts; raise pre-call token ceilings checks; adjust fallback priorities; add synthetic prompts to golden set.
+
+### 12.3 Incident response workflows & escalation paths
+
+*Purpose: Define how the team reacts to outages or security events.*
+
+- Incident severity levels with defined on-call rotations (Engineering, Security, Product). Playbooks for RBAC breaches, data residency violations, Guardian outages.
+- Post-incident reviews required within 48h; actions tracked in ops backlog. Metrics `incident_count_total`, `mttr_minutes`, and `logging_incident_total`.
+- Communication templates for customer notifications, regulators, and internal leadership included in App.H; latest redlines stored as `INCIDENT_TEMPLATE` artifacts covering PII disclosure, residency breach, and major outage scenarios.
+- Logging ingestion incidents (dropped events or ingest lag > 2 minutes) automatically raise Sev-2, reference RB-LOG-007, and block prod deploys until the pipeline stabilizes for two consecutive collection intervals.
+
+### 12.4 Backup, DR objectives, and failover drills
+
+*Purpose: Maintain data durability and disaster preparedness.*
+
+- Postgres: daily full snapshots + continuous WAL shipping; target RPO ≤ 15 minutes, RTO ≤ 1 hour. Quarterly restore drills documented.
+- Object storage: versioning + lifecycle rules; deletion requires dual confirmation. Immutable audit sinks operate under WORM retention policies.
+- Redis: persistence optional; rely on recomputation for queues. For critical caches, use managed Redis with cross-zone replicas.
+- DR exercises simulate region failure; cross-region read replicas considered once residency waivers approved. Settings and Guardian services replicate configuration backups.
+
+### 12.5 Capacity planning, autoscaling, and performance budgets
+
+*Purpose: Keep services within latency/cost budgets as usage grows.*
+
+- Autoscaling policies: HPAs for web/channels (CPU, request latency), workers (queue depth), Guardian/Signer (p95 latency). Compose/Analyze queue lengths monitored for backlog thresholds.
+- Capacity reviews quarterly: evaluate job volume, LLM spend, storage growth. Provide forecasts to FinOps (link to §57).
+- Performance budgets tracked via dashboards: upload finalize ≤ 5s, SSE lag \< 1s, LLM lane runtime budgets (5–15 minutes per lane depending on complexity).
+- Stress tests run pre-release using synthetic workloads; results captured in App.H for regression comparison.
+- Benchmark snapshots in App.L capture the latest measured baselines feeding these budgets; deviations trigger escalation before release.
+
+#### 12.5.1 Failure taxonomy & resilience (binding)
+
+*Purpose: Define platform-wide recovery behavior and safety nets.*
+
+- Classes and remedies:
+
+  - `TRANSIENT` (429/5xx/timeouts): exponential backoff + jitter; respect `Retry-After`; bounded attempts. Trip per-model/provider circuit on threshold; half-open probes every 60s.
+  - `POLICY` (forbidden/region): no auto-retry; Guardian quarantine when applicable; actionable errors surfaced.
+  - `INPUT` (validation/media): no auto-retry; clear user-facing error; link to docs.
+  - `INTEGRITY` (hash mismatch): block pipeline; quarantine; require resubmit; audit `ARTIFACT_INTEGRITY_MISMATCH`.
+  - `CONCURRENCY` (OCC/locks): short jittered retries; escalate after N attempts; ensure OCC versions in APIs.
+
+- Circuits and watchdogs:
+
+  - LLM circuits: OPEN/HALF-OPEN/CLOSED; metrics `llm_circuit_state`, reason codes (`PRIMARY_DEGRADED`, `RATE_LIMIT`). Runbook App.H RB-LLM-003.
+  - Advisory lock watchdog: metrics `udlock_watchdog_stale_total`, `udlock_lock_age_seconds_p95`; defaults `udlock.max_session_hold_seconds=300`, `udlock.heartbeat.interval_seconds=5`. Runbook App.H RB-LOCK-006. `kill_stale=false` in prod; remediation flows through the operator-only endpoint `POST /ops/v1/udlock/{scope}/{key}/mark` which tags the holder, adds trace attribute `lock.triage=manual_review`, and (when explicitly requested) issues `pg_terminate_backend` after human confirmation.
+
+- Queues and DLQ:
+
+  - Outbox pattern for notifications with retries/backoff; poison messages routed to DLQ with capped replays and operator alerts.
+
+- Integrity scan DLQ: dead-letter queue `q.integrity.deadletter` captures items exceeding retry budget (`last_error`, `attempts`, `cause`). DLQ processing emits on-call alerts and requires manual triage per App.H runbook.
+
+- Downstream propagation: when a source artifact is quarantined for integrity mismatch, workers walk `manifest.source_artifacts[]` and apply `integrity.downstream_action ∈ {mark_stale, quarantine}` to dependents so UI surfaces NEEDS_REVIEW banners; defaults are `quarantine` for legal deliverables (`COMPOSE_*`, `ATTACHMENT_*`) and `mark_stale` for Analyze outputs per Appendix D.
+
+- SLO guardrails:
+
+  - Guardian decision P95 ≤ 5m; Compose ≤ 45m P95; upload finalize ≤ 5s. Alerts on burn rates and budget breaches; see §12.6 dashboards.
+
+- **Source material:** `§20`, `§24`, `§41`, `App.H`
+
+- **Priority:** Medium (operational readiness)
+
+______________________________________________________________________
+
+### 12.6 Named dashboards & alert routing
+
+*Purpose: Provide common observability views and bind alerts to runbooks.*
+
+- Guardian SLO & Throughput (SRE): decision latency P50/P95/P99, error rate, queue depth, synthetic success, SLO burn rate.
+- Queues & KEDA (SRE): Celery queue depth per lane, replicas, scaling events, DLQ intake and drain.
+- LLM Cost & Circuit (Platform): tokens in/out, estimated spend vs cap, circuit state per model/provider, fallback reason codes.
+- Audit Seal & WORM (SecEng): seal cadence, seal errors, WORM lag, verification status.
+- Portal Security (SecEng): download rate per org/user, anomaly triggers, link invalidations, adaptive MFA prompts.
+- Advisory Locks (SRE): locks held by scope/kind, age percentiles, stale detections, terminations; tied to App.H RB-LOCK-006.
+- Logging Pipeline (SRE): ingest lag, drop rate, spool utilization, index health; alerts map to App.H RB-LOG-007.
+- Unit Economics & Delivery (PM/SRE): cost per case/org; MoM deltas; top 10 expensive cases; delivery counts and failure rates.
+
+Alert routing
+
+- Sev-1 pages on: Guardian SLO burn > 2x target 15m; audit seal missed 2 intervals; queue depth > 3× budget 10m.
+- All alerts include `dashboard_url`, `runbook_id` (when applicable), and last 5 relevant traces.
+
+### 12.7 Synthetic monitors coverage
+
+*Purpose: Continuously validate critical paths and assumptions.*
+
+- Web: `/readyz` checks RLS GUCs; `/healthz` verifies DB connectivity and cache coherence.
+- Guardian: submit synthetic artifact; expect deterministic READY with known inputs; verifies rules load; latency \< SLO.
+- Signer: sign a synthetic document against test trust roots; verify TSA/OCSP reachability.
+- Settings: activate a safe test bundle; diff preview matches expected; revert; validators pass.
+- Portal: download approved synthetic artifact; ETag/Range behavior validated; portal invalidation simulated.
+- Alert thresholds: burn-rate SLO alerts and synthetic failures must page on-call with proper runbook IDs.
+
+### 12.8 Quotas & metering
+
+*Purpose: Enforce fair‑use and protect performance budgets.*
+
+- Quotas: per‑org limits on uploads/day, concurrent jobs, portal downloads/min; Settings expose knobs and per-org overrides.
+- Enforcement: API checks at submission and per request; friendly 429s with `Retry-After` + guidance; dashboards for sustained breaches.
+- Metering: counters for usage; monthly exports; tie-in with FinOps budgets; anomaly detection.
+- Source material: `§40`, `§57.3`
+
+### 12.9 FinOps dashboards & alert wiring
+
+*Purpose: Ensure cost signals are visible and actionable.*
+
+- Dashboards: `llm_cost_estimate_total`, `finops_cost_per_case_usd`, MoM regression panel, top N expensive cases, budget forecasts, and logging volume views (`logging_bytes_ingested_total`, budget vs actual per service).
+- Alerts: regression > threshold (default 10%); monthly cap risk > X%; route to Product/SRE with runbooks; annotate releases.
+- Acceptance: dashboards exist and alerts fire in staging drill before enabling in prod, including `LOG_VOLUME_BUDGET` alerts tied to App.H RB-LOG-007.
+
+### 12.10 Business continuity & degraded operations
+
+*Purpose: Outline how teams sustain service when automation or guardians fail.*
+
+- **LLM outage:** Pause Compose/Analyze submission queues; switch agents to manual review lane per App.H RB-LLM-003; provide fallback templates for staff authorship. Notify customers via incident template (`INCIDENT_TEMPLATE_LLMDOWN`) with expected recovery window.
+- **Guardian impairment:** Freeze approvals that rely on Guardian READY; manual reviewers follow paper checklist (`docs/runbooks/guardian-manual-review.md`) and log decisions as `MANUAL_GUARDIAN_DECISION` artifacts until service recovers.
+- **Transcription fallback:** Route urgent audio to vetted human transcription vendor under DPA (no cross-border transfer) with manual import once automated pipeline restored.
+- **Communication cadence:** Duty Manager sends initial update within SLA (§1.6) and hourly until resolved; final customer notice includes timeline, data impact, and remediation.
+- **Drills:** Semi-annual BCP exercise simulating combined Guardian + LLM outage; evidence stored as `BCP_DRILL_REPORT` artifacts linked in App.H.
+
+### 12.11 Fail-closed behaviors matrix
+
+*Purpose: Summarize safety defaults, their downstream impact, and where to find remediation guidance.*
+
+| Subsystem              | Fail-closed behavior                                                            | User impact                                                      | Runbook                                           |
+| ---------------------- | ------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------- |
+| Guardian               | Rejects submissions; artifacts remain `DRAFT` until service recovers            | New approvals paused; portal shows READY-only backlog            | App.H RB-GUARD-001                                |
+| Settings Service       | New jobs block on snapshot fetch; running jobs continue with embedded snapshots | Operators see queue backlog; activation UI disabled              | App.H Standard template + Settings rollback drill |
+| Audit seal / WORM      | Portal deliveries blocked if seal chain breaks for >1 interval                  | Reviewers cannot promote artifacts; portal download attempts 503 | App.H RB-AUDIT-004                                |
+| Residency policy guard | Jobs error with `RESIDENCY_POLICY_BLOCK` on drift                               | Org must adjust settings or seek waiver before resubmission      | App.H RB-RES-BLOCK                                |
+| LLM provider circuit   | LangGraph lanes halt once fallback exhausted                                    | Compose/Analyze jobs paused; manual drafting invoked             | App.H RB-LLM-003                                  |
+
+______________________________________________________________________
+
+## 13) Quality, testing & compliance validation
+
+### 13.1 Test strategy tiers (unit, integration, end-to-end, property)
+
+*Purpose: Provide a holistic testing framework for engineering teams.*
+
+- Unit tests cover models, services, and policies with high type coverage (pyright/mypy). Integration tests simulate agent flows, Guardian decisions, settings activation.
+- End-to-end tests orchestrate uploads → Guardian → approval → portal delivery with stubbed providers; nightly in staging.
+
+### 13.2 Property tests & fixtures
+
+*Purpose: Increase confidence in critical invariants and edge cases.*
+
+- Property tests: settings precedence (SYSTEM≺ORG≺CASE), RLS denials without GUCs, idempotency store uniqueness, approval swap exclusivity.
+- Fixtures: synthetic audio for long/short transcripts, redaction payloads with seeded PII, sample manifests, decision history rows with varied reasons.
+- Test gates: required to pass in CI before promoting settings or rules changes; failure blocks deploy.
+- Property-based tests validate UUIDv8 determinism, manifest integrity, and advisory locks across edge cases.
+- UUIDv8 vectors from `spec/vectors/uuidv8.json` feed analyze/compose determinism tests ensuring helper outputs remain stable across refactors.
+- Coverage targets: ≥ 90% for critical modules (agents, Guardian, Settings) per AGENTS guides.
+
+### 13.3 Governance/privacy acceptance suites
+
+*Purpose: Validate compliance requirements continuously.*
+
+- DSAR/erasure flows, legal hold enforcement, field masking, and break-glass logging validated with synthetic cases.
+- Residency matrix: activations that violate regional policies are rejected with `VALIDATION_ERROR`; runtime pre-flight blocks cross-jurisdiction runs (`RESIDENCY_POLICY_BLOCK`).
+- Privacy API Spectral stubs warn until GA, then block; endpoints declare security and HMAC; examples avoid PII.
+
+### 13.4 LangGraph contract tests and replay harnesses
+
+*Purpose: Prevent regressions in agent graph behavior and reproducibility.*
+
+- Node idempotency: re-run a completed lane → zero new LLM calls; outputs identical or schema-equivalent.
+- Checkpoint resume: kill between Lane QA and Final QA → resume at Final QA without re-calling LLM.
+- Cross-lane integrity: conflicting entity/event refs cause Final QA rejection with actionable QA log.
+- Fallback correctness: force primary model OPEN circuit → fallback chosen; evidence records circuit state.
+- Deterministic IDs: same anchors yield the same UUIDv8-HMAC (draft) value; changed spans produce new IDs.
+- Policy block: simulate region disallowance → `POLICY_BLOCK` in ContextBuilder; token ceilings truncate prompts within bounds.
+
+### 13.5 Deployment gates (FinOps, error budgets, security scans)
+
+*Purpose: Enforce release safety and cost controls.*
+
+- CI gates: type-checks, lint/format, unit/integration, OpenAPI lint, SBOM, image signing; nightly DAST on staging before promotion.
+- Golden-set jailbreak gate: the release pipeline halts unless the `golden_set:jailbreak` job passes on the candidate build within the last staging run; failures require product/security sign-off and a fresh run before deploy.
+- FinOps: CI step `scripts/finops/check_mom_guard.py` blocks releases when the MoM regression exceeds `llm.finops.guard.threshold_pct` (default 10%) or any org’s trailing 7-day burn surpasses `llm.finops.guard.trailing7d_pct` (default 25% of the monthly cap); both thresholds are configurable per org within approved bounds.
+- Error budgets: breaches block releases until burn rate stabilizes; dashboards link from alerts.
+- Vulnerability policy: SCA/SAST/secret scanning on every PR; Criticals block unless risk-accepted.
+
+### 13.6 SBOM & build provenance
+
+*Purpose: Guarantee supply-chain transparency and tamper-evident releases.*
+
+- Builds emit CycloneDX SBOMs (`build/sbom/*.json`) via Syft/Grype; artifacts stored in object storage (`ops/artifacts/sbom/<commit>.json`) with SHA-256 recorded in release manifest.
+- Container images signed with Cosign + Sigstore keyless flow; attestations include SLSA provenance (`predicateType: https://slsa.dev/provenance/v1`) capturing git commit, builder, and build inputs. Verification runs in deployment pipelines and documented in App.K evidence.
+- SBOM retention: minimum 2 years or life of supported release, whichever longer. Access requires Security or Compliance role; auditors receive read-only bucket link during assessments.
+- Third-party dependency diffs reviewed weekly; high-risk packages flagged in `DEPENDENCY_RISK_REPORT` artifacts referenced in App.P.
+- OSS licenses and notices shipped with releases are catalogued in App.P.
+
+### 13.7 Secure coding standard & scanning
+
+*Purpose: Establish mandatory guardrails for code quality and vulnerability prevention.*
+
+- Standards: OWASP ASVS L2/L3 controls where relevant; banned APIs list (`docs/security/banned_apis.md`) enforced via custom ruff rules and pyright plugins; secret-scanning (detect-secrets + trufflehog) runs on every PR.
+- Coverage targets: unit coverage ≥ 80 % per critical service, integration coverage ≥ 60 %; failing to meet thresholds blocks merge without approved exception logged in App.O risk register.
+- Tooling: ruff, mypy, pyright, bandit, semgrep, gitleaks, dependency-review. Critical/High findings must be resolved or explicitly risk-accepted with expiry.
+- KPI dashboard tracks open vulns by severity, mean remediation time, and SLA compliance (Critical ≤ 7 days, High ≤ 14 days). Breaches escalate to Security leadership and appear in §15.3 decision log.
+
+### 13.8 Compliance evidence generation (SOC2, privacy records)
+
+*Purpose: Automate artifacts required for audits and regulator reviews.*
+
+- Generate quarterly `SYSADMIN_RECERT_REPORT` artifacts; contract tests assert creation, audit trail, and dual-approval gates.
+
+- Publish DPIA/RoPA record references in audit seals; retain evidence of settings activations and Guardian decisions.
+
+- Diagram drift checks: fail build when diagrams change without source updates; ensure traceability.
+
+- Diagram drift check (binding): CI job `diagram:diff` ensures exported ERD/service-map assets only change alongside their `.mmd`/`.drawio` sources and associated commit notes.
+
+- **Source material:** `§23`, `§31`, `§57`, `§41.7`, `App.E`
+
+- **Priority:** Medium (QA & compliance alignment)
+
+______________________________________________________________________
+
+## 14) Operations playbooks & lifecycle
+
+- Glossary: Appendix I captures retention, legal hold, and governance terms referenced in this chapter.
+
+### 14.1 Tenant provisioning & offboarding
+
+*Purpose: Standardize customer lifecycle in ops tools.*
+
+- Provisioning: create org in Keycloak, configure domains (SPF/DKIM), set residency allowlists, budgets, templates, rotate initial secrets. Onboard staff via invites with role assignments.
+- Offboarding: disable logins, export data with tamper-evident bundles, revoke keys, enforce retention/erasure, archive audit seals. Checklist recorded in App.H.
+
+### 14.2 Artifact retention, legal hold, and destruction flows
+
+*Purpose: Align document lifecycle with policy and legal requirements.*
+
+- Retention defaults: artifacts ≥ 365 days, audit logs ≥ case retention, privacy artifacts ≥ 730 days (Appendix N). HIPAA mode shortens certain retention and disables excerpt artifacts.
+- Legal hold: `case.legal_hold = true` prevents destruction and surfaces reason (masked in secure view). Releases require approvals and audit log entries.
+- Destruction: queued jobs with Guardian oversight produce `DESTRUCTION_CERT` artifacts; double-check via manifest before final delete.
+- Object lock: production buckets enforce versioning + Object Lock (compliance mode) for audit sinks; destroy operations require dual approval and manifest verification.
+- Ops scripts: `ops/scripts/destroy_case.py` (dry-run + execute) logs intended artifacts, checks legal hold, and writes `DESTRUCTION_CERT`; references recorded in Appendix N.
+- HIPAA mode enforcement: when `privacy.hipaa.enabled=true`, retention jobs honor shortened schedules, approvals for HIPAA-classed artifacts require WebAuthn step-up, evidence-store excerpts stay disabled (confirmed via the purge job above), and portal delivery of PHI-tagged attachments is rejected unless a security waiver is recorded.
+
+#### 14.2.1 DSAR/erasure mode (binding)
+
+*Purpose: Support hard-purge erasure requests without compromising provenance.*
+
+- Settings: `compliance.erasure_mode ∈ {'off','hard_purge'}` (ORG) toggles hard purge; `compliance.subject_hkdf_salt` (SYSTEM, KMS-backed) seeds deterministic subject hashes. See Appendix E for key traceability.
+- Scope: Hard purge deletes artifacts, QA logs, evidence, and prompts tied to the subject; legal hold supersedes erasure requests and blocks purge.
+- Artifact proof: Every purge emits an `ERASURE_JOURNAL` artifact capturing minimal evidence (subject hash, scope, approvals) and referencing the job manifest hash. Guardian review ensures readiness before portal exposure.
+- Approval: Dual approval when policy requires (`privacy.dpia.reviewers.roles`), with audit records referencing erasure justification and timestamps. Waivers recorded when residency/retention conflicts arise.
+- Process: Scheduler selects eligible records, acquires locks to avoid concurrent purges, performs deletion, writes `ERASURE_JOURNAL`, and appends ops log entry (`ops/<job_id>__erasure_log.json`).
+- Restores: Backup restore jobs must replay all applicable `ERASURE_JOURNAL` entries before the recovered case or subject is re-exposed to reviewers or clients.
+- Manifest schema (normative):
+  ```json
+  {
+    "schema_version": "erasure@1.0",
+    "org_id": "UUID",
+    "case_id": "UUID|null",
+    "subject_hash": "sha256-hex",
+    "scope": ["ARTIFACTS","QA_LOGS","EVIDENCE","PROMPTS"],
+    "requested_by_user_id": "UUID",
+    "approved_by_user_ids": ["UUID","UUID"],
+    "justification": "string",
+    "executed_at": "RFC3339",
+    "settings_snapshot_sha256": "sha256-hex"
+  }
+  ```
+- Audit: Tombstone audit links preserve chain integrity without retaining content; purge actions emit `audit_event('DSAR_ERASURE_EXECUTED', {...})` with scope, actors, and manifest hash.
+- Backups exception: immutable backups are not altered in-place. Instead, restore-point catalogue retains entries ≤ 35 days; if restoration is required, operators immediately re-run DSAR purge on recovered data before bringing case online. Evidence (backup set IDs, purge confirmation) appended to the initiating `ERASURE_JOURNAL`.
+
+### 14.3 Key management & secret rotation
+
+*Purpose: Maintain cryptographic hygiene across services.*
+
+- Secrets stored in Vault/Key Vault; rotation schedule documented (e.g., API HMAC keys quarterly, TLS certs ≤24h TTL). Rotation triggers service reload and Settings activation updates.
+- Guardian and Signer keys require dual control. Audit events record rotation actor, key scope, and previous expiration.
+- Client-provided keys (email, SMS) stored per org with restricted access; rotation process includes verification with provider.
+- Root key material (Vault transit master, signing HSM keys) operates under two-person integrity: no single operator can export or rotate without co-approval. Break-glass escrow requires Security + Platform VP sign-off and generates `KEY_ESCROW_EVENT` artifacts.
+- Hardware-backed keys: production signing keys live in cloud HSM (Azure Key Vault HSM) with policy `KV-Policy-Prod-001`; audit logs exported nightly and referenced in App.K evidence.
+- Rotation automation pipelines: TLS certs rotate via GitHub Action `secops/rotate-certs.yml`, which writes attestations to `ops/security/cert_rotation/<date>.json` and updates `azure-key-vault://platform-secrets/certs/*`; Guardian/Signer HMAC keys rotate with `ops/security/rotate_guardian_keys.py`. A quarterly drill exercises the dual-publish → canary → cutover flow: enable the `svc-*-next` secret, replay synthetic signed requests (`scripts/security/key_rotation_canary.py`) across staging and a prod shadow job, observe `key_rotation_canary_success_total`, then revoke the old key. Rollback cue: if error rate or canary metric deviates >1%, revert `current` pointer and reissue the previous key bundle. Evidence bundles are attached to App.K control entries.
+- Rotation cadence summary: TLS certs ≤24h TTL, API HMAC quarterly, Guardian/Signer keys semi-annually, customer-supplied keys per contract or ≤90 days. Upcoming rotations tracked in change calendar; overdue keys page SecEng.
+- Escape hatch: should KMS become unavailable, documented manual signing path (App.H RB-SIGNER-HSM) allows temporary softkey use capped at 24 h with post-incident review.
+
+### 14.4 Vulnerability management & supply chain updates
+
+*Purpose: Keep dependencies secure and up-to-date.*
+
+- Monthly dependency audits using SCA tools; critical CVEs patched within 48h. `ops/security` backlog tracks remediation.
+- Infrastructure scanning (container, cluster) integrated with security triage. Penetration testing results stored as artifacts (`PENTEST_REPORT`).
+- Supply chain safeguards: pin dependencies, use checksums, enable SBOM generation. Build pipeline signs artifacts and release images.
+
+### 14.5 Change management, versioning, and rollout plans
+
+*Purpose: Ensure coordinated releases across services.*
+
+- Versioning: semantic for APIs, semver-like for settings bundles, `graph_version` for agents. Releases require change tickets referencing TDD sections.
+- Rollouts: canary in staging, phased production release, with rollback plan. Documented in App.H runbooks.
+- Communication: notify stakeholders (Product, Support, Security) with release notes summarizing changes, risk, and mitigation.
+- Case enum migration playbook: settings introduce new `case.status`/`representation_type` values first; DB adds `CHECK ... NOT VALID` constraints, validates post-backfill, and only then removes deprecated values. Deprecations flow through Settings/UI; final removal requires data migration and constraint regeneration.
+
+### 14.6 Organization directory sync (Ops)
+
+*Purpose: Keep org users and roles aligned with upstream IdP/Directory without breaking tenancy or RLS.*
+
+- Scope: sync users, org membership, and role mappings; avoid storing PII beyond required identifiers.
+- Integration: Keycloak/SCIM connectors; scheduled and on‑demand sync; diff‑based updates; conflict resolution rules.
+- Safety: deny‑by‑default; degraded mode on sync failure; audit changes with actor/source; dry‑run mode for large updates.
+- Observability: metrics (`dirsync_changes_total{kind}`, `dirsync_errors_total`), dashboards and alerts for failures.
+- Source material: `§44`, roadmap §15.2
+
+### 14.7 Admin governance & recertification
+
+*Purpose: Periodically verify entitlements, policies, and exceptions.*
+
+- Cadence: quarterly recertification; dual approvals for exceptions; step‑up MFA required.
+- Artifacts: `SYSADMIN_RECERT_REPORT` and decision logs; surfaced to auditors; retention aligns with §14.2.
+- Enforcement: block unsafe policy activations pending recert; alerts on overdue reviews; SSE events for recert windows.
+- Automation: scheduled job (`0 3 1 */3 *`) enumerates principals with realm `sysadmin` or elevated org roles and produces structured reports `{principal_id, roles[], last_login, justification?, reviewer_ids[], attested_at}`; Security/Architecture must attest or revoke within 14 days or access is suspended until resolved.
+- Source material: `§29.7`
+
+### 14.8 Data migration & seeding operations
+
+*Purpose: Keep schema changes, backfills, and seed data predictable and auditable.*
+
+- Migration pipeline: every schema change ships with forward/backward-safe Alembic migrations plus dry-run artefacts (`migrations/README.md`) enumerating pre/post conditions. When mutating hot tables we execute a formal dual-write plan: (1) enable feature-flagged writes to the new table alongside the legacy path, (2) emit divergence metrics (`dualwrite_divergence_total`, `dualwrite_lag_seconds`) from a background reconciler, (3) block promotion until divergence remains 0 for ≥ 24h, (4) cut traffic by flipping the settings toggle, and (5) retire legacy writes only after snapshot/backups are captured. Rollback instructions and toggles live under Settings bundles so releases can revert without code changes.
+- Seed data strategy: baseline organizations, roles, settings bundles, and Guardian rules install via `ops/scripts/bootstrap_platform.py` (idempotent). Seed updates run through the same approval flow as settings activations, with diff previews captured in App.K controls evidence.
+- Backfills: long-running data backfills execute in Celery workers with OCC guards, chunked pagination, and advisory locks (`udlock.xact_lock('backfill', ...)`) to prevent overlap. Progress metrics and human logs land in `ops/<job_id>__backfill_log.json`.
+- Smoke checks: migrations must register probes (`tests/migrations/test_<id>.py`) verifying secure views, RLS policies, and settings compilers post-upgrade. A staging cutover drill is mandatory before production rollout and recorded in App.M.
+- Rollback: documented `down_revision` paths plus data snapshots for destructive changes; rollback playbooks include verification of recompiled policies, rehydrated caches, and SSE stream health.
+
+### 14.9 Security disclosure & penetration testing
+
+*Purpose: Formalize external vulnerability reporting, pentest cadence, and fix SLAs.*
+
+- Vulnerability disclosure: publish `security.txt` at `/.well-known/security.txt` with `Contact: mailto:security@udocket.ca` and `Encryption: https://udocket.ca/pgp/security.asc`. Inbound reports acknowledge within 24h, provide triage results within 3 business days, and target remediation per severity SLA below. Disclosures tracked in the security incident register and mapped to App.K controls.
+
+- Penetration testing: annual third-party assessments at minimum, with additional tests after major architecture changes (new data flows, agent classes, residency waivers). Findings log as `PENTEST_REPORT` artifacts, feed triage dashboards, and require verification of remediation evidence prior to closure.
+
+- Severity SLAs: Critical fixes within 7 days, High within 14 days, Medium within 45 days, Low within 90 days unless risk accepted by Security and Architecture. Exceptions require waiver entries in App.O and Security leadership approval.
+
+- Coordination: bug bounty pilots leverage the disclosure inbox; sanitized findings shared with Product/Ops for customer messaging when impact crosses multi-tenant boundaries.
+
+- Monitoring: security backlog reviewed in weekly governance sync; outstanding high/critical items block releases per §13.4 deployment gates.
+
+- **Source material:** `§14.2`, `§14.5–§14.9`, `§25`, `§37`, `§39`, `App.D`, `App.K–App.O`
+
+- **Priority:** Medium (Ops + Security)
+
+______________________________________________________________________
+
+## 15) Roadmap alignment & open questions
+
+- Glossary: Appendix I defines non-functional constraint terminology and deliverable acceptance vocabulary used below.
+
+### 15.1 Near-term milestones (feature gates, migrations)
+
+*Purpose: Keep engineering/program leadership aligned with delivery timeline.*
+
+- Q1: finalize Analyze/Compose LangGraph production rollout, Guardian v2 ruleset, FinOps deploy gate enforcement.
+- Q2: Timeline/relationships agent alpha, Settings self-service diff preview UI, improved SSE replay guard.
+- Feature flags tracked via Settings bundles; gating decisions recorded in decision log.
+
+### 15.2 Dependencies on external programs (IAM overhaul, infra upgrades)
+
+*Purpose: Highlight work reliant on other teams or vendors.*
+
+- IAM roadmap: Keycloak upgrade, org directory sync integration, potential SSO for enterprise clients (requires Settings and portal changes).
+- Infra upgrades: Kubernetes version bump, service mesh migration, storage cost optimization.
+- Provider dependencies: Azure Speech SLA adjustments, new LLM providers pending security review.
+
+### 15.3 Risks, mitigations, and decision log
+
+*Purpose: Surface known risks and capture resolution context.*
+
+- Risks: LLM policy drift, Guardian false negatives, residency waiver backlog, staffing for manual reviews.
+- Mitigations: continuous evals, rule dry-run/diff, automated waiver stamping, cross-training reviewers.
+- Decision log entries include change rationale, date, owners, references to sections impacted.
+
+### 15.4 Outstanding research spikes
+
+*Purpose: Track unresolved technical investigations.*
+
+- Evaluate on-device speech normalization fallback, cross-region replication strategy, privacy-preserving analytics, automated QA suggestions for manual edits.
+- Each spike records hypothesis, owner, expected completion, linked documents.
+
+### 15.5 Sunset plan for legacy behaviors and documents
+
+*Purpose: Plan deprecation steps for obsolete flows.*
+
+- Retire prior TDD versions (v6 and earlier) once approvals complete; archive older docs with version tags.
+
+### 15.6 Non-functional constraints (consolidated)
+
+*Purpose: Centralize cross-cutting constraints and SLOs.*
+
+- SLOs: API availability ≥ 99.9%/30d; read P95 ≤ 250ms; write P95 ≤ 500ms; decision P95 ≤ 5m; Compose P95 ≤ 45m.
+- Security: TLS 1.3 preferred; mTLS for service‑to‑service; HSTS; CSP; signed images and SBOM.
+- Residency: Canada‑only unless waiver; storage/compute pinned per §3.6.
+- Privacy: masking, secure views, field‑level encryption (§4.6) for sensitive classes.
+- Performance: backpressure via rate limits and quotas; bounded memory for LLM contexts; capped retries.
+
+### 15.7 Deliverables acceptance
+
+*Purpose: Define acceptance gates for major outputs of this program.*
+
+- Platform: end-to-end path (upload→Guardian→approval→portal) passes in staging with synthetic data.
+- Governance: runbooks executed; audits verified; settings validators enforce unsafe rules.
+
+### 15.8 Roadmap alignment hooks
+
+*Purpose: Link roadmap milestones to owners and dependencies so this TDD stays actionable.*
+
+- Milestones → Epics:
+  - Milestone M1 (Analyze LangGraph GA) → Product epic `P-123`; depends on App.A diagrams, §6.7/§6.11 completion, App.H RB-LLM-003 drill.
+  - Milestone M2 (Portal messaging GA) → Product epic `P-207`; references §11.6 and Appendix J; depends on App.A A.8 flow and security review gates (§9.11).
+- Milestone M3 (FinOps deploy guard) → SRE epic `SRE-88`; depends on §8.7, §12.9, FinOps dashboards wiring acceptance.
+- Dependency notes: provider template updates (Appendix D) tracked in backlog; cross-team sequence captured in roadmap doc linking to this section.
+
+______________________________________________________________________
+
+### 15.9 Architectural decision records (binding)
+
+*Purpose: Ensure significant technical choices remain discoverable, immutable, and supersedable.*
+
+- ADRs live under `docs/adr/` and follow GitLab’s lightweight template (`Title, Context, Decision, Consequences, Status`). `docs/adr/README.md` indexes active, superseded, and deprecated entries; this TDD’s front matter `related_adrs` highlights the decisions most tied to the current scope.
+- Lifecycle: new ADRs start as **Draft**, graduate to **Accepted** once Architecture + Security approve, and move to **Superseded** when a follow-on ADR renders the prior decision obsolete. Status changes require PR review plus an update to the ADR index table.
+- Integration points: breaking API or security changes cannot transition this TDD to **Implementable** or **Implemented** without a corresponding ADR (e.g., `ADR-0003-api-versioning-and-sunset.md` for the deprecation policy, `ADR-0001-guardian-ready-quarantine.md` for Guardian rule enforcement). Cross-reference IDs appear throughout the document (see §3.7, §7.1, §10.0) to keep provenance intact.
+- Tooling: `make adr:new` scaffolds numbered ADRs; CI verifies headers/metadata and blocks merges when ADR titles, filenames, or statuses drift from the index. Quarterly governance reviews audit ADR freshness and ensure open decisions align with App.K controls.
+
+______________________________________________________________________
+
+## 16) Search & knowledge retrieval
+
+### 16.1 Indexing model and sources
+
+*Purpose: Provide cross-layer search over artifacts while honoring residency and RBAC.*
+
+- Sources: transcripts (latest approved or job-scoped), Analyze outputs (summaries, outlines, timeline seeds, entity hints), Compose deliverables, QA logs, and selected metadata fields; exclude sensitive raw attachments unless policy allows.
+- Indices: full-text (Postgres/ES/OpenSearch) for keyword search; optional vector index for semantic search. Embeddings providers must respect `regions.allowlist.compute`.
+- Document identity: each indexed record carries `artifact_id` (and lane/section for Analyze/Compose) to enable deep-linking; titles via shared `unique_title` helper.
+- Update policy: on artifact APPROVED, indexers upsert records; on demotion/archival, records are hidden. Index jobs emit ops logs and metrics.
+- Locale awareness: analyzers respect document language metadata; cross-language toggle exposes translated artifacts when available with fallbacks.
+
+### 16.2 Retrieval APIs and results
+
+*Purpose: Standardize how clients and agents query and consume results.*
+
+- API: `GET /api/v1/search?case_id&q=&k=&type=` with filters for artifact types. Responses include snippets, highlights, and stable refs (`artifact_id`, lane/section IDs).
+- Agents: Analyze/Compose retrieval uses case-scoped search with token ceilings and redaction; results include canonical refs to App.D artifact entries and transcript timestamps when applicable.
+- Caching: per-query cache keyed by `(case_id, q, filters)` with short TTL; eviction on artifact state changes.
+
+### 16.3 Security, residency, and RBAC enforcement
+
+*Purpose: Ensure search respects the same deny-by-default policy as reads.*
+
+- Index-time filters store `org_id`, `case_id`, and visibility state; query-time adds RLS-like constraints using the token’s `active_org_id` and case membership. Masked fields remain masked in results.
+- Residency: embedding/vector stores must be deployed in allowed regions; vector shards run exclusively in canadacentral/canadaeast clusters backed by object storage in the same region. Cross-region restores are blocked by policy unless a waiver exists, manifests reflect the waiver, and the index bootstrap pipeline verifies residency before serving queries.
+- Audit: log `SEARCH_QUERY_EXECUTED` with hashed query, `case_id`, and filters; redact content; metrics `search_qps`, `search_latency_seconds`, `search_results_per_query_p95`.
+
+### 16.4 Cost, performance, and quality budgets
+
+*Purpose: Keep retrieval affordable and responsive.*
+
+- Budgets: target P95 search latency ≤ 400ms; vector queries capped at `search.vector.max_top_k` with backpressure on sustained load.
+- FinOps: track `search_cost_estimate_total` (if using paid vector providers). Circuit open if budget exceeded.
+- Quality: relevance evaluated with curated queries and golden answers; dashboards show precision/recall trends.
+
+### 16.5 UI integration and relevance feedback
+
+*Purpose: Close the loop between users and ranking signals.*
+
+- Staff UI: unified search in case workspace with filters; excerpts link to transcript timestamps and Analyze entities/events.
+
+- Feedback: click/expand signals logged (privacy-safe) and fed to relevance tuning jobs. Feature flags control exposure.
+
+- See App.D for searchable artifact types and field maps; §11 for UX constraints; §8 for LLM-powered retrieval compliance.
+
+- Sunset manual artifact upload flow once new staging pipeline fully vetted.
+
+- Plan retirement for non-Settings-based configuration files; ensure agents rely solely on Settings service.
+
+- **Source material:** `§32`, `§33`, `§35`, `§57`, `App.E` decision log
+
+- **Priority:** Medium (keeps roadmap aligned)
+
+______________________________________________________________________
+
+## Appendices (link targets)
+
+- **App.A** System context & sequence diagrams *(source: App.A)*
+- **App.B** Threat model catalog *(source: §31, App.B)*
+- **App.C** Data classification & retention matrices *(source: App.C, §15)*
+- **App.D** Canonical artifact catalog *(source: App.F)*
+- **App.E** Settings key map and traceability index *(source: §42)*
+- **App.F** API reference snippets / example payloads *(source: §21.9)*
+- **App.G** ERD and schema migrations history *(source: App.I)*
+- **App.H** Ops runbooks & health check playbooks *(source: §20.3, App.H)*
+- **App.I** Glossary and taxonomy *(source: Glossary, §16 taxonomy notes)*
+- **App.J** SQL policy patterns *(source: §4.4, §11.6)*
+- **App.K** Controls assurance map *(source: §2.2, §12, §14)*
+- **App.L** Benchmark baselines *(source: §3.2, §8, §12)*
+- **App.M** Environment & dependency matrix *(source: §3.2, §14.8)*
+- **App.N** Privacy controls traceability *(source: §2.2, §14.2)*
+- **App.O** Active waivers ledger *(source: §3.6, §7.1.1, §14.9)*
+- **App.P** Third-party & OSS notices *(source: §13.6, App.P)*
+- **App.Q** Sub-processors & DPAs *(source: §3.5, §8, §14.3)*
+- **App.R** Data lineage maps *(source: §5.6, §6, §7)*
+- **App.S** Ownership & RACI map *(source: §1.5, §15)*
+- **App.T** Traceability matrix *(source: §3.7, §7, §10, §12.1, §12.6)*
+
+______________________________________________________________________
+
+## Appendix A — System context & sequence diagrams (normative)
+
+*Purpose: Provide authoritative visuals of service boundaries and key workflows.*
+
+- **A.1 System context:** Updated diagram (`docs/diagrams/system-context-v1.mmd`) depicting web, workers, supporting services, external dependencies, and trust boundaries. Includes overlays for mTLS domains and network policies.
+- **A.2 Upload → Guardian → Approve:** Mermaid sequence source `docs/diagrams/upload-guardian-approve-v1.mmd`; shows client upload, staging, artifact creation, Guardian submission, reviewer approval, SSE notifications, and portal invalidation.
+- **A.3 Signing & delivery:** Mermaid sequence source `docs/diagrams/signing-delivery-v1.mmd`; covers signing request, TSA/OCSP validation, artifact promotion, link generation, and client download with ETag/If-Match.
+- **A.4 Error flows:** Diagram source `docs/diagrams/error-flows-v1.mmd`; illustrates TRANSIENT/POLICY/INPUT/INTEGRITY/CONCURRENCY paths with retries, quarantine, and user feedback.
+- **A.5 Approvals UX:** Flow source `docs/diagrams/approvals-ux-v1.mmd`; illustrates staff review, QA, approve/reject, and portal invalidation.
+- **A.6 Portal invalidation:** Sequence `docs/diagrams/portal-invalidation-v1.mmd`; shows invalidation path and 403 behavior.
+- **A.7 Analyze/Compose pipeline:** Sequence `docs/diagrams/analyze-compose-v1.mmd`; illustrates LangGraph lanes, artifact writes, and Guardian readiness.
+- **A.8 Manual/Agent Edit flows:** Flow `docs/diagrams/approvals-edit-flows-v1.mmd`; shows editor flows and promotion/demotion behavior.
+- Diagrams maintained via `diagram:diff` CI job; PRs must include source updates (Mermaid/Draw.io) alongside exported SVG/PNG.
+
+______________________________________________________________________
+
+## Appendix B — Threat model catalog
+
+*Purpose: Centralize high‑value threats, mitigations, and validations (STRIDE).*
+
+B.1 STRIDE summary (illustrative; see App.H for runbooks)
+
+- Spoofing (identity):
+  - Vector: forged inter‑service calls
+  - Mitigations: mTLS, HMAC signing (§7.3), short‑lived tokens, audience scoping
+  - Validation: synthetic signed/unsigned request tests in staging
+- Tampering (data at rest/in transit):
+  - Vector: object storage overwrite or man‑in‑the‑middle
+  - Mitigations: SSE‑KMS, bucket versioning, strong ETag from SHA‑256, TLS 1.3, WORM audit sink
+  - Validation: integrity sweeps, WORM verification
+- Repudiation:
+  - Vector: missing audit trail of approvals/decisions
+  - Mitigations: `audit_event`, `guardian_decision_history`, `delivery_receipt`, SSE correlation IDs
+  - Validation: runbook drills; dashboards for decision rates and audit seals
+- Information disclosure:
+  - Vector: field leakage, portal stale links
+  - Mitigations: secure views/masking (§4.5), portal invalidation (§11.2.1), strict CORS/ETag
+  - Validation: unit/integration tests, staging drills
+- Denial of service:
+  - Vector: provider throttling, queue saturation
+  - Mitigations: rate limits, circuit breakers, autoscaling, DLQ
+  - Validation: synthetics and alert burn‑rate
+- Elevation of privilege:
+  - Vector: RLS bypass, unsafe settings activation
+  - Mitigations: RLS GUC canaries (§4.4), deny‑by‑default policies, dual approval for unsafe changes
+  - Validation: activation dry‑run/diff; fail‑closed probes
+
+B.2 Top threats & mitigations (illustrative)
+
+- RLS bypass via pooling misconfig → AdmissionPolicy blocks statement pooling; fail‑closed canaries (§4.4, App.J.6).
+- Residency leakage to non‑CA endpoints → mesh egress allowlist; region allowlist settings; Guardian waiver stamping (§3.6, §7.1.1).
+- Prompt injection & policy drift → safety harness, golden‑set tests, QA gates, Guardian policy checks (§8.4, §7.1).
+- SSE replay abuse → Last‑Event‑ID handling, snapshot rules, token‑bound streams (§10.8).
+- Artifact integrity tamper → SHA‑256 ETag, WORM audit sink, integrity sweeps (§5.3, §12.1).
+
+B.3 Abuse controls (illustrative)
+
+- Portal scraping → rate limits, anomaly triggers, forced invalidation, step-up MFA (§11.2.2, §12.8).
+- Messaging misuse → content scanning, attachment limits, abuse reporting, audit trails (§11.6).
+- Brute forcing APIs → global/org rate limits, IP throttles, 429 guidance, runbooks (§10.7, §12.6, App.H). *Purpose: Document top risks, mitigations, and residual risk ratings.*
+- **Threat tables:** Expanded STRIDE matrix covering RLS bypass, region leakage, LLM prompt exfiltration, Guardian rule poisoning, signature spoofing, SSE replay, and portal phishing.
+- **Mitigation mapping:** For each threat, list preventive/detective controls (section references) and automation coverage (synthetics, alerts). Residual risk rated (Low/Medium/High) with owner.
+- **Abuse cases:** Scenarios such as malicious reviewer approval, compromised client account, and mass download scraping with corresponding throttles and anomaly detection.
+- **Updates:** Threat catalog reviewed quarterly by Security + Architecture; changes tracked in decision log and referenced in §15.3.
+
+B.4 Abuse prevention plan & fraud detection checks (normative)
+
+- Governance: Abuse triad (Security Engineering Lead, Product Abuse PM, SRE) meets monthly to review abuse dashboards, App.T traceability rows, and new reports from Support. Action items flow into the security backlog with SLA tracking.
+- Baseline detectors:
+  - API anomaly detector: `api_abuse_scorer` job inspects rolling windows (IP/user/org) for unusual verb/method combinations and increments `api_suspect_request_total{reason}`. Score > threshold auto-enqueues an approval block pending human review.
+  - Portal download sentinel: `portal_download.anomaly_score` (needs trend < 1.5× baseline). 3 consecutive breaches trigger automatic `portal_link_invalidated` + step-up MFA requirement; App.H RB-ETAG handles follow-up messaging.
+  - Messaging fraud rules: heuristics for mass outbound, URL reputation hits, and attachment mismatch log to `messaging_abuse_detected_total` and quarantine threads until Guardian re-approves.
+- Shadow/soak controls: High-risk pipeline changes (payment integrations, new export endpoints) must run in shadow mode (see §6.13) for ≥7 days with abuse detectors enabled; only after the review sign-off do we flip “serving” flags.
+- For every new abuse vector, engineering must add: (1) detector metric + alert, (2) runbook entry (App.H), (3) test fixture covering expected vs blocked flows, (4) traceability row in App.T.
+
+______________________________________________________________________
+
+## Appendix C — Data classification & retention matrices
+
+*Purpose: Define classification, masking, storage location, and baseline retention.*
+
+C.1 Classification table
+
+| Class         | Examples            | Masking                         | Storage                       | Default retention              |
+| ------------- | ------------------- | ------------------------------- | ----------------------------- | ------------------------------ |
+| PUBLIC        | docs, marketing     | none                            | object storage (public site)  | n/a                            |
+| INTERNAL      | non‑PII ops logs    | redact sensitive fields         | object storage (private)      | life of case + 2y              |
+| PII           | names, contact info | REDACT/HASH in logs             | object storage (private)      | life of case + 2y              |
+| SENSITIVE_PII | health, minors      | REDACT in UI logs; NULL in JSON | object storage (private, KMS) | case + 2y (HIPAA may override) |
+| HIPAA_PH      | medical             | REDACT everywhere; no excerpts  | object storage (private, KMS) | org policy (shorter)           |
+
+C.2 Retention mapping
+
+- Map artifact types to retention groups (see §14.2 baseline and overrides). HIPAA override mode shortens Compose deliverables and disables excerpts. *Purpose: Align information handling with policy and jurisdictional requirements.*
+- **Classification table:** Data classes (PUBLIC, INTERNAL, PII, SENSITIVE_PII, HIPAA_PH) with storage locations, at-rest/in-transit protections, masking requirements, default retention, permitted roles.
+- **Residency matrix:** Mapping of `region_tag` to jurisdictions, residency/transfer rules, breach notification SLA (ties into §8.2). Specifies waiver requirements and Guardian stamping expectations.
+- **Retention schedules:** Baseline retention for each artifact type (transcripts, analysis outputs, compose deliverables, audit logs, DPIA/ROPA). Includes HIPAA overrides and cross-reference to Appendix N.
+- **Compliance dependencies:** Links to legal counsel sign-off and policy documents; updates require dual approval and version bump in Settings (`privacy.legal.matrix_version`).
+
+Retention schedule (baseline; orgs may set stricter)
+
+- Transcripts (TRANSCRIPT): ≥ 365 days from approval or case closure, whichever is later.
+- Analyze outputs (SUMMARY/OUTLINE/TIMELINE/ENTITIES): ≥ 365 days; align with transcript retention to preserve traceability.
+- Compose deliverables (CLIENT/LAWYER/BUNDLE/QA reports): ≥ 365 days; promoters may archive older versions when a newer APPROVED version exists.
+- Ops logs (ops\_\*.jsonl, per-run JSON): retained for life of case + 2 years in the operational store; dual-streamed to WORM object storage with bucket-level retention locks per audit policy.
+- Privacy artifacts (DPIA_RECORD, ROPA_RECORD): ≥ 730 days; listed in audit seals; access limited to `auditor|sysadmin`.
+- QA logs: retained for life of case; hidden from portal; included in WORM audit scope.
+- Entitlement snapshots and audit events: life of case + 2 years; WORM copies per audit policy.
+- Legal hold: any hold on the case supersedes retention timers; destruction jobs must check hold state and emit `DESTRUCTION_CERT` artifacts upon completion.
+
+HIPAA override mode
+
+- Shortens certain retentions (e.g., Compose deliverables) and disables excerpt artifacts; requires explicit activation in Settings with dual approval and audit trail.
+
+______________________________________________________________________
+
+## Appendix D — Canonical artifact catalog
+
+*Purpose: Define stable artifact types, filenames, directories, and versioning rules consumed by UI, agents, and Guardian.*
+
+General rules
+
+- Filenames are prefixed with `job_id` when tied to a run, and use `_v{n}` suffixes for regenerated versions without overwrite.
+- All artifacts persist content SHA-256 in `artifact.content_sha256` and again in the manifest.
+- Ops logs are per-run JSON + human-readable `.log`, plus append-only `ops_<agent>.jsonl` at the case level.
+
+Ingestion inputs (binding)
+
+| Artifact type     | Purpose                                                  | Notes                                                                          |
+| ----------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| EXHIBIT_RAW       | Original exhibit uploads (PDF/image/archive)             | Stored under `docs/raw/`; Guardian enforces format allowlist prior to parsing. |
+| EXHIBIT_TEXT      | Parsed/ocr text companion for exhibits                   | Linked to `EXHIBIT_RAW` via `source.inputs[]`; feeds Analyze search.           |
+| COURT_DOC_RAW     | Court filings or orders as uploaded                      | Similar handling to `EXHIBIT_RAW`; maintains original casing.                  |
+| COURT_DOC_TEXT    | Structured text extraction for court documents           | Used for diffing, timeline extraction, and Compose references.                 |
+| EMAIL_RFC822      | Raw RFC822 email payloads (including headers)            | Stored encrypted; normalized to `EMAIL_TEXT` and attachments.                  |
+| EMAIL_TEXT        | Parsed email body (plaintext/HTML converted)             | Preserves header metadata for Guardian/Compose citations.                      |
+| EMAIL_ATTACHMENTS | Individual artifacts emitted per attachment              | Guardian scans each attachment; retained under case `docs/attachments/`.       |
+| FINANCIALS_RAW    | Spreadsheet or CSV financial uploads                     | Normalized before conversion; preserved for audit.                             |
+| FINANCIALS_TABLE  | Structured table representation of financial artifacts   | Stored as JSON/CSV; downstream analytics consume.                              |
+| MEMO_TEXT\_\*     | Staff/comms memos with deterministic suffix per template | Used by Guardian to validate memo templates and approvals.                     |
+
+Canonical artifact table
+
+| Artifact type             | Directory / pattern                         | Exclusive | Manifest pointer                       | Notes                                                             |
+| ------------------------- | ------------------------------------------- | --------- | -------------------------------------- | ----------------------------------------------------------------- |
+| TRANSCRIPT                | `transcript/<job_id>__transcript.txt`       | No        | `<transcript>.manifest.json`           | Header includes case, source, language, hashes                    |
+| AUDIO_NORMALIZED          | `audio/<job_id>__<normalized_name>`         | No        | n/a                                    | PCM 16 kHz mono copy for reproducibility                          |
+| SUMMARY_MD                | `analysis/<job_id>__summary_v1.md`          | **Yes**   | `<summary>.manifest.json`              | Human-readable narrative                                          |
+| SUMMARY_JSON              | `analysis/<job_id>__summary_v1.json`        | **Yes**   | `<summary>.manifest.json`              | Structured narrative (optional)                                   |
+| OUTLINE_JSON              | `analysis/<job_id>__outline_v1.json`        | No        | `<outline>.manifest.json`              | Hierarchical outline for Compose                                  |
+| TIMELINE_SEEDS_JSON       | `analysis/<job_id>__timeline_seeds_v1.json` | No        | `<timeline_seeds>.manifest.json`       | Deterministic UUID per event                                      |
+| ENTITY_HINTS_JSON         | `analysis/<job_id>__entity_hints_v1.json`   | No        | `<entity_hints>.manifest.json`         | Deterministic UUID per entity/relationship                        |
+| STAFF_REPORT_MD           | `analysis/<job_id>__staff_report_v1.md`     | No        | `<staff_report>.manifest.json`         | Required staff report                                             |
+| COMPOSE_CLIENT_MD/DOCX    | \`docs/\<job_id>\_\_compose_client_v1.md    | docx\`    | **Yes**                                | `<compose_client>.manifest.json`                                  |
+| COMPOSE_LAWYER_MD/DOCX    | \`docs/\<job_id>\_\_compose_lawyer_v1.md    | docx\`    | **Yes**                                | `<compose_lawyer>.manifest.json`                                  |
+| COMPOSE_BUNDLE_EXCERPT_MD | `docs/<job_id>__compose_bundle_v1.md`       | **Yes**   | `<compose_bundle>.manifest.json`       | Excerpt for bundle                                                |
+| COMPOSE_STAFF_REPORT_MD   | `docs/<job_id>__compose_staff_report_v1.md` | No        | `<compose_staff_report>.manifest.json` | QA staff notes                                                    |
+| COMPOSE_QA_REPORT_MD      | `docs/<job_id>__compose_qa_report_v1.md`    | No        | `<compose_qa_report>.manifest.json`    | QA outcomes                                                       |
+| DPIA_RECORD               | \`privacy/\<job_id>\_\_dpia_v1.json         | md\`      | No                                     | `<dpia>.manifest.json`                                            |
+| ROPA_RECORD               | \`privacy/\<job_id>\_\_ropa_v1.json         | md\`      | No                                     | `<ropa>.manifest.json`                                            |
+| AUDIT_SEAL                | `ops/<timestamp>__audit_seal_v1.json`       | No        | `<audit_seal>.manifest.json`           | Rolling Merkle root                                               |
+| SIGNATURE_CERT            | `docs/<job_id>__signature_cert_v1.json`     | No        | `<signature_cert>.manifest.json`       | Signer certificate bundle                                         |
+| ATTACHMENT_RAW            | `docs/<job_id>__attachment_raw_v1.bin`      | No        | `<attachment_raw>.manifest.json`       | Source binary for portal messaging/client uploads; Guardian-gated |
+| ATTACHMENT_TEXT           | \`docs/\<job_id>\_\_attachment_text_v1.json | md\`      | No                                     | `<attachment_text>.manifest.json`                                 |
+| TIMELINE_V2 (future)      | \`timeline/\<job_id>\_\_timeline_v2.json    | md\`      | TBD                                    | `<timeline_v2>.manifest.json`                                     |
+| ERASURE_JOURNAL           | `privacy/<job_id>__erasure_journal_v1.json` | No        | `<erasure_journal>.manifest.json`      | Hard-purge DSAR evidence; subject hashed with HKDF salt           |
+
+Ops logs
+
+- Transcription: `ops/<job_id>__transcription_log.json`, `ops/<job_id>__transcription.log`, case-level `ops_transcription.jsonl`.
+- Analyze: `ops/<job_id>__summary_log.json`, case-level `ops_summary.jsonl`.
+- Compose: `ops/<job_id>__compose_log.json`, case-level `ops_compose.jsonl`.
+- QA diagnostics: `ops/<job_id>__qa_log.json` (internal diagnostics only); reviewer-facing QA outputs stay Guardian-gated artifacts per the table above.
+
+Exclusive types (binding)
+
+- At most one APPROVED per case for `SUMMARY_MD`, `SUMMARY_JSON`, `COMPOSE_CLIENT_*`, `COMPOSE_LAWYER_*`, `COMPOSE_BUNDLE_EXCERPT_MD`.
+- Settings may extend `artifact.exclusive_types[]`; Guardian enforces readiness; approval swap logic in §5.4.1.
+
+Sample manifest pointers
+
+- Each artifact includes a manifest conforming to §5.6; examples should be stored beside artifacts as `<filename>.manifest.json` for debugging.
+
+Notes
+
+- Replace `_v1` with `_v{n}` on regenerated artifacts; prior versions remain on disk. UI promotes only approved versions per type exclusivity rules.
+- For any new artifact, add a distinct type constant, filename template, directory, and ops logging pattern here before implementation.
+- Default downstream integrity action (`integrity.downstream_action`) is `quarantine` for legal deliverables (`COMPOSE_*`, `ATTACHMENT_*`) and `mark_stale` for Analyze narrative artifacts; overrides must be explicitly justified during Settings activation.
+
+______________________________________________________________________
+
+## Appendix E — Settings key map & traceability index
+
+*Purpose: Link platform behavior to configuration keys for audit and troubleshooting.*
+
+E.1 Key catalog (scope: SYSTEM | ORG | CASE)
+
+- regions.allowlist.compute — ORG — \[canadacentral, canadaeast\] — Allowed compute regions; enforced by §3.6.
+- regions.allowlist.storage — ORG — \[canadacentral, canadaeast\] — Allowed storage regions; enforced by §3.6 and §5.3.
+- analyze.model.id — ORG|CASE — default profile — LLM model profile for Analyze lanes; see §8 and §6.3.
+- analyze.token_ceiling — ORG|CASE — 100000 — Max tokens per Analyze job; see §8.3.
+- analyze.max_retries — ORG|CASE — 2 — Retry budget per lane; see §6.3 QA loops.
+- compose.model.id — ORG|CASE — default profile — LLM model profile for Compose; see §8 and §6.4.
+- compose.token_ceiling — ORG|CASE — 100000 — Max tokens per Compose job; §8.3.
+- compose.max_retries — ORG|CASE — 2 — Retry budget per lane; §6.4.
+- compose.policy.forbidden_patterns\[\] — ORG — \[\] — Content forbids; §6.4 QA.
+- compose.templates.client.template_id — ORG — default — DOCX/MD template selection; §6.4.
+- compose.templates.lawyer.template_id — ORG — default — DOCX/MD template selection; §6.4.
+- guardian.rules.version — ORG — v1 — Ruleset version; §7.1.
+- guardian.decision_slo_ms — SYSTEM|ORG — 300000 — Decision latency SLO; §7.1, §12.
+- sign.trust_roots\[\] — SYSTEM|ORG — \[\] — Trust roots for signing; §7.2.
+- sign.tsa.endpoint — SYSTEM|ORG — null — TSA API endpoint; §7.2.
+- sign.tsa.max_time_drift_secs — SYSTEM — 5 — NTP drift tolerance; §7.2, §3.2.
+- security.tls.min_version — SYSTEM — TLSv1.3 — Minimum TLS version for ingress; §3.2.
+- security.tls.cipher_profile — SYSTEM — default — TLS cipher profile for ingress; §3.2.
+- security.tls.legacy_exceptions\[\] — SYSTEM — \[\] — Temporary TLS 1.2 exceptions (≤30 days, alert at T-7); §3.2, §9.2.
+- llm.providers\[\] — SYSTEM|ORG — \[\] — Provider catalog; §8.1.
+- llm.models\[\] — SYSTEM|ORG — \[\] — Model catalog and fallback priorities; §8.1.
+- llm.finops.monthly_cap_usd — ORG — 0 (disabled) — Monthly LLM spend cap; §8.3, §13.4.
+- api.idempotency.ttl_hours — SYSTEM — 24 — TTL for idempotency; §10.3.
+- api.rate_limits.web.rpm_per_org — SYSTEM|ORG — 600 (guardrail 10–2000; activation validator enforces range) — Org RPM; §10.5.
+- api.rate_limits.web.rpm_per_ip — SYSTEM|ORG — 300 (guardrail 10–2000) — IP RPM; §10.5.
+- portal.download.rate_limits.user_rpm — ORG — 60 (guardrail 10–2000) — Portal download/user; §10.5.
+- portal.download.rate_limits.org_rpm — ORG — 200 (guardrail 10–2000) — Portal download/org; §10.5.
+- security.org_switch.step_up_required — SYSTEM — true — Enforce step-up on privilege increase; §4.3.
+- security.disclosure.contact — SYSTEM — null — Security.txt contact; §25.1.
+- security.disclosure.encryption_key_url — SYSTEM — null — PGP key URL; §25.1.
+- security.pentest.cadence — SYSTEM — annual — Pentest schedule; §25.1.
+- security.mfa.webauthn_required_roles — ORG — \[\] — Roles requiring WebAuthn step-up (HIPAA mode); §2.2, §4.3.
+- security.session.device_bind.ip_prefix_len_v4 — ORG — 24 — IPv4 prefix length for device binding; §4.3 (soft/hard modes).
+- security.session.device_bind.ip_prefix_len_v6 — ORG — 48 — IPv6 prefix length for device binding; §4.3 (soft/hard modes).
+- security.session.device_bind.mode — ORG — "soft" — Device fingerprint reaction (`soft` or `hard`); §4.3.
+- udlock.max_session_hold_seconds — SYSTEM — 300 — Advisory lock hold time; App.H RB-LOCK-006.
+- udlock.heartbeat.interval_seconds — SYSTEM — 5 — Heartbeat period; App.H RB-LOCK-006.
+- compliance.erasure_mode — ORG — off — Hard-purge toggle for DSAR mode; §14.2.1.
+- compliance.subject_hkdf_salt — SYSTEM — managed secret — HKDF salt for DSAR subject hashing; §14.2.1.
+- privacy.legal.matrix_version — SYSTEM — semver — Data residency/legal matrix version; App.C.
+- privacy.hipaa.enabled — ORG — false — HIPAA override mode toggle; §2.2, §14.2, App.C.
+- privacy.hipaa.bundle_version — SYSTEM — semver — HIPAA policy bundle version pin; §2.2, App.C.
+- i18n.supported_locales\[\] — ORG — \[en-CA, fr-CA\] — Supported locales; §11.3.
+- storage.bucket_versioning_required — SYSTEM — true — Bucket versioning must be enabled; §5.3, §12.1.
+- storage.remote_hash.enabled — ORG|CASE — false — Record remote hashes for batch inputs; §5.3.
+- storage.remote_hash.max_mb — ORG|CASE — 50 — Max remote bytes to hash; §5.3.
+- settings.activation.require_dual_approval — SYSTEM — true — Dual approval for unsafe changes; §9.3.
+- logging.redaction.enabled — SYSTEM — true — Redact PII in logs; §12.1.
+- logging.access.roles[] — SYSTEM — \[\] — Role mapping for log query privileges (`observability.reader|engineer|auditor`); §12.1.2.
+- logging.cost.daily_budget_mb_per_service — SYSTEM|ORG — 500 — Daily log volume budget per service; §12.1.6.
+- logging.cost.alert_threshold_pct — SYSTEM|ORG — 80 — Alert threshold as % of daily log budget; §12.1.6.
+- logging.level.default — SYSTEM — "INFO" — Default production log level; §12.1.6.
+- logging.level.overrides[] — ORG — \[\] — Per-service log level overrides; §12.1.6.
+- portal.logging.enabled — ORG — true — Enable client telemetry capture; §12.1.5.
+- evidence_store.redacted_excerpts.enabled — ORG — true — Allow storage of prompt/response excerpts; HIPAA enable guard forces false and triggers purge; §2.2, §8.2.
+- logging.immutable_sink.enabled — SYSTEM — true (prod) — Mirror structured logs to immutable storage alongside the audit sink; validators block `false` in production and mark overrides unsafe (§9.11, §12.1).
+- llm.finops.guard.threshold_pct — SYSTEM|ORG — 10 — MoM regression ceiling for deploy gate; §8.7, §13.5.
+- llm.finops.guard.trailing7d_pct — SYSTEM|ORG — 25 — Trailing 7-day burn ceiling (% of monthly cap) for deploy gate; §8.7, §13.5.
+- llm.finops.override_until — SYSTEM — null — Optional timestamp (max +72h) to temporarily relax FinOps guard (dual approval required); §8.7.
+
+E.2 Traceability map
+
+- Agents → analyze.*, compose.*, llm.\* (Sections §6, §8)
+- Guardian/Signer → guardian.*, sign.* (Sections §7)
+- Storage & integrity → storage.\* (Sections §5, §12)
+- Portal/Frontend → portal.*, i18n.*, security.\* (Sections §11)
+- APIs → api.\*, rate limits, CORS (Sections §10)
+- Operations → udlock.*, logging.*, privacy.legal.*, security.pentest.* (Sections §12, §14, App.H)
+
+E.3 Linting (binding)
+
+- CI must flag settings keys referenced in this document that are missing in service repositories. The `settings:lint-keys` pipeline step runs on every PR and fails the build when discrepancies are detected.
+- Script pattern: load Appendix E lists, scan OpenAPI/spec/config code for usage; fail when unmapped keys found.
+- Regions/Residency → regions.allowlist.*, privacy.* (Sections §3.6, App.C)
+- APIs/Rate limits → api.*, portal.download.* (Sections §10)
+- FinOps → llm.finops.\* (Sections §8.3, §12.6, §13.4)
+- Security/Compliance → security.*, privacy.*, logging.redaction.\* (Sections §4, §12, §25)
+- Ops/Locks → udlock.\* (App.H)
+
+E.3 Audit checklist (activation)
+
+- Include justification, reviewers, validation results (`unsafe_reasons[]`), impacted scopes, and rollout timeline. Ensure lints pass (residency, safety, cost) and link to decision log (§15.3).
+
+E.4 Change log
+
+- Maintain a rolling history of key modifications with references to PRs, decision log entries, and rollout notes.
+
+______________________________________________________________________
+
+## Appendix F — API reference snippets & examples (normative)
+
+*Purpose: Provide signed, idempotent examples to guide integrations.*
+
+F.0 Canonical `ApiError.code` values
+
+| Code | Description |
+| ---- | ----------- |
+| `POLICY_BLOCK` | Guardian or settings policy prevented the action. |
+| `QUARANTINED` | Artifact is quarantined and unavailable. |
+| `INTEGRITY_ERROR` | Hash or integrity validation failed. |
+| `VALIDATION_ERROR` | Input payload failed validation. |
+| `AUTH_ERROR` | Authentication or signature failure. |
+| `NOT_FOUND` | Resource not found or not visible. |
+| `CONFLICT` | Optimistic concurrency or idempotency conflict. |
+| `RATE_LIMIT` | Rate, quota, or budget exceeded. |
+| `PROVIDER_DEGRADED` | Downstream provider degraded/unavailable. |
+
+Spectral rule `ops/openapi/rules/apierror-enum.yaml` lints OpenAPI specs to keep responses aligned with this list.
+
+F.1 Idempotency contract & Guardian submit (binding)
+
+Idempotency store schema (restated from §10.3.1 for quick reference)
 
 ```sql
--- Optional guard: prevent overlapping runs of same kind per case
--- Try to acquire a short-lived advisory lock; fail with 409 if held.
-SELECT udlock.try_lock_i(
-  'jobkind',
-  CONCAT(:case_id::text, '/', :kind),
-  :node_id   -- caller-supplied logical worker id/pod name
-) AS ok;
--- If ok=false → 409 CONFLICT "JOB_KIND_BUSY".
--- Hold the lock only through the transition to RUNNING, then release.
+CREATE TABLE idempotency_keys (
+  org_id UUID NOT NULL,
+  scope  TEXT NOT NULL,
+  key    TEXT NOT NULL,
+  endpoint TEXT NOT NULL,
+  case_id UUID NULL,
+  request_hash BYTEA NOT NULL,
+  status TEXT NOT NULL DEFAULT 'in_progress',
+  result_ref TEXT NULL,
+  response_code INTEGER NULL,
+  response_hash BYTEA NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at TIMESTAMPTZ NOT NULL,
+  PRIMARY KEY (org_id, scope, key)
+);
+CREATE INDEX idempotency_keys_expiry_idx
+    ON idempotency_keys (expires_at);
+CREATE UNIQUE INDEX idempotency_request_dedupe_idx
+    ON idempotency_keys (org_id, scope, endpoint, request_hash);
+```
+
+Scope dimensions
+
+| Column | Description |
+| ------ | ----------- |
+| `scope` | Logical action bucket (`job:create`, `artifact:approve`, etc.); shared constants in `packages.udocket_core.idem.constants`. |
+| `endpoint` | Canonical `METHOD:/api/...` string preventing cross-route collisions. |
+| `case_id` | Optional discriminator for case-scoped flows (null for global jobs). |
+| `request_hash` | `sha256` of the canonicalised request payload (body + sorted query + idempotency key). |
+| `status` | `in_progress` during execution, `succeeded` after persistence, `conflict` when a mismatched replay occurs. |
+| `result_ref` | Identifier returned to the caller (artifact ID, job ID, etc.). |
+| `response_hash` | `sha256` of the serialized response body for auditability. |
+| `response_code` | HTTP status associated with the stored response (used for `Idempotency-Status`). |
+| `last_seen_at`/`expires_at` | Replay window accounting (default TTL = `api.idempotency.ttl_hours`). |
+
+Collision handling & headers
+
+- Services MUST compute `request_hash` using the shared helper and raise `409 IDEMPOTENCY_SIGNATURE_MISMATCH` when an existing `(scope,key)` stores a different hash.
+- Replay successes update `last_seen_at`, return the stored `result_ref`, and echo `Idempotency-Key` plus `Idempotency-Status: replay`. First-run success emits `Idempotency-Status: fresh`; conflicts return 409 with `Idempotency-Status: conflict`.
+- `Idempotency-Status` joins structured logging (`idempotency_status` field) so SREs can track replay rates; metrics `idempotency_replay_total` and `idempotency_conflict_total` back deploy gates.
+
+Header example (success replay)
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+Idempotency-Key: 6d2fdc4c-483f-4f5b-9f4d-0f514c214766
+Idempotency-Status: replay
+X-Request-ID: 4f1a9c8c-0da5-4b27-9acd-6b6ddfd402c2
+
+{ "artifact_id": "a7b9495c-4a5c-4e3b-91c6-5adef1d22264" }
+```
+
+Idempotency scopes
+
+```
+IDEMPOTENCY_SCOPES = {
+  "job:create",
+  "job:checkpoint",
+  "artifact:approve",
+  "artifact:upload",
+  "upload:finalize"
+}
 ```
 
 
-#### 21.1.3 Reviews (with OCC)
-* `POST /api/v1/reviews/{artifact_id}/approve`
-  Body: `{ "note": "...", "expected_version": INT }`
-  Transaction (isolation: READ COMMITTED)
-
-  1. Acquire case/type advisory lock:
-    ```sql
-    -- Approval/reject lock: scope 'case-approval' + "org/case/type"
-    SELECT udlock.xact_lock(
-      'case-approval',
-      CONCAT(:org_id::text, '/', :case_id::text, '/', :type)
-    );
-    ```
-  2. Demote any existing APPROVED for (org_id, case_id, type):
-    ```sql
-    UPDATE artifact
-       SET state='READY', version=version+1
-     WHERE org_id=:org_id AND case_id=:case_id AND type=:type AND state='APPROVED';
-    ```
-  3. Approve target if in READY and version matches:
-     ```sql
-     UPDATE artifact
-        SET state='APPROVED', review_reason=:reason, approved_at=now(), approved_by=:user, version=version+1
-      WHERE id=:artifact_id AND state='READY' AND version=:expected_version;
-     ```
- 4. If rowcount=0:
-     * If the target is already `APPROVED`, return **200** (idempotent) regardless of `expected_version`.
-      (Clients SHOULD send the current version, but servers MUST treat replays as idempotent.)
-     * Else → **409 CONFLICT** (stale version or illegal state).
-  5. Emit audit + SSE.
-
-**Portal invalidation (binding):** If this approval demotes a previously `APPROVED` artifact of the same `(case,type)` or a rejection affects an artifact backing any active portal link, the server MUST:
-  * emit `portal_link_invalidated` (see §47, §50) and
-  * terminate in-flight downloads with **412 If-Match** or **403 state changed** per §47.
-
-* `POST /api/v1/reviews/{artifact_id}/reject`
-  **Body:**
-  `{ "reason": "...", "expected_version": INT }` (required)
-  Transaction (READ COMMITTED)
-
-  1. Acquire lock as above.
-  2. Update with OCC:
-     ```sql
-     UPDATE artifact
-        SET state='REJECTED', review_reason=:reason, rejected_by=:user, rejected_at=now(), version=version+1
-      WHERE id=:artifact_id AND state IN ('READY','APPROVED') AND version=:expected_version;
-     ```
-  3. If rowcount=0 → 409 CONFLICT (stale state/version).
-  4. Emit audit + SSE.
-
-
-#### 21.1.4 QA_logs (read-only)
-* `GET /api/v1/jobs/{job_id}/qa-logs`
-* `GET /api/v1/artifacts/{artifact_id}/qa-logs`
-* `GET /api/v1/qa-logs/{id}`
-
-**Implementation binding:** Handlers MUST select from `qa_log_secure` (not the base `qa_log` table).
-
-**Handler skeleton (Django/psycopg3 example, with helpers):**
-* Snippet is normative for OCC.
-```python
-with connection.cursor() as cur, transaction.atomic():
-    cur.execute("""
-        WITH demote AS (
-            UPDATE artifact SET state='READY', version=version+1
-                WHERE org_id=%s AND case_id=%s AND type=%s AND state='APPROVED'
-				RETURNING id
-        )
-        UPDATE artifact
-            SET state='APPROVED', approved_at=now(), approved_by=%s, version=version+1
-        WHERE id=%s AND state='READY' AND version=%s;
-    """, [org_id, case_id, atype, user_id, artifact_id, expected_version])
-    if cur.rowcount == 0:
-        raise Conflict("Approval preconditions not met")
+```bash
+curl -sS -X POST \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: $IDEMP" \
+  -H "X-Signature-Key-Id: $KEY_ID" \
+  -H "X-Timestamp: $(date -u +%FT%TZ)" \
+  -H "X-Request-Signature: $(./scripts/sign.sh body.json)" \
+  https://platform.local/api/v1/guardian/submit \
+  -d '{"artifact_id":"...","org_id":"...","case_id":"...","content_sha256":"..."}'
 ```
 
+F.2 Reviews approve (OCC lock implied)
 
-#### 21.1.5 RBAC & field controls (API contract note)
-* All read endpoints MUST select from secure views:
-  * `case_secure`, `artifact_secure`, `qa_log_secure`, `guardian_decision_history_secure`, `delivery_receipt_secure`, `audit_event_secure`, `entitlement_snapshot_secure`.
-  * SSE/WS reuse the same serializers to prevent leakage.* Serializers must not “re-hydrate” masked fields; SSE/WS reuse the same serializer pipeline to prevent leaking masked data.
-* `sysadmin` (realm role) bypasses masking via `udocket_has_realm_role('sysadmin')`.
-* **Gateway header linter (binding):** Protected routes **reject** org/role spoofing headers (e.g., `X-Org-ID`, `X-Active-Roles`). Authorization is derived **only** from the OIDC token claims; such headers are accepted **solely** as correlation on explicitly whitelisted diagnostic endpoints.
-
-
-### 21.2 Real-time
-* On org switch, server terminates existing SSE/WS; clients reconnect after re-auth with the new token.
-* **SSE:**
-  * `GET /sse/job/{job_id}` → `event: progress|state|error|artifact_state` (payload includes `artifact_id` when relevant).
-  * `GET /sse/case/{case_id}` → artifact state & review updates.
-
-> **Event ID (monotonic):** Use a per-case counter stored in Redis: key `sse:case:{case_id}:seq`. Each emission uses `INCR` and sets `id = "case/{case_id}/{seq}"`. This guarantees monotonicity across pods and restarts.
-
-* **Channels:**
-  * `/ws/editor/{artifact_id}` for collaborative editing on DRAFTs.
-
-
-### 21.3 Guardian / Signer / Settings / LLM registry
-* Guardian: §5.2 (plus `/healthz`, `/readyz`, `/rulesz`, `/synthetic/status`)
-* Signer: `POST /v1/sign`, `POST /v1/verify` (with APPROVED source)
-* Settings: §36 APIs
-* LLM registry (read-only admin views): `GET /v1/admin/llm/providers`, `GET /v1/admin/llm/models`
-
-
-### 21.4 Privacy & Governance APIs (admin/auditor)
-* **DPIA (Data Protection Impact Assessment)**
-  * `POST /v1/privacy/dpia` → create a DPIA record (produces `DPIA_RECORD` artifact; content stored in object storage; summary fields only in DB).
-  * `GET /v1/privacy/dpia?org_id|case_id|status|page=...` → list (pagination per §52).
-  * `GET /v1/privacy/dpia/{id}` → metadata + artifact refs.
-* **RoPA (Record of Processing Activities)**
-  * `POST /v1/privacy/ropa` → create/update a RoPA snapshot (produces `ROPA_RECORD` artifact).
-  * `GET /v1/privacy/ropa?org_id|page=...`
-* **Entitlements history**
-  * `GET /v1/admin/entitlements/history?user_id&org_id&from&to&page=...`
-* **Security & RBAC**
-  * Security: `oidc` required; roles `auditor|sysadmin` (realm) or delegated `org_auditor` (org-scoped) may read; create/update endpoints require `sysadmin|privacy_officer`.
-  * All responses include `X-Request-ID`; errors conform to `ApiError` (§21.9.1).
-    * **OpenAPI tagging:** all operations under `/v1/privacy/*` MUST include the `privacy` tag for discoverability and linting (§21.11.1).
-
-
-### 21.5 API error (Pydantic)
-```python
-class ApiError(BaseModel):
-    code: Literal[
-      'POLICY_BLOCK','QUARANTINED','INTEGRITY_ERROR',
-      'VALIDATION_ERROR','AUTH_ERROR','NOT_FOUND','CONFLICT','RATE_LIMIT','PROVIDER_DEGRADED'
-    ]
-    message: str
-    details: dict[str, Any] | None = None
-    correlation_id: str
-    # Server echoes "Idempotency-Key" (when provided) to aid safe retries.
+```bash
+curl -sS -X POST \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  https://platform.local/api/v1/reviews/$ARTIFACT_ID/approve \
+  -d '{"note":"Looks good","expected_version":3}'
 ```
 
-*For `RATE_LIMIT`, set `Retry-After` header and include `details.retry_after_ms`.*
+F.3 Signing request (HMAC)
 
+```bash
+curl -sS -X POST \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "X-Signature-Key-Id: $KEY_ID" \
+  -H "X-Timestamp: $(date -u +%FT%TZ)" \
+  -H "X-Request-Signature: $(./scripts/sign.sh body.json)" \
+  https://platform.local/api/v1/sign \
+  -d '{"artifact_id":"...","content_uri":"..."}'
+```
 
-### 21.6 Header examples
-* On 429 responses include:
-  * Retry-After: <seconds>
-  * X-RateLimit-Limit: <limit>
-  * X-RateLimit-Remaining: <remaining>
-  * X-RateLimit-Reset: <unix-epoch-seconds>
-  * Idempotency-Key: <echoed-opaque-key-if-present>
+F.4 SSE events with Last-Event-ID
 
+```bash
+curl -N -H "Authorization: Bearer $TOKEN" \
+  -H "Last-Event-ID: $LAST_ID" \
+  https://platform.local/api/v1/jobs/$JOB_ID/events
+```
 
-#### 21.6.1 CORS exposure (binding)
-**Canonical CORS contract:** This subsection is normative. Other sections (e.g., §23 tests, §29.4 security headers) reference this list rather than repeating it.
-* Purpose: allow browser clients (Portal, Staff UI) to **read rate-limit and correlation headers**.
-* Responses to CORS requests **MUST** include:
-  * `Access-Control-Expose-Headers: X-Request-ID, X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset, Retry-After, ETag, Deprecation, Sunset`
-* Preflight **MUST** allow required request headers for our contracts:
-  * `Access-Control-Allow-Headers` includes: `Authorization, Content-Type, Idempotency-Key, X-Request-Signature, X-Signature-Key-Id, X-Timestamp, If-Match`
-* Cache correctness:
-  * Add `Vary: Origin, Access-Control-Request-Method, Access-Control-Request-Headers` to CORS responses.
-* Normative restatement (authZ): **Org/role spoofing headers are correlation-only and never used for authorization**; see §21.1.5 and §2. All authorization derives from OIDC token claims.
+Notes
 
+- Headers exposed to browsers per §10.5 CORS; examples avoid PII.
+- OpenAPI snippets below are normative; service implementations must keep them in sync with Spectral rules.
 
-### 21.7 Rate limits & antifraud
-* Per-org: 600 rpm sustained, 1200 rpm burst; Per-IP: 300 rpm sustained.
-* Portal downloads: 60 rpm per user, 200 rpm per org; anomaly trip → auto-expire all active links for the org and alert.
-* 429 with Retry-After on limit breach; headers expose remaining tokens.
+F.5 Conditional GET with ETag and range
 
+```bash
+curl -I -H "Authorization: Bearer $TOKEN" \
+  https://platform.local/api/v1/artifacts/$A/download
 
-### 21.8 Idempotency TTL (binding)
-* Unless explicitly overridden in settings (`api.idempotency.ttl_hours`, default **24h**), reusing the same `Idempotency-Key` within TTL returns the same result reference. After TTL, new execution occurs; **callers MUST NOT** assume dedupe beyond TTL.
-* Error on key reuse with different signature: `409 CONFLICT` `details.reason="IDEMPOTENCY_SIGNATURE_MISMATCH"`.
+curl -L -H "Authorization: Bearer $TOKEN" \
+  -H "If-None-Match: \"$ETAG\"" \
+  -H "Range: bytes=0-1048575" \
+  https://platform.local/api/v1/artifacts/$A/download
+```
 
-### 21.9 OpenAPI
-### 21.9.1 OpenAPI authoring rules (binding)
-**Scope:** Applies to all uDocket OpenAPI documents (Web, Guardian, Signer, Settings, LLM Registry).
+F.6 CORS preflight
 
-**Baselines**
-* **OpenAPI version:** 3.0.3 (or newer minor) across all specs.
-* **Servers:** MUST include a base server with `/api/v1` (or service-specific root) and environment variables documented.
-* **Global security:** All operations require `oidc`. Mutating operations (`POST|PUT|PATCH|DELETE`) that cross service boundaries or are internally posted over HTTP MUST also require `hmacSignature`.
-* **Error envelope:** Every 4xx/5xx response MUST reference `#/components/schemas/ApiError` (see §21.5) and include `X-Request-ID`.
-* **Pagination contract:** List endpoints MUST use `#/components/parameters/page`, `page_size`, and `sort` and return the envelope in §52.
-* **Headers:** Requests/responses MUST use the shared header components below; **org/role spoofing headers are forbidden** (see §21.1.5).
+```bash
+curl -i -X OPTIONS \
+  -H "Origin: https://portal.local" \
+  -H "Access-Control-Request-Method: GET" \
+  -H "Access-Control-Request-Headers: Authorization, Idempotency-Key, X-Request-Signature, X-Signature-Key-Id, X-Timestamp, If-Match" \
+  https://platform.local/api/v1/artifacts/$A/download
+```
 
-**Shared components (imported by all specs)**
+F.7 Upload Finalize
+
 ```yaml
-openapi: 3.0.3
-components:
-  securitySchemes:
-    oidc:
-      type: openIdConnect
-      openIdConnectUrl: https://<keycloak>/.well-known/openid-configuration
-    hmacSignature:
-      type: apiKey
-      in: header
-      name: X-Request-Signature
-  headers:
-    X-Request-ID:
-      schema: { type: string }
-      description: Correlation ID echoed by the server.
-    X-RateLimit-Limit:     { schema: { type: integer } }
-    X-RateLimit-Remaining: { schema: { type: integer } }
-    X-RateLimit-Reset:     { schema: { type: integer, description: "Unix epoch seconds" } }
-    Retry-After:           { schema: { type: integer, description: "Seconds until safe retry" } }
-  parameters:
-    page:
-      in: query
-      name: page
-      schema: { type: integer, minimum: 1, default: 1 }
-    page_size:
-      in: query
-      name: page_size
-      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
-    sort:
-      in: query
-      name: sort
-      schema: { type: string }
-  schemas:
-    ApiError:
-      type: object
-      required: [code, message, correlation_id]
-      properties:
-        code: { type: string }
-        message: { type: string }
-        details: { type: object, additionalProperties: true }
-        correlation_id: { type: string }
-```
-
-**Authoring rules**
-1) Each operation MUST declare at least one `2xx` and one `4xx` response.  
-2) Mutating operations MUST include `Idempotency-Key` header when idempotency is defined (see §21.8.1).  
-3) Response examples MUST avoid PII and use masked placeholders per §29.1.  
-4) Specs MUST not define or accept `X-Org-ID`/`X-Active-Roles` headers except on whitelisted diagnostics (see §21.1.5).
-
-
-### 21.9.2 OpenAPI exemplars (normative)
-
-#### 21.9.2.1 Upload Finalize
-```yaml
-openapi: 3.0.3
+openapi: 3.1.0
 paths:
   /api/v1/uploads/{upload_session_id}/finalize:
     post:
@@ -2132,20 +3056,12 @@ paths:
       security:
         - oidc: []
         - hmacSignature: []
-components:
-  securitySchemes:
-    oidc:
-      type: openIdConnect
-      openIdConnectUrl: https://<keycloak>/.well-known/openid-configuration
-    hmacSignature:
-      type: apiKey
-      in: header
-      name: X-Request-Signature
 ```
 
-#### 21.9.2.2 Guardian Submit
+F.8 Guardian Submit
+
 ```yaml
-openapi: 3.0.3
+openapi: 3.1.0
 paths:
   /api/v1/guardian/submit:
     post:
@@ -2157,14 +3073,6 @@ paths:
         - oidc: []
         - hmacSignature: []
 components:
-  securitySchemes:
-    oidc:
-      type: openIdConnect
-      openIdConnectUrl: https://<keycloak>/.well-known/openid-configuration
-    hmacSignature:
-      type: apiKey
-      in: header
-      name: X-Request-Signature
   schemas:
     GuardianDecision:
       type: object
@@ -2175,20 +3083,10 @@ components:
         guardian_decision_id: { type: string, format: uuid }
 ```
 
+F.9 Review Approve (OCC)
 
-#### 21.9.2.3 Review Approve (OCC)
 ```yaml
-openapi: 3.0.3
-components:
-  schemas:
-    ApiError:
-      type: object
-      required: [code, message, correlation_id]
-      properties:
-        code: { type: string }
-        message: { type: string }
-        details: { type: object, additionalProperties: true }
-        correlation_id: { type: string }
+openapi: 3.1.0
 paths:
   /api/v1/reviews/{artifact_id}/approve:
     post:
@@ -2211,1615 +3109,432 @@ paths:
         "200": { description: Approved }
         "409":
           description: Conflict (stale version or illegal state)
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiError"
 ```
 
-
-### 21.10 API versioning & deprecation
-* Semantic versions in OpenAPI; additive changes only within minor.
-* **Deprecation signaling (binding):** when an operation is deprecated, servers MUST emit `Deprecation: true` on all responses and `Sunset: <RFC 8594 HTTP-date>` for the endpoint. Clients SHOULD warn when `Sunset` is ≤ 30 days away. Minimum 90-day overlap between stable and deprecated routes.
-* Contract tests in CI enforce non-breaking schema changes.
-* **Stability matrix:** `stable`, `beta`, `experimental` tags in OpenAPI `x-stability`; clients must not rely on experimental endpoints in production.
-
-
-### 21.11 API style & linting (Spectral; binding)
-**Goal:** Enforce consistency and security across OpenAPI specs in CI.
-
-**Tooling:** Spectral with a repo-local ruleset `ops/openapi/spectral.yaml`.
-
-**Required rules (excerpt)**
-* `oas3-valid-schema-example` — examples must validate against schemas.
-* `operation-2xx-response` — every operation needs a success response.
-* `no-undefined-server-variables` — all server variables documented.
-* `udocket-global-security` — each operation includes `oidc`.
-* `udocket-hmac-on-mutating` — `POST|PUT|PATCH|DELETE` require `hmacSignature` unless explicitly annotated `x-internal=false`.
-* `udocket-error-envelope` — all 4xx/5xx reference `#/components/schemas/ApiError`.
-* `udocket-pagination` — list endpoints use shared `page`, `page_size`, `sort` params and §52 envelope.
-* `udocket-no-org-spoof-headers` — forbid `X-Org-ID`/`X-Active-Roles` request headers.
-
-**Ruleset (snippet)**
-```yaml
-extends: ["spectral:oas", "spectral:asyncapi"]
-rules:
-  udocket-global-security:
-    given: $.paths[*][*]
-    then:
-      field: security
-      function: falsy
-      functionOptions:
-        not: true   # i.e., must exist
-  udocket-hmac-on-mutating:
-    given: $.paths[*].*[?(@key.match(/post|put|patch|delete/i))]
-    then:
-      function: schema
-      functionOptions:
-        schema:
-          type: object
-          properties:
-            security:
-              type: array
-              contains:
-                type: object
-                required: [hmacSignature]
-          required: [security]
-  udocket-error-envelope:
-    given: $.paths[*][*].responses[?(@property.match(/^4|5\d{2}$/))]
-    then:
-      field: content.application/json.schema.$ref
-      function: pattern
-      functionOptions: { match: "#/components/schemas/ApiError" }
-  udocket-pagination:
-    given: $.paths[*].get.parameters
-    then:
-      function: schema
-      functionOptions:
-        schema:
-          type: array
-          contains:
-            anyOf:
-              - { type: object, properties: { $ref: { const: "#/components/parameters/page" } }, required: [$ref] }
-              - { type: object, properties: { $ref: { const: "#/components/parameters/page_size" } }, required: [$ref] }
-  udocket-no-org-spoof-headers:
-    given: $.paths[*][*].parameters[?(@.in=="header")].name
-    then:
-      function: pattern
-      functionOptions: { notMatch: "^(X-Org-ID|X-Active-Roles)$" }
-
-# --- Privacy API stubs
-  udocket-privacy-security-stub:
-    description: "Stub – Privacy endpoints must declare security; POST-like methods also require hmacSignature."
-    severity: warn
-    given: $.paths[/^\/v1\/privacy\/.*/]
-    then:
-      function: schema
-      functionOptions:
-        schema:
-          type: object
-          properties:
-            get:
-              type: object
-              properties:
-                security:
-                  type: array
-            post:
-              type: object
-              properties:
-                security:
-                  type: array
-            put:
-              type: object
-              properties:
-                security:
-                  type: array
-            patch:
-              type: object
-              properties:
-                security:
-                  type: array
-            delete:
-              type: object
-              properties:
-                security:
-                  type: array
-  udocket-privacy-tag-stub:
-    description: "Stub – Privacy endpoints should be tagged 'privacy' for discoverability."
-    severity: warn
-    given: $.paths[/^\/v1\/privacy\/.*/][*].tags
-    then:
-      function: schema
-      functionOptions:
-        schema:
-          type: array
-          contains:
-            type: string
-            const: privacy
-  udocket-privacy-error-envelope-stub:
-    description: "Stub – Privacy endpoints should use ApiError envelope on 4xx/5xx."
-    severity: warn
-    given: $.paths[/^\/v1\/privacy\/.*/][*].responses[?(@property.match(/^4|5\\d{2}$/))]
-    then:
-      field: content.application/json.schema.$ref
-      function: pattern
-      functionOptions: { match: "#/components/schemas/ApiError" }
-  udocket-privacy-no-pii-examples-stub:
-    description: "Stub – Avoid raw PII in examples under privacy endpoints (enforce later with custom fn)."
-    severity: warn
-    given: $.paths[/^\/v1\/privacy\/.*/]..example
-    then:
-      function: falsy
-      functionOptions:
-        not: false  # placeholder: warns if any example is present; tighten with custom fn later
-```
-
-**CI binding:** `make openapi:lint` MUST run in PRs; failures block merge.
-
-
-#### 21.11.1 Privacy API Spectral stub rules (notes)
-* These stubs are **WARN**-level initially to surface drift without blocking merges while the privacy specs stabilize.
-* **Escalation plan:** Within one quarter post-GA of the privacy APIs, raise severities to **ERROR** and replace the `no-pii-examples` stub with a custom function that rejects email/phone/National-ID patterns.
-
----
-
-## 22) Frontend behavior
-
-* **SSE** for status/progress; auto-reconnect with `Last-Event-ID`; backoff + jitter.
-* **Channels** for interactive controls/editor.
-* **Diff views:**
-  * Transcript: word-level diff, timecode chips → playback.
-  * Compose: section diff; references to Facts/Entities/Events resolve to Analyze IDs.
-* **Review UI:** Approve/reject with rationale; show Guardian reasons if quarantined.
-* **QA Logs panel:** Render Markdown + issues table with deep links; **export MD/JSON**; labeled *Internal*.
-* **Delivery UI:** Link expiry; receipt statuses.
-* **Signoff UI:** Manifest preview; verification result.
-* **Visibility:** default lists prioritize `APPROVED`; toggle shows `READY/REJECTED`.
-* **Masked fields:** Fields returned as `[REDACTED]` or `null` must be rendered as-is; the UI should not attempt client-side “unmasking,” and must hide copy-to-clipboard for masked values.
-* **Masked value handling (binding):** Values masked by secure views (e.g., `'[REDACTED]'` or `null`) **must be rendered as-is**. API serializers and clients **must not** attempt to “unmask”, transform, or substitute sentinel values.
-
-**Accessibility additions (binding):**
-* **Global**: Provide “Skip to content” link; maintain logical heading hierarchy; ensure focus is restored sensibly after dialogs close.
-* **Live updates**: Route SSE events to ARIA live regions:
-  * `progress/state`: announce in a **polite** region with rate-limiting to avoid screen reader spam.
-  * `portal_link_invalidated`: announce once in an **assertive** region and display a high-contrast banner with an actionable link.
-* **Keyboard patterns**: Use roving `tabindex` for composite widgets (lists, menus); ensure Enter/Space activate, Arrow keys navigate.
-* **Reduced motion**: Respect `prefers-reduced-motion`; swap spinners/shimmers with static alternatives.
-
-**Artifacts:**
-* **Artifact header:** show **Artifact (ID)** + **State** badge (e.g., “Client Brief — **APPROVED**”); show **Archived** chip when archived.
-* **Default views** hide `archived=true` unless toggled; "Latest documents" uses **exclusive-type** latest semantics.
-* **Status model:** `DRAFT` (work-in-progress) → `READY` (passed Guardian, awaiting review) → `APPROVED` (consumable) → `REJECTED` (with reason) / `QUARANTINED`.
-
----
-
-## 23) Testing strategy
-
-* **Unit:** validators, RLS, Settings precedence, Guardian rules, Signer manifest/hash, LLM selection & circuit breaker.
-* **Contract:** Pydantic schema conformance, referential integrity, structure/length bounds, policy compliance, Guardian idempotency (per artifact).
-* **API lints (binding):** Spectral ruleset (§21.10) passes for all OpenAPI specs; CI blocks on violations (global security, error envelope, pagination, forbidden headers).
-* **Regression:** snapshot diffs on semantics (required sections presence/order, references resolvable, forbidden patterns absent). **No byte-equality** assertions for LLM content.
-* **Integration:** E2E with fixture audio/templates; SSE & Channels paths; **approval gate** blocks consumption until `APPROVED`.
-* **Security:** AuthZ boundaries, case membership enforcement, signed-URL misuse, break-glass audit.
-* **SQL linter (binding):** CI fails if application code issues `FROM "case"` or `FROM artifact` (migrations/tests excluded).
-* **DB privilege tests:** app role cannot `SELECT` base tables; can `SELECT` only `*_secure` views; attempts are denied even for table owner due to RLS+grants.
-* **Performance:** Long-audio throughput, latency, READY backlog processing rate, approval lead times, concurrent jobs, SSE fan-out, Guardian/Signer/LLM latency.
-* **Chaos & DR drills:** quarterly chaos experiments (pod kills, network latency injection, object store read throttling) and restoration dry-runs; SLO burn recorded.
-* **Integrity:** corrupt file injection → quarantine path; downstream integrity scan from `manifest.source_artifacts[]`.
-* **Security regression:** CSP/CORS headers present; cookies SameSite=strict; adaptive MFA flows exercised.
-* **Supply chain:** CI blocks Critical CVEs; SBOM present in build artifacts.
-* **LLM safety:** jailbreak golden-set run passes; cost cap enforcement returns RATE_LIMIT with details.
-* **Accessibility:** axe/pa11y CI green; manual audit sample.
-
-* **CORS & header exposure (rate limits):**
-  * Contract tests assert presence of `Access-Control-Expose-Headers` per **§21.6.1** (includes `X-Request-ID, X-RateLimit-*, Retry-After, ETag, Deprecation, Sunset`).
-  * Browser E2E verifies JS `fetch()` can read `X-RateLimit-Remaining` and `Retry-After` on 429 responses.
-  * Negative test: Preflight includes `Idempotency-Key`, `X-Request-Signature`, `X-Signature-Key-Id`, `X-Timestamp`, `If-Match`; server allows them.
-
-* **Fuzz/property tests (ingestion & policy compiler)**
-  * **Scope:** Hypothesis corpora; CI job; seeds from real docs.
-  * **DoD:** Reproducible failures; corpus persisted.
-  * **Owner:** QA/BE
-  * **Est:** 2d.
-
-* **UUIDv8 test vectors (binding)**
-  * A canonical vectors file lives at `spec/vectors/uuidv8.json` (repo-relative). CI loads and asserts that the deterministic packer in §27 reproduces IDs for the given anchors and salts.
-  * **Contract:** Any change to packing/anchors must update vectors and bump the graph version (§54).
-
-* **Diagram drift check (binding)**
-  * CI job `diagram:diff` fails the build when `docs/erd/udocket-erd.svg` or `docs/diagrams/service-map.svg` hash changes without the corresponding source files (`.drawio`/`.mermaid`) and commit note.
-
-* **Sysadmin recertification workflow**
-  * Synthetic data job generates `SYSADMIN_RECERT_REPORT` artifacts quarterly (see §29.7). Contract tests assert artifact creation, audit trail, and dual-approval gate on exceptions.
-
-
-### 23.1 Integrity flow
-* On `INTEGRITY_ERROR`: call **§5.2.1** `/v1/guardian/quarantine`. Guardian validates and records the decision and sets `state='QUARANTINED'`.
-
-  * For dependents, apply `integrity.downstream_action ∈ {mark_stale|quarantine}`; UI flags **NEEDS_REVIEW** where applicable.
-* If `policy=mark_stale`, flag UI **NEEDS_REVIEW**.
-* If `policy=quarantine`, set `state=QUARANTINED` and emit `audit_event('DOWNSTREAM_QUARANTINE')`.
-
-```sql
-CREATE TABLE integrity_scan_queue (
-  org_id UUID NOT NULL,
-  artifact_id UUID NOT NULL,
-  enqueued_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  PRIMARY KEY (org_id, artifact_id)
-);
-```
-
-* **Enqueue (Idempotent):**
-
-```sql
-INSERT INTO integrity_scan_queue (org_id, artifact_id)
-VALUES (:org_id, :artifact_id)
-ON CONFLICT DO NOTHING;
-```
-
-* **Workers claim:**
-
-```sql
-  SELECT artifact_id FROM integrity_scan_queue
-   FOR UPDATE SKIP LOCKED
-   LIMIT :batch;
-```
-
-
-### 23.2 LangGraph Acceptance Tests
-* **Node idempotency:** re-run a completed lane → zero new LLM calls; identical outputs or schema-equivalent.
-* **Checkpoint resume:** kill between Lane QA and Final QA → resume at Final QA without re-calling LLM.
-* **Cross-lane integrity:** create conflicting entity/event refs → Final QA rejects with actionable QA log.
-* **Fallback correctness:** primary model forced open-circuit → fallback chosen; evidence shows circuit state.
-* **Deterministic IDs:** same anchors → same UUIDv8 across reruns; changed spans → new IDs.
-* **Policy block:** simulate region disallow → job fails early in ContextBuilder with `POLICY_BLOCK`.
-* **Token ceilings:** construct oversized input → prompt truncation obeys ceiling; QA passes shape bounds.
-
-
-### 23.3 More test hooks
-* **Approve/Reject concurrency:** two reviewers racing → exactly one state transition; other gets 409.
-* **Upload finalize race:** assert that **no artifact row exists** prior to finalize; finalize creates exactly one row; any further finalize attempts are idempotent or rejected.
-* **Outbox claim:** two senders never process the same row (SKIP LOCKED proof + OCC).
-* **Settings activation:** activating a bundle while one is ACTIVE swaps atomically; unique constraint + advisory lock + OCC enforce invariant.
-* **Single-use token:** second fetch returns 410/403.
-* **Artifact immutability:** attempt to UPDATE `content_uri`, `content_sha256`, or `manifest` on an existing row → rejected by trigger.
-* **Guardian gate:** downstream consumers blocked until `APPROVED` as already specified.
-
-
-### 23.4 Governance/Privacy acceptance
-* **Residency matrix:** activating a bundle that violates Appendix G for the org’s jurisdictions is rejected with `VALIDATION_ERROR`; runtime pre-flight blocks cross-jurisdiction runs (`RESIDENCY_POLICY_BLOCK`).
-* **DPIA:** creating a DPIA produces a `DPIA_RECORD` artifact; required fields validated per §H.2; artifact appears in audit seal window.
-* **RoPA:** RoPA snapshot creation produces `ROPA_RECORD`; retention matches Appendix H; auditor can list and fetch metadata.
-* **Entitlements:** login mints an entitlement snapshot; `GET /v1/admin/entitlements/history` returns rows scoped by RLS and role; pagination per §52.
-
-
-### 23.5 Property & fuzz testing
-* **Targets:** ingestion parsers (archive/ocr/email), policy compiler (settings→effective tables), SSE event schemas (§50), region validator (§8).
-* **Method:** Hypothesis-based generators + curated corpora; invariants (idempotent compile, denial on malformed RBAC, parser safety limits, SSE schema round-trip).
-* **CI:** `test:prop` job runs on PR + nightly; flakiness budget 0; failing examples minimized and checked in under `tests/corpora/`.
-* **Artifacts on fail:** store failing payloads as INTERNAL test artifacts (non-PII) for triage.
-* **Exit criteria:** no regressions across 1000 seeds per suite; mutation score ≥ 85% on compiler module.
-
-
-### 23.6 Advisory-lock watchdog tests
-* **Detection:** simulate over-threshold session-held `jobkind` lock via test worker; watchdog flags stale with correct `scope/kind`.
-* **No false positives:** xact-scoped locks during approval swap never flagged (duration ≪ threshold).
-* **Actions:** when `kill_stale=false` → alerts only; when `kill_stale=true` (test env) → holder backend terminated and lock released; job resumes on next retry.
-* **Metrics/assertions:** `udlock_watchdog_stale_total{action=...}` increments; `udlock_locks_held` returns to baseline; registry GC removes orphans.
-
----
-
-## 24) Operations
-
-* **CI/CD:** type checks (mypy/pyright), lint/format (ruff/black), unit tests; image build; blue/green deploy; gated DB migrations; CycloneDX SBOM; image signing (cosign).
-* **Backups/DR:** PostgreSQL base + WAL; object versioning; restore drills.
-* **Secrets:** No secrets in code/artifacts; rotation cadence enforced.
-* **Celery queue taxonomy & DLQ**
-  * **Queues:** `q.transcribe`, `q.analyze`, `q.compose`, `q.assembly`, `q.delivery`, `q.sign`, `q.ingest`, `q.maintenance` (+ optional priority lanes).
-  * **DLQ:** `q.deadletter` with `last_error`, `attempts`, `cause` (policy, integrity, provider).
-  * **Poison handler:** configurable requeue after fix; manual purge tools.
-* **DB migrations (Postgres) — zero-downtime playbook**
-  * Use `CREATE INDEX CONCURRENTLY`; `ALTER TABLE ... ADD COLUMN NULL` (then backfill in chunks).
-  * Backfills run in worker jobs with **`work_mem`** caps; verify bloat; `REINDEX CONCURRENTLY` post-migration if needed.
-  * Kill-switch in migration runner if `pg_stat_activity` shows locks > 2s on hot tables.
-
-### 24.1 DR Objectives & Drills
-Targets: RTO ≤ 4h, RPO ≤ 15m.
-* PostgreSQL: PITR + cross-region replica; quarterly restore drill with pass/fail SLO 99%.
-* Object storage: cross-region replication for artifacts; verify replication lag < 5m P95.
-* KMS: key replication or per-region keys with rotation parity.
-* Region evacuation runbook (DNS, ingress, autoscale) tested twice yearly.
-
----
-
-## 25) Vulnerability & Supply-Chain
-
-* SCA/SAST/secret scanning on every PR; block on Criticals unless risk-accepted.
-* Weekly dependency bump bot; CVE budget policy with exception register.
-* Image hardening: distroless/non-root, seccomp, read-only FS; image signing (cosign) + provenance attestation (SLSA-like).
-* IaC scanning (K8s/Terraform) with enforced policies.
-* DAST on staging before prod promotion.
-* SBOM (CycloneDX) published per build; stored with release artifacts.
-* **Provenance & attestation:** supply SLSA-compatible provenance; verify image signatures (cosign) and attestations at deploy time; block if signature missing or key not trusted.
-* **Runtime security:** enable Falco/Cloud IDS for syscall/network anomalies; alert on suspicious exec/syscalls in `web`, `workers`, `guardian`, `signer`.
-* **Secret rotation cadences:** KMS data-keys rotated ≤ 90 days; request-signing keys ≤ 180 days; Web/Portal OAuth clients ≤ 365 days. Alerts if overdue.
-
-
-### 25.1 Pentest & Vulnerability Disclosure (binding)
-* **Cadence:** external penetration test **pre-GA** and **annually** thereafter; ad-hoc after material changes to auth, RBAC, or crypto.
-* **Disclosure:** `/.well-known/security.txt` (SYSTEM setting keys below); coordinated vulnerability disclosure with safe-harbor language.
-* **SLA:** triage within **2 business days**, fix plan within **7**, severity per CVSS v3.1.
-* **Artifacts:** Each engagement generates `PENTEST_REPORT` (internal artifact) with executive summary + fix tracking linkage.
-* **Metrics:** `disclosure_reports_open_total`, `pentest_findings_open_total{severity}`.
-* **Settings keys:** `security.disclosure.contact`, `security.disclosure.encryption_key_url`, `security.pentest.cadence` (cron-ish), `security.pentest.allowed_scope`.
-
----
-
-## 26) Failure taxonomy & job resilience
-
-* `POLICY_BLOCK` (region allowlist) → 403 + audit.
-* `QUARANTINED` (Guardian) → 409 with rule IDs.
-* `INTEGRITY_ERROR` (hash mismatch) → 412; artifact quarantined; **Downstream Integrity Scan** enqueued:
-  * Walk `source_artifacts` lineage; for dependents: mark **NEEDS_REVIEW** (UI banner) or **QUARANTINED** by policy (`integrity.downstream_action = mark_stale|quarantine`).
-* `PROVIDER_DEGRADED` → **job `PAUSED`**; auto-resume when health recovers (workers subscribe to provider health).
-* **Idempotency:** duplicate `Idempotency-Key` returns prior result (per artifact/job scope). TTL default 24h; after TTL, a new execution occurs—documented to callers.
-
-**Job state saving & resume**
-* Each task emits **checkpoints** (idempotent unit boundaries).
-* On pause/failure, resume uses `job_checkpoint`.
-* Manual resume endpoint available; auto-resume on provider recovery via watchdog signal.
-
----
-
-## 27) Deterministic UUIDv8 generation
-
-* **Use case:** stable IDs for Events/Entities/Facts/Timeline items **inside** Analyze/Compose artifacts.
-* **Anchors** include stable selections (e.g., sorted transcript spans by `artifact_id`, key entity IDs).
-* **Inputs:** `case_id`, `lane_or_section`, `anchors`, `org_salt`.
-* **Digest:** `hmac_sha256(org_salt, json_canonical(payload))`.
-* **Pack UUIDv8:** set version bits to 1000, RFC-4122 variant.
-* **Note:** Artifact IDs remain **unique v7** per creation; **content is non-deterministic**; **derived IDs are deterministic**.
-
-Pseudocode:
-```py
-def uuidv8_deterministic(
-    case_id: UUID,
-    lane_or_section: str,             # e.g., "analyze.events" or "compose.client.intro"
-    anchors: dict,                    # e.g., {"spans":[[1000,1500],[3200,3600]], "entities":[...]}
-    org_salt: bytes
-) -> UUID:
-    # Canonicalize anchors (sorted, normalized)
-    anchor_bytes = json.dumps(anchors, separators=(',',':'), sort_keys=True).encode()
-    payload = {
-        "case": str(case_id),
-        "scope": lane_or_section,
-        "anchors_sha256": hashlib.sha256(anchor_bytes).hexdigest(),
-    }
-    msg = json.dumps(payload, separators=(',', ':'), sort_keys=True).encode()
-    d = hmac.new(org_salt, msg, hashlib.sha256).digest()  # 32 bytes
-    b = bytearray(d[:16])
-    b[6] = (b[6] & 0x0F) | (0x8 << 4)   # version 8
-    b[8] = (b[8] & 0x3F) | 0x80         # RFC 4122
-    return UUID(bytes=bytes(b))
-```
-
-* Notes:
-  * For Events/Facts, anchors should include sorted source_spans and (optionally) key entity UUIDs; for Compose
-    sections, include outline position and referenced analyze UUIDs.
-
----
-
-## 28) Content & template linting
-
-* **Placeholder linter:** No unresolved markers before Assembly Guardian submit.
-* **Policy linter:** Forbidden phrases/tone rules to reduce quarantine churn.
-
----
-
-## 29) Security model (selected) & Privacy/Compliance
-
-* MFA for privileged roles; **step-up** for sensitive actions (`security.org_switch.step_up_required`); enforce WebAuthn where available.
-* Least-privilege storage per org; single-use signed URLs optional.
-* Headers like `X-Org-ID` are **correlation only**; authorization derives from token claims.
-* Global API requires `X-Request-ID`.
-* `audit_event` retention ≥ **case retention** (org-configurable upward).
-* Provide **export** API (filters + tamper-evident hash chain).
-* Signed URLs embed `artifact_id`, `content_sha256`, `state`, `expiry`. Fetch must verify `state=='APPROVED'`. If the artifact transitions to `READY`, `REJECTED`, or `QUARANTINED`, fetch rejects.
-* **Storage isolation (configurable by SysAdmin):**
-  * `storage.isolation.mode ∈ {'per_org_bucket','shared_bucket_prefix'}`
-  * `storage.kms.key_scoping ∈ {'per_org','global'}`
-  * Documented trade-offs (ops overhead vs isolation).
-* Rotate signing keys on a cadence; short access token lifetime with refresh; disable offline tokens for clients not requiring
-  them; enforce WebAuthn for privileged roles where available.
-* Org switch auditing: `audit_event('ORG_SWITCH', {from_org, to_org})` on successful token mint for a new `active_org_id`; optional step-up enforced by policy.
-* Authorization derives solely from token **`active_org_id`** + `active_org_roles[]`; headers are correlation only.
-* Step-up on org switch that raises privilege is policy-driven (setting: `security.org_switch.step_up_required`).
-* Audit `{active_org_id, active_org_roles[], realm_roles[]}` per request; emit `ORG_SWITCH` on successful switch.
-* **RBAC doctrine:** deny-by-default, policy-driven from Settings down to field level; **only** hardcoded bypass is realm `sysadmin` → full access. Enforced via RLS + security-barrier views.
-
-
-### 29.1 Data classification
-Classes: PUBLIC, INTERNAL, PII, SENSITIVE_PII. 
-* SENSITIVE_PII must be encrypted at rest using envelope encryption (KMS). 
-* Logs exclude PII by default; scrubbing middleware redacts email/phone/ID patterns and configurable PII classes.
-* **Incident response (binding):** Triage within 24h, contain/eradicate within 72h, notify impacted orgs per jurisdictional SLA matrix (Appendix G). Dry-run semiannually; artifacts: `IR_REPORT`.
-
-
-### 29.2 Field-level encryption
-* For designated columns (e.g., client email/phone), use deterministic AEAD for equality filters and randomized AEAD otherwise. Keys scoped per org; key rotation supported via dual-decrypt window. Settings: security.field_encryption.enabled, security.field_encryption.key_scope.
-
-
-### 29.3 DSAR & erasure (policy tie-in)
-* See §15 for DSAR/erasure mode and erasure journal. When enabled, purge paths override “retain rows” default while preserving minimum provenance.
-
-
-### 29.4 Browser security headers (portal & staff)
-* CSP (default-src 'self'), COOP/COEP/CORP enabled, Referrer-Policy strict-origin-when-cross-origin, HSTS max-age≥180d, SameSite=strict cookies, CORS restricted to allowed origins per org.
-**CORS exposure (binding):** responses must expose headers per the **canonical contract in §21.6.1** for cross-origin Portal/Staff UI access to rate-limit and deprecation metadata.
-
-
-### 29.5 Field-level encryption — implementation
-* **Approach:** Use randomized AEAD for ciphertexts + a separate deterministic **search token** (HMAC) for equality queries. This avoids weaknesses of deterministic encryption while still supporting `WHERE email=?` and `UNIQUE` constraints.
-
-* **DB shape (example for client email/phone):**
-```sql
--- Enable pgcrypto for HMAC
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
-
-ALTER TABLE user_account
-  ADD COLUMN email_ct  BYTEA,          -- ciphertext (AEAD from app)
-  ADD COLUMN email_eq  BYTEA,          -- deterministic HMAC token (for equality/unique)
-  ADD COLUMN email_key_version SMALLINT,      -- data-key version used for AEAD
-  ADD COLUMN email_eq_key_version SMALLINT,   -- eq-token key version
-  ADD COLUMN phone_ct  BYTEA,
-  ADD COLUMN phone_eq  BYTEA,
-  ADD COLUMN phone_key_version SMALLINT,
-  ADD COLUMN phone_eq_key_version SMALLINT;
-
--- Enforce per-org uniqueness on token (not plaintext)
-CREATE UNIQUE INDEX user_email_unique_per_org
-  ON user_account (coalesce(default_org_id, '00000000-0000-0000-0000-000000000000'::uuid), email_eq)
-  WHERE email_eq IS NOT NULL;
-```
-
-* **Token derivation (in app):**
-  * `eq_key_org = HKDF(KMS_key_org, info='udocket:eq:v1')`
-  * `email_eq = HMAC-SHA256(eq_key_org, lower(trim(email)))` (store as `BYTEA`)
-  * Same pattern for `phone_eq` (normalized E.164).
-
-* **Ciphertext (in app):**
-  * `AES-GCM` with per-row random nonce; store `{ct, nonce, aad}` inside `email_ct` (compact binary or JSON).
-  * Record `*_key_version` alongside ciphertext and `*_eq_key_version` for tokens.
-
-* **Queries:**
-  * `SELECT ... WHERE email_eq = :HMAC(lower(email_input))`
-
-* **App binding when `security.field_encryption.enabled=true`:**
-  * Do **not** persist plaintext columns (`user_account.email`, `phone`) on writes; set them to NULL at rest.
-  * Serializers hydrate plaintext **only** by decrypting `*_ct` in process memory; never log or persist the plaintext.
-
-* **Rotation:**
-  * Maintain `eq_key_org` versions in Settings; rotate by writing a **second** token column during migration, then swap indexes.
-
-* **Logging:**
-  * Log tokens never; scrub plaintext at ingress.
-  * Emit metric `field_encrypt_rotation_overdue_total` if any key version exceeds org/system rotation SLO.
-
-**KMS key naming & scoping examples (settings)**
-  * `security.field_encryption.kms_key_alias_per_org`: JSON map of `{ "<org_id>": "alias/udocket/org/<org_id>/fieldenc" }`. If absent, fall back to a system default alias.
-   Rotation playbook: see §29.5.2; ensure per-org key alias swap is coordinated with dual-write window and index migration for `*_eq` tokens.
-
-
-#### 29.5.1 AEAD/AAD parameters & rotation SLOs (binding)
-* **Cipher:** AES-256-GCM; library: OpenSSL EVP; tag length 128 bits.
-* **Nonce:** 96-bit random; uniqueness guaranteed per write via CSPRNG.
-* **AAD (associated data):** `org_id || ":" || table || ":" || column || ":" || row_id || ":" || schema_version`.
-* **Key sizes & scope:** 256-bit data keys; per-org by default (`security.field_encryption.key_scope=per_org`).
-* **Rotation SLO:** dual-write window **30 days**; alert if dual-write persists >45 days.
-* **Test vectors:** maintained under `sec/test_vectors/field_encryption/*.json` with known plaintexts and ciphertexts for regression.
-* **Metrics:** `field_encrypt_dualwrite_total`, `field_encrypt_decrypt_fail_total`.
-
-#### 29.5.2 Backfill migration playbook (encryption)
-1) Enable dual-write/decrypt with old+new keys.
-2) Online job rewrites rows with new AEAD; writes both `*_ct` (new) and `*_eq` tokens; keeps old readable.
-3) After coverage ≥99.9% and soak ≥7d, flip reads to new key only.
-4) Remove legacy key material; finalize indexes on new `*_eq` if changed.
-
-
-### 29.6 Entitlements history snapshots (binding)
-* **Goal:** Immutable audit of the effective entitlements at token mint time for legal/audit queries.
-* **Captured fields:** `{snapshot_id, user_id, active_org_id, active_org_roles[], realm_roles[], device_fp, ip, ua_hash, minted_at, token_id}`.
-* **RLS:** Rows are visible only to `auditor|sysadmin` and (optionally) org-scoped `org_auditor` via policy.
-* **Lifecycle:** Written at login/token refresh; retained per `privacy.entitlements.retention_days`.
-* **Access:** `GET /v1/admin/entitlements/history` (see §21.4).
-
-
-### 29.7 Admin governance & recertification (binding)
-* **Quarterly recertification job/report:** A scheduled job (default cron `0 3 1 */3 *`) enumerates principals with realm `sysadmin` and elevated org roles and produces a `SYSADMIN_RECERT_REPORT` internal artifact per environment. Report schema: `{principal_id, roles[], last_login, justification?, reviewer_ids[], attested_at}`.
-* **Workflow:** Security and Architecture reviewers must **attest** or revoke within 14 days. Unattested entries trigger alerts and (optionally) temporary suspension per org policy.
-* **Approvals & audit:** Attestations require step-up MFA; actions are logged via `audit_event('SYSADMIN_RECERT', {principal_id, action})`. Exception grants or deadline extensions require **dual approval** as per §36.10.
-* **Settings:** `security.recert.cron` (SYSTEM), `security.recert.escalate_after_days` (default 14), `security.recert.auto_suspend` (BOOL, default false).
-
----
-
-## 30) Data migration & seeding
-
-* Reference catalogs: checksum-verified import with provenance.
-* Templates & questionnaires imported as artifacts; emit `REFERENCE_SNAPSHOT`.
-
----
-
-## 31) Threat Model & Abuse Cases
-
-### 31.1 Method
-We maintain STRIDE-style threat models and data-flow diagrams per service (Web, Channels, Workers, Guardian, Signer).
-Trust boundaries: browser⇄ingress, ingress⇄web/channels, web⇄workers, workers⇄providers, web/workers⇄DB/objstore.
-
-
-### 31.2 Top threats & mitigations
-* SSRF / path abuse on upload finalize → Strict object-key templating; server-side COPY only; deny user-supplied paths; VPC egress allowlists.
-* Prompt injection via exhibits/emails → Pre-call sanitization, policy lints, forbidden patterns (§53), no external browsing/tools in batch.
-* Credential stuffing / scraping (portal) → Rate limits (§21/§18), adaptive MFA (§18), anomaly detection + auto-revoke links.
-* Link replay / token theft → Single-use tokens (§13), short TTL, device/IP heuristics, If-Match SHA guard.
-* Cross-org data access → RLS+GUC fail-closed (§2.2), SSE/WS teardown on org switch (§21.2).
-* Quota abuse / cost blowups → Org budgets & kill switches (§7, §40), token ceilings, job pausing on PROVIDER_DEGRADED (§25).
-* Insider data browsing → RLS, case membership, immutable audit sink (§20), reviewer scope limits.
-* Multi-tenant inference leakage (LLM) → prompt redaction, per-org model contexts, no cross-org embedding stores, replay harness tests.
-* Confused deputy via Settings → all policy resolution server-side from Settings Service; callers cannot supply overrides; HMAC request signing on cross-service calls (§49).
-
-
-### 31.3 Abuse controls
-* **Rate limits:** API and portal caps (§21, §18).
-* **Anomaly detection:** sudden download spikes → auto-expire links + alert.
-* **Malware scanning:** ingest quarantine on detection (§37).
-* **Adaptive MFA:** high-risk logins/downloads require step-up (§18).
-* **Backpressure:** Queue depth/KEDA scaling with hard ceilings; fail-closed on Guardian down (§41.4).
-
----
-
-## 32) Capacity & Performance Budgets
-
-Targets (P95 unless noted):
-* Analyze (1 hr audio, single lane end-to-end): ≤ 18 min; total job ≤ 35 min.
-* Compose (10 sections): ≤ 6 min.
-* Guardian decision: ≤ 2s (§41.5).
-* SSE fan-out: up to 10k concurrent case streams per env; reconnect rate ≤ 3%/5min.
-* Backlog burn-down: ≥ 2× ingest rate at scale-out N.
-
-* Load tests emulate real distributions: audio lengths, languages, template complexities. KEDA triggers set from these budgets; alerts fire at 80/90% thresholds.
-
-**Backpressure policy (binding):** When org exceeds `sse.max_events_per_sec_per_org`, queue drops oldest **non-critical** events (never `portal_link_invalidated`) and emits `sse.org_throttle_total{reason="rate_exceeded"}`.
-
-
-### 32.1 Initial scale assumptions & autoscaling policies
-**Traffic model (baseline):**
-* Tenants: 10 pilot orgs; active cases/day: 150; median audio length: 45m; P95: 90m.
-* Concurrent jobs (peak): 120 RUNNING; SSE clients: 2,000.
-
-**K8s HPA:**
-* `web`: CPU target 60%, min 3, max 15.
-* `workers`: custom metric `queue_depth / replicas <= 200`; min 4, max 50.
-* `guardian`: P95 latency target 2s; step scaling 1.5x when >2s for 5m.
-
-**KEDA triggers:**
-* `q.transcribe`: 1 replica per 20 queued items, max 40.
-* `q.analyze`/`q.compose`: 1 per 50 queued, max 60.
-
-**Cost guardrails:** alert when estimated monthly LLM cost > 80% of cap; automatically lower `*.token_ceiling` by 10% for non-privileged tenants when >95%.
-
----
-
-## 33) Example flows
-
-**Interview → Transcribe → Analyze → Compose → Assembly → Review → Delivery → Signoff**
-Each stage creates **new artifacts** (`DRAFT`) → **Guardian** (`READY`) → **Review** (`APPROVED`) before downstream consumption. QA outputs are **QA_logs** (internal).
-
-**Corrections loop**
-Client correction → new Analyze/Compose run → emits **new artifacts** (`DRAFT`) → **Guardian** (`READY`) → **Review** (`APPROVED`). For exclusive types, approving a new artifact **demotes** any previously **APPROVED** same-type artifact to `READY` atomically.
-
----
-
-## 34) Non-functional constraints
-
-* Concurrency-safe (idempotency & dedupe).
-* Guardian/Signer responsive under load; bulk work async.
-* Scale horizontally on `workers` & `channels`; **SSE** scales via HTTP fan-out + event buffers.
-
----
-
-## 35) Deliverables
-
-* **OpenAPI** specs: Web, Guardian, Signer, Settings, LLM registry.
-* **DB migrations** & seeders.
-* **Helm charts** per service.
-* **Runbooks** for common incidents.
-* **Test suites** and **golden datasets**.
-* **ERD (database diagram)** committed at `docs/erd/udocket-erd.svg` (+ source `docs/erd/udocket-erd.drawio`).
-* **Service dependency graph** committed at `docs/diagrams/service-map.svg` (source `docs/diagrams/service-map.mmd`).
-
----
-
-## 36) Centralized Settings Service
-
-### 36.1 Responsibilities
-* Define/validate settings; versioned **bundles** at `SYSTEM`/`ORG`/`CASE`; resolve effective map; snapshot into jobs; broadcast changes.
-
-
-### 36.2 Definitions (Pydantic, selected)
-```python
-class SettingDefinition(BaseModel):
-    key: str  # e.g., regions.allowlist.compute
-    datatype: Literal['BOOL','INT','FLOAT','STRING','DURATION','ENUM','JSON','REGION','PERCENT']
-    enum_values: list[str] | None = None
-    default_value: Any
-    mutable_scope: list[Literal['SYSTEM','ORG','CASE']]
-    validation_schema: dict[str, Any] | None = None  # external-only
-```
-
-**Case-scoped keys (M1)**
-* `compose.tone`, `compose.section.length_limits`, `compose.max_retries`, `compose.token_ceiling`, `analyze.max_retries`, `analyze.token_ceiling`, `portal.link.expiry`, `visibility.operators.scope` (`own_cases` | `all_org_cases`), `compose.language`, `llm.model.preference`
-
-**Org/System keys (examples)**
-* `regions.allowlist.*`, `retention.days`, `quotas.*`, `notifications.*`, `llm.providers[]`, `llm.models[]`, `tsa.endpoints[]`, `ocsp.endpoints[]`, `artifact.exclusive_types[]`, `reviews.required_types[]` (for artifacts that must be reviewed vs. auto-approve)
-* `storage.isolation.mode`, `storage.kms.key_scoping`,
-* `integrity.downstream_action` (`mark_stale`|`quarantine`)
-* `security.org_switch.step_up_required` (`BOOL`, default `true`)
-* `sse.replay.max_events` (INT, default 1000)
-* `sse.replay.max_age` (DURATION, default `10m`)
-* `sse.max_clients_per_org` (INT, SYSTEM; default 0 = unlimited)
-* `sse.max_events_per_sec_per_org` (INT, SYSTEM; default 0 = unlimited)
-
-**New/extended keys (scope → default)**
-```
-policy.rbac.v1: JSON (ORG/SYSTEM)         # resource/actions/roles + field masks
-security.field_encryption.enabled: BOOL (SYSTEM false)
-security.field_encryption.key_scope: ENUM['global','per_org'] (SYSTEM 'per_org')
-security.org_switch.step_up_required: BOOL (SYSTEM true)
-compliance.erasure_mode: ENUM['off','hard_purge'] (ORG 'off')
-compliance.subject_hkdf_salt: STRING/KMS (SYSTEM)
-retention.exempt_types: JSON (ORG [])                       # artifact types exempt from global retention
-retention.legal_hold_required_roles: JSON (ORG ["org_manager","org_reviewer"])
-api.rate_limits.org_rpm: INT (SYSTEM 600)
-api.rate_limits.org_burst: INT (SYSTEM 1200)
-api.rate_limits.ip_rpm: INT (SYSTEM 300)
-api.tls.min_version: ENUM['1.2','1.3'] (SYSTEM '1.3')
-api.tls.allowed_ciphers: JSON (SYSTEM ['TLS_AES_128_GCM_SHA256','TLS_AES_256_GCM_SHA384','ECDHE-ECDSA-AES128-GCM-SHA256','ECDHE-RSA-AES128-GCM-SHA256'])
-ingestion.av.enabled: BOOL (SYSTEM true)
-ingestion.archive.max_depth: INT (SYSTEM 5)
-ingestion.archive.max_unpacked_mb: INT (SYSTEM 512)
-dr.rto_hours: INT (SYSTEM 4)
-dr.rpo_minutes: INT (SYSTEM 15)
-llm.finops.monthly_cap_usd: INT (ORG 0 = unlimited)
-finops.deploy_guard.mom_regression_pct: INT (SYSTEM 10)
-finops.report.schedule_cron: STRING (SYSTEM "0 2 1 * *")
-finops.report.enabled: BOOL (ORG true)
-logging.immutable_sink.enabled: BOOL (SYSTEM true)
-security.request_signing.rotation_days: INT (ORG 180)
-security.tls.cert_ttl_hours: INT (SYSTEM 24)
-portal.rate_limits.user_download_rpm: INT (ORG 60)
-portal.rate_limits.org_download_rpm: INT (ORG 200)
-portal.adaptive_mfa.enabled: BOOL (ORG true)
-portal.downloads.allow_ranges: BOOL (ORG false)
-portal.messaging.attachments.allow_ranges: BOOL (ORG false)
-portal.messaging.enabled: BOOL (ORG true)
-portal.messaging.rate_limits.user_msg_rpm: INT (ORG 20)
-portal.messaging.attachments.max_mb: INT (ORG 50)
-portal.messaging.allowed_attachment_types: JSON (ORG ["pdf","png","jpg","jpeg","docx"])
-portal.messaging.profanity_filter.enabled: BOOL (ORG true)
-portal.messaging.staff_auto_subscribe_roles: JSON (ORG ["org_operator","org_reviewer","org_manager"])
-portal.messaging.archive_days: INT (ORG 180)
-udlock.max_session_hold_seconds: INT (SYSTEM 30)
-udlock.watchdog.kill_stale: BOOL (SYSTEM false)
-udlock.heartbeat.interval_seconds: INT (SYSTEM 5)
-privacy.legal.org_jurisdictions: JSON (ORG [])                     # e.g., ["EU","US-CA"]
-privacy.legal.matrix_version: STRING (SYSTEM "v1")                 # Appendix G version pin
-privacy.entitlements.retention_days: INT (SYSTEM 365)
-privacy.dpia.required_flows: JSON (SYSTEM ["TRANSCRIPT","COMPOSE","ASSEMBLY"])
-privacy.dpia.reviewers.roles: JSON (ORG ["privacy_officer","org_manager"])
-privacy.ropa.enabled: BOOL (ORG true)
-privacy.hipaa.enabled: BOOL (ORG false)                               # HIPAA mode bundle toggle
-privacy.hipaa.bundle_version: STRING (SYSTEM "v1")
-security.disclosure.contact: STRING (SYSTEM "[security@example.com](mailto:security@example.com)")
-security.disclosure.encryption_key_url: STRING (SYSTEM "")
-security.pentest.cadence: STRING (SYSTEM "annual")
-security.pentest.allowed_scope: JSON (SYSTEM ["web","portal","api"])
-security.mfa.webauthn_required_roles: JSON (ORG [])                    # enforced when HIPAA mode is on for staff roles
-evidence_store.redacted_excerpts.enabled: BOOL (SYSTEM true)
-```
-
-### 36.3 Storage & APIs
-* Tables:
-  * `setting_definition`
-  * `setting_bundle (scope, version, state, effective_from, org_id?, case_id?, version INT NOT NULL DEFAULT 0)`
-  * `setting_value`
-  * `setting_audit`
-  * **Policy compilation targets:** `effective_permission`, `field_mask_rule` (see **§3.2**)
-
-* APIs:
-  * `GET /v1/settings/effective?org_id&case_id&format=yaml|json`
-  * `POST /v1/settings/bundles`, `/validate`, `/activate`
-  * `GET /v1/settings/history?org_id|case_id`
-  * **Policy hooks:** `/v1/settings/policy/validate` (schema + referential checks), `/activate` compiles into `effective_permission` / `field_mask_rule` and publishes `settings.changed`.
-  * **Messaging toggles:** `GET /v1/settings/effective` Web/Portal reads toggles to gate UI and rate limits.
-  * **Residency validator:** `/v1/settings/regions/validate` enforces Appendix G against `privacy.legal.*` keys.
-  * **Privacy helpers:** `/v1/settings/privacy/templates` returns DPIA/RoPA template metadata by matrix version.
-
-
-### 36.4 SDK & snapshot
-```python
-settings = SettingsClient(request_context)
-value = settings.get("analyze.max_retries", type=int)
-snapshot = settings.snapshot()  # dict + bundle/version ids
-# Workers embed snapshot in job payload; job.settings_snapshot_sha256 recorded.
-```
-
-
-### 36.5 Caching & distribution
-* In-memory + Redis cache; pub/sub `settings.changed` with `{scope, org_id, case_id, bundle_id}` invalidation.
-
-
-### 36.6 Enforcement points
-* **Policy Guard:** `regions.allowlist.compute|storage`, `providers.*`
-* **Security/Compliance:** `security.field_encryption.*`, `compliance.erasure_mode`
-  * **RBAC/Fields:** `policy.rbac.v1 → effective_permission, field_mask_rule`
-
-
-### 36.7 Acceptance
-* Precedence resolution; scheduled activation; rollback; snapshot immutability; cross-process invalidation.
-
-
-### 36.8 Activation Lock + Uniqueness (helpers + OCC)
-```sql
-ALTER TABLE setting_bundle
-  ADD CONSTRAINT one_active_per_scope UNIQUE (scope, org_id, case_id)
-  DEFERRABLE INITIALLY IMMEDIATE
-  WHERE state = 'ACTIVE';
-```
-
-**Activate API transaction:**
-```
-1) SELECT pg_advisory_xact_lock(
-     (("x" || replace(coalesce(:org_id,'-'),'-',''))::bit(128)::bigint >> 64),
-     hashtextextended(CONCAT('settings:activate:', :scope, '/', coalesce(:case_id,'-')), 0)
-   );
-2) UPDATE setting_bundle SET state='INACTIVE', version=version+1 WHERE scope=... AND org_id ... AND state='ACTIVE';
-3) UPDATE setting_bundle SET state='ACTIVE', effective_from=now(), version=version+1 WHERE id=:bundle_id AND version=:expected_version;
-```
-
-
-### 36.9 Policy bundle versioning & diff preview
-* Bundles carry `bundle_id` (e.g., `rbac@1.2.0`) and `schema_version` (e.g., `rbac-schema@1.0`).
-* `POST /v1/settings/policy/activate?dry_run=true` compiles into **shadow** tables and returns:
-  * counts of grants added/removed,
-  * resources widened to **write**,
-  * “unsafe” flags (e.g., grant to `*`),
-  * sample of affected rows.
-* Dry-run produces a `diff_preview_id` usable for audit linkage and enumerates `unsafe_reasons[]` per **§36.11**.
-
-
-### 36.10 Activation & rollback (binding)
-* Two-phase activation: `DRY_RUN → ACTIVATE`.
-* On ACTIVATE failure, system restores **last-good** bundle atomically and emits `POLICY_ROLLBACK`.
-* APIs:
-  * `POST /v1/settings/policy/activate` `{ bundle_id, expected_version, diff_preview_id? }`
-  * `POST /v1/settings/policy/rollback` `{ to_bundle_id }` (auditor/sysadmin only)
-    * **Dual-approval (binding):** Activations flagged as **unsafe** by dry-run (e.g., widened write access, wildcard grants) or any request with `--force` require **two distinct approvers**: one **Security** and one **Architecture** role (realm or delegated). Step-up MFA is enforced for both approvers and the activation is audit-logged with approver IDs.
-* **Gates:** CI/CD blocks production deploy if any budget burn > 25% over trailing 7d. Staging promotion requires green **golden-set jailbreak** (§7.1) and **synthetic checks** (§41.2).
-
-
-### 36.11 Unsafe Policy Change Rules (binding)
-**Purpose:** Define changes that increase risk and therefore require **dual approval** and explicit `--force` on activation.
-
-**RBAC widenings (effective_permission)**
-* New grants that add any role to `action ∈ {'write','approve','delete'}` for resources `CASE|ARTIFACT|JOB|SETTINGS`.
-* New grants that add **org-external** roles (e.g., `org_external_counsel`, `org_client`) to `read` on `QA_LOG`, `GUARDIAN_DECISION`, or other internal resources.
-* Introduction of wildcard roles/resources (e.g., `role='*'` or `resource='*'`) — **always unsafe**.
-
-**Field exposure (field_mask_rule)**
-* Any change that:
-  * moves a field from masked (`REDACT|NULL|HASH`) to visible for any additional role, or
-  * weakens a mask (e.g., `NULL → LAST4`, `HASH → LAST4`).
-
-**Region & residency**
-* Enabling `regions.cross_region_waiver=true` (see §8.1) or widening `regions.allowlist.*` beyond prior union.
-
-**Security posture toggles**
-* Setting any of the following from secure→weaker defaults:
-  * `security.org_switch.step_up_required: true → false`
-  * `portal.adaptive_mfa.enabled: true → false`
-  * `logging.immutable_sink.enabled: true → false`
-  * `ingestion.av.enabled: true → false`
-  * `security.field_encryption.enabled: true → false`
-  * `storage.kms.key_scoping: 'per_org' → 'global'`
-  * `api.tls.min_version: '1.3' → '1.2'` or **weakening ciphers** in `api.tls.allowed_ciphers`
-
-**Signer & crypto**
-* Trust root additions that are not present in the approved anchor registry.
-* Lowering AEAD parameters (key size, tag length) below §29.5.1 baselines.
-
-**Dry-run output (normative)**
-```json
+F.10 Rate limit response example (normative)
+
+```jsonc
+HTTP/1.1 429 Too Many Requests
+Content-Type: application/json
+Retry-After: 60
+X-RateLimit-Limit: 600
+X-RateLimit-Remaining: 0
+X-RateLimit-Reset: 2025-10-19T21:15:00Z
+X-Request-ID: 09c2d6c0-2bdc-4f8e-9f2d-4f64cb9f2e30
 {
-  "grants_added": 12,
-  "grants_removed": 3,
-  "fields_unmasked": ["CASE.legal_hold_reason"],
-  "mask_weakened": ["ARTIFACT.content_sha256: HASH→LAST4"],
-  "regions_widened": ["compute: +gcp-asia-southeast1"],
-  "posture_toggles": ["portal.adaptive_mfa.enabled:false"],
-  "unsafe_reasons": ["RBAC_WRITE_WIDENING","FIELD_UNMASK","REGION_WIDEN","MFA_TOGGLE"]
+  "code": "RATE_LIMIT",
+  "message": "Per-organization API request ceiling reached.",
+  "details": {"retry_after_ms": 60000},
+  "correlation_id": "09c2d6c0-2bdc-4f8e-9f2d-4f64cb9f2e30"
 }
 ```
 
-**Activation gate**
-* If `unsafe_reasons[]` non-empty → API returns `422 VALIDATION_ERROR { unsafe_reasons[] }` unless `--force` AND **dual approval** (Security + Architecture) with step-up MFA are provided (see §36.10).
+Illustrative payload; redact or mask as needed to comply with §10.5 rules prohibiting PII in examples.
 
----
+Notes
 
-## 37) Document & Data Ingestion
+- Headers exposed to browsers per §10.5 CORS; examples avoid PII.
+- Full components (security schemes, shared headers/params) live in service-local specs; CI lints enforce shared rules.
 
-### 37.1 Artifact type patterns
-* Allowed types enforced by Settings + Guardian.
-* Core: `EXHIBIT_RAW|TEXT`, `COURT_DOC_RAW|TEXT`, `EMAIL_RFC822|TEXT|ATTACHMENTS`, `FINANCIALS_RAW|TABLE`, `TRANSCRIPT`, `DIARIZATION`, `MEMO_TEXT_*`.
+F.11 Deprecation response with `Sunset` header (normative)
 
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+X-Request-ID: 7d1f1dba-1d6f-4f6a-a7ef-2d2f1c2e9bd3
+Deprecation: date="2026-04-01T00:00:00Z"
+Sunset: Tue, 01 Apr 2026 00:00:00 GMT
+Link: </api/v1/migrations/2026-04-case-export>; rel="deprecation"; type="text/html"
+X-uDocket-API-Version: 2025-01
 
-### 37.2 Pipelines
-* Raw → parser/OCR → structured text/table (DRAFT) → Guardian (**READY**) → Review (**APPROVED**).
-* Manifests include parse stats and link to originals via `source_artifacts`.
-
-
-### 37.3 Malware & archive defenses
-* All binary inputs (EXHIBIT_*, EMAIL_ATTACHMENTS, COURT_DOC_RAW) scanned with AV; positive → artifact QUARANTINED with reason MALWARE_DETECTED.
-* Archive bomb guard: nested archive depth limits and decompressed size cap; reject on violation.
-* OCR/parse sandboxes: per-task CPU/memory/time caps; untrusted content never executed.
-
----
-
-## 38) Internationalization & Multilingual Support
-
-### 38.1 Languages & locales
-* Multiple locales (e.g., `en`, `fr`, `es`) supported; ICU message format; **RTL readiness**.
-* Locale-aware analyzers; cross-language toggle; exports preserve language metadata.
-
-
-### 38.2 Data & documents
-* Templates have locale variants; placeholder linting per locale.
-* **Compose** selects LLM model compatible with target language (LLM registry).
-* Transcript/ingest language detection informs model selection.
-* Output language set at case level.
-
-
-### 38.3 Catalogs & questionnaires
-* Courts/divisions carry localized names and verbiage; validators are language-agnostic; validation messages localized.
-* Fallback to base locale with admin flag when translations are missing.
-
-
-### 38.4 Search & indexing
-* Locale-aware analyzers; language field on text payloads; cross-language toggle.
-* Exports preserve language & locale metadata.
-
-
-### 38.5 PHI posture
-* uDocket is **not** a HIPAA Business Associate by default. PHI ingestion is **unsupported** unless an org enables the **HIPAA mode** bundle:
-  * **Toggle:** `privacy.hipaa.enabled=true` (ORG). Version pinned via `privacy.hipaa.bundle_version`.
-  * **Enforcements when enabled (binding):**
-    - Force field-level encryption on designated SENSITIVE_PII tables (`security.field_encryption.enabled=true`; `security.field_encryption.key_scope='per_org'`).
-    - Require WebAuthn for privileged staff roles: add `security.mfa.webauthn_required_roles` to include `["org_admin","org_manager","org_reviewer","org_operator"]`; reject session without WebAuthn on step-up actions.
-    - Disable storage of **any** prompt/response excerpts in the Evidence Store: set `evidence_store.redacted_excerpts.enabled=false` (see §48).
-    - Shorten retention for privacy artifacts per Appendix H; raise access logging verbosity for privacy endpoints.
-    - Block portal messaging attachments marked as PHI from download by non-staff roles unless explicit case waiver exists.
-* By default (HIPAA off), any attempt to upload content labeled `PHI=true` is **POLICY_BLOCK**.
-
----
-
-## 39) Legal Hold
-
-* Case fields: `legal_hold`, `legal_hold_reason`, `legal_hold_since`.
-* Destruction jobs exclude held cases; emit `audit_event('LEGAL_HOLD_CHANGED')`.
-
----
-
-## 40) Quotas & Metering
-
-* `org_quota (org_id, key, limit_int)`, `org_usage (org_id, key, period, used_int)`.
-* Enforced on job submit & storage writes; admin visibility.
-* Unique key: UNIQUE(org_id, key, period)
-* Atomic increment:
-* INSERT INTO org_usage (org_id, key, period, used_int)
-* VALUES (:org_id, :key, :period, :delta)
-* ON CONFLICT (org_id, key, period)
-* DO UPDATE SET used_int = org_usage.used_int + EXCLUDED.used_int;
-
----
-
-## 41) Health, Watchdog & Self-healing
-
-### 41.1 Liveness/Readiness
-* All services expose `/healthz` (liveness) and `/readyz` (deps: DB, Redis, Settings).
-* **Guardian/Signer** add `/rulesz` and `/keysz` probes.
-* **Web/Portal** readiness asserts DB RLS GUC canary, `search_path` pinning, and that **CORS exposure list** (§21.6.1) matches expected (synthetic OPTIONS probe).
-
-
-### 41.2 Synthetic checks
-* **Guardian synthetic:** calls `/synthetic/status` + seeded test artifact in test org/case.
-* **Signer synthetic**: sign/verify a test PDF; verify TSA/OCSP reachability.
-
-
-### 41.3 Watchdogs
-* **Guardian watchdog**: decision P95 latency, queue depth, synthetic success; auto-scale + page on breach.
-* **Worker watchdog**: worker stall detection (no progress N min) → `PAUSED` + alert; **auto-resume** when health recovers.
-* **Queue watchdog**: Celery depth triggers KEDA scale-out; hard ceiling pages on-call.
-* **SSE/Channels watchdog**: reconnect/error spikes → alert; per-org throttling to protect service.
-* **LLM watchdog**: per-model health; open/half-open/closed circuit metrics.
-
-
-### 41.4 Fail-closed behavior
-* If **Guardian** down/unready, artifacts remain **DRAFT**.
-* If **Settings** down, new jobs cannot start; **running jobs continue** using embedded **settings snapshot**.
-
-
-### 41.5 SLOs (internal guidance)
-* Guardian decision P95 ≤ 2s; Signer verify P95 ≤ 500ms; worker heartbeat ≤ 30s; SSE reconnect ≤ 3% / 5 min.
-
-
-### 41.6 Guardian synthetic runbook & auto-remediation (new)
-* **SLO guardrails:**
-  * Decision **P95 ≤ 2s** over 5-minute window
-  * Error rate ≤ **0.5%** over 5-minute window
-  * `/synthetic/status` success ≥ **99%** over rolling hour
-
-* **On breach:**
-  1. **Auto-scale** `guardian` (HPA step-up + max surge),
-  2. **Open circuit** for degraded rulesets if detector signals rules load failures; serve 503 to submitters with retry-after,
-  3. **Throttle** callers via token bucket tied to org quotas,
-  4. **Page** on-call with last 100 decision traces attached.
-* **Recovery:** Hold at elevated replicas for 15 minutes after SLO restoration; close circuits gradually.
-
-
-### 41.7 Error budgets & deployment gates (binding)
-* **Budgets:** Guardian decision SLO 99.5% over 30d; Signer verify SLO 99.9% over 30d; LLM wrapper availability 99.0%.
-* **Gates:** CI/CD blocks production deploy if any budget burn > 25% over trailing 7d. Staging promotion requires green **golden-set jailbreak** (§7.1) and **synthetic checks** (§41.2).
-* **Auto-rollback:** If Guardian SLO drops below target by >0.5% over 60m after a deploy, rollback to prior image automatically; page on-call.
-
-
-#### 41.7.1 CI integration & deploy gates
-**Gate implementation (reference GitHub Actions step)**
-```yaml
-- name: Error-budget gate
-
-run: |
-python ops/gates/check_error_budgets.py \
-  --window 7d \
-  --guardian_slo_burn_pct 25 \
-  --signer_slo_burn_pct 25 \
-  --llm_wrapper_availability_slo 99.0
+{ "id": "...", "status": "deprecated", "sunset_at": "2026-04-01T00:00:00Z" }
 ```
 
-* Gate **blocks** production deploy if any burn > 25% over trailing 7d.
-* On block, the job emits a markdown summary (linked in PR) with panels to dashboards in §20.2 and runbook IDs.
-
-**Auto-rollback hook**
-* Release controller watches SLO streams; on breach post-deploy (≥60m), triggers rollback workflow and annotates the change with `RB-GUARD-001`.
-
-
-### 41.8 Advisory-lock watchdog
-**Goal:** Detect and remediate **session-scoped** advisory locks held over `udlock.max_session_hold_seconds`.
-
-**Design:**
-* **Attribution:** All session locks are created via `udlock.try_lock_i(...)`, which records `(scope,k,k1,k2,backend_pid,node_id,acquired_at)` in `udlock.registry` and heartbeats every `udlock.heartbeat.interval_seconds` via `udlock.registry_heartbeat()`.
-* **Signal:** Watchdog loop (SRE job) joins `udlock.registry` with `pg_locks`/`pg_stat_activity`:
-  * stale = `now() - r.acquired_at > max_session_hold` AND lock present AND `state` ∈ ('idle','idle in transaction') OR heartbeat older than 2× interval.
-* **Actions (configurable):**
-  * `kill_stale=false` (default): emit alert + metric; annotate job id if scope is `jobkind`; no unlock attempt.
-  * `kill_stale=true` (test/staging only): `SELECT pg_terminate_backend(r.backend_pid)`; emit `udlock_watchdog_stale_total{action="terminate"}`.
-* **GC:** Periodic `udlock.gc_registry()` cleans rows whose locks have disappeared.
-* **SLOs:** 99% of stale detections within 60s; zero false positives on xact locks.
-* **Runbook:** `RB-LOCK-006`—triage by scope, confirm job/jobkind, decide on termination, verify metrics return to baseline.
-
----
-
-## 42) Settings usage map (traceability)
-
-* **Policy Guard:** `regions.allowlist.compute|storage`, `providers.*`
-* **Analyze:** `analyze.max_retries`, `analyze.token_ceiling`, `analyze.parallelism`, `llm.model.preference`
-* **Compose:** `compose.max_retries`, `compose.section.length_limits`, `compose.token_ceiling`, `compose.language`, `compose.tone`, `compose.policy`
-* **Assembly:** `templates.default`, `templates.branding`
-* **Notifications:** `notifications.email|sms.enabled`, `notifications.providers.*`
-* **Retention:** `retention.days`, `retention.exempt_types`, `retention.legal_hold_required_roles`
-* **Portal:** `portal.enabled`, `portal.download.limits`, `portal.link.expiry`
-* **Visibility:** `visibility.operators.scope`
-* **Quotas:** `quotas.*`
-* **LLM:** `llm.providers[]`, `llm.models[]`, `llm.default_model`
-* **Crypto/Sign:** `tsa.endpoints[]`, `ocsp.endpoints[]`
-* **Storage:** `storage.isolation.mode`, `storage.kms.key_scoping`
-* **Integrity:** `integrity.downstream_action`
-* **Reviews & exclusivity:** `artifact.exclusive_types[]`; optional `reviews.required_types[]`.
-* **Security/Compliance:** `security.field_encryption.*`, `compliance.erasure_mode`
-* **Portal/API:** `api.rate_limits.*`, `portal.rate_limits.*`, `portal.adaptive_mfa.enabled`
-* **Ingestion:** `ingestion.av.enabled`, `ingestion.archive.*`
-* **DR:** `dr.rto_hours`, `dr.rpo_minutes`
-* **FinOps:** `llm.finops.monthly_cap_usd`
-* **Logging:** `logging.immutable_sink.enabled`
-* **Privacy/Governance:** `privacy.legal.org_jurisdictions`, `privacy.legal.matrix_version`, `privacy.entitlements.retention_days`, `privacy.dpia.required_flows`, `privacy.dpia.reviewers.roles`, `privacy.ropa.enabled`, `security.disclosure.*`, `security.pentest.*`
-
----
-
-## 43) Additional acceptance tests
-
-* **Settings precedence & case-scope:** org vs case overrides; snapshot immutability during jobs.
-* **Visibility toggles:** operator scope (`own_cases` → `all_org_cases`) takes effect immediately.
-* **Analyze + ingestion:** APPROVED `EXHIBIT_TEXT` / `EMAIL_TEXT` included in ContextBuilder; Compose references appear.
-* **Compose output shape:** `COMPOSE_CLIENT` / `COMPOSE_LAWYER` JSON includes ordered **all sections**; Assembly consumes JSON.
-* **SSE:** reconnect via `Last-Event-ID`; no loss; auth scoped correctly.
-* **Guardian determinism:** same artifact twice → same decision (idempotent).
-* **MEMO_TEXT_*:** accepted if prefix policy matches; Once APPROVED they are visible per RBAC.
-* **Job resume:** kill worker mid-task → resume from **job_checkpoint** without duplication.
-* **LLM fallback:** primary model circuit open → fallback model selected per rules; trace logs show decision.
-* **LLM non-determinism:** repeated runs on identical inputs must still satisfy invariants: schema valid, required sections present,
-  no unresolved placeholders, all references resolvable, policy/forbidden-pattern checks pass.
-* **Malware:** upload EICAR sample → artifact QUARANTINED (`MALWARE_DETECTED`), audit logged.
-* **Rate limits:** exceed portal and API RPM caps → 429 with Retry-After; anomaly → links auto-expire and audit event emitted.
-* **DSAR:** enable hard_purge; issue erasure; rows removed; ERASURE_JOURNAL artifact created; portal denies now-missing items.
-* **Audit seal:** verify 2 consecutive AUDIT_SEAL artifacts produce continuous hash chain; tamper breaks verification.
-* **DR drill:** restore latest PITR backup into sandbox; object replicas present; RTO/RPO targets met.
-
-**Artifacts:**
-* **No mutation:** Attempting to update `content_uri`, `content_sha256`, or `manifest` on an existing artifact row is rejected at DAL and DB.
-* **Guardian idempotency:** Submitting the same artifact with the same `Idempotency-Key` returns the prior decision.
-* **Downstream integrity:** When a source artifact is quarantined for hash mismatch, the scanner walks `source_artifacts` and applies `integrity.downstream_action` to dependents; UI surfaces **NEEDS_REVIEW** where applicable.
-
-**Multi-org:**
-* Access with `active_org_id=A` to a case in org **B** → 403.
-* Switcher re-auth to **B** → new token shows `active_org_id=B`; SSE/WS from **A** are closed; new streams open under **B**.
-* Step-up is enforced on privilege-raising switches; `ORG_SWITCH` audit logged.
-* Guardian idempotency, exclusive swap (approval-demote behavior), integrity scans behave identically across orgs (scoped by `active_org_id`).
-* **Org directory sync:** With webhooks, renames propagate within **10 minutes**; with webhook outage, fallback poll updates within **6 hours**.
-
-* **SSE tuning:** Changing `sse.replay.max_events` and `sse.replay.max_age` via Settings takes effect without restart; replay behavior matches configured limits.
-* **Case enums:** API rejects `case.status` not present in `case.status.enum`; activating a new bundle allows the new values.
-* **Portal guard:** A previously valid link fails after the artifact transitions away from `APPROVED`; denial is audited.
-* **Accessibility (WCAG 2.2 AA):** Keyboard-only navigation completes core flows; focus not obscured by sticky UI; minimum target sizes verified; drag actions have keyboard/click alternatives; live updates announced via ARIA.
-* **Rate-limit headers in browser:** JS clients can read `X-RateLimit-Remaining` and `Retry-After` after same-origin and cross-origin requests (CORS exposed).
-* **Evidence PII posture:** No unredacted prompt/response content appears in storage scans; evidence reads are audited.
-* **Approval gate:** Compose/Assembly/Delivery fail cleanly when inputs lack `APPROVED`.
-* **Exclusive swap:** Approving new `COMPOSE_CLIENT` demotes prior `APPROVED` to `READY` in one transaction; unique index remains satisfied.
-* **Idempotent approvals:** Re-approving an already `APPROVED` artifact returns 200 with no change.
-* **Reject after approval:** `APPROVED→REJECTED` blocks delivery and portal; link denial audited.
-* **Guardian quarantine:** `DRAFT→QUARANTINED`; review actions disallowed.
-* **Metrics:** `time_to_approval_ms` recorded; dashboards show READY backlog vs APPROVED throughput.
-* **Policy dry-run:** activating bundle with widened write access must produce `unsafe=true` and be blocked without `--force`.
-* **Unsafe rules enumeration:** dry-run returns `unsafe_reasons[]` per §36.11 for (a) RBAC write widening, (b) field unmasking, (c) region widening, (d) posture toggles; activation requires dual approval when present.
-* **OpenAPI lints:** all service specs pass Spectral pack (§21.10); any regression fails CI.
-* **FinOps guard:** with `finops.deploy_guard.mom_regression_pct=10`, a simulated 12% MoM org-level cost increase blocks prod deploy; 8% passes. Monthly CSV `FINOPS_REPORT` artifacts appear with correct schema and manifest.
-
-**RBAC & Field Controls:**
-* Removing a role from org policy immediately revokes access to rows (RLS) and cleartext fields (views/serializers).
-* Masking appears identically across REST, SSE, and WS payloads; no masked field is leaked in alt representations (CSV/PDF exports).
-* `sysadmin` realm role bypass verified for rows and fields.
-* Deny-by-default on malformed/missing `policy.rbac.v1`.
-* Hot reload: activating a new policy updates decisions within ≤1s (cache invalidated via `settings.changed`).
-* App role cannot `SELECT` from base tables (`"case"`, `artifact`, `qa_log`, `guardian_decision_history`, `delivery_receipt`); reads succeed via `case_secure`, `artifact_secure`, `qa_log_secure`, `guardian_decision_history_secure`, `delivery_receipt_secure`.
+- Every response advertises the scheduled removal date via `Sunset` and links to migration notes under `/api/v1/migrations/<version>`. Clients pinned to older versions receive the same headers; monitoring (`api_sunset_header_missing_total`) ensures deprecations remain compliant with §10.0.
 
----
+### F.12 Header obligations (normative)
 
-## 44) Organization Directory Sync (Ops)
+| Category | Header(s) | Enforcement & reference | Notes |
+| -------- | --------- | ----------------------- | ----- |
+| Exposed response headers | `X-Request-ID`, `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`, `Retry-After`, `ETag`, `Deprecation`, `Sunset` | `config/settings.py::CORS_EXPOSE_HEADERS`; Settings bundle `security.cors.expose_headers`; validated by `scripts/security/verify_cors_headers.py` | Aligns with §10.5 acceptance; deviations require dual approval. |
+| Allowed preflight headers | `Authorization`, `Content-Type`, `Idempotency-Key`, `X-Request-Signature`, `X-Signature-Key-Id`, `X-Timestamp`, `If-Match`, `If-None-Match`, `If-Range`, `X-Style-Nonce`, `X-Script-Nonce` | Settings bundle `security.cors.allowed_headers`; test `scripts/security/verify_cors_headers.py` | Nonce headers support CSP enforcement per §11.5. |
+| Security baseline | `Content-Security-Policy`, `Strict-Transport-Security`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` | Generated by `apps/platform/ui/security/csp.py` + middleware; asserted in `tests/e2e/test_security_headers.py::test_csp_header_enforced` | CSP requires per-response script/style nonces; see §11.5. |
+| Download guard contract | `If-Match`, `If-None-Match`, `Range`, `If-Range` | `apps/platform/portal/downloads.py::enforce_if_match`; tests in §10.6 acceptance | Clients must echo `If-Match` ETag; violations return 412 `INTEGRITY_ERROR`. |
+| Rate-limit headers | `Retry-After`, `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset` | `apps/platform/api/middleware/rate_limiting.py::append_rate_limit_headers`; monitored via `api_rate_limit_header_miss_total` | Contract referenced in §10.5 acceptance and Appendix F.10. |
 
-**Purpose:** Keep `organization` table labels in sync with Keycloak Organizations for display and FK integrity, without modeling user↔org membership in our DB.
+Refer to §10.5, §10.6, §11.2.2, and §11.5 for narrative requirements tied to these headers.
 
-**Source of truth:** Keycloak Organizations.
+______________________________________________________________________
 
-**Triggers:**
-* Webhook from IdP (preferred): `organization.created|updated|archived`.
-* Fallback cron: poll every 6h (targets <6h freshness when webhooks are unavailable).
+## Appendix G — ERD & schema migrations history
 
-**Behavior:**
-1. Upsert `organization (id, name, archived_at)` using the Keycloak Organization UUID and display name.
-2. If an org is archived upstream, set `organization.archived_at = now()` locally (no hard delete).
-3. Emit `audit_event('ORG_DIRECTORY_SYNC', {org_id, action})`.
+*Purpose: Capture database structure evolution and reference diagrams.*
 
-**Failure handling:**
-* Retries with exponential backoff.
-* If sync is down > 24h, surface Ops alert.
-* **Data hygiene:** name changes are logged to `audit_event` with prior/new values; collision on org names is tolerated (display only).
+- **ERD:** `docs/erd/udocket-erd-v1.svg` exported from Draw.io source with entity descriptions matching §5.1.
+- **Migration ledger:** Table summarizing major migrations (ID, date, purpose, impacted tables). Highlights backward-compatibility considerations and deployment notes.
+- **Schema policies:** Links to lint rules ensuring ORM uses secure views, triggers enforcing immutability, and migration templates for advisory locks or partitioning.
+- **Tooling:** Instructions for generating ERD updates and running schema diff checks prior to migration PR merge.
 
-**Security:**
-* Read-only service account allowed to list organizations; no user data or membership is read or stored.
+______________________________________________________________________
 
----
+## Appendix H — Ops runbooks & health check playbooks
 
-## 45) SSE Replay Tuning (Settings)
+*Purpose: Collect operational runbooks referenced from alerts and dashboards; enable fast, consistent remediation.*
 
-**Goal:** Make the replay buffer tunable per environment/load profile.
+### H.1 Runbook index
 
-**Settings (Org/System):**
-* `sse.replay.max_events` (INT): default **1000**.
-* `sse.replay.max_age` (DURATION): default **10m**.
-* `sse.max_clients_per_org` (INT): default **0** (unlimited). If >0, new connections over the limit are throttled (HTTP 429) and an SSE `error` event is emitted to existing clients.
-* `sse.max_events_per_sec_per_org` (INT): default **0** (unlimited). If >0, per-org event fan-out is rate-limited with token bucket; excess emissions are batched and delivered on the next interval.
+- RB-GUARD-001 Guardian SLO breach
+- RB-QUEUE-002 Backlog saturation & KEDA tuning
+- RB-LLM-003 Provider degradation / circuit breaker
+- RB-AUDIT-004 Audit seal failure
+- RB-PORTAL-005 Download anomaly & link revoke
+- RB-LOCK-006 Advisory-lock stale detection & remediation
+- RB-LOG-007 Logging pipeline ingestion health
+- RB-GOV-008 Settings governance toggle / rollback
 
-**Server behavior:**
-* Each stream maintains a ring buffer of `≤ max_events` and evicts entries older than `max_age`.
-* If a client presents `Last-Event-ID` older than the window, send a **sync snapshot** then resume live.
-* Changes are hot-reloaded via Settings pub/sub.
-* When org-level throttles are enabled, the server enforces them before enqueueing to Redis Streams and surfaces `sse.org_throttle_total{org,reason}` metrics.
+### H.2 Standard runbook template
 
-**Observability:**
-* Metric: `sse.replay.evictions`.
-* Alert if `sse.replay.evictions` spikes > P95 baseline for 15min (suggest increasing buffers).
+- Purpose: one sentence describing the operational objective.
+- Signals: metrics/logs/traces that trigger or inform the runbook.
+- Triage (5-minute checklist): quick steps to confirm scope, blast radius, and holder liveness.
+- Decision tree: conditional actions based on environment and risk (prod vs staging), including guardrails.
+- Post-remediation: verification steps to ensure system health and to capture evidence.
+- Preventive actions: changes that reduce recurrence (tuning, automation, code fixes).
+- Field snippets: vetted commands and SQL queries with placeholders.
 
+### H.3 RB-LOG-007 — Logging pipeline ingestion health (normative)
 
-### 45.1 Replay security checks
-* Replay snapshot omits masked fields entirely; serializers reuse `*_secure` views.
-* If `Last-Event-ID` predates retention window, server emits a **snapshot** then resumes live; snapshot generation is RLS-scoped to the caller.
-* **DoS guard:** per-org token bucket for enqueue; when saturated, **drop** non-critical `progress` events first; never drop `artifact_state` or `portal_link_invalidated`.
+Purpose: Keep centralized logging ingest within SLOs and prevent silent data loss.
 
----
+Linked alert: `alert_logging_ingest_lag` (Grafana: Observability → Logging pipeline dashboard).
 
-## 46) Case Field Enumerations via Settings
+Signals
 
-**Objective:** Strongly type `case.status` and `case.representation_type` using centrally managed enums.
+- `logging_ingest_lag_seconds` > 30 for 3 consecutive scrapes
+- `logging_drop_rate_pct` > 0.1 or `logging_spool_utilization_pct` > 80
+- Fluent Bit / otel-collector health checks failing or queue file growth beyond 12h buffer
 
-**Settings (Org/System):**
-* `case.status.enum` (JSON array of strings)
-* `case.representation_type.enum` (JSON array of strings)
+Triage — 5-minute checklist
 
-**Validation:**
-* API layer enforces membership in the active org/case effective enums.
-* DB adds check constraints that are generated/migrated from the current system enum sets for baseline safety; app-level validation guards drift across versions.
+1. Confirm scope & blast radius
+   - Grafana dashboard filtered by environment and service; note affected indices.
+   - Check Kafka topic lag (`kafka_consumergroup_lag`); capture screenshot for incident log.
+1. Collector health
+   - `kubectl exec <collector> -- otelcol status` to verify pipeline state.
+   - Inspect Fluent Bit metrics endpoint (`/api/v1/metrics/prometheus`) for retries/back-pressure.
+1. Downstream availability
+   - Verify Elasticsearch cluster green state and disk watermark.
 
-**Admin workflow:**
-* Enum changes go through Settings bundles (`/validate` → `/activate`) with scheduled activation.
-* Backward compatibility: existing records are allowed; UI prevents selection of deprecated values.
+Decision
 
-**Testing:**
-* Contract tests verify rejects on unknown enum values; history shows bundle/version that authorized each stored value.
+- If collectors overloaded: scale `otel-collector` deployment and flush queue with `kubectl rollout restart`.
+- If downstream unavailable (Elasticsearch/Kafka), switch collectors to file-buffer mode using `kubectl patch configmap logging-collector --type merge ...` (template in runbook repo), notify on-call DB/SRE.
+- If drop rate persists after scaling, pause non-critical DEBUG logs via `logging.level.overrides` until backlog clears.
 
----
+Post-remediation
 
-## 47) Portal Fetch-time Guard (Explicit)
+- Ensure `logging_ingest_lag_seconds` < 15 and `logging_drop_rate_pct` = 0 for two consecutive collection intervals.
+- Produce incident summary with root cause, impacted indices, and recovery actions; attach to decision log (§15.3).
+- File follow-up tasks (capacity, query optimization) if backlog exceeded 50% of quota.
 
-**Purpose:** Make the release-state guard unmistakable in the portal spec.
-**Rule:** A signed URL or direct download **must** validate at fetch time:
+Preventive actions
 
-* `artifact.state == 'APPROVED'`
-* `artifact.id` and `content_sha256` match the signed parameters
-* `expiry` is in the future
+- Validate new services against `log_schema@1` before deploying.
+- Review log verbosity budgets quarterly and adjust `logging.cost.daily_budget_mb_per_service`.
+- Exercise disaster recovery by simulating downstream outage each quarter; capture evidence under App.H.
 
-**Invalidation semantics (binding):**
-* When an approval swap or rejection affects an artifact backing a live link, the server:
-  1) **terminates** any in-flight transfers and responds **412 (If-Match)** or **403 (state changed)**,
-  2) emits SSE event `portal_link_invalidated` with `{artifact_id, reason, ts}`,
-  3) logs `audit_event('PORTAL_DOWNLOAD_DENIED', {artifact_id, reason})`.
+Field runbook snippets
 
-If an artifact transitions away from `APPROVED` (e.g., **REJECTED** after approval), the fetch fails with `403` and the portal shows “This document is no longer available” banner.
+- Collector status: `kubectl -n observability logs deploy/otel-collector --tail=200`
+- Kafka lag: `kafka-consumer-groups.sh --bootstrap-server $BROKER --describe --group logs-indexer`
+- Force rollover when index nearly full: `POST /logs-*/_rollover` (requires observability.engineer role)
 
-**Telemetry:**
-* Emit`audit_event('PORTAL_DOWNLOAD_DENIED', {artifact_id, reason})` on rejections.
+### H.4 RB-LOCK-006 — Advisory-lock stale detection & remediation (normative)
 
----
+Purpose: Detect and remediate session-scoped advisory locks that exceed the configured hold time without breaking correctness.
 
-## 48) LLM Evidence Store — PII Posture
+Signals (any triggers page on-call):
 
-**Principle:** Evidence is always redacted; unredacted prompts/responses never persist beyond transient execution memory.
+- Metric `udlock_watchdog_stale_total{action=alert}` increased in last 5m
+- Lock age P95 > `udlock.max_session_hold_seconds`
+- Repeated stale detections for the same `(scope,k)` within 15m
 
-**Storage contract:**
-* Persist only: `{prompt_template_id, template_version, redaction_ruleset_id, redaction_stats, model_id, model_version, input_hashes, output_hashes, request_id, actor_id, case_id, timestamps}`.
-* Store redacted prompt/response **excerpts** for debugging **when** `evidence_store.redacted_excerpts.enabled=true` (default). When `privacy.hipaa.enabled=true`, this setting MUST be **false**.
+Triage — 5-minute checklist
 
-**Access:**
-* Roles: `auditor`, `sysadmin` via dedicated endpoints.
-* Every read emits `audit_event('EVIDENCE_READ', {request_id, actor_id})`.
+1. Confirm scope & blast radius
+   - Grafana → Advisory Locks dashboard: filter by `scope` and `node_id`.
+   - Note affected `case_id`/`job_id` if `k` is of the form `caseId/jobkind` or `org/case/type`.
+1. Verify holder liveness
+   - Query:
+     ```sql
+     SELECT r.scope, r.k, r.node_id, r.backend_pid, now()-r.acquired_at AS age, a.state, a.query
+       FROM udlock.registry r JOIN pg_stat_activity a ON a.pid=r.backend_pid
+      WHERE now()-r.acquired_at > make_interval(secs => :threshold_seconds)
+      ORDER BY age DESC;
+     ```
+   - If `a.state IN ('idle','idle in transaction')` or heartbeat > 2× interval → stale.
+1. Check job/case impact (if `scope='jobkind'`)
+   - `SELECT id, kind, status, started_at, finished_at FROM job WHERE case_id=:case LIMIT 1;`
+   - If job still making progress (recent checkpoints) → prefer notify over terminate.
 
-**Retention:**
-* Default ≥ **2× artifact retention** for non-content metadata; excerpts follow the same schedule.
+Decision tree
 
-**Tests:**
-* Security tests assert no code path writes unredacted payloads to disk or object storage.
-* Redaction unit tests validate that configured PII classes are removed with recall ≥ 0.99 on the golden set.
+- Prod default (`udlock.watchdog.kill_stale=false`)
+  - Action: Alert only. Post a remediation note in incident channel; ask owner pod to release lock (rolling restart of that worker Deployment if needed).
+  - Evidence: attach top 5 rows from the query above and last job checkpoint id.
+- Staging / controlled prod exception (approved by on-call SRE + service owner):
+  - Terminate session: `SELECT pg_terminate_backend(:backend_pid);`
+  - Verify release: lock disappears from `pg_locks`; `udlock.registry` row GC’d within 60s or by `SELECT udlock.gc_registry();`
+  - Resume: If a job was blocked, it resumes on next retry loop.
 
----
+Post-remediation
 
-## 49) Request Signing & Key Rotation (Global)
+- Confirm metrics return to baseline (`udlock_locks_held`, `udlock_watchdog_stale_total` plateau).
+- Open a defect if the same `(scope,k)` reappears within 24h; include `node_id`, last 200 lines of the worker pod logs, and query plan of the blocking transaction (if any).
 
-**Purpose:** Standardize HMAC signing across internal POST/PUT endpoints for tamper-evidence and replay control.
+Preventive actions
 
-**Headers:**
-* `X-Signature-Key-Id`: opaque key identifier (from Settings).
-* `X-Timestamp`: RFC3339 in UTC (e.g., 2025-01-01T12:00:00Z)
-* `X-Request-Signature`: HMAC-SHA256( X-Signature-Key-Id || "\n" || X-Timestamp || "\n" || <raw body bytes> ) hex.
+- Ensure all session locks are taken via `udlock.try_lock_i(...)` (instrumented) and held \< `udlock.max_session_hold_seconds`.
+- Tune `udlock.heartbeat.interval_seconds` to 5–10s; avoid noisy heartbeats (\<3s) in production.
+- Add a short “finally” clause in workers to call `udlock.unlock(...)` on early abort paths.
 
-**Key management:**
-* Keys are stored per org/client in Settings (`security.request_signing.keys[]`).
-* Rotation: mark new key `active=true`, old key `active=true` for 24h overlap, then `active=false`.
-* Audit: `audit_event('SIGNING_KEY_ROTATED', {key_id, org_id})`.
+Field runbook snippets
 
-**Verification algorithm:**
-1. Parse X-Timestamp; reject if |now - ts| > 300s (clock skew).
-2. Look up key by `X-Signature-Key-Id`.
-3. Compute HMAC as above; constant-time compare to `X-Request-Signature`.
-4. On mismatch → `401 AUTH_ERROR`; on unknown key → `401 AUTH_ERROR` with `details.reason='UNKNOWN_KEY_ID'`.
-5. Pair with Idempotency-Key for 24h replay protection (as already specified).
+- Identify pod from `node_id`: `kubectl get pod -A | grep <node_id>`
+- Bounce a single worker pod: `kubectl delete pod <pod> -n <ns> --grace-period=5`
+- Force GC registry (safe): `SELECT udlock.gc_registry();`
 
-**Replay control:**
-* Pair with `Idempotency-Key` and store `(org_id, endpoint, idempotency_key, signature_sha256)` for 24h.
-* On duplicate with differing signature → `409 CONFLICT`.
-* **Echo headers:** On success the server echoes `Idempotency-Key` and `X-Request-ID`; clients must display correlation.
+### H.6 RB-GUARD-QUAR — Guardian quarantine handling (normative)
 
-**Acceptance:**
-* Requests without both headers → `401`.
-* Keys rotated remain valid per overlap window; after window expiry, requests fail with `UNKNOWN_KEY_ID`.
+Purpose: Quickly diagnose and resolve QUARANTINED artifacts without bypassing policy.
 
----
+Linked alert: `alert_guardian_quarantine_spike` (Grafana: Guardian SLO dashboard).
 
-## 50) SSE Event Schema & Sync Snapshot
+Signals
 
-**Event types:**
-* `progress`: `{ job_id, task, pct, ts }`
-* `state`: `{ job_id, status, ts }`  // `PENDING|RUNNING|PAUSED|FAILED|COMPLETED`
-* `error`: `{ job_id, code, message, correlation_id, ts }`
-* `artifact_state`: `{ artifact_id, type, prev_state, state, ts }`
-* `portal_link_invalidated`: `{ artifact_id, reason, ts }`  // emitted on approval swap/reject
-* `message_new`: `{ thread_id, message_id, case_id, sender_id, ts }`  // Portal Messaging (§58)
-* `message_read`: `{ thread_id, message_id, reader_id, ts }`          // read receipts (§58)
+- Guardian decisions with `decision=QUARANTINED` increase; reasons include `POLICY_FORBIDDEN_PATTERN`, `INTEGRITY_HASH_MISMATCH`, `SOURCE_NOT_APPROVED`.
+- READY backlog drops, approval throughput slows.
 
-**Event ID:**
-* **Monotonic, per-stream:** `case/{case_id}/{seq}` where `{seq}` is an atomically-incremented integer from Redis (key: `sse:case:{case_id}:seq`).
-* **Transport buffer:**
-  * Use Redis Streams per case: stream key sse:case:{case_id}
-  * Emit with XADD sse:case:{case_id} MAXLEN ~ {max_events} * <fields...>
-  * Replay: if client Last-Event-ID = "{case_id}/{seq}", translate to stream ID "{seq}-0" and XRANGE from there.
-  * Evict by MAXLEN and by age with periodic XTRIM on server timer to honor max_age.
-  * Store the monotonic {seq} alongside each XADD payload.
+Triage
 
-**Sync snapshot (sent when Last-Event-ID < window):**
-```json
-{
-  "type": "snapshot",
-  "case_id": "UUID",
-  "jobs": [{ "id":"UUID", "status":"...", "updated_at":"..." }],
-  "artifacts": [{ "id":"UUID", "type":"...", "state":"...", "updated_at":"..." }],
-  "settings_snapshot_sha256": "hex",
-  "ts": "RFC3339"
-}
-```
+1. Inspect guardian dashboard filtered by `reasons[]` and `org_id`.
+1. Sample decisions in `guardian_decision_history_secure`; confirm rules_version and settings snapshot.
+1. If `INTEGRITY_HASH_MISMATCH`, verify upload finalize and recompute hash.
 
-**Contract:**
-* No PII in payloads.
-* Clients may request replay from any `Last-Event-ID`; server returns replay or a one-time snapshot then resumes live.
+Decision
 
-* **Accessibility:** Servers emit human-friendly, single-sentence summaries alongside raw payloads for UI announcement in ARIA live regions (e.g., “Your download link was revoked; please refresh.”). UI MUST not announce high-frequency events more than once every 2s.
+- `POLICY_FORBIDDEN_PATTERN`: notify product; route to QA/Agent edits; consider template or policy updates.
+- `SOURCE_NOT_APPROVED`: instruct operator to approve upstream artifact or rebind inputs.
+- `REGION`/`DEBUG_MODE_BLOCKED`: enforce settings fix and re-submit.
 
----
+Post-remediation
 
-## 51) Case Enum Migration Playbook
+- Track READY ratio recovery; log incident with counts per reason.
 
-**Goal:** Safely evolve `case.status` / `case.representation_type` without breaking existing rows.
+### H.7 RB-RES-BLOCK — Residency block remediation (normative)
 
-**Steps:**
-1. Add new values in Settings bundle; activate.
-2. **DB migration:** add `CHECK ... NOT VALID` constraints reflecting the full current set.
-3. Validate constraints after backfill (optional) using `ALTER TABLE ... VALIDATE CONSTRAINT`.
-4. Deprecate values via Settings; UI hides deprecated items for new edits.
-5. On final removal, run data migration to remap deprecated values, then regenerate constraints.
+Purpose: Enforce Canada-only residency while providing a waiver path when approved.
 
-**Notes:**
-* `NOT VALID` allows legacy rows to exist; updates/inserts must satisfy the new set.
-* For auditability, history records bundle/version that authorized each stored value.
+Linked alert: `alert_residency_policy_block` (Grafana: Residency dashboard).
 
----
+Signals
 
-## 52) List Endpoint Contract (Pagination & Sorting)
+- Errors `RESIDENCY_POLICY_BLOCK` in logs; settings validation failures; egress policy denies to non-CA endpoints.
 
-**Applies to:** `/api/v1/artifacts`, `/api/v1/jobs`, `/api/v1/qa-logs`, `/portal/cases`.
+Triage
 
-**Query params:**
-* `page` (INT, default 1), `page_size` (INT, default 50, max 200)
-* `sort` (comma-list of `field:asc|desc`) — default:
-  * artifacts: `created_at:desc`
-  * jobs: `started_at:desc`
-  * qa-logs: `created_at:desc`
+1. Confirm org allowlists (`regions.allowlist.*`).
+1. Check provider endpoints; DNS drift; mesh egress policies.
 
-**Response envelope:**
-```json
-{
-  "items": [...],
-  "page": 1,
-  "page_size": 50,
-  "total": 1234,
-  "next_page": 2
-}
-```
+Decision
 
-**Errors:**
-* Invalid `sort` field → `400 VALIDATION_ERROR` with `details.fields`.
-  * Attempting to sort/filter on masked-only fields returns `400 VALIDATION_ERROR` (those fields are not queryable).
+- If legitimate cross-region need: require dual approval (Security + Architecture), set `cross_region_waiver=true`, re-run; Guardian stamps waiver in manifest.
+- Else: adjust settings to allowed regions; update provider config.
 
----
+Post-remediation
 
-## 53) Compose/Policy Lint Settings (Declarative)
+- Verify blocks drop to zero; audit waiver usage in ops.
 
-**Keys (Org/System):**
-* `compose.policy.forbidden_patterns[]` — list of regex strings
-* `compose.policy.required_sections[]` — list of section keys that must be present
-* `compose.policy.max_links_per_section` — INT
+### H.8 RB-ETAG — If-Match/ETag failures (normative)
 
-**Enforcement:**
-* Compose QA rejects artifacts violating forbidden patterns or missing required sections; Guardian reasons include `POLICY_FORBIDDEN_PATTERN`/`MISSING_SECTION`.
+Purpose: Ensure clients download the exact approved bytes and handle invalidations correctly.
 
-**Acceptance:**
-* Contract tests assert Compose outputs fail when patterns match; success when lists are empty.
+Linked alert: `alert_portal_412_spike` (Grafana: Portal Security dashboard).
 
+Signals
 
-### 53.1 Additional acceptance tests (policy & regions)
-* **Policy dry-run:** activating bundle with widened write access must produce `unsafe=true` and be blocked without `--force`.
-* **Region lint:** settings activation with conflicting compute/storage regions is rejected; waiver path stamps manifests and emits audit events.
+- 412 PRECONDITION_FAILED spikes on portal downloads.
 
----
+Triage
 
-## 54) LangGraph Implementation Spec
+1. Confirm approval swap or rejection; check portal invalidation events.
+1. Verify ETag equals artifact `content_sha256`.
 
-### 54.1 Goals
-* Deterministic control surfaces with non-deterministic content.
-* Safe pause/resume/retry without duplication.
-* Strong schema & referential guarantees at every node boundary.
-* Full observability of LLM calls (tokens, latency, cost) under region allowlists.
+Decision
 
+- Instruct clients to re-fetch metadata and retry with fresh ETag.
+- If portal link stale: regenerate signed URL; ensure portal displays denial banner for revoked artifacts.
 
-### 54.2 Graph state (typed)
-```python
-# Python (pydantic v2) — shared by all nodes
-from pydantic import BaseModel, Field
-from typing import Any, Literal, Dict, List, Optional
-from uuid import UUID
+Post-remediation
 
-class GraphState(BaseModel):
-    case_id: UUID
-    job_id: UUID
-    settings_snapshot_sha256: str
-    inputs: Dict[str, Any]            # e.g., transcript indices, APPROVED artifact refs
-    work: Dict[str, Any] = {}         # per-lane intermediate state
-    outputs: Dict[str, Any] = {}      # lane -> validated list[...] (models in §10.3)
-    qa_notes: List[Dict[str, Any]] = []
-    rev_counters: Dict[str, int] = {} # lane -> attempts used
-    traces: List[str] = []            # decision trace ids / correlation ids
-    version: str = "analyze@v1"       # graph version id
-```
+- Monitor 412 rate returning to baseline; verify portal behavior in staging.
 
-**Persistence:** after each node, serialize `GraphState` to `job_checkpoint.checkpoint` with `checkpoint_hash`. On resume, load last checkpoint and continue.
+### H.9 RB-GOV-008 — Settings governance toggle / rollback (normative)
 
-### 54.3 Nodes & contracts
+Purpose: Safely activate and, if necessary, revert high-sensitivity settings such as `settings.can_open_source`, residency waivers, or cross-organization pilots.
 
-#### ContextBuilder
-* **In:** `TRANSCRIPT`, `DIARIZATION`, **APPROVED** ingestion (`EXHIBIT_TEXT`, etc.), settings snapshot.
-* **Out:** `inputs.transcript_index`, `inputs.knowledge_index`, normalized language metadata.
-* **Checks:** region allowlist, minimum transcript coverage; emit `POLICY_BLOCK` if violated.
+Linked trigger: Settings activation flagged `unsafe` for governance toggles, change ticket type `GOV-TOGGLE`, or alert `settings_governance_override_total`.
 
+Approvers & prerequisites
 
-#### Lane nodes (Events, Timeline, Issues, Entities, Facts)
-* **In:** `GraphState.inputs`, previous `work`.
-* **Process:** chunking + retrieval; prompt build (template id+version recorded); LLM call; schema validate to the lane model list (§10.3).
-* **Deterministic IDs:** generate UUIDv8 for each derived item using §27 anchors (transcript spans, referenced entities/events).
-* **Out:** `outputs[LANE] = list[Model]`.
-* **Retry:** bounded by `analyze.max_retries`. Categories:
-  * `TRANSIENT` (provider 429/5xx/timeouts) → exponential backoff + jitter.
-  * `SCHEMA` (validation fail) → 1 auto-repair attempt with corrective prompt; then fail lane.
-  * `POLICY` (forbidden pattern) → fail lane (no auto-retry).
+- Required approvals: Architecture Steering Committee + Security Review Board (aligns with TDD front matter).
+- Preconditions: Approved ADR (if applicable), drafted customer/internal comms, staging dry-run using identical bundle hash, rollback window defined.
+- Coordination: Product owner confirms rollout audience; Support prepares FAQ.
 
+Execution steps
 
-#### Lane QA node
-* **In:** lane `outputs[...]`.
-* **Checks:** schema, references (transcript spans resolve, entity/event IDs exist), policy lint, length bounds.
-* **Side-effects:** write `qa_log` (`scope='ANALYZE_LANE'`) + upload notes to `/job/{job}/qa_logs/...`.
-* **On fail:** if `rev_counters[lane] < max_retries`, write directive + loop back to lane node; else mark lane `FAILED`.
+1. Announce maintenance/change window in `#ops-announcements` with activation + rollback timestamps.
+1. Activate via Settings CLI/UI, capturing activation ID and justification referencing change ticket.
+1. Monitor propagation: verify Redis/cache invalidation, run `settings.snapshot --org <id>` sanity check, and execute targeted smoke tests (API, portal, worker flows) tied to the toggle.
+1. Update change ticket with activation ID, verification evidence, and next review checkpoint.
 
+Rollback
 
-#### Final QA (cross-lane)
-* **In:** all lane outputs.
-* **Checks:** cross-references across lanes (e.g., Issues.related_events exist; Timeline items reference valid Events), no ID collisions, statistical anomalies (e.g., duplicate entities with very close names).
-* **Out:** ready-for-artifact dicts per lane.
-* **Side-effects:** `qa_log` (`scope='ANALYZE_FINAL'`).
+- If monitors fail or stakeholders report regression inside the rollback window, reapply prior bundle (`settings rollback --bundle <previous_id>`), confirm `settings.changed` event emitted, and rerun smoke tests.
+- Communicate rollback to stakeholders and note reason/actions in change ticket and decision log (§15.3).
 
+Evidence & artefacts
 
-#### Emit artifacts
-* **Action:** create DRAFT artifacts for each lane (`ANALYZE_EVENTS|...|GAPS`), with manifests linking source artifacts + settings snapshot hash; submit each to Guardian (idempotent).
-* **SSE:** emit `artifact_state` updates.
+- Store activation/rollback JSON under `ops/settings/<date>/` (`ACTIVATION_<id>.json`, `ROLLBACK_<id>.json`).
+- Append decision log entry, citing ADR, activation ID, and outcome.
+- Runbook reference material: `docs/runbooks/settings/governance_toggle.md`, communication template `docs/runbooks/settings/templates/governance_toggle_announce.md`.
 
+### H.4 SQL helper — Two-key advisory lock (normative)
 
-### 54.4 Concurrency & ordering
-* `ContextBuilder` → barrier.
-* Lanes run **in parallel** (Celery group) up to `analyze.parallelism` (settings); each lane internally may fan out per chunk but must **gather** and validate before writing to `outputs[LANE]`.
-* `Final QA` waits for all lanes that did not hard-fail. If any required lane failed, job `FAILED` with reasons.
+Purpose: Provide a stable 64-bit advisory lock key derived from a scope and key, minimizing collisions and supporting both session- and xact-scoped locks.
 
+Helper (PostgreSQL)
 
-### 54.5 Checkpointing & idempotency
-* **Checkpoint after:**
-  * ContextBuilder completion,
-  * each lane completion,
-  * each QA pass,
-  * each artifact emission.
-* **Idempotency keys:** per node: `Idem:<job_id>:<node_name>:<rev#>`.
-* Re-entrancy: re-running a completed node with same input hash returns prior result (no duplicate LLM calls) using a small result cache keyed by `(node,input_hash,template_version,model_id)` for TTL 24h.
-
-
-### 54.6 LLM call wrapper (mandatory)
-* Enforce region allowlist before call.
-* Inputs redacted; record `prompt_template_id`, `template_version`, `model_id`, `model_version`, token usage, latency, and `output_hash`.
-* Timeout and max tokens from settings (`*.token_ceiling`).
-* Streaming disabled for batch; enabled only for interactive editors (Channels).
-* Emits metrics: `llm_call_count`, `llm_latency_ms`, `llm_tokens_in/out`, `llm_cost_estimate`.
-* Circuit breaker respected; fallback by `fallback_priority` filtered by language/region.
-
-
-### 54.7 Memory & retrieval policy
-* Transcript chunking: ~2–5k tokens per chunk, overlap 10–15%.
-* Retrieval: BM25 + (optional) embedding index constrained to allowed regions; no external vectors if region disallowed.
-* Map-reduce summarization only stores **redacted** map outputs transiently in `work`; never persisted unredacted.
-
-
-### 54.8 Error classes & actions
-| Class     | Examples                          | Action                           |
-| --------- | --------------------------------- | -------------------------------- |
-| TRANSIENT | 502/503/504/429, network timeouts | backoff retry (bounded)          |
-| SCHEMA    | pydantic validation fail          | 1 repair attempt; else lane FAIL |
-| POLICY    | forbidden pattern, region block   | hard FAIL (lane or job)          |
-| INTEGRITY | missing referenced artifact       | hard FAIL + `INTEGRITY_ERROR`    |
-
-
-### 54.9 Observability
-* **Logs:** per node start/stop, input/output hashes, model selection decisions (and fallback reason).
-* **Traces:** span per node (attributes: case_id, job_id, lane, model_id, template_version).
-* **Metrics:** `analyze_lane_duration_ms`, `analyze_finalqa_duration_ms`, success/fail counters, retry counts, P95 per lane.
-* **Prop tests hooks:** lanes expose pure functions for schema validation & ID determinism to the property-test harness (§23.5).
-
-
-### 54.10 Security
-* All reads happen under the worker’s **active_org_id** RLS session.
-* `compute_region` stamped into manifests; verified by Guardian.
-* No unredacted prompts/responses written to disk or object storage (per §48).
-
----
-
-## 55) Graph Versioning & Migrations
-
-* **IDs:** `analyze@v1`, `compose@v1` (semver allowed later).
-* **Stored with:** `job.version`, artifact manifest (`graph_version`), QA logs.
-* **Breaking change policy:** bump major; write a migration shim that:
-  * maps prior lane outputs to the new schema,
-  * or forces a re-run (recorded as **NEEDS_REVIEW** banner).
-* **Runtime constraint:** do not mix outputs from different major versions within one job. Enforce at job start.
-
----
-
-## 56) Compose Graph Details (parallels Analyze)
-
-* Nodes: `OutlineBuilder` → `SectionWriter[*]` (parallel) → `SectionQA[*]` → `FinalWeave` → emit `COMPOSE_CLIENT|LAWYER`.
-* **SectionWriter contract:** inputs are **APPROVED** Analyze refs + template section key; outputs a `ComposeSection` with deterministic references (IDs from Analyze).
-* **QA:** structure + policy lint (per §53), forbidden patterns, reference resolvability.
-* **Retries:** `compose.max_retries` with a repair prompt; then fail the section and surface in QA logs.
-* **FinalWeave:** validates required sections (settings) and outline order; blocks Assembly until pass.
-
----
-
-## 57) FinOps — Unit Economics & Deploy Guard (Epic G start)
-
-### 57.1 Scope & definitions
-* **Unit economics (initial):** Focus on LLM spend + delivery activity. Compute:
-  * `finops_cost_per_case_usd = Σ(llm_call_cost_usd) per case` (tokens × model rate)
-  * `finops_cost_per_org_usd = Σ(finops_cost_per_case_usd) per org per calendar month`
-* **Delivery activity (visibility only, phase 1):** counts of `EMAIL|SMS|PORTAL` events by status; no carrier cost modeling in phase 1.
-
-
-### 57.2 Data sources
-* Metrics emitted by LLM wrapper (§7.6) and delivery subsystem (§17): `llm_tokens_in/out`, `llm_cost_estimate`, `delivery_receipt`.
-* No DB schema changes required for phase 1 (greenfield).
-
-
-### 57.3 Dashboard (Grafana)
-Panels (org-scoped by variable):
-1) **Cost per case (last 30d)**: `sum by (case) (finops_cost_per_case_usd{org="$org"})`
-2) **MoM cost (org)**: current month vs prior; sparkline + % delta
-3) **Top 10 cases by cost** (table): case id/title, cost, jobs, tokens
-4) **Delivery activity**: stacked bar by channel/status for last 30d
-
-
-### 57.4 Deploy guard — MoM regression
-**Policy:** Block production deploy if org-level MoM cost regression exceeds threshold.
-* Threshold: `finops.deploy_guard.mom_regression_pct` (default **10**)
-* Window: compare **completed previous calendar month** to **month before it**
-
-**CI gate (reference step)**
-```yaml
-- name: FinOps MoM regression gate
-  run: |
-    python ops/gates/check_finops_mom.py \
-      --threshold_pct "${FINOPS_MOM_THRESHOLD:-10}" \
-      --window_months 2 \
-      --metric finops_cost_per_org_usd
-```
-* **Pass:** max(org MoM delta %) ≤ threshold → continue deploy
-* **Fail:** gate blocks; job posts markdown summary with orgs exceeding threshold and links to the **Unit Economics & Delivery** dashboard
-
-
-### 57.5 Monthly CSV artifact (FINOPS_REPORT)
-**Purpose:** Per-org CSV for finance review and export.
-* **Artifact type:** `FINOPS_REPORT` (already listed in Appendix F)
-* **Cadence:** 1st of each month at 02:00 UTC (configurable via settings)
-* **Layout:** `/org/{org}/reports/finops/{YYYY-MM}/finops_{org}_{YYYY-MM}.csv`
-* **Columns (phase 1):**
-  * `org_id, month, case_id, job_id, model_id, provider, tokens_in, tokens_out, llm_cost_usd, deliveries_email, deliveries_sms, portal_downloads, total_estimated_cost_usd`
-* **Provenance:** manifest includes `{generator:"finops@v1", month, inputs:["metrics://llm","db://delivery_receipt"], settings_snapshot_sha256}`
-* **Access:** scoped by RLS; visible to `org_admin|org_manager|auditor|sysadmin`
-
-
-### 57.6 Acceptance
-* Gate fails when simulated MoM delta > threshold; success otherwise.
-* CSV artifact generated with >0 rows for active orgs on the 1st; manifest present and validates.
-* Dashboard panels render for an org with test data; top 10 table populated.
-
----
-
-## 58) Secure Portal Messaging
-
-### 58.1 Scope & goals
-Enable case-scoped, secure, rate-limited messaging between clients (`org_client`) and staff (`org_operator|org_reviewer|org_manager|org_admin`) inside the Portal/Staff UI, with attachments, profanity filtering, SSE updates, and strict RLS. Messaging is **internal** (non-email/SMS), stored in DB + object storage; attachments are **not** artifacts.
-
-
-### 58.2 Data model & RLS
 ```sql
-CREATE TABLE message_thread (
-  id UUID PRIMARY KEY,                -- UUIDv7
-  org_id UUID NOT NULL REFERENCES organization(id),
-  case_id UUID NOT NULL REFERENCES "case"(id),
-  title TEXT NOT NULL,
-  created_by UUID NOT NULL REFERENCES user_account(id),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  archived BOOLEAN NOT NULL DEFAULT FALSE
-);
+-- Two-part hashing to 64-bit key space
+CREATE OR REPLACE FUNCTION udlock.key64(scope text, k text)
+RETURNS bigint
+LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
+  SELECT ((hashtextextended(scope, 0)::bigint << 32)
+       #  (hashtextextended(k,     0)::bigint       ))::bigint;
+$$;
 
-CREATE TABLE message (
-  id UUID PRIMARY KEY,                -- UUIDv7
-  org_id UUID NOT NULL REFERENCES organization(id),
-  case_id UUID NOT NULL REFERENCES "case"(id),
-  thread_id UUID NOT NULL REFERENCES message_thread(id),
-  sender_id UUID NOT NULL REFERENCES user_account(id),
-  body_md TEXT NOT NULL,
-  profanity_flag BOOLEAN NOT NULL DEFAULT FALSE,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  edited_at TIMESTAMPTZ NULL
-);
+-- Session-scoped lock wrappers (instrumented variants `*_i` record registry rows)
+CREATE OR REPLACE FUNCTION udlock.lock(scope text, k text) RETURNS void AS $$
+  SELECT pg_advisory_lock(udlock.key64(scope,k));
+$$ LANGUAGE sql VOLATILE;
 
-CREATE TABLE message_attachment (
-  id UUID PRIMARY KEY,                -- UUIDv7
-  org_id UUID NOT NULL REFERENCES organization(id),
-  case_id UUID NOT NULL REFERENCES "case"(id),
-  thread_id UUID NOT NULL REFERENCES message_thread(id),
-  message_id UUID NOT NULL REFERENCES message(id),
-  content_uri TEXT NOT NULL,
-  content_sha256 CHAR(64) NOT NULL,
-  filename TEXT NOT NULL,
-  content_type TEXT NOT NULL,
-  content_length BIGINT NOT NULL,
-  av_status TEXT NOT NULL CHECK (av_status IN ('PENDING','CLEAN','QUARANTINED')),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+CREATE OR REPLACE FUNCTION udlock.try_lock(scope text, k text) RETURNS boolean AS $$
+  SELECT pg_try_advisory_lock(udlock.key64(scope,k));
+$$ LANGUAGE sql VOLATILE;
 
-CREATE TABLE message_read_receipt (
-  message_id UUID NOT NULL REFERENCES message(id),
-  reader_id  UUID NOT NULL REFERENCES user_account(id),
-  read_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-  PRIMARY KEY (message_id, reader_id)
-);
+CREATE OR REPLACE FUNCTION udlock.unlock(scope text, k text) RETURNS void AS $$
+  SELECT pg_advisory_unlock(udlock.key64(scope,k));
+$$ LANGUAGE sql VOLATILE;
 
--- Indexes
-CREATE INDEX message_thread_org_case ON message_thread (org_id, case_id, created_at DESC);
-CREATE INDEX message_case_thread_time ON message (org_id, case_id, thread_id, created_at DESC);
-CREATE INDEX message_attachment_status ON message_attachment (org_id, case_id, av_status, created_at DESC);
+-- Transaction-scoped lock
+CREATE OR REPLACE FUNCTION udlock.xact_lock(scope text, k text) RETURNS void AS $$
+  SELECT pg_advisory_xact_lock(udlock.key64(scope,k));
+$$ LANGUAGE sql VOLATILE;
+```
 
--- RLS (deny-by-default; case membership + policy driven)
-ALTER TABLE message_thread ENABLE ROW LEVEL SECURITY; ALTER TABLE message_thread FORCE ROW LEVEL SECURITY;
-ALTER TABLE message        ENABLE ROW LEVEL SECURITY; ALTER TABLE message        FORCE ROW LEVEL SECURITY;
-ALTER TABLE message_attachment ENABLE ROW LEVEL SECURITY; ALTER TABLE message_attachment FORCE ROW LEVEL SECURITY;
-ALTER TABLE message_read_receipt ENABLE ROW LEVEL SECURITY; ALTER TABLE message_read_receipt FORCE ROW LEVEL SECURITY;
+Usage
 
+- Exclusive approval swap: `udlock.xact_lock('case-approval', CONCAT(:org,'/',:case,'/',:type))` (see §5.4.1).
+- Overlapping job guard: `udlock.try_lock('jobkind', CONCAT(:case,'/',:kind))` (see §10.3.1).
+- Python helper (psycopg3):
+  ```python
+  from contextlib import contextmanager
+
+  @contextmanager
+  def advisory_lock(cur, org_id: str, scope_key: str) -> None:
+      cur.execute(
+          """
+          SELECT pg_advisory_xact_lock(
+            (("x" || replace(%s, '-', ''))::bit(128)::bigint >> 64),
+            hashtextextended(%s, 0)
+          );
+          """,
+          [org_id, scope_key],
+      )
+      try:
+          yield
+      finally:
+          cur.execute(
+              """
+              SELECT pg_advisory_unlock(
+                (("x" || replace(%s, '-', ''))::bit(128)::bigint >> 64),
+                hashtextextended(%s, 0)
+              );
+              """,
+              [org_id, scope_key],
+          )
+  ```
+- Canonical scopes: `artifact:{artifact_id}`, `case-type:{case_id}/{type}`, `jobkind:{case_id}/{kind}`, `idempotency:{scope}:{key}`, `settings:activate:{scope}/{case_id}`. Align helpers under `udlock.*` to ensure watchdog visibility.
+
+______________________________________________________________________
+
+## Appendix I — Glossary & taxonomy
+
+*Purpose: Ensure consistent terminology across platform, docs, and UI.*
+
+Glossary entries
+
+- Artifact: Immutable content record with `content_sha256` and manifest; states `DRAFT|READY|QUARANTINED|APPROVED|REJECTED`; `ARCHIVED` flag hides without state change.
+- Exclusive type: Artifact type for which a case may have at most one `APPROVED` at a time; enforced by unique index and approval swap (§5.4.1).
+- Guardian: Service deciding `READY|QUARANTINED` for artifacts before human approval; writes `guardian_decision_history`.
+- Review/Approval: Human action promoting `READY→APPROVED`; idempotent re-approve; may demote prior same-type artifact (§10.3.2).
+- Manifest: JSON payload embedded in artifacts capturing provenance (regions, hashes, settings snapshot), tool versions, and inputs (§5.6).
+- SSE: Server-Sent Events for streaming job and artifact updates; token-bound; supports `Last-Event-ID`.
+- RLS: PostgreSQL Row Level Security enforcing org/case scoping and deny-by-default policies; secure views restrict field access.
+- OCC: Optimistic concurrency control using `version` columns to avoid lost updates.
+- udlock: Advisory lock helpers (`scope:key`) supporting session and transaction locks with registry visibility.
+- Residency waiver: Temporary exception allowing cross-region processing; requires dual approval; manifest stamped and audited (§3.6, §7.1.1).
+- FinOps metrics: Cost/time series including `llm_cost_estimate_total`, `finops_cost_per_case_usd`, `finops_mom_regression_flag` used for dashboards and deploy guards (§8.3, §12.9).
+- LangGraph node: Typed step in Analyze/Compose graphs (e.g., OutlineBuilder, SectionWriter) producing deterministic outputs with envelopes (§6.7–§6.10).
+- Quota: Per-org limits (uploads/day, concurrent jobs, portal downloads) enforced via rate limiting and monitored in §12.8.
+
+## Appendix J — SQL policy patterns (normative)
+
+J.1 Per-request GUC setup
+
+```sql
+SELECT set_config('udocket.active_org',    :active_org_uuid::text, true);
+SELECT set_config('udocket.active_user',   :active_user_uuid::text, true);
+SELECT set_config('udocket.active_roles',  :active_roles_csv, true);
+SELECT set_config('udocket.realm_roles',   :realm_roles_csv, true);
+SELECT set_config('udocket.operator_scope',:operator_scope, true); -- 'own_cases' | 'all_org_cases'
+```
+
+J.2 Helpers (realm role, case membership)
+
+```sql
+CREATE OR REPLACE FUNCTION udocket_has_realm_role(role text)
+RETURNS boolean LANGUAGE sql STABLE AS $$
+  SELECT position(',' || role || ',' IN ',' || coalesce(current_setting('udocket.realm_roles', true),'') || ',') > 0
+$$;
+
+CREATE OR REPLACE FUNCTION udocket_is_case_member(p_case uuid)
+RETURNS boolean LANGUAGE sql STABLE AS $$
+  WITH v_user AS (
+    SELECT NULLIF(current_setting('udocket.active_user', true),'')::uuid AS uid
+  )
+  SELECT EXISTS (
+    SELECT 1 FROM case_member cm, v_user u
+     WHERE cm.case_id = p_case AND cm.user_id = u.uid
+  );
+$$;
+```
+
+J.3 Secure portal messaging RLS (binding)
+
+```sql
+-- Threads visible to case members per policy
 CREATE POLICY msg_thread_vis ON message_thread
 USING (
   org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
@@ -3852,342 +3567,548 @@ WITH CHECK (
 
 CREATE POLICY msg_read_vis ON message_read_receipt
 USING (
-  EXISTS (SELECT 1 FROM message m
-           WHERE m.id = message_read_receipt.message_id
-             AND m.org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
-             AND udocket_can('MESSAGE','read',m.case_id,NULL,NULL))
-)
-WITH CHECK (FALSE); -- system-managed
-
--- AV + HIPAA gates (binding)
--- Attachments default av_status='PENDING'; downloads only when av_status='CLEAN'.
--- If privacy.hipaa.enabled=true, block attachments flagged PHI for non-staff roles.
-
--- Endpoints (Staff/Portal):
---  POST   /v1/portal/cases/{case_id}/threads
---  GET    /v1/portal/cases/{case_id}/threads?archived=
---  POST   /v1/portal/threads/{thread_id}/messages
---  GET    /v1/portal/threads/{thread_id}/messages?page=...           (pagination §52)
---  POST   /v1/portal/messages/{message_id}/attachments                (upload session + AV)
---  GET    /v1/portal/attachments/{attachment_id}/download             (If-Match/ETag; region re-check §13)
---  POST   /v1/portal/messages/{message_id}/read                       (idempotent)
-
--- SSE integration (§50)
---  Emit:
---   message_new  { thread_id, message_id, case_id, sender_id, ts }
---   message_read { thread_id, message_id, reader_id, ts }
---  Event ids follow `case/{case_id}/{seq}`.
-
--- Rate limits (settings §36.2)
---  portal.messaging.enabled (bool)
---  portal.messaging.rate_limits.user_msg_rpm (default 20)
---  portal.messaging.attachments.max_mb (default 50)
---  portal.messaging.allowed_attachment_types (default ["pdf","png","jpg","jpeg","docx"])
---  portal.messaging.attachments.allow_ranges (default false) – if true, apply §13.1 range checks to attachments.
-
--- Retention (settings)
---  portal.messaging.archive_days (default 180) – job auto-archives threads with no activity after N days.
-
--- Acceptance (additions)
---  * AV positive → attachment QUARANTINED; message remains; UI banner shown; audit logged.
---  * HIPAA on → PHI-tagged attachments downloadable by staff only; clients see POLICY_BLOCK.
+  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
+  AND EXISTS (
+    SELECT 1 FROM message m
+    WHERE m.id = message_read_receipt.message_id
+      AND udocket_can('MESSAGE','read',m.case_id,NULL,NULL)
+  )
+);
 ```
-**RLS policies (deny-by-default; reuse §2 helpers):**
+
+J.4 Messaging tables (illustrative DDL)
+
 ```sql
--- Visibility constrained to active org and case membership
-CREATE POLICY msg_thread_vis ON message_thread
-USING (
-  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
-  AND udocket_can('MESSAGE_THREAD','read',case_id,NULL,NULL)
-) WITH CHECK (
-  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
-  AND udocket_can('MESSAGE_THREAD','write',case_id,NULL,NULL)
+CREATE TABLE message_thread (
+  id uuid PRIMARY KEY,
+  org_id uuid NOT NULL,
+  case_id uuid NOT NULL,
+  title text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE POLICY msg_vis ON message
-USING (
-  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
-  AND udocket_can('MESSAGE','read',case_id,NULL,NULL)
-) WITH CHECK (
-  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
-  AND udocket_can('MESSAGE','write',case_id,NULL,NULL)
+CREATE TABLE message (
+  id uuid PRIMARY KEY,
+  org_id uuid NOT NULL,
+  case_id uuid NOT NULL,
+  thread_id uuid NOT NULL REFERENCES message_thread(id) ON DELETE CASCADE,
+  author_id uuid NOT NULL,
+  body text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE POLICY msg_att_vis ON message_attachment
-USING (
-  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
-  AND udocket_can('MESSAGE_ATTACHMENT','read',case_id,NULL,NULL)
-) WITH CHECK (
-  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
-  AND udocket_can('MESSAGE_ATTACHMENT','write',case_id,NULL,NULL)
+CREATE TABLE message_attachment (
+  id uuid PRIMARY KEY,
+  org_id uuid NOT NULL,
+  case_id uuid NOT NULL,
+  message_id uuid NOT NULL REFERENCES message(id) ON DELETE CASCADE,
+  content_uri text NOT NULL,
+  content_sha256 text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE message_read_receipt (
+  id uuid PRIMARY KEY,
+  org_id uuid NOT NULL,
+  message_id uuid NOT NULL REFERENCES message(id) ON DELETE CASCADE,
+  reader_id uuid NOT NULL,
+  read_at timestamptz NOT NULL DEFAULT now()
 );
 ```
-**Secure views (binding):** expose reads only via `message_secure`, `message_thread_secure`, `message_attachment_secure` with `(security_barrier=true)`; app role cannot `SELECT` base tables.
 
+J.3 Central allow function (deny-by-default; sysadmin bypass)
 
-### 58.3 Object storage layout (attachments)
-```
-/org/{org}/case/{case}/messages/{thread_id}/attachments/{attachment_id}/content.bin
-```
-*AV scan:* reuse §37.3; `av_status='QUARANTINED'` blocks download (403) and emits `audit_event('MSG_ATTACHMENT_QUARANTINED', ...)`.
-
-
-### 58.4 RBAC & policy
-* **Participants:** any **case member** (staff roles) and the **client(s)** tied to the case (`org_client` membership).
-* **Moderation:** when `portal.messaging.profanity_filter.enabled=true` (§36.2), server sets `profanity_flag=true` on detection; message still persists but the UI shows a moderation badge; orgs may flip to hard-block via settings later (not in M1).
-* **Rate limits:** enforced via §36.2 (`portal.messaging.user_msg_rpm`, org rpm). 429 with Retry-After and exposed headers (CORS §21.6.1).
-
-
-### 58.5 APIs (Portal/Staff)
-* **Threads**
-  * `GET /portal/cases/{case_id}/messages/threads` → list (pagination §52)
-  * `POST /portal/cases/{case_id}/messages/threads` `{title}` → create
-* **Messages**
-  * `GET /portal/messages/threads/{thread_id}/messages`
-  * `POST /portal/messages/threads/{thread_id}/messages` `{body_md, attachments[]?}`  
-    * attachments created via **upload session** (§21.1.1), then bound to the new message
-* **Attachments**
-  * `GET /portal/messages/attachments/{attachment_id}/download` → requires `av_status='CLEAN'`
-    * Responses include `Content-Disposition: attachment; filename="<sanitized>"`, `ETag: <content_sha256>`, `X-Content-Type-Options: nosniff`, and `Cache-Control: private` (or `no-store`).
-    * **Strong match on fetch (binding):** require `If-Match: <ETag>` or a signed `etag=<ETag>` URL parameter, mirroring §13.1. Return **412** on mismatch.
-    * **Ranges:** disallowed unless `portal.messaging.attachments.allow_ranges=true`. If allowed, validate `If-Match` for each `206` response; otherwise return `416`.
-
-* **Read receipts**
-  * `POST /portal/messages/{message_id}/read`
-
-**SSE (Portal):**
-* Stream: `GET /sse/case/{case_id}` already exists; emit `message_new` and `message_read` (§50).
-
-
-### 58.6 Settings enforcement
-* `portal.messaging.enabled` (ORG, default true): disables routes and hides UI when false.
-* `portal.messaging.allowed_attachment_types`, `portal.messaging.attachments.max_mb`: validated at finalize; reject with `VALIDATION_ERROR`.
-* `portal.messaging.staff_auto_subscribe_roles`: on thread creation, auto-subscribe roles for notifications (email/in-app via §17).
-
-
-### 58.7 Frontend & accessibility
-* WCAG 2.2 AA per §18.2; message list uses roving tabindex; “New message” announced in a **polite** ARIA live region; throttle announcements to ≤ 1 per 2s.
-* Keyboard accessible attachment picker; drag-drop has click/keyboard alternative (2.5.7).
-
-
-### 58.8 Observability & alerts
-* Metrics: `portal_msg_sent_total{org,case}`, `portal_msg_attachment_quarantined_total`, `portal_msg_rate_limit_total`, `portal_msg_sse_clients{case}`.
-* Dashboard added in §20.2.
-* Alert: spike in `portal_msg_rate_limit_total` or `attachment_quarantined_total` P95 over 15m → notify Support with top offending orgs.
-
-
-### 58.9 Acceptance tests
-* RLS: client cannot read messages from another case; staff restricted by operator scope.
-* Rate limit: exceed user rpm → 429 with exposed headers.
-* Attachments: EICAR upload → `QUARANTINED` and blocked download; clean file succeeds.
-* SSE: sender posts → recipient receives `message_new`; read event emits `message_read`.
-* Profanity flag: when enabled, flagged message stored with `profanity_flag=true`; UI badge visible.
-
----
-
-## Appendix A — System context & sequence diagrams (normative)
-
-### A.1 System context
-```
-[Client/Staff UIs] --OIDC--> [Keycloak]
-[Client/Staff UIs] --REST/SSE--> [Web/Channels] --RPC--> [Workers]
-[Workers] <--> [Guardian] <--> [Postgres (RLS)]
-[Workers] <--> [Signer]   <--> [KMS/TSA/OCSP]
-[All services] <--> [Object Storage]
-[All services] --> [Logs/Metrics/Traces]
+```sql
+CREATE OR REPLACE FUNCTION udocket_can(p_resource text, p_action text, p_case uuid, p_artifact uuid, p_field text DEFAULT NULL)
+RETURNS boolean LANGUAGE plpgsql STABLE AS $$
+DECLARE v_org uuid := NULLIF(current_setting('udocket.active_org', true), '')::uuid;
+DECLARE v_roles text := coalesce(current_setting('udocket.active_roles', true),'');
+DECLARE v_scope text := coalesce(current_setting('udocket.operator_scope', true),'own_cases');
+DECLARE r text;
+BEGIN
+  IF udocket_has_realm_role('sysadmin') THEN RETURN true; END IF;
+  IF v_org IS NULL THEN RETURN false; END IF;
+  IF p_case IS NOT NULL AND v_scope <> 'all_org_cases' AND NOT udocket_is_case_member(p_case) THEN
+    RETURN false;
+  END IF;
+  FOR r IN SELECT regexp_split_to_table(v_roles, ',') LOOP
+    IF EXISTS (
+      SELECT 1 FROM effective_permission ep
+       WHERE ep.org_id = v_org AND ep.resource = p_resource AND ep.action = p_action AND ep.role = r
+         AND ((ep.field IS NULL AND p_field IS NULL) OR (ep.field IS NOT NULL AND ep.field = p_field))
+    ) THEN RETURN true; END IF;
+  END LOOP;
+  RETURN false;
+END $$;
 ```
 
-### A.2 Upload → Guardian → Approve (sequence)
-```
-Client -> Web: POST /uploads (create session)
-Client -> Storage: PUT content (staging)
-Client -> Web: POST /uploads/{id}/finalize (Idempotency-Key)
-Web -> DB: COPY object + INSERT artifact(DRAFT)
-Web -> Guardian: submit(artifact_id, snapshot)
-Guardian -> DB: UPDATE state READY|QUARANTINED; INSERT decision
-Reviewer -> Web: POST /reviews/{artifact}/approve (OCC)
-Web -> DB: demote prior APPROVED (type); approve target
-```
+J.4 RLS policy bindings (selected)
 
-## Appendix B — Threat model (summary)
-### B.1 DFD (text)
-```
-External Entities: Users, Providers(TSA/LLM/Email/SMS)
-Processes: Web, Channels, Workers, Guardian, Signer
-Data Stores: Postgres(RLS), ObjectStore(WORM for audit seals), Redis
-Trust Boundaries: Browser<->Ingress, Ingress<->Web/Channels, Web<->Workers, Services<->DB/Obj
-```
-### B.2 Top threats & mitigations
-| Threat | Vector | Mitigation |
-|---|---|---|
-| RLS bypass | missing GUC / pooling | §2.2.2 canaries, fail-closed, health gates |
-| Signed URL replay | token theft | single-use tokens, If-Match ETag, anomaly revocation |
-| Prompt exfiltration | exhibits/emails | redaction pre-call, forbidden patterns, no raw persistence (§48) |
-| Guardian rule poison | bad policy | policy dry-run/diff + rollback (§36.9–36.10) |
-| Region leak | cross-region reuse | §8.1 lints & waiver stamping |
+```sql
+CREATE POLICY case_visibility ON "case"
+USING (
+  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
+  AND udocket_can('CASE','read',"case".id,NULL,NULL)
+)
+WITH CHECK (
+  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
+  AND udocket_can('CASE','write',"case".id,NULL,NULL)
+);
 
-## Appendix C — Data classification matrix
-| Data class | Storage | At rest | In transit | Masking | Retention | Roles |
-|---|---|---|---|---|---|---|
-| PUBLIC | DB | n/a | TLS | n/a | 365d | all |
-| INTERNAL | DB | disk enc | TLS | none | 365d | org roles |
-| PII | DB + Obj | field AEAD (where flagged) | TLS | view masking | per org | least privilege |
-| SENSITIVE_PII | DB + Obj | field AEAD + KMS | TLS | masking | stricter (§15) | reviewers/auditors |
+CREATE POLICY artifact_visibility ON artifact
+USING (
+  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
+  AND EXISTS (SELECT 1 FROM "case" c WHERE c.id=artifact.case_id)
+  AND udocket_can('ARTIFACT','read',artifact.case_id,artifact.id,NULL)
+)
+WITH CHECK (
+  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
+  AND udocket_can('ARTIFACT','write',artifact.case_id,artifact.id,NULL)
+);
 
-## Appendix D — Tenant lifecycle runbooks
-**Provisioning:** create org, verify domain (SPF/DKIM), configure regions, set budgets, import templates, rotate initial keys.  
-**Offboarding:** disable logins, export data (tamper-evident), revoke keys, purge per retention/erasure mode, archive audit seals.
+CREATE POLICY gdh_visibility ON guardian_decision_history
+USING (
+  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
+  AND udocket_can('GUARDIAN_HISTORY','read',artifact_id,NULL,NULL)
+)
+WITH CHECK (
+  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
+  AND udocket_can('GUARDIAN_HISTORY','write',artifact_id,NULL,NULL)
+);
 
-## Appendix E — Privacy & Security control mapping
-**SOC2/ISO anchors (excerpt):**  
-* A.9 Access Control → §2, §36  
-* A.12 Logging & Monitoring → §20, §20.1  
-* A.14 System acquisition, development → §21, §23  
-* A.17 Business continuity → §24.1  
-Owners noted in runbooks repository.
+CREATE POLICY ent_hist_vis ON entitlement_snapshot
+USING (
+  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
+  AND udocket_can('ENTITLEMENT_HISTORY','read',NULL,NULL,NULL)
+)
+WITH CHECK (
+  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
+  AND udocket_can('ENTITLEMENT_HISTORY','write',NULL,NULL,NULL)
+);
 
-## Appendix F — Canonical artifact type guidance (non-exhaustive; validated by policy)
-
-```
-INTAKE,
-TRANSCRIPT_INPUT, AUDIO_NORMALIZED, TRANSCRIPT, DIARIZATION,
-ANALYZE_EVENTS, ANALYZE_TIMELINE, ANALYZE_ISSUES, ANALYZE_ENTITIES, ANALYZE_FACTS, ANALYZE_GAPS,
-COMPOSE_CLIENT, COMPOSE_LAWYER,				# EXCLUSIVE
-ASSEMBLED_DOC_CLIENT, ASSEMBLED_DOC_LAWYER, # EXCLUSIVE
-SIGNATURE_CERT, DESTRUCTION_CERT,			# EXCLUSIVE
-TEMPLATE, QUESTIONNAIRE, REFERENCE_SNAPSHOT,
-EXHIBIT_RAW, EXHIBIT_TEXT,
-COURT_DOC_RAW, COURT_DOC_TEXT,
-EMAIL_RFC822, EMAIL_TEXT, EMAIL_ATTACHMENTS,
-FINANCIALS_RAW, FINANCIALS_TABLE,
-MEMO_TEXT_*							# multiple memos by suffix (enforced by Guardian policy)
-AUDIT_SEAL, ERASURE_JOURNAL, `SYSADMIN_RECERT_REPORT`
-PENTEST_REPORT,                       # internal governance artifact
-FINOPS_REPORT,                        # monthly per-org CSV (FinOps §57.5)
-DPIA_RECORD, ROPA_RECORD              # privacy governance artifacts
-* Settings key `artifact.exclusive_types[]` MUST be a subset of the above (or added via extensions with Guardian rules).
+CREATE POLICY audit_vis ON audit_event
+USING (
+  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
+  AND udocket_can('AUDIT_EVENT','read',NULL,NULL,NULL)
+)
+WITH CHECK (
+  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
+  AND udocket_can('AUDIT_EVENT','write',NULL,NULL,NULL)
+);
 ```
 
-> Guardian & Settings enforce allowable values/patterns; database accepts `TEXT` types matching `^[A-Z0-9_]+$`.
+J.5 Secure views and privileges (binding)
 
----
+```sql
+CREATE VIEW case_secure WITH (security_barrier=true) AS
+SELECT
+  id,
+  org_id,
+  title,
+  representation_type,
+  status,
+  legal_hold,
+  udocket_mask('CASE','legal_hold_reason', legal_hold_reason) AS legal_hold_reason,
+  legal_hold_since,
+  created_at
+FROM "case";
 
-## Appendix G — Data Residency & Legal Matrix (pointer & shape)
+CREATE VIEW artifact_secure WITH (security_barrier=true) AS
+SELECT id,
+       org_id,
+       case_id,
+       type,
+       state,
+       content_sha256,
+       CASE
+         WHEN (SELECT 1
+                 FROM field_mask_rule r
+                WHERE r.org_id = artifact.org_id
+                  AND r.resource='ARTIFACT'
+                  AND r.field='content_uri'
+                  AND NOT udocket_can('ARTIFACT','read',artifact.case_id,artifact.id,'content_uri')
+              ) IS NULL
+         THEN content_uri
+         ELSE udocket_mask(content_uri,'REDACT')
+       END AS content_uri,
+       manifest,
+       created_by,
+       created_at,
+       approved_at,
+       approved_by,
+       rejected_at,
+       rejected_by,
+       review_reason,
+       version
+  FROM artifact;
 
-**Version:** `v1` (referenced by `privacy.legal.matrix_version`)
+CREATE VIEW qa_log_secure WITH (security_barrier=true) AS
+SELECT id, org_id, case_id, job_id, scope, lane_or_section, notes_md, issues_json, source_artifacts,
+       created_by, created_at
+  FROM qa_log;
 
-**Scope:** Maps `region_tag` → `jurisdictions[]` → constraints.
+CREATE VIEW guardian_decision_history_secure WITH (security_barrier=true) AS
+SELECT id,
+       artifact_id,
+       org_id,
+       idempotency_key,
+       decision,
+       reasons,
+       rules_version,
+       settings_snapshot_sha256,
+       decided_at
+  FROM guardian_decision_history;
 
-**Example (excerpt):**
-| region_tag | jurisdictions           | storage_constraints                               | transfer_rules                          | breach_notice_sla |
-|-----------:|-------------------------|----------------------------------------------------|-----------------------------------------|-------------------|
-| EU         | EU, EEA                 | At-rest within EU; cross-region waiver required    | SCC/adequacy required for 3rd countries | 72h               |
-| NA         | US (federal), CA        | At-rest in NA                                      | CCPA/CPRA contractual controls          | state-dependent   |
-| APAC       | AU, SG, JP (varies)     | Country-specific allowlists (org policy driven)    | Local statutes                           | varies            |
+CREATE VIEW guardian_decision AS
+SELECT DISTINCT ON (artifact_id) artifact_id,
+       org_id,
+       idempotency_key,
+       decision,
+       reasons,
+       rules_version,
+       settings_snapshot_sha256,
+       decided_at
+  FROM guardian_decision_history
+ ORDER BY artifact_id, decided_at DESC, id DESC;
 
-**Binding rules:**
-1) `compute_region` and `storage_region` MUST be subsets permitted by the **intersection** of org- and case-jurisdictions.
-2) When `cross_region_waiver=true` (§8.1), a waiver record is required; Guardian stamps `cross_region=true`.
-3) Settings activation fails if org declares jurisdictions incompatible with configured allowlists.
+CREATE VIEW delivery_receipt_secure WITH (security_barrier=true) AS
+SELECT id,
+       artifact_id,
+       org_id,
+       channel,
+       recipient,
+       status,
+       details,
+       created_at,
+       provider_event_id
+  FROM delivery_receipt;
 
-**Change control:** Matrix updates bump `privacy.legal.matrix_version` and require Security + Privacy dual approval.
+CREATE VIEW entitlement_snapshot_secure WITH (security_barrier=true) AS
+SELECT id,
+       org_id,
+       user_id,
+       token_id,
+       active_org_roles,
+       realm_roles,
+       device_fp,
+       ip,
+       ua_hash,
+       minted_at
+  FROM entitlement_snapshot;
 
-**Shape (YAML excerpt):**
-```yaml
-matrix_version: v1
-regions:
-  EU:
-    jurisdictions: [EEA, UK]
-    constraints:
-      residency_required: true
-      cross_border_allowed: false
-      breach_notice_sla_days: 3
-  NA:
-    jurisdictions: [US, CA]
-    constraints:
-      residency_required: false
-      cross_border_allowed: true
-      breach_notice_sla_days: 30
+REVOKE SELECT ON TABLE "case", artifact, qa_log, guardian_decision_history, delivery_receipt FROM udocket_app;
+GRANT  SELECT ON case_secure, artifact_secure,
+                  qa_log_secure, guardian_decision_history_secure, delivery_receipt_secure,
+                  entitlement_snapshot_secure
+       TO udocket_app;
+GRANT USAGE ON SCHEMA public TO udocket_app;
 ```
 
-**Usage:** §8.2 validators resolve `privacy.legal.matrix_version` → this file; activation and runtime checks consult its constraints.
+J.6 Partitioning and rotation (illustrative)
 
----
+```sql
+ALTER TABLE audit_event PARTITION BY RANGE (created_at);
+CREATE TABLE audit_event_2025_01 PARTITION OF audit_event
+  FOR VALUES FROM ('2025-01-01') TO ('2025-02-01');
+CREATE TABLE delivery_receipt_2025_01 PARTITION OF delivery_receipt
+  FOR VALUES FROM ('2025-01-01') TO ('2025-02-01');
+ALTER TABLE guardian_decision_history PARTITION BY RANGE (decided_at);
+CREATE TABLE guardian_decision_history_2025_01 PARTITION OF guardian_decision_history
+  FOR VALUES FROM ('2025-01-01') TO ('2025-02-01');
+```
 
-## Appendix H — DPIA & RoPA Process (new)
+- Ops job `ops/db/rotate_partitions.py` creates upcoming partitions and seals older ones; indexes remain local to each partition to limit bloat.
 
-### H.1 Triggers
-* New or materially changed processing of PII/SENSITIVE_PII (see Appendix C).
-* Introduction or change of LLM providers/models handling PII.
-* Cross-region data transfers outside current allowlists.
+J.7 Operational canaries (fail-closed)
 
-### H.2 DPIA minimum fields (stored in `DPIA_RECORD` artifact)
-* `{org_id, case_scope?, processing_purposes[], data_categories[], lawful_basis, risks[], mitigations[], residual_risk, reviewers[], approved_at?, next_review_due}`
-* Redaction: free-text fields pass through PII scrubbers (§29.1) before persistence.
+```sql
+-- Connect guard: verify all GUCs present
+SELECT current_setting('udocket.active_org', true) IS NOT NULL
+   AND current_setting('udocket.active_user', true) IS NOT NULL
+   AND current_setting('udocket.active_roles', true) IS NOT NULL AS rls_context_ok;
 
-### H.3 RoPA snapshot (stored in `ROPA_RECORD`)
-* `{org_id, activities[], controllers, processors, data_subjects[], data_categories[], recipients[], retention, transfers[], dpo_contact}`
+-- Boot probe for PgBouncer pooling
+-- Expect ERROR unless transaction/session pooling is in use
+SELECT 1 FROM "case" WHERE org_id = current_setting('udocket.active_org', true)::uuid;
 
-### H.4 Roles & access
-* Create/update: `privacy_officer|sysadmin`.
-* Read: `auditor|sysadmin` (realm) and org-scoped `org_auditor` if enabled.
+-- Search-path and timeout guard
+SHOW search_path;   -- expect exactly: pg_catalog, public
+SHOW statement_timeout; -- expect >= 30s
+```
 
-### H.5 Retention
-* DPIA/RoPA artifacts retained ≥ **case retention** and not less than **2 years** (org-configurable via Settings).
+- Integrity queue health probe ensures rows do not accumulate faster than workers drain; alerts fire on backlog age breaches.
 
-### H.6 Audit & metrics
-* `audit_event('DPIA_CREATED'|'ROPA_CREATED', {...})`; metrics per §20.
+J.8 Integrity scan queue (artifact sweep)
 
----
+```sql
+CREATE TABLE integrity_scan_queue (
+  org_id UUID NOT NULL,
+  artifact_id UUID NOT NULL,
+  enqueued_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (org_id, artifact_id)
+);
 
-## Appendix I — ERD & Service Map
-* **ERD:** `docs/erd/udocket-erd.svg` (source `docs/erd/udocket-erd.drawio`)
-* **Service dependency graph:** `docs/diagrams/service-map.svg` (source `docs/diagrams/service-map.mmd`)
-* **CI:** `diagram:diff` blocks merges on un-sourced SVG changes (see §23).
+INSERT INTO integrity_scan_queue (org_id, artifact_id)
+VALUES (:org_id, :artifact_id)
+ON CONFLICT DO NOTHING;
 
----
+SELECT artifact_id
+  FROM integrity_scan_queue
+ FOR UPDATE SKIP LOCKED
+ LIMIT :batch;
+```
 
-## Appendix J — State machines
-* **Artifact lifecycle state diagram:** `docs/diagrams/state-machine-artifact.svg`
-* **Job state diagram:** `docs/diagrams/state-machine-job.svg`
-* **Compose section flow:** `docs/diagrams/state-machine-compose.svg`
-* **UUIDv8 vectors:** `spec/vectors/uuidv8.json` (consumed in §23 tests).
+- Workers quarantine via Guardian (`/api/v1/guardian/quarantine`) and remove rows once reconciled; metrics track backlog size and age.
 
----
+J.9 Download tokens (signed URL guard)
 
-## Appendix K — TLS Policy (normative)
-* Min version: configurable via `api.tls.min_version` (default 1.2); prefer 1.3.
-* Allowed ciphers are governed by `api.tls.allowed_ciphers`; CBC suites are forbidden.
-* HSTS `max-age >= 180d`, includeSubDomains for staff domains.
+```sql
+CREATE TABLE download_token (
+  id UUID PRIMARY KEY,
+  artifact_id UUID NOT NULL,
+  org_id UUID NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  single_use BOOLEAN NOT NULL DEFAULT FALSE,
+  consumed_at TIMESTAMPTZ NULL
+);
 
----
+CREATE INDEX download_token_lookup
+  ON download_token (artifact_id, expires_at);
 
-## Appendix L — DB Autovacuum Baselines (ops cheat-sheet)
-* HOT partitions (audit_event, delivery_receipt, guardian_decision_history): `vacuum_scale_factor=0.05`, `analyze_scale_factor=0.02`, `naptime=30s`.
-* Monitor `pg_stat_all_tables.n_dead_tup` and alert at 80th percentile of historic baseline.
+UPDATE download_token
+   SET consumed_at = now()
+ WHERE id = :token_id
+   AND single_use = TRUE
+   AND consumed_at IS NULL
+   AND expires_at > now()
+RETURNING 1;
+```
 
----
+- Fetch logic requires this update to succeed before streaming, then validates artifact state (`APPROVED`), SHA match, region allowlists, and audit logging.
 
-## Appendix M — Privacy Artifacts Retention (pointer)
+______________________________________________________________________
 
-**Path (repo):** `docs/privacy/retention/<version>/retention.yaml` (e.g., `v1`).
+## Appendix K — Controls assurance map
 
-**Contents:** Baseline retention periods (days) for `DPIA_RECORD`, `ROPA_RECORD`, `ENTITLEMENT_SNAPSHOT`, `AUDIT_SEAL`, and HIPAA overrides. §38.5 references Appendix H when HIPAA mode is enabled.
+*Purpose: Link external controls (SOC 2, ISO 27001, internal policies) to evidence inside this TDD.*
 
----
+Quick crosswalk (illustrative)
 
-## Appendix N — Retention Baselines
-* Baseline (can be raised per org): artifacts ≥ 365d; audit_event ≥ case retention; privacy artifacts (DPIA/RoPA) ≥ 730d;
-  evidence-store metadata ≥ 2× artifact retention; object-store WORM lock for immutable audit sink per §20.1.
-* HIPAA mode overrides: shorter excerpt retention (excerpts disabled), stricter access logging (§38.5).
+| Control family    | See                |
+| ----------------- | ------------------ |
+| SOC2 CC1 / ISO 5  | §2, §15.3, App.S   |
+| SOC2 CC6 / ISO 9  | §4, App.J          |
+| SOC2 CC7 / ISO 12 | §12, §14.5, App.H  |
+| SOC2 CC8 / ISO 14 | §3.2, §12.5, App.L |
+| SOC2 PI / ISO 18  | §2.2, §14.2, App.N |
+| Vendor CUECs      | §3.5, §8, App.Q    |
 
----
+HMAC key inventory
 
-## Glossary
+| Service → Service | Key ID | Last rotated (UTC) | Evidence bundle |
+| ----------------- | ------ | ------------------ | --------------- |
+| web → guardian    | `svc-web-guardian-v3` | 2025-09-12T14:30Z | `ops/security/key_rotation/guardian_2025-09-12.json` |
+| worker → settings | `svc-worker-settings-v4` | 2025-08-01T09:00Z | `ops/security/key_rotation/settings_2025-08-01.json` |
+| guardian → signer | `svc-guardian-signer-v2` | 2025-07-18T16:45Z | `ops/security/key_rotation/signer_2025-07-18.json` |
 
-* **Artifact:** Immutable content object (unique UUID) plus state.
-* **Exclusive type:** Artifact type for which a case may have at most one **APPROVED** artifact at a time (enforced at approval).
-* **Approval:** Human action that promotes `READY → APPROVED`; **only APPROVED is consumable** by downstream and portal.
-* **Archived:** Visibility flag to remove from default lists.
-* **Settings snapshot:** Frozen map of effective settings recorded with jobs/decisions.
-* **Derived ID (UUIDv8):** Deterministic ID for in-document entities generated from stable anchors.
+Key rotation calendar (rolling 90 days)
+
+| Upcoming rotation | Owners | Window | Notes |
+| ----------------- | ------ | ------ | ----- |
+| `svc-web-guardian-v4` | Security Eng Lead, Platform SRE | 2025-12-05 → 2025-12-07 | Requires APP.SEC-117 approval; pre-stage secret in Key Vault |
+| `svc-worker-settings-v5` | Settings Service TL, Security Eng Lead | 2026-01-08 → 2026-01-10 | Align with Settings deploy freeze lift |
+
+| Control ID / Policy        | Scope                      | Primary coverage (Section/App)                   | Evidence artifact(s)                                                                          | Status |
+| -------------------------- | -------------------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------- | ------ |
+| SOC2 CC1.1 / ISO 5.1       | Governance & principles    | §2 Core principles; §15.3 Risks                  | App.K map, App.O waivers ledger, decision log exports                                         | Pass   |
+| SOC2 CC6.x / ISO 9         | Access control             | §4 Identity & RLS; App.J SQL policies            | `case_secure`/`artifact_secure` views, Settings activation audit trail (App.E)                | Pass   |
+| SOC2 CC7.x / ISO 12        | Operations & change        | §12 Observability; §14.5 Change mgmt             | App.H runbooks, Guardian/Signer synthetics, deployment playbooks                              | Pass   |
+| SOC2 CC8.x / ISO 14        | Availability & resilience  | §3.2 topology; §12.5 capacity                    | App.L benchmarks, autoscaling dashboards, synthetic monitor reports                           | Pass   |
+| SOC2 PI1 / ISO 18          | Privacy & retention        | §2.2 regulatory constraints; §14.2 retention     | App.N privacy traceability matrix, DPIA/ROPA artifacts                                        | Pass   |
+| SOC2 CUEC / Vendor reviews | Third-party oversight      | §3.5 external integrations; §8 LLM governance    | Provider registry health logs, evidence store envelopes, vendor reassessment checklist        | Pass   |
+| Internal POL-SC-01         | Security incident response | §12.3 incident workflows; §14.9 disclosure       | Incident register exports, security.txt contact, on-call rotation docs                        | Pass   |
+| Internal POL-DS-02         | Data residency             | §3.6 region enforcement; §7.1 Guardian decisions | Egress AuthorizationPolicy manifests, App.O waiver entries, ops logs `RESIDENCY_POLICY_BLOCK` | Pass   |
+| Internal POL-AU-01         | Audit & approvals          | §10 API contracts; §11 approvals UX              | Guardian history, audit_event partitions, reviewer swap algorithm logs                        | Pass   |
+| Internal POL-BCP-03        | Business continuity        | §12.10 BCP drills; App.H runbooks                | `BCP_DRILL_REPORT` artifacts, incident templates                                              | Pass   |
+
+Controls mapped here drive quarterly evidence reviews. Each entry references runbooks, dashboards, or artifacts cited in the final column; missing evidence must be captured before release sign-off.
+
+______________________________________________________________________
+
+## Appendix L — Benchmark baselines
+
+*Purpose: Capture recent performance and cost baselines that back the documented SLOs.*
+
+| Workload                      | Date (UTC) | Load profile                            | P50 / P95 latency    | Cost / tokens | Source                                                                    |
+| ----------------------------- | ---------- | --------------------------------------- | -------------------- | ------------- | ------------------------------------------------------------------------- |
+| Web API (`GET /api/v1/cases`) | 2025-09-30 | 1k virtual users, 50 RPS step           | 0.112 s / 0.238 s    | n/a           | k6 run `benchmarks/api_caselist.json`, Grafana `web_http_latency_seconds` |
+| Guardian READY decision       | 2025-10-05 | 500 concurrent submissions, 5k/day      | 48 s / 242 s         | n/a           | Synthetic job `guardian_slo.yaml`, `guardian_decision_latency_seconds`    |
+| Compose client deliverable    | 2025-10-11 | Transcript 9k tokens, default templates | 8.3 min / 21.4 min   | 58k tokens    | LangGraph harness `compose_benchmark.py`, `llm_cost_estimate_total`       |
+| Analyze summary lane          | 2025-10-11 | Transcript 9k tokens, 4 exhibits        | 6.1 min / 13.7 min   | 42k tokens    | LangGraph harness `analyze_benchmark.py`, `agent_lane_duration_seconds`   |
+| Portal DOCX download 25 MB    | 2025-09-28 | 500 clients, CDN disabled               | 310 ms / 480 ms TTFB | n/a           | Locust scenario `portal_download.py`, Nginx access logs                   |
+
+Benchmarks run at least quarterly and after significant infra upgrades using the dedicated synthetic suite (`tests/synthetic/perf/*`). Results update App.L and dashboards referenced in §12.6; deviations ≥10% trigger review prior to release, with raw outputs archived under `ops/perf/<date>/`.
+
+______________________________________________________________________
+
+## Appendix M — Environment & dependency matrix
+
+*Purpose: Document supported platform versions per environment and upgrade cadence.*
+
+| Component                | Dev/Staging | Production | Upgrade policy                                                | Notes                                                                                                       |
+| ------------------------ | ----------- | ---------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Kubernetes               | 1.29        | 1.28       | Minor upgrades every 6 months; patch monthly                  | Managed AKS clusters with PodSecurity restricted profile; next prod upgrade Q1 2026; baseline CIS AKS v1.29 |
+| Service mesh (Istio)     | 1.21.1      | 1.20.4     | N-1 support; canary namespace before prod rollout             | mTLS enforced cluster-wide; cert TTL 24h; targeted prod bump Q2 2025                                        |
+| Postgres                 | 15.6        | 15.6 HA    | Major every 18 months; logical replication for blue/green     | Patroni-managed; statement pooling disabled; HA failover drills quarterly                                   |
+| Redis                    | 7.2         | 7.2        | Patch quarterly; persistence `aof` for broker, none for cache | Managed Azure Cache for Redis Enterprise; next review Q2 2025                                               |
+| Python runtime           | 3.12.x      | 3.12.x     | Security releases within 30 days                              | Pinned in `Dockerfile` & dependency locks; min supported 3.11 for tooling; deprecation notice 90 days prior |
+| Node.js (build)          | 20.x LTS    | 20.x LTS   | Upgrade within 45 days of LTS patch                           | Build-time only; no runtime exposure; Node 18 blocked since 2025-07                                         |
+| Terraform                | 1.8.x       | 1.8.x      | Upgrade quarterly with module pin review                      | State stored in Terraform Cloud; nightly drift detection; drift incidents logged in App.H                   |
+| Nginx ingress controller | 1.11.x      | 1.10.x     | Patch monthly; major with Kubernetes cadence                  | TLS 1.3 preferred; OCSP stapling enabled; next prod upgrade Q1 2025                                         |
+| Base OS images           | Debian 12   | Debian 12  | Rebuild monthly or on critical CVE                            | Images signed; SBOM generated per build; CIS benchmark level 1 enforced                                     |
+
+Upgrade windows recorded in the change calendar; App.M supports audit inquiries regarding environment parity and upcoming rollouts.
+
+______________________________________________________________________
+
+## Appendix N — Privacy controls traceability
+
+*Purpose: Provide a single view from regulatory obligations to settings, gates, and evidence.*
+
+| Obligation (Reg / Article)                 | Settings / gates                                                                                            | Enforcement point                                          | Evidence artifacts                                                              |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Data residency (PIPEDA s.17, GDPR Art.44)  | `regions.allowlist.*`, `integrity.downstream_action`                                                        | Guardian residency checks (§3.6, §7.1.1)                   | AuthorizationPolicy manifests, ops `RESIDENCY_POLICY_BLOCK` logs, App.O waivers |
+| DPIA / RoPA maintenance (GDPR Art.35/30)   | `privacy.dpia.*`, `privacy.ropa.*`                                                                          | Privacy activation workflow (§9.3)                         | DPIA/ROPA artifacts, audit seals, App.K mapping                                 |
+| HIPAA override mode (HIPAA §164.312)       | `privacy.hipaa.enabled`, `security.mfa.webauthn_required_roles`, `evidence_store.redacted_excerpts.enabled` | Dual approval (§9.11), Guardian/portal guards              | HIPAA manifest entries, audit events, QA logs                                   |
+| Legal hold & retention (GDPR Art.5, CPPA)  | `privacy.legal.matrix_version`, `compliance.erasure_mode`                                                   | Destruction job approval (§14.2), DSAR scheduler (§14.2.1) | `DESTRUCTION_CERT`, `ERASURE_JOURNAL`, secure views showing masked reasons      |
+| DSAR / erasure fulfillment (GDPR Art.17)   | `compliance.subject_hkdf_salt`, `compliance.erasure_mode`                                                   | DSAR operations runbook (§14.2.1)                          | Ops logs, audit events `DSAR_ERASURE_EXECUTED`, App.H drills                    |
+| Masking & field protection (SOC2 CC6.6)    | `field_mask_rule`, `security.field_encryption.*`                                                            | Secure views (§4.5) and encryption routines (§4.6)         | Masking helper tests, encryption key rotation records                           |
+| Client portal delivery (PIPEDA Safeguards) | `portal.download.rate_limits.*`, `compose.policy.forbidden_patterns[]`                                      | Guardian readiness + portal invalidation (§11.2.1)         | Portal invalidation SSE events, QA reports, App.H RB-ETAG output                |
+
+Matrix reviewed quarterly with Privacy & Security; updates required whenever referenced settings or obligations change.
+
+______________________________________________________________________
+
+## Appendix O — Active waivers ledger
+
+*Purpose: Track approved temporary deviations (residency, security, privacy) with expiry and owners.*
+
+| Waiver ID | Category | Scope | Approved by | Effective / Expiry | Conditions | Status            |
+| --------- | -------- | ----- | ----------- | ------------------ | ---------- | ----------------- |
+| (none)    | —        | —     | —           | —                  | —          | No active waivers |
+
+Process: waiver requests originate via Settings activation metadata or incident response; Security + Architecture approvals required. Entries mirror App.K controls evidence and must include remediation plans before expiry. Stale waivers trigger §12.3 incident workflow.
+
+Waiver template (JSON, all fields required)
+
+```json
+{
+  "waiver_id": "WAIVER-0001",
+  "category": "residency",
+  "scope": {
+    "org_id": "uuid",
+    "case_id": "uuid|null",
+    "settings_key": "regions.allowlist.compute"
+  },
+  "justification": "string",
+  "approved_by": ["Security Engineering Lead", "Architecture Lead"],
+  "effective_at": "RFC3339",
+  "expires_at": "RFC3339",
+  "conditions": ["Weekly review", "Guardian manifest flag"],
+  "evidence_bundle": "ops/waivers/WAIVER-0001.json"
+}
+```
+
+### Risk acceptances (time-boxed)
+
+| Acceptance ID | Risk description | Owner | Mitigation / Monitoring | Accepted until | Status                   |
+| ------------- | ---------------- | ----- | ----------------------- | -------------- | ------------------------ |
+| (none)        | —                | —     | —                       | —              | No open risk acceptances |
+
+Risk acceptances capture deviations such as deferred CVE remediation or temporary SLO relaxations. Entries require Security + Product approval, explicit expiry, and linkage to incident/problem tickets. Items auto-escalate to leadership if not reviewed 7 days before expiry.
+
+______________________________________________________________________
+
+## Appendix P — Third-party & OSS notices
+
+*Purpose: Centralize licensing, attribution, and notice obligations for distributed software.*
+
+| Component / Package      | License      | Notice location              | Additional obligations                                |
+| ------------------------ | ------------ | ---------------------------- | ----------------------------------------------------- |
+| Django                   | BSD-3-Clause | `licenses/django/LICENSE`    | Include copyright notice in customer-facing docs      |
+| Celery                   | BSD-3-Clause | `licenses/celery/LICENSE`    | Provide acknowledgement in operator manual            |
+| Azure SDKs               | MIT          | `licenses/azure-sdk/LICENSE` | No attribution required; note data use terms in App.Q |
+| LangGraph                | Apache-2.0   | `licenses/langgraph/LICENSE` | Preserve NOTICE text in redistributed binaries        |
+| ffmpeg                   | LGPL-2.1     | `licenses/ffmpeg/NOTICE`     | Dynamic linking only; provide source offer on request |
+| openpyxl                 | MIT          | `licenses/openpyxl/LICENSE`  | None                                                  |
+| Company-specific scripts | Proprietary  | `licenses/custom/README.md`  | Internal use only; no redistribution without approval |
+
+Process: SBOM generation (§13.6) cross-checks license metadata nightly; discrepancies raise `LICENSE_GAP` alerts. Updated notices shipped in `NOTICE.md` alongside release artifacts.
+
+______________________________________________________________________
+
+## Appendix Q — Sub-processors & DPAs
+
+*Purpose: List sanctioned data processors, residency posture, and contractual guarantees.*
+
+| Provider                                           | Service                           | Region(s) in scope           | Data classes processed                     | DPA/Terms highlights                                                                         |
+| -------------------------------------------------- | --------------------------------- | ---------------------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| Microsoft Azure Speech                             | Transcription (batch/on-demand)   | Canada Central / Canada East | Audio uploads, transcript text             | DPA §3 forbids training on customer data; residency locked to Canada; 30-day deletion        |
+| Microsoft Azure OpenAI                             | LLM inference                     | Canada Central / Canada East | Prompt excerpts (redacted), generated text | Enterprise agreement disables logging & training; retention ≤ 24h                            |
+| Entrust TSA / OCSP                                 | Timestamping & revocation         | Canada                       | Hashes, certificate metadata               | No content retention; logs retained 90 days for audits                                       |
+| Twilio SendGrid (optional)                         | Email delivery                    | Canada/EU data center        | Notification metadata, recipient email     | Data residency restriction via regional sub-account; logs 30 days                            |
+| Telnyx                                             | SMS delivery                      | Canada                       | Phone numbers, message metadata            | Opt-out enforcement, no content mining                                                       |
+| Back-office transcription vendor (manual fallback) | Human transcription (break-glass) | Canada                       | Audio, transcript                          | Activated only under App.H manual fallback; NDA + DPA prohibits data retention beyond 7 days |
+
+All sub-processors contractually commit to “no training on customer prompts/outputs” clauses. Annual review ensures residency alignment; updates trigger customer notification per §12.3.
+
+______________________________________________________________________
+
+## Appendix R — Data lineage maps
+
+*Purpose: Provide visual traceability from inputs to signed deliverables.*
+
+- **R.1 Artifact lineage overview:** Mermaid diagram `docs/diagrams/data-lineage-v1.mmd` showing flow from audio/exhibits → Transcribe artifacts → Analyze outputs → Compose deliverables → Guardian → Signer → Portal.
+- **R.2 UUID provenance:** Table mapping deterministic UUID anchors (transcript spans, timeline events) to downstream artifacts; generated via `scripts/lineage/export_uuid_map.py`.
+- **R.3 Audit linkage:** Describes how manifests reference `settings_snapshot_sha256`, upstream artifact IDs, and Guardian decision IDs; includes example JSON in `docs/examples/lineage/compose_client.json`.
+- **R.4 Worked example:** `docs/examples/lineage/transcript_to_compose.json` shows `TRANSCRIPT` → `SUMMARY_MD` → `COMPOSE_CLIENT_DOCX` lineage with manifest snippets (`source.inputs`, `provenance.tool_versions`, Guardian decision ID) and matching audit events.
+- Lineage diagrams must be regenerated with each schema/manifest change; CI `diagram:diff` gate (§13.8) verifies updates. Auditors can cross-check lineage by loading `LINEAGE_REPORT` artifacts produced during quarterly controls testing.
+
+______________________________________________________________________
+
+## Appendix S — Ownership & RACI map
+
+*Purpose: Clarify accountability for each major area documented in this TDD.*
+
+| Domain / Section           | Responsible                | Accountable             | Consulted                    | Informed                  |
+| -------------------------- | -------------------------- | ----------------------- | ---------------------------- | ------------------------- |
+| Agent pipelines (§6)       | Platform AI Lead           | Director of Engineering | QA Lead, Product             | Support, Customer Success |
+| Guardian & Signer (§7)     | Security Engineering Lead  | CISO                    | Platform Architecture, Legal | Support, Customer Success |
+| LLM governance (§8)        | AI Governance Lead         | CTO                     | Security, Privacy Officer    | Product, Customer Success |
+| Settings platform (§9)     | Platform Architecture Lead | Director of Engineering | Security, QA                 | Support                   |
+| APIs & Integrations (§10)  | API Engineering Manager    | Director of Engineering | Product, Support             | Customers (release notes) |
+| Frontend & Portal (§11)    | UX Engineering Manager     | VP Product              | Accessibility SME, Support   | Customer Success          |
+| Observability & Ops (§12)  | SRE Manager                | VP Engineering          | Security, Product            | Support, Customers        |
+| Quality & Compliance (§13) | QA Manager                 | VP Engineering          | Security, Privacy            | Product, Customers        |
+| Operations lifecycle (§14) | Operations Lead            | COO                     | Security, Legal              | Customer Success          |
+| Roadmap & governance (§15) | Product Strategy Lead      | VP Product              | Architecture, Security       | All teams                 |
+
+RACI reviewed every release train; updates recorded in decision log (§15.3) and mirrored in internal handbook.
+
+- Mesh-controlled pods allow egress only to cluster DNS and the Istio egress gateway; the gateway enforces external destinations via the AuthorizationPolicy allowlist above. Namespaces without the mesh label can define their own policies, but production workloads inherit this baseline.
+
+______________________________________________________________________
+
+## Appendix T — Traceability matrix
+
+*Purpose: Tie requirements to validation, observability, and operational response so audits stay frictionless.*
+
+| Requirement (section) | Tests / validation artefacts | Monitors / alerts | Runbook / response |
+| --------------------- | ---------------------------- | ----------------- | ------------------ |
+| Guardian decisions deterministic & parent-aware (§7.1) | `tests/guardian/test_concurrent_parent_swap.py::test_child_blocks_on_parent_swap`; Guardian synthetic `guardian_slo.yaml` job | `guardian_ready_ratio`, `guardian_decision_latency_seconds`, `guardian_ready_parent_block_total` | App.H RB-GUARD-001, App.H RB-GUARD-QUAR |
+| API versioning & Sunset policy enforced (§10.0, §10.5) | `make lint-openapi` (`npx spectral lint ops/openapi/**/*.yaml`), Spectral `sunset-header` rule, ADR-0003 change review checklist | `api_sunset_header_missing_total`, `api_deprecation_notice_age_seconds` | App.H standard runbook template → API Sunset (`docs/runbooks/api/sunset.md`, draft) |
+| FinOps guardrails prevent runaway spend (§8.7, §12.9) | `scripts/finops/check_mom_guard.py`; `tests/udocket_core/finops/test_guard.py::test_regression_formula` | `finops_mom_regression_flag{org}`, `llm_cost_estimate_total` | App.H RB-LLM-003 |
+| Logging pipeline retains structured records (§12.1) | `tests/logging/test_redaction.py::test_forbidden_headers_masked`; `diagram:diff` for log schema | `logging_ingest_lag_seconds`, `logging_drop_rate_pct`, `logging_spool_utilization_pct` | App.H RB-LOG-007 |
+| Advisory locks stay healthy during approvals (§5.4) | `tests/platform/artifacts/test_approval_swap.py::test_concurrent_approvals_single_winner`; `tests/platform/db/test_rls_guard.py::test_rls_context_asserts_missing_gucs` | `udlock_watchdog_stale_total`, `udlock_lock_age_seconds_p95` | App.H RB-LOCK-006 |
+| Portal downloads honour ETag / If-Match (§10.6, App.H RB-ETAG) | `tests/e2e/test_artifact_range_download.py::test_range_and_conditional_gets` | `portal_412_precondition_total`, `alert_portal_412_spike` | App.H RB-ETAG |
+| Abuse-prevention detectors enforce throttles (§B.4, §10.9) | `tests/security/test_abuse_checks.py::test_api_abuse_flagged`, `tests/security/test_portal_download_guard.py::test_anomaly_blocks` | `api_suspect_request_total`, `portal_download.anomaly_score`, `messaging_abuse_detected_total` | App.H RB-RES-BLOCK (residency), App.H RB-ETAG, App.H abuse triage SOP (`docs/runbooks/security/abuse_triage.md`) |
