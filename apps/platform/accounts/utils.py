@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
-import uuid
 import logging
+import uuid
+from collections.abc import Iterable as IterableABC, Mapping as MappingABC
+from typing import Any, Optional, Sequence
 
-from django.db import models
+from django.db import models, transaction
 from django.core.exceptions import PermissionDenied
 from django.http import HttpRequest
 from django.conf import settings
 
 from apps.platform.accounts.models import Organization, OrganizationMembership
-from apps.platform.cases.models import CaseMembership
+from apps.platform.cases.models import Case, CaseMembership
 
 AdminOrgChoice = dict[str, str]
 
@@ -181,3 +182,199 @@ def sync_user_access_flags(user: Any) -> None:
         updates.append("is_staff")
     if updates:
         user.save(update_fields=updates)
+
+
+def _normalize_roles(raw_roles: Any) -> list[str]:
+    if raw_roles is None:
+        return []
+    if isinstance(raw_roles, str):
+        role = raw_roles.strip()
+        return [role] if role else []
+    if isinstance(raw_roles, IterableABC):
+        roles: list[str] = []
+        for item in raw_roles:
+            text = str(item).strip()
+            if text:
+                roles.append(text)
+        return roles
+    return []
+
+
+def _normalize_entries(value: Any) -> list[Any]:
+    if value is None:
+        return []
+    if isinstance(value, MappingABC):
+        return [value]
+    if isinstance(value, IterableABC) and not isinstance(value, (str, bytes, bytearray)):
+        return list(value)
+    return [value]
+
+
+def _map_role(remote_roles: Sequence[str], mapping: MappingABC[str, str], default_role: str, *, valid_roles: set[str]) -> str:
+    for role in remote_roles:
+        key = role.strip().lower()
+        if not key:
+            continue
+        mapped = mapping.get(key)
+        if mapped and mapped in valid_roles:
+            return mapped
+    if default_role in valid_roles:
+        return default_role
+    return next(iter(valid_roles))
+
+
+def sync_organization_memberships_from_claims(user: Any, claims: MappingABC[str, Any]) -> None:
+    claim_name = getattr(settings, "OIDC_ORG_CLAIM", "organizations") or "organizations"
+    raw_entries = claims.get(claim_name)
+    entries = _normalize_entries(raw_entries)
+    if not entries:
+        return
+
+    org_id_field = getattr(settings, "OIDC_ORG_ID_FIELD", "id") or "id"
+    org_name_field = getattr(settings, "OIDC_ORG_NAME_FIELD", "name") or "name"
+    org_roles_field = getattr(settings, "OIDC_ORG_ROLES_FIELD", "roles") or "roles"
+    default_role = str(getattr(settings, "OIDC_ORG_DEFAULT_ROLE", OrganizationMembership.Role.MEMBER)).upper()
+    role_map_raw = getattr(settings, "OIDC_ORG_ROLE_MAP", {})
+    if isinstance(role_map_raw, MappingABC):
+        role_map = {str(k).lower(): str(v).upper() for k, v in role_map_raw.items()}
+    else:
+        role_map = {}
+    valid_roles = {choice for choice, _ in OrganizationMembership.Role.choices}
+
+    active_ids: set[uuid.UUID] = set()
+    with transaction.atomic():
+        for entry in entries:
+            org_id_value: str | None = None
+            org_name_value: str | None = None
+            remote_roles: list[str] = []
+
+            if isinstance(entry, MappingABC):
+                raw_id = entry.get(org_id_field) or entry.get("id")
+                if raw_id is not None:
+                    org_id_value = str(raw_id).strip()
+                raw_name = entry.get(org_name_field)
+                if raw_name:
+                    org_name_value = str(raw_name).strip()
+                remote_roles = _normalize_roles(entry.get(org_roles_field))
+            else:
+                text = str(entry).strip()
+                if ":" in text:
+                    org_id_value, _, role_part = text.partition(":")
+                    remote_roles = _normalize_roles(role_part.split("|"))
+                else:
+                    org_id_value = text
+
+            if not org_id_value:
+                logger.debug("Skipping organization entry without identifier", extra={"entry": entry})
+                continue
+
+            organization = Organization.objects.filter(kc_organization_id=org_id_value).first()
+            if not organization and org_name_value:
+                organization = Organization.objects.filter(kc_organization_id__isnull=True, name=org_name_value).first()
+            created = False
+            if not organization:
+                organization = Organization(name=org_name_value or org_id_value, display_name=org_name_value or "", kc_organization_id=org_id_value)
+                organization.save()
+                created = True
+            updates: list[str] = []
+            if organization.kc_organization_id != org_id_value:
+                organization.kc_organization_id = org_id_value
+                updates.append("kc_organization_id")
+            if org_name_value:
+                if organization.name != org_name_value:
+                    organization.name = org_name_value
+                    updates.append("name")
+                if not organization.display_name or organization.display_name != org_name_value:
+                    organization.display_name = org_name_value
+                    updates.append("display_name")
+            if updates:
+                organization.save(update_fields=list(dict.fromkeys(updates)))
+            if created:
+                logger.info(
+                    "Created organization from Keycloak",
+                    extra={"kc_id": org_id_value, "org_name": organization.name},
+                )
+
+            local_role = _map_role(remote_roles, role_map, default_role, valid_roles=valid_roles)
+            membership, created = OrganizationMembership.objects.get_or_create(
+                organization=organization,
+                user=user,
+                defaults={"role": local_role},
+            )
+            if not created and membership.role != local_role:
+                membership.role = local_role
+                membership.save(update_fields=["role"])
+            active_ids.add(organization.id)
+
+        if active_ids:
+            OrganizationMembership.objects.filter(user=user).exclude(organization_id__in=active_ids).delete()
+
+
+def sync_case_memberships_from_claims(user: Any, claims: MappingABC[str, Any]) -> None:
+    claim_name = getattr(settings, "OIDC_CASE_MEMBERSHIPS_CLAIM", "").strip()
+    if not claim_name:
+        return
+    raw_entries = claims.get(claim_name)
+    entries = _normalize_entries(raw_entries)
+    if not entries:
+        return
+
+    case_id_field = getattr(settings, "OIDC_CASE_ID_FIELD", "id") or "id"
+    case_role_field = getattr(settings, "OIDC_CASE_ROLE_FIELD", "role") or "role"
+    default_role = str(getattr(settings, "OIDC_CASE_DEFAULT_ROLE", CaseMembership.Role.CONTRIBUTOR)).upper()
+    role_map_raw = getattr(settings, "OIDC_CASE_ROLE_MAP", {})
+    if isinstance(role_map_raw, MappingABC):
+        role_map = {str(k).lower(): str(v).upper() for k, v in role_map_raw.items()}
+    else:
+        role_map = {}
+    valid_roles = {choice for choice, _ in CaseMembership.Role.choices}
+
+    active_case_ids: set[str] = set()
+    with transaction.atomic():
+        for entry in entries:
+            case_id_value: str | None = None
+            remote_roles: list[str] = []
+
+            if isinstance(entry, MappingABC):
+                raw_id = entry.get(case_id_field) or entry.get("id")
+                if raw_id:
+                    case_id_value = str(raw_id).strip()
+                remote_roles = _normalize_roles(entry.get(case_role_field))
+            else:
+                text = str(entry).strip()
+                if ":" in text:
+                    case_id_value, _, role_part = text.partition(":")
+                    remote_roles = _normalize_roles(role_part.split("|"))
+                else:
+                    case_id_value = text
+
+            if not case_id_value:
+                logger.debug("Skipping case membership entry without identifier", extra={"entry": entry})
+                continue
+
+            try:
+                case = Case.objects.get(pk=case_id_value)
+            except Case.DoesNotExist:
+                logger.warning("Case from claim not found locally", extra={"case_id": case_id_value})
+                continue
+
+            local_role = _map_role(remote_roles, role_map, default_role, valid_roles=valid_roles)
+            membership, created = CaseMembership.objects.get_or_create(
+                case=case,
+                user=user,
+                defaults={"role": local_role},
+            )
+            if not created and membership.role != local_role:
+                membership.role = local_role
+                membership.save(update_fields=["role"])
+            active_case_ids.add(case.id)
+
+        if active_case_ids:
+            CaseMembership.objects.filter(user=user).exclude(case_id__in=active_case_ids).delete()
+
+
+def apply_claim_mappings(user: Any, claims: MappingABC[str, Any], *, sync_cases: bool) -> None:
+    sync_organization_memberships_from_claims(user, claims)
+    if sync_cases:
+        sync_case_memberships_from_claims(user, claims)
+    sync_user_access_flags(user)

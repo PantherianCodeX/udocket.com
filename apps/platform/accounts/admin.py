@@ -185,12 +185,12 @@ class UserAdmin(UserAdminBase):
 
 @admin.register(Organization)
 class OrganizationAdmin(OrganizationAdminBase):
-    list_display = ("id", "name", "city", "province", "contact_email", "created_at")
-    search_fields = ("id", "name", "display_name", "contact_email")
+    list_display = ("id", "kc_organization_id", "name", "city", "province", "contact_email", "created_at")
+    search_fields = ("id", "kc_organization_id", "name", "display_name", "contact_email")
     ordering = ("name",)
     readonly_fields = ("created_at", "updated_at")
     fieldsets = (
-        (None, {"fields": ("id", "name", "display_name")}),
+        ("Identifiers", {"fields": ("id", "kc_organization_id", "name", "display_name")}),
         (_("Contact"), {"fields": ("contact_name", "contact_email", "contact_phone")}),
         (_("Address"), {"fields": ("address_line1", "address_line2", "city", "province", "postal_code", "country")}),
         (_("Notes"), {"fields": ("notes",)}),

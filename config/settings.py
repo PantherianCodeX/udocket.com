@@ -98,6 +98,51 @@ def _json_or_split_int_list(value: object) -> list[int]:
     return result
 
 
+def _json_or_mapping(value: object) -> dict[str, str]:
+    if value is None:
+        return {}
+    if isinstance(value, Mapping):
+        items = [(str(k), str(v)) for k, v in value.items()]
+    else:
+        text = str(value).strip()
+        if not text:
+            return {}
+        try:
+            loaded = json.loads(text)
+        except json.JSONDecodeError:
+            pairs: list[tuple[str, str]] = []
+            for part in text.split(","):
+                key, sep, val = part.partition(":")
+                if not sep:
+                    key, sep, val = part.partition("=")
+                key = key.strip()
+                val = val.strip()
+                if key and val:
+                    pairs.append((key, val))
+            items = pairs
+        else:
+            if isinstance(loaded, Mapping):
+                items = [(str(k), str(v)) for k, v in loaded.items()]
+            elif isinstance(loaded, IterableABC):
+                pairs_list: list[tuple[str, str]] = []
+                for entry in loaded:
+                    if isinstance(entry, Mapping):
+                        for k, v in entry.items():
+                            pairs_list.append((str(k), str(v)))
+                    elif isinstance(entry, (list, tuple)) and len(entry) == 2:
+                        pairs_list.append((str(entry[0]), str(entry[1])))
+                items = pairs_list
+            else:
+                items = []
+    normalized: dict[str, str] = {}
+    for key, val in items:
+        norm_key = key.strip().lower()
+        norm_val = val.strip().upper()
+        if norm_key and norm_val:
+            normalized[norm_key] = norm_val
+    return normalized
+
+
 def _normalize_redis_url(value: object) -> str | None:
     if value is None:
         return None
@@ -338,8 +383,16 @@ class OIDCConfig:
     rp_sign_algo: str
     rp_scopes: str
     sync_memberships: bool
-    case_group_prefix: str
-    case_group_separator: str
+    organization_claim: str
+    organization_id_field: str
+    organization_name_field: str
+    organization_roles_field: str
+    organization_default_role: str
+    organization_role_map: dict[str, str]
+    case_memberships_claim: str
+    case_id_field: str
+    case_role_field: str
+    case_role_map: dict[str, str]
     case_default_role: str
 
     def is_enabled(self) -> bool:
@@ -566,9 +619,36 @@ class Settings(BaseSettings):
     OIDC_OP_JWKS_ENDPOINT: str | None = None
     OIDC_RP_SIGN_ALGO: str = "RS256"
     OIDC_RP_SCOPES: str = "openid email profile"
-    OIDC_SYNC_MEMBERSHIPS: bool = False
-    OIDC_CASE_GROUP_PREFIX: str = "case:"
-    OIDC_CASE_GROUP_SEPARATOR: str = ":"
+    OIDC_SYNC_MEMBERSHIPS: bool = True
+    OIDC_ORG_CLAIM: str = "organizations"
+    OIDC_ORG_ID_FIELD: str = "id"
+    OIDC_ORG_NAME_FIELD: str = "name"
+    OIDC_ORG_ROLES_FIELD: str = "roles"
+    OIDC_ORG_DEFAULT_ROLE: str = "MEMBER"
+    OIDC_ORG_ROLE_MAP: dict[str, str] = Field(
+        default_factory=lambda: {
+            "admin": "ADMIN",
+            "manager": "MANAGER",
+            "member": "MEMBER",
+            "owner": "ADMIN",
+            "superuser": "SUPERUSER",
+        }
+    )
+    OIDC_CASE_MEMBERSHIPS_CLAIM: str = "case_memberships"
+    OIDC_CASE_ID_FIELD: str = "id"
+    OIDC_CASE_ROLE_FIELD: str = "role"
+    OIDC_CASE_ROLE_MAP: dict[str, str] = Field(
+        default_factory=lambda: {
+            "owner": "OWNER",
+            "contributor": "CONTRIBUTOR",
+            "reviewer": "REVIEWER",
+            "admin": "ADMIN",
+            "superuser": "SUPERUSER",
+            "auditor": "AUDITOR",
+            "external": "EXTERNAL",
+            "client": "CLIENT",
+        }
+    )
     OIDC_CASE_DEFAULT_ROLE: str = "REVIEWER"
 
     @field_validator("AZURE_SPEECH_REGION")
@@ -613,6 +693,11 @@ class Settings(BaseSettings):
             return int(value)
         except (TypeError, ValueError):
             return 25
+ 
+    @field_validator("OIDC_ORG_ROLE_MAP", "OIDC_CASE_ROLE_MAP", mode="before")
+    @classmethod
+    def parse_role_maps(cls, value: Any) -> dict[str, str]:
+        return _json_or_mapping(value)
 
     @field_validator("REDIS_URL", "CELERY_BROKER_URL", mode="before")
     @classmethod
@@ -846,8 +931,16 @@ class Settings(BaseSettings):
             rp_sign_algo=self.OIDC_RP_SIGN_ALGO,
             rp_scopes=self.OIDC_RP_SCOPES,
             sync_memberships=self.OIDC_SYNC_MEMBERSHIPS,
-            case_group_prefix=self.OIDC_CASE_GROUP_PREFIX,
-            case_group_separator=self.OIDC_CASE_GROUP_SEPARATOR,
+            organization_claim=self.OIDC_ORG_CLAIM,
+            organization_id_field=self.OIDC_ORG_ID_FIELD,
+            organization_name_field=self.OIDC_ORG_NAME_FIELD,
+            organization_roles_field=self.OIDC_ORG_ROLES_FIELD,
+            organization_default_role=self.OIDC_ORG_DEFAULT_ROLE,
+            organization_role_map=dict(self.OIDC_ORG_ROLE_MAP),
+            case_memberships_claim=self.OIDC_CASE_MEMBERSHIPS_CLAIM,
+            case_id_field=self.OIDC_CASE_ID_FIELD,
+            case_role_field=self.OIDC_CASE_ROLE_FIELD,
+            case_role_map=dict(self.OIDC_CASE_ROLE_MAP),
             case_default_role=self.OIDC_CASE_DEFAULT_ROLE,
         )
 

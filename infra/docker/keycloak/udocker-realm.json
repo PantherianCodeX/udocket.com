@@ -3,7 +3,9 @@
   "enabled": true,
   "users": [],
   "groups": [
-    {"name": "udocket-admin"}
+    {
+      "name": "udocket-admin"
+    }
   ],
   "clients": [
     {
@@ -15,9 +17,19 @@
         "http://localhost:8000/oidc/callback/*",
         "http://localhost:8000/oidc/callback/"
       ],
-      "webOrigins": ["*"] ,
-      "defaultClientScopes": ["openid", "email", "profile"],
-      "optionalClientScopes": ["roles"]
+      "webOrigins": [
+        "*"
+      ],
+      "defaultClientScopes": [
+        "openid",
+        "email",
+        "profile",
+        "organizations",
+        "case-memberships"
+      ],
+      "optionalClientScopes": [
+        "roles"
+      ]
     },
     {
       "clientId": "udocket-api",
@@ -28,59 +40,62 @@
         "http://localhost:8000/oidc/callback/*",
         "http://localhost:8000/oidc/callback/"
       ],
-      "webOrigins": ["*"] ,
-      "defaultClientScopes": ["openid", "email", "profile", "groups-scope"],
-      "optionalClientScopes": ["roles"]
+      "webOrigins": [
+        "*"
+      ],
+      "defaultClientScopes": [
+        "openid",
+        "email",
+        "profile",
+        "organizations",
+        "case-memberships"
+      ],
+      "optionalClientScopes": [
+        "roles"
+      ]
     }
   ],
   "clientScopes": [
-    {"name": "openid", "protocol": "openid-connect"},
-    {"name": "email", "protocol": "openid-connect"},
-    {"name": "profile", "protocol": "openid-connect"},
-    {"name": "roles", "protocol": "openid-connect"},
     {
-      "name": "groups-scope",
+      "name": "openid",
+      "protocol": "openid-connect"
+    },
+    {
+      "name": "email",
+      "protocol": "openid-connect"
+    },
+    {
+      "name": "profile",
+      "protocol": "openid-connect"
+    },
+    {
+      "name": "organizations",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": true
+      }
+    },
+    {
+      "name": "roles",
+      "protocol": "openid-connect"
+    },
+    {
+      "name": "case-memberships",
       "protocol": "openid-connect",
       "attributes": {
         "include.in.token.scope": true
       },
       "protocolMappers": [
         {
-          "name": "Group Membership",
+          "name": "Case Memberships",
           "protocol": "openid-connect",
-          "protocolMapper": "oidc-group-membership-mapper",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
           "consentRequired": false,
           "config": {
-            "full.path": "false",
-            "id.token.claim": "true",
-            "access.token.claim": "true",
-            "userinfo.token.claim": "true",
-            "claim.name": "groups"
-          }
-        },
-        {
-          "name": "Preferred Username",
-          "protocol": "openid-connect",
-          "protocolMapper": "oidc-usermodel-property-mapper",
-          "consentRequired": false,
-          "config": {
-            "user.attribute": "username",
-            "claim.name": "preferred_username",
+            "user.attribute": "case_memberships",
+            "claim.name": "case_memberships",
             "jsonType.label": "String",
-            "id.token.claim": "true",
-            "access.token.claim": "true",
-            "userinfo.token.claim": "true"
-          }
-        },
-        {
-          "name": "Email",
-          "protocol": "openid-connect",
-          "protocolMapper": "oidc-usermodel-property-mapper",
-          "consentRequired": false,
-          "config": {
-            "user.attribute": "email",
-            "claim.name": "email",
-            "jsonType.label": "String",
+            "multivalued": "true",
             "id.token.claim": "true",
             "access.token.claim": "true",
             "userinfo.token.claim": "true"
@@ -88,5 +103,8 @@
         }
       ]
     }
+  ],
+  "enabledFeatures": [
+    "organizations"
   ]
 }

@@ -95,7 +95,7 @@ class PermissionPresetAdminForm(forms.ModelForm):
         try:
             from apps.platform.authorization import capabilities as capabilities_module
 
-            capabilities_module.CAPABILITY_CHOICES = capabilities_module.capability_choices()
+            capabilities_module.capability_choices(force_refresh=True)
         except Exception:
             pass
 

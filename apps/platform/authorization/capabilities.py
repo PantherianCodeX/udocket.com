@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Iterable, Optional
+from functools import lru_cache
+from typing import Any, Iterable, Optional, Tuple
 
 from django.conf import settings
 from django.db.models import Q
@@ -75,19 +76,23 @@ DEFAULT_CAPS: dict[str, set[str]] = {
 BASE_CAPABILITIES: set[str] = set().union(*DEFAULT_CAPS.values())
 
 
-def capability_choices() -> list[tuple[str, str]]:
-    """Return available capability choices for admin/forms widgets."""
-
+@lru_cache(maxsize=1)
+def _cached_capability_choices() -> Tuple[tuple[str, str], ...]:
     dynamic: set[str] = set()
     try:
         dynamic = set(PresetCapability.objects.values_list("capability", flat=True))
     except Exception:
         dynamic = set()
     values = sorted(BASE_CAPABILITIES | dynamic)
-    return [(c, c) for c in values]
+    return tuple((c, c) for c in values)
 
 
-CAPABILITY_CHOICES: list[tuple[str, str]] = capability_choices()
+def capability_choices(*, force_refresh: bool = False) -> list[tuple[str, str]]:
+    """Return available capability choices for admin/forms widgets."""
+
+    if force_refresh:
+        _cached_capability_choices.cache_clear()
+    return list(_cached_capability_choices())
 
 def _roles_for_name(role_name: str, organization_id: Optional[str]) -> Iterable[Role]:
     qs = Role.objects.filter(name__iexact=role_name)

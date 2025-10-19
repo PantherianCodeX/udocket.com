@@ -275,8 +275,16 @@ OIDC_OP_JWKS_ENDPOINT = oidc_config.jwks_endpoint()
 # Default OIDC scopes for browser SSO
 OIDC_RP_SCOPES = oidc_config.rp_scopes
 
-# Optional: sync case memberships from Keycloak group claims
+# OIDC organization and membership synchronization
 OIDC_SYNC_MEMBERSHIPS = oidc_config.sync_memberships
-OIDC_CASE_GROUP_PREFIX = oidc_config.case_group_prefix
-OIDC_CASE_GROUP_SEPARATOR = oidc_config.case_group_separator
+OIDC_ORG_CLAIM = oidc_config.organization_claim
+OIDC_ORG_ID_FIELD = oidc_config.organization_id_field
+OIDC_ORG_NAME_FIELD = oidc_config.organization_name_field
+OIDC_ORG_ROLES_FIELD = oidc_config.organization_roles_field
+OIDC_ORG_DEFAULT_ROLE = oidc_config.organization_default_role
+OIDC_ORG_ROLE_MAP = dict(oidc_config.organization_role_map)
+OIDC_CASE_MEMBERSHIPS_CLAIM = oidc_config.case_memberships_claim
+OIDC_CASE_ID_FIELD = oidc_config.case_id_field
+OIDC_CASE_ROLE_FIELD = oidc_config.case_role_field
+OIDC_CASE_ROLE_MAP = dict(oidc_config.case_role_map)
 OIDC_CASE_DEFAULT_ROLE = oidc_config.case_default_role
