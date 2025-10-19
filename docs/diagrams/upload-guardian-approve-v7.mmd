@@ -1,0 +1,20 @@
+%% Mermaid sequence stub: Upload → Guardian → Approve v7
+sequenceDiagram
+  participant U as User/Client
+  participant Web as Web (Django)
+  participant Obj as Object Storage
+  participant DB as Postgres (RLS)
+  participant G as Guardian
+  participant R as Reviewer
+  U->>Web: POST /uploads (create session)
+  Web->>Obj: PUT blob (SAS)
+  U-->>Obj: Upload file
+  U->>Web: POST /uploads/{id}/finalize (Idempotency-Key)
+  Web->>DB: INSERT artifact (DRAFT)
+  Web->>G: POST /v1/guardian/submit
+  G->>DB: UPDATE artifact.state READY|QUARANTINED; INSERT decision
+  G-->>Web: {decision, reasons}
+  Web-->>U: SSE artifact_state
+  R->>Web: POST /reviews/{artifact}/approve (OCC)
+  Web->>DB: Demote prior APPROVED; APPROVE target
+  Web-->>U: SSE portal_link_invalidated

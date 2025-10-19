@@ -1,0 +1,39 @@
+name: Docs Validation
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  render-diagrams:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install Mermaid CLI
+        run: npm install --location=global @mermaid-js/mermaid-cli
+      - name: Render Mermaid diagrams
+        run: scripts/docs/render_mermaid.sh
+
+  docs-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install documentation Python tooling
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-docs.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install markdownlint CLI
+        run: npm install --location=global markdownlint-cli2@0.11.0 markdownlint-cli2-config-standard@0.0.6
+      - name: Run documentation lint suite
+        run: python scripts/docs/lint_docs.py

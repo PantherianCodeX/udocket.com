@@ -1,0 +1,17 @@
+%% Mermaid sequence: Analyze/Compose pipeline (simplified)
+sequenceDiagram
+  participant W as Worker (Celery)
+  participant L as LangGraph
+  participant G as Guardian
+  participant DB as Postgres
+  participant Obj as Object Storage
+  W->>L: Start Analyze (Events/Timeline/Entities)
+  L-->>W: Lane outputs (JSON/MD)
+  W->>Obj: PUT analysis artifacts
+  W->>DB: INSERT artifacts (DRAFT)
+  W->>G: submit READY checks
+  G->>DB: decision history + state READY
+  W->>L: Start Compose (Outline→Sections→QA→Weave)
+  L-->>W: Deliverables (MD/DOCX)
+  W->>Obj: PUT compose deliverables
+  W->>DB: INSERT artifacts (DRAFT); submit to Guardian

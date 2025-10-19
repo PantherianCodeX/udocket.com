@@ -1,0 +1,12 @@
+%% Mermaid flow stub: Error flows v7
+flowchart TD
+  A[Agent lane starts] --> B{Failure?}
+  B -- No --> C[Proceed]
+  B -- TRANSIENT --> T[Backoff + jitter retry]
+  B -- POLICY --> P[Fail lane; Guardian quarantine]
+  B -- INPUT --> I[Fail lane; report validation]
+  B -- INTEGRITY --> Q[Quarantine; block downstream]
+  B -- CONCURRENCY --> K[Jittered retry; surface conflict]
+  B -- REGION_POLICY --> R[Block; log RESIDENCY_POLICY_BLOCK]
+  T --> B
+  K --> B
