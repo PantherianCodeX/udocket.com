@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Iterator
 
 try:
-    import jsonschema  # type: ignore
+    import jsonschema
 except Exception as exc:  # pragma: no cover
     print("jsonschema is required for local validation (pip install jsonschema)", file=sys.stderr)
     raise
