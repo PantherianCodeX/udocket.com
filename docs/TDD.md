@@ -337,6 +337,7 @@ metadata:
 - **Localization:** i18n string packs (approval banners, invalidation messages, intake copy), formatting rules (date/time, numbers, currencies, measurement units), legal disclaimers keyed by locale. Data is sourced from pinned Unicode CLDR releases, rendered through ICU primitives, and tagged with BCP-47 locale identifiers plus MessageFormat 2 metadata. Centralized in `compiled_l10n_locale`.
 - **Residency policies:** Canonical compute/vector/storage allowlists with waiver metadata and expiry tracking; surfaced as `residency_regions` in `PolicyContext`.
 - **Policy bundles:** Signed, versioned Rego + data payloads that OPA consumes to enforce residency, egress, HIPAA, and attachment rules. Bundles include manifests with SHA-256 digests, compatibility range, and monotonic build numbers; LPE rejects unsigned or stale bundles.
+- **OPA discovery manifest (`spec/schemas/opa_discovery_manifest.schema.json`):** Enumerates bundle channels (`stable`, `beta`, `canary`), allowed regions, SHA-256 digests, ETags, rollout windows, and promotion rules so OPA evaluators hot-reload safely.
 - **PolicyContext table (`compiled_policy_context`):** Keyed by `(org_id, case_locale?, privacy_flags_hash)` with values `{policy_context_version, frameworks_enabled[], hipaa_required, residency_regions{compute[],storage[],vector[]}, retention_days, portal_rules{disclaimer_key,banner_key}, logging_rules, masking_profile, i18n_keys[], hash_sha256}`.
 - **PolicyContext schema (`spec/schemas/policy_context.schema.json`):** Canonical JSON Schema (draft 2020-12) describing all fields, value types, and optional blocks; versioned separately to allow additive fields. Digests in API responses (`digest_sha256`) sign the canonicalized JSON payload.
 - **Reference Manager integration:** LPE consumes canonical datasets emitted by Reference Manager (RM)—court hierarchy, localization strings, questionnaires, forms. RM supplies signed manifests plus SHA-256 digests; LPE refuses to compile if digests drift or the RM publish event is missing.
@@ -380,12 +381,25 @@ metadata:
 
 #### 3.4.6 Service integrations
 
-- **Policy Agent (OPA):** LPE publishes bundle metadata and rollout channels; OPA sidecars per service download and hot-reload signed Rego/data bundles via discovery. Bundles are signed with Ed25519 keys stored in KMS; OPA verifies signatures and digest-matches before activation and treats mismatches as fatal (fail closed). Access to discovery/bundle endpoints requires mTLS + HMAC headers. Decision APIs (`/v1/data/udocket/...`) back the residency, HIPAA, attachment, and egress checks surfaced in Guardian, Workers, and Portal flows; timeouts/5xx responses are converted to `POLICY_BLOCK` errors with alerts. Decision logs (scrubbed of PII) and status logs feed the observability fabric for audit, with retention ≥ 365 days in immutable storage.
+- **Policy Agent (OPA):** LPE publishes bundle metadata and rollout channels (`stable`, `beta`, `canary`); OPA sidecars per service download and hot-reload signed Rego/data bundles via discovery. Bundles are signed with Ed25519 keys stored in KMS; OPA verifies signatures and digest-matches before activation and treats mismatches as fatal (fail closed). Access to discovery/bundle endpoints requires mTLS + HMAC headers. Decision APIs (`/v1/data/udocket/...`) back the residency, HIPAA, attachment, and egress checks surfaced in Guardian, Workers, and Portal flows; timeouts/5xx responses are converted to `POLICY_BLOCK` errors with alerts. Decision logs (scrubbed of PII) and status logs feed the observability fabric for audit, with retention ≥ 365 days in immutable storage.
 - **Web/Portal:** Replace ad-hoc localization and policy banners with LPE-driven strings and formatting helpers; UI hydration fetches `PolicyContext` during session bootstrap.
 - **Guardian & Workers:** Consult `PolicyContext` for residency and HIPAA toggles; Guardian blocks PHI artifacts unless HIPAA/PHIPA frameworks enable PHI, logging `POLICY_BLOCK` codes with context digest.
 - **Search/Retrieval:** Index creation chooses locale-aware analyzers and vector-store residency from `PolicyContext`.
 - **Notifications:** Template selection, disclaimers, and delivery restrictions derive from context outputs; outbox retains idempotency semantics.
 - **DB layer:** `PolicyContext.masking_profile` drives secure view selections; migrations enforce FORCE RLS for contexts requiring PHI redaction.
+
+Decision logs validate against `spec/schemas/opa_decision_log.schema.json`. `reason_code` values (`OK`, `REGION_NOT_ALLOWED`, `WAIVER_REQUIRED`, `HIPAA_REQUIRED`, `ATTACHMENT_FORBIDDEN`, `OPA_ERROR`) map to downstream actions:
+
+| `reason_code` | `policy_block_code` surfaced to callers |
+| ------------- | --------------------------------------- |
+| `OK` | `null` (decision allow) |
+| `REGION_NOT_ALLOWED` | `RESIDENCY_POLICY_BLOCK` |
+| `WAIVER_REQUIRED` | `POLICY_BLOCK` (UI prompts for waiver) |
+| `HIPAA_REQUIRED` | `HIPAA_REQUIRED` |
+| `ATTACHMENT_FORBIDDEN` | `ATTACHMENT_BLOCK` |
+| `OPA_ERROR` | `POLICY_BLOCK` (with remediation message) |
+
+CI (`scripts/opa/validate_decision_logs.py`) verifies that emitted logs comply with the schema, and dashboards aggregate `reason_code` to drive alerts and FinOps reporting.
 
 #### 3.4.7 Gap-closure owners
 
@@ -539,7 +553,7 @@ This example demonstrates how residency outcomes are derived: LPE supplies the d
 
 #### 3.5.5 Catalog bundles & publishing pipeline
 
-- RM produces semver’d **Catalog Bundles** (`courts@1.4.0`, `jurisdictions@2.1.3`, `localization@0.9.2`, `questionnaires@0.5.0`, etc.) with `effective_at` timestamps, signed SHA-256 hashes, and provenance manifests. Bundles are content-addressed; manifests capture compatibility ranges and the licensed sources embedded (e.g., CC BY-SA excerpts vs CC0 datasets).
+- RM produces semver’d **Catalog Bundles** (`courts@1.4.0`, `jurisdictions@2.1.3`, `localization@0.9.2`, `questionnaires@0.5.0`, etc.) with `effective_at` timestamps, signed SHA-256 hashes, and provenance manifests. Bundles are content-addressed; manifests (see `spec/schemas/reference_bundle_manifest.schema.json`) capture compatibility ranges and the licensed sources embedded (e.g., CC BY-SA excerpts vs CC0 datasets).
 - Each bundle contains a deterministic JSON payload and optional parquet/CSV artifact for analytics; manifests include source citations, license ledger, CLDR/ICU version pins, and compatibility notes. Snapshot archives ship alongside delta bundles so adopters can fast-forward Netflix-Hollow style (full snapshot + rolling deltas) while retaining rollback hooks.
 - RM also emits **OPA bundles** (compressed Rego + JSON data) per channel/region. Each bundle is signed, versioned, and associated with a discovery manifest so OPA evaluators know which residency/privacy rule-set to download.
 - Publishing emits `reference_manager.catalog.published` events `{domain, version, effective_at, hash, affected_keys[], bundle_uri}`. LPE listens to these events, invalidates cached compiles, and records the bundle versions used in each `PolicyContext`; OPA discovery manifests update in lockstep.
@@ -551,6 +565,7 @@ This example demonstrates how residency outcomes are derived: LPE supplies the d
 - Questionnaires store hierarchical blocks, localized prompts, scoring rubrics, conditional logic, and deterministic UUIDs for sections/questions. RM enforces locale completeness and tags questions that require legal review.
 - Court forms and templates capture download URIs, file hashes, accessibility status (PDF/HTML/accessible text), renewal cadence, and license terms. Availability monitors run HEAD requests; failures raise `reference_resource_unavailable`.
 - Resource bundles publish via `reference_manager.resource.updated` events so LPE and Compose/Analyze agents access consistent localization keys and metadata.
+- Locale packs must satisfy the coverage validator (`scripts/reference/verify_locale_coverage.py`) which loads `spec/schemas/locale.schema.json` and ensures every locale enabled in Settings has required CLDR keys before publish; failures block bundle promotion.
 
 #### 3.5.7 APIs & automation surfaces
 
@@ -590,6 +605,7 @@ This example demonstrates how residency outcomes are derived: LPE supplies the d
 - FinOps: `reference_manager_ingest_cost_cents{source}`, `reference_manager_api_credit_total`, and `reference_manager_storage_bytes_total` feed cost dashboards; budgets defined per source family with alerts when 7-day rolling spend exceeds 80% of monthly cap.
 - Dashboards (added to §12.6): “Reference Manager – Ingestion & Quality” (coverage %, freshness age, selector failures), “Reference Manager – Review & Publishing” (diff backlog, review SLA, adoption lag), and bundle adoption overlays alongside LPE dashboards.
 - Alerts: stalled harvests (>2 intervals missed), selector failure spikes, diff backlog > SLA, publish with missing license metadata, adoption lag beyond SLA, or RM publish without subsequent LPE compile (`lpe_policy_context_version` drift).
+- Deploy gate `deploy:reference-adoption` blocks promotion when `reference_bundle_stale_total > 0` for more than 10 consecutive minutes; SRE must either clear the backlog or apply a documented waiver before the release continues.
 
 #### 3.5.11 Editorial tooling & UX
 
@@ -1816,7 +1832,7 @@ ______________________________________________________________________
 
 *Purpose: Anchor the narrative TDD to machine-readable contracts and a predictable change cadence.*
 
-- Canonical OpenAPI 3.1 specifications live under `ops/openapi/` (`udocket-platform.openapi.yaml` for staff/client surfaces, with service-specific overlays). Every PR that changes endpoints must update the spec and rerun `make lint-openapi` (`npx spectral lint ops/openapi/**/*.yaml --ruleset ops/openapi/spectral.yaml`); CI blocks merges when lint or diff checks fail.
+- Canonical OpenAPI 3.1 specifications live under `ops/openapi/` (`udocket-platform.openapi.yaml` for staff/client surfaces, with service-specific overlays). Every PR that changes endpoints must update the spec and rerun `make lint-openapi` (`npx spectral lint ops/openapi/**/*.yaml --ruleset ops/openapi/spectral.yaml`); CI blocks merges when lint or diff checks fail. `make lint-schemas` validates `spec/schemas/*.json` (enforcing `additionalProperties=false` where required, string length caps, and enumerations) so generated models stay aligned with the OpenAPI components.
 - Shared JSON Schemas live under `spec/schemas/` and are treated as the single source of truth for reusable components. Code generators (Python/TS) consume these schemas so no handwritten Pydantic model drifts from the published contract.
 - Breaking or materially user-visible changes require an ADR (see `docs/adr/README.md` and linked entries such as `ADR-0003-api-versioning-and-sunset.md`) approved by Architecture + Security before the change can progress from **Provisional → Implementable → Implemented**.
 - Versioning policy: monthly “compatible” releases roll on the first business Monday; clients may pin to older behaviour via `X-uDocket-API-Version: YYYY-MM`. Majors ship at most twice per year, demand 90-day notice, and use calendar-versioned prefixes (`2025-02`), while additive changes batch unless explicitly waived.
@@ -2042,7 +2058,7 @@ Client retry guidance (normative)
 *Purpose: Define canonical SSE events and replay behavior.*
 
 - Event types: `job.update`, `artifact.state`, `qa.notes`, `portal_link_invalidated`, `settings.activated`.
-- Envelope: `id` (monotonic), `event`, `data` (JSON), `retry` (ms). `data` for snapshot payloads includes `watermark_ts` to indicate the newest event timestamp included. The envelope and payloads validate against `spec/schemas/sse/event_envelope.schema.json`; SSE producers deserialize generated Pydantic models before emit. `id` echoes in `Last-Event-ID`.
+- Envelope: `id` (monotonic), `event`, `data` (JSON), `retry` (ms). `data` for snapshot payloads includes `watermark_ts` to indicate the newest event timestamp included. The envelope and payloads validate against `spec/schemas/sse/event_envelope.schema.json`; SSE producers deserialize generated Pydantic models before emit. Schema constraints encode `maxLength`/`maxItems` limits (e.g., snapshot ≤ 500 events, messages ≤ 2 KiB) so the 8 KiB payload budget is enforced mechanically. `id` echoes in `Last-Event-ID`.
 - Sequencing: IDs are monotonic per stream (`sse:case:{case_id}` and `sse:job:{job_id}`) and minted via Redis `INCR`, ensuring ordered delivery across multiple web pods without requiring cross-stream ordering.
 - Sync snapshot: if `Last-Event-ID` predates the 15-minute/500-event replay window (whichever comes first), the server emits a snapshot (RLS‑scoped) containing the last 500 events and `watermark_ts` before tailing live updates.
 - Delivery: at‑least‑once; clients de‑dupe via `id`. Snapshots include a bounded window and `watermark_ts` so consumers know when they are live. Individual events are capped at 8 KiB payloads (post-JSON encoding) and Redis stream memory budgets target ≤ 256 MiB per environment; SREs size `stream.maxlen` accordingly.

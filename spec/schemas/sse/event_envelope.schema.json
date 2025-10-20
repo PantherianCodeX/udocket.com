@@ -13,6 +13,7 @@
   "properties": {
     "id": {
       "type": "string",
+      "maxLength": 64,
       "description": "Monotonic identifier for at-least-once delivery."
     },
     "event": {
@@ -29,6 +30,7 @@
     "retry": {
       "type": "integer",
       "minimum": 0,
+      "maximum": 60000,
       "description": "Optional reconnection hint in milliseconds."
     },
     "data": {
@@ -101,7 +103,8 @@
           "type": [
             "string",
             "null"
-          ]
+          ],
+          "maxLength": 512
         }
       }
     },
@@ -178,6 +181,7 @@
         },
         "notes": {
           "type": "array",
+          "maxItems": 100,
           "items": {
             "type": "object",
             "required": [
@@ -196,7 +200,8 @@
                 ]
               },
               "message": {
-                "type": "string"
+                "type": "string",
+                "maxLength": 2048
               },
               "ts": {
                 "type": "string",
@@ -228,7 +233,8 @@
           "$ref": "#/$defs/uuid"
         },
         "reason": {
-          "type": "string"
+          "type": "string",
+          "maxLength": 128
         },
         "ts": {
           "type": "string",
@@ -251,7 +257,12 @@
           "const": "settings.activated"
         },
         "scope": {
-          "type": "string"
+          "type": "string",
+          "enum": [
+            "SYSTEM",
+            "ORG",
+            "CASE"
+          ]
         },
         "org_id": {
           "$ref": "#/$defs/uuid"
@@ -260,10 +271,12 @@
           "$ref": "#/$defs/uuid"
         },
         "bundle_id": {
-          "type": "string"
+          "type": "string",
+          "maxLength": 128
         },
         "version_id": {
-          "type": "string"
+          "type": "string",
+          "maxLength": 128
         },
         "ts": {
           "type": "string",
@@ -289,6 +302,7 @@
         },
         "events": {
           "type": "array",
+          "maxItems": 500,
           "items": {
             "type": "object"
           }
