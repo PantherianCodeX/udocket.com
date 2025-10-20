@@ -715,6 +715,34 @@ ______________________________________________________________________
 - Expansion posture: RM catalogs enumerate global regions (NA/EU/APAC). New jurisdictions enable by adding allowlist entries plus waiver or DPA references; App.O ledger tracks approvals. Synthetic tenant “EU-REFERENCE” exercises EU-only paths quarterly to confirm Azure EU endpoints, storage buckets, vector shards, and TSA integrations honor EU residency before production onboarding.
 - Waiver enforcement: active waivers embed `waiver_id`/expiry into `PolicyContext`; Guardian and workers relay this to OPA and stamp manifests with `cross_region=true` plus reason `RESIDENCY_WAIVER_USED`. Absent or expired waivers force `POLICY_BLOCK` responses so operators remediate before promotion.
 
+#### 3.8.1 Residency endpoint posture detection (binding)
+
+*Purpose: Continuously verify that every outbound endpoint honours the declared residency posture before traffic is permitted.*
+
+- Source-of-truth: Reference Manager publishes a `provider_endpoints` catalogue (`region`, `provider`, `purpose`, `approved_cidrs`, `san`, `dpa_ref`). Settings activation merges this catalogue with org-scoped allowlists and materializes `network.egress.allowed_hosts`.
+- Scanner: the `residency_endpoint_scan` Celery job runs hourly (per environment) and on activation events. It resolves each hostname, expands CNAME chains, and maps IPs to jurisdictions using provider APIs (Azure Resource Graph, MS Peering) plus the GeoIP2 offline database (`data/privacy/geoip.mmdb`, refreshed weekly). SAN and certificate-chain validation confirms that TLS endpoints still advertise the expected region/service pair.
+- Drift & gaps: hosts missing from the catalogue, SAN mismatches, or GeoIP jurisdiction drift record findings in `residency_endpoint_findings` (`state ∈ {open, mitigated, waived}`) and append JSONL evidence under `ops/residency/endpoint_scan.jsonl`. The mesh deny list blocks endpoints whose findings remain `open` for ≥ 5 minutes.
+- Change detection: new endpoints discovered in provider SDKs or Azure/AWS service updates trigger `RESIDENCY_ENDPOINT_NEW` audit events, open a Security Jira ticket (template `SEC-RESIDENCY-ENDPOINT`), and require catalogue ingestion before the Settings activation may proceed (`unsafe_reason="missing_endpoint_catalog_entry"`).
+
+#### 3.8.2 Reporting & escalation (binding)
+
+*Purpose: Ensure residency drift is observable and actioned quickly across teams.*
+
+- Metrics: `residency_endpoint_scan_duration_seconds`, `residency_endpoint_drift_total{reason=...}`, and `residency_endpoint_blocks_total` feed the Residency dashboard (Grafana → “Residency & Endpoint Posture”). Alert `alert_residency_endpoint_drift` fires when new `open` findings exist for 10 minutes or a scan fails twice consecutively.
+- Notifications: the scanner emits structured PagerDuty incidents tagged `RESIDENCY_DRIFT`, posts to `#residency-alerts`, and attaches the latest JSONL snippet plus catalogue diff. Weekly digest reports aggregate findings, waivers, and remediation SLAs; digests store under `ops/residency/digest_<iso_week>.json`.
+- Evidence: App.L incorporates residency drift baselines; App.H RB-RES-ENDPOINT holds the detailed remediation runbook referenced from alerts. App.O ledger links waivers to the specific findings they suppress.
+
+#### 3.8.3 Triage & remediation workflow (binding)
+
+*Purpose: Provide a deterministic path from detection to resolution without violating residency guarantees.*
+
+- First response (within 15 minutes): SRE validates the alert, confirms the endpoint is blocked, and checks whether production traffic attempted to reach it (audit search on `RESIDENCY_POLICY_BLOCK` + endpoint). Security triages provider announcements or CDN/autoscaling expansions.
+- Remediation branches:
+  - **Catalogue update:** Reference Manager on-call ingests provider metadata, updates `provider_endpoints`, and supplies DPA/attestation references; Settings activation replays with the new host, unblocking after automated verification passes.
+  - **Waiver required:** Dual approval (Security + Architecture) recorded in App.O; Settings sets `cross_region_waiver` for the affected org/service, and Guardian stamps manifests until the provider delivers an in-region alternative.
+  - **Misconfiguration:** When hosts resolve outside the allowlist because of DNS drift or cache poisoning, SRE flushes DNS caches (`scripts/residency/flush_dns_cache.py`) and, if necessary, overrides the mesh egress policy until the provider restores expected records.
+- Closure: findings flip to `mitigated` once the scanner observes compliant endpoints for two consecutive runs. Incident retrospectives attach scanner evidence, Settings diffs, and Guardian waiver logs to the decision log (§15.3); preventive tickets capture backlog (provider engagement, automation gaps).
+
 ______________________________________________________________________
 
 ### 3.9 C4 containers & STRIDE dataflows (binding)
@@ -1437,62 +1465,8 @@ Node catalog (illustrative)
   - Analyze: `SummaryJSON`, `OutlineJSON`, `TimelineSeed`, `EntityHint`, `StaffReport` with `uuid`, `source_span`, `evidence_refs[]`.
   - Compose: `SectionOutput { section_id, role: client|lawyer, text_md, envelope_id, issues[] }`.
   - QA: `QAIssue { code, level, message, ref?, location? }`.
-- Example Pydantic models (Analyze extract):
-  ```python
-  from __future__ import annotations
-
-  from datetime import datetime
-  from typing import Literal
-  from uuid import UUID
-
-  from pydantic import BaseModel, Field
-
-
-  class SourceSpan(BaseModel):
-      start_ms: int
-      end_ms: int
-
-
-  class AnalyzeEvent(BaseModel):
-      id: UUID
-      title: str
-      datetime: datetime | None = None
-      participants: list[UUID] = Field(default_factory=list)
-      source_spans: list[SourceSpan] = Field(default_factory=list)
-      notes: str | None = None
-
-
-  class AnalyzeIssue(BaseModel):
-      id: UUID
-      label: str
-      description: str
-      related_events: list[UUID] = Field(default_factory=list)
-      risk: Literal["LOW", "MEDIUM", "HIGH"] = "LOW"
-  ```
-- Compose JSON example:
-  ```python
-  from __future__ import annotations
-
-  from typing import Literal
-  from uuid import UUID
-
-  from pydantic import BaseModel, Field
-
-
-  class ComposeSection(BaseModel):
-      key: str
-      title: str
-      body_md: str
-      references: list[UUID] = Field(default_factory=list)
-
-
-  class ComposeDocument(BaseModel):
-      doc_type: Literal["CLIENT", "LAWYER"]
-      language: str | None = None
-      sections: list[ComposeSection]
-      outline: list[str]
-      analyze_refs: dict[str, list[UUID]] = Field(default_factory=dict)
-  ```
+- Example Pydantic models (Analyze extract): see App.U.1 for the canonical typed definitions including source-span handling and deterministic enums.
+- Compose JSON example: App.U.2 captures the Compose document/section models with default factories and typed references.
 - Error codes (binding):
   - `E_TRANSIENT_PROVIDER` (TRANSIENT): wrap 429/5xx/timeouts; retry per §6.6.
   - `E_POLICY_FORBIDDEN` (POLICY): forbidden pattern redaction failure; fail lane.
@@ -1821,23 +1795,7 @@ ______________________________________________________________________
 - SDK (`SettingsClient`) caches reads per request/context, supports type-safe access (`get(key, type=...)`), and snapshotting (`snapshot()`) to embed in jobs with `settings_snapshot_sha256`.
 - Authentication via service tokens + HMAC signing for mutating endpoints. Responses include `version_id`, `bundle_id`, and list of contributing scopes for auditing.
 - Clients must avoid direct `.env` reads except for bootstrapping; runtime decisions rely on Settings API to respect dual approvals.
-- Definitions expressed via Pydantic models (illustrative):
-  ```python
-  from __future__ import annotations
-
-  from typing import Any, Literal
-
-  from pydantic import BaseModel
-
-
-  class SettingDefinition(BaseModel):
-      key: str
-      datatype: Literal["BOOL", "INT", "FLOAT", "STRING", "DURATION", "ENUM", "JSON", "REGION", "PERCENT"]
-      enum_values: list[str] | None = None
-      default_value: Any
-      mutable_scope: list[Literal["SYSTEM", "ORG", "CASE"]]
-      validation_schema: dict[str, Any] | None = None
-  ```
+- Definitions expressed via Pydantic models (illustrative): refer to App.U.3 for the Settings definition model (`SettingDefinition`) with literal datatypes and scope enforcement helpers.
   - Case-scoped keys (examples): `compose.tone`, `compose.section.length_limits`, `compose.max_retries`, `analyze.token_ceiling`, `portal.link.expiry`, `visibility.operators.scope`.
   - Org/system keys include residency allowlists, quotas, notifications, LLM provider/model catalogs, TLS policies, `security.field_encryption.*`, `integrity.downstream_action`, request-signing keys, FinOps thresholds, and case enumerations (`case.status.enum`, `case.representation_type.enum`).
 - Privacy helpers: `/api/v1/settings/privacy/templates` exposes DPIA/RoPA template metadata by matrix version so Privacy tooling stays aligned with Appendix H.
@@ -2204,24 +2162,7 @@ Payloads (illustrative)
 | portal_link_invalidated | `{ artifact_id, case_id, reason, ts }`                               | Portal consumes to revoke stale links                 |
 | settings.activated      | `{ scope, org_id?, case_id?, bundle_id, version_id, ts }`            | Triggers cache invalidation on clients                |
 
-Examples
-
-- `job.update`
-  ```json
-  { "id": "1024", "event": "job.update", "data": { "job_id": "...", "case_id": "...", "org_id": "...", "status": "RUNNING", "progress": 42 } }
-  ```
-- `artifact.state`
-  ```json
-  { "id": "1030", "event": "artifact.state", "data": { "artifact_id": "...", "case_id": "...", "org_id": "...", "type": "SUMMARY_MD", "state": "APPROVED", "previous_state": "READY", "ts": "2025-10-19T21:12:00Z" } }
-  ```
-- `portal_link_invalidated`
-  ```json
-  { "id": "1035", "event": "portal_link_invalidated", "data": { "artifact_id": "...", "case_id": "...", "reason": "APPROVAL_SWAP", "ts": "2025-10-19T21:14:00Z" } }
-  ```
-- Snapshot bootstrap payload (truncated)
-  ```json
-  { "id": "snapshot", "event": "artifact.snapshot", "data": { "watermark_ts": "2025-10-19T21:14:00Z", "events": [ { "artifact_id": "...", "state": "READY" }, { "artifact_id": "...", "state": "APPROVED" } ] } }
-  ```
+- Canonical payloads: App.U.4 contains the reference JSON for `job.update`, `artifact.state`, `portal_link_invalidated`, and snapshot bootstrap messages. Examples are generated from the shared schema test fixtures so they stay aligned with validation logic and SSE contracts.
 
 ### 10.9 Rate limits & antifraud controls
 
@@ -2274,49 +2215,7 @@ ______________________________________________________________________
 
 *Purpose: Demonstrate accessible, deterministic SSE consumption in the staff UI without freezing layout or leaking cross-case data.*
 
-```tsx
-import { useEffect, useState } from "react";
-
-type JobStatus = "PENDING" | "RUNNING" | "PAUSED" | "FAILED" | "COMPLETED";
-
-interface JobUpdatePayload {
-  job_id: string;
-  status: JobStatus;
-  progress?: number;
-}
-
-export function JobStatusTicker({ jobId }: { jobId: string }) {
-  const [status, setStatus] = useState<JobStatus>("PENDING");
-  const [progress, setProgress] = useState<number | null>(null);
-
-  useEffect(() => {
-    const source = new EventSource(`/api/v1/jobs/${jobId}/events`, { withCredentials: true });
-
-    const onUpdate = (event: MessageEvent<string>) => {
-      const payload = JSON.parse(event.data) as JobUpdatePayload;
-      if (payload.job_id !== jobId) return;
-      setStatus(payload.status);
-      setProgress(typeof payload.progress === "number" ? payload.progress : null);
-    };
-
-    source.addEventListener("job.update", onUpdate);
-    source.onerror = () => source.close();
-
-    return () => {
-      source.removeEventListener("job.update", onUpdate);
-      source.close();
-    };
-  }, [jobId]);
-
-  return (
-    <output role="status" aria-live="polite" data-status={status.toLowerCase()}>
-      <strong>{status}</strong>
-      {progress !== null ? ` — ${progress}%` : ""}
-    </output>
-  );
-}
-```
-
+- Reference implementation: App.U.5 provides the TypeScript/React snippet (`JobStatusTicker`) covering SSE subscription, token binding, and accessible announcements. The appendix version is linted with the shared UI tooling so snippets stay copy/pasteable.
 - `aria-live="polite"` keeps assistive tech informed without flooding announcements.
 - `withCredentials` enforces token binding per §10.7; callers must run inside the case-scoped layout so cookies inherit the correct SameSite/Path metadata.
 - UI surfaces deterministic state transitions: badges map `data-status` to semantic colors via design tokens (`--badge-ready`, `--badge-failed`), ensuring light/dark themes stay in sync without inline overrides.
@@ -3129,6 +3028,7 @@ ______________________________________________________________________
 - **App.R** Data lineage maps *(source: §5.6, §6, §7)*
 - **App.S** Ownership & RACI map *(source: §1.5, §15)*
 - **App.T** Traceability matrix *(source: §3.8, §7, §10, §12.1, §12.6)*
+- **App.U** Reference code snippets *(source: §6.11, §9.2, §10.8, §11.1.1)*
 
 ______________________________________________________________________
 
@@ -3789,6 +3689,8 @@ ______________________________________________________________________
 - RB-PORTAL-005 Download anomaly & link revoke
 - RB-LOCK-006 Advisory-lock stale detection & remediation
 - RB-LOG-007 Logging pipeline ingestion health
+- RB-RES-ENDPOINT Residency endpoint drift remediation
+- RB-RES-BLOCK Residency waiver / policy block handling
 - RB-GOV-008 Settings governance toggle / rollback
 
 ### H.2 Standard runbook template
@@ -3903,7 +3805,42 @@ Field runbook snippets
 - Bounce a single worker pod: `kubectl delete pod <pod> -n <ns> --grace-period=5`
 - Force GC registry (safe): `SELECT udlock.gc_registry();`
 
-### H.6 RB-GUARD-QUAR — Guardian quarantine handling (normative)
+### H.6 RB-RES-ENDPOINT — Residency endpoint drift remediation (normative)
+
+Purpose: Restore compliant residency posture when outbound endpoints drift or new hosts appear unexpectedly.
+
+Linked alert: `alert_residency_endpoint_drift` (Grafana: Residency & Endpoint Posture dashboard).
+
+Signals
+
+- Metrics: `residency_endpoint_drift_total{state="open"}`, `residency_endpoint_scan_duration_seconds` failures, `residency_endpoint_blocks_total`.
+- Audit/stringers: recent `RESIDENCY_ENDPOINT_NEW`, `RESIDENCY_ENDPOINT_DRIFT`, or `RESIDENCY_POLICY_BLOCK` entries; PagerDuty incidents tagged `RESIDENCY_DRIFT`.
+
+Triage — 5-minute checklist
+
+1. Confirm current findings
+   - Query `residency_endpoint_findings` for `state='open'` sorted by `detected_at`.
+   - Inspect attached evidence from `ops/residency/endpoint_scan.jsonl` (last entry) and verify which service attempted egress.
+1. Verify enforcement is blocking
+   - Check Istio AuthorizationPolicy revisions (`istioctl proxy-config endpoints <pod>`); ensure offending host absent.
+   - Confirm Guardian logged blocks as expected when jobs attempted the endpoint.
+1. Determine scope
+   - Identify affected provider/org(s); review Settings activation diff (`settings_activation` table) linked in alert payload.
+
+Decision
+
+- **Provider expansion/new host**: engage Reference Manager on-call to ingest metadata; once catalogue updated, re-run `residency_endpoint_scan --host <fqdn>` and `settings activate` bundle. Verify SAN + GeoIP match before clearing finding.
+- **Misconfiguration or DNS drift**: flush DNS caches (`scripts/residency/flush_dns_cache.py --host <fqdn>`), validate upstream provider records, and roll Istio egress gateway if stale endpoints persist.
+- **Waiver path**: if business-critical and no in-region endpoint exists, escalate for dual approval via App.O; set temporary waiver in Settings and confirm Guardian stamps `RESIDENCY_WAIVER_USED` before unblocking.
+- **False positive/no traffic**: annotate finding, keep block in place, and downgrade alert severity after evidence review.
+
+Post-remediation
+
+- Ensure `residency_endpoint_findings.state` transitions to `mitigated` within two scans; leave comment referencing catalogue commit or Settings activation.
+- Close PagerDuty incident with root cause and corrective actions; attach evidence to decision log (§15.3) and App.O waiver entry if used.
+- File preventive follow-ups (provider attestation request, automation gap) within 24h.
+
+### H.7 RB-GUARD-QUAR — Guardian quarantine handling (normative)
 
 Purpose: Quickly diagnose and resolve QUARANTINED artifacts without bypassing policy.
 
@@ -3930,7 +3867,7 @@ Post-remediation
 
 - Track READY ratio recovery; log incident with counts per reason.
 
-### H.7 RB-RES-BLOCK — Residency block remediation (normative)
+### H.8 RB-RES-BLOCK — Residency block remediation (normative)
 
 Purpose: Enforce residency allowlists while providing a waiver path when approved.
 
@@ -3954,7 +3891,7 @@ Post-remediation
 
 - Verify blocks drop to zero; audit waiver usage in ops.
 
-### H.8 RB-ETAG — If-Match/ETag failures (normative)
+### H.9 RB-ETAG — If-Match/ETag failures (normative)
 
 Purpose: Ensure clients download the exact approved bytes and handle invalidations correctly.
 
@@ -3978,7 +3915,7 @@ Post-remediation
 
 - Monitor 412 rate returning to baseline; verify portal behavior in staging.
 
-### H.9 RB-GOV-008 — Settings governance toggle / rollback (normative)
+### H.10 RB-GOV-008 — Settings governance toggle / rollback (normative)
 
 Purpose: Safely activate and, if necessary, revert high-sensitivity settings such as `settings.can_open_source`, residency waivers, or cross-organization pilots.
 
@@ -4008,7 +3945,7 @@ Evidence & artefacts
 - Append decision log entry, citing ADR, activation ID, and outcome.
 - Runbook reference material: `docs/runbooks/settings/governance_toggle.md`, communication template `docs/runbooks/settings/templates/governance_toggle_announce.md`.
 
-### H.4 SQL helper — Two-key advisory lock (normative)
+### H.11 SQL helper — Two-key advisory lock (normative)
 
 Purpose: Provide a stable 64-bit advisory lock key derived from a scope and key, minimizing collisions and supporting both session- and xact-scoped locks.
 
@@ -4718,3 +4655,152 @@ ______________________________________________________________________
 | Masking profiles map to FORCE RLS policies (§4.4.1)                 | `tests/platform/db/test_mask_profiles.py::test_mask_profile_matches_policy`, `tests/platform/db/test_secure_view_usage.py::test_no_base_table_queries`                                                       | `rls_context_missing_total`, `mask_profile_mismatch_total`                                                                              | App.H RB-GOV-008 (settings rollback), App.H RB-LOCK-006                                                          |
 | LLM/vector residency guard prevents out-of-region fallback (§8.1.1) | `tests/udocket_core/llm/test_residency_guard.py::test_block_disallowed_region`, `tests/udocket_core/vector/test_vector_residency.py::test_allowed_regions_only`, synthetic `synthetics/llm_residency.yaml`   | `llm_region_fallback_total`, `vector_region_fallback_total`                                                                             | App.H RB-LLM-003, App.H RB-RES-BLOCK                                                                             |
 | CSP nonce & HIPAA cache enforcement (§11.5, §10.6)                  | `tests/ui/test_csp_nonced.py::test_nonce_roundtrip`, synthetic `synthetics/csp_nonce_failure.yaml`, `synthetics/portal_hipaa_cache.yaml`, `tests/e2e/test_portal_policy_context.py::test_disclaimer_l10n`    | `csp_nonce_mismatch_total`, `portal_cache_header_violation_total`                                                                       | App.H RB-PORTAL-005, App.H security headers checklist                                                            |
+
+______________________________________________________________________
+
+## Appendix U — Reference code snippets (normative)
+
+*Purpose: Centralise authoritative code examples so sections can reference stable, linted artefacts without duplicating snippets.*
+
+### U.1 Analyze agent schema (Pydantic)
+
+```python
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Literal
+from uuid import UUID
+
+from pydantic import BaseModel, Field
+
+
+class SourceSpan(BaseModel):
+    start_ms: int
+    end_ms: int
+
+
+class AnalyzeEvent(BaseModel):
+    id: UUID
+    title: str
+    datetime: datetime | None = None
+    participants: list[UUID] = Field(default_factory=list)
+    source_spans: list[SourceSpan] = Field(default_factory=list)
+    notes: str | None = None
+
+
+class AnalyzeIssue(BaseModel):
+    id: UUID
+    label: str
+    description: str
+    related_events: list[UUID] = Field(default_factory=list)
+    risk: Literal["LOW", "MEDIUM", "HIGH"] = "LOW"
+```
+
+### U.2 Compose agent schema (Pydantic)
+
+```python
+from __future__ import annotations
+
+from typing import Literal
+from uuid import UUID
+
+from pydantic import BaseModel, Field
+
+
+class ComposeSection(BaseModel):
+    key: str
+    title: str
+    body_md: str
+    references: list[UUID] = Field(default_factory=list)
+
+
+class ComposeDocument(BaseModel):
+    doc_type: Literal["CLIENT", "LAWYER"]
+    language: str | None = None
+    sections: list[ComposeSection]
+    outline: list[str]
+    analyze_refs: dict[str, list[UUID]] = Field(default_factory=dict)
+```
+
+### U.3 Settings definition model (Pydantic)
+
+```python
+from __future__ import annotations
+
+from typing import Any, Literal
+
+from pydantic import BaseModel
+
+
+class SettingDefinition(BaseModel):
+    key: str
+    datatype: Literal["BOOL", "INT", "FLOAT", "STRING", "DURATION", "ENUM", "JSON", "REGION", "PERCENT"]
+    enum_values: list[str] | None = None
+    default_value: Any
+    mutable_scope: list[Literal["SYSTEM", "ORG", "CASE"]]
+    validation_schema: dict[str, Any] | None = None
+```
+
+### U.4 SSE event payloads (JSON)
+
+- `job.update`
+  ```json
+  { "id": "1024", "event": "job.update", "data": { "job_id": "...", "case_id": "...", "org_id": "...", "status": "RUNNING", "progress": 42 } }
+  ```
+- `artifact.state`
+  ```json
+  { "id": "1030", "event": "artifact.state", "data": { "artifact_id": "...", "case_id": "...", "org_id": "...", "type": "SUMMARY_MD", "state": "APPROVED", "previous_state": "READY", "ts": "2025-10-19T21:12:00Z" } }
+  ```
+- `portal_link_invalidated`
+  ```json
+  { "id": "1035", "event": "portal_link_invalidated", "data": { "artifact_id": "...", "case_id": "...", "reason": "APPROVAL_SWAP", "ts": "2025-10-19T21:14:00Z" } }
+  ```
+- Snapshot bootstrap payload (truncated)
+  ```json
+  { "id": "snapshot", "event": "artifact.snapshot", "data": { "watermark_ts": "2025-10-19T21:14:00Z", "events": [ { "artifact_id": "...", "state": "READY" }, { "artifact_id": "...", "state": "APPROVED" } ] } }
+  ```
+
+### U.5 Staff UI job status widget (TypeScript/React)
+
+```tsx
+import { useEffect, useState } from "react";
+
+type JobStatus = "PENDING" | "RUNNING" | "PAUSED" | "FAILED" | "COMPLETED";
+
+interface JobUpdatePayload {
+  job_id: string;
+  status: JobStatus;
+  progress?: number;
+}
+
+export function JobStatusTicker({ jobId }: { jobId: string }) {
+  const [status, setStatus] = useState<JobStatus>("PENDING");
+  const [progress, setProgress] = useState<number | null>(null);
+
+  useEffect(() => {
+    const source = new EventSource(`/api/v1/jobs/${jobId}/events`, { withCredentials: true });
+
+    const onUpdate = (event: MessageEvent<string>) => {
+      const payload = JSON.parse(event.data) as JobUpdatePayload;
+      if (payload.job_id !== jobId) return;
+      setStatus(payload.status);
+      setProgress(typeof payload.progress === "number" ? payload.progress : null);
+    };
+
+    source.addEventListener("job.update", onUpdate);
+    source.onerror = () => source.close();
+
+    return () => {
+      source.removeEventListener("job.update", onUpdate);
+      source.close();
+    };
+  }, [jobId]);
+
+  return (
+    <output role="status" aria-live="polite" data-status={status.toLowerCase()}>
+      <strong>{status}</strong>
+      {progress !== null ? ` — ${progress}%` : ""}
+    </output>
+  );
+}
+```
