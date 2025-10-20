@@ -14,6 +14,7 @@ adr_index: docs/adr/README.md
 related_adrs:
   - ADR-0001-guardian-ready-quarantine.md
   - ADR-0003-api-versioning-and-sunset.md
+  - ADR-0004-localization-and-policy-engine.md
 ---
 
 # **uDocket — Technical Description Document (TDD Outline)**
@@ -179,7 +180,7 @@ ______________________________________________________________________
 
 - Staff users, reviewers, and clients interact with the **Web App** (Django ASGI) via browser connections protected by TLS 1.3; SSE provides status streaming while Channels enables bidirectional collaboration. SSE payloads include only IDs and metadata already permitted by RLS—no raw PII or artifact bodies traverse the channel.
 - Background processing occurs in the **Worker cluster** (Celery) which orchestrates agent pipelines, storage operations, and notifications.
-- Supporting services—**Guardian**, **Digital Signer**, **Settings**, **LLM Registry**, **Reference Engine**, and **Notifications**—communicate over mTLS within the cluster and persist state to Postgres with RLS.
+- Supporting services—**Guardian**, **Digital Signer**, **Settings**, **LLM Registry**, **Localization & Policy Engine (LPE)**, **Reference Manager (RM)**, and **Notifications**—communicate over mTLS within the cluster and persist state to Postgres with RLS. RM operates as the editorial/source-of-truth service for catalog bundles, while LPE is the runtime resolver that consumes those bundles.
 - External dependencies (Azure Speech, LLM providers, TSA/OCSP authorities, email/SMS gateways) sit outside the trusted cluster and are accessed under strict egress policies.
 - Visual: see `App.A` for the full context diagram and sequence overlays.
 
@@ -306,23 +307,340 @@ metadata:
 | Digital Signer       | FastAPI                          | PDF/A signing, OCSP/CRL/TSA validation, bundle creation                         | Scales with signing queues; relies on KMS/TSA connectors    | `signer_request_latency_seconds`, `tsa_drift_seconds`            |
 | LLM Registry         | FastAPI                          | Provider catalog, health probes, token accounting, fallback logic               | Low QPS; run ≥2 replicas                                    | `llm_provider_health`, `llm_circuit_state`                       |
 | Settings Service     | FastAPI                          | Hierarchical settings APIs, bundle activation, diff previews                    | Autoscale on QPS; Redis pub/sub for cache invalidation      | `settings_activation_total`, `settings_cache_hit_ratio`          |
-| Reference Engine     | FastAPI + worker cron            | International court catalogs, validators, questionnaires                        | Scheduled updates; horizontal scale minimal                 | `reference_sync_duration_seconds`, `catalog_version`             |
+| Localization & Policy Engine (LPE) | FastAPI + worker cron + compiler jobs | Localization (locale/i18n packs), policy contexts (privacy/residency), court catalogs | Compiler pods scale on activation; lookup API horizontally replicated | `lpe_lookup_latency_seconds`, `lpe_policy_context_version`, `lpe_cache_hit_ratio` |
+| Policy Agent (OPA)        | Open Policy Agent (sidecar or centralized) | Evaluates signed policy bundles for residency, HIPAA, egress, attachment rules; emits decision logs | Colocates sidecar per service for low latency; central cluster fans out discovery bundles | `opa_decision_latency_seconds`, `opa_bundle_status`, `opa_denied_total` |
+| Reference Manager      | FastAPI + Celery ingest workers + review UI | Source connectors (Wikipedia, court sites, vendor feeds), catalog lifecycle, questionnaires/forms administration | Ingest workers autoscale on harvest queues; reviewer workload tracked via task backlog | `reference_manager_ingest_duration_seconds`, `reference_manager_pending_reviews`, `reference_catalog_version` |
 | Notification Service | Celery beat + worker             | Outbox delivery (email/SMS/in-app), receipt tracking                            | Scales with delivery volume; provider specific adapters     | `delivery_success_ratio`, `delivery_retry_total`                 |
 | Storage adapters     | Sidecar / init jobs              | Object storage integrity checks, audio normalization caching                    | Scoped per namespace                                        | `storage_hash_mismatch_total`, `object_store_latency_seconds`    |
 
 - **Stack note:** Web and Channels services run on Django 5.2.x (ASGI via uvicorn + gunicorn) and Django Channels 4.1.x, both pinned in `apps/platform/requirements.txt`; SBOM gates block implicit minor upgrades.
 
-### 3.4 Data flows between services
+### 3.4 Localization & Policy Engine (LPE)
+
+*Purpose: Elevate the former Reference Engine into the authoritative service for localization, residency, and jurisdictional policy decisions.*
+
+- `ADR-0004-localization-and-policy-engine.md` renames the Reference Engine to **Localization & Policy Engine (LPE)** and expands its charter from court catalogs to a unified localization and policy compiler. The ADR follows the existing lifecycle (Provisional → Implementable → Accepted) and is required before the rename ships; CI checks enforce ADR references for API or schema changes touching LPE.
+- LPE exposes a public, versioned API surface that joins the existing OpenAPI bundles. Historic `/reference/*` endpoints remain read-only shims until the migration in §3.4.9 completes; they return `Sunset` headers once the cutover flag is on.
+- LPE outputs **immutable `PolicyContext` payloads** and localization packs, guaranteeing consistent enforcement across API tier, workers, frontend, and database RLS. Runtime callers treat contexts as deterministic for a `(org_id, case_id?, locale, privacy_flags)` tuple; settings snapshots embed the corresponding `policy_context_version`.
+- Runtime policy decisions (residency, HIPAA, attachment routing) execute through colocated **Open Policy Agent (OPA)** sidecars or a shared OPA tier that continuously downloads the same signed bundles LPE compiles. LPE focuses on producing deterministic data and localization artifacts, while OPA evaluates Rego policies against those datasets and emits decision/status logs for audit.
+
+#### 3.4.1 Objectives & mandate
+
+- Single source of truth for locale (language, date/time, number, units), court and jurisdiction names, residency allowlists, privacy frameworks, disclaimers, and enforcement hints.
+- Deterministic, auditable enforcement: every runtime decision consults `PolicyContext`, removing ad-hoc copies inside Web, Guardian, Workers, or DB RLS.
+- Availability SLO 99.9%, lookup P95 ≤ 50 ms, compiler jobs complete within 10 minutes of Settings activation. Violations page SRE and block risky deployments.
+
+#### 3.4.2 Domain scope & compiled outputs
+
+- **Jurisdictions:** Country → province/state → court system → court metadata, inclusive of localized labels and canonical abbreviations. Versioned in `compiled_court_catalog`.
+- **Privacy frameworks:** HIPAA, PHIPA (Ontario), PIPA (British Columbia), GDPR, etc. Each captures retention intervals, permitted compute/storage regions, PHI allowance flags, DSAR semantics, waiver requirements, and audit linkages.
+- **Localization:** i18n string packs (approval banners, invalidation messages, intake copy), formatting rules (date/time, numbers, currencies, measurement units), legal disclaimers keyed by locale. Data is sourced from pinned Unicode CLDR releases, rendered through ICU primitives, and tagged with BCP-47 locale identifiers plus MessageFormat 2 metadata. Centralized in `compiled_l10n_locale`.
+- **Residency policies:** Canonical compute/vector/storage allowlists with waiver metadata and expiry tracking; surfaced as `residency_regions` in `PolicyContext`.
+- **Policy bundles:** Signed, versioned Rego + data payloads that OPA consumes to enforce residency, egress, HIPAA, and attachment rules. Bundles include manifests with SHA-256 digests, compatibility range, and monotonic build numbers; LPE rejects unsigned or stale bundles.
+- **PolicyContext table (`compiled_policy_context`):** Keyed by `(org_id, case_locale?, privacy_flags_hash)` with values `{policy_context_version, frameworks_enabled[], hipaa_required, residency_regions{compute[],storage[],vector[]}, retention_days, portal_rules{disclaimer_key,banner_key}, logging_rules, masking_profile, i18n_keys[], hash_sha256}`.
+- **PolicyContext schema (`spec/schemas/policy_context.schema.json`):** Canonical JSON Schema (draft 2020-12) describing all fields, value types, and optional blocks; versioned separately to allow additive fields. Digests in API responses (`digest_sha256`) sign the canonicalized JSON payload.
+- **Reference Manager integration:** LPE consumes canonical datasets emitted by Reference Manager (RM)—court hierarchy, localization strings, questionnaires, forms. RM supplies signed manifests plus SHA-256 digests; LPE refuses to compile if digests drift or the RM publish event is missing.
+- Outputs include deterministic UUIDs for events/entities when the compiler derives identity; reruns reuse UUID5 of canonical content to satisfy cross-artifact identity rules (§6.3).
+
+#### 3.4.3 PolicyContext contract & enforcement matrix
+
+- Runtime helpers (`udocket_lpe.PolicyContext` in Python, `@udocket/lpe-client` in TypeScript) supply immutable contexts per request. Callers must not mutate records; each instance records `generated_at`, `source_settings_version`, and `policy_context_version`.
+- Enforcement points consuming `PolicyContext`:
+
+| Enforcement point (§9.9) | LPE decisions provided | Consuming surfaces |
+| ------------------------ | ---------------------- | ------------------ |
+| API gateway & web tier   | Locale headers, residency posture, CORS templates, download banners, HIPAA messaging, rate-limit hints | Web, Channels, REST/SSE |
+| Worker/agent execution   | Allowed model providers & regions, compute/token budgets, retention timers, waiver gating | Celery workers, Guardian, Guardian budget checks |
+| Frontend rendering       | Localization strings, number/date/unit formats, accessibility copy, approval/invalidation banners | Staff UI, Portal |
+| Database layer           | `masking_profile`, PHI redaction toggles, RLS policy selectors | Postgres secure views, data warehouse exports |
+
+- `PolicyContext` is cached in-process with a default TTL of 5 minutes; cache invalidation fires when Settings activation emits an `lpe.policy_context.updated` event or when RM publishes a new bundle version. Clients reuse digest-based `ETag`s for conditional GETs and fall back to snapshot bootstrap when the requested digest is older than 30 minutes or 500 events in the SSE stream. Background refresh keeps hot tenants warm while respecting the lookup P95 SLO.
+
+#### 3.4.4 APIs & SDKs
+
+- REST surface added under `/api/v1/lpe/`:
+  - `GET /policy_context?org_id&case_id?&privacy_flags?&locale?` → returns `{policy_context_version, generated_at, digest_sha256, data: {...}}`; supports `If-None-Match`/`ETag` (digest) and `Cache-Control: private, max-age=300`.
+  - `GET /policy_context/schema` → JSON Schema describing the context payload (stable `schema_version`), served verbatim from `spec/schemas/policy_context.schema.json`.
+  - `GET /courts?jurisdiction=&q=&locale=` → paginated search with `page`, `page_size`, and deterministic sort.
+  - `GET /locales/:locale` → locale pack with CLDR/ICU metadata, MessageFormat resource identifiers, and attribution requirements (validates against `spec/schemas/locale.schema.json`).
+  - `GET /catalog_versions` → exposes currently active bundle versions per domain (`courts`, `localization`, `policy`, `opa`).
+- Error model: `POLICY_CONTEXT_NOT_FOUND`, `POLICY_CONTEXT_STALE`, `WAIVER_REQUIRED`, and `VALIDATION_ERROR` follow the shared `ApiError` envelope (§10.7). Responses include `Idempotency-Key` (echo), `X-PolicyContext-Version`, and `Deprecation/Sunset` headers when applicable.
+- Endpoints follow standard envelopes, include idempotency echo headers, and participate in the public OpenAPI bundle with autogenerated SDK references. Old `/reference/*` routes proxy to LPE read paths until the cutover flag in §3.4.9 flips.
+- OPA evaluators (sidecar or shared) subscribe to discovery manifests exposed at `/api/v1/lpe/opa/discovery` and fetch signed bundles from `/api/v1/lpe/opa/bundles/{channel}`. Each manifest advertises region-specific bundle URIs, expected SHA-256 digests/ETags, and rollout windows; OPA status/decision logs (`opa_bundle_status`, `opa_decision_latency_seconds`, `opa_denied_total`) ship to the observability stack for governance review.
+- SDKs (`udocket_lpe`, `@udocket/lpe-client`) expose LRU caches, background refresh, Settings activation hooks, and typed responses. Canonical error codes map to the shared API error model (§10.7).
+
+#### 3.4.5 Settings alignment & compiler gates
+
+- New or consolidated keys under `localization.*`, `privacy.*`, and `regions.*`:
+  - `localization.locale_default`, `localization.timezone_default`, `localization.units` (`metric|imperial`).
+  - `privacy.frameworks.enabled[]`, `privacy.retention_overrides{jurisdiction -> duration}`, `privacy.portal.disclaimer_key`.
+  - `regions.allowlist.compute|storage|vector[]` (compiler owns enforcement; settings capture requested allowlists).
+- Activation pipeline runs LPE compiler in dry-run mode, produces diffs for review, and marks unsafe changes (e.g., loosening residency) requiring dual approval per §9.11.
+- Compiler validation suite covers schema drift, missing localization strings, residency overrides without waiver metadata, and ensures `PolicyContext` hashes remain deterministic.
+
+#### 3.4.6 Service integrations
+
+- **Policy Agent (OPA):** LPE publishes bundle metadata and rollout channels; OPA sidecars per service download and hot-reload signed Rego/data bundles via discovery. Bundles are signed with Ed25519 keys stored in KMS; OPA verifies signatures and digest-matches before activation and treats mismatches as fatal (fail closed). Access to discovery/bundle endpoints requires mTLS + HMAC headers. Decision APIs (`/v1/data/udocket/...`) back the residency, HIPAA, attachment, and egress checks surfaced in Guardian, Workers, and Portal flows; timeouts/5xx responses are converted to `POLICY_BLOCK` errors with alerts. Decision logs (scrubbed of PII) and status logs feed the observability fabric for audit, with retention ≥ 365 days in immutable storage.
+- **Web/Portal:** Replace ad-hoc localization and policy banners with LPE-driven strings and formatting helpers; UI hydration fetches `PolicyContext` during session bootstrap.
+- **Guardian & Workers:** Consult `PolicyContext` for residency and HIPAA toggles; Guardian blocks PHI artifacts unless HIPAA/PHIPA frameworks enable PHI, logging `POLICY_BLOCK` codes with context digest.
+- **Search/Retrieval:** Index creation chooses locale-aware analyzers and vector-store residency from `PolicyContext`.
+- **Notifications:** Template selection, disclaimers, and delivery restrictions derive from context outputs; outbox retains idempotency semantics.
+- **DB layer:** `PolicyContext.masking_profile` drives secure view selections; migrations enforce FORCE RLS for contexts requiring PHI redaction.
+
+#### 3.4.7 Gap-closure owners
+
+- **Security:** Ship STRIDE-by-component threat model artifacts for LPE and its call-sites; unsafe activations must reference threat IDs.
+- **UX/QA:** Integrate WCAG 2.2 AA checks (axe-core/Pa11y) into CI; approval/invalidation copy reads from LPE localization packs; dashboards expose a11y defect rate.
+- **Compliance:** Encode PHIPA (ON) and PIPA (BC) retention/DSAR/PHI overrides with DPIA/RoPA linkages; portal and Guardian behaviors reflect provincial flags.
+- **SRE/Product:** Extend FinOps compute/token SLO dashboards (“LLM Cost & Circuit”) and enforce back-pressure using LPE hints; alerts route with runbook IDs.
+- **SRE:** BCDR drills log restoration evidence and `PolicyContext` replay of DSAR erasures post-restore.
+
+#### 3.4.8 Observability & cost posture
+
+- Metrics: `lpe_lookup_latency_seconds`, `lpe_policy_context_version`, `lpe_compiler_duration_seconds`, `lpe_cache_hit_ratio`, `lpe_policy_block_total`, `lpe_privacy_framework_enabled_total`.
+- Dashboards: “LPE – Enforcement & Residency” (latency, cache hits, decision distribution, `opa_bundle_status`, OPA decision P95 ≤ 20 ms target) and “LPE Compiler” (diff volume, unsafe flags). Add both to §12.6 Named dashboards.
+- Logs honor the never-log list (§12.1.3); responses contain identifiers/flags only—no raw PII or legal text. Sampling ties into the dynamic budgets described in §12.1.6.
+
+#### 3.4.9 Testing, rollout & migration
+
+- Contract tests validate OpenAPI schemas, golden `PolicyContext` fixtures for HIPAA/PHIPA/PIPA/GDPR combinations, and compiler diff outputs.
+- Activation dry-run surfaces computed diffs; unsafe flags demand dual approval before publication.
+- Synthetic monitors invoke `GET /lpe/policy_context` for HIPAA/PHIPA/PIPA cases post-deploy and verify Guardian/Portal behavior end-to-end.
+- Rollout timeline (target start Mon 2025‑10‑20, America/Vancouver):
+  - **Weeks 1–2:** ADR + TDD updates, schema/compiler scaffolding, seed jurisdiction data, `PolicyContext` draft, Threat Model v1.
+  - **Weeks 3–4:** Web/Portal, Guardian/Workers, and Search integrations wired to LPE; vector residency enforcement live.
+  - **Week 5:** A11y CI gates, Notifications templates via LPE, dashboards, synthetic monitors.
+  - **Week 6:** Cutover flag enabled, `/reference/*` deprecation notices, BCDR + DSAR replay drill, publish lessons-learned artifact.
+- Repository migration: existing `packages/udocket_core/reference/*` modules become the Reference Manager domain (`packages.udocket_core.reference_manager` namespace). New `packages/udocket_core/lpe/*` modules house compilers/access helpers. A temporary compatibility shim keeps `packages.udocket_core.reference` imports valid while callers migrate, and it delegates to the appropriate RM or LPE component. Remove the shim once `/reference/*` API sunset completes and SDKs consume the new bundles.
+- Compatibility: `/reference/*` routes proxy to LPE read APIs until sunset; clients receive `Deprecation` + `Sunset` headers with migration guidance.
+
+#### 3.4.10 Example configuration & runtime usage
+
+```yaml
+jurisdictions:
+  CA:
+    BC:
+      frameworks: [PIPA_BC]
+      retention_overrides:
+        QA_LOGS: 365d
+        PRIVACY_ARTIFACTS: 730d
+      residency:
+        compute: [canadacentral, canadaeast]
+        storage: [canadacentral]
+      portal:
+        disclaimers_key: portal.disclaimer.bc
+    ON:
+      frameworks: [PHIPA_ON]
+      hipaa: false
+frameworks:
+  HIPAA:
+    phi_allowed: true
+    requires_mode_enable: true
+localization:
+  default_locale: en-CA
+  time_format: "YYYY-MM-DD HH:mm z"
+  number_system: "latn"
+```
+
+```python
+ctx = lpe.get_policy_context(
+    org_id=org_id,
+    case_id=case_id,
+    privacy_flags={"PHI": True},
+    locale="en-CA",
+)
+if ctx.frameworks.HIPAA.required and not ctx.frameworks.HIPAA.enabled:
+    raise PolicyBlock("HIPAA_REQUIRED", context_digest=ctx.digest)
+db.set_rls_mask_profile(ctx.masking_profile)
+vector_client = vector_pool.for_regions(ctx.residency.compute)
+formatter = lpe.get_locale("en-CA").formatters
+rendered_date = formatter.date_short(approved_at)
+
+# Residency/egress lookup
+decision = opa_client.evaluate(
+    policy="udocket/residency/allow",
+    input={
+        "org_id": org_id,
+        "case_id": case_id,
+        "artifact_type": "COMPOSE_CLIENT_MD",
+        "requested_region": "canadacentral",
+        "context_digest": ctx.digest,
+    },
+)
+if not decision["allow"]:
+    raise PolicyBlock(decision["reason"], context_digest=ctx.digest)
+```
+
+This example demonstrates how residency outcomes are derived: LPE supplies the deterministic `PolicyContext` (with compute/storage/vector allowlists per `(org_id, locale, privacy_flags)`), while OPA enforces deny-by-default egress rules and returns structured deny codes (`REGION_NOT_ALLOWED`, `WAIVER_REQUIRED`) that propagate to Guardian and portal clients.
+
+#### 3.4.11 Risks & mitigations
+
+- **Policy drift between Settings and runtime:** Compiler diff + activation dry-run block inconsistent deployments; golden-case monitors detect divergence early.
+- **Performance regressions on hot paths:** In-process caches with TTLs, async refresh, and P95 alerting; SRE can shed load via neutral fallback `PolicyContext` guarded by feature flag while issue triaged.
+- **Logging leaks of sensitive policy detail:** Never-log enforcement, log redaction filters, and audit seals review.
+
+#### 3.4.12 Deliverables at cutover
+
+- ADR + updated TDD chapter + diagrams.
+- New OpenAPI bundle plus SDKs with contract tests.
+- LPE compiler outputs (`compiled_*` tables) with diff artifacts.
+- Enforcement matrix wired through API/Workers/Portal/RLS.
+- A11y CI gates and metrics dashboard.
+- Provincial privacy mappings + DPIA/RoPA linkage.
+- FinOps compute SLO dashboards tied to LPE hints.
+- BCDR drill + DSAR replay artifact recorded.
+
+### 3.5 Reference Manager (catalog ingestion & lifecycle)
+
+*Purpose: Provide the authoritative ingestion, validation, and administration layer for court catalogs, questionnaires, forms, and every reference asset that powers LPE and downstream workflows.*
+
+- Reference Manager (RM) owns regulated data acquisition, entity resolution, editorial review, and versioned publishing for the platform’s canonical reference data. LPE consumes RM’s signed bundles as read-only inputs when compiling runtime `PolicyContext` outputs.
+- Scope includes jurisdictions and court hierarchies, residency/privacy policy annotations, localization strings, questionnaires, court forms, identifiers/crosswalks, and any structured lookup used by Guardian, agents, or UI surfaces.
+- RM publishes immutable, signed bundles (JSON datasets, CLDR-derived locale packs, and Rego/data packages) with manifests carrying SHA-256 digests, semantic versions, compatibility ranges, and license metadata. Bundles fuel both LPE compilers and the OPA policy plane; unsigned or stale bundles are rejected.
+- Repository migration: existing `packages/udocket_core/reference/*` modules transition into the RM domain (`packages.udocket_core.reference_manager`). Compilation/runtime logic lives under the new `packages.udocket_core.lpe` namespace. A temporary shim (`packages.udocket_core.reference`) delegates to RM/LPE until clients migrate; once `/reference/*` API shims sunset, the shim is removed.
+
+#### 3.5.1 Mandate & separation of concerns
+
+- RM is the *source* of truth (curated, versioned, auditable); LPE is the *resolver* (fast, deterministic, runtime).
+- RM guarantees every published change has provenance, license metadata, reviewer sign-off, and a rollback path.
+- LPE treats RM bundles as immutable inputs; any mutation or override requires publishing a new bundle revision rather than hot-editing runtime tables.
+
+#### 3.5.2 Source acquisition & adapters
+
+- **MediaWiki/Wikidata adapters:** use API-based delta pulls (page IDs/QIDs), maintain watchlists for change notifications, and capture license terms (Wikipedia text → CC BY-SA 4.0 with attribution/propagation duties, Wikidata structured data → CC0) so downstream LPE surfaces can render the correct attribution badges automatically.
+- **Court/tribunal websites:** employ respectful scraping (robots.txt compliance, per-domain rate limits, randomized user agents, selector health checks). HTML is parsed into structured metadata (name, address, contact, filing URL) with sanitization and MIME validation.
+- **Government/open-data portals:** ingest CSV/JSON/API feeds with schema version tracking and checksum validation. Sources include provincial datasets, justice ministry APIs, and federal open-data hubs.
+- **Vendor feeds & authenticated sources:** use signed downloads (S3/SAS) or webhook-triggered updates with HMAC verification. API keys rotate via Vault; failures trigger automatic disablement and alerting.
+- **Internal editorial submissions:** provide a UI and API for staff to propose corrections, additions, or manual emergency updates, capturing justification and attachments.
+
+#### 3.5.3 ETL, normalization & entity resolution
+
+- Canonical identifiers rely on ISO-3166 (country/subdivision), official court IDs, and Wikidata QIDs; RM maintains `identifier_crosswalk` to link external schemes.
+- Normalization enforces consistent casing, diacritics, street abbreviations, and URL validation. Geocoding is optional but, when present, uses Canadian-centric providers and stores coordinate precision separately.
+- Entity resolution applies deterministic keys first (official IDs), then fuzzy matching with confidence scores. Items below confidence thresholds require manual review before advancing.
+- Localization strings carry locale, text, fallback locale, source attribution, and licensing. Missing locales generate tasks for editorial follow-up.
+
+#### 3.5.4 Governance & review workflows
+
+- State machine: `DRAFT → REVIEW → APPROVED → PUBLISHED → DEPRECATED → ARCHIVED`. Emergency hotfixes may fast-track to `APPROVED` but still require retrospective review within 48h.
+- Dual-approval is mandatory for sensitive changes (jurisdiction boundaries, residency/privacy flags, HIPAA/PHIPA toggles, identifier removals). Approvers must come from distinct roles (Content Ops + Legal Ops).
+- Deprecations capture replacement pointers, effective dates, and user-facing guidance (e.g., “use Court of Appeal docket type X”). LPE surfaces deprecation hints in `PolicyContext` until the effective date passes.
+- Audit metadata—proposer, reviewers, timestamps, diff hashes, and citations—are persisted in `reference_change_log` and mirrored to the immutable log sink.
+- Governance RACI (binding):
+
+  | Change class                               | Responsible (R) | Accountable (A)   | Consulted (C)              | Informed (I)                    | SLA |
+  | ------------------------------------------ | --------------- | ----------------- | -------------------------- | ------------------------------- | --- |
+  | Routine catalog update (name/address)      | Content Ops     | RM Product Owner  | Legal Ops                  | Platform Support, Product       | Review ≤ 2 business days |
+  | Residency/privacy flag update              | Content Ops     | Security Eng Lead | Legal Ops, Architecture    | Compliance, Product             | Dual approval, publish ≤ 4 business hours after approval |
+  | Questionnaire/form change                  | Legal Ops       | RM Product Owner  | Content Ops, UX            | Platform Support, Product       | Review ≤ 3 business days |
+  | Emergency hotfix (court closure)           | Content Ops     | RM Product Owner  | Legal Ops, Security (post) | All affected customers, Product | Publish ≤ 2 hours, retrospective review within 48 hours |
+
+- Emergency guardrails: hotfixes require a designated incident captain, automated ticket creation, and completion of the adoption rollback checklist in §3.5.14 within 24h to confirm bundles stabilized.
+
+#### 3.5.5 Catalog bundles & publishing pipeline
+
+- RM produces semver’d **Catalog Bundles** (`courts@1.4.0`, `jurisdictions@2.1.3`, `localization@0.9.2`, `questionnaires@0.5.0`, etc.) with `effective_at` timestamps, signed SHA-256 hashes, and provenance manifests. Bundles are content-addressed; manifests capture compatibility ranges and the licensed sources embedded (e.g., CC BY-SA excerpts vs CC0 datasets).
+- Each bundle contains a deterministic JSON payload and optional parquet/CSV artifact for analytics; manifests include source citations, license ledger, CLDR/ICU version pins, and compatibility notes. Snapshot archives ship alongside delta bundles so adopters can fast-forward Netflix-Hollow style (full snapshot + rolling deltas) while retaining rollback hooks.
+- RM also emits **OPA bundles** (compressed Rego + JSON data) per channel/region. Each bundle is signed, versioned, and associated with a discovery manifest so OPA evaluators know which residency/privacy rule-set to download.
+- Publishing emits `reference_manager.catalog.published` events `{domain, version, effective_at, hash, affected_keys[], bundle_uri}`. LPE listens to these events, invalidates cached compiles, and records the bundle versions used in each `PolicyContext`; OPA discovery manifests update in lockstep.
+- Adoption guardrails: LPE refuses to load bundles that are unsigned, revoked, or older than the configurable staleness window (default 30 days). If a newer bundle is available but not yet adopted, alerts fire and clients log `reference_bundle_stale`.
+- Fallback: on RM outage or bundle failure, LPE serves the last known good bundle but raises `reference_bundle_degraded` metrics; emergency publish workflow allows a `-rc` bundle with shortened expiry.
+
+#### 3.5.6 Questionnaires, forms, and auxiliary resources
+
+- Questionnaires store hierarchical blocks, localized prompts, scoring rubrics, conditional logic, and deterministic UUIDs for sections/questions. RM enforces locale completeness and tags questions that require legal review.
+- Court forms and templates capture download URIs, file hashes, accessibility status (PDF/HTML/accessible text), renewal cadence, and license terms. Availability monitors run HEAD requests; failures raise `reference_resource_unavailable`.
+- Resource bundles publish via `reference_manager.resource.updated` events so LPE and Compose/Analyze agents access consistent localization keys and metadata.
+
+#### 3.5.7 APIs & automation surfaces
+
+- REST surface (`@surface reference_manager`) includes:
+  - `POST /api/v1/reference_manager/sources/wikipedia/refresh?qid=` (enqueue delta harvest).
+  - `POST /api/v1/reference_manager/sources/court_scrape` with `{url, jurisdiction_hint}` payload.
+  - `PUT /api/v1/reference_manager/catalogs/:domain/proposals/:id` (submit or amend proposal).
+  - `POST /api/v1/reference_manager/catalogs/:domain/proposals/:id/{approve|reject}` (dual-control aware).
+  - `POST /api/v1/reference_manager/catalogs/:domain/publish` `{version, effective_at}`.
+  - `GET /api/v1/reference_manager/bundles/:domain/:version` (returns signed bundle manifest + download link).
+  - `GET /api/v1/reference_manager/diff/:domain/:from/:to` (machine + human-readable diff).
+  - `GET /api/v1/reference_manager/metrics` (quality dashboard JSON).
+- SSE/GraphQL feeds stream review queue counts, bundle publishes, selector health alerts, and locale coverage gaps for editorial consoles.
+- All mutating endpoints require Keycloak client credentials with `reference_manager.editor` or higher scopes plus HMAC signatures; high-risk actions demand step-up MFA.
+
+#### 3.5.8 Storage & schema layering
+
+- Logical schemas: `reference_harvest` (raw payloads + provenance), `reference_staging` (normalized, unapproved), `reference_canonical` (approved), `reference_history` (immutable snapshots), and `reference_bundle_registry`.
+- Core tables: `jurisdiction`, `court`, `court_locale`, `identifier_crosswalk`, `residency_policy`, `localization_string`, `questionnaire`, `questionnaire_item`, `form`, `form_locale`, `reference_change_log`, `bundle`, and `bundle_resource`.
+- Every canonical record captures `version`, `source_hash`, `source_uri`, `license`, `effective_from`, `effective_to`, and `bundle_version`. Snapshots store the full payload for rollback, while diff tables record field-level changes for review UIs.
+- Retention: raw harvest payloads purge after 30 days (unless an incident hold is active), staging tables roll to history after 90 days, and canonical/history records follow the data-class timelines in Appendix C. Immutable bundle registry entries persist for the life of the platform to support attribution audits.
+
+#### 3.5.9 Security, compliance & licensing
+
+- Scraped HTML is sanitized (strip scripts, inline event handlers, data URIs) before storage. Allowed MIME types enforced via allowlist; downloads occur over TLS-only endpoints.
+- License ledger tracks source license (e.g., CC BY-SA, Crown copyright, vendor-specific terms) and downstream attribution requirements; publish pipeline blocks bundles missing license metadata.
+- Rate limits and access controls guard adapters and editorial APIs; scraping credentials rotate via Vault with per-source quotas.
+- Sensitive metadata (e.g., residency allowlists, PHI flags) requires dual approval and triggers audit events `REFERENCE_SENSITIVE_CHANGE`.
+- RM follows the never-log policy; raw scraped content lives only in restricted harvest tables and is purged per retention schedules once canonical records are published.
+- Attribution enforcement (binding): any UI or exported document that renders RM-managed strings with attribution requirements (e.g., CC BY-SA or Wikidata-derived content) must include the attribution badge/link in the footer tooltip (`portal.reference.attribution_component`) and the API response metadata (`attribution[]` array). Contract tests `tests/portal/test_reference_attribution.py::test_ccby_badge_rendered` and `tests/api/test_catalog_attribution.py::test_attribution_metadata_present` ensure both portal and API surfaces propagate license information. Compose/Analyze artifacts inherit the same metadata through manifests so Guardian can verify attribution prior to approval.
+- Rendering contract: staff UI and Compose/Analyze agents call the shared helper `reference_attribution.render(metadata)` to place CC BY-SA requirements inline; portal clients display badges with localized tooltip copy from LPE. Attribution metadata must be preserved when artifacts are manually edited; Guardian rejects submissions missing required references.
+
+#### 3.5.10 Observability, SLOs & dashboards
+
+- SLOs: harvest success ≥ 99%/day; selector failure rate < 2% rolling 7d; median proposal review < 48h; publish latency P95 < 2h; bundle adoption lag (RM publish → LPE compile) P95 < 10m.
+- Metrics: `reference_manager_harvest_total{source,result}`, `reference_manager_ingest_duration_seconds`, `reference_manager_selector_failure_total`, `reference_manager_diff_backlog`, `reference_manager_publish_total`, `reference_manager_bundle_adoption_seconds`, `reference_resource_missing_locale_total`, `reference_manager_license_violation_total`.
+- FinOps: `reference_manager_ingest_cost_cents{source}`, `reference_manager_api_credit_total`, and `reference_manager_storage_bytes_total` feed cost dashboards; budgets defined per source family with alerts when 7-day rolling spend exceeds 80% of monthly cap.
+- Dashboards (added to §12.6): “Reference Manager – Ingestion & Quality” (coverage %, freshness age, selector failures), “Reference Manager – Review & Publishing” (diff backlog, review SLA, adoption lag), and bundle adoption overlays alongside LPE dashboards.
+- Alerts: stalled harvests (>2 intervals missed), selector failure spikes, diff backlog > SLA, publish with missing license metadata, adoption lag beyond SLA, or RM publish without subsequent LPE compile (`lpe_policy_context_version` drift).
+
+#### 3.5.11 Editorial tooling & UX
+
+- Web console features: side-by-side diff viewer (source extract vs normalized preview), license badges, attribution preview, and crosswalk inspector.
+- Deprecation wizard supports single or bulk deprecation with replacement suggestions and effective date scheduling.
+- Locale coverage heatmap highlights missing translations; machine translation assistance is allowed but requires reviewer confirmation before publishing.
+- Review queue integrates search/filter by jurisdiction, change type, source, or SLA; reviewers can leave inline comments that persist with the proposal.
+
+#### 3.5.12 Pipelines & scheduling
+
+- Daily: MediaWiki delta sync, selector health checks on top courts, localization completeness scan.
+- Weekly: Full recrawl of low-change domains, license attestation refresh, string coverage reports.
+- On-demand: editorial hotfix pipeline publishes `*-rc` bundles with short TTL; emergency deprecation workflow stages `effective_at = now()+5m` and auto-pages Legal Ops.
+- Pipelines run on dedicated Celery queues (`reference-harvest`, `reference-validate`, `reference-publish`); concurrency limits respect external rate policies.
+
+#### 3.5.13 Testing & safeguards
+
+- Golden snapshots for major jurisdictions/locales stored under `tests/reference/golden/`; CI diff check fails on drift without reviewer acknowledgement.
+- Scraper contract tests use recorded fixtures (VCR) to prevent flaky network tests while ensuring DOM selectors remain valid.
+- Semantic publish guard blocks breaking changes (e.g., removing an active court ID) unless replacement mappings are provided.
+- Each bundle publish triggers `reference_manager.validate_bundle` which validates schema, cross-field integrity, license metadata, and diff size thresholds before signing.
+- Synthetic adoption tests run in staging: publish bundle, ensure LPE compiles new `PolicyContext`, and verify staff/portal surfaces reflect updates.
+- Adoption rollback cookbook (binding): the `ops/reference/rollback_bundle.py` script accepts `{domain, version}` and (1) toggles the bundle status to `revoked`, (2) republishes the last known good bundle, (3) triggers an immediate LPE recompile via `lpe.internal.recompile` API, and (4) runs the staging synthetic above to confirm the restored bundle. Rolling back auto-pages the RM on-call and writes `BUNDLE_ROLLBACK_REPORT` artifacts capturing timestamps, reason, and validation evidence. SLA: 15 minutes from rollback initiation to restored adoption per alert (`reference_manager_bundle_adoption_seconds` back to baseline).
+
+#### 3.5.14 Risks & mitigations
+
+- **Selector churn:** automated monitors open tickets with last good HTML snapshot; fall back to last good bundle while alerting Content Ops.
+- **License drift:** publish pipeline enforces license metadata; missing data blocks release. Quarterly audits reconcile license ledger with source registries.
+- **Entity merges:** low-confidence matches require manual approval; reversions publish a corrective bundle referencing the prior hash.
+- **Stale runtime:** adoption lag alerts, LPE staleness guard (refuse bundles older than limit), and synthetic monitors covering high-value jurisdictions.
+
+#### 3.5.15 Deliverables & rollout sequencing
+
+- Phase 1: ADRs, RM service skeleton, bundle schema/signing, MediaWiki adapter, manual proposal workflow, initial dashboards.
+- Phase 2: Court scraper framework, crosswalk schema, questionnaire/form ingestion, dual-approval enforcement, integration tests, first `courts@0.1.0` bundle.
+- Phase 3: Deprecation workflows, diff endpoints, locale coverage tooling, synthetic adoption monitors, FinOps dashboards for ingestion cost.
+- Phase 4: LPE consumption wired behind feature flag; staff/portal/workers read `PolicyContext` with bundle metadata; end-to-end synthetic drills.
+- Exit criteria: no direct writes to canonical tables outside RM, `/reference/*` APIs read-only shims backed by RM/LPE, adoption lag SLO green for 30 days, golden snapshots validated, and rollback tooling exercised (BUNDLE_ROLLBACK_REPORT on file).
+
+### 3.6 Data flows between services
 
 *Purpose: Describe the critical sequences that tie services together.*
 
 - **Upload → Guardian → Approval:** Web accepts uploads, stages to object storage, inserts DRAFT artifacts, calls Guardian for readiness, then surfaces for reviewer approval (sequence in `App.A.2`).
 - **Agent pipeline:** Workers fetch inputs (audio/transcripts), execute Transcribe/Analyze/Compose stages, write artifacts + manifests, and notify Guardian & SSE. Settings snapshots travel alongside each job to guarantee reproducibility.
+- **Reference curation loop:** Reference Manager harvests external sources, normalizes data, routes diffs to reviewers, and publishes canonical catalogs/questionnaires/forms. Publish events trigger LPE recompiles and propagate version digests to services consuming `PolicyContext`.
 - **Notification loop:** Worker pushes delivery requests to Notification Service; receipts update artifact manifests and audit events. Portal fetches approved deliverables via signed URLs with guardian-enforced readiness.
 - **Telemetry stream:** All services emit logs/metrics/traces to the Observability Fabric (Elastic/OTel stack). Guardian decisions and settings activations append to ops audit JSONL under each case.
 - **Settings change propagation:** Activations in Settings Service publish invalidation events; consuming services flush caches and rehydrate GUC policies on next request/task.
 
-### 3.5 External integrations (Azure Speech, LLM providers, TSA/OCSP)
+### 3.7 External integrations (Azure Speech, LLM providers, TSA/OCSP)
 
 *Purpose: Catalog regulated touchpoints subject to policy and audit.*
 
@@ -334,7 +652,8 @@ metadata:
 
 - **Notification channels:** Email/SMS providers configured per organization; webhook adapters log request/response pairs with PII masking.
 
-- **Reference Engine:** Maintains international court catalogs with localized labels, validator rules, and questionnaire templates; scheduled sync jobs update per jurisdiction and publish catalog versions for downstream services.
+- **Localization & Policy Engine (LPE):** Compiles jurisdictional policy, residency allowlists, localization packs, and court catalogs into versioned `PolicyContext` payloads exposed over REST/SDKs; compiler jobs run on Settings activation and publish immutable digests for downstream caches (see §3.4).
+- **Reference Manager sources:** Connectors for Wikipedia/Wikidata, provincial/territorial court sites, federal and provincial legislation portals, vendor feeds, and manual CSV uploads. Harvest jobs treat each source as a regulated integration with throttle policies, citation capture, and evidence storage for compliance review (see §3.5).
 
 - **Optional analytics sinks:** Metrics exported to Grafana/Prometheus; FinOps dashboards consume cost metrics for monthly guardrails.
 
@@ -346,7 +665,7 @@ metadata:
 
 ______________________________________________________________________
 
-### 3.6 Region allowlist enforcement & egress policies (binding)
+### 3.8 Region allowlist enforcement & egress policies (binding)
 
 *Purpose: Enforce Canada-only compute/storage and control outbound traffic to providers.*
 
@@ -359,7 +678,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-### 3.7 C4 containers & STRIDE dataflows (binding)
+### 3.9 C4 containers & STRIDE dataflows (binding)
 
 *Purpose: Provide an explicit container-level view with threat annotations that build on the context diagram.*
 
@@ -373,7 +692,7 @@ ______________________________________________________________________
 | Worker cluster (Celery)    | Jobs ↔ storage/LLM providers (`Tampering`, `Repudiation`, `DoS`)    | Settings snapshots (§6.1), audit JSONL (§6.3/§6.4), advisory locks (§5.4/App.H RB-LOCK-006), FinOps guard (§8.7/§13.5)      |
 | Guardian & Signer services | Artifact promotion, digital seals (`Tampering`, `Repudiation`)      | FOR SHARE parent guard (§7.1), immutable audit sink (§12.1), OCSP/TSA verification (§7.2), ADR-0001 READY/QUARANTINED rules |
 | Settings service + policy compiler | Config activation across tenants (`Spoofing`, `Elevation of privilege`) | HMAC-signed requests (§7.3), dual approval (§9.3/§9.11), compiled RLS tables (§4.4), activation lock advisory key (§9.8)    |
-| External providers (Azure Speech/OpenAI/TSA) | Controlled egress (`Information disclosure`, `DoS`) | Mesh AuthorizationPolicy (§3.6), residency waivers (App.O), LLM safety harness (§8.4), provider circuit breakers (§8.1, App.H RB-LLM-003) |
+| External providers (Azure Speech/OpenAI/TSA) | Controlled egress (`Information disclosure`, `DoS`) | Mesh AuthorizationPolicy (§3.8), residency waivers (App.O), LLM safety harness (§8.4), provider circuit breakers (§8.1, App.H RB-LLM-003) |
 
 - Threat reviews must reference both the container diagram and DFD; new services may not progress past **Provisional** until they document ingress/egress paths, STRIDE analysis, and mitigations in Appendix B.
 
@@ -385,7 +704,7 @@ ______________________________________________________________________
 
 *Purpose: Define the identity backbone and token contract consumed by all services.*
 
-- Realm `udocket` with clients `staff-ui`, `client-portal`, `service-api`, `guardian`, `signer`, `settings`, `notifications`, `llm-registry`, `reference`.
+- Realm `udocket` with clients `staff-ui`, `client-portal`, `service-api`, `guardian`, `signer`, `settings`, `notifications`, `llm-registry`, `reference-manager`, `lpe` (former `reference` client retained temporarily as read-only shim until §3.4.9 cutover).
 - Roles split into realm (`sysadmin`, `auditor`) and organization scope (`org_admin`, `org_manager`, `org_operator`, `org_reviewer`, `org_external_counsel`, `org_client`).
 - Tokens include `org_ids[]`, `active_org_id`, `active_org_roles[]`, optional `org_directory[]`. Middleware rejects any request where `active_org_id ∉ org_ids[]`.
 - Access tokens ≤15 minutes, refresh tokens 12h (staff) / 2h (portal); offline tokens disabled unless security approves exceptions. Step-up MFA signaled via OIDC `acr` claim for sensitive endpoints.
@@ -427,6 +746,31 @@ ______________________________________________________________________
 - CI guardrails (binding): `pytest -k test_secure_view_usage` runs a static query-inspection test that fails if any Django queryset or raw SQL in `apps/platform` references base tables instead of `*_secure` views. The lint feeds the release gate and prevents regressions when new endpoints are added.
 
 - Advisory locks (`udlock` schema) encapsulate concurrency primitives with heartbeat registries and GC routines.
+
+- Masking profiles produced by LPE bind directly into `effective_permission` / `field_mask_rule` rows so database policy remains in lock-step with runtime `PolicyContext` decisions. The profile name selected via `db.set_rls_mask_profile(ctx.masking_profile)` is just-in-time translated to a concrete policy set during Settings activation; CI ensures profiles without corresponding `field_mask_rule` coverage fail activation.
+
+#### 4.4.1 Masking profile mapping (binding)
+
+- LPE emits `masking_profile` values (`default`, `hipaa_strict`, `legal_hold`) in `PolicyContext`. Settings activation compiles those values into `field_mask_rule` rows that parameterize the SQL policies below. Activation fails if any required profile lacks entries for `CASE`, `ARTIFACT`, `QA_LOG`, `GUARDIAN_DECISION`, or `DELIVERY_RECEIPT`.
+- Normative enforcement DDL (excerpt; see Appendix J for full catalog):
+  ```sql
+  ALTER TABLE "case"                  FORCE ROW LEVEL SECURITY;
+  ALTER TABLE artifact                FORCE ROW LEVEL SECURITY;
+  ALTER TABLE qa_log                  FORCE ROW LEVEL SECURITY;
+  ALTER TABLE guardian_decision_history FORCE ROW LEVEL SECURITY;
+  ALTER TABLE delivery_receipt        FORCE ROW LEVEL SECURITY;
+
+  CREATE POLICY case_visibility ON "case"
+  USING (
+    org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
+    AND udocket_can('CASE','read',"case".id,NULL,NULL)
+  )
+  WITH CHECK (
+    org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
+    AND udocket_can('CASE','write',"case".id,NULL,NULL)
+  );
+  ```
+- Masked columns rely on `udocket_mask`/`udocket_mask_json`; the compiler injects `field_mask_rule` rows such as `('default','ARTIFACT','content_uri','REDACT')` and `('hipaa_strict','QA_LOG','notes_md','REDACT')`. Test `tests/platform/db/test_mask_profiles.py::test_mask_profile_matches_policy` verifies each profile masks the expected columns, while `tests/platform/db/test_rls_guard.py` and `tests/platform/db/test_secure_view_usage.py` assert that FORCE RLS remains active and base tables stay inaccessible.
 
 - Normative SQL (binding):
 
@@ -935,7 +1279,7 @@ Example
   - `INPUT`: bad media/schema. Action → fail lane; no auto-retry; record validation details in ops JSON.
   - `INTEGRITY`: hash mismatch/content drift. Action → block downstream; require resubmit with corrected input; log `ARTIFACT_INTEGRITY_MISMATCH`.
   - `CONCURRENCY`: OCC/version conflicts or lock contention. Action → short jittered retry; escalate if repeated; surface conflict to UI.
-  - `REGION_POLICY`: residency disallowance. Action → block and log `RESIDENCY_POLICY_BLOCK`; waivers per §3.6.
+  - `REGION_POLICY`: residency disallowance. Action → block and log `RESIDENCY_POLICY_BLOCK`; waivers per §3.8.
 - Retries & budgets: default 5 attempts; `backoff_factor=2`; jitter 10–20%; max delay 120s; per-agent overrides allowed via Settings.
 - Node idempotency (binding): rerunning a completed lane issues zero new provider calls; outputs identical or schema-equivalent.
 - Single-flight: use `udlock` advisory locks for job/lane scopes; hold \< `udlock.max_session_hold_seconds` with heartbeats every `udlock.heartbeat.interval_seconds`.
@@ -1092,7 +1436,7 @@ Node catalog (illustrative)
 - Evaluation metrics: compare shadow vs primary outputs using divergence counters (`shadow_match_rate`, `shadow_token_delta`, `shadow_runtime_ratio`) and reviewer sampling tasks. An alert (`agent_shadow_divergence_total`) fires when divergence exceeds configured tolerances.
 - Promotion checklist: (1) shadow match rate ≥ 98% over the agreed soak period, (2) no open Sev-2/3 incidents attributed to the shadow agent, (3) Product/Security sign-off recorded in the decision log, and (4) App.T traceability row updated with tests/monitors/runbooks.
 - Rollback: disable via settings toggle; purge shadow outputs with `ops/scripts/agents/cleanup_shadow.py` to avoid confusing reviewers.
-- Abuse coverage: shadow runs feed the abuse prevention detectors (§B.4) so fraud heuristics see the same traffic profile before we expose new flows to customers.
+- Abuse coverage: shadow runs feed the abuse prevention detectors (§B.4) so fraud heuristics see the same traffic profile before we expose new flows to customers. Per-org thresholds for shadow soak (`abuse.shadow.threshold_per_org`) require dual approval at activation, expire automatically with the soak window, and are linted by `settings:lint-keys` so relaxed thresholds cannot persist once the feature goes live.
 
 ______________________________________________________________________
 
@@ -1123,7 +1467,7 @@ ______________________________________________________________________
 - Categories and examples:
   - `INTEGRITY_HASH_MISMATCH`: content SHA mismatch vs DB. Remediation: resubmit with correct content.
   - `POLICY_FORBIDDEN_PATTERN`: content violates forbidden pattern. Remediation: edit content; re-run QA.
-  - `POLICY_REGION_BLOCK`: compute/storage region disallowed. Remediation: adjust region; or obtain waiver (§3.6).
+  - `POLICY_REGION_BLOCK`: compute/storage region disallowed. Remediation: adjust region; or obtain waiver (§3.8).
   - `MISSING_SECTION`: required section absent (Compose). Remediation: update template or regenerate.
   - `SOURCE_NOT_APPROVED`: upstream artifact not APPROVED. Remediation: approve source or select valid input.
   - `DEBUG_MODE_BLOCKED`: DEBUG enabled in production. Remediation: disable DEBUG.
@@ -1162,7 +1506,7 @@ Reason matrix (illustrative)
 - Idempotency: submitting the same artifact with the same `Idempotency-Key` returns the prior decision; conflicting payloads with the same key yield 409. Guardian caches keys for the same 24-hour TTL defined by `api.idempotency.ttl_hours` so replay windows align with API expectations.
 - Scope of mutation: Guardian only sets the state of the submitted artifact (`DRAFT↔READY` or `QUARANTINED`); it never approves artifacts and never mutates other artifacts.
 - History integrity: `guardian_decision_history` defines a unique index on `(org_id, artifact_id, idempotency_key) WHERE idempotency_key IS NOT NULL` to prevent duplicate keys; a `guardian_decision` view exposes the latest decision per artifact.
-- Residency waivers: when `regions.cross_region_waiver=true` (§3.6), Guardian stamps `cross_region=true` into the artifact manifest and logs `REGION_WAIVER_USED`; waivers require dual approval (Security + Architecture).
+- Residency waivers: when `regions.cross_region_waiver=true` (§3.8), Guardian stamps `cross_region=true` into the artifact manifest and logs `REGION_WAIVER_USED`; waivers require dual approval (Security + Architecture).
 - Signals: on `READY` or `QUARANTINED`, emit `artifact_state` SSE and structured audit events with correlation IDs; consumers must treat these as at-least-once.
 - Superusers: production deployments run without a runtime superuser bypass; database superuser access is reserved for break-glass workflows and audited in Appendix O.
 - Unique index (binding):
@@ -1235,6 +1579,16 @@ ______________________________________________________________________
 - Selection steps: enforce region allowlists (`regions.allowlist.compute/storage`), filter by language/org preference, honor case-specific overrides if healthy, otherwise iterate `fallback_priority`. Token ceilings per job lane cap prompts.
 - Decision trace recorded in logs and evidence store: chosen model, reason code (`PRIMARY_DEGRADED`, `RATE_LIMIT`, `POLICY_REGION_BLOCK`), health snapshot, cost estimate.
 - **Provider data-use posture:** Registry enforces vendor toggles (`llm.providers[].log_retention=false`, `llm.providers[].train_on_data=false`) and verifies contract clauses that forbid prompt/output reuse. Health probes include periodic API checks of provider-side `x-ms-logging-enabled` (Azure) headers; deviations generate `PROVIDER_DATA_POLICY_DRIFT` alerts and block selection until remediated.
+
+#### 8.1.1 LLM & vector residency guard (binding)
+
+- Residency enforcement stacks three controls:
+  1. **Configuration:** Settings validation rejects `llm.providers[]` or `llm.models[]` entries whose declared regions fall outside `regions.allowlist.compute`. Vector stores declare `vector.providers[]` with the same guard and include storage shard regions; activation lints fail on drift.
+  2. **Runtime firewall:** Service-mesh AuthorizationPolicy mirrors the allowlist so only canadacentral/canadaeast endpoints (plus explicitly waived hosts) pass egress. Vector clients inherit the same mesh policy and record `vector_region` in envelopes for audit.
+  3. **Circuit breaker:** Registry tracks the active region for each provider call. If the SDK reports a fallback to a non-allowlisted region (for example, due to provider-side failover), registry raises `LLM_REGION_FALLBACK` events, opens the circuit (`circuit_state=OPEN`, reason `REGION_DRIFT`), and blocks further calls until the provider returns to an approved region.
+- Fallback hierarchy honours residency before priority: if no healthy model exists in allowed regions, the selection algorithm short-circuits with `PROVIDER_DEGRADED` and surfaces actionable errors rather than silently choosing an out-of-region model.
+- Audit trail: every call logs `{model_id, region, residency_policy_version, waiver_id?}`; Guardian and FinOps dashboards display residency decision distributions (`lpe_policy_context_version` paired with `reference_manager_bundle_adoption_seconds`).
+- Tests: `tests/udocket_core/llm/test_residency_guard.py::test_block_disallowed_region` stubs provider metadata to ensure the guard rejects non-Canadian regions without waiver, while `tests/udocket_core/vector/test_vector_residency.py::test_allowed_regions_only` covers vector stores. A staging synthetic (`synthetics/llm_residency.yaml`) confirms the egress gateway denies traffic when the allowlist is intentionally misconfigured.
 
 ### 8.2 Prompt management, redaction, and evidence store
 
@@ -1330,7 +1684,7 @@ PII posture (binding)
 
 Notes
 
-- Settings `llm.models[]` define authoritative IDs and regions; this table is illustrative only. Non-Canadian regions are blocked unless waiver (§3.6). Registry health governs selection order (§8.1).
+- Settings `llm.models[]` define authoritative IDs and regions; this table is illustrative only. Non-Canadian regions are blocked unless waiver (§3.8). Registry health governs selection order (§8.1).
 
 ______________________________________________________________________
 
@@ -1382,6 +1736,7 @@ ______________________________________________________________________
 
 - Services maintain in-memory cache keyed by `(scope, org_id, case_id, bundle_id)` with TTL + version checks. Redis distributed cache optional for cross-instance sharing.
 - Invalidation: Settings service publishes `settings.changed` events `{scope, org_id, case_id, bundle_id}`; subscribers flush caches and reload on next access. Health checks verify caches clear after activation.
+- Reference Manager publishes `reference_manager.catalog.updated` and `reference_manager.resource.updated` topics with affected jurisdiction/resource IDs; LPE consumes these events, invalidates relevant compiled artifacts, and annotates `PolicyContext` with the new `reference_catalog_version` so downstream caches refresh deterministically.
 - Policy compilation pipeline materializes `effective_permission` and `field_mask_rule` tables per org. Activation jobs run inside workers with transaction-scope locks to avoid race conditions.
 - Drift detection compares cached hash vs actual database values; mismatch triggers warnings and eventual forced reload.
 
@@ -1429,10 +1784,11 @@ ______________________________________________________________________
 
 *Purpose: Enumerate where runtime must consult Settings or compiled policy.*
 
-- API: authorization (RBAC writes, approvals), CORS, rate limits, portal download guards.
-- Workers: agent configurations (models, budgets), residency policy, Guardian/Signer configs.
-- Frontend: feature flags, UI flows for approvals and messaging, locales.
-- DB: RLS policies and secure masking views referencing compiled tables.
+- All enforcement paths fetch an LPE `PolicyContext` (see §3.4.3) and record the `policy_context_version` + digest in structured logs. Cache TTL defaults to 5 minutes; expiries must trigger a refresh before decision-making.
+- API: authorization (RBAC writes, approvals), CORS, rate limits, portal download guards, HIPAA/PHIPA banner selection, residency enforcement for download URLs.
+- Workers: agent configurations (models, budgets), residency policy, Guardian/Signer configs, FinOps cost ceilings, waiver gating.
+- Frontend: feature flags, UI flows for approvals and messaging, locale + formatting decisions, accessibility copy.
+- DB: RLS policies and secure masking views referencing compiled tables; masking profile selection derives from `PolicyContext.masking_profile`.
 
 ### 9.10 Acceptance
 
@@ -1461,6 +1817,7 @@ ______________________________________________________________________
 *Purpose: Anchor the narrative TDD to machine-readable contracts and a predictable change cadence.*
 
 - Canonical OpenAPI 3.1 specifications live under `ops/openapi/` (`udocket-platform.openapi.yaml` for staff/client surfaces, with service-specific overlays). Every PR that changes endpoints must update the spec and rerun `make lint-openapi` (`npx spectral lint ops/openapi/**/*.yaml --ruleset ops/openapi/spectral.yaml`); CI blocks merges when lint or diff checks fail.
+- Shared JSON Schemas live under `spec/schemas/` and are treated as the single source of truth for reusable components. Code generators (Python/TS) consume these schemas so no handwritten Pydantic model drifts from the published contract.
 - Breaking or materially user-visible changes require an ADR (see `docs/adr/README.md` and linked entries such as `ADR-0003-api-versioning-and-sunset.md`) approved by Architecture + Security before the change can progress from **Provisional → Implementable → Implemented**.
 - Versioning policy: monthly “compatible” releases roll on the first business Monday; clients may pin to older behaviour via `X-uDocket-API-Version: YYYY-MM`. Majors ship at most twice per year, demand 90-day notice, and use calendar-versioned prefixes (`2025-02`), while additive changes batch unless explicitly waived.
 - Deprecations follow the cadence published in `docs/api/DEPRECATIONS.md`: announce, provide migration guides, emit `Sunset` headers 90 days before removal, and confirm monitors stay green before final removal (traceability captured in App.T).
@@ -1473,7 +1830,7 @@ ______________________________________________________________________
 
 - REST base path `/api/v1/` per service; plural resources (`/cases`, `/artifacts`). Mutations use optimistic concurrency (`version`) for idempotent semantics.
 - Pagination envelope `{items, page, page_size, total, next_page}`; sorting `?sort=field:asc`. Invalid sort or masked fields → 400.
-- Error envelope `ApiError { code, message, details?, correlation_id }`; servers always include `X-Request-ID`. Rate-limit headers exposed to browsers (see §10.5 CORS contract).
+- Error envelope conforms to `spec/schemas/api_error.schema.json`; servers always include `X-Request-ID` and reuse the schema-generated models in runtime code. Rate-limit headers exposed to browsers (see §10.5 CORS contract).
 - Real-time:
   - SSE for jobs/cases; emit `progress|state|error|artifact_state` only after committing DB transactions. Monotonic event IDs via Redis `sse:case:{case_id}:seq`.
   - Channels (WebSocket) for collaborative editing and controls; OIDC-authenticated; topics namespaced per case/job.
@@ -1584,12 +1941,13 @@ Handler pattern
   - Acquire the same `case-approval` lock, `UPDATE artifact SET state='REJECTED', ...` when state∈{`READY`,`APPROVED`} and version matches.
   - On success emit audit/SSE and portal invalidation events per §11.2.1; conflicts return 409.
 
-### 10.4 Guardian, Settings, and Signature APIs
+### 10.4 Guardian, Settings, Reference Manager, and Signature APIs
 
 *Purpose: Enumerate service-specific endpoints integrations rely on.*
 
 - Guardian: `POST /api/v1/guardian/submit`, `POST /api/v1/guardian/quarantine`, readiness endpoints (`/healthz`, `/readyz`, `/rulesz`, `/synthetic/status`).
 - Settings: `GET /api/v1/settings/<scope>`, `POST /api/v1/settings/bundles`, `/api/v1/settings/validate/*` for regions/privacy, `GET /api/v1/settings/changelog`.
+- Reference Manager: `POST /api/v1/reference_manager/harvests`, `GET /api/v1/reference_manager/diffs`, approval/reject endpoints, catalog/resource readers (`/catalogs/{jurisdiction}`, `/resources/{type}`), and event subscription feed. Responses include diff metadata, reviewer IDs, and source digests; all mutating operations require content-ops scopes plus dual-control audit when touching residency/privacy attributes.
 - Digital Signer: `POST /api/v1/sign`, `POST /api/v1/sign/verify`, `GET /api/v1/sign/certificates/{artifact_id}`.
 - Privacy & governance: `POST /api/v1/privacy/dpia`, `POST /api/v1/privacy/ropa`, list/read endpoints (`GET /api/v1/privacy/dpia`, `/api/v1/privacy/ropa`), entitlement history (`GET /api/v1/admin/entitlements/history`). All responses include `X-Request-ID` and follow the ApiError schema; OpenAPI specs tag operations with `privacy` and enforce auditor-only access.
 - Security: HMAC signing required for all mutating operations; examples in Appendix F. SSE under `/api/v1/jobs/{id}/events`.
@@ -1640,6 +1998,7 @@ Binding breadcrumbs:
 - Content metadata (binding): `artifact.content_length` stores the byte length computed at write time; release tests compare it against the object store’s metadata after every deploy to catch silent truncation.
 - Contract test: staging job `tests/e2e/test_artifact_range_download.py::test_range_and_conditional_gets` performs full GET → captures the strong ETag → issues an `If-Range` request and verifies partial content → retries with `If-None-Match` expecting 304. The deploy pipeline blocks if any step fails.
 - ETag invariance: the download service recomputes SHA-256 after fulfilling range requests and compares it to `artifact.content_sha256`; mismatches raise `INTEGRITY_ERROR` and quarantine the artifact.
+- HIPAA cache directives: when `privacy.hipaa.enabled=true`, responses must emit `Cache-Control: private, no-store` and `Pragma: no-cache` regardless of artifact type. Synthetic monitor `synthetics/portal_hipaa_cache.yaml` toggles HIPAA mode in staging, downloads a PHI-tagged artifact, and asserts the cache headers plus 403 behavior for disabled orgs; failure blocks production deploys.
 
 **Acceptance**
 
@@ -1659,18 +2018,7 @@ Binding breadcrumbs:
 *Purpose: Provide a consistent envelope and code semantics across services.*
 
 - Envelope (binding):
-  ```python
-  class ApiError(BaseModel):
-      code: Literal[
-        "POLICY_BLOCK","QUARANTINED","INTEGRITY_ERROR",
-        "VALIDATION_ERROR","AUTH_ERROR","NOT_FOUND",
-        "CONFLICT","RATE_LIMIT","PROVIDER_DEGRADED"
-      ]
-      message: str
-      details: dict[str, Any] | None = None
-      correlation_id: str
-  ```
-  - Servers echo the `Idempotency-Key` header (if present) in responses to aid callers with safe retries.
+- Envelope (binding): HTTP error payloads MUST validate against `spec/schemas/api_error.schema.json`. Runtime code in Django/FastAPI imports Pydantic models generated from that schema during the build pipeline so the schema remains the single source of truth. Servers echo the `Idempotency-Key` header (if present) in responses to aid callers with safe retries.
 - HTTP mapping examples:
   - `409 CONFLICT`: `code="CONFLICT"` (idempotency mismatch, stale OCC version, job kind busy).
   - `412 PRECONDITION_FAILED`: `code="INTEGRITY_ERROR"` (hash mismatch) or `code="POLICY_BLOCK"` (portal invalidation).
@@ -1694,7 +2042,7 @@ Client retry guidance (normative)
 *Purpose: Define canonical SSE events and replay behavior.*
 
 - Event types: `job.update`, `artifact.state`, `qa.notes`, `portal_link_invalidated`, `settings.activated`.
-- Envelope: `id` (monotonic), `event`, `data` (JSON), `retry` (ms). `data` for snapshot payloads includes `watermark_ts` to indicate the newest event timestamp included. `id` echoes in `Last-Event-ID`.
+- Envelope: `id` (monotonic), `event`, `data` (JSON), `retry` (ms). `data` for snapshot payloads includes `watermark_ts` to indicate the newest event timestamp included. The envelope and payloads validate against `spec/schemas/sse/event_envelope.schema.json`; SSE producers deserialize generated Pydantic models before emit. `id` echoes in `Last-Event-ID`.
 - Sequencing: IDs are monotonic per stream (`sse:case:{case_id}` and `sse:job:{job_id}`) and minted via Redis `INCR`, ensuring ordered delivery across multiple web pods without requiring cross-stream ordering.
 - Sync snapshot: if `Last-Event-ID` predates the 15-minute/500-event replay window (whichever comes first), the server emits a snapshot (RLS‑scoped) containing the last 500 events and `watermark_ts` before tailing live updates.
 - Delivery: at‑least‑once; clients de‑dupe via `id`. Snapshots include a bounded window and `watermark_ts` so consumers know when they are live. Individual events are capped at 8 KiB payloads (post-JSON encoding) and Redis stream memory budgets target ≤ 256 MiB per environment; SREs size `stream.maxlen` accordingly.
@@ -1766,6 +2114,18 @@ Examples
 - **UI controls:** Date pickers default to case locale; portal displays timezone label on deliverables and approvals. Manual edits capture both UTC timestamp and operator-local zone for audit clarity.
 - **Backfills/migrations:** Jobs ensure time arithmetic uses timezone-aware APIs; tests verify `created_at`/`decided_at` fields remain UTC during bulk updates.
 
+### 10.11 Localization & Policy Engine APIs
+
+*Purpose: Publish the formal interface for retrieving `PolicyContext`, localization packs, and jurisdictional catalogs.*
+
+- **Endpoints:** `GET /api/v1/lpe/policy_context?org_id&case_id?&privacy_flags?&locale?`, `GET /api/v1/lpe/courts?jurisdiction=&q=`, `GET /api/v1/lpe/locales/{locale}`. Responses include `policy_context_version`, `settings_snapshot_version`, `generated_at`, and SHA‑256 `digest`. `privacy_flags` accepts deterministic key/value pairs (sorted) to keep caching viable.
+- **Versioning:** LPE ships as a dedicated OpenAPI bundle with `x-surface: lpe`. Specs adopt the same change log policy as Guardian/Settings; breaking changes require ADR + major version bump. `/reference/*` endpoints remain read-only pass-throughs until §3.4.9 cutover, returning RFC 8594 `Sunset` and RFC 8594-compliant `Link` headers with migration docs.
+- **Upstream coordination:** Responses include `X-Reference-Catalog-Version` derived from Reference Manager publishes (§3.5). Clients compare this value with Settings snapshots to detect drift; LPE refuses to serve contexts when the referenced RM version is missing or flagged as revoked.
+- **Caching & headers:** Responses set `Cache-Control: private, max-age=300` and `ETag: <digest>`; clients must revalidate on `412` to pick up new contexts. `PolicyContext` payloads include `expires_at` hints derived from residency/retention rules and never expose raw legal text (only localization keys).
+- **Authentication:** Standard service tokens (Keycloak + HMAC). Auditing requires callers to log the `policy_context_version` they acted upon; middleware persists it alongside `settings_snapshot_version`.
+- **SDKs:** `udocket_lpe` (Python) and `@udocket/lpe-client` (TypeScript) provide LRU caches, activation hooks, and typed helpers (`policy_context()`, `get_locale()`, `lookup_court()`). SDKs perform background refresh and surface telemetry counters to `lpe_cache_hit_ratio`.
+- **Error model:** Uses shared `ApiError`; notable codes include `POLICY_CONTEXT_NOT_FOUND`, `LOCALE_NOT_AVAILABLE`, `JURISDICTION_NOT_SUPPORTED`. Clients must surface `error.context_digest` to logs for post-incident reconstruction.
+
 ______________________________________________________________________
 
 ## 11) Frontend & client experience
@@ -1817,6 +2177,7 @@ ______________________________________________________________________
 - Templates offer locale variants with placeholder linting per locale; cross-language toggle supported for courts/catalogs. RTL readiness documented for supported locales; fallback flags alert admins when translations are missing.
 - CI runs pseudolocalization suite (`scripts/i18n/pseudolocale.sh`) and axe-core screen-reader scripts; latest WCAG audit summary stored as `ACCESSIBILITY_AUDIT` artifact (referenced in App.L). Every GA release requires a pre-cut `pa11y-ci`/axe DevTools sweep documented in the release checklist. Accessibility KPI dashboard tracks open issues, assistive-technology test passes, and remediation SLAs.
 - Merge-stop checklist: accessibility reviewers block merges when (1) any keyboard trap persists, (2) focus order diverges from visible reading order, (3) form errors fail to raise an ARIA live region announcement, or (4) the automated axe/pa11y run reports level-A/AA violations without documented mitigation.
+- Localization contract test: `tests/e2e/test_portal_policy_context.py::test_disclaimer_l10n` fetches policy contexts for `en-CA` and `fr-CA`, verifies portal banners render the RM-provided disclaimer keys with correct locale-specific formatting (dates, numbers), and ensures attribution badges from §3.5.9 display for licensed content in both languages.
 
 ### 11.4 Real-time collaboration (SSE + Channels policies)
 
@@ -1832,6 +2193,8 @@ ______________________________________________________________________
 
 - Security headers: enforced baseline CSP plus HSTS, frame, and referrer protections. Staff and portal responses MUST emit  
   `Content-Security-Policy: default-src 'self'; frame-ancestors 'none'; script-src 'self' 'nonce-{csp-script-nonce}'; style-src 'self' 'nonce-{csp-style-nonce}'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://{api_host}; base-uri 'none'; form-action 'self'` (prod). Nonce values are generated per response, injected into rendered templates, and surfaced to the frontend build via the `X-Style-Nonce`/`X-Script-Nonce` headers so components can set matching `nonce` attributes. Lower environments may append `localhost` origins via `security.csp.extra_connect_hosts[]` and register specific hash exceptions through `security.csp.extra_style_hashes[]`; `unsafe-inline` is forbidden in prod. `Strict-Transport-Security: max-age=63072000; includeSubDomains` remains mandatory in prod, optional elsewhere. Additional headers: `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Permissions-Policy: camera=(), microphone=()`. CI test `tests/e2e/test_security_headers.py::test_csp_header_enforced` asserts the header (nonces masked but positionally present); failures block merges. Full header requirements (exposed, allowed, and prohibited) live in Appendix F.12.
+  `Content-Security-Policy: default-src 'self'; frame-ancestors 'none'; script-src 'self' 'nonce-{csp-script-nonce}'; style-src 'self' 'nonce-{csp-style-nonce}'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://{api_host}; base-uri 'none'; form-action 'self'` (prod). Nonce values are generated per response, injected into rendered templates, and surfaced to the frontend build via the `X-Style-Nonce`/`X-Script-Nonce` headers so components can set matching `nonce` attributes. Lower environments may append `localhost` origins via `security.csp.extra_connect_hosts[]` and register specific hash exceptions through `security.csp.extra_style_hashes[]`; `unsafe-inline` is forbidden in prod. `Strict-Transport-Security: max-age=63072000; includeSubDomains` remains mandatory in prod, optional elsewhere. Additional headers: `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Permissions-Policy: camera=(), microphone=()`. CI test `tests/e2e/test_security_headers.py::test_csp_header_enforced` asserts the header (nonces masked but positionally present); failures block merges. Full header requirements (exposed, allowed, and prohibited) live in Appendix F.12.
+- Hard-fail nonce enforcement: responses missing either nonce trigger an inline guard that writes `CSP_NONCE_MISSING` audit events and returns HTTP 500 rather than rendering partially secured content. Synthetic monitor `synthetics/csp_nonce_failure.yaml` injects a nonce-less template daily and expects a 500 to confirm the guard remains active; the release pipeline blocks if the monitor detects a 200 response.
 
 - Anti-phishing: link verification, suspicious message detection, `Report` workflows logging to audit event.
 
@@ -1934,7 +2297,7 @@ ______________________________________________________________________
 *Purpose: Ensure platform-wide visibility, SLOs, and actionable alerts.*
 
 - Structured logs: `ts, trace_id, span_id, service, level, message, correlation_id, org_id, case_id, user_id, job_id, artifact_id, route, action, result, latency_ms, ip_prefix, ua_hash, settings_bundle_id` with PII redaction.
-- Canonical schema (binding): every log event serializes to newline-delimited JSON matching `log_schema@1`. Example:
+- Canonical schema (binding): every log event serializes to newline-delimited JSON validating against `spec/schemas/log_record.schema.json` (`log_schema@1`). Example:
   ```json
   {
     "ts":"2025-10-20T03:12:45.183Z",
@@ -1957,7 +2320,7 @@ ______________________________________________________________________
   ```
 - Emission & formatting (binding): All services emit newline-delimited JSON to stdout for levels `DEBUG` through `ERROR`; only `ERROR` and higher duplicate to stderr so container runtimes and `kubectl logs`/`docker logs` tail a single canonical stream. The `src` field records the compact source location as `package.module:function:line` (max 80 characters) and extended diagnostics belong in structured keys under `extras`. Messages must remain ≤ 160 characters—richer context should be captured in dedicated fields to avoid terminal noise. Local pretty printing is opt-in via `LOG_PRETTY=1`, keeping production streams strict JSON with no ANSI colour or stacktrace spam.
 - Forbidden fields (binding): log scrubber removes `Authorization`, `Cookie`, `Set-Cookie`, `X-Request-Signature`, `X-Signature-Key-Id`, raw signed URLs, and any header matching `*-Token` before serialization. CI test `tests/logging/test_redaction.py::test_forbidden_headers_masked` asserts the mask list, and runtime metrics `logging_redaction_dropped_total` surface any attempt to log a banned key.
-- Metrics: queue depth, job durations, Guardian latency/throughput, Signer verify latency (including `sign_verify_status_total`, `ocsp_latency_seconds`, `ocsp_staple_age_seconds`, `tsa_latency_seconds`, `tsa_time_drift_seconds`), LLM health/circuit state, delivery rates, integrity incidents (`integrity_scan_queue_depth`, `integrity_quarantine_total`), SSE reconnect rate, `artifacts_ready_total`, `artifacts_approved_total`, `time_to_approval_seconds`. All Prometheus metrics use seconds for duration histograms and `_total` counters for events; legacy `*_ms` signals are deprecated and scheduled for removal in v7 GA (§12.6).
+- Metrics: queue depth, job durations, Guardian latency/throughput, Signer verify latency (including `sign_verify_status_total`, `ocsp_latency_seconds`, `ocsp_staple_age_seconds`, `tsa_latency_seconds`, `tsa_time_drift_seconds`), LLM health/circuit state, delivery rates, integrity incidents (`integrity_scan_queue_depth`, `integrity_quarantine_total`), LPE surface health (`lpe_lookup_latency_seconds`, `lpe_cache_hit_ratio`, `lpe_compiler_duration_seconds`, `lpe_policy_block_total`), Reference Manager ingest health (`reference_manager_ingest_duration_seconds`, `reference_manager_diff_backlog`, `reference_manager_publish_total`), SSE reconnect rate, `artifacts_ready_total`, `artifacts_approved_total`, `time_to_approval_seconds`. All Prometheus metrics use seconds for duration histograms and `_total` counters for events; legacy `*_ms` signals are deprecated and scheduled for removal in v7 GA (§12.6).
 - FinOps metrics: `llm_cost_estimate_total{org,case,job,model}`, `finops_cost_per_case_usd{org,case}`, `finops_cost_per_org_usd{org,month}`, `delivery_events_total{org,channel,status}`, `finops_mom_regression_flag{org}`.
 - Privacy/Governance: `residency_block_total`, `dpia_records_total{status}`, `ropa_records_total`, `entitlement_snapshots_total`, `policy_unsafe_activations_blocked_total`.
 - Advisory locks: `udlock_locks_held{scope,kind}`, `udlock_lock_age_seconds_p95{scope,kind}`, `udlock_watchdog_stale_total{action}`, `udlock_registry_gc_total`.
@@ -2122,6 +2485,9 @@ ______________________________________________________________________
 - Guardian SLO & Throughput (SRE): decision latency P50/P95/P99, error rate, queue depth, synthetic success, SLO burn rate.
 - Queues & KEDA (SRE): Celery queue depth per lane, replicas, scaling events, DLQ intake and drain.
 - LLM Cost & Circuit (Platform): tokens in/out, estimated spend vs cap, circuit state per model/provider, fallback reason codes.
+- Localization & Policy Engine (Platform/SRE): lookup latency P50/P95/P99, cache hit ratio, compiler duration, policy decision distribution by residency/privacy flags, unsafe activation counters, waiver utilisation.
+- Reference Manager – Ingestion & Quality (Content Ops/Legal Ops): harvest throughput per source, freshness age, selector failure rate, coverage % by jurisdiction/locale, license ledger health.
+- Reference Manager – Review & Publishing (Content Ops/Legal Ops): diff backlog, reviewer SLA burn-down, bundle adoption lag, publish latency, questionnaire/form coverage gaps.
 - Audit Seal & WORM (SecEng): seal cadence, seal errors, WORM lag, verification status.
 - Portal Security (SecEng): download rate per org/user, anomaly triggers, link invalidations, adaptive MFA prompts.
 - Advisory Locks (SRE): locks held by scope/kind, age percentiles, stale detections, terminations; tied to App.H RB-LOCK-006.
@@ -2448,7 +2814,7 @@ ______________________________________________________________________
 
 - SLOs: API availability ≥ 99.9%/30d; read P95 ≤ 250ms; write P95 ≤ 500ms; decision P95 ≤ 5m; Compose P95 ≤ 45m.
 - Security: TLS 1.3 preferred; mTLS for service‑to‑service; HSTS; CSP; signed images and SBOM.
-- Residency: Canada‑only unless waiver; storage/compute pinned per §3.6.
+- Residency: Canada‑only unless waiver; storage/compute pinned per §3.8.
 - Privacy: masking, secure views, field‑level encryption (§4.6) for sensitive classes.
 - Performance: backpressure via rate limits and quotas; bounded memory for LLM contexts; capped retries.
 
@@ -2477,7 +2843,7 @@ ______________________________________________________________________
 
 - ADRs live under `docs/adr/` and follow GitLab’s lightweight template (`Title, Context, Decision, Consequences, Status`). `docs/adr/README.md` indexes active, superseded, and deprecated entries; this TDD’s front matter `related_adrs` highlights the decisions most tied to the current scope.
 - Lifecycle: new ADRs start as **Draft**, graduate to **Accepted** once Architecture + Security approve, and move to **Superseded** when a follow-on ADR renders the prior decision obsolete. Status changes require PR review plus an update to the ADR index table.
-- Integration points: breaking API or security changes cannot transition this TDD to **Implementable** or **Implemented** without a corresponding ADR (e.g., `ADR-0003-api-versioning-and-sunset.md` for the deprecation policy, `ADR-0001-guardian-ready-quarantine.md` for Guardian rule enforcement). Cross-reference IDs appear throughout the document (see §3.7, §7.1, §10.0) to keep provenance intact.
+- Integration points: breaking API or security changes cannot transition this TDD to **Implementable** or **Implemented** without a corresponding ADR (e.g., `ADR-0003-api-versioning-and-sunset.md` for the deprecation policy, `ADR-0001-guardian-ready-quarantine.md` for Guardian rule enforcement). Cross-reference IDs appear throughout the document (see §3.9, §7.1, §10.0) to keep provenance intact.
 - Tooling: `make adr:new` scaffolds numbered ADRs; CI verifies headers/metadata and blocks merges when ADR titles, filenames, or statuses drift from the index. Quarterly governance reviews audit ADR freshness and ensure open decisions align with App.K controls.
 
 ______________________________________________________________________
@@ -2554,12 +2920,12 @@ ______________________________________________________________________
 - **App.L** Benchmark baselines *(source: §3.2, §8, §12)*
 - **App.M** Environment & dependency matrix *(source: §3.2, §14.8)*
 - **App.N** Privacy controls traceability *(source: §2.2, §14.2)*
-- **App.O** Active waivers ledger *(source: §3.6, §7.1.1, §14.9)*
+- **App.O** Active waivers ledger *(source: §3.8, §7.1.1, §14.9)*
 - **App.P** Third-party & OSS notices *(source: §13.6, App.P)*
-- **App.Q** Sub-processors & DPAs *(source: §3.5, §8, §14.3)*
+- **App.Q** Sub-processors & DPAs *(source: §3.7, §8, §14.3)*
 - **App.R** Data lineage maps *(source: §5.6, §6, §7)*
 - **App.S** Ownership & RACI map *(source: §1.5, §15)*
-- **App.T** Traceability matrix *(source: §3.7, §7, §10, §12.1, §12.6)*
+- **App.T** Traceability matrix *(source: §3.8, §7, §10, §12.1, §12.6)*
 
 ______________________________________________________________________
 
@@ -2613,7 +2979,7 @@ B.1 STRIDE summary (illustrative; see App.H for runbooks)
 B.2 Top threats & mitigations (illustrative)
 
 - RLS bypass via pooling misconfig → AdmissionPolicy blocks statement pooling; fail‑closed canaries (§4.4, App.J.6).
-- Residency leakage to non‑CA endpoints → mesh egress allowlist; region allowlist settings; Guardian waiver stamping (§3.6, §7.1.1).
+- Residency leakage to non‑CA endpoints → mesh egress allowlist; region allowlist settings; Guardian waiver stamping (§3.8, §7.1.1).
 - Prompt injection & policy drift → safety harness, golden‑set tests, QA gates, Guardian policy checks (§8.4, §7.1).
 - SSE replay abuse → Last‑Event‑ID handling, snapshot rules, token‑bound streams (§10.8).
 - Artifact integrity tamper → SHA‑256 ETag, WORM audit sink, integrity sweeps (§5.3, §12.1).
@@ -2636,6 +3002,7 @@ B.4 Abuse prevention plan & fraud detection checks (normative)
   - Portal download sentinel: `portal_download.anomaly_score` (needs trend < 1.5× baseline). 3 consecutive breaches trigger automatic `portal_link_invalidated` + step-up MFA requirement; App.H RB-ETAG handles follow-up messaging.
   - Messaging fraud rules: heuristics for mass outbound, URL reputation hits, and attachment mismatch log to `messaging_abuse_detected_total` and quarantine threads until Guardian re-approves.
 - Shadow/soak controls: High-risk pipeline changes (payment integrations, new export endpoints) must run in shadow mode (see §6.13) for ≥7 days with abuse detectors enabled; only after the review sign-off do we flip “serving” flags.
+- Threshold waivers: temporary relaxations for shadow soaks or customer beta programs use `abuse.shadow.threshold_per_org` settings with explicit expiry (≤30 days) and are catalogued in App.O. Activation lints reject waivers without matching expiry and justification.
 - For every new abuse vector, engineering must add: (1) detector metric + alert, (2) runbook entry (App.H), (3) test fixture covering expected vs blocked flows, (4) traceability row in App.T.
 
 ______________________________________________________________________
@@ -2760,8 +3127,8 @@ ______________________________________________________________________
 
 E.1 Key catalog (scope: SYSTEM | ORG | CASE)
 
-- regions.allowlist.compute — ORG — \[canadacentral, canadaeast\] — Allowed compute regions; enforced by §3.6.
-- regions.allowlist.storage — ORG — \[canadacentral, canadaeast\] — Allowed storage regions; enforced by §3.6 and §5.3.
+- regions.allowlist.compute — ORG — \[canadacentral, canadaeast\] — Allowed compute regions; enforced by §3.8.
+- regions.allowlist.storage — ORG — \[canadacentral, canadaeast\] — Allowed storage regions; enforced by §3.8 and §5.3.
 - analyze.model.id — ORG|CASE — default profile — LLM model profile for Analyze lanes; see §8 and §6.3.
 - analyze.token_ceiling — ORG|CASE — 100000 — Max tokens per Analyze job; see §8.3.
 - analyze.max_retries — ORG|CASE — 2 — Retry budget per lane; see §6.3 QA loops.
@@ -2833,7 +3200,7 @@ E.3 Linting (binding)
 
 - CI must flag settings keys referenced in this document that are missing in service repositories. The `settings:lint-keys` pipeline step runs on every PR and fails the build when discrepancies are detected.
 - Script pattern: load Appendix E lists, scan OpenAPI/spec/config code for usage; fail when unmapped keys found.
-- Regions/Residency → regions.allowlist.*, privacy.* (Sections §3.6, App.C)
+- Regions/Residency → regions.allowlist.*, privacy.* (Sections §3.8, App.C)
 - APIs/Rate limits → api.*, portal.download.* (Sections §10)
 - FinOps → llm.finops.\* (Sections §8.3, §12.6, §13.4)
 - Security/Compliance → security.*, privacy.*, logging.redaction.\* (Sections §4, §12, §25)
@@ -2867,7 +3234,7 @@ F.0 Canonical `ApiError.code` values
 | `RATE_LIMIT` | Rate, quota, or budget exceeded. |
 | `PROVIDER_DEGRADED` | Downstream provider degraded/unavailable. |
 
-Spectral rule `ops/openapi/rules/apierror-enum.yaml` lints OpenAPI specs to keep responses aligned with this list.
+The authoritative schema for these payloads lives at `spec/schemas/api_error.schema.json`. Spectral rule `ops/openapi/rules/apierror-enum.yaml` lints OpenAPI specs to keep responses aligned with this list.
 
 F.1 Idempotency contract & Guardian submit (binding)
 
@@ -3239,7 +3606,7 @@ Post-remediation
 
 Preventive actions
 
-- Validate new services against `log_schema@1` before deploying.
+- Validate new services against `log_schema@1` (`spec/schemas/log_record.schema.json`) before deploying.
 - Review log verbosity budgets quarterly and adjust `logging.cost.daily_budget_mb_per_service`.
 - Exercise disaster recovery by simulating downstream outage each quarter; capture evidence under App.H.
 
@@ -3488,13 +3855,15 @@ Glossary entries
 - Artifact: Immutable content record with `content_sha256` and manifest; states `DRAFT|READY|QUARANTINED|APPROVED|REJECTED`; `ARCHIVED` flag hides without state change.
 - Exclusive type: Artifact type for which a case may have at most one `APPROVED` at a time; enforced by unique index and approval swap (§5.4.1).
 - Guardian: Service deciding `READY|QUARANTINED` for artifacts before human approval; writes `guardian_decision_history`.
+- Localization & Policy Engine (LPE): Runtime resolver that consumes RM bundles + Settings to emit deterministic `PolicyContext` objects, masking profiles, and localization packs for every enforcement point (§3.4, §9.9, §10.11).
+- Reference Manager (RM): Editorial/catalog service that ingests and normalizes jurisdictional data, questionnaires, and localization strings; publishes signed catalog bundles to LPE and enforces licensing, attribution, and dual-control workflows (§3.5).
 - Review/Approval: Human action promoting `READY→APPROVED`; idempotent re-approve; may demote prior same-type artifact (§10.3.2).
 - Manifest: JSON payload embedded in artifacts capturing provenance (regions, hashes, settings snapshot), tool versions, and inputs (§5.6).
 - SSE: Server-Sent Events for streaming job and artifact updates; token-bound; supports `Last-Event-ID`.
 - RLS: PostgreSQL Row Level Security enforcing org/case scoping and deny-by-default policies; secure views restrict field access.
 - OCC: Optimistic concurrency control using `version` columns to avoid lost updates.
 - udlock: Advisory lock helpers (`scope:key`) supporting session and transaction locks with registry visibility.
-- Residency waiver: Temporary exception allowing cross-region processing; requires dual approval; manifest stamped and audited (§3.6, §7.1.1).
+- Residency waiver: Temporary exception allowing cross-region processing; requires dual approval; manifest stamped and audited (§3.8, §7.1.1).
 - FinOps metrics: Cost/time series including `llm_cost_estimate_total`, `finops_cost_per_case_usd`, `finops_mom_regression_flag` used for dashboards and deploy guards (§8.3, §12.9).
 - LangGraph node: Typed step in Analyze/Compose graphs (e.g., OutlineBuilder, SectionWriter) producing deterministic outputs with envelopes (§6.7–§6.10).
 - Quota: Per-org limits (uploads/day, concurrent jobs, portal downloads) enforced via rate limiting and monitored in §12.8.
@@ -3901,7 +4270,7 @@ Quick crosswalk (illustrative)
 | SOC2 CC7 / ISO 12 | §12, §14.5, App.H  |
 | SOC2 CC8 / ISO 14 | §3.2, §12.5, App.L |
 | SOC2 PI / ISO 18  | §2.2, §14.2, App.N |
-| Vendor CUECs      | §3.5, §8, App.Q    |
+| Vendor CUECs      | §3.7, §8, App.Q    |
 
 HMAC key inventory
 
@@ -3925,9 +4294,9 @@ Key rotation calendar (rolling 90 days)
 | SOC2 CC7.x / ISO 12        | Operations & change        | §12 Observability; §14.5 Change mgmt             | App.H runbooks, Guardian/Signer synthetics, deployment playbooks                              | Pass   |
 | SOC2 CC8.x / ISO 14        | Availability & resilience  | §3.2 topology; §12.5 capacity                    | App.L benchmarks, autoscaling dashboards, synthetic monitor reports                           | Pass   |
 | SOC2 PI1 / ISO 18          | Privacy & retention        | §2.2 regulatory constraints; §14.2 retention     | App.N privacy traceability matrix, DPIA/ROPA artifacts                                        | Pass   |
-| SOC2 CUEC / Vendor reviews | Third-party oversight      | §3.5 external integrations; §8 LLM governance    | Provider registry health logs, evidence store envelopes, vendor reassessment checklist        | Pass   |
+| SOC2 CUEC / Vendor reviews | Third-party oversight      | §3.7 external integrations; §8 LLM governance    | Provider registry health logs, evidence store envelopes, vendor reassessment checklist        | Pass   |
 | Internal POL-SC-01         | Security incident response | §12.3 incident workflows; §14.9 disclosure       | Incident register exports, security.txt contact, on-call rotation docs                        | Pass   |
-| Internal POL-DS-02         | Data residency             | §3.6 region enforcement; §7.1 Guardian decisions | Egress AuthorizationPolicy manifests, App.O waiver entries, ops logs `RESIDENCY_POLICY_BLOCK` | Pass   |
+| Internal POL-DS-02         | Data residency             | §3.8 region enforcement; §7.1 Guardian decisions | Egress AuthorizationPolicy manifests, App.O waiver entries, ops logs `RESIDENCY_POLICY_BLOCK` | Pass   |
 | Internal POL-AU-01         | Audit & approvals          | §10 API contracts; §11 approvals UX              | Guardian history, audit_event partitions, reviewer swap algorithm logs                        | Pass   |
 | Internal POL-BCP-03        | Business continuity        | §12.10 BCP drills; App.H runbooks                | `BCP_DRILL_REPORT` artifacts, incident templates                                              | Pass   |
 
@@ -3977,7 +4346,7 @@ ______________________________________________________________________
 
 | Obligation (Reg / Article)                 | Settings / gates                                                                                            | Enforcement point                                          | Evidence artifacts                                                              |
 | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| Data residency (PIPEDA s.17, GDPR Art.44)  | `regions.allowlist.*`, `integrity.downstream_action`                                                        | Guardian residency checks (§3.6, §7.1.1)                   | AuthorizationPolicy manifests, ops `RESIDENCY_POLICY_BLOCK` logs, App.O waivers |
+| Data residency (PIPEDA s.17, GDPR Art.44)  | `regions.allowlist.*`, `integrity.downstream_action`                                                        | Guardian residency checks (§3.8, §7.1.1)                   | AuthorizationPolicy manifests, ops `RESIDENCY_POLICY_BLOCK` logs, App.O waivers |
 | DPIA / RoPA maintenance (GDPR Art.35/30)   | `privacy.dpia.*`, `privacy.ropa.*`                                                                          | Privacy activation workflow (§9.3)                         | DPIA/ROPA artifacts, audit seals, App.K mapping                                 |
 | HIPAA override mode (HIPAA §164.312)       | `privacy.hipaa.enabled`, `security.mfa.webauthn_required_roles`, `evidence_store.redacted_excerpts.enabled` | Dual approval (§9.11), Guardian/portal guards              | HIPAA manifest entries, audit events, QA logs                                   |
 | Legal hold & retention (GDPR Art.5, CPPA)  | `privacy.legal.matrix_version`, `compliance.erasure_mode`                                                   | Destruction job approval (§14.2), DSAR scheduler (§14.2.1) | `DESTRUCTION_CERT`, `ERASURE_JOURNAL`, secure views showing masked reasons      |
@@ -4111,4 +4480,7 @@ ______________________________________________________________________
 | Logging pipeline retains structured records (§12.1) | `tests/logging/test_redaction.py::test_forbidden_headers_masked`; `diagram:diff` for log schema | `logging_ingest_lag_seconds`, `logging_drop_rate_pct`, `logging_spool_utilization_pct` | App.H RB-LOG-007 |
 | Advisory locks stay healthy during approvals (§5.4) | `tests/platform/artifacts/test_approval_swap.py::test_concurrent_approvals_single_winner`; `tests/platform/db/test_rls_guard.py::test_rls_context_asserts_missing_gucs` | `udlock_watchdog_stale_total`, `udlock_lock_age_seconds_p95` | App.H RB-LOCK-006 |
 | Portal downloads honour ETag / If-Match (§10.6, App.H RB-ETAG) | `tests/e2e/test_artifact_range_download.py::test_range_and_conditional_gets` | `portal_412_precondition_total`, `alert_portal_412_spike` | App.H RB-ETAG |
-| Abuse-prevention detectors enforce throttles (§B.4, §10.9) | `tests/security/test_abuse_checks.py::test_api_abuse_flagged`, `tests/security/test_portal_download_guard.py::test_anomaly_blocks` | `api_suspect_request_total`, `portal_download.anomaly_score`, `messaging_abuse_detected_total` | App.H RB-RES-BLOCK (residency), App.H RB-ETAG, App.H abuse triage SOP (`docs/runbooks/security/abuse_triage.md`) |
+| Abuse-prevention detectors enforce throttles (§B.4, §6.13, §10.9) | `tests/security/test_abuse_checks.py::test_api_abuse_flagged`, `tests/security/test_portal_download_guard.py::test_anomaly_blocks`, shadow soak fixtures (`tests/platform/shadow/test_shadow_thresholds.py`) | `api_suspect_request_total`, `portal_download.anomaly_score`, `messaging_abuse_detected_total`, `abuse_shadow_threshold_expiring_total` | App.H RB-RES-BLOCK (residency), App.H RB-ETAG, App.H abuse triage SOP (`docs/runbooks/security/abuse_triage.md`) |
+| Masking profiles map to FORCE RLS policies (§4.4.1) | `tests/platform/db/test_mask_profiles.py::test_mask_profile_matches_policy`, `tests/platform/db/test_secure_view_usage.py::test_no_base_table_queries` | `rls_context_missing_total`, `mask_profile_mismatch_total` | App.H RB-GOV-008 (settings rollback), App.H RB-LOCK-006 |
+| LLM/vector residency guard prevents out-of-region fallback (§8.1.1) | `tests/udocket_core/llm/test_residency_guard.py::test_block_disallowed_region`, `tests/udocket_core/vector/test_vector_residency.py::test_allowed_regions_only`, synthetic `synthetics/llm_residency.yaml` | `llm_region_fallback_total`, `vector_region_fallback_total` | App.H RB-LLM-003, App.H RB-RES-BLOCK |
+| CSP nonce & HIPAA cache enforcement (§11.5, §10.6) | `tests/ui/test_csp_nonced.py::test_nonce_roundtrip`, synthetic `synthetics/csp_nonce_failure.yaml`, `synthetics/portal_hipaa_cache.yaml`, `tests/e2e/test_portal_policy_context.py::test_disclaimer_l10n` | `csp_nonce_mismatch_total`, `portal_cache_header_violation_total` | App.H RB-PORTAL-005, App.H security headers checklist |
