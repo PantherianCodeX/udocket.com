@@ -1439,39 +1439,59 @@ Node catalog (illustrative)
   - QA: `QAIssue { code, level, message, ref?, location? }`.
 - Example Pydantic models (Analyze extract):
   ```python
+  from __future__ import annotations
+
+  from datetime import datetime
+  from typing import Literal
+  from uuid import UUID
+
+  from pydantic import BaseModel, Field
+
+
   class SourceSpan(BaseModel):
       start_ms: int
       end_ms: int
+
 
   class AnalyzeEvent(BaseModel):
       id: UUID
       title: str
       datetime: datetime | None = None
-      participants: list[UUID] = []
-      source_spans: list[SourceSpan] = []
+      participants: list[UUID] = Field(default_factory=list)
+      source_spans: list[SourceSpan] = Field(default_factory=list)
       notes: str | None = None
+
 
   class AnalyzeIssue(BaseModel):
       id: UUID
       label: str
       description: str
-      related_events: list[UUID] = []
-      risk: Literal['LOW','MEDIUM','HIGH'] = 'LOW'
+      related_events: list[UUID] = Field(default_factory=list)
+      risk: Literal["LOW", "MEDIUM", "HIGH"] = "LOW"
   ```
 - Compose JSON example:
   ```python
+  from __future__ import annotations
+
+  from typing import Literal
+  from uuid import UUID
+
+  from pydantic import BaseModel, Field
+
+
   class ComposeSection(BaseModel):
       key: str
       title: str
       body_md: str
-      references: list[UUID] = []
+      references: list[UUID] = Field(default_factory=list)
+
 
   class ComposeDocument(BaseModel):
-      doc_type: Literal['CLIENT','LAWYER']
+      doc_type: Literal["CLIENT", "LAWYER"]
       language: str | None = None
       sections: list[ComposeSection]
       outline: list[str]
-      analyze_refs: dict[str, list[UUID]] = {}
+      analyze_refs: dict[str, list[UUID]] = Field(default_factory=dict)
   ```
 - Error codes (binding):
   - `E_TRANSIENT_PROVIDER` (TRANSIENT): wrap 429/5xx/timeouts; retry per §6.6.
@@ -1803,12 +1823,19 @@ ______________________________________________________________________
 - Clients must avoid direct `.env` reads except for bootstrapping; runtime decisions rely on Settings API to respect dual approvals.
 - Definitions expressed via Pydantic models (illustrative):
   ```python
+  from __future__ import annotations
+
+  from typing import Any, Literal
+
+  from pydantic import BaseModel
+
+
   class SettingDefinition(BaseModel):
       key: str
-      datatype: Literal['BOOL','INT','FLOAT','STRING','DURATION','ENUM','JSON','REGION','PERCENT']
+      datatype: Literal["BOOL", "INT", "FLOAT", "STRING", "DURATION", "ENUM", "JSON", "REGION", "PERCENT"]
       enum_values: list[str] | None = None
       default_value: Any
-      mutable_scope: list[Literal['SYSTEM','ORG','CASE']]
+      mutable_scope: list[Literal["SYSTEM", "ORG", "CASE"]]
       validation_schema: dict[str, Any] | None = None
   ```
   - Case-scoped keys (examples): `compose.tone`, `compose.section.length_limits`, `compose.max_retries`, `analyze.token_ceiling`, `portal.link.expiry`, `visibility.operators.scope`.
@@ -2179,19 +2206,22 @@ Payloads (illustrative)
 
 Examples
 
-```json
-// job.update
-{ "id":"1024","event":"job.update","data": {"job_id":"...","case_id":"...","org_id":"...","status":"RUNNING","progress":42}}
-
-// artifact.state
-{ "id":"1030","event":"artifact.state","data": {"artifact_id":"...","case_id":"...","org_id":"...","type":"SUMMARY_MD","state":"APPROVED","previous_state":"READY","ts":"2025-10-19T21:12:00Z"}}
-
-// portal_link_invalidated
-{ "id":"1035","event":"portal_link_invalidated","data": {"artifact_id":"...","case_id":"...","reason":"APPROVAL_SWAP","ts":"2025-10-19T21:14:00Z"}}
-
-// snapshot bootstrap payload (truncated)
-{ "id":"snapshot","event":"artifact.snapshot","data": {"watermark_ts":"2025-10-19T21:14:00Z","events":[{"artifact_id":"...","state":"READY"}, {"artifact_id":"...","state":"APPROVED"}]}}
-```
+- `job.update`
+  ```json
+  { "id": "1024", "event": "job.update", "data": { "job_id": "...", "case_id": "...", "org_id": "...", "status": "RUNNING", "progress": 42 } }
+  ```
+- `artifact.state`
+  ```json
+  { "id": "1030", "event": "artifact.state", "data": { "artifact_id": "...", "case_id": "...", "org_id": "...", "type": "SUMMARY_MD", "state": "APPROVED", "previous_state": "READY", "ts": "2025-10-19T21:12:00Z" } }
+  ```
+- `portal_link_invalidated`
+  ```json
+  { "id": "1035", "event": "portal_link_invalidated", "data": { "artifact_id": "...", "case_id": "...", "reason": "APPROVAL_SWAP", "ts": "2025-10-19T21:14:00Z" } }
+  ```
+- Snapshot bootstrap payload (truncated)
+  ```json
+  { "id": "snapshot", "event": "artifact.snapshot", "data": { "watermark_ts": "2025-10-19T21:14:00Z", "events": [ { "artifact_id": "...", "state": "READY" }, { "artifact_id": "...", "state": "APPROVED" } ] } }
+  ```
 
 ### 10.9 Rate limits & antifraud controls
 
@@ -2239,6 +2269,58 @@ ______________________________________________________________________
 - Approvals panel enforces multi-step review (agent output, manual edits) with OCC guardrails; components display readiness, reviewer count, and pending manual edits.
 - Analytics dashboards surface LLM cost, artifact coverage, QA issues; data sourced from `audit_event`, `ops_*` logs, and FinOps metrics.
 - Component-level permissions derived from Settings-driven policy map; UI respects field masks (e.g., masked SHA values replaced with `[REDACTED]`).
+
+#### 11.1.1 Live status widget (illustrative)
+
+*Purpose: Demonstrate accessible, deterministic SSE consumption in the staff UI without freezing layout or leaking cross-case data.*
+
+```tsx
+import { useEffect, useState } from "react";
+
+type JobStatus = "PENDING" | "RUNNING" | "PAUSED" | "FAILED" | "COMPLETED";
+
+interface JobUpdatePayload {
+  job_id: string;
+  status: JobStatus;
+  progress?: number;
+}
+
+export function JobStatusTicker({ jobId }: { jobId: string }) {
+  const [status, setStatus] = useState<JobStatus>("PENDING");
+  const [progress, setProgress] = useState<number | null>(null);
+
+  useEffect(() => {
+    const source = new EventSource(`/api/v1/jobs/${jobId}/events`, { withCredentials: true });
+
+    const onUpdate = (event: MessageEvent<string>) => {
+      const payload = JSON.parse(event.data) as JobUpdatePayload;
+      if (payload.job_id !== jobId) return;
+      setStatus(payload.status);
+      setProgress(typeof payload.progress === "number" ? payload.progress : null);
+    };
+
+    source.addEventListener("job.update", onUpdate);
+    source.onerror = () => source.close();
+
+    return () => {
+      source.removeEventListener("job.update", onUpdate);
+      source.close();
+    };
+  }, [jobId]);
+
+  return (
+    <output role="status" aria-live="polite" data-status={status.toLowerCase()}>
+      <strong>{status}</strong>
+      {progress !== null ? ` — ${progress}%` : ""}
+    </output>
+  );
+}
+```
+
+- `aria-live="polite"` keeps assistive tech informed without flooding announcements.
+- `withCredentials` enforces token binding per §10.7; callers must run inside the case-scoped layout so cookies inherit the correct SameSite/Path metadata.
+- UI surfaces deterministic state transitions: badges map `data-status` to semantic colors via design tokens (`--badge-ready`, `--badge-failed`), ensuring light/dark themes stay in sync without inline overrides.
+- Retry backoff and offline banners reuse the shared `useConnectivity` hook (not shown) so SSE and REST clients show consistent UX when the session expires or the network drops.
 
 ### 11.2 Client portal (document delivery, messaging, access controls)
 
@@ -3566,9 +3648,16 @@ paths:
   /api/v1/guardian/submit:
     post:
       responses:
-        "200": { description: OK, application/json: { schema: { $ref: "#/components/schemas/GuardianDecision" } } }
-        "409": { description: Idempotency signature mismatch }
-        "412": { description: INTEGRITY_ERROR }
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GuardianDecision"
+        "409":
+          description: Idempotency signature mismatch
+        "412":
+          description: INTEGRITY_ERROR
       security:
         - oidc: []
         - hmacSignature: []
@@ -3606,14 +3695,24 @@ paths:
                 note: { type: string }
                 expected_version: { type: integer, minimum: 0 }
       responses:
-        "200": { description: Approved }
+        "200":
+          description: Approved
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [artifact_id, state]
+                properties:
+                  artifact_id: { type: string, format: uuid }
+                  state: { type: string, enum: [APPROVED] }
+                  version: { type: integer, minimum: 0 }
         "409":
           description: Conflict (stale version or illegal state)
 ```
 
 F.10 Rate limit response example (normative)
 
-```jsonc
+```http
 HTTP/1.1 429 Too Many Requests
 Content-Type: application/json
 Retry-After: 60
