@@ -1,0 +1,10 @@
+%% Mermaid flow: Approvals UX (staff) v1
+flowchart TD
+  A[Artifact READY] --> B{Reviewer opens review}
+  B --> C[View diffs/QA]
+  C --> D{Approve?}
+  D -- Yes --> E[POST /reviews/{id}/approve]
+  D -- No  --> F[POST /reviews/{id}/reject]
+  E --> G[SSE: artifact_state APPROVED]
+  E --> H[Portal: invalidate prior same-type links]
+  F --> I[SSE: artifact_state REJECTED]

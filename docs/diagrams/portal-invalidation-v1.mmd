@@ -1,0 +1,9 @@
+%% Mermaid sequence: Portal invalidation v1
+sequenceDiagram
+  participant Web as Web
+  participant DB as Postgres
+  participant P as Portal Client
+  Web->>DB: Approve new same-type artifact (demote prior)
+  Web-->>P: SSE portal_link_invalidated{artifact_id}
+  P->>Web: GET old link
+  Web-->>P: 403 state changed (banner)

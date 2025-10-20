@@ -26,6 +26,7 @@ and module discovery (`db/__init__.py`, `config/__init__.py`).
 - Permissions: Visit `/permissions/` for a read-only catalog of artifact fields, presets, and roles (edits still happen via Django admin for MVP).
 - Platform uploads let you choose `batch` (default) or `on-demand` transcription.
 - Batch mode optionally enables speaker diarization via UI toggle or `--diarization` flag.
+- JSON Schemas: run `make lint-schemas` (requires `jsonschema`) to validate shared schemas under `spec/schemas`. When ready for CI wiring, add this target to the lint pipeline after Spectral runs so schema drift fails early.
 
 ## Authentication & dashboard flow
 - Sign in at `/login/` to use the themed welcome screen. Local username/password login remains available in development, while production instances surface a Single Sign-On button when OIDC is configured.

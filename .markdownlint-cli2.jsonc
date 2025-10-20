@@ -1,0 +1,21 @@
+{
+  "$schema": "https://raw.githubusercontent.com/DavidAnson/markdownlint-cli2/main/schema/markdownlint-cli2-config-schema.json",
+  "config": {
+    "MD013": false,
+    "MD033": {
+      "allowed_elements": ["br", "sup", "sub"]
+    },
+    "MD036": false,
+    "MD046": {
+      "style": "fenced"
+    }
+  },
+  "globs": [
+    "docs/**/*.md",
+    "AGENTS.md"
+  ],
+  "ignores": [
+    "**/node_modules/**",
+    "docs/diagrams/**/_rendered/**"
+  ]
+}

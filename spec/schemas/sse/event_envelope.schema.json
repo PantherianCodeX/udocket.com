@@ -1,0 +1,313 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://udocket.ca/schemas/sse/event_envelope.schema.json",
+  "title": "ServerSentEvent",
+  "description": "Envelope and payload definitions for SSE streams (case and job channels).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "event",
+    "data"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "maxLength": 64,
+      "description": "Monotonic identifier for at-least-once delivery."
+    },
+    "event": {
+      "type": "string",
+      "enum": [
+        "job.update",
+        "artifact.state",
+        "qa.notes",
+        "portal_link_invalidated",
+        "settings.activated",
+        "artifact.snapshot"
+      ]
+    },
+    "retry": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 60000,
+      "description": "Optional reconnection hint in milliseconds."
+    },
+    "data": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/job_update"
+        },
+        {
+          "$ref": "#/$defs/artifact_state"
+        },
+        {
+          "$ref": "#/$defs/qa_notes"
+        },
+        {
+          "$ref": "#/$defs/portal_link_invalidated"
+        },
+        {
+          "$ref": "#/$defs/settings_activated"
+        },
+        {
+          "$ref": "#/$defs/artifact_snapshot"
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "job_update": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event",
+        "job_id",
+        "case_id",
+        "org_id",
+        "status"
+      ],
+      "properties": {
+        "event": {
+          "const": "job.update"
+        },
+        "job_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "case_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "org_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "PENDING",
+            "RUNNING",
+            "PAUSED",
+            "FAILED",
+            "COMPLETED"
+          ]
+        },
+        "progress": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 512
+        }
+      }
+    },
+    "artifact_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event",
+        "artifact_id",
+        "case_id",
+        "org_id",
+        "type",
+        "state",
+        "ts"
+      ],
+      "properties": {
+        "event": {
+          "const": "artifact.state"
+        },
+        "artifact_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "case_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "org_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "type": {
+          "type": "string"
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "DRAFT",
+            "READY",
+            "QUARANTINED",
+            "APPROVED",
+            "REJECTED"
+          ]
+        },
+        "previous_state": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ts": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "qa_notes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event",
+        "case_id",
+        "notes"
+      ],
+      "properties": {
+        "event": {
+          "const": "qa.notes"
+        },
+        "case_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "artifact_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "job_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "notes": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "type": "object",
+            "required": [
+              "level",
+              "message",
+              "ts"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "level": {
+                "type": "string",
+                "enum": [
+                  "INFO",
+                  "WARN",
+                  "ERROR"
+                ]
+              },
+              "message": {
+                "type": "string",
+                "maxLength": 2048
+              },
+              "ts": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      }
+    },
+    "portal_link_invalidated": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event",
+        "artifact_id",
+        "case_id",
+        "reason",
+        "ts"
+      ],
+      "properties": {
+        "event": {
+          "const": "portal_link_invalidated"
+        },
+        "artifact_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "case_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "ts": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "settings_activated": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event",
+        "scope",
+        "bundle_id",
+        "version_id",
+        "ts"
+      ],
+      "properties": {
+        "event": {
+          "const": "settings.activated"
+        },
+        "scope": {
+          "type": "string",
+          "enum": [
+            "SYSTEM",
+            "ORG",
+            "CASE"
+          ]
+        },
+        "org_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "case_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "bundle_id": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "version_id": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "ts": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "artifact_snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event",
+        "watermark_ts",
+        "events"
+      ],
+      "properties": {
+        "event": {
+          "const": "artifact.snapshot"
+        },
+        "watermark_ts": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "events": {
+          "type": "array",
+          "maxItems": 500,
+          "items": {
+            "type": "object"
+          }
+        }
+      }
+    }
+  }
+}
