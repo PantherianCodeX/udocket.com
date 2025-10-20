@@ -1323,6 +1323,7 @@ Example
 
 - Modes: `on-demand` streaming for shorter recordings (local processing), `batch` for longer files via Azure Batch Transcription (HTTPS SAS URL). Region allowlists from Settings are enforced at job dispatch.
 - Input processing: audio uploads hashed, normalized via ffmpeg (PCM 16 kHz mono). Artifacts created: `TRANSCRIPT_INPUT`, `AUDIO_NORMALIZED`.
+- Malware & format validation: every upload (audio, documents, exhibits) routes through the `upload_scan` pipeline—an isolated Kubernetes job running ClamAV with daily `freshclam` updates plus org-specific YARA rules (`packages/security/yara/`). Files are scanned before workers access them; positive hits set `upload_session.status='SCANNING_FAILED'`, quarantine the staging object, emit `MALWARE_DETECTED` audit events, and notify Security (remediation flow in App.H RB-UPLOAD-SCAN). Format validators (mediainfo/ffprobe, pdfcpu, tika) run in the same sandbox to confirm claimed MIME/codec; malformed files are rejected with actionable error codes and attached diagnostic logs.
 - Multi-track support: batch mode can ingest stereo/multi-channel sources, splitting speakers prior to diarization; single-track on-demand relies on optional diarization metadata when available.
 - Outputs: timestamped transcript (`transcript/<job_id>__transcript.txt`) with header metadata (case, source name, hashes, language, region, duration); optional `DIARIZATION` JSON for batch mode.
 - Ops artifacts: `ops/<job_id>__transcription.log`, `ops/<job_id>__transcription_log.json`, case-level `ops_transcription.jsonl` append. Guardian invoked automatically post-write.
@@ -1481,7 +1482,7 @@ Node catalog (illustrative)
 *Purpose: Make analysis, transcription, and Guardian quality targets measurable and auditable.*
 
 - **Speech accuracy:** Word Error Rate (WER) target ≤ 8 % for on-demand, ≤ 6 % for batch transcripts measured against quarterly golden sets; dashboards plot WER trend per language with alerts when ≥ 2 % regression (`metrics: transcription_wer_pct{mode,language}`).
-- **Guardian effectiveness:** False-negative rate (quarantined after customer exposure) ≤ 0.5 % per quarter, false-positive (unjustified quarantine) ≤ 5 % with remediation documented in App.H RB-GUARD-QUAR review log. Weekly sampling validates decision reasons against policy matrix.
+- **Guardian effectiveness:** False-negative rate (quarantined after customer exposure) ≤ 0.5 % per quarter, false-positive (unjustified quarantine) ≤ 5 % with remediation documented in App.H RB-GUARD-QUAR review log. Weekly sampling validates decision reasons against policy matrix using `guardian_quarantine_false_positive_total` vs `guardian_decision_total` to quantify drift and trigger policy tuning.
 - **Review delta:** Reviewer change rate for Analyze/Compose deliverables \< 15 % of sections (measured via `qa_log` issue density and Manual/Agent edit diffs). Exceeding thresholds triggers regression analysis in LangGraph acceptance tests (§13.3).
 - **QA defect density:** `qa_issue_density` metric targets ≤ 0.2 blocking defects per artifact; Compose/Analyze QA lanes surface severity distribution for release gates.
 - **FinOps + quality blend:** Track tokens-per-approved artifact and rejection counts to ensure budget adherence does not degrade quality; anomalies produce decision-log entries (§15.3).
@@ -1583,6 +1584,15 @@ Reason matrix (illustrative)
    WHERE idempotency_key IS NOT NULL;
   ```
 
+#### 7.1.3 Queue observability & timeout safeguards (binding)
+
+*Purpose: Surface Guardian stalls quickly and keep operators unblocked when automation degrades.*
+
+- Guardian publishes queue gauges `guardian_pending_total` and `guardian_pending_oldest_seconds` from the `guardian_submission_queue` materialized view (fields: `artifact_id`, `org_id`, `submitted_at`, `last_heartbeat_at`). Alert `alert_guardian_queue_stale` fires when pending count exceeds the adaptive KEDA budget or the oldest item age breaches `guardian.queue.backlog_alert_minutes`; App.H RB-GUARD-QUEUE prescribes triage steps and manual fallback sequencing.
+- Worker submission watchdogs enforce `guardian.queue.submission_timeout_seconds` (default 300s). When Guardian has not replied within that window the worker marks the run `FAILED_GUARDIAN_TIMEOUT`, leaves the artifact in `DRAFT`, emits SSE `artifact.guardian_timeout`, records audit event `GUARDIAN_TIMEOUT_ESCALATED`, and increments `guardian_submission_timeout_total`. Ops receives a page and the UI surfaces a banner instructing staff to either resubmit once Guardian is healthy or follow the manual review checklist.
+- Reviewer backlog health is tracked via `review_ready_backlog_total` and `review_ready_oldest_seconds`; alerts respect `reviews.backlog.alert_minutes` so reviewers are paged before READY artifacts languish. The approvals panel highlights age bands and links directly to the Guardian decision details that require action.
+- False-positive sampling increments `guardian_quarantine_false_positive_total` whenever an artifact resubmits with the same `content_sha256` and transitions from `QUARANTINED` to `READY` without a ruleset change. Weekly governance checks compare that counter against `guardian_decision_total` to ensure the ≤ 5 % false-positive objective (§6.12) remains on track and to prioritise rule tuning when the ratio trends upward.
+
 ### 7.2 Digital signature service (PDF/A, TSA, OCSP)
 
 *Purpose: Produce tamper-evident deliverables with verifiable trust anchors.*
@@ -1624,7 +1634,7 @@ Reason matrix (illustrative)
 
 - Break-glass events, waiver usage (cross-region), and trust-root updates require dual approval and generate dedicated audit artifacts per §14 / Appendix D.
 
-- Observability dashboards highlight Guardian decision rates, quarantine reasons, and signature verification outcomes for compliance teams.
+- Observability dashboards highlight Guardian decision rates, backlog age (`guardian_pending_oldest_seconds`), quarantine reasons, and signature verification outcomes for compliance teams.
 
 - **Source material:** `§5.2`, `§6`, `§49`, `App.A` sequence
 
@@ -1936,7 +1946,8 @@ List contracts (normative)
 - Jobs
 
   - Create: `POST /api/v1/cases/{case_id}/jobs/{kind}` with `Idempotency-Key` (TTL default 24h) → returns job id.
-  - Get: `GET /api/v1/jobs/{id}`; Control: `POST /api/v1/jobs/{id}/pause|resume` (OCC on `version`).
+  - Get: `GET /api/v1/jobs/{id}`; Control: `POST /api/v1/jobs/{id}/pause|resume|cancel` (OCC on `version`). Cancelling transitions the job to `CANCELLED`, emits audit event `JOB_CANCELLED` (captures `reason`, `actor_id`), raises SSE `job.update` with `status="CANCELLED"`, and propagates best-effort aborts to external providers (Azure Speech Batch, LangGraph lanes) before marking dependent artifacts `DRAFT`. Repeated cancels are idempotent; only `PENDING|RUNNING|PAUSED` jobs accept the transition.
+  - Progress watchdog (binding): the `job_progress_heartbeat` table records `{job_id, last_heartbeat_at, progress_pct}` updates from workers. A dedicated watchdog task scans for `RUNNING` jobs whose heartbeat age exceeds `jobs.watchdog.no_progress_minutes`; it emits `job_watchdog_warning_total`, raises SSE `job.update` with `status="RUNNING"`, `warning="NO_PROGRESS"`, and annotates the job record. If the heartbeat age exceeds `jobs.watchdog.timeout_minutes`, the watchdog transitions the job to `FAILED`, increments `job_watchdog_timeout_total`, files audit event `JOB_WATCHDOG_TIMEOUT`, and invokes RB-JOB-WATCHDOG. Watchdog actions never mutate jobs already `COMPLETED|FAILED|CANCELLED`; recoverable jobs remain resumable thanks to checkpoint metadata (§6.2, §6.3, §6.4).
   - Overlap guard: advisory lock `jobkind:{case_id}/{kind}`; conflicts → 409 `JOB_KIND_BUSY`.
 
 - Reviews (OCC + swap lock)
@@ -2207,7 +2218,8 @@ ______________________________________________________________________
 *Purpose: Summarize the operator/reviewer experience and dependencies.*
 
 - Case workspace shows artifact timeline, job status, approvals queue, and Guardian outcomes; integrates with SSE for live updates and Channels for collaborative notes.
-- Approvals panel enforces multi-step review (agent output, manual edits) with OCC guardrails; components display readiness, reviewer count, and pending manual edits.
+- Approvals panel enforces multi-step review (agent output, manual edits) with OCC guardrails; components display readiness, reviewer count, pending manual edits, Guardian reason codes (with scrubbed excerpts), and backlog ageing banners tied to `review_ready_backlog_total`/`review_ready_oldest_seconds`.
+- Job tiles surface watchdog warnings (icon + tooltip) when `job_watchdog_warning_total` increments; clicking reveals last heartbeat, current lane, and suggested remediation per RB-JOB-WATCHDOG. Cancelled or timeout jobs link directly to audit events and runbook excerpts.
 - Analytics dashboards surface LLM cost, artifact coverage, QA issues; data sourced from `audit_event`, `ops_*` logs, and FinOps metrics.
 - Component-level permissions derived from Settings-driven policy map; UI respects field masks (e.g., masked SHA values replaced with `[REDACTED]`).
 
@@ -2216,6 +2228,7 @@ ______________________________________________________________________
 *Purpose: Demonstrate accessible, deterministic SSE consumption in the staff UI without freezing layout or leaking cross-case data.*
 
 - Reference implementation: App.U.5 provides the TypeScript/React snippet (`JobStatusTicker`) covering SSE subscription, token binding, and accessible announcements. The appendix version is linted with the shared UI tooling so snippets stay copy/pasteable.
+- Status vocabulary: `PENDING`, `RUNNING`, `PAUSED`, `FAILED`, `COMPLETED`, and `CANCELLED`; terminal cancellations surface with a neutral badge and a tooltip linking to the audit event that recorded the cancellation request.
 - `aria-live="polite"` keeps assistive tech informed without flooding announcements.
 - `withCredentials` enforces token binding per §10.7; callers must run inside the case-scoped layout so cookies inherit the correct SameSite/Path metadata.
 - UI surfaces deterministic state transitions: badges map `data-status` to semantic colors via design tokens (`--badge-ready`, `--badge-failed`), ensuring light/dark themes stay in sync without inline overrides.
@@ -2276,7 +2289,7 @@ ______________________________________________________________________
 - SSE streams status updates (`job.update`, `artifact.state`, `qa.notes`) to both staff and clients with token-binding; server disconnects on token expiry or org switch.
 - SSE responses MUST set `Cache-Control: no-store` and, when fronted by Nginx/Envoy, `X-Accel-Buffering: no` (or equivalent) to prevent buffering. Producers emit a heartbeat comment every 15 seconds and advertise `retry: 5000` so clients back off exponentially (max 30 seconds) when reconnecting.
 - Channels-based editors allow Manual/Agent edits with conflict resolution; optimistic locking ensures edits create new artifact versions awaiting approval.
-- Real-time controls (pause/resume jobs, rerun Guardian) restricted to authorized roles; commands processed via Channels with audit events capturing actor and outcome.
+- Real-time controls (pause/resume/cancel jobs, rerun Guardian) restricted to authorized roles; commands processed via Channels with audit events capturing actor and outcome.
 
 ### 11.5 Security hardening (headers, anti-phishing, download guards)
 
@@ -2411,7 +2424,7 @@ ______________________________________________________________________
   ```
 - Emission & formatting (binding): All services emit newline-delimited JSON to stdout for levels `DEBUG` through `ERROR`; only `ERROR` and higher duplicate to stderr so container runtimes and `kubectl logs`/`docker logs` tail a single canonical stream. The `src` field records the compact source location as `package.module:function:line` (max 80 characters) and extended diagnostics belong in structured keys under `extras`. Messages must remain ≤ 160 characters—richer context should be captured in dedicated fields to avoid terminal noise. Local pretty printing is opt-in via `LOG_PRETTY=1`, keeping production streams strict JSON with no ANSI colour or stacktrace spam.
 - Forbidden fields (binding): log scrubber removes `Authorization`, `Cookie`, `Set-Cookie`, `X-Request-Signature`, `X-Signature-Key-Id`, raw signed URLs, and any header matching `*-Token` before serialization. CI test `tests/logging/test_redaction.py::test_forbidden_headers_masked` asserts the mask list, and runtime metrics `logging_redaction_dropped_total` surface any attempt to log a banned key.
-- Metrics: queue depth, job durations, Guardian latency/throughput, Signer verify latency (including `sign_verify_status_total`, `ocsp_latency_seconds`, `ocsp_staple_age_seconds`, `tsa_latency_seconds`, `tsa_time_drift_seconds`), LLM health/circuit state, delivery rates, integrity incidents (`integrity_scan_queue_depth`, `integrity_quarantine_total`), LPE surface health (`lpe_lookup_latency_seconds`, `lpe_cache_hit_ratio`, `lpe_compiler_duration_seconds`, `lpe_policy_block_total`), Reference Manager ingest health (`reference_manager_ingest_duration_seconds`, `reference_manager_diff_backlog`, `reference_manager_publish_total`), SSE reconnect rate, `artifacts_ready_total`, `artifacts_approved_total`, `time_to_approval_seconds`. All Prometheus metrics use seconds for duration histograms and `_total` counters for events; legacy `*_ms` signals are deprecated and scheduled for removal in v7 GA (§12.6).
+- Metrics: queue depth, job durations, Guardian latency/throughput (`guardian_decision_latency_seconds`, `guardian_ready_ratio`, `guardian_pending_total`, `guardian_pending_oldest_seconds`, `guardian_submission_timeout_total`), Signer verify latency (including `sign_verify_status_total`, `ocsp_latency_seconds`, `ocsp_staple_age_seconds`, `tsa_latency_seconds`, `tsa_time_drift_seconds`), LLM health/circuit state, delivery rates, integrity incidents (`integrity_scan_queue_depth`, `integrity_quarantine_total`), review queue health (`review_ready_backlog_total`, `review_ready_oldest_seconds`), Guardian false-positive sampling (`guardian_quarantine_false_positive_total`), job lifecycle signals (`job_stalled_total`, `job_watchdog_warning_total`, `job_watchdog_timeout_total`, `job_cancellation_total`), watchdog runner health (`watchdog_runner_lag_seconds`, `watchdog_runner_missed_total`), LPE surface health (`lpe_lookup_latency_seconds`, `lpe_cache_hit_ratio`, `lpe_compiler_duration_seconds`, `lpe_policy_block_total`), upload scanning (`upload_scan_duration_seconds`, `upload_scan_infected_total`, `upload_scan_error_total`), Reference Manager ingest health (`reference_manager_ingest_duration_seconds`, `reference_manager_diff_backlog`, `reference_manager_publish_total`), SSE reconnect rate, `artifacts_ready_total`, `artifacts_approved_total`, `time_to_approval_seconds`. All Prometheus metrics use seconds for duration histograms and `_total` counters for events; legacy `*_ms` signals are deprecated and scheduled for removal in v7 GA (§12.6).
 - FinOps metrics: `llm_cost_estimate_total{org,case,job,model}`, `finops_cost_per_case_usd{org,case}`, `finops_cost_per_org_usd{org,month}`, `delivery_events_total{org,channel,status}`, `finops_mom_regression_flag{org}`.
 - Privacy/Governance: `residency_block_total`, `dpia_records_total{status}`, `ropa_records_total`, `entitlement_snapshots_total`, `policy_unsafe_activations_blocked_total`.
 - Advisory locks: `udlock_locks_held{scope,kind}`, `udlock_lock_age_seconds_p95{scope,kind}`, `udlock_watchdog_stale_total{action}`, `udlock_registry_gc_total`.
@@ -2474,7 +2487,7 @@ ______________________________________________________________________
 - Synthetic checks: `/readyz` with RLS enforcement, settings cache validation, NTP drift. Guardian synthetic job ensures policy enforcement; Signer synthetic verifies TSA reachability.
 - Logging pipeline synthetic monitors assert `logging_ingest_lag_seconds < 30s`, `logging_drop_rate_pct = 0`, and index freshness; alerts route to App.H RB-LOG-007.
 - Runbooks stored in ops repo (linked in App.H) cover Guardian quarantine handling, PgBouncer pooling misconfig, artifact integrity mismatch, SSE replay issues, and logging pipeline recovery.
-- Automation: watchdog tasks auto-quarantine artifacts with integrity failures, restart pods on failed health checks, and rotate settings caches when invalidation fails.
+- Automation: watchdog tasks auto-quarantine artifacts with integrity failures, restart pods on failed health checks, and rotate settings caches when invalidation fails. The `watchdog-runner` Celery beat process emits heartbeats (`watchdog_runner_lag_seconds`) and raises PagerDuty incidents if it misses two consecutive intervals; Kubernetes liveness/readiness probes restart the runner on failure.
 - Fail-closed defaults: if Guardian is unavailable, artifacts remain `DRAFT`; if Settings is unavailable, new jobs block on snapshot fetch while running jobs continue with embedded snapshots. These scenarios have dedicated alerts and runbooks in App.H.
 
 ### H.5 RB-LLM-003 — Provider degradation / circuit breaker (normative)
@@ -2516,6 +2529,7 @@ Preventive actions
 - Post-incident reviews required within 48h; actions tracked in ops backlog. Metrics `incident_count_total`, `mttr_minutes`, and `logging_incident_total`.
 - Communication templates for customer notifications, regulators, and internal leadership included in App.H; latest redlines stored as `INCIDENT_TEMPLATE` artifacts covering PII disclosure, residency breach, and major outage scenarios.
 - Logging ingestion incidents (dropped events or ingest lag > 2 minutes) automatically raise Sev-2, reference RB-LOG-007, and block prod deploys until the pipeline stabilizes for two consecutive collection intervals.
+- Upload scanning outages or sustained `upload_scan_error_total` spikes trigger security incidents with App.H RB-UPLOAD-SCAN; uploads remain disabled (`uploads.enabled=false`) until the pipeline clears and signatures are verified current.
 
 ### 12.4 Backup, DR objectives, and failover drills
 
@@ -2552,6 +2566,7 @@ Preventive actions
 
   - LLM circuits: OPEN/HALF-OPEN/CLOSED; metrics `llm_circuit_state`, reason codes (`PRIMARY_DEGRADED`, `RATE_LIMIT`). Runbook App.H RB-LLM-003.
   - Advisory lock watchdog: metrics `udlock_watchdog_stale_total`, `udlock_lock_age_seconds_p95`; defaults `udlock.max_session_hold_seconds=300`, `udlock.heartbeat.interval_seconds=5`. Runbook App.H RB-LOCK-006. `kill_stale=false` in prod; remediation flows through the operator-only endpoint `POST /ops/v1/udlock/{scope}/{key}/mark` which tags the holder, adds trace attribute `lock.triage=manual_review`, and (when explicitly requested) issues `pg_terminate_backend` after human confirmation.
+  - Job progress watchdog: metrics `job_watchdog_warning_total`, `job_watchdog_timeout_total`; thresholds driven by `jobs.watchdog.*` settings. Runbook App.H RB-JOB-WATCHDOG guides remediation.
 
 - Queues and DLQ:
 
@@ -2575,8 +2590,8 @@ ______________________________________________________________________
 
 *Purpose: Provide common observability views and bind alerts to runbooks.*
 
-- Guardian SLO & Throughput (SRE): decision latency P50/P95/P99, error rate, queue depth, synthetic success, SLO burn rate.
-- Queues & KEDA (SRE): Celery queue depth per lane, replicas, scaling events, DLQ intake and drain.
+- Guardian SLO & Throughput (SRE): decision latency P50/P95/P99, error rate, queue depth/backlog age (`guardian_pending_total`, `guardian_pending_oldest_seconds`), submission timeout rate (`guardian_submission_timeout_total`), false-positive ratio (`guardian_quarantine_false_positive_total / guardian_decision_total`), synthetic success, SLO burn rate.
+- Queues & KEDA (SRE): Celery queue depth per lane, replicas, scaling events, DLQ intake and drain, job cancellation spikes (`job_cancellation_total`), watchdog escalations (`job_watchdog_timeout_total`), and review backlog ageing (`review_ready_backlog_total`, `review_ready_oldest_seconds`).
 - LLM Cost & Circuit (Platform): tokens in/out, estimated spend vs cap, circuit state per model/provider, fallback reason codes.
 - Localization & Policy Engine (Platform/SRE): lookup latency P50/P95/P99, cache hit ratio, compiler duration, policy decision distribution by residency/privacy flags, unsafe activation counters, waiver utilisation.
 - Reference Manager – Ingestion & Quality (Content Ops/Legal Ops): harvest throughput per source, freshness age, selector failure rate, coverage % by jurisdiction/locale, license ledger health.
@@ -2585,6 +2600,7 @@ ______________________________________________________________________
 - Portal Security (SecEng): download rate per org/user, anomaly triggers, link invalidations, adaptive MFA prompts.
 - Advisory Locks (SRE): locks held by scope/kind, age percentiles, stale detections, terminations; tied to App.H RB-LOCK-006.
 - Logging Pipeline (SRE): ingest lag, drop rate, spool utilization, index health; alerts map to App.H RB-LOG-007.
+- Upload Scanning (Security): queue depth, scan duration, infected/errored totals, signature freshness metrics; alerts route to App.H RB-UPLOAD-SCAN.
 - Unit Economics & Delivery (PM/SRE): cost per case/org; MoM deltas; top 10 expensive cases; delivery counts and failure rates.
 
 Instrumentation rollout: Phase 1 (MVP) enables Guardian SLO, Queue/KEDA, LLM Cost & Circuit, and Logging Pipeline dashboards with paging alerts. Phase 2 adds Localization/Policy, Reference Manager, and Portal Security views once core adoption metrics stabilize. Subsequent dashboards remain defined here but ship behind feature flags and non-blocking alerts until their owning teams finish onboarding/runbook training.
@@ -2602,6 +2618,7 @@ Alert routing
 - Guardian: submit synthetic artifact; expect deterministic READY with known inputs; verifies rules load; latency \< SLO.
 - Signer: sign a synthetic document against test trust roots; verify TSA/OCSP reachability.
 - Settings: activate a safe test bundle; diff preview matches expected; revert; validators pass.
+- Watchdog runner: `watchdog-runner` Celery beat schedule fires every minute, invoking all watchdog tasks (Guardian backlog, job progress, advisory locks, integrity queue). A self-check endpoint `/ops/watchdog/status` reports the most recent execution timestamp and per-task durations; synthetic monitor verifies the timestamp delta stays \< 120s. Metrics `watchdog_runner_lag_seconds`, `watchdog_runner_missed_total`, and log-based alerts catch missed beats; if the runner stalls, App.H RB-JOB-WATCHDOG and RB-GUARD-QUEUE prescribe manual invocation plus root-cause remediation before re-enabling automation.
 - Portal: download approved synthetic artifact; ETag/Range behavior validated; portal invalidation simulated.
 - Alert thresholds: burn-rate SLO alerts and synthetic failures must page on-call with proper runbook IDs.
 
@@ -3243,8 +3260,11 @@ E.1 Key catalog (scope: SYSTEM | ORG | CASE)
 - compose.templates.client.template_id — ORG — default — DOCX/MD template selection; §6.4.
 - compose.templates.lawyer.template_id — ORG — default — DOCX/MD template selection; §6.4.
 - reviews.timeout_hours — ORG — 72 — Approval escalation threshold (reminders/escalations); §11.2.3.
+- reviews.backlog.alert_minutes — ORG — 30 — Minutes before READY artifacts trigger reviewer escalation banners/alerts; §7.1.3, §11.1.
 - guardian.rules.version — ORG — v1 — Ruleset version; §7.1.
 - guardian.decision_slo_ms — SYSTEM|ORG — 300000 — Decision latency SLO; §7.1, §12.
+- guardian.queue.backlog_alert_minutes — SYSTEM|ORG — 5 — Pending Guardian submission age threshold before alerts fire; §7.1.3, §12.6.
+- guardian.queue.submission_timeout_seconds — SYSTEM|ORG — 300 — Worker timeout waiting on Guardian response; §7.1.3, §12.1.
 - sign.trust_roots\[\] — SYSTEM|ORG — \[\] — Trust roots for signing; §7.2.
 - sign.tsa.endpoint — SYSTEM|ORG — null — TSA API endpoint; §7.2.
 - sign.tsa.max_time_drift_secs — SYSTEM — 5 — NTP drift tolerance; §7.2, §3.2.
@@ -3265,6 +3285,13 @@ E.1 Key catalog (scope: SYSTEM | ORG | CASE)
 - agents.langgraph.runner — SYSTEM|ORG — langgraph — Graph runner selection (`langgraph` or `linear`); §6.7.2.
 - agents.langgraph.fallback_mode — SYSTEM — false — Force manual drafting fallback; §6.7.2, App.H RB-LLM-003.
 - llm.finops.monthly_cap_usd — ORG — 0 (disabled) — Monthly LLM spend cap; §8.3, §13.4.
+- jobs.watchdog.no_progress_minutes — SYSTEM|ORG — 5 — Minutes without heartbeat before watchdog warns; §10.2, §12.1, App.H RB-JOB-WATCHDOG.
+- jobs.watchdog.timeout_minutes — SYSTEM|ORG — 15 — Minutes without heartbeat before watchdog fails the job; §10.2, §12.1, App.H RB-JOB-WATCHDOG.
+- uploads.scan.engine — SYSTEM — clamav — Malware engine used in the upload scan pipeline; §6.2, §12.1.
+- uploads.scan.yara_ruleset_version — SYSTEM — latest — Version tag for YARA rules synced from Security; §6.2.
+- uploads.scan.timeout_seconds — SYSTEM|ORG — 120 — Max scan duration before treating file as suspicious and quarantining; §6.2, App.H RB-UPLOAD-SCAN.
+- uploads.scan.override_hashes[] — SYSTEM|ORG — [] — Temporary allowlist for known-clean artifacts while rules are tuned (dual approval, time-boxed); App.H RB-UPLOAD-SCAN.
+- uploads.enabled — SYSTEM|ORG — true — Toggle to accept new uploads; disabled during major scanner outages; App.H RB-UPLOAD-SCAN.
 - api.idempotency.ttl_hours — SYSTEM — 24 — TTL for idempotency; §10.3.
 - api.rate_limits.web.rpm_per_org — SYSTEM|ORG — 600 (guardrail 10–2000; activation validator enforces range) — Org RPM; §10.5.
 - api.rate_limits.web.rpm_per_ip — SYSTEM|ORG — 300 (guardrail 10–2000) — IP RPM; §10.5.
@@ -3683,7 +3710,10 @@ ______________________________________________________________________
 ### H.1 Runbook index
 
 - RB-GUARD-001 Guardian SLO breach
+- RB-GUARD-QUEUE Guardian backlog watchdog
 - RB-QUEUE-002 Backlog saturation & KEDA tuning
+- RB-JOB-WATCHDOG Job stall watchdog
+- RB-UPLOAD-SCAN Upload malware scan failures
 - RB-LLM-003 Provider degradation / circuit breaker
 - RB-AUDIT-004 Audit seal failure
 - RB-PORTAL-005 Download anomaly & link revoke
@@ -4012,6 +4042,171 @@ Usage
           )
   ```
 - Canonical scopes: `artifact:{artifact_id}`, `case-type:{case_id}/{type}`, `jobkind:{case_id}/{kind}`, `idempotency:{scope}:{key}`, `settings:activate:{scope}/{case_id}`. Align helpers under `udlock.*` to ensure watchdog visibility.
+
+### H.12 RB-GUARD-QUEUE — Guardian backlog watchdog (normative)
+
+Purpose: Restore Guardian submission throughput before READY artifacts stall.
+
+Linked alert: `alert_guardian_queue_stale` (Grafana: Guardian SLO dashboard).
+
+Signals
+
+- `guardian_pending_total` breaching adaptive threshold or trending upward for 3 scrapes.
+- `guardian_pending_oldest_seconds` > `guardian.queue.backlog_alert_minutes * 60`.
+- `guardian_submission_timeout_total` increments within the last 5 minutes.
+- `review_ready_oldest_seconds` approaching `reviews.backlog.alert_minutes`.
+
+Triage — 5-minute checklist
+
+1. Verify Guardian health: `/readyz`, `/synthetic/status`, and decision latency panels (`guardian_decision_latency_seconds`).
+1. Inspect queue detail:
+   ```sql
+   SELECT artifact_id,
+          org_id,
+          submitted_at,
+          now() - submitted_at AS age,
+          last_heartbeat_at,
+          decision_attempts
+     FROM guardian_submission_queue
+ ORDER BY submitted_at
+    LIMIT 50;
+   ```
+1. Sample worker logs for `FAILED_GUARDIAN_TIMEOUT` and ensure Celery workers remain healthy (no memory pressure, no stuck tasks).
+1. Check recent releases/settings: review `guardian.rules.version` activations and Guardian deploy history.
+
+Decision
+
+- **Compute exhaustion:** scale Guardian deployment (HPA min replicas), verify CPU/memory headroom, and ensure database connections below pool limits.
+- **Policy/rules regressions:** confirm latest ruleset; if new rule causes mass `POLICY_BLOCK`, escalate to Guardian SME, revert via settings, or mark for manual review per RB-GUARD-001.
+- **External dependency degradation:** inspect LPE/Settings latency; if upstream latency > SLO, coordinate with owning team and consider temporarily throttling submissions.
+- **Service outage:** if Guardian unhealthy, follow RB-GUARD-001 for manual review mode and pause automated submissions until synthetic passes.
+
+Post-remediation
+
+- Ensure `guardian_pending_total` returns below alert threshold and `guardian_pending_oldest_seconds` < 120s for two scrapes.
+- Confirm `guardian_submission_timeout_total` stops increasing and backlog items receive fresh decisions.
+- Annotate incident/decision log with root cause, remediation, and follow-up tasks; link to Guardian deploy/settings diff.
+
+Preventive actions
+
+- Add load test case to Guardian synthetic job if backlog caused by unmodelled traffic.
+- Tune `guardian.queue.backlog_alert_minutes` or worker concurrency if burst patterns evolve.
+- Schedule ruleset review to address false positives if `guardian_quarantine_false_positive_total` spiked.
+
+Field runbook snippets
+
+- Restart Guardian: `kubectl -n platform rollout restart deploy/guardian` (after confirming fix).
+- Adjust HPA floor: `kubectl -n platform scale deploy/guardian --replicas=<n>` (and update IaC after incident).
+- Worker health snapshot: `kubectl -n platform get pods -l app=platform-worker -o wide`.
+
+### H.13 RB-JOB-WATCHDOG — Job stall watchdog (normative)
+
+Purpose: Detect and remediate jobs that stop progressing despite remaining RUNNING.
+
+Linked alerts: `alert_job_watchdog_timeout` (Grafana: Queues & KEDA dashboard) and `alert_job_watchdog_warning` (warning tier).
+
+Signals
+
+- `job_watchdog_warning_total` increments for a job.
+- `job_watchdog_timeout_total` increments (hard failure).
+- Log sample contains `JOB_WATCHDOG_TIMEOUT` audit event or worker error `WATCHDOG_NO_PROGRESS`.
+- Support tickets referencing stuck progress bars for specific jobs/cases.
+
+Triage — 5-minute checklist
+
+1. Identify impacted job(s): query
+   ```sql
+   SELECT j.id,
+          j.case_id,
+          j.kind,
+          j.status,
+          j.progress_pct,
+          now() - heartbeat.last_heartbeat_at AS heartbeat_age
+     FROM job j
+     JOIN job_progress_heartbeat heartbeat ON heartbeat.job_id = j.id
+    WHERE j.status = 'RUNNING'
+      AND heartbeat.last_heartbeat_at < now() - make_interval(mins => current_setting('jobs.watchdog.no_progress_minutes')::int)
+ ORDER BY heartbeat.last_heartbeat_at;
+   ```
+1. Inspect worker logs (`kubectl -n platform logs deploy/platform-worker -c worker --since=10m`) for exceptions, provider errors, or stalled external calls.
+1. Verify dependent services: for transcription, check Azure Batch job status; for Compose/Analyze, review LangGraph lane envelopes and Guardian readiness.
+
+Decision
+
+- **Transient dependency issue:** pause/resume the job to trigger fresh attempt; monitor heartbeat.
+- **Provider/API failure:** cancel the job (`POST /api/v1/jobs/{id}/cancel`) and notify product; capture provider ticket ID; follow RB-LLM-003 or relevant provider runbook.
+- **Worker crash:** restart impacted worker deployment, ensure queue drains, and requeue the job via manual retry.
+- **Data issue (bad input/exhibit):** fail the job with actionable message explaining remediation; ensure audit trail references offending artifact.
+
+Post-remediation
+
+- Confirm heartbeats resume and `job_status` transitions to `RUNNING` (with progress) or `FAILED/CANCELLED` with explicit reason.
+- Update incident/decision log with root cause and resolution; attach logs or provider responses.
+- If watchdog thresholds proved too aggressive/lenient, propose tuned values for `jobs.watchdog.no_progress_minutes` / `jobs.watchdog.timeout_minutes` via Settings activation.
+
+Preventive actions
+
+- Add synthetic coverage for new job kinds before GA.
+- Instrument provider adapters with finer-grained heartbeats when adding new long-running stages.
+- Review worker resource limits; scale concurrency when CPU saturation or queue backlog contributed to stalls.
+
+Field runbook snippets
+
+- Check heartbeat age: `python scripts/jobs/print_watchdog.py --case <case_id>`.
+- Force retry: `python manage.py jobs_retry --job-id <job_id>`.
+- Pause/resume: `curl -X POST -H 'Authorization: Bearer ...' /api/v1/jobs/<id>/pause` then `/resume` once dependencies healthy.
+
+### H.14 RB-UPLOAD-SCAN — Upload malware scan failures (normative)
+
+Purpose: Keep malicious or malformed uploads out of the pipeline and restore scanning capacity quickly when the pipeline degrades.
+
+Linked alerts: `alert_upload_scan_failure_rate`, `alert_upload_scan_lag`, and security ticket automation when `upload_scan_infected_total` spikes.
+
+Signals
+
+- `upload_scan_error_total` increases or `upload_scan_duration_seconds` P95 exceeds `uploads.scan.timeout_seconds`.
+- Queue backlog on `upload-scan` workers (`celery_queue_depth{queue="upload-scan"}`) grows faster than drain rate.
+- Audit events `MALWARE_DETECTED`, `UPLOAD_SCAN_TIMEOUT`, or `UPLOAD_SCAN_UNSCANNED` appear for the same case/org.
+- Support tickets referencing stuck uploads (`status='SCANNING'`) or users unable to proceed after repeated antivirus hits.
+
+Triage — 5-minute checklist
+
+1. Validate scanner health: `kubectl -n platform logs deploy/upload-scan --since=5m` for ClamAV errors, signature update failures, or YARA compilation issues. Confirm pods are Ready.
+1. Check signature freshness: `kubectl -n platform exec deploy/upload-scan -- freshclam --version` (expect timestamp < 4h). Verify YARA bundle version matches `uploads.scan.yara_ruleset_version`.
+1. Inspect backlog:
+   ```sql
+   SELECT id, org_id, case_id, status, submitted_at
+     FROM upload_session
+    WHERE status = 'SCANNING'
+    ORDER BY submitted_at
+    LIMIT 50;
+   ```
+1. Review infected detections: confirm whether positives correlate to a specific user/org or file type; cross-reference audit events for escalation history.
+
+Decision
+
+- **Scanner unhealthy (errors/timeouts):** cordon uploads by setting `uploads.enabled=false` (org or system scope) if backlog > alert threshold, restart scanner deployment, and rerun synthetic upload test. If ClamAV definitions are stale, force `freshclam`, re-run signature sync, and document cause.
+- **Malware outbreak (true positives):** keep uploads blocked for affected org, notify Security, capture indicators (hash, filename) in incident ticket, and work with the customer on clean replacements. Ensure Guardian waivers are *not* used to bypass scans.
+- **False positives / rule regression:** escalate to Security to adjust YARA signatures; apply temporary allowlist via `uploads.scan.override_hashes` (time-boxed, dual approval) and note in App.O waiver ledger.
+- **Performance bottleneck:** scale `upload-scan` workers, validate resource limits (CPU/Mem), and review queue metrics. Consider adjusting `uploads.scan.timeout_seconds` after root cause understood (e.g., legitimate large PDFs).
+
+Post-remediation
+
+- Confirm queue drains (`celery_queue_depth{queue="upload-scan"} → 0`) and `upload_session` rows progress to `FINALIZED` within expected SLA.
+- Ensure metrics `upload_scan_error_total` and `upload_scan_lag_seconds` return to baseline for consecutive scrapes.
+- Document findings in incident/decision log with malware hashes, remediation actions, and follow-up tasks (ruleset update, customer comms).
+
+Preventive actions
+
+- Schedule weekly synthetic uploads (clean + EICAR) to verify detection paths and alarms.
+- Rotate YARA/ClamAV updates through staging before production; maintain changelog of rule deltas.
+- Review throughput quarterly; add GPU-accelerated scanners or sandboxed detonation for high-risk orgs if volume grows.
+
+Field runbook snippets
+
+- Force signature update: `kubectl -n platform exec deploy/upload-scan -- freshclam`.
+- Manual rescan: `python manage.py uploads_rescan --session-id <uuid>`.
+- Temporarily disable uploads (system scope): `python manage.py settings activate --key uploads.enabled --value false`.
 
 ______________________________________________________________________
 
@@ -4745,8 +4940,9 @@ class SettingDefinition(BaseModel):
 
 - `job.update`
   ```json
-  { "id": "1024", "event": "job.update", "data": { "job_id": "...", "case_id": "...", "org_id": "...", "status": "RUNNING", "progress": 42 } }
+  { "id": "1024", "event": "job.update", "data": { "job_id": "...", "case_id": "...", "org_id": "...", "status": "CANCELLED" } }
   ```
+- Optional fields `progress` (0–100) and `warning` (`"NO_PROGRESS"`, `"CAPACITY_THROTTLED"`, etc.) appear when the watchdog raises alerts or when providers emit granular progress.
 - `artifact.state`
   ```json
   { "id": "1030", "event": "artifact.state", "data": { "artifact_id": "...", "case_id": "...", "org_id": "...", "type": "SUMMARY_MD", "state": "APPROVED", "previous_state": "READY", "ts": "2025-10-19T21:12:00Z" } }
@@ -4765,7 +4961,7 @@ class SettingDefinition(BaseModel):
 ```tsx
 import { useEffect, useState } from "react";
 
-type JobStatus = "PENDING" | "RUNNING" | "PAUSED" | "FAILED" | "COMPLETED";
+type JobStatus = "PENDING" | "RUNNING" | "PAUSED" | "FAILED" | "COMPLETED" | "CANCELLED";
 
 interface JobUpdatePayload {
   job_id: string;
