@@ -2300,6 +2300,35 @@ Payloads (illustrative)
 - **SDKs:** `udocket_lpe` (Python) and `@udocket/lpe-client` (TypeScript) provide LRU caches, activation hooks, and typed helpers (`policy_context()`, `get_locale()`, `lookup_court()`). SDKs perform background refresh and surface telemetry counters to `lpe_cache_hit_ratio`.
 - **Error model:** Uses shared `ApiError`; notable codes include `POLICY_CONTEXT_NOT_FOUND`, `LOCALE_NOT_AVAILABLE`, `JURISDICTION_NOT_SUPPORTED`. Clients must surface `error.context_digest` to logs for post-incident reconstruction.
 
+### 10.12 Assistant capability & settings APIs
+
+*Purpose: Give staff and portal clients a consistent interface to discover assistant availability, rate limits, and disclaimers without exposing raw conversations.*
+
+- `GET /api/v1/chat/assistants` (audience-scoped)
+  - Returns metadata for assistants the caller may invoke. Response envelope includes `assistants[]`, each with `{id, audience, enabled, capabilities, rate_limits, moderation, guardian, disclaimer}`.
+  - `capabilities` captures retrieval sources (`transcript|analysis|compose|portal_messages`), supported actions (`summarize`, `suggest_tasks`, `link_to_edit`, `answer_questions`), citation policy, and HIPAA posture.
+  - `rate_limits` mirrors Settings (`chat.*`) and surfaces current ceilings; UI uses it to render limit pickers and warnings.
+  - `moderation` flags whether prompt/response filters are enforced and lists supported reason codes (documentation derived from §11.11).
+  - `guardian` includes `state` (`ok|quarantined|disabled`) plus `last_reviewed_at` so operators know when Guardian last sampled the assistant.
+  - `disclaimer` references localization keys and acknowledgement requirements (`must_acknowledge=true` for client assistants).
+  - Responses set `Cache-Control: private, max-age=120` and `ETag`; SSE event `chat.assistant.updated` carries the new ETag so clients refresh lazily.
+- `GET /api/v1/chat/assistants/{assistant_id}/settings`
+  - Provides localized disclaimers, enabled locales, and effective Settings values (rate limits, HIPAA allowances) after policy evaluation. Portal callers receive only fields marked `portal_visible=true`.
+  - Includes `rate_limit_status` so the UI can show remaining RPM/token budget without creating a session.
+- `GET /api/v1/chat/rate-limit-status`
+  - Optional helper returning `{assistant_id, remaining, resets_at}` per active assistant. Enforced via the same role checks as the assistants endpoint; staff may query for multiple cases by passing `case_id`.
+- `GET /api/v1/chat/manifest/{session_id}`
+  - Fetches the manifest for a completed session (metadata, Guardian decision, citations) without returning message content. Requires artifact read permission and Guardian approval (`state='APPROVED'`). Intended for UI review panels and auditors.
+
+Contract requirements (binding)
+
+- Authentication mirror artifact APIs: staff endpoints require `org_operator` (or higher); client endpoints require `org_client` membership for the case. All responses log `CHAT_ASSISTANT_API` audit events with `{assistant_id, audience, org_id, case_id?}`.
+- Chat session creation/execution endpoints remain documented in the application API references; this section focuses on capability discovery so frontends stay aligned with policy changes.
+- OpenAPI: `ops/openapi/chat_assistants.yaml` defines shared schemas (`ChatAssistant`, `ChatAssistantCapabilities`, `ChatAssistantRateLimits`, `ChatAssistantDisclaimer`). Spectral rules enforce example coverage and forbid exposing conversation payloads.
+- Errors: `403` with `code="CHAT_DISABLED"` when assistants are toggled off; `404` when an assistant ID is unknown in the caller’s scope; `409` for stale ETags on `If-Match` guarded settings fetches.
+- Tests: `tests/e2e/test_chat_api.py` covers role requirements, ETag/If-Match behavior, guardian-state propagation, and ensures rate-limit status mirrors Settings. Load tests in `synthetics/chat_assistant_status.yaml` verify latency stays <200 ms P95.
+- Observability: metrics `chat_assistant_metadata_requests_total{audience}`, `chat_rate_limit_status_requests_total`, and `chat_assistant_etag_miss_total` feed the “Assistant API” dashboard; anomalies page Platform SRE.
+
 ______________________________________________________________________
 
 ## 11) Frontend & client experience
@@ -3358,6 +3387,77 @@ Canonical artifact table
 | ATTACHMENT_TEXT           | \`docs/\<job_id>\_\_attachment_text_v1.json | md\`      | No                                     | `<attachment_text>.manifest.json`                                 |
 | TIMELINE_V2 (future)      | \`timeline/\<job_id>\_\_timeline_v2.json    | md\`      | TBD                                    | `<timeline_v2>.manifest.json`                                     |
 | ERASURE_JOURNAL           | `privacy/<job_id>__erasure_journal_v1.json` | No        | `<erasure_journal>.manifest.json`      | Hard-purge DSAR evidence; subject hashed with HKDF salt           |
+
+| CHAT_SESSION_JSON         | `ops/<session_id>__chat_staff.jsonl`        | No        | `<chat_session>.manifest.json`         | Staff Copilot conversation log with citations + moderation metadata |
+| CHAT_SESSION_CLIENT_JSON  | `ops/<session_id>__chat_client.jsonl`       | No        | `<chat_client_session>.manifest.json`  | Client portal chat conversation; portal-visible subset; Guardian-audited |
+| CHAT_SUMMARY_JSON         | `analysis/<job_id>__chat_summary_v1.json`   | No        | `<chat_summary>.manifest.json`         | Optional summarization of chat session; includes references and moderation outcome |
+| AGENT_EDIT_PROPOSAL_MD    | `analysis/<job_id>__edit_proposal_v1.md`    | No        | `<agent_edit_proposal>.manifest.json`  | AI-assisted edit proposal human-reviewed before promotion |
+| AGENT_EDIT_DIFF_JSON      | `analysis/<job_id>__edit_diff_v1.json`      | No        | `<agent_edit_diff>.manifest.json`      | Machine-readable diff for Agent edit proposals |
+
+### D.1 Chat assistant artifacts (binding)
+
+- `CHAT_SESSION_JSON` (staff) and `CHAT_SESSION_CLIENT_JSON` (portal) share schema version `chat_session@1.0`:
+  ```json
+  {
+    "schema_version": "chat_session@1.0",
+    "session_id": "uuid",
+    "audience": "staff|client",
+    "case_id": "uuid",
+    "org_id": "uuid",
+    "started_at": "RFC3339",
+    "ended_at": "RFC3339|null",
+    "model_id": "string",
+    "prompt_version": "string",
+    "guardian_state": "ok|quarantined|blocked",
+    "messages": [
+      {
+        "id": "uuid",
+        "role": "user|assistant|system",
+        "created_at": "RFC3339",
+        "content": [
+          {"type": "text", "text": "..." }
+        ],
+        "citations": [
+          {
+            "artifact_id": "uuid",
+            "source_path": "transcript/<job_id>__transcript.txt",
+            "start_offset_ms": 1234,
+            "end_offset_ms": 5678
+          }
+        ],
+        "moderation": {
+          "status": "allowed|blocked|redacted",
+          "reason_codes": ["INJECTION_ATTEMPT"]
+        }
+      }
+    ],
+    "metrics": {
+      "prompt_tokens": 123,
+      "completion_tokens": 456,
+      "latency_ms": 789
+    }
+  }
+  ```
+- Guardian quarantines set `guardian_state="quarantined"` and append a `guardian_decision` block inside the manifest (`decision_id`, `reason`, `acted_at`).
+- Staff transcripts retain full conversation (with masked snippets); client transcripts redact internal-only system prompts and any content hidden by moderation for the client audience. Both run through the redaction pipeline before persistence.
+- `CHAT_SUMMARY_JSON` (`chat_summary@1.0`) stores structured summaries for downstream analytics: `{ "schema_version": "chat_summary@1.0", "session_id": "...", "summaries": [{ "audience": "staff|client", "locale": "en-CA", "text_md": "...", "citations": [...] }], "generated_at": "RFC3339", "model_id": "string" }`. Summaries always link back to the source session via `manifest.source_artifacts`.
+
+### D.2 Agent edit artifacts (binding)
+
+- `AGENT_EDIT_PROPOSAL_MD` contains the assistant-generated proposal rendered in Markdown with front-matter capturing `{edit_id, parent_artifact_id, locale, model_id, prompt_id, moderation_status}`. Content includes inline citation markers referencing the source artifact segments.
+- `AGENT_EDIT_DIFF_JSON` (`agent_edit_diff@1.0`) delivers structured patches for programmatic diffing:
+  ```json
+  {
+    "schema_version": "agent_edit_diff@1.0",
+    "edit_id": "uuid",
+    "base_artifact_id": "uuid",
+    "operations": [
+      {"op": "replace", "path": "/sections/3", "old": "...", "new": "...", "citations": ["artifact://..."]}
+    ],
+    "moderation": {"status": "allowed|blocked", "reason_codes": []}
+  }
+  ```
+- Guardian manifests track review state for each proposal (`manifest.guardian.review_state ∈ {pending, approved, rejected, quarantined}`) and tie audit events (`EDIT_POLICY_BLOCK`, `EDIT_GUARDIAN_QUARANTINED`) back to the edit artifact. Reviewers promote an edit only after approving the proposal and diff pair.
 
 Ops logs
 
