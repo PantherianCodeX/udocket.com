@@ -77,7 +77,7 @@ ______________________________________________________________________
 
 - No generic e-discovery, enterprise DMS migration tooling, or third-party redaction services; integrations focus on Azure Speech, selected LLM providers, and in-house signing.
 - Hardware devices, telephony capture, and in-person interview tooling remain outside MVP scope (ingest assumes digital uploads).
-- Non-Canadian speech regions and unrestricted LLM model bring-your-own configurations are disabled pending future waivers.
+- Bring-your-own model endpoints remain out of scope for this revision; platform-supported providers must be onboarded through the registry with residency and policy reviews documented in Appendix O.
 
 ### 1.4 Success metrics & KPIs
 
@@ -125,27 +125,28 @@ ______________________________________________________________________
 
 - Artifacts are immutable, content-addressed, and versioned; human approvals elevate READY → APPROVED.
 - Guardian gating: the Guardian service is the decision authority for READY/QUARANTINED; downstream stages accept APPROVED artifacts only.
-- Deterministic controls over non-deterministic LLM output: UUIDv7 row IDs, UUIDv8-HMAC (draft) derived IDs per §6.7, Settings snapshots, prompt/version capture.
+- Deterministic controls over non-deterministic LLM output: UUIDv7 row IDs, content fingerprints, namespace UUIDv5 derived IDs per §6.7, Settings snapshots, prompt/version capture.
 - Zero-trust for every hop: deny-by-default RBAC, workload identities, enforced mTLS, and per-request DB GUC binding.
 - Observability and auditability as first-class: every job/action emits structured telemetry with correlation IDs.
 - Settings as a platform: a centralized Settings Service defines effective configuration (system/org/case), is versioned/audited, and snapshots embed into every job.
 - Operational safety defaults: database sessions pin `search_path`, enforce timeouts, and fail closed when required RLS GUCs are missing.
 - Real-time transport policy: SSE for one-way server→client status, Channels for bidirectional collaboration and controls.
 
-### 2.2 Regulatory & contractual constraints (Canada residency, SOC2, privacy)
+### 2.2 Regulatory & contractual constraints (global residency, SOC2, privacy)
 
 *Purpose: Spell out compliance rails enforced across the stack.*
 
-- Data residency: compute and storage restricted to canadacentral/canadaeast; cross-region requires dual-approved waiver stamped in manifests.
-- SOC 2 / ISO controls: change management, incident response, and logging mapped to specific sections (`§20`, `§24`, `App.E`).
-- Privacy commitments: DPIA/RoPA artifacts, entity masking, retention baselines, HIPAA override mode (stricter access + retention).
-- HIPAA override mode: disabled by default (`privacy.hipaa.enabled=false`). When enabled, enforces per-org field encryption (`security.field_encryption.enabled=true`, `security.field_encryption.key_scope='per_org'`), requires WebAuthn for privileged roles (`security.mfa.webauthn_required_roles` includes `org_admin|org_manager|org_operator|org_reviewer`), blocks evidence-store prompt excerpts (`evidence_store.redacted_excerpts.enabled=false`), shortens retention windows (Appendix C), and disallows portal delivery of PHI-tagged attachments unless a waiver is recorded. Uploads carrying `PHI=true` are rejected with `POLICY_BLOCK` when HIPAA mode is off.
+- Data residency: compute, storage, and vector workloads must execute inside the region sets declared by each organization (`regions.allowlist.compute|storage|vector`). Defaults provide paired primary/secondary regions per jurisdiction (for example, `na-us-1` + `na-us-2`, `eu-central-1` + `eu-west-2`). Cross-region replication or failover outside the allowlist requires dual-approved waivers stamped in manifests and surfaced to Guardian.
+- SOC 2 / ISO controls: change management, incident response, and logging mapped to specific sections (`§20`, `§24`, `App.E`); mappings extend to PCI DSS logging, FedRAMP Moderate, and audit retention requirements surfaced in Appendix K.
+- Privacy frameworks in scope: GDPR/UK GDPR, CCPA/CPRA, HIPAA, PHIPA, PIPEDA, APP (Australia), LGPD (Brazil), and CPPA (Canada). Reference Manager curates authoritative policy catalogues, Localization & Policy Engine (LPE) compiles them, and OPA enforces runtime decisions so outputs meet or exceed every framework simultaneously rather than generating bespoke policies per org.
+- HIPAA mode: disabled by default (`privacy.hipaa.enabled=false`). Enabling HIPAA mode enforces per-org field encryption (`security.field_encryption.enabled=true`, `security.field_encryption.key_scope='per_org'`), requires WebAuthn for privileged roles (`security.mfa.webauthn_required_roles` includes `org_admin|org_manager|org_operator|org_reviewer`), pins PHI retention schedules to Appendix C, and blocks portal delivery of PHI-tagged attachments without a waiver.
+- Prompt retention under HIPAA: storage of prompts/outputs is governed by `privacy.hipaa.prompt_retention_mode` (`'redacted'` default; options: `hash_only`, `full`). Mode selection is an explicit org-level setting reviewed with Compliance; HIPAA mode does **not** suppress storage automatically. Evidence-store pipelines honour the selected mode and record hashes + region metadata either way.
 - The `PHI=true` marker is collected at upload via a staff-facing “Contains PHI” toggle (default false) and may also be asserted by the post-upload classifier; both paths write the flag to artifact metadata. If a downstream classifier later upgrades an artifact to PHI while HIPAA mode is disabled, the artifact is retro-quarantined, downstream approvals are invalidated, and portal links are revoked until an organization enables HIPAA mode or files a waiver.
-- Portal enforcement: portal fetches hitting PHI-tagged artifacts while HIPAA mode is disabled return `403` with `code="POLICY_BLOCK"` and copy key `portal.hipaa.blocked_download`. The invalidation SSE event includes `reason="HIPAA_REQUIRED"` so clients surface consistent messaging.
-- Evidence-store hygiene: enabling HIPAA mode kicks off `scripts/privacy/purge_evidence_store.py`, which removes legacy prompt excerpts, reindexes redactable artifacts, and records a completion artifact (`PRIVACY_PURGE_REPORT`) before the org can ingest PHI. The command refuses to flip the setting if purge verification fails.
-- Rationale: the platform blocks PHI ingestion unless an org explicitly enables HIPAA mode, preventing accidental handling outside approved compliance footing.
+- Portal enforcement: portal fetches hitting PHI-tagged artifacts while HIPAA mode is disabled return `403` with `code="POLICY_BLOCK"` and localization key `portal.hipaa.blocked_download`. The invalidation SSE event includes `reason="HIPAA_REQUIRED"` so clients surface consistent messaging.
+- Evidence-store hygiene: enabling HIPAA mode triggers `scripts/privacy/purge_evidence_store.py`, which validates prompt retention mode, reindexes redactable artifacts, and records a completion artifact (`PRIVACY_PURGE_REPORT`) before the org can ingest PHI. The command refuses to flip the setting if verification fails.
+- Rationale: the platform blocks PHI ingestion unless an org explicitly enables HIPAA mode, preventing accidental handling outside approved compliance footing while preserving audit records aligned with the selected retention mode.
 - Legal hold and destruction policies align with jurisdictional obligations captured in Appendix C.
-- Audit linkage: DPIA/RoPA records referenced in audit seals (`§14.2`, Appendix N); HIPAA override activations require Compliance approval and manifest tagging.
+- Audit linkage: DPIA/RoPA artifacts, CCPA notice ledgers, and HIPAA override activations are referenced in audit seals (`§14.2`, Appendix N); HIPAA activations require Compliance approval and manifest tagging.
 
 ### 2.3 Non-functional requirements (SLOs, latency budgets, availability)
 
@@ -162,7 +163,7 @@ ______________________________________________________________________
 
 - Identity provider: Keycloak with Organizations feature remains authoritative; no secondary IdP fallback.
 
-- Cloud dependencies: Azure Speech (Canada), Azure Blob/S3-compatible storage with versioning, managed Redis/Postgres.
+- Cloud dependencies: Azure Speech, Azure OpenAI, Azure Blob/S3-compatible storage with versioning, managed Redis/Postgres—each instantiated in the regions declared per org policy bundle or waiver.
 
 - DevOps baseline: Kubernetes with mesh or workload identity capable of enforcing strict mTLS and egress controls.
 
@@ -192,10 +193,11 @@ ______________________________________________________________________
 
 - Kubernetes namespaces per environment (`dev`, `staging`, `prod`, `audit`) host Deployments for `web`, `channels`, `workers`, `guardian`, `signer`, `llm-registry`, `reference`, `notifications`, `settings`, ingress controllers, Redis broker/cache, and object-storage sidecars.
 - Service mesh or SPIFFE/SPIRE workload identity enforces strict mTLS; certificates rotate with TTL ≤ 24h and SLO of 99.9% renewals within five minutes of expiry. Certificates that exceed `security.tls.cert_ttl_minutes + 5` minutes trigger a hard fail (traffic denied) and page on-call; soft warnings fire 30 minutes before TTL expiry to allow proactive rotation. Mutating RPCs must satisfy both mutual TLS **and** HMAC headers: the mesh validates SANs against SPIFFE IDs (`spiffe://udocket/<service>`) or an allowlisted CN, and the receiving service reconstructs the shared-secret signature (Appendix F). Calls missing either layer are rejected with `401 AUTH_ERROR` and recorded via `auth_layer_violation_total`.
-- Network policy: ingress terminates TLS (TLS 1.3 preferred; limited TLS 1.2 fallback). Egress is default-deny aside from kube-dns and the Istio egress gateway; the gateway enforces the Canadian Azure and third-party allowlists rendered from the `network.egress.allowed_hosts` Settings bundle, and drift detection nightly resolves each FQDN (e.g., `*.blob.core.windows.net`, `*.table.core.windows.net`, `*.queue.core.windows.net`, TSA/OCSP hosts) to compare against SAN lists.
+- Network policy: ingress terminates TLS (TLS 1.3 preferred; limited TLS 1.2 fallback). Egress is default-deny aside from kube-dns and the Istio egress gateway; the gateway enforces the region-scoped allowlists rendered from the `network.egress.allowed_hosts` Settings bundle, and drift detection nightly resolves each FQDN (for example `*.blob.core.windows.net`, `*.table.core.windows.net`, `*.queue.core.windows.net`, TSA/OCSP hosts) to compare against SAN lists.
 - TLS details: TLS 1.3 remains the platform default. When `security.tls.fips_mode=true`, only FIPS-approved AES-GCM ciphers are permitted (`TLS_AES_128_GCM_SHA256`, `TLS_AES_256_GCM_SHA384`) and ChaCha20 suites are rejected at validation time (mirrors OpenSSL FIPS provider guidance). Non-FIPS environments (explicit `security.tls.performance_mode=true`) MAY allow `TLS_CHACHA20_POLY1305_SHA256` to improve mobile performance but must record the exception in the release checklist. TLS 1.2 fallback suites remain explicit (`{'ECDHE-ECDSA-AES128-GCM-SHA256','ECDHE-RSA-AES128-GCM-SHA256','ECDHE-ECDSA-AES256-GCM-SHA384','ECDHE-RSA-AES256-GCM-SHA384'}`). OCSP stapling stays enabled on ingress. Fallback may be enabled via `security.tls.legacy_exceptions[]` entries that include endpoint name, justification, and an expiry ≤ 30 days out; Settings activation validator rejects longer windows, and an alert fires seven days before expiry to force review. Production ingress treats TLS 1.3 (`security.tls.min_version=TLSv1.3`) as the control surface; downgrades require Security approval plus updated attestation for the impacted environment.
 - Platform services leverage managed secrets (Vault or Azure Key Vault). Nodes run chrony/NTP with ±100 ms drift to support TSA validation. Redis handles broker/cache needs; Postgres (regional HA) stores relational data.
 - Object storage: Azure Blob (prod) or S3-compatible (dev) buckets configured for versioning, SSE-KMS, and immutable retention for audit sinks.
+- Multi-region posture: each environment operates within a primary/secondary region pair; database replicas, blob replication, and queue failover respect the org-specific allowlists. Disaster recovery runbooks document region cutover and data rehydration using only approved regions per §3.8.
 
 #### 3.2.1 Policy manifests (illustrative)
 
@@ -213,13 +215,13 @@ spec:
     - to:
         - operation:
             hosts:
-              - "canadacentral.api.cognitive.microsoft.com"
-              - "canadaeast.api.cognitive.microsoft.com"
-              - "canadacentral.ocsp.msocsp.com"
-              - "tsa.partner.example.ca"
+              - "na-us-1.api.cognitive.microsoft.com"
+              - "eu-west-2.api.cognitive.microsoft.com"
+              - "na-us-1.ocsp.msocsp.com"
+              - "tsa.partner.example.com"
     - to:
         - operation:
-            hosts: ["signing-root.example.ca"]
+            hosts: ["signing-root.example.com"]
 ```
 
 - Illustrative host list; production values are rendered from the `network.egress.allowed_hosts` Settings bundle (SYSTEM scope) and materialized as `ServiceEntry` resources with exact SNI/authority matches. Istio AuthorizationPolicy host matching is literal—wildcards are rejected—so the helper renders the fully qualified domains for each approved endpoint.
@@ -438,26 +440,29 @@ CI (`scripts/opa/validate_decision_logs.py`) verifies that emitted logs comply w
 
 ```yaml
 jurisdictions:
-  CA:
-    BC:
-      frameworks: [PIPA_BC]
+  US:
+    CA:
+      frameworks: [CCPA_CA]
       retention_overrides:
         QA_LOGS: 365d
         PRIVACY_ARTIFACTS: 730d
       residency:
-        compute: [canadacentral, canadaeast]
-        storage: [canadacentral]
+        compute: [na-us-1, na-us-2]
+        storage: [na-us-1]
       portal:
-        disclaimers_key: portal.disclaimer.bc
-    ON:
-      frameworks: [PHIPA_ON]
-      hipaa: false
+        disclaimers_key: portal.disclaimer.ca
+  EU:
+    DE:
+      frameworks: [GDPR_DE]
+      residency:
+        compute: [eu-central-1]
+        storage: [eu-central-1]
 frameworks:
   HIPAA:
     phi_allowed: true
     requires_mode_enable: true
 localization:
-  default_locale: en-CA
+  default_locale: en-US
   time_format: "YYYY-MM-DD HH:mm z"
   number_system: "latn"
 ```
@@ -467,13 +472,13 @@ ctx = lpe.get_policy_context(
     org_id=org_id,
     case_id=case_id,
     privacy_flags={"PHI": True},
-    locale="en-CA",
+    locale="en-US",
 )
 if ctx.frameworks.HIPAA.required and not ctx.frameworks.HIPAA.enabled:
     raise PolicyBlock("HIPAA_REQUIRED", context_digest=ctx.digest_sha256)
 db.set_rls_mask_profile(ctx.masking_profile)
 vector_client = vector_pool.for_regions(ctx.residency_regions.compute)
-formatter = lpe.get_locale("en-CA").formatters
+formatter = lpe.get_locale("en-US").formatters
 rendered_date = formatter.date_short(approved_at)
 
 # Residency/egress lookup
@@ -483,7 +488,7 @@ decision = opa_client.evaluate(
         "org_id": org_id,
         "case_id": case_id,
         "artifact_type": "COMPOSE_CLIENT_MD",
-        "requested_region": "canadacentral",
+        "requested_region": "na-us-1",
         "context_digest": ctx.digest_sha256,
     },
 )
@@ -536,7 +541,7 @@ This example demonstrates how residency outcomes are derived: LPE supplies the d
 #### 3.5.3 ETL, normalization & entity resolution
 
 - Canonical identifiers rely on ISO-3166 (country/subdivision), official court IDs, and Wikidata QIDs; RM maintains `identifier_crosswalk` to link external schemes.
-- Normalization enforces consistent casing, diacritics, street abbreviations, and URL validation. Geocoding is optional but, when present, uses Canadian-centric providers and stores coordinate precision separately.
+- Normalization enforces consistent casing, diacritics, street abbreviations, and URL validation. Geocoding is optional but, when present, uses jurisdiction-aware providers (per org policy) and stores coordinate precision separately.
 - Entity resolution applies deterministic keys first (official IDs), then fuzzy matching with confidence scores. Items below confidence thresholds require manual review before advancing.
 - Localization strings carry locale, text, fallback locale, source attribution, and licensing. Missing locales generate tasks for editorial follow-up.
 
@@ -670,7 +675,7 @@ This example demonstrates how residency outcomes are derived: LPE supplies the d
 
 *Purpose: Catalog regulated touchpoints subject to policy and audit.*
 
-- **Azure Speech (canadacentral/canadaeast):** Batch transcription via SAS URLs and on-demand streaming; operations include hashing uploads, enforcing PCM normalization, and monitoring quotas.
+- **Azure Speech (per-org allowlisted regions):** Batch transcription via SAS URLs and on-demand streaming; operations include hashing uploads, enforcing PCM normalization, and monitoring quotas. Regional endpoints are provisioned according to `regions.allowlist.compute`.
 
 - **LLM providers:** Restricted to org-approved regions and models; Selection algorithm honors `fallback_priority`. Evidence store records prompts, redaction metrics, and envelope metadata per call.
 
@@ -694,14 +699,14 @@ ______________________________________________________________________
 
 ### 3.8 Region allowlist enforcement & egress policies (binding)
 
-*Purpose: Enforce Canada-only compute/storage and control outbound traffic to providers.*
+*Purpose: Enforce multi-region residency controls and govern outbound traffic to providers.*
 
-- Settings define allowlists per org: `regions.allowlist.compute = ['canadacentral','canadaeast']`, `regions.allowlist.storage = ['canadacentral','canadaeast']`. Activation lints reject disallowed regions.
-- Network layer: Kubernetes `NetworkPolicy`/service mesh `AuthorizationPolicy` denies egress to non-allowlisted CIDRs/hostnames; provider endpoints pinned by FQDN and SAN match with mTLS.
-- Providers: Azure Speech endpoints restricted to Canadian regions; LLM runtime filters models by allowed regions before selection; cross-region requires dual-approved waiver stamped in manifests and Guardian rules log.
-- Storage: object buckets created in approved regions; replication outside allowlist disabled unless waiver present; replication metadata recorded in manifests.
-- Drift detection: nightly job resolves each configured host, validates SAN entries against `network.egress.allowed_hosts`, and compares resulting CIDRs to the allowlist; deviations alert and auto-disable offending endpoints.
-- Telemetry: `residency_block_total` increments on blocks; audit records include `RESIDENCY_POLICY_BLOCK` reason and settings snapshot hash.
+- Settings define allowlists per org: `regions.allowlist.compute|storage|vector` accept ISO-like region identifiers (for example, `na-us-1`, `na-us-2`, `eu-west-2`). Activation lints reject entries outside the curated Reference Manager region catalogue or without matching data-processing agreements.
+- Network layer: Kubernetes `NetworkPolicy`/service mesh `AuthorizationPolicy` denies egress to non-allowlisted CIDRs/hostnames; provider endpoints are pinned by FQDN, SAN match, and residency metadata sourced from RM bundles.
+- Providers: Azure Speech/OpenAI selection honours the allowlist; the LLM runtime filters models by approved regions before selection. Cross-region failover requires a dual-approved waiver stamped into manifests and logged by Guardian.
+- Storage: object buckets created in approved regions; replication outside the allowlist stays disabled unless a waiver is present. Manifests record the storage topology (`primary_region`, optional `replica_region`, waiver reference).
+- Drift detection: nightly job resolves each configured host, validates SAN entries against `network.egress.allowed_hosts`, compares resulting CIDRs to the allowlist, and pages when drift is detected. The job also verifies that provider metadata still advertises the approved residency posture.
+- Telemetry: `residency_block_total` increments on blocks; audit records include `RESIDENCY_POLICY_BLOCK` reason and settings snapshot hash; dashboards highlight block rates per org/region.
 
 ______________________________________________________________________
 
@@ -1104,6 +1109,7 @@ ______________________________________________________________________
 *Purpose: Define how artifacts progress and how exclusivity & approvals apply.*
 
 - States: `DRAFT` (agent output awaiting Guardian), `READY` (Guardian pass), `QUARANTINED` (Guardian fail), `APPROVED` (human reviewer), `REJECTED` (terminal). `ARCHIVED` flag hides without altering state.
+- Review outcomes are binary: reviewers may only choose `APPROVED` or `REJECTED`. Partial approvals are not supported; remediation returns the artifact to `DRAFT` and requires a fresh Guardian review.
 - Guardian transitions only mutate `DRAFT` or `READY`; `QUARANTINED` sticks unless a new submit succeeds. Reviewers promote `READY → APPROVED` and demote any prior approved artifact of the same exclusive type.
 - Exclusive types enforced via unique index `one_approved_per_case_type` (state=`APPROVED`, `archived=false`). Settings maintain the type allowlist.
 - Manifests capture provenance: schema and graph versions, source artifacts, settings snapshot hash, regions, template versions, and optional SHA pins for dependencies.
@@ -1122,12 +1128,13 @@ ______________________________________________________________________
   - `ops/` — human logs, per-run JSON, and append-only `ops_<agent>.jsonl` audit streams
 - Integrity: compute and persist `content_sha256` for all immutable artifacts; manifests include SHA-256 of outputs and `settings_snapshot_sha256` for provenance. Batch mode may record remote hashes (`BATCH_HASH_REMOTE=1`, `BATCH_HASH_MAX_MB`).
 - Versioning: reruns must not overwrite prior outputs; suffix filenames with `_v{n}` and update manifests. Object storage buckets enable versioning for rollback and audit defense.
-- Security: buckets are private by default with server-side encryption (SSE-KMS). Access via short-lived signed URLs; range requests supported for large downloads. Egress and region policies enforce Canada-only storage.
+- Security: buckets are private by default with server-side encryption (SSE-KMS). Access via short-lived signed URLs; range requests supported for large downloads. Egress and region policies enforce the per-org residency allowlist.
 - Normalization: audio inputs normalized to PCM 16 kHz mono when feasible (ffmpeg); normalized copies stored with job-prefixed names for reproducibility and reprocessing.
 - Immutability: artifacts are treated as write-once; update attempts to immutable fields are rejected by database triggers. Deletions rely on retention/legal-hold settings (see §14.2).
 - Telemetry: object storage latency and hash mismatch counters exported; nightly integrity sweeps sample-verify SHA-256 and bucket versioning state.
 - Path template: `storage/media/<ORG_ID>/cases/<CASE_ID>/artifacts/<ARTIFACT_ID>/content.bin|manifest.json`; case-level directories include `audio/`, `transcript/`, `analysis/`, `docs/`, `ops/`. Legacy `storage/media/cases/<CASE_ID>/` layouts are deprecated and blocked in new deployments.
 - Upload staging uses `upload_session` records with expected hashes and single-use tokens; finalize promotes staged object into artifact storage.
+- Staff operators are responsible for submitting artifacts to Guardian once content is ready; submissions are never automatic. Review queues surface only artifacts that a staff user or agent explicitly submitted and received a `READY` decision.
 - `upload_session` (transient) table persists resumable upload metadata and scan status: `{id UUID PK, org_id, case_id, status ENUM('PENDING','UPLOADED','SCANNING','FINALIZED','ABORTED'), staging_uri, expected_sha256, expires_at, created_at}`. Workers purge expired rows hourly and hard-delete the corresponding staging objects.
 - SHA-256 computed at write; persisted in `artifact.content_sha256`. Reads recompute and quarantine inconsistencies (`ARTIFACT_INTEGRITY_MISMATCH`).
 - Buckets enable versioning + object lock for immutable audit sinks (per §20.1). KMS keys scoped per org when configured (`storage.kms.key_scoping='per_org'`).
@@ -1252,8 +1259,8 @@ Example
   "type": "TRANSCRIPT",
   "source": {"case_id": "...", "job_id": "...", "inputs": ["..."]},
   "provenance": {
-    "compute_region": "canadacentral",
-    "storage_region": "canadacentral",
+    "compute_region": "na-us-1",
+    "storage_region": "na-us-1",
     "tool_versions": {"udocket_core": "0.9.0", "azure_speech": "1.38"},
     "template_version": null
   },
@@ -1279,7 +1286,7 @@ Example
 
 *Purpose: Summarize ingestion flow from audio to transcript artifacts.*
 
-- Modes: `on-demand` streaming for shorter recordings (local processing), `batch` for longer files via Azure Batch Transcription (HTTPS SAS URL). Canada-only regions enforced.
+- Modes: `on-demand` streaming for shorter recordings (local processing), `batch` for longer files via Azure Batch Transcription (HTTPS SAS URL). Region allowlists from Settings are enforced at job dispatch.
 - Input processing: audio uploads hashed, normalized via ffmpeg (PCM 16 kHz mono). Artifacts created: `TRANSCRIPT_INPUT`, `AUDIO_NORMALIZED`.
 - Multi-track support: batch mode can ingest stereo/multi-channel sources, splitting speakers prior to diarization; single-track on-demand relies on optional diarization metadata when available.
 - Outputs: timestamped transcript (`transcript/<job_id>__transcript.txt`) with header metadata (case, source name, hashes, language, region, duration); optional `DIARIZATION` JSON for batch mode.
@@ -1293,7 +1300,7 @@ Example
 
 - Graph built with LangGraph; lanes include `Events`, `Timeline`, `Issues`, `Entities`, `Facts`, plus staff report generation. Each lane produces typed Pydantic outputs.
 - Inputs: latest transcript (`TRANSCRIPT`), optional `DIARIZATION`, approved exhibits (`EXHIBIT_TEXT`, etc.), and settings snapshot. Retrieval uses chunking + embeddings constrained to allowed regions.
-- Deterministic IDs: UUIDv8-HMAC (draft) values derived from transcript spans and content remain stable across reruns; references validated across lanes.
+- Deterministic IDs: row IDs rely on UUIDv7; cross-lane references include a `content_fingerprint_sha256` and a namespace UUIDv5 derived from `{org_id, case_id, lane_scope, canonical_anchor}` so reruns reuse the same identity when anchors match.
 - QA stages: per-lane validation (schema, references, policy lint, token bounds) with `qa_log` entries; final QA ensures cross-lane consistency before Guardian submission.
 - Artifacts: `analysis/<job_id>__summary_v1.md|json`, outline, timeline seeds, entity hints, staff report, plus ops JSON + JSONL audit. Failures surface via SSE with actionable errors.
 - See App.D for summary/outline/timeline/entity artifact schemas, filenames, and versioning.
@@ -1304,7 +1311,7 @@ Example
 
 - LangGraph pipeline with `OutlineBuilder`, parallel `SectionWriter` nodes (client/lawyer lanes), `SectionQA`, and `FinalWeave`. Inputs include Analyze outputs, intake data, templates.
 - Templates resolved via Settings + organization-specific overrides; `unique_title` helper prevents collisions. Manifest stores template version, language, document type.
-- QA loops enforce forbidden patterns (`compose.policy.forbidden_patterns[]`), required sections, link counts, and reference integrity. Lane retries limited by `compose.max_retries`.
+- QA loops enforce forbidden patterns (`compose.policy.forbidden_patterns[]`), required sections, link counts, and reference integrity. `SectionQA` runs per lane before `FinalWeave`; a final QA pass checks cross-lane coherence. Lane retries limited by `compose.max_retries`.
 - Outputs written to `docs/`: `compose_client_v1.md|docx`, `compose_lawyer_v1.md|docx`, bundle excerpt, QA/staff reports. Guardian ensures readiness before reviewer approval.
 - Envelopes capture LLM metadata (model, prompt version, region) for reproducibility; FinOps counters track token usage per section.
 - See App.D for compose deliverables and QA artifacts and their canonical filenames.
@@ -1355,32 +1362,17 @@ Example
 - Error classes & actions: per §6.6 taxonomy mapped to node behaviors.
 - Source material: `§54.1–54.10`, `§56`
 
-Deterministic UUIDv8-HMAC helper (draft binding)
+#### 6.7.1 Deterministic identity & fingerprints (normative)
 
-```python
-def uuidv8_deterministic(
-    case_id: UUID,
-    lane_or_section: str,
-    anchors: dict,
-    org_salt: bytes,
-) -> UUID:
-    anchor_bytes = json.dumps(anchors, separators=(',', ':'), sort_keys=True).encode()
-    payload = {
-        "case": str(case_id),
-        "scope": lane_or_section,
-        "anchors_sha256": hashlib.sha256(anchor_bytes).hexdigest(),
-    }
-    msg = json.dumps(payload, separators=(',', ':'), sort_keys=True).encode()
-    digest = hmac.new(org_salt, msg, hashlib.sha256).digest()
-    b = bytearray(digest[:16])
-    b[6] = (b[6] & 0x0F) | (0x8 << 4)
-    b[8] = (b[8] & 0x3F) | 0x80
-    return UUID(bytes=bytes(b))
-```
+*Purpose: Maintain stable cross-run identifiers without relying on experimental UUID versions.*
 
-- Anchors must be canonicalized (sorted transcript spans, referenced Analyze UUIDs, outline positions). Staged vectors live in `spec/vectors/uuidv8.json`; CI asserts the helper reproduces vectors.
-- Implementation uses the Python 3.12 standard library `hashlib`/`hmac` exactly as pinned in the runtime container digest; no third-party crypto libraries are pulled in. `org_salt` is derived from a per-org secret stored in KMS (`uuidv8.org_salt_secret`) and materialized via HKDF; rotating the secret issues new UUIDs for future artifacts while manifests keep prior IDs immutable, ensuring replay does not re-key historical records.
-- CI test `tests/spec/test_uuidv8_vectors.py` verifies both deterministic output and correct version/variant bits for every reference vector.
+- Row identifiers (`artifact.id`, `qa_log.id`, etc.) use UUIDv7 for temporal ordering and compatibility with existing tooling.
+- Each lane computes a canonical anchor dictionary (sorted keys, normalized transcript spans, referenced IDs, outline offsets) and hashes it to `content_fingerprint_sha256`.
+- Deterministic reference IDs use UUIDv5 with an org-scoped namespace: `namespace_uuid = uuid.uuid5(uuid.NAMESPACE_URL, f"udocket:{org_id}:{case_id}")`; `stable_id = uuid.uuid5(namespace_uuid, content_fingerprint_sha256)`. This keeps IDs stable when anchors match while avoiding disclosure of the raw anchor payload.
+- Because LLM outputs are inherently non-deterministic, downstream comparisons rely on the `content_fingerprint_sha256` rather than byte-for-byte equality; replays that diverge mark artifacts for review while preserving the original UUIDv7 identifiers.
+- Manifests and JSON artifacts include both `uuid` (UUIDv7) and `content_fingerprint_sha256`; downstream tools prefer the fingerprint for drift detection.
+- Per-org secret rotation updates only the namespace seed; historical UUIDv5 values remain valid because manifests treat IDs as immutable once published.
+- Test vectors live in `spec/vectors/uuid_fingerprints.json`; CI test `tests/spec/test_uuid_fingerprints.py` asserts canonicalization and UUIDv5 output stability.
 
 Node catalog (illustrative)
 
@@ -1648,11 +1640,11 @@ ______________________________________________________________________
 
 - Residency enforcement stacks three controls:
   1. **Configuration:** Settings validation rejects `llm.providers[]` or `llm.models[]` entries whose declared regions fall outside `regions.allowlist.compute`. Vector stores declare `vector.providers[]` with the same guard and include storage shard regions; activation lints fail on drift.
-  1. **Runtime firewall:** Service-mesh AuthorizationPolicy mirrors the allowlist so only canadacentral/canadaeast endpoints (plus explicitly waived hosts) pass egress. Vector clients inherit the same mesh policy and record `vector_region` in envelopes for audit.
+  1. **Runtime firewall:** Service-mesh AuthorizationPolicy mirrors the allowlist so only approved endpoints (plus explicitly waived hosts) pass egress. Vector clients inherit the same mesh policy and record `vector_region` in envelopes for audit.
   1. **Circuit breaker:** Registry tracks the active region for each provider call. If the SDK reports a fallback to a non-allowlisted region (for example, due to provider-side failover), registry raises `LLM_REGION_FALLBACK` events, opens the circuit (`circuit_state=OPEN`, reason `REGION_DRIFT`), and blocks further calls until the provider returns to an approved region.
 - Fallback hierarchy honours residency before priority: if no healthy model exists in allowed regions, the selection algorithm short-circuits with `PROVIDER_DEGRADED` and surfaces actionable errors rather than silently choosing an out-of-region model.
 - Audit trail: every call logs `{model_id, region, residency_policy_version, waiver_id?}`; Guardian and FinOps dashboards display residency decision distributions (`lpe_policy_context_version` paired with `reference_manager_bundle_adoption_seconds`).
-- Tests: `tests/udocket_core/llm/test_residency_guard.py::test_block_disallowed_region` stubs provider metadata to ensure the guard rejects non-Canadian regions without waiver, while `tests/udocket_core/vector/test_vector_residency.py::test_allowed_regions_only` covers vector stores. A staging synthetic (`synthetics/llm_residency.yaml`) confirms the egress gateway denies traffic when the allowlist is intentionally misconfigured.
+- Tests: `tests/udocket_core/llm/test_residency_guard.py::test_block_disallowed_region` stubs provider metadata to ensure the guard rejects non-approved regions without waiver, while `tests/udocket_core/vector/test_vector_residency.py::test_allowed_regions_only` covers vector stores. A staging synthetic (`synthetics/llm_residency.yaml`) confirms the egress gateway denies traffic when the allowlist is intentionally misconfigured.
 
 ### 8.2 Prompt management, redaction, and evidence store
 
@@ -1728,9 +1720,11 @@ PII posture (binding)
 
 *Purpose: Guard against prompt injection, bias, and policy breaches.*
 
-- Pre-call injection filters: pattern-based sanitization, allowlist of instructions, region/language cross-check. Policy guard rejects requests hitting forbidden patterns.
+- Pre-call injection filters: pattern-based sanitization, allowlist of instructions, region/language cross-check. Policy guard rejects requests hitting forbidden patterns and requires successful moderation check before dispatch.
+- Moderation stack: inbound prompts and retrieved context flow through provider moderation APIs plus in-house classifiers (`toxicity`, `self_harm`, `sexual_content`, `pii_reintroduction`). Post-call outputs run through the same classifiers; violations emit `LLM_CONTENT_FLAGGED` QA issues, place the artifact back into `DRAFT`, and require Guardian approval after staff remediation.
 - Golden-set tests: nightly runs across languages evaluate jailbreak resistance, toxicity, fairness; regressions page on-call and block deploys. Promotion to production is blocked unless the release pipeline’s `golden_set:jailbreak` job re-runs clean within the staging window.
-- QA nodes re-validate outputs against schema, length, references, and organization-specific policies (`compose.policy.*`, `analyze.*`). Failures escalate to QA logs and SSE notifications.
+- QA nodes re-validate outputs against schema, length, references, organization-specific policies (`compose.policy.*`, `analyze.*`), and moderation results. Failures escalate to QA logs and SSE notifications while Guardian keeps the artifact in `READY` until approval.
+- Guardian gating: Guardian consumes moderation verdicts and QA outcomes, blocks promotion when `LLM_CONTENT_FLAGGED` or `POLICY_BLOCK` is present, and forwards only clean artifacts to reviewers for APPROVED/REJECTED decisions.
 - Forbidden content detection triggers automatic Guardian quarantine request and records event in `audit_event` with reason `LLM_POLICY_BLOCK`.
 
 ### 8.5 Reproducibility envelopes & replay strategy
@@ -1745,7 +1739,7 @@ PII posture (binding)
 
 - Fallback policy ensures deterministic IDs remain stable: same inputs + envelope guarantee same structure even if textual content varies.
 
-- Deterministic UUIDv8-HMAC helper (draft binding) defined in §6.7 ensures Events/Entities/Facts remain stable; vectors under `spec/vectors/uuidv8.json` keep CI honest.
+- Deterministic fingerprint helper (§6.7.1) ensures Events/Entities/Facts remain stable; vectors under `spec/vectors/uuid_fingerprints.json` keep CI honest.
 
 - **Source material:** `§7`, `§48`, `§57`, `§54.6-54.10`
 
@@ -1757,13 +1751,13 @@ PII posture (binding)
 
 | Provider     | Model ID               | Regions                   | Max context | Notes                                        |
 | ------------ | ---------------------- | ------------------------- | ----------: | -------------------------------------------- |
-| azure_openai | gpt-4o-mini            | canadacentral, canadaeast |      128000 | Default Analyze/Compose profile; low latency |
-| azure_openai | o3-mini                | canadacentral, canadaeast |      200000 | Long-context drafting; higher cost           |
-| azure_openai | text-embedding-3-large | canadacentral, canadaeast |        8192 | Embeddings for retrieval                     |
+| azure_openai | gpt-4o-mini            | na-us-1, na-us-2          |      128000 | Default Analyze/Compose profile; low latency |
+| azure_openai | o3-mini                | eu-west-2, eu-central-1   |      200000 | Long-context drafting; higher cost           |
+| azure_openai | text-embedding-3-large | ap-southeast-2            |        8192 | Embeddings for retrieval                     |
 
 Notes
 
-- Settings `llm.models[]` define authoritative IDs and regions; this table is illustrative only. Non-Canadian regions are blocked unless waiver (§3.8). Registry health governs selection order (§8.1).
+- Settings `llm.models[]` define authoritative IDs and regions; this table is illustrative only. Regions must align with `regions.allowlist.compute` (waivers documented in Appendix O). Registry health governs selection order (§8.1).
 
 ______________________________________________________________________
 
@@ -2654,8 +2648,8 @@ ______________________________________________________________________
 - Property tests: settings precedence (SYSTEM≺ORG≺CASE), RLS denials without GUCs, idempotency store uniqueness, approval swap exclusivity.
 - Fixtures: synthetic audio for long/short transcripts, redaction payloads with seeded PII, sample manifests, decision history rows with varied reasons.
 - Test gates: required to pass in CI before promoting settings or rules changes; failure blocks deploy.
-- Property-based tests validate UUIDv8 determinism, manifest integrity, and advisory locks across edge cases.
-- UUIDv8 vectors from `spec/vectors/uuidv8.json` feed analyze/compose determinism tests ensuring helper outputs remain stable across refactors.
+- Property-based tests validate fingerprint/UUIDv5 determinism, manifest integrity, and advisory locks across edge cases.
+- Fingerprint vectors from `spec/vectors/uuid_fingerprints.json` feed analyze/compose determinism tests ensuring helper outputs remain stable across refactors.
 - Coverage targets: ≥ 90% for critical modules (agents, Guardian, Settings) per AGENTS guides.
 
 ### 13.3 Governance/privacy acceptance suites
@@ -2674,7 +2668,7 @@ ______________________________________________________________________
 - Checkpoint resume: kill between Lane QA and Final QA → resume at Final QA without re-calling LLM.
 - Cross-lane integrity: conflicting entity/event refs cause Final QA rejection with actionable QA log.
 - Fallback correctness: force primary model OPEN circuit → fallback chosen; evidence records circuit state.
-- Deterministic IDs: same anchors yield the same UUIDv8-HMAC (draft) value; changed spans produce new IDs.
+- Deterministic IDs: same anchors yield the same UUIDv5-derived reference; changed spans produce new IDs while preserving prior fingerprints in manifests.
 - Policy block: simulate region disallowance → `POLICY_BLOCK` in ContextBuilder; token ceilings truncate prompts within bounds.
 
 ### 13.5 Deployment gates (FinOps, error budgets, security scans)
@@ -2901,7 +2895,7 @@ ______________________________________________________________________
 
 - SLOs: API availability ≥ 99.9%/30d; read P95 ≤ 250ms; write P95 ≤ 500ms; decision P95 ≤ 5m; Compose P95 ≤ 45m.
 - Security: TLS 1.3 preferred; mTLS for service‑to‑service; HSTS; CSP; signed images and SBOM.
-- Residency: Canada‑only unless waiver; storage/compute pinned per §3.8.
+- Residency: workloads remain within each org’s allowlisted regions; waivers recorded per §3.8 and surfaced in manifests.
 - Privacy: masking, secure views, field‑level encryption (§4.6) for sensitive classes.
 - Performance: backpressure via rate limits and quotas; bounded memory for LLM contexts; capped retries.
 
@@ -2960,7 +2954,7 @@ ______________________________________________________________________
 *Purpose: Ensure search respects the same deny-by-default policy as reads.*
 
 - Index-time filters store `org_id`, `case_id`, and visibility state; query-time adds RLS-like constraints using the token’s `active_org_id` and case membership. Masked fields remain masked in results.
-- Residency: embedding/vector stores must be deployed in allowed regions; vector shards run exclusively in canadacentral/canadaeast clusters backed by object storage in the same region. Cross-region restores are blocked by policy unless a waiver exists, manifests reflect the waiver, and the index bootstrap pipeline verifies residency before serving queries.
+- Residency: embedding/vector stores must be deployed in allowed regions; vector shards run exclusively in the org’s approved regions (for example, `na-us-1`, `eu-west-2`) backed by object storage in the same geography. Cross-region restores are blocked by policy unless a waiver exists, manifests reflect the waiver, and the index bootstrap pipeline verifies residency before serving queries.
 - Audit: log `SEARCH_QUERY_EXECUTED` with hashed query, `case_id`, and filters; redact content; metrics `search_qps`, `search_latency_seconds`, `search_results_per_query_p95`.
 
 ### 16.4 Cost, performance, and quality budgets
@@ -3214,8 +3208,8 @@ ______________________________________________________________________
 
 E.1 Key catalog (scope: SYSTEM | ORG | CASE)
 
-- regions.allowlist.compute — ORG — \[canadacentral, canadaeast\] — Allowed compute regions; enforced by §3.8.
-- regions.allowlist.storage — ORG — \[canadacentral, canadaeast\] — Allowed storage regions; enforced by §3.8 and §5.3.
+- regions.allowlist.compute — ORG — \[na-us-1, na-us-2\] — Allowed compute regions; enforced by §3.8.
+- regions.allowlist.storage — ORG — \[na-us-1, na-us-2\] — Allowed storage regions; enforced by §3.8 and §5.3.
 - analyze.model.id — ORG|CASE — default profile — LLM model profile for Analyze lanes; see §8 and §6.3.
 - analyze.token_ceiling — ORG|CASE — 100000 — Max tokens per Analyze job; see §8.3.
 - analyze.max_retries — ORG|CASE — 2 — Retry budget per lane; see §6.3 QA loops.
@@ -3786,13 +3780,13 @@ Post-remediation
 
 ### H.7 RB-RES-BLOCK — Residency block remediation (normative)
 
-Purpose: Enforce Canada-only residency while providing a waiver path when approved.
+Purpose: Enforce residency allowlists while providing a waiver path when approved.
 
 Linked alert: `alert_residency_policy_block` (Grafana: Residency dashboard).
 
 Signals
 
-- Errors `RESIDENCY_POLICY_BLOCK` in logs; settings validation failures; egress policy denies to non-CA endpoints.
+- Errors `RESIDENCY_POLICY_BLOCK` in logs; settings validation failures; egress policy denies to non-allowlisted endpoints.
 
 Triage
 
@@ -3801,7 +3795,7 @@ Triage
 
 Decision
 
-- If legitimate cross-region need: require dual approval (Security + Architecture), set `cross_region_waiver=true`, re-run; Guardian stamps waiver in manifest.
+- If legitimate cross-region need: require dual approval (Security + Architecture), set `cross_region_waiver=true`, re-run; Guardian stamps waiver in manifest referencing the approved region pair.
 - Else: adjust settings to allowed regions; update provider config.
 
 Post-remediation
@@ -4508,12 +4502,12 @@ ______________________________________________________________________
 
 | Provider                                           | Service                           | Region(s) in scope           | Data classes processed                     | DPA/Terms highlights                                                                         |
 | -------------------------------------------------- | --------------------------------- | ---------------------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------- |
-| Microsoft Azure Speech                             | Transcription (batch/on-demand)   | Canada Central / Canada East | Audio uploads, transcript text             | DPA §3 forbids training on customer data; residency locked to Canada; 30-day deletion        |
-| Microsoft Azure OpenAI                             | LLM inference                     | Canada Central / Canada East | Prompt excerpts (redacted), generated text | Enterprise agreement disables logging & training; retention ≤ 24h                            |
-| Entrust TSA / OCSP                                 | Timestamping & revocation         | Canada                       | Hashes, certificate metadata               | No content retention; logs retained 90 days for audits                                       |
-| Twilio SendGrid (optional)                         | Email delivery                    | Canada/EU data center        | Notification metadata, recipient email     | Data residency restriction via regional sub-account; logs 30 days                            |
-| Telnyx                                             | SMS delivery                      | Canada                       | Phone numbers, message metadata            | Opt-out enforcement, no content mining                                                       |
-| Back-office transcription vendor (manual fallback) | Human transcription (break-glass) | Canada                       | Audio, transcript                          | Activated only under App.H manual fallback; NDA + DPA prohibits data retention beyond 7 days |
+| Microsoft Azure Speech                             | Transcription (batch/on-demand)   | Org allowlisted Azure regions (e.g., na-us-1, eu-west-2) | Audio uploads, transcript text             | DPA §3 forbids training on customer data; residency pinned to selected region; 30-day deletion |
+| Microsoft Azure OpenAI                             | LLM inference                     | Org allowlisted Azure regions (mirror Speech)           | Prompt excerpts (redacted), generated text | Enterprise agreement disables logging & training; retention ≤ 24h; residency anchored to allowlist |
+| Entrust TSA / OCSP                                 | Timestamping & revocation         | Global (per org trust bundle)                            | Hashes, certificate metadata               | No content retention; logs retained 90 days for audits; trust roots mapped to Appendix F          |
+| Twilio SendGrid (optional)                         | Email delivery                    | Org-selected sub-account region (NA/EU/APAC)            | Notification metadata, recipient email     | Data residency restriction via regional sub-account; logs 30 days                                 |
+| Telnyx                                             | SMS delivery                      | Org-selected region (NA/EU/APAC)                         | Phone numbers, message metadata            | Opt-out enforcement, no content mining; residency documented in waiver ledger                      |
+| Back-office transcription vendor (manual fallback) | Human transcription (break-glass) | Org-approved locale (per waiver)                         | Audio, transcript                          | Activated only under App.H manual fallback; NDA + DPA prohibits retention beyond 7 days            |
 
 All sub-processors contractually commit to “no training on customer prompts/outputs” clauses. Annual review ensures residency alignment; updates trigger customer notification per §12.3.
 
