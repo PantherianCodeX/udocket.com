@@ -147,6 +147,7 @@ ______________________________________________________________________
 - HIPAA mode: disabled by default (`privacy.hipaa.enabled=false`). Enabling HIPAA mode enforces per-org field encryption (`security.field_encryption.enabled=true`, `security.field_encryption.key_scope='per_org'`), requires WebAuthn for privileged roles (`security.mfa.webauthn_required_roles` includes `org_admin|org_manager|org_operator|org_reviewer`), pins PHI retention schedules to Appendix C, and blocks portal delivery of PHI-tagged attachments without a waiver.
 - Prompt retention under HIPAA: storage of prompts/outputs is governed by `privacy.hipaa.prompt_retention_mode` (`'redacted'` default; options: `hash_only`, `full`). Mode selection is an explicit org-level setting reviewed with Compliance; HIPAA mode does **not** suppress storage automatically. Evidence-store pipelines honour the selected mode and record hashes + region metadata either way.
 - The `PHI=true` marker is collected at upload via a staff-facing “Contains PHI” toggle (default false) and may also be asserted by the post-upload classifier; both paths write the flag to artifact metadata. If a downstream classifier later upgrades an artifact to PHI while HIPAA mode is disabled, the artifact is retro-quarantined, downstream approvals are invalidated, and portal links are revoked until an organization enables HIPAA mode or files a waiver.
+- PHI detection pipeline: when HIPAA mode is on, uploads and generated artifacts run through a layered detection sequence—operator declaration, deterministic regex heuristics, Azure Content Safety PHI classifier, and a nightly re-scan job powered by the in-house transformer model. Guardian samples artifacts weekly (minimum 5% or 20 artifacts, whichever is higher) and compares classifier outputs; discrepancies trigger `PHI_DETECTION_DRIFT` incidents and force operators to review the backlog before approvals resume. Artifacts detected as PHI at any stage are immediately quarantined, and Guardian blocks further processing until remediation. Detection settings are governed by `privacy.hipaa.phi_detection.strict_mode` (default true) and `privacy.hipaa.phi_detection.rescan_hours` (default 24).
 - Portal enforcement: portal fetches hitting PHI-tagged artifacts while HIPAA mode is disabled return `403` with `code="POLICY_BLOCK"` and localization key `portal.hipaa.blocked_download`. The invalidation SSE event includes `reason="HIPAA_REQUIRED"` so clients surface consistent messaging.
 - Evidence-store hygiene: enabling HIPAA mode triggers `scripts/privacy/purge_evidence_store.py`, which validates prompt retention mode, reindexes redactable artifacts, and records a completion artifact (`PRIVACY_PURGE_REPORT`) before the org can ingest PHI. The command refuses to flip the setting if verification fails.
 - Rationale: the platform blocks PHI ingestion unless an org explicitly enables HIPAA mode, preventing accidental handling outside approved compliance footing while preserving audit records aligned with the selected retention mode.
@@ -166,7 +167,7 @@ ______________________________________________________________________
 
 *Purpose: Make explicit the foundational inputs the solution relies on.*
 
-- Identity provider: Keycloak with Organizations feature remains authoritative; no secondary IdP fallback.
+- Identity provider: Keycloak remains the reference IdP, deployed as an HA, multi-region cluster with database replication and automated failover; the Access service layer supports bring-your-own IdP via OIDC/SAML federation (Azure Entra ID, Okta, Ping) so tenants can elect an alternate IdP while Keycloak acts as broker of last resort.
 
 - Cloud dependencies: Azure Speech, Azure OpenAI, Azure Blob/S3-compatible storage with versioning, managed Redis/Postgres—each instantiated in the regions declared per org policy bundle or waiver.
 
@@ -711,6 +712,7 @@ ______________________________________________________________________
 - Settings define allowlists per org: `regions.allowlist.compute|storage|vector` accept ISO-like region identifiers (for example, `na-us-1`, `na-us-2`, `eu-west-2`). Activation lints reject entries outside the curated Reference Manager region catalogue or without matching data-processing agreements.
 - Network layer: Kubernetes `NetworkPolicy`/service mesh `AuthorizationPolicy` denies egress to non-allowlisted CIDRs/hostnames; provider endpoints are pinned by FQDN, SAN match, and residency metadata sourced from RM bundles.
 - Providers: Azure Speech/OpenAI selection honours the allowlist; the LLM runtime filters models by approved regions before selection. Cross-region failover requires a dual-approved waiver stamped into manifests and logged by Guardian.
+- Availability posture: compliance trumps uptime—jobs pause when all in-region providers are unhealthy rather than spilling into non-compliant regions. To mitigate downtime, every residency bundle must approve at least two providers per region for core services (speech, LLMs); health monitors rotate across the in-region pool and Guardian raises `REGION_PROVIDER_DEGRADED` alerts when redundancy is at risk.
 - Storage: object buckets created in approved regions; replication outside the allowlist stays disabled unless a waiver is present. Manifests record the storage topology (`primary_region`, optional `replica_region`, waiver reference).
 - Drift detection: nightly job resolves each configured host, validates SAN entries against `network.egress.allowed_hosts`, compares resulting CIDRs to the allowlist, and pages when drift is detected. The job also verifies that provider metadata still advertises the approved residency posture.
 - Telemetry: `residency_block_total` increments on blocks; audit records include `RESIDENCY_POLICY_BLOCK` reason and settings snapshot hash; dashboards highlight block rates per org/region.
@@ -778,6 +780,9 @@ ______________________________________________________________________
 - Tokens include `org_ids[]`, `active_org_id`, `active_org_roles[]`, optional `org_directory[]`. Middleware rejects any request where `active_org_id ∉ org_ids[]`.
 - Access tokens ≤15 minutes, refresh tokens 12h (staff) / 2h (portal); offline tokens disabled unless security approves exceptions. Step-up MFA signaled via OIDC `acr` claim for sensitive endpoints.
 - Login flow for org switching triggers re-authentication to mint new tokens bound to the selected organization—no custom headers for impersonation allowed.
+- High availability: Keycloak runs as an active-active cluster across at least two zones per permitted region with Galera-backed MariaDB or Aurora Postgres, sticky session disabled. Ingress health probing and Envoy failover drain unhealthy pods. Backup realm exports run hourly; disaster recovery rehydrates a warm standby in the paired region identified in `regions.allowlist.compute`.
+- IdP federation: organizations can register external IdPs (Azure Entra ID, Okta, Ping, ADFS) through Keycloak identity brokering. Each federation mapping undergoes automated policy linting (MFA enforcement, group-to-role mapping) before activation. Tokens always originate from Keycloak, so revocation/audit remain centralized even when primary credential verification happens upstream.
+- Emergency access: if an external IdP fails, operators flip the org to Keycloak-native credentials via a feature flag (`identity.org.{org_id}.primary_idp=keycloak`) with dual approval. Runbook App.H RB-IDP-FAILOVER covers rollback. Conversely, if the Keycloak control plane is degraded, traffic fails over to the warm standby while orgs using external IdPs continue authenticating directly with their provider, minimizing downtime.
 
 ### 4.2 Org/case membership model and RBAC lattice
 
@@ -1363,19 +1368,52 @@ Example
   - `ingest`: `supported_containers[]` (e.g., `["wav","mp3","m4a","ogg"]`), `preferred_audio_format` (`"wav/pcm16"` default), `max_channels` (int), `max_duration_minutes`, `max_file_mb`, `requires_conversion` (bool) when provider enforces PCM inputs, `streaming_modes[]` (`"on_demand"`, `"batch"`).
   - `analysis`: `diarization` (`none|provider|external`), `speaker_labels` (bool), `dominant_speaker` (bool), `word_timestamps` (`none|per_word|per_token`), `timestamp_precision_ms` (int), `channel_separation` (bool).
   - `normalization`: `punctuation_normalization` (enum), `numerical_normalization` (enum), `capitalization` (enum), `profanity_filters` (enum), `locale_support[]` (BCP-47 codes) indicating verified language/localization coverage, `preferred_locale_fallback` (BCP-47).
+  - `translation` (optional): `supports_translation` (`none|provider|external`), `translation_modes[]` (for example `["source_to_target","source_to_many"]`), `verified_target_locales[]` (BCP-47), `verified_language_pairs[]` (array of `{source,target[],mode}` records), `max_parallel_targets` (int), `pivot_locale` (BCP-47) when the provider requires an intermediate locale, `requires_custom_glossary` (bool), `supports_glossary` (bool), `supports_formality_tone` (enum), and `fallback_translation_strategy` (`"pivot"`, `"reject"`, `"external"`) for unsupported pairs.
   - `operational`: `billing_unit` (`"minute"`, `"second"`, `"character"`), `max_parallel_jobs`, `region_allowlist[]` (subset of Settings region catalog), `requires_data_residency_attestation` (bool), `sla_compliant` (bool), `health_check.url`.
 - Execution planning best practices:
-  - Agents always normalize inputs to `preferred_audio_format`; if the source already matches (e.g., PCM 16 kHz mono) conversion is skipped; otherwise ffmpeg converts to PCM 16-bit little-endian WAV at the provider’s highest verified sample rate ≤ 32 kHz to balance accuracy and cost. Conversion artifacts are saved (`AUDIO_NORMALIZED`) with SHA-256 so replays share a stable baseline.
-  - When `supported_containers` excludes the upload type, the pipeline re-muxes into WAV before plan evaluation, logs the operation in `compile_notes`, and retains original audio under `audio/` for audit parity.
-  - `max_channels` governs whether the pipeline attempts native multi-channel; when the input exceeds this value, the registry can declare `fallback_channel_strategy` (`"synthetic_merge"` or `"reject"`). Synthetic merges are only attempted if integration tests demonstrate <1.5% WER regression compared to provider multi-channel output.
-  - `max_duration_minutes` and `max_file_mb` gate plan selection; exceeding either triggers preflight chunking (feature-flagged) or a policy failure with actionable guidance in SSE and ops logs.
-  - Language/locale negotiation respects `locale_support[]`: if the requested locale is missing, the planner either downgrades to `preferred_locale_fallback` (noting the downgrade in manifest) or fails fast depending on Settings (`speech.require_locale_match`).
+- Agents always normalize inputs to `preferred_audio_format`; if the source already matches (e.g., PCM 16 kHz mono) conversion is skipped; otherwise ffmpeg converts to PCM 16-bit little-endian WAV at the provider’s highest verified sample rate ≤ 32 kHz to balance accuracy and cost. Conversion artifacts are saved (`AUDIO_NORMALIZED`) with SHA-256 so replays share a stable baseline.
+- When `supported_containers` excludes the upload type, the pipeline re-muxes into WAV before plan evaluation, logs the operation in `compile_notes`, and retains original audio under `audio/` for audit parity.
+- `max_channels` governs whether the pipeline attempts native multi-channel; when the input exceeds this value, the registry can declare `fallback_channel_strategy` (`"synthetic_merge"` or `"reject"`). Synthetic merges are only attempted if integration tests demonstrate <1.5% WER regression compared to provider multi-channel output.
+- `max_duration_minutes` and `max_file_mb` gate plan selection; exceeding either triggers preflight chunking (feature-flagged) or a policy failure with actionable guidance in SSE and ops logs.
+- Language/locale negotiation respects `locale_support[]`: if the requested locale is missing, the planner either downgrades to `preferred_locale_fallback` (noting the downgrade in manifest) or fails fast depending on Settings (`speech.require_locale_match`).
+- Combined transcribe+translate providers (`supports_translation="provider"`) still follow the plan pipeline: planners request both source and target locales explicitly, set `dual_output=true`, and verify capabilities for diarization/timestamps on both outputs. Providers must return a structured payload containing source and translated segments; normalized transcripts split these outputs into discrete artifacts while sharing provenance metadata.
+- Translation coverage guardrails: the registry’s `verified_language_pairs[]` enumerates source→target combinations that have passed integration tests. The planner refuses to dispatch pairs absent from the list unless `speech.translation.allow_unverified_pairs=true` (waiver-only). Per-org overrides may remove pairs for contractual reasons; removals are stored in Settings activation history for audit.
+- Residency redundancy: each residency bundle must approve at least two speech providers per allowed region; nightly health checks validate coverage and raise `SPEECH_REGION_PROVIDER_DEGRADED` alerts if redundancy drops below two active providers, prompting immediate remediation before new jobs are accepted.
 - Audio optimization guidance (binding):
   - Prefer lossless PCM WAV at 16 kHz mono for dialog; escalate to 24 kHz stereo only when the provider’s accuracy materially improves for music-heavy or courtroom recordings (documented per provider in Appendix Q notes). The planner records any higher sample rate conversions in manifest metadata (`normalization.sample_rate_hz`).
   - Apply loudness normalization (`-16 LUFS` target, ±1 LU tolerance) and dynamic range compression (light preset) before transcription only when `speech.allow_preprocessing=true`; defaults preserve raw audio aside from format conversion to maintain evidentiary integrity.
   - Size optimization uses ffmpeg `-ar` (sample rate) and `-ac` (channels) parameters, never applying lossy codecs; storage deduplicates normalized outputs via content hash.
-- Provider capability validation: nightly job `scripts/agents/validate_speech_capabilities.py` runs golden audio fixtures against each provider, verifies declared fields (diarization, timestamps, normalization behaviors), and writes results to `ops/speech_capability_report.json` per org. Failures block new activations and trigger App.H RB-TRANSCRIBE-CAP escalation.
+- Provider capability validation: nightly job `scripts/agents/validate_speech_capabilities.py` runs golden audio fixtures against each provider, verifies declared fields (diarization, timestamps, normalization behaviors, translation language pairs), and writes results to `ops/speech_capability_report.json` per org. Failures block new activations and trigger App.H RB-TRANSCRIBE-CAP escalation; translation pair regressions additionally file `TRANSLATION_PAIR_REGRESSION` incidents and remove the affected pair from `verified_language_pairs[]` until retested.
 - Documentation & SDK alignment: OpenAPI schemas expose the negotiated capability plan in `GET /api/v1/speech/providers` for UI/SDK consumers. SDK samples in `docs/examples/api/speech_capabilities/*.md` stay synchronized with Settings keys and the registry schema.
+
+#### 6.2.4 Multilingual speech & translation pipeline (binding)
+
+- Scope: captures language detection, multi-locale transcription, and optional translation flows, ensuring downstream artifacts remain deterministic and policy compliant across locales.
+- Locale negotiation:
+  - Inputs declare `source_language` (BCP-47) and optional `requested_locales[]`. If `source_language` is omitted and `speech.detect_language.enabled=true`, the `LanguageProbe` step samples audio snippets (≤30 seconds) using CLD3 + provider hints to produce a ranked list with confidence. Detections below confidence threshold (default 0.75) require human confirmation before dispatch (SSE `LANGUAGE_CONFIRMATION_REQUIRED`).
+  - Providers must have the requested locale in `locale_support[]`; otherwise the planner either downgrades to `preferred_locale_fallback` (recorded in manifest `locale_resolution`) or blocks execution when `speech.require_locale_match=true`.
+- Native multilingual transcription:
+  - When a provider supports direct transcription into the source language (`supports_translation in {"none","external"}` but `locale_support` includes the source), the agent emits a single normalized transcript tagged with `language`/`locale` fields. Multi-language sessions (code-switching) use diarization segments to attach `segment.language` metadata; transcripts remain in the predominant locale unless `speech.multilingual_segments.enabled=true`, which produces language-tagged segments and writes `compile_notes` describing each language span.
+  - Segment-level metadata stores `language_confidence` (0–1) and optional `transliteration` for scripts requiring romanization (provider capability `supports_transliteration=true`). Transliteration is stored separately from the normalized text to preserve original script in downstream artifacts.
+- Translation workflow:
+  - Translation requests create derivative artifacts `transcript/<job_id>__transcript_<locale>.txt` alongside JSON manifests referencing the source transcript ID, translation provider, glossary version, and pivot locale (if used). The base transcript remains the source of truth; translated transcripts carry `schema_version: "speech_translation@1.0"` with fields `{source_locale, target_locale, translation_mode, glossary_ids[], segments[]}`.
+  - Translation providers declare `translation_modes[]`; the planner batches target locales up to `max_parallel_targets`, respecting rate limits and cost envelopes. During planning the agent filters requested locales against `verified_language_pairs[]`, logging `TRANSLATION_PAIR_BLOCKED` when a combination is unsupported and surfacing actionable guidance (`try_pivot_locale`, `choose_different_provider`). Providers advertising `supports_translation="provider"` can execute transcription and translation in a single call; the planner still writes two artifacts: the primary transcript (source locale) and each translated transcript, both derived from a single provider response with provenance recorded in manifests (`translation_bundle_id`, `provider_job_id`, `source_transcript_offset`).
+  - When `supports_translation="provider"` and the provider lacks word-level timestamps or diarization for translated text, the agent backfills alignments by projecting source timestamps, storing alignment confidence (`alignment_confidence`) per segment. Providers that emit both transcribed and translated text with distinct timestamps must pass integration tests (`tests/udocket_core/transcription/test_dual_output_alignment.py`) to ensure timestamp drift stays under 100 ms.
+  - If the provider requires separate translation calls (`supports_translation="external"`), the planner first generates the normalized source-language transcript and then fans out translation jobs per target locale. Each target locale job inherits Guardian gating and writes ops logs (`ops/<job_id>__translation_<locale>.log`), JSON metadata (`..._log.json`), and case-level audit entries (`ops_transcription_translation.jsonl`).
+  - Glossary management integrates with Reference Manager: settings key `speech.translation.glossary_set` references immutable glossary bundles. Providers advertising `requires_custom_glossary=true` block activation until a glossary is configured and parity tests (`tests/udocket_core/transcription/test_translation_glossary.py`) pass.
+- Accessibility & locale formatting:
+  - Normalize punctuation/casing per target locale using LPE formatters. Number/date normalization respects locale-specific rules (for example, decimal separators). Each translated transcript includes `normalization.locale_pack_version` linking back to the LPE bundle used for formatting.
+  - Right-to-left scripts store `direction: "rtl"` in metadata; UI renderers consume this flag to adjust layout without altering stored content.
+- Policy & compliance:
+  - Residency rules mirror primary transcription; translation providers must belong to the same (or stricter) region allowlist. Manifest fields record `translation_provider_region` and `waiver_id` when applicable.
+  - HIPAA/PHI rules apply identically: translations inherit PHI tags from the source transcript. If a translation provider lacks HIPAA attestation, the planner blocks translation when HIPAA mode is on.
+  - Never-log still applies; raw translated text is confined to artifacts. Audit logs capture only identifiers, locale codes, provider IDs, and hashes.
+- Observability:
+  - Metrics: `speech_language_detect_total{result}`, `speech_translation_jobs_total{locale,provider}`, `speech_translation_duration_seconds`, `speech_locale_downgrade_total`, `speech_translation_glossary_miss_total`.
+  - Dashboards correlate translation costs with FinOps budgets; alerts fire when translation error rates exceed thresholds or when locale downgrades occur repeatedly for an org.
+- Testing & fixtures:
+  - Golden audio/translation pairs stored under `tests/udocket_core/transcription/multilingual/`; CI asserts locale negotiation, glossary application, and parity between provider-native translation and fallback external translation within documented tolerance.
+  - Synthetic tenant `GLOBAL-MULTI` exercises quarterly drills covering multilingual flows, ensuring Guardian approvals, portal rendering, and downstream Analyze/Compose consumption remain stable across locales.
 
 ### 6.3 Analyze agent (LangGraph lanes, QA, artifacts)
 
@@ -1474,7 +1512,7 @@ Node catalog (illustrative)
 - Training & SOP: engineering onboarding includes LangGraph workshops, code walkthroughs, and pairing sessions; a living playbook in `docs/runbooks/langgraph-adoption.md` captures patterns, anti-patterns, and upgrade notes.
 - Upgrade cadence: LangGraph pinned via Poetry with weekly review of upstream releases; canary staging job (`synthetics/langgraph_canary.yaml`) executes against new versions before upgrade PRs. Major version bumps require ADR review.
 - UUID safeguards: default UUIDv7/UUIDv5 strategy (see §6.7.1) avoids dependence on draft UUIDv8 implementations while preserving deterministic references.
-- Automated failover: lanes invoke the shared `ModelFailoverOrchestrator` (§8.1.2) so `llm.models[].fallback_chain` is applied consistently across Analyze/Compose/Audit tasks. The orchestrator surfaces `LLM_FALLBACK_TRIGGERED` events, records parity hashes, and continues processing without human drafting. When the chain is exhausted the queue marks `PAUSED_AWAITING_PROVIDER`; on-call focuses on restoring provider health rather than producing manual content. Manual drafting remains a break-glass SOP only under an explicit executive waiver recorded in Appendix O.
+- Automated failover: lanes invoke the shared `ModelFailoverOrchestrator` (§8.1.2) so `llm.models[].fallback_chain` is applied consistently across Analyze/Compose/Audit tasks. Each allowed residency region must have at least two approved providers/models in the chain; health probes cycle through providers without leaving the region. The orchestrator surfaces `LLM_FALLBACK_TRIGGERED` events, records parity hashes, and continues processing without human drafting. When the chain is exhausted the queue marks `PAUSED_AWAITING_PROVIDER`; on-call focuses on restoring provider health rather than producing manual content. Manual drafting is not an availability strategy and remains a break-glass SOP only under an executive waiver recorded in Appendix O.
 
 ### 6.8 Compose/Policy lint settings (declarative)
 
@@ -2330,13 +2368,13 @@ ______________________________________________________________________
 *Purpose: Ensure frontends meet accessibility and language requirements.*
 
 - WCAG 2.2 AA compliance: keyboard navigation, focus states, ARIA labels, color contrast checks. Automated audits run in CI; manual audits scheduled per release.
-- Localization: staff UI initially English/French; portal supports additional locales via Settings (`i18n.supported_locales[]`). Strings managed in translation files with fallback logic.
+- Localization: staff and portal UIs honor any locale declared in `i18n.supported_locales[]`; strings live in translation packs with deterministic fallback to the org default and never rely on hard-coded text. Language toggles expose the full locale catalog (including RTL scripts) and persist per user/session.
 - Date/time formatting relies on case locale; transcripts labelled with language metadata. Screenreader testing prioritized for approval flows and messaging. All new flows must ship with explicit focus order verification and accessible error messaging (ARIA `role="alert"` or equivalent) for SSR and SPA states.
 - Templates offer locale variants with placeholder linting per locale; cross-language toggle supported for courts/catalogs. RTL readiness documented for supported locales; fallback flags alert admins when translations are missing.
-- Translation operations plan: Phase 1 launches with English/French strings signed off by editorial; Phase 2 (flagged) schedules quarterly localization sprints to add high-priority locales from the sales pipeline. Each release includes manual UX verification in at least one non-English locale (navigation, Guardian approvals, compose review) and user research sessions with accessibility devices (screen readers, switch control) to validate the localized experience.
+- Localization operations plan: continuous localization pipeline with rolling translation drops. Weekly sync with Localization & Policy Engine (LPE) ensures new locales/updates ship alongside settings activations; editorial QA signs off on glossaries/tone guidelines; and Product prioritizes locale additions via roadmap intake. Every release performs manual UX verification across at least two non-English locales (including an RTL locale) and accessibility device sessions (screen readers, switch control) to validate the localized experience.
 - CI runs pseudolocalization suite (`scripts/i18n/pseudolocale.sh`) and axe-core screen-reader scripts; latest WCAG audit summary stored as `ACCESSIBILITY_AUDIT` artifact (referenced in App.L). Every GA release requires a pre-cut `pa11y-ci`/axe DevTools sweep documented in the release checklist. Accessibility KPI dashboard tracks open issues, assistive-technology test passes, and remediation SLAs.
 - Merge-stop checklist: accessibility reviewers block merges when (1) any keyboard trap persists, (2) focus order diverges from visible reading order, (3) form errors fail to raise an ARIA live region announcement, or (4) the automated axe/pa11y run reports level-A/AA violations without documented mitigation.
-- Localization contract test: `tests/e2e/test_portal_policy_context.py::test_disclaimer_l10n` fetches policy contexts for `en-CA` and `fr-CA`, verifies portal banners render the RM-provided disclaimer keys with correct locale-specific formatting (dates, numbers), and ensures attribution badges from §3.5.9 display for licensed content in both languages.
+- Localization contract test: `tests/e2e/test_portal_policy_context.py::test_disclaimer_l10n` exercises a rotating canonical set of locales (for example `en-CA`, `fr-CA`, `es-MX`, `ar-SA`) to verify portal banners render RM-provided disclaimer keys with locale-specific formatting (dates, numbers, RTL layout when applicable) and ensure attribution badges from §3.5.9 display for licensed content in every tested locale. The test suite is data-driven so additional locales can be added without code changes.
 
 ### 11.4 Real-time collaboration (SSE + Channels policies)
 
@@ -2399,8 +2437,12 @@ ______________________________________________________________________
 
 - Manual Edit: creates a child version (`DRAFT`); reviewers (count configurable per `reviews.required_types[]`) must approve before promotion; demotes any prior APPROVED exclusive artifact.
 - Agent Edit: interactive session produces a candidate child; same approval semantics as Manual Edit; UI shows “AI Assisted” badge with audit trail.
+- Stage coverage: every major artifact (transcript, analysis outputs, compose deliverables, portal messaging attachments) exposes both Manual and Agent edit affordances so operators can choose between direct editing and AI-assisted drafting. Agent edits reuse the shared LangGraph infrastructure with the relevant lane templates (transcript cleanup, summary refinement, compose adjustments) while honoring residency and provider caps; manual edits launch a rich text/JSON editor with schema-aware validation.
+- Guardrails: Agent edit prompts template in case metadata and enforce redaction of PHI/PII beyond the case scope; prompts and model settings write to the edit manifest so reviewers can validate provenance. The Agent edit runtime inherits the same moderation/masked-token policies as §8.4 LLM calls plus edit-specific classifiers that block off-topic, speculative, or policy-disallowed requests (`EDIT_POLICY_BLOCK`). Manual edits require operators to provide a change summary that is persisted alongside the diff; reviewers see both the diff and the operator note.
 - Dual approval: certain artifacts (e.g., legal deliverables) require two distinct reviewers (roles defined in Settings); UI displays remaining approvals and enforces step-up MFA when configured.
 - Database guardrails enforce distinct approvers via a partial unique index (e.g., `CREATE UNIQUE INDEX approve_once_per_user ON artifact_review (artifact_id, reviewer_id, approval_type) WHERE state IN ('PENDING','APPROVED')`), preventing the same reviewer from consuming multiple required slots.
+- Telemetry & audit: every edit (manual or agent) appends to `ops/<job_id>__edit_log.jsonl` with `{edit_type, editor_id, locale, diff_fingerprint_sha256, model_id?, prompt_id?, moderation_outcome}`. Metrics (`edit_sessions_total{type}`, `edit_rejected_total`, `edit_agent_retry_total`, `edit_policy_block_total`) feed QA dashboards; repeated rejections (`>=3` within 24h) automatically page the owning engineering team. Guardian monitors moderation outcomes and can auto-quarantine edits flagged `critical` (`EDIT_GUARDIAN_QUARANTINE`) pending compliance review.
+- SSE + notifications: editors emit SSE events (`edit.started`, `edit.updated`, `edit.ready_for_review`, `edit.policy_blocked`) so collaborators stay aware of in-flight edits. Reviewers receive actionable notifications with deep links to the diff view; declined edits record the reviewer feedback and push a follow-up task to the originating operator. Guardian-triggered quarantines notify Security/Compliance with contextual metadata.
 - i18n: all approval banners, edit prompts, and invalidation copy are localized via settings-driven strings (`i18n.*`).
 - Source material: §§11, 21; see Appendix A.8 for state diagrams
 
@@ -2447,6 +2489,31 @@ ______________________________________________________________________
 - Steps: lint placeholders, render DOCX (optionally PDF/A), compute SHA-256, write `ASSEMBLED_DOC_*` artifacts (`DRAFT → READY → APPROVED`).
 - Exclusive types: approving a new assembled document demotes the prior APPROVED version atomically (same swap logic as Compose).
 - Telemetry: emit metrics `document_assembly_duration_seconds`, `document_assembly_error_total`; lint warnings recorded in ops logs for reviewer visibility.
+
+### 11.11 Conversational assistants (staff Copilot & portal guide)
+
+*Purpose: Provide scoped AI chat experiences for staff and clients while preserving privacy, auditability, and abuse controls.*
+
+- Staff Copilot (internal):
+  - Entry points: case sidebar, job detail panes, and edit dialogs. Sessions are case-scoped; assistants can reference approved artifacts (transcripts, Analyze outputs, Compose drafts), Guardian manifests, settings snapshots, ops logs, and portal messages with redacted PII. Retrieval uses embeddings restricted to the org’s residency allowlist and runs via the LangGraph retrieval wrapper with deterministic prompts in `packages/udocket_core/config/chat_prompts.yaml`.
+  - Capabilities: answer questions, summarize evidence, surface related artifacts, draft follow-up checklists, and propose edit suggestions. Copilot cannot mutate artifacts directly; it links to Manual/Agent edit actions so humans approve changes. Generated snippets include citation pointers (`artifact_id`, `source_span`) for reviewers.
+  - Data handling: each exchange calls the `ChatAssistant` agent and writes append-only records to `storage/media/cases/<case>/ops/<session_id>__chat_staff.jsonl` with SHA-256 digests. Sensitive segments are passed through the redaction pipeline (§8.4) before storage. Session manifests capture `{model_id, prompt_version, retrieval_sources[], token_usage, latency_ms}`.
+- Client portal guide:
+  - Accessible from the portal dashboard and artifact detail screens. Sessions are limited to the client’s approved artifacts, intake questionnaires, portal messages, and knowledge articles explicitly marked `portal_visible=true`. Draft, quarantined, or PHI-restricted artifacts remain inaccessible.
+  - Responses include human-readable citations (document title, timestamp/page) and disclaimers that guidance is informational, not legal advice. If clients request disallowed information, the assistant returns policy copy (`portal.chat.policy_block`) and logs `CHAT_ACCESS_DENIED`.
+- Anti-abuse & moderation:
+  - Per-user/org rate limits (`chat.staff.rate_limit.rpm`, `chat.staff.token_cap_daily`, `chat.client.rate_limit.rpm`, `chat.client.token_cap_daily`) plus concurrency caps (`chat.session.max_active_per_user`). Exceeding limits yields structured errors (`CHAT_RATE_LIMIT`) surfaced via SSE/UI banners.
+- Moderation stack mirrors §8.4 LLM safeguards with stricter topic enforcement: prompt pre-checks (`CHAT_PROMPT_FILTER`) reject off-topic, speculative, or unauthorized requests; output filters (`CHAT_RESPONSE_FILTER`) scan for policy violations, PII leakage, legal advice, or jailbreak attempts. Violations emit `CHAT_POLICY_BLOCK` audit events with severity tiers (`low`, `medium`, `high`), redact offending messages, and—when `chat.auto_disable_on_abuse=true`—disable the assistant pending Security review.
+  - Guardian integration: Guardian consumes chat telemetry; critical violations (`severity >= high`) trigger immediate conversation quarantine (`CHAT_GUARDIAN_QUARANTINED`), notify Security/Compliance, and suspend assistant access for the org/case until remediation. Guardian decisions include remediation guidance and can be appealed via the existing waiver workflow (§3.8).
+- Security & compliance:
+  - Residency: LLM calls use the LLM orchestrator with allowlisted regions; prompts embed `policy_context_digest` so auditors verify compliance. HIPAA mode disables client chat unless `portal.chat.hipaa_allowed=true` and the configured provider attests to HIPAA controls.
+  - Audit & retention: chat artifacts align with ops log retention. Clients can request a transcript export when `portal.chat.export.enabled=true`, subject to reviewer approval. Staff chats honor legal holds; deletion follows the same process as ops logs.
+- Observability & testing:
+  - Metrics: `chat_sessions_total{audience}`, `chat_messages_total{audience}`, `chat_token_usage_total`, `chat_rate_limit_block_total`, `chat_policy_block_total`, `chat_latency_seconds`, `chat_retrieval_documents_total`. Grafana dashboards highlight usage trends and anomaly spikes.
+  - Synthetic monitors exercise staff/client scenarios daily to validate latency, citation presence, and policy enforcement. Integration tests (`tests/e2e/test_chat_assistant.py`) cover retrieval scoping, rate-limit enforcement, and residence compliance; unit tests validate prompt templates and guard rails.
+- Governance:
+  - Feature toggles per org/case (`chat.staff.enabled`, `chat.client.enabled`). Localization keys (`i18n.chat.*`) govern disclaimers and policy messages; Product/Legal must sign off before enabling new locales.
+  - Prompt/template changes require AI Governance review (§8.1.4). Any adjustment to retrieval scope demands Appendix D updates and regression tests.
 
 ## 12) Observability, reliability & operations
 
@@ -2654,6 +2721,7 @@ ______________________________________________________________________
 - Reference Manager – Review & Publishing (Content Ops/Legal Ops): diff backlog, reviewer SLA burn-down, bundle adoption lag, publish latency, questionnaire/form coverage gaps.
 - Audit Seal & WORM (SecEng): seal cadence, seal errors, WORM lag, verification status.
 - Portal Security (SecEng): download rate per org/user, anomaly triggers, link invalidations, adaptive MFA prompts.
+- PHI Detection & HIPAA (SecEng/Compliance): `phi_detection_scan_total`, `phi_detection_positive_total{stage}`, `phi_detection_drift_total`, rescan latency, Guardian quarantines triggered; dashboards link to sampled artifacts for manual review.
 - Advisory Locks (SRE): locks held by scope/kind, age percentiles, stale detections, terminations; tied to App.H RB-LOCK-006.
 - Logging Pipeline (SRE): ingest lag, drop rate, spool utilization, index health; alerts map to App.H RB-LOG-007.
 - Upload Scanning (Security): queue depth, scan duration, infected/errored totals, signature freshness metrics; alerts route to App.H RB-UPLOAD-SCAN.
@@ -2899,6 +2967,7 @@ ______________________________________________________________________
 - Versioning: semantic for APIs, semver-like for settings bundles, `graph_version` for agents. Releases require change tickets referencing TDD sections.
 - Rollouts: canary in staging, phased production release, with rollback plan. Documented in App.H runbooks.
 - Communication: notify stakeholders (Product, Support, Security) with release notes summarizing changes, risk, and mitigation.
+- Spec/code parity gate: `docs/settings_key_skip.txt` must be empty (or limited to feature-flagged experiments explicitly tagged `deferred=true`) before production enablement; the release pipeline blocks if any referenced key lacks implementation coverage or automated tests.
 - Case enum migration playbook: settings introduce new `case.status`/`representation_type` values first; DB adds `CHECK ... NOT VALID` constraints, validates post-backfill, and only then removes deprecated values. Deprecations flow through Settings/UI; final removal requires data migration and constraint regeneration.
 
 ### 14.6 Organization directory sync (Ops)
@@ -3360,6 +3429,26 @@ E.1 Key catalog (scope: SYSTEM | ORG | CASE)
 - speech.jobs[] — SYSTEM|ORG — [] — Transcription job profiles and fallback chains; §6.2.1.
 - speech.allow_preprocessing — ORG|CASE — false — Permit loudness normalization/compression before transcription; §6.2.3.
 - speech.require_locale_match — ORG|CASE — true — Fail fast when provider lacks requested locale; §6.2.3.
+- speech.detect_language.enabled — ORG|CASE — false — Enable automatic source-language detection; §6.2.4.
+- speech.multilingual_segments.enabled — ORG|CASE — false — Emit language-tagged segments for code-switched audio; §6.2.4.
+- speech.translation.enabled — ORG|CASE — false — Allow generation of translated transcripts; §6.2.4.
+- speech.translation.targets_default[] — ORG — [] — Default target locales for translation requests; §6.2.4.
+- speech.translation.provider — ORG|CASE — null — Translation provider identifier; §6.2.4.
+- speech.translation.glossary_set — ORG|CASE — null — Reference Manager glossary bundle for translations; §6.2.4.
+- speech.translation.max_parallel_targets — ORG|CASE — 3 — Parallel translation limit per job; §6.2.4.
+- speech.translation.allow_unverified_pairs — ORG|CASE — false — Permit translation pairs not in the verified registry (waiver required); §6.2.3, §6.2.4.
+- speech.translation.language_pair_overrides[] — ORG|CASE — [] — Disable or remap specific source→target pairs for contractual/compliance reasons; §6.2.3, §6.2.4.
+- chat.staff.enabled — ORG|CASE — false — Enable staff Copilot assistant; §11.11.
+- chat.staff.rate_limit.rpm — ORG|CASE — 30 — Staff assistant requests per minute; §11.11.
+- chat.staff.token_cap_daily — ORG|CASE — 20000 — Staff assistant daily token budget; §11.11.
+- chat.client.enabled — ORG|CASE — false — Enable portal chat assistant; §11.11.
+- chat.client.rate_limit.rpm — ORG|CASE — 10 — Client assistant requests per minute; §11.11.
+- chat.client.token_cap_daily — ORG|CASE — 10000 — Client assistant daily token budget; §11.11.
+- chat.session.max_active_per_user — ORG|CASE — 2 — Concurrent chat sessions allowed per user; §11.11.
+- chat.auto_disable_on_abuse — ORG|CASE — true — Auto-disable assistants on policy violations; §11.11.
+- chat.provider.profile — ORG|CASE — null — LLM profile assignment for assistants; §8.1.4, §11.11.
+- portal.chat.hipaa_allowed — ORG — false — Permit client chat when HIPAA mode active; §11.11.
+- portal.chat.export.enabled — ORG|CASE — false — Allow client chat transcript exports; §11.11.
 - llm.finops.monthly_cap_usd — ORG — 0 (disabled) — Monthly LLM spend cap; §8.3, §13.4.
 - jobs.watchdog.no_progress_minutes — SYSTEM|ORG — 5 — Minutes without heartbeat before watchdog warns; §10.2, §12.1, App.H RB-JOB-WATCHDOG.
 - jobs.watchdog.timeout_minutes — SYSTEM|ORG — 15 — Minutes without heartbeat before watchdog fails the job; §10.2, §12.1, App.H RB-JOB-WATCHDOG.
@@ -3388,7 +3477,10 @@ E.1 Key catalog (scope: SYSTEM | ORG | CASE)
 - privacy.legal.matrix_version — SYSTEM — semver — Data residency/legal matrix version; App.C.
 - privacy.hipaa.enabled — ORG — false — HIPAA override mode toggle; §2.2, §14.2, App.C.
 - privacy.hipaa.bundle_version — SYSTEM — semver — HIPAA policy bundle version pin; §2.2, App.C.
-- i18n.supported_locales\[\] — ORG — \[en-CA, fr-CA\] — Supported locales; §11.3.
+- privacy.hipaa.phi_detection.strict_mode — ORG|CASE — true — Enforce layered PHI detection (waiver required to relax); §2.2.
+- privacy.hipaa.phi_detection.rescan_hours — ORG — 24 — Interval for scheduled PHI re-scan jobs; §2.2.
+- i18n.supported_locales\[\] — ORG — \[\] — Supported locales (BCP-47 codes) surfaced in UI toggles; must include at least one locale; §11.3.
+- identity.org.primary_idp — ORG — keycloak — Primary IdP assignment (`keycloak` or `external:<id>`); §4.1.
 - storage.bucket_versioning_required — SYSTEM — true — Bucket versioning must be enabled; §5.3, §12.1.
 - storage.remote_hash.enabled — ORG|CASE — false — Record remote hashes for batch inputs; §5.3.
 - storage.remote_hash.max_mb — ORG|CASE — 50 — Max remote bytes to hash; §5.3.
@@ -5077,3 +5169,4 @@ export function JobStatusTicker({ jobId }: { jobId: string }) {
   );
 }
 ```
+- Guardian runs continuous policy sampling on chat and agent-edit manifests. High-severity violations result in conversation/artifact quarantine (`CHAT_GUARDIAN_QUARANTINED`, `EDIT_GUARDIAN_QUARANTINED`) and revoked access until a Security/Compliance reviewer lifts the block or applies a waiver.
