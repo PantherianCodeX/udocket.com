@@ -39,7 +39,6 @@ ______________________________________________________________________
 | ADR index       | `docs/adr/README.md` (immutable ADRs referenced in front matter `related_adrs`)                                 |
 | Migration plan  | Supersede prior TDD versions once Architecture/Security approvals are recorded (parity verified 2025-10-19)     |
 | Docs validation | `python scripts/docs/lint_docs.py` (see `docs/README.md` for tooling)                                           |
-| Draft keys skip | `docs/settings_key_skip.txt` (keys referenced in Appendix E but pending code implementation)                    |
 | Link lint       | `python scripts/docs/link_check.py --strict` (CI `docs-link-check` stage blocks unresolved §/App./ADR refs)     |
 
 ______________________________________________________________________
@@ -51,7 +50,7 @@ ______________________________________________________________________
 - **Cross-references:** Use `§<number>` for sections and `App.<letter>` for appendices.
 - **LLM hint:** Each subsection starts with a one-line purpose statement before implementation details.
 - **Maintenance:** Run `python scripts/docs/lint_docs.py` (or see `docs/README.md`) before submitting edits to keep references, formatting, and settings keys synchronized with the codebase.
-- **Audit integration (2025‑10‑19):** This draft incorporates audit items for CCPA/CPRA coverage (§2.2, §14.2.1), automated LLM moderation (§8.4), and model version pinning/replay rules (§8.1, §8.5). Keys added to Appendix E are marked in `docs/settings_key_skip.txt` until implemented in code.
+- **Audit integration (2025‑10‑19):** This draft incorporates audit items for CCPA/CPRA coverage (§2.2, §14.2.1), automated LLM moderation (§8.4), and model version pinning/replay rules (§8.1, §8.5). Appendix E is authoritative—every key listed there must exist in code, and CI blocks releases if parity ever drifts.
 - **Doc change protocol:** Every PR that modifies regulated behavior (policy, residency, approvals, agents) must link to the corresponding TDD diff; Architecture/Security reviewers block merges when code and spec diverge. Appendix automation (settings map, API snippets) continues to evolve—when feasible, replace manual tables with generated outputs to minimize churn.
 
 ______________________________________________________________________
@@ -143,7 +142,7 @@ ______________________________________________________________________
 - SOC 2 / ISO controls: change management, incident response, and logging mapped to specific sections (`§20`, `§24`, `App.E`); mappings extend to PCI DSS logging, FedRAMP Moderate, and audit retention requirements surfaced in Appendix K.
 - Privacy frameworks in scope: GDPR/UK GDPR, CCPA/CPRA, HIPAA, PHIPA, PIPEDA, APP (Australia), LGPD (Brazil), and CPPA (Canada). Reference Manager curates authoritative policy catalogues, Localization & Policy Engine (LPE) compiles them, and OPA enforces runtime decisions so outputs meet or exceed every framework simultaneously rather than generating bespoke policies per org.
 - CCPA/CPRA specifics: platform does not sell or share personal information; privacy notices and contracts state “no sale/no sharing.” DSAR timelines follow CCPA (45 days, one 45‑day extension with notice) and GDPR (30 days, extensions as allowed). Admin tooling exports DSAR evidence and timelines; audit seals reference the governing framework for each request.
-- Optional alignment: ISO/IEC 27701 (privacy extension) alignment tracked as a follow‑on objective; control mappings are recorded in Appendix K with gaps/POAM annotated for phased adoption.
+- ISO/IEC 27701 (privacy extension) alignment: fully mapped and implemented. Appendix K lists the control crosswalk, evidence sources, and quarterly recertification cadence; deviations trigger `ISO27701_GAP` incidents and block releases until remediated.
 - HIPAA mode: disabled by default (`privacy.hipaa.enabled=false`). Enabling HIPAA mode enforces per-org field encryption (`security.field_encryption.enabled=true`, `security.field_encryption.key_scope='per_org'`), requires WebAuthn for privileged roles (`security.mfa.webauthn_required_roles` includes `org_admin|org_manager|org_operator|org_reviewer`), pins PHI retention schedules to Appendix C, and blocks portal delivery of PHI-tagged attachments without a waiver.
 - Prompt retention under HIPAA: storage of prompts/outputs is governed by `privacy.hipaa.prompt_retention_mode` (`'redacted'` default; options: `hash_only`, `full`). Mode selection is an explicit org-level setting reviewed with Compliance; HIPAA mode does **not** suppress storage automatically. Evidence-store pipelines honour the selected mode and record hashes + region metadata either way.
 - The `PHI=true` marker is collected at upload via a staff-facing “Contains PHI” toggle (default false) and may also be asserted by the post-upload classifier; both paths write the flag to artifact metadata. If a downstream classifier later upgrades an artifact to PHI while HIPAA mode is disabled, the artifact is retro-quarantined, downstream approvals are invalidated, and portal links are revoked until an organization enables HIPAA mode or files a waiver.
@@ -661,11 +660,11 @@ This example demonstrates how residency outcomes are derived: LPE supplies the d
 
 #### 3.5.15 Deliverables & rollout sequencing
 
-- Phase 1: ADRs, RM service skeleton, bundle schema/signing, MediaWiki adapter, manual proposal workflow, initial dashboards.
-- Phase 2: Court scraper framework, crosswalk schema, questionnaire/form ingestion, dual-approval enforcement, integration tests, first `courts@0.1.0` bundle.
-- Phase 3: Deprecation workflows, diff endpoints, locale coverage tooling, synthetic adoption monitors, FinOps dashboards for ingestion cost.
-- Phase 4: LPE consumption wired behind feature flag; staff/portal/workers read `PolicyContext` with bundle metadata; end-to-end synthetic drills.
-- Exit criteria: no direct writes to canonical tables outside RM, `/reference/*` APIs read-only shims backed by RM/LPE, adoption lag SLO green for 30 days, golden snapshots validated, and rollback tooling exercised (BUNDLE_ROLLBACK_REPORT on file).
+- Reference Manager ships with ADR-backed governance, bundle schema/signing automation, MediaWiki adapter, manual proposal workflow, and operational dashboards at launch.
+- Harvesting includes the court scraper framework, crosswalk schema, questionnaire/form ingestion, dual-approval enforcement, and integration tests that publish the `courts@0.1.0` bundle on day one.
+- Deprecation workflows, diff endpoints, locale coverage tooling, synthetic adoption monitors, and FinOps dashboards run continuously; alerts feed Content Ops SLAs.
+- LPE integration is fully active: staff/portal/workers consume `PolicyContext` bundles, with end-to-end drills executed quarterly to validate adoption. No feature flags gate this flow in production.
+- Exit criteria remain unchanged: no direct writes to canonical tables outside RM, `/reference/*` endpoints operate as read-only shims backed by RM/LPE, adoption lag SLO stays green for 30 days, golden snapshots validate every publish, and rollback tooling (`BUNDLE_ROLLBACK_REPORT`) is exercised each quarter.
 
 ### 3.6 Data flows between services
 
@@ -683,7 +682,7 @@ This example demonstrates how residency outcomes are derived: LPE supplies the d
 *Purpose: Catalog regulated touchpoints subject to policy and audit.*
 
 - **Azure Speech (per-org allowlisted regions):** Batch transcription via SAS URLs and on-demand streaming; operations include hashing uploads, enforcing PCM normalization, and monitoring quotas. Regional endpoints are provisioned according to `regions.allowlist.compute`.
-- **Speech fallback providers (processor-agnostic):** Speechmatics Canada (primary fallback) and any future providers must expose REST APIs with parity guarantees (WER/diarization deltas within policy thresholds) and identical residency attestations. Workers consume them through the same `TranscriptionAgent` interface so jobs remain provider-agnostic.
+- **Speech fallback providers (processor-agnostic):** Speechmatics Canada (primary fallback) and any additional providers must expose REST APIs with parity guarantees (WER/diarization deltas within policy thresholds) and identical residency attestations. Workers consume them through the same `TranscriptionAgent` interface so jobs remain provider-agnostic.
 
 - **LLM providers:** Restricted to org-approved regions and models; selection algorithm honors `fallback_priority`/`fallback_chain` and records equivalence evidence for every switchover. Evidence store records prompts, redaction metrics, and envelope metadata per call.
 
@@ -783,6 +782,7 @@ ______________________________________________________________________
 - High availability: Keycloak runs as an active-active cluster across at least two zones per permitted region with Galera-backed MariaDB or Aurora Postgres, sticky session disabled. Ingress health probing and Envoy failover drain unhealthy pods. Backup realm exports run hourly; disaster recovery rehydrates a warm standby in the paired region identified in `regions.allowlist.compute`.
 - IdP federation: organizations can register external IdPs (Azure Entra ID, Okta, Ping, ADFS) through Keycloak identity brokering. Each federation mapping undergoes automated policy linting (MFA enforcement, group-to-role mapping) before activation. Tokens always originate from Keycloak, so revocation/audit remain centralized even when primary credential verification happens upstream.
 - Emergency access: if an external IdP fails, operators flip the org to Keycloak-native credentials via a feature flag (`identity.org.{org_id}.primary_idp=keycloak`) with dual approval. Runbook App.H RB-IDP-FAILOVER covers rollback. Conversely, if the Keycloak control plane is degraded, traffic fails over to the warm standby while orgs using external IdPs continue authenticating directly with their provider, minimizing downtime.
+- Federation flows: Keycloak brokers both OIDC (`authorization_code+PKCE`, signed JWT access tokens, enforced `acr` claims) and SAML 2.0 integrations. Each org-specific IdP registration supplies metadata (JWKS endpoint or SAML metadata URL), required MFA assurance levels, group-to-role mappers, and SCIM provisioning endpoints. SCIM sync (see §14.6) keeps org membership aligned; onboarding rejects providers that cannot assert MFA or pass signed-response validation. All tokens ultimately originate from Keycloak so audit, revocation, and Guardian controls remain centralized.
 
 ### 4.2 Org/case membership model and RBAC lattice
 
@@ -1343,7 +1343,7 @@ Example
 #### 6.2.1 Provider fallback & health-governed resume (binding)
 
 - Provider catalog: `speech.providers[]` mirrors the LLM registry, capturing API endpoints, residency, pricing, and `health_check.url`. Each `speech.jobs[]` entry defines a `fallback_chain` where every hop is validated against an equivalence harness (`tests/udocket_core/agents/test_transcribe_fallback.py`) demonstrating WER delta ≤ 1.5 % and diarization accuracy within tolerance on the golden corpus.
-- Orchestration helper: `packages/udocket_core/failover/speech.py::SpeechFailoverController` applies the fallback chain uniformly across batch/on-demand workers. It shares telemetry/event naming with the LLM orchestrator and exposes `speech.failover.for_request(...)` so Celery tasks and future speech processors remain provider-agnostic.
+- Orchestration helper: `packages/udocket_core/failover/speech.py::SpeechFailoverController` applies the fallback chain uniformly across batch/on-demand workers. It shares telemetry/event naming with the LLM orchestrator and exposes `speech.failover.for_request(...)` so Celery tasks and new speech processors remain provider-agnostic.
 - Automated retries: when Azure Speech (primary) degrades or breaches SLA thresholds, workers emit `TRANSCRIBE_FALLBACK_TRIGGERED`, replay the batch against the next healthy provider/region pair, and annotate manifests with `fallback_source_provider_id` and `fallback_attempt`. Retries respect org budgets and residency settings; no human transcription path exists in the automated flow.
 - Pause semantics: if the chain exhausts without a healthy provider, the job enters `PAUSED_AWAITING_PROVIDER`, preserving the queue order. Health monitors run every 60 seconds, requiring three consecutive successes before the job automatically resumes from the point of failure. UI surfaces status with next probe ETA; operators can trigger an on-demand probe via `POST /ops/transcription/{job}/probe`.
 - Observability: metrics `transcribe_fallback_total{provider,reason}`, `transcribe_pause_total`, and `transcribe_paused_jobs` feed dashboards. Audit events capture provider transitions and parity evidence hash; ops logs include health snapshots for every pause/resume cycle.
@@ -1760,6 +1760,16 @@ ______________________________________________________________________
 - Guarantees: orchestrator enforces parity validation (`fallback.evidence_sha256`), residency checks, throttling budgets, and pause/resume gating. It records counters (`llm_failover_attempt_total{provider,reason}`, `llm_failover_pause_total`) and appends structured telemetry consumed by dashboards (§12.6).
 - Testing: golden-set replay harness `tests/udocket_core/failover/test_model_orchestrator.py` verifies deterministic selection order, pause semantics, and auto-resume after consecutive health probes. Synthetic monitor `synthetics/llm_failover.yaml` exercises the helper end-to-end in staging.
 - Extensibility: new providers register adapters implementing the `FailoverAdapter` protocol; the orchestrator enforces interface compliance at import time and blocks activation if adapters omit health probes, parity metadata, or residency attestations.
+- Telemetry: `llm_circuit_state` and `llm_fallback_total{model,reason}` power dashboards; on-call alerts fire when circuits remain OPEN beyond 15 minutes or when fallback spend exceeds budget thresholds.
+
+#### 8.1.3 Bring-your-own model integration (binding)
+
+- Registry support: organizations may register private endpoints by defining `llm.providers[]` entries with `kind="byo"`, providing base URL, residency attestations, logging/training guarantees, and a dedicated credential scope (`llm.providers[].credentials_id`). BYO models must reside within the org’s allowlisted regions and traverse the same mesh policies; onboarding fails if declared CIDRs fall outside `regions.allowlist.compute`.
+- Security & compliance: onboarding runs `scripts/llm/byo_onboarding.py`, which validates TLS posture, performs automated vulnerability scans, confirms data-retention clauses, and executes the jailbreak/red-team corpus. Approval requires dual sign-off (Security + Architecture) recorded in the onboarding manifest (`ops/llm/byo/<provider_id>__onboarding.json`).
+- Evaluation requirements: BYO models must pass the golden evaluation suite (`tests/llm/byo/test_eval_matrix.py`) with ≤3 % delta on accuracy metrics and matching safety classifier outcomes. The evaluation digest (`byo_evaluation_sha256`) is stored with the provider definition; registry refuses activation when the digest is missing or older than 90 days.
+- Runtime enforcement: BYO models run through the same moderation harness (§8.4) and evidence-store logging. Guardian leverages the manifests to apply policy sampling; policy violations set the circuit to OPEN with reason `BYO_POLICY_DRIFT` and quarantine the provider until a fresh evaluation passes.
+- Settings (Appendix E): `llm.byo.allowed` (ORG|CASE, default `false`) toggles BYO availability; `llm.byo.evaluation_suite_id` (ORG) references the evaluation configuration; `llm.byo.vpc_endpoints[]` (ORG) enumerates allowed hostnames and is reconciled against mesh policies during activation. CI lints ensure these keys are present whenever a BYO provider is defined.
+- Observability: dashboards segment metrics by `model_kind` (`managed|byo`); synthetic monitor `synthetics/llm_byo_health.yaml` calls each BYO endpoint hourly to confirm SLA adherence and certify moderation telemetry (`chat_policy_block_total`) funnels correctly.
 
 ### 8.2 Prompt management, redaction, and evidence store
 
@@ -1845,7 +1855,7 @@ PII posture (binding)
 
 ### 8.5 Reproducibility envelopes & replay strategy
 
-*Purpose: Allow future re-execution or provider migration without ambiguity.*
+*Purpose: Allow re-execution or provider migration without ambiguity.*
 
 - Every LLM call persists a reproducibility envelope `{prompt_template_id, template_version, model_id, model_version, provider, provider_region, stop_sequences, truncation_policy_version, temperature, top_p, penalties, redaction_ruleset_id, token_ceiling, settings_snapshot_sha256, input_hashes, output_hashes}`.
 - Replay rules: when `llm.enforce_model_version=true`, replay only occurs against the exact pinned model version/snapshot; otherwise, a warning is recorded and the job must carry a waiver linking the upgraded model version. HIPAA environments combine `privacy.hipaa.prompt_retention_mode` with envelope hashes to allow defensible audits without retaining full prompts.
@@ -1872,10 +1882,12 @@ PII posture (binding)
 | azure_openai | gpt-4o-mini            | na-us-1, na-us-2          |      128000 | Default Analyze/Compose profile; low latency |
 | azure_openai | o3-mini                | eu-west-2, eu-central-1   |      200000 | Long-context drafting; higher cost           |
 | azure_openai | text-embedding-3-large | ap-southeast-2            |        8192 | Embeddings for retrieval                     |
+| byo_private   | org.custom-hf/v1        | na-us-1, na-us-2          |      16000 | Bring-your-own HuggingFace Inference endpoint (evaluation digest `sha256-...`) |
 
 Notes
 
 - Settings `llm.models[]` define authoritative IDs and regions; this table is illustrative only. Regions must align with `regions.allowlist.compute` (waivers documented in Appendix O). Registry health governs selection order (§8.1).
+- BYO rows appear in the same catalog with `kind="byo"`; activation validators confirm the evaluation digest and VPC endpoints before allowing traffic.
 
 ______________________________________________________________________
 
@@ -2756,7 +2768,7 @@ ______________________________________________________________________
 - Upload Scanning (Security): queue depth, scan duration, infected/errored totals, signature freshness metrics; alerts route to App.H RB-UPLOAD-SCAN.
 - Unit Economics & Delivery (PM/SRE): cost per case/org; MoM deltas; top 10 expensive cases; delivery counts and failure rates.
 
-Instrumentation rollout: Phase 1 (MVP) enables Guardian SLO, Queue/KEDA, LLM Cost & Circuit, and Logging Pipeline dashboards with paging alerts. Phase 2 adds Localization/Policy, Reference Manager, and Portal Security views once core adoption metrics stabilize. Subsequent dashboards remain defined here but ship behind feature flags and non-blocking alerts until their owning teams finish onboarding/runbook training.
+Instrumentation rollout: All dashboards listed here are live in production with paging alerts. SRE and Platform teams control alert thresholds via Settings; when a team pauses ownership (for example, onboarding a new runbook), the associated dashboard can be switched to warning-only mode using the documented change process in App.H.
 
 Alert routing
 
@@ -2795,7 +2807,7 @@ Alert routing
 #### 12.9.1 Portal-facing usage transparency
 
 - *Purpose: Extend FinOps visibility to customers while keeping controls consistent with internal reporting.*
-- Admin usage dashboard (Phase 2 release behind `portal.usage_dashboard.enabled`): portal `Org Admin` view surfaces rolling 7/30-day spend, token consumption, job counts, and export volumes using the same metrics powering internal FinOps dashboards (`llm_cost_estimate_total`, `finops_cost_per_case_usd`, `case_jobs_total`). CSV exports mirror the monthly reports already generated for finance; APIs provide `GET /portal/org/{org_id}/usage` with pagination and granular filters.
+- Admin usage dashboard (`portal.usage_dashboard.enabled`, default `true`): portal `Org Admin` view surfaces rolling 7/30-day spend, token consumption, job counts, and export volumes using the same metrics powering internal FinOps dashboards (`llm_cost_estimate_total`, `finops_cost_per_case_usd`, `case_jobs_total`). CSV exports mirror the monthly reports for finance; APIs provide `GET /portal/org/{org_id}/usage` with pagination and granular filters.
 - Guardrails: data is scoped by org and adheres to residency/privacy policies enforced via secure views (§4.3). Rate limits protect against scraping; anomalies raise `PORTAL_USAGE_EXPORT_ANOMALY` events and notify support.
 - Acceptance: feature flag stays limited to pilot orgs until (1) UX copy passes localization review, (2) support playbooks for billing inquiries are published, and (3) synthetic monitors validate parity between staff and portal dashboards for representative orgs.
 
@@ -2924,8 +2936,7 @@ ______________________________________________________________________
 
 *Purpose: Provide an inbound migration path that mirrors export guarantees and preserves chain-of-custody evidence.*
 
-- Phase 1 (Ops-assisted pilot, tracked for Q3 execute): support zipped `case_export@1.0` bundles supplied by customers. Ops runs `scripts/import/validate_case_bundle.py` (new) to verify manifest signatures, per-artifact hashes, and residency tags before invoking an internal `case_import` Celery task. Every run logs to `ops/<job_id>__case_import_log.json` and emits `CASE_IMPORT_ATTEMPT` audit events; App.H will add the corresponding runbook with dual-review steps.
-- Phase 2 (self-service GA, behind `import.legacy_cases.enabled`): ship a Settings-scoped feature gate and admin UI/API (`POST /ops/case-imports`) so org admins can submit bundles directly. The task enforces deterministic ID mapping, replays Guardian states, and produces a reconciliation report highlighting artifacts that require manual reviewer confirmation. Portal visibility remains blocked until Guardian re-approves imported artifacts.
+- Legacy case import supports both ops-assisted and self-service flows. Ops-assisted imports use `scripts/import/validate_case_bundle.py` to verify manifest signatures, residency tags, and hashes before queueing the `case_import` Celery task; every run logs to `ops/<job_id>__case_import_log.json` and emits `CASE_IMPORT_ATTEMPT` audit events (see App.H runbook). Self-service org admin workflows (`POST /ops/case-imports`, guarded by `import.legacy_cases.enabled`) apply deterministic ID mapping, replay Guardian states, and produce reconciliation reports for reviewer confirmation. Portal visibility stays blocked until Guardian approves the imported artifacts.
 - Observability & guardrails: metrics `case_import_duration_seconds`, `case_import_artifacts_total{status}`, and drift checks comparing imported hashes to manifest expectations. Synthetic drill runs quarterly to confirm import tooling keeps parity with export schema revisions; failures block expanding the feature flag beyond pilot orgs.
 
 ### 14.2 Artifact retention, legal hold, and destruction flows
@@ -2996,7 +3007,7 @@ ______________________________________________________________________
 - Versioning: semantic for APIs, semver-like for settings bundles, `graph_version` for agents. Releases require change tickets referencing TDD sections.
 - Rollouts: canary in staging, phased production release, with rollback plan. Documented in App.H runbooks.
 - Communication: notify stakeholders (Product, Support, Security) with release notes summarizing changes, risk, and mitigation.
-- Spec/code parity gate: `docs/settings_key_skip.txt` must be empty (or limited to feature-flagged experiments explicitly tagged `deferred=true`) before production enablement; the release pipeline blocks if any referenced key lacks implementation coverage or automated tests.
+- Spec/code parity gate: `docs/settings_key_skip.txt` must remain empty; CI and release pipelines fail immediately if any Appendix E key lacks implementation coverage or automated tests.
 - Case enum migration playbook: settings introduce new `case.status`/`representation_type` values first; DB adds `CHECK ... NOT VALID` constraints, validates post-backfill, and only then removes deprecated values. Deprecations flow through Settings/UI; final removal requires data migration and constraint regeneration.
 
 ### 14.6 Organization directory sync (Ops)
@@ -3063,10 +3074,10 @@ ______________________________________________________________________
 
 Implementation phases
 
-- **MVP-critical (Phase 0/1):** Secure ingest → Guardian → approval → portal delivery; LangGraph runner (single lane fallback acceptable), core dashboards (Guardian SLO, Queue/KEDA, LLM cost, logging), residency enforcement, DSAR/retention jobs, manual edit workflows.
-- **Phase 2+ (post-GA hardening):** Advanced analytics dashboards, ROPA automation, full RACI-backed runbook coverage, timeline/entity agent GA, portal messaging. These remain documented but feature flagged until Product/Architecture approve readiness.
+- **Core release scope:** Secure ingest → Guardian → approval → portal delivery; LangGraph runner with dual-lane execution, core observability dashboards (Guardian SLO, Queue/KEDA, LLM cost, logging), residency enforcement, DSAR/retention jobs, and manual/agent edit workflows.
+- **Extended automation scope:** Advanced analytics dashboards, ROPA automation, full RACI-backed runbook coverage, timeline/entity agents, and portal messaging are all delivered; individual organizations can toggle them via settings when operationally ready, but the platform ships with complete functionality and runbooks.
 - Each phase requires update to decision log and appendix references; defer non-critical automations when they would delay MVP, but record manual controls (e.g., quarterly vendor review, manual waiver SOP) to preserve compliance evidence.
-- Complexity guardrail: maintain a feature gating matrix (Appendix T update) mapping every optional service (Localization bundles beyond en/fr, advanced Guardian heuristics, configurable policy catalogs) to explicit enablement criteria: Ops runbook sign-off, load/perf test evidence, and owner bandwidth confirmation. Architecture council reviews the matrix quarterly to ensure deferred capabilities do not silently re-enter scope without the gating checklist.
+- Complexity guardrail: maintain a feature gating matrix (Appendix T update) mapping every optional service (Localization bundles beyond en/fr, advanced Guardian heuristics, configurable policy catalogs) to explicit enablement criteria: Ops runbook sign-off, load/perf test evidence, and owner bandwidth confirmation. Architecture council reviews the matrix quarterly to ensure previously gated capabilities do not re-enter scope without the checklist.
 
 ### 15.2 Dependencies on external programs (IAM overhaul, infra upgrades)
 
@@ -3385,7 +3396,7 @@ Canonical artifact table
 | SIGNATURE_CERT            | `docs/<job_id>__signature_cert_v1.json`     | No        | `<signature_cert>.manifest.json`       | Signer certificate bundle                                         |
 | ATTACHMENT_RAW            | `docs/<job_id>__attachment_raw_v1.bin`      | No        | `<attachment_raw>.manifest.json`       | Source binary for portal messaging/client uploads; Guardian-gated |
 | ATTACHMENT_TEXT           | \`docs/\<job_id>\_\_attachment_text_v1.json | md\`      | No                                     | `<attachment_text>.manifest.json`                                 |
-| TIMELINE_V2 (future)      | \`timeline/\<job_id>\_\_timeline_v2.json    | md\`      | TBD                                    | `<timeline_v2>.manifest.json`                                     |
+| TIMELINE_JSON              | `timeline/<job_id>__timeline_v2.json`       | No        | `<timeline_v2>.manifest.json`         | Normalized timeline events (speakers, timestamps, UUID anchors) |
 | ERASURE_JOURNAL           | `privacy/<job_id>__erasure_journal_v1.json` | No        | `<erasure_journal>.manifest.json`      | Hard-purge DSAR evidence; subject hashed with HKDF salt           |
 
 | CHAT_SESSION_JSON         | `ops/<session_id>__chat_staff.jsonl`        | No        | `<chat_session>.manifest.json`         | Staff Copilot conversation log with citations + moderation metadata |
@@ -3459,6 +3470,44 @@ Canonical artifact table
   ```
 - Guardian manifests track review state for each proposal (`manifest.guardian.review_state ∈ {pending, approved, rejected, quarantined}`) and tie audit events (`EDIT_POLICY_BLOCK`, `EDIT_GUARDIAN_QUARANTINED`) back to the edit artifact. Reviewers promote an edit only after approving the proposal and diff pair.
 
+### D.3 Timeline artifacts (binding)
+
+- `TIMELINE_JSON` uses schema `timeline_v2@1.0`:
+  ```json
+  {
+    "schema_version": "timeline_v2@1.0",
+    "case_id": "uuid",
+    "job_id": "uuid",
+    "generated_at": "RFC3339",
+    "events": [
+      {
+        "uuid": "uuid",
+        "start_ms": 1250,
+        "end_ms": 2380,
+        "speaker": "Speaker A",
+        "channel": 0,
+        "label": "Initial consultation",
+        "summary": "Client describes the accident at 5th Street.",
+        "source": {
+          "artifact_id": "uuid",
+          "path": "transcript/<job_id>__transcript.txt",
+          "start_offset_ms": 1250,
+          "end_offset_ms": 2380
+        },
+        "tags": ["incident", "client_statement"],
+        "confidence": 0.93
+      }
+    ],
+    "normalization": {
+      "speaker_strategy": "deterministic_channel",
+      "timezone": "UTC"
+    }
+  }
+  ```
+- Events reference upstream transcript segments (Appendix D `TRANSCRIPT`) via deterministic UUIDv5 anchored on `{case_id, start_ms, end_ms, speaker, summary}`. Replays regenerate the same UUID when content matches, ensuring cross-agent linkage.
+- Guardian validates that timeline events cite approved transcripts; manifests embed `source_artifacts[]` so Guardian can quarantine events if the upstream transcript is revoked.
+- Analyze and downstream tooling (timeline UI, Compose timeline sections) consume this artifact; modifications run through Manual/Agent edit flows, producing new timeline artifacts with `_v{n}` suffixes.
+
 Ops logs
 
 - Transcription: `ops/<job_id>__transcription_log.json`, `ops/<job_id>__transcription.log`, case-level `ops_transcription.jsonl`.
@@ -3518,11 +3567,14 @@ E.1 Key catalog (scope: SYSTEM | ORG | CASE)
  - llm.enforce_model_version — ORG|CASE — true — Fail when provider model version drifts from pin; §8.1/§8.5.
  - llm.moderation.enabled — ORG — true — Enable automated input/output moderation; §8.4.
  - llm.moderation.provider — ORG — azure|openai|local — Moderation provider selection; §8.4.
- - llm.moderation.enforcement — SYSTEM|ORG — block — Enforcement mode: `block` (default) or `warn`; §8.4.
- - llm.moderation.thresholds.toxicity — ORG — 0.5 — Classification threshold; §8.4.
+- llm.moderation.enforcement — SYSTEM|ORG — block — Enforcement mode: `block` (default) or `warn`; §8.4.
+- llm.moderation.thresholds.toxicity — ORG — 0.5 — Classification threshold; §8.4.
 - llm.moderation.thresholds.self_harm — ORG — 0.5 — Classification threshold; §8.4.
 - llm.moderation.thresholds.sexual_content — ORG — 0.5 — Classification threshold; §8.4.
 - llm.moderation.thresholds.pii_reintroduction — ORG — 0.5 — Classification threshold; §8.4.
+- llm.byo.allowed — ORG|CASE — false — Permit bring-your-own model endpoints; §8.1.3.
+- llm.byo.evaluation_suite_id — ORG — default — Evaluation suite applied to BYO providers; §8.1.3.
+- llm.byo.vpc_endpoints[] — ORG — [] — Allowed BYO endpoint hostnames (reconciled with mesh policies); §8.1.3.
 - agents.langgraph.runner — SYSTEM|ORG — langgraph — Graph runner selection (`langgraph` or `linear`); §6.7.2.
 - agents.langgraph.fallback_mode — SYSTEM — false — Force manual drafting fallback; §6.7.2, App.H RB-LLM-003.
 - speech.providers[] — SYSTEM|ORG — [] — Speech provider catalog (health, residency, parity evidence); §6.2.1.
@@ -5027,7 +5079,7 @@ Waiver template (JSON, all fields required)
 | ------------- | ---------------- | ----- | ----------------------- | -------------- | ------------------------ |
 | (none)        | —                | —     | —                       | —              | No open risk acceptances |
 
-Risk acceptances capture deviations such as deferred CVE remediation or temporary SLO relaxations. Entries require Security + Product approval, explicit expiry, and linkage to incident/problem tickets. Items auto-escalate to leadership if not reviewed 7 days before expiry.
+Risk acceptances capture deviations such as pending CVE remediation or temporary SLO relaxations. Entries require Security + Product approval, explicit expiry, and linkage to incident/problem tickets. Items auto-escalate to leadership if not reviewed 7 days before expiry.
 
 ______________________________________________________________________
 
