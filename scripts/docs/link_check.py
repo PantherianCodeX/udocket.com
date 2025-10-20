@@ -7,7 +7,7 @@ from pathlib import Path
 import os
 
 ROOT = Path(__file__).resolve().parents[2]
-DOC = ROOT / "docs" / "TDDv7.md"
+DOC = ROOT / "docs" / "TDD.md"
 
 def find_diagram_refs(text: str) -> set[str]:
     return set(re.findall(r"docs/diagrams/[\w\-/]+\.mmd", text))

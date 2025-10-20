@@ -1,0 +1,45 @@
+%% Mermaid threat DFD placeholder for uDocket STRIDE analysis
+
+flowchart TD
+    subgraph External
+        Staff[Staff User]
+        Client[Client]
+    end
+
+    subgraph Platform[Platform Boundary]
+        Web[Web App]
+        Channels[Channels]
+        Workers[Celery Workers]
+        Guardian[Guardian Service]
+        Settings[Settings Service]
+        LPE[Localization & Policy Engine]
+        Signer[Digital Signer]
+        Storage[Object Storage]
+        DB[(Postgres RLS)]
+    end
+
+    Staff -->|HTTPS| Web
+    Client -->|HTTPS| Web
+    Web -->|WebSocket| Channels
+    Web -->|REST| Workers
+    Workers -->|REST| Guardian
+    Workers -->|REST| Settings
+    Workers -->|REST| LPE
+    Workers -->|Sign request| Signer
+    Workers -->|Artifacts| Storage
+    Guardian -->|Audit| DB
+    Workers -->|Jobs| DB
+    Web -->|Read| DB
+    Web -->|Download| Storage
+
+    %% STRIDE notes (custom annotations)
+    classDef spoof fill:#fdd,stroke:#f00,stroke-width:1px,color:#000;
+    classDef tamper fill:#dfd,stroke:#080,stroke-width:1px,color:#000;
+    classDef info fill:#ddf,stroke:#00f,stroke-width:1px,color:#000;
+
+    Staff:::spoof
+    Client:::spoof
+    Web:::tamper
+    Workers:::tamper
+    Guardian:::tamper
+    Storage:::info

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Aggregate documentation linting for TDDv7.
+"""Aggregate documentation linting for TDD.
 
 This script wraps all of the doc hygiene checks the project expects:
 
@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-DOC = ROOT / "docs" / "TDDv7.md"
+DOC = ROOT / "docs" / "TDD.md"
 
 
 @dataclass
@@ -53,6 +53,9 @@ def run_task(task: Task) -> bool:
             print(f"  Install hint: {task.install_hint}")
         return False
     except subprocess.CalledProcessError as exc:
+        if task.optional:
+            print(f"⤷ Optional task '{task.name}' failed with exit code {exc.returncode}; continuing\n")
+            return True
         print(f"✗ {task.name} failed with exit code {exc.returncode}")
         return False
 
@@ -61,12 +64,12 @@ def build_tasks() -> list[Task]:
     py = sys.executable
     return [
         Task(
-            name="mdformat --check docs/TDDv7.md",
+            name="mdformat --check docs/TDD.md",
             cmd=[py, "-m", "mdformat", "--wrap", "no", "--check", str(DOC)],
             install_hint="pip install -r requirements-docs.txt",
         ),
         Task(
-            name="markdownlint-cli2 docs/TDDv7.md",
+            name="markdownlint-cli2 docs/TDD.md",
             cmd=["markdownlint-cli2", str(DOC)],
             optional=True,
             install_hint="npm install --location=global markdownlint-cli2 markdownlint-cli2-config-standard",

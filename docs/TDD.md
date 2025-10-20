@@ -17,6 +17,8 @@ related_adrs:
   - ADR-0004-localization-and-policy-engine.md
 ---
 
+______________________________________________________________________
+
 # **uDocket — Technical Description Document (TDD Outline)**
 
 **Audience:** Engineering, Security, QA, Ops, Product\
@@ -26,18 +28,18 @@ ______________________________________________________________________
 
 ## Document controls
 
-| Field           | Value                                                                                                       |
-| --------------- | ----------------------------------------------------------------------------------------------------------- |
-| Version         | 0.1-draft                                                                                                   |
+| Field           | Value                                                                                                           |
+| --------------- | --------------------------------------------------------------------------------------------------------------- |
+| Version         | 0.1-draft                                                                                                       |
 | Status          | Implementable (mirrors front matter `status`; KEP lifecycle applies: Provisional → Implementable → Implemented) |
-| Last updated    | 2025-10-19 (source of truth is the front matter `last_updated`)                                             |
-| Primary owners  | Platform Architecture, Security Engineering                                                                 |
-| Approvers       | Architecture Steering Committee; Security Review Board                                                      |
-| Reviewers       | QA Engineering Lead; SRE Manager                                                                            |
-| ADR index       | `docs/adr/README.md` (immutable ADRs referenced in front matter `related_adrs`)                             |
-| Migration plan  | Supersede prior TDD versions once Architecture/Security approvals are recorded (parity verified 2025-10-19) |
-| Docs validation | `python scripts/docs/lint_docs.py` (see `docs/README.md` for tooling)                                       |
-| Link lint       | `python scripts/docs/link_check.py --strict` (CI `docs-link-check` stage blocks unresolved §/App./ADR refs) |
+| Last updated    | 2025-10-19 (source of truth is the front matter `last_updated`)                                                 |
+| Primary owners  | Platform Architecture, Security Engineering                                                                     |
+| Approvers       | Architecture Steering Committee; Security Review Board                                                          |
+| Reviewers       | QA Engineering Lead; SRE Manager                                                                                |
+| ADR index       | `docs/adr/README.md` (immutable ADRs referenced in front matter `related_adrs`)                                 |
+| Migration plan  | Supersede prior TDD versions once Architecture/Security approvals are recorded (parity verified 2025-10-19)     |
+| Docs validation | `python scripts/docs/lint_docs.py` (see `docs/README.md` for tooling)                                           |
+| Link lint       | `python scripts/docs/link_check.py --strict` (CI `docs-link-check` stage blocks unresolved §/App./ADR refs)     |
 
 ______________________________________________________________________
 
@@ -191,7 +193,7 @@ ______________________________________________________________________
 - Kubernetes namespaces per environment (`dev`, `staging`, `prod`, `audit`) host Deployments for `web`, `channels`, `workers`, `guardian`, `signer`, `llm-registry`, `reference`, `notifications`, `settings`, ingress controllers, Redis broker/cache, and object-storage sidecars.
 - Service mesh or SPIFFE/SPIRE workload identity enforces strict mTLS; certificates rotate with TTL ≤ 24h and SLO of 99.9% renewals within five minutes of expiry. Certificates that exceed `security.tls.cert_ttl_minutes + 5` minutes trigger a hard fail (traffic denied) and page on-call; soft warnings fire 30 minutes before TTL expiry to allow proactive rotation. Mutating RPCs must satisfy both mutual TLS **and** HMAC headers: the mesh validates SANs against SPIFFE IDs (`spiffe://udocket/<service>`) or an allowlisted CN, and the receiving service reconstructs the shared-secret signature (Appendix F). Calls missing either layer are rejected with `401 AUTH_ERROR` and recorded via `auth_layer_violation_total`.
 - Network policy: ingress terminates TLS (TLS 1.3 preferred; limited TLS 1.2 fallback). Egress is default-deny aside from kube-dns and the Istio egress gateway; the gateway enforces the Canadian Azure and third-party allowlists rendered from the `network.egress.allowed_hosts` Settings bundle, and drift detection nightly resolves each FQDN (e.g., `*.blob.core.windows.net`, `*.table.core.windows.net`, `*.queue.core.windows.net`, TSA/OCSP hosts) to compare against SAN lists.
-- TLS details: TLS 1.3 relies on the platform default cipher selection; only TLS 1.2 fallback suites are configured explicitly (`{'ECDHE-ECDSA-AES128-GCM-SHA256','ECDHE-RSA-AES128-GCM-SHA256','ECDHE-ECDSA-AES256-GCM-SHA384','ECDHE-RSA-AES256-GCM-SHA384'}`). OCSP stapling remains enabled on ingress. Fallback may be enabled via `security.tls.legacy_exceptions[]` entries that include endpoint name, justification, and an expiry ≤ 30 days out; Settings activation validator rejects longer windows, and an alert fires seven days before expiry to force review. CHACHA20-Poly1305 is supported only under TLS 1.3, satisfying mobile performance needs without weakening the FIPS posture. Production ingress treats TLS 1.3 as the FIPS boundary; `security.tls.min_version` defaults to `TLSv1.3` and downgrades require Security approval and updated attestation for the impacted environment.
+- TLS details: TLS 1.3 remains the platform default. When `security.tls.fips_mode=true`, only FIPS-approved AES-GCM ciphers are permitted (`TLS_AES_128_GCM_SHA256`, `TLS_AES_256_GCM_SHA384`) and ChaCha20 suites are rejected at validation time (mirrors OpenSSL FIPS provider guidance). Non-FIPS environments (explicit `security.tls.performance_mode=true`) MAY allow `TLS_CHACHA20_POLY1305_SHA256` to improve mobile performance but must record the exception in the release checklist. TLS 1.2 fallback suites remain explicit (`{'ECDHE-ECDSA-AES128-GCM-SHA256','ECDHE-RSA-AES128-GCM-SHA256','ECDHE-ECDSA-AES256-GCM-SHA384','ECDHE-RSA-AES256-GCM-SHA384'}`). OCSP stapling stays enabled on ingress. Fallback may be enabled via `security.tls.legacy_exceptions[]` entries that include endpoint name, justification, and an expiry ≤ 30 days out; Settings activation validator rejects longer windows, and an alert fires seven days before expiry to force review. Production ingress treats TLS 1.3 (`security.tls.min_version=TLSv1.3`) as the control surface; downgrades require Security approval plus updated attestation for the impacted environment.
 - Platform services leverage managed secrets (Vault or Azure Key Vault). Nodes run chrony/NTP with ±100 ms drift to support TSA validation. Redis handles broker/cache needs; Postgres (regional HA) stores relational data.
 - Object storage: Azure Blob (prod) or S3-compatible (dev) buckets configured for versioning, SSE-KMS, and immutable retention for audit sinks.
 
@@ -210,13 +212,17 @@ spec:
   rules:
     - to:
         - operation:
-            hosts: ["*.canadacentral.azure.com", "*.canadaeast.azure.com"]
+            hosts:
+              - "canadacentral.api.cognitive.microsoft.com"
+              - "canadaeast.api.cognitive.microsoft.com"
+              - "canadacentral.ocsp.msocsp.com"
+              - "tsa.partner.example.ca"
     - to:
         - operation:
-            hosts: ["tsa.example.ca", "ocsp.example.ca"]
+            hosts: ["signing-root.example.ca"]
 ```
 
-- Illustrative host list; production values are rendered from the `network.egress.allowed_hosts` Settings bundle (SYSTEM scope) so environments stay in lockstep with approved endpoints.
+- Illustrative host list; production values are rendered from the `network.egress.allowed_hosts` Settings bundle (SYSTEM scope) and materialized as `ServiceEntry` resources with exact SNI/authority matches. Istio AuthorizationPolicy host matching is literal—wildcards are rejected—so the helper renders the fully qualified domains for each approved endpoint.
 
 NetworkPolicy (Kubernetes)
 
@@ -298,20 +304,20 @@ metadata:
 
 *Purpose: Provide a tabular summary for capacity planning and onboarding.*
 
-| Service              | Runtime                          | Responsibilities                                                                | Scaling & notes                                             | Observability anchors                                            |
-| -------------------- | -------------------------------- | ------------------------------------------------------------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------- |
-| Web                  | Django ASGI (uvicorn + gunicorn) | REST APIs, staff UI, client portal, SSE endpoints, approval workflows           | HPA on CPU+request latency; sticky sessions avoided         | `web_http_*`, `frontend_latency_seconds`, `audit_event_total`    |
-| Channels             | Django Channels (Redis-backed)   | Real-time editors, approvals, QA feedback                                       | Separate Deployment with autoscale on WS connections        | `channels_active_connections`, `channels_msg_latency_seconds`    |
-| Workers              | Celery (prefork)                 | Media normalization, agent orchestration, notifications, ingestion, destruction | Queue length auto-scaling; dedicated queues per agent class | `celery_queue_depth`, `job_duration_seconds`, `task_retry_total` |
-| Guardian             | FastAPI                          | Artifact READY/QUARANTINED decisions, policy evaluation, audit history          | Pod HPA on latency; 99.9% SLO                               | `guardian_decision_latency_seconds`, `guardian_ready_ratio`      |
-| Digital Signer       | FastAPI                          | PDF/A signing, OCSP/CRL/TSA validation, bundle creation                         | Scales with signing queues; relies on KMS/TSA connectors    | `signer_request_latency_seconds`, `tsa_drift_seconds`            |
-| LLM Registry         | FastAPI                          | Provider catalog, health probes, token accounting, fallback logic               | Low QPS; run ≥2 replicas                                    | `llm_provider_health`, `llm_circuit_state`                       |
-| Settings Service     | FastAPI                          | Hierarchical settings APIs, bundle activation, diff previews                    | Autoscale on QPS; Redis pub/sub for cache invalidation      | `settings_activation_total`, `settings_cache_hit_ratio`          |
-| Localization & Policy Engine (LPE) | FastAPI + worker cron + compiler jobs | Localization (locale/i18n packs), policy contexts (privacy/residency), court catalogs | Compiler pods scale on activation; lookup API horizontally replicated | `lpe_lookup_latency_seconds`, `lpe_policy_context_version`, `lpe_cache_hit_ratio` |
-| Policy Agent (OPA)        | Open Policy Agent (sidecar or centralized) | Evaluates signed policy bundles for residency, HIPAA, egress, attachment rules; emits decision logs | Colocates sidecar per service for low latency; central cluster fans out discovery bundles | `opa_decision_latency_seconds`, `opa_bundle_status`, `opa_denied_total` |
-| Reference Manager      | FastAPI + Celery ingest workers + review UI | Source connectors (Wikipedia, court sites, vendor feeds), catalog lifecycle, questionnaires/forms administration | Ingest workers autoscale on harvest queues; reviewer workload tracked via task backlog | `reference_manager_ingest_duration_seconds`, `reference_manager_pending_reviews`, `reference_catalog_version` |
-| Notification Service | Celery beat + worker             | Outbox delivery (email/SMS/in-app), receipt tracking                            | Scales with delivery volume; provider specific adapters     | `delivery_success_ratio`, `delivery_retry_total`                 |
-| Storage adapters     | Sidecar / init jobs              | Object storage integrity checks, audio normalization caching                    | Scoped per namespace                                        | `storage_hash_mismatch_total`, `object_store_latency_seconds`    |
+| Service                            | Runtime                                     | Responsibilities                                                                                                 | Scaling & notes                                                                           | Observability anchors                                                                                         |
+| ---------------------------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Web                                | Django ASGI (uvicorn + gunicorn)            | REST APIs, staff UI, client portal, SSE endpoints, approval workflows                                            | HPA on CPU+request latency; sticky sessions avoided                                       | `web_http_*`, `frontend_latency_seconds`, `audit_event_total`                                                 |
+| Channels                           | Django Channels (Redis-backed)              | Real-time editors, approvals, QA feedback                                                                        | Separate Deployment with autoscale on WS connections                                      | `channels_active_connections`, `channels_msg_latency_seconds`                                                 |
+| Workers                            | Celery (prefork)                            | Media normalization, agent orchestration, notifications, ingestion, destruction                                  | Queue length auto-scaling; dedicated queues per agent class                               | `celery_queue_depth`, `job_duration_seconds`, `task_retry_total`                                              |
+| Guardian                           | FastAPI                                     | Artifact READY/QUARANTINED decisions, policy evaluation, audit history                                           | Pod HPA on latency; 99.9% SLO                                                             | `guardian_decision_latency_seconds`, `guardian_ready_ratio`                                                   |
+| Digital Signer                     | FastAPI                                     | PDF/A signing, OCSP/CRL/TSA validation, bundle creation                                                          | Scales with signing queues; relies on KMS/TSA connectors                                  | `signer_request_latency_seconds`, `tsa_drift_seconds`                                                         |
+| LLM Registry                       | FastAPI                                     | Provider catalog, health probes, token accounting, fallback logic                                                | Low QPS; run ≥2 replicas                                                                  | `llm_provider_health`, `llm_circuit_state`                                                                    |
+| Settings Service                   | FastAPI                                     | Hierarchical settings APIs, bundle activation, diff previews                                                     | Autoscale on QPS; Redis pub/sub for cache invalidation                                    | `settings_activation_total`, `settings_cache_hit_ratio`                                                       |
+| Localization & Policy Engine (LPE) | FastAPI + worker cron + compiler jobs       | Localization (locale/i18n packs), policy contexts (privacy/residency), court catalogs                            | Compiler pods scale on activation; lookup API horizontally replicated                     | `lpe_lookup_latency_seconds`, `lpe_policy_context_version`, `lpe_cache_hit_ratio`                             |
+| Policy Agent (OPA)                 | Open Policy Agent (sidecar or centralized)  | Evaluates signed policy bundles for residency, HIPAA, egress, attachment rules; emits decision logs              | Colocates sidecar per service for low latency; central cluster fans out discovery bundles | `opa_decision_latency_seconds`, `opa_bundle_status`, `opa_denied_total`                                       |
+| Reference Manager                  | FastAPI + Celery ingest workers + review UI | Source connectors (Wikipedia, court sites, vendor feeds), catalog lifecycle, questionnaires/forms administration | Ingest workers autoscale on harvest queues; reviewer workload tracked via task backlog    | `reference_manager_ingest_duration_seconds`, `reference_manager_pending_reviews`, `reference_catalog_version` |
+| Notification Service               | Celery beat + worker                        | Outbox delivery (email/SMS/in-app), receipt tracking                                                             | Scales with delivery volume; provider specific adapters                                   | `delivery_success_ratio`, `delivery_retry_total`                                                              |
+| Storage adapters                   | Sidecar / init jobs                         | Object storage integrity checks, audio normalization caching                                                     | Scoped per namespace                                                                      | `storage_hash_mismatch_total`, `object_store_latency_seconds`                                                 |
 
 - **Stack note:** Web and Channels services run on Django 5.2.x (ASGI via uvicorn + gunicorn) and Django Channels 4.1.x, both pinned in `apps/platform/requirements.txt`; SBOM gates block implicit minor upgrades.
 
@@ -321,7 +327,7 @@ metadata:
 
 - `ADR-0004-localization-and-policy-engine.md` renames the Reference Engine to **Localization & Policy Engine (LPE)** and expands its charter from court catalogs to a unified localization and policy compiler. The ADR follows the existing lifecycle (Provisional → Implementable → Accepted) and is required before the rename ships; CI checks enforce ADR references for API or schema changes touching LPE.
 - LPE exposes a public, versioned API surface that joins the existing OpenAPI bundles. Historic `/reference/*` endpoints remain read-only shims until the migration in §3.4.9 completes; they return `Sunset` headers once the cutover flag is on.
-- LPE outputs **immutable `PolicyContext` payloads** and localization packs, guaranteeing consistent enforcement across API tier, workers, frontend, and database RLS. Runtime callers treat contexts as deterministic for a `(org_id, case_id?, locale, privacy_flags)` tuple; settings snapshots embed the corresponding `policy_context_version`.
+- LPE outputs **immutable `PolicyContext` payloads** and localization packs, guaranteeing consistent enforcement across API tier, workers, frontend, and database RLS. Runtime callers treat contexts as deterministic for a `(org_id, case_id?, locale, privacy_flags)` tuple. The compiler persists each unique combination as a row keyed by `(org_id, case_id, locale, privacy_flags_hash)` (with `case_id` nullable), and settings snapshots embed the corresponding `policy_context_version`.
 - Runtime policy decisions (residency, HIPAA, attachment routing) execute through colocated **Open Policy Agent (OPA)** sidecars or a shared OPA tier that continuously downloads the same signed bundles LPE compiles. LPE focuses on producing deterministic data and localization artifacts, while OPA evaluates Rego policies against those datasets and emits decision/status logs for audit.
 
 #### 3.4.1 Objectives & mandate
@@ -338,8 +344,8 @@ metadata:
 - **Residency policies:** Canonical compute/vector/storage allowlists with waiver metadata and expiry tracking; surfaced as `residency_regions` in `PolicyContext`.
 - **Policy bundles:** Signed, versioned Rego + data payloads that OPA consumes to enforce residency, egress, HIPAA, and attachment rules. Bundles include manifests with SHA-256 digests, compatibility range, and monotonic build numbers; LPE rejects unsigned or stale bundles.
 - **OPA discovery manifest (`spec/schemas/opa_discovery_manifest.schema.json`):** Enumerates bundle channels (`stable`, `beta`, `canary`), allowed regions, SHA-256 digests, ETags, rollout windows, and promotion rules so OPA evaluators hot-reload safely.
-- **PolicyContext table (`compiled_policy_context`):** Keyed by `(org_id, case_locale?, privacy_flags_hash)` with values `{policy_context_version, frameworks_enabled[], hipaa_required, residency_regions{compute[],storage[],vector[]}, retention_days, portal_rules{disclaimer_key,banner_key}, logging_rules, masking_profile, i18n_keys[], hash_sha256}`.
-- **PolicyContext schema (`spec/schemas/policy_context.schema.json`):** Canonical JSON Schema (draft 2020-12) describing all fields, value types, and optional blocks; versioned separately to allow additive fields. Digests in API responses (`digest_sha256`) sign the canonicalized JSON payload.
+- **PolicyContext table (`compiled_policy_context`):** Keyed by `(org_id, case_id, locale, privacy_flags_hash)` (with `case_id` nullable for org-scoped defaults) with values `{policy_context_version, frameworks_enabled[], hipaa_required, residency_regions{compute[],storage[],vector[]}, retention_days, portal_rules{disclaimer_key,banner_key}, logging_rules, masking_profile, i18n_keys[], digest_sha256}`.
+- **PolicyContext schema (`spec/schemas/policy_context.schema.json`):** Canonical JSON Schema (draft 2020-12) describing all fields, value types, and optional blocks; versioned separately to allow additive fields. Digests in API responses (`digest_sha256`) sign the canonicalized JSON payload and are exposed by helper libraries as `ctx.digest_sha256`.
 - **Reference Manager integration:** LPE consumes canonical datasets emitted by Reference Manager (RM)—court hierarchy, localization strings, questionnaires, forms. RM supplies signed manifests plus SHA-256 digests; LPE refuses to compile if digests drift or the RM publish event is missing.
 - Outputs include deterministic UUIDs for events/entities when the compiler derives identity; reruns reuse UUID5 of canonical content to satisfy cross-artifact identity rules (§6.3).
 
@@ -348,12 +354,12 @@ metadata:
 - Runtime helpers (`udocket_lpe.PolicyContext` in Python, `@udocket/lpe-client` in TypeScript) supply immutable contexts per request. Callers must not mutate records; each instance records `generated_at`, `source_settings_version`, and `policy_context_version`.
 - Enforcement points consuming `PolicyContext`:
 
-| Enforcement point (§9.9) | LPE decisions provided | Consuming surfaces |
-| ------------------------ | ---------------------- | ------------------ |
-| API gateway & web tier   | Locale headers, residency posture, CORS templates, download banners, HIPAA messaging, rate-limit hints | Web, Channels, REST/SSE |
-| Worker/agent execution   | Allowed model providers & regions, compute/token budgets, retention timers, waiver gating | Celery workers, Guardian, Guardian budget checks |
-| Frontend rendering       | Localization strings, number/date/unit formats, accessibility copy, approval/invalidation banners | Staff UI, Portal |
-| Database layer           | `masking_profile`, PHI redaction toggles, RLS policy selectors | Postgres secure views, data warehouse exports |
+| Enforcement point (§9.9) | LPE decisions provided                                                                                 | Consuming surfaces                               |
+| ------------------------ | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------ |
+| API gateway & web tier   | Locale headers, residency posture, CORS templates, download banners, HIPAA messaging, rate-limit hints | Web, Channels, REST/SSE                          |
+| Worker/agent execution   | Allowed model providers & regions, compute/token budgets, retention timers, waiver gating              | Celery workers, Guardian, Guardian budget checks |
+| Frontend rendering       | Localization strings, number/date/unit formats, accessibility copy, approval/invalidation banners      | Staff UI, Portal                                 |
+| Database layer           | `masking_profile`, PHI redaction toggles, RLS policy selectors                                         | Postgres secure views, data warehouse exports    |
 
 - `PolicyContext` is cached in-process with a default TTL of 5 minutes; cache invalidation fires when Settings activation emits an `lpe.policy_context.updated` event or when RM publishes a new bundle version. Clients reuse digest-based `ETag`s for conditional GETs and fall back to snapshot bootstrap when the requested digest is older than 30 minutes or 500 events in the SSE stream. Background refresh keeps hot tenants warm while respecting the lookup P95 SLO.
 
@@ -390,14 +396,14 @@ metadata:
 
 Decision logs validate against `spec/schemas/opa_decision_log.schema.json`. `reason_code` values (`OK`, `REGION_NOT_ALLOWED`, `WAIVER_REQUIRED`, `HIPAA_REQUIRED`, `ATTACHMENT_FORBIDDEN`, `OPA_ERROR`) map to downstream actions:
 
-| `reason_code` | `policy_block_code` surfaced to callers |
-| ------------- | --------------------------------------- |
-| `OK` | `null` (decision allow) |
-| `REGION_NOT_ALLOWED` | `RESIDENCY_POLICY_BLOCK` |
-| `WAIVER_REQUIRED` | `POLICY_BLOCK` (UI prompts for waiver) |
-| `HIPAA_REQUIRED` | `HIPAA_REQUIRED` |
-| `ATTACHMENT_FORBIDDEN` | `ATTACHMENT_BLOCK` |
-| `OPA_ERROR` | `POLICY_BLOCK` (with remediation message) |
+| `reason_code`          | `policy_block_code` surfaced to callers   |
+| ---------------------- | ----------------------------------------- |
+| `OK`                   | `null` (decision allow)                   |
+| `REGION_NOT_ALLOWED`   | `RESIDENCY_POLICY_BLOCK`                  |
+| `WAIVER_REQUIRED`      | `POLICY_BLOCK` (UI prompts for waiver)    |
+| `HIPAA_REQUIRED`       | `HIPAA_REQUIRED`                          |
+| `ATTACHMENT_FORBIDDEN` | `ATTACHMENT_BLOCK`                        |
+| `OPA_ERROR`            | `POLICY_BLOCK` (with remediation message) |
 
 CI (`scripts/opa/validate_decision_logs.py`) verifies that emitted logs comply with the schema, and dashboards aggregate `reason_code` to drive alerts and FinOps reporting.
 
@@ -464,9 +470,9 @@ ctx = lpe.get_policy_context(
     locale="en-CA",
 )
 if ctx.frameworks.HIPAA.required and not ctx.frameworks.HIPAA.enabled:
-    raise PolicyBlock("HIPAA_REQUIRED", context_digest=ctx.digest)
+    raise PolicyBlock("HIPAA_REQUIRED", context_digest=ctx.digest_sha256)
 db.set_rls_mask_profile(ctx.masking_profile)
-vector_client = vector_pool.for_regions(ctx.residency.compute)
+vector_client = vector_pool.for_regions(ctx.residency_regions.compute)
 formatter = lpe.get_locale("en-CA").formatters
 rendered_date = formatter.date_short(approved_at)
 
@@ -478,11 +484,11 @@ decision = opa_client.evaluate(
         "case_id": case_id,
         "artifact_type": "COMPOSE_CLIENT_MD",
         "requested_region": "canadacentral",
-        "context_digest": ctx.digest,
+        "context_digest": ctx.digest_sha256,
     },
 )
 if not decision["allow"]:
-    raise PolicyBlock(decision["reason"], context_digest=ctx.digest)
+    raise PolicyBlock(decision["reason"], context_digest=ctx.digest_sha256)
 ```
 
 This example demonstrates how residency outcomes are derived: LPE supplies the deterministic `PolicyContext` (with compute/storage/vector allowlists per `(org_id, locale, privacy_flags)`), while OPA enforces deny-by-default egress rules and returns structured deny codes (`REGION_NOT_ALLOWED`, `WAIVER_REQUIRED`) that propagate to Guardian and portal clients.
@@ -537,17 +543,21 @@ This example demonstrates how residency outcomes are derived: LPE supplies the d
 #### 3.5.4 Governance & review workflows
 
 - State machine: `DRAFT → REVIEW → APPROVED → PUBLISHED → DEPRECATED → ARCHIVED`. Emergency hotfixes may fast-track to `APPROVED` but still require retrospective review within 48h.
+
 - Dual-approval is mandatory for sensitive changes (jurisdiction boundaries, residency/privacy flags, HIPAA/PHIPA toggles, identifier removals). Approvers must come from distinct roles (Content Ops + Legal Ops).
+
 - Deprecations capture replacement pointers, effective dates, and user-facing guidance (e.g., “use Court of Appeal docket type X”). LPE surfaces deprecation hints in `PolicyContext` until the effective date passes.
+
 - Audit metadata—proposer, reviewers, timestamps, diff hashes, and citations—are persisted in `reference_change_log` and mirrored to the immutable log sink.
+
 - Governance RACI (binding):
 
-  | Change class                               | Responsible (R) | Accountable (A)   | Consulted (C)              | Informed (I)                    | SLA |
-  | ------------------------------------------ | --------------- | ----------------- | -------------------------- | ------------------------------- | --- |
-  | Routine catalog update (name/address)      | Content Ops     | RM Product Owner  | Legal Ops                  | Platform Support, Product       | Review ≤ 2 business days |
-  | Residency/privacy flag update              | Content Ops     | Security Eng Lead | Legal Ops, Architecture    | Compliance, Product             | Dual approval, publish ≤ 4 business hours after approval |
-  | Questionnaire/form change                  | Legal Ops       | RM Product Owner  | Content Ops, UX            | Platform Support, Product       | Review ≤ 3 business days |
-  | Emergency hotfix (court closure)           | Content Ops     | RM Product Owner  | Legal Ops, Security (post) | All affected customers, Product | Publish ≤ 2 hours, retrospective review within 48 hours |
+  | Change class                          | Responsible (R) | Accountable (A)   | Consulted (C)              | Informed (I)                    | SLA                                                      |
+  | ------------------------------------- | --------------- | ----------------- | -------------------------- | ------------------------------- | -------------------------------------------------------- |
+  | Routine catalog update (name/address) | Content Ops     | RM Product Owner  | Legal Ops                  | Platform Support, Product       | Review ≤ 2 business days                                 |
+  | Residency/privacy flag update         | Content Ops     | Security Eng Lead | Legal Ops, Architecture    | Compliance, Product             | Dual approval, publish ≤ 4 business hours after approval |
+  | Questionnaire/form change             | Legal Ops       | RM Product Owner  | Content Ops, UX            | Platform Support, Product       | Review ≤ 3 business days                                 |
+  | Emergency hotfix (court closure)      | Content Ops     | RM Product Owner  | Legal Ops, Security (post) | All affected customers, Product | Publish ≤ 2 hours, retrospective review within 48 hours  |
 
 - Emergency guardrails: hotfixes require a designated incident captain, automated ticket creation, and completion of the adoption rollback checklist in §3.5.14 within 24h to confirm bundles stabilized.
 
@@ -600,7 +610,7 @@ This example demonstrates how residency outcomes are derived: LPE supplies the d
 
 #### 3.5.10 Observability, SLOs & dashboards
 
-- SLOs: harvest success ≥ 99%/day; selector failure rate < 2% rolling 7d; median proposal review < 48h; publish latency P95 < 2h; bundle adoption lag (RM publish → LPE compile) P95 < 10m.
+- SLOs: harvest success ≥ 99%/day; selector failure rate \< 2% rolling 7d; median proposal review \< 48h; publish latency P95 \< 2h; bundle adoption lag (RM publish → LPE compile) P95 \< 10m.
 - Metrics: `reference_manager_harvest_total{source,result}`, `reference_manager_ingest_duration_seconds`, `reference_manager_selector_failure_total`, `reference_manager_diff_backlog`, `reference_manager_publish_total`, `reference_manager_bundle_adoption_seconds`, `reference_resource_missing_locale_total`, `reference_manager_license_violation_total`.
 - FinOps: `reference_manager_ingest_cost_cents{source}`, `reference_manager_api_credit_total`, and `reference_manager_storage_bytes_total` feed cost dashboards; budgets defined per source family with alerts when 7-day rolling spend exceeds 80% of monthly cap.
 - Dashboards (added to §12.6): “Reference Manager – Ingestion & Quality” (coverage %, freshness age, selector failures), “Reference Manager – Review & Publishing” (diff backlog, review SLA, adoption lag), and bundle adoption overlays alongside LPE dashboards.
@@ -669,6 +679,7 @@ This example demonstrates how residency outcomes are derived: LPE supplies the d
 - **Notification channels:** Email/SMS providers configured per organization; webhook adapters log request/response pairs with PII masking.
 
 - **Localization & Policy Engine (LPE):** Compiles jurisdictional policy, residency allowlists, localization packs, and court catalogs into versioned `PolicyContext` payloads exposed over REST/SDKs; compiler jobs run on Settings activation and publish immutable digests for downstream caches (see §3.4).
+
 - **Reference Manager sources:** Connectors for Wikipedia/Wikidata, provincial/territorial court sites, federal and provincial legislation portals, vendor feeds, and manual CSV uploads. Harvest jobs treat each source as a regulated integration with throttle policies, citation capture, and evidence storage for compliance review (see §3.5).
 
 - **Optional analytics sinks:** Metrics exported to Grafana/Prometheus; FinOps dashboards consume cost metrics for monthly guardrails.
@@ -702,13 +713,13 @@ ______________________________________________________________________
 - The platform threat DFD (`docs/diagrams/threat/dfd-platform-stride-v1.mmd`) applies STRIDE categories per dataflow: ingress/egress gateways, service-mesh mTLS, Guardian/Signer decision loops, and outbound provider calls. Appendix B enumerates the detailed scenarios; this subsection records the binding between the DFD and container view.
 - Container threats and mitigations:
 
-| Container / trust boundary | Primary dataflows & STRIDE focus                                   | Key mitigations & references                                                                                              |
-| -------------------------- | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| Web & Channels (staff + portal) | Browser ↔ ASGI over TLS (`Spoofing`, `Tampering`, `Information disclosure`) | mTLS terminates at ingress; HSTS/CSP (§11.5); SSE token binding (§10.8); RLS GUC canaries (§4.4); App.B Spoofing mitigations |
-| Worker cluster (Celery)    | Jobs ↔ storage/LLM providers (`Tampering`, `Repudiation`, `DoS`)    | Settings snapshots (§6.1), audit JSONL (§6.3/§6.4), advisory locks (§5.4/App.H RB-LOCK-006), FinOps guard (§8.7/§13.5)      |
-| Guardian & Signer services | Artifact promotion, digital seals (`Tampering`, `Repudiation`)      | FOR SHARE parent guard (§7.1), immutable audit sink (§12.1), OCSP/TSA verification (§7.2), ADR-0001 READY/QUARANTINED rules |
-| Settings service + policy compiler | Config activation across tenants (`Spoofing`, `Elevation of privilege`) | HMAC-signed requests (§7.3), dual approval (§9.3/§9.11), compiled RLS tables (§4.4), activation lock advisory key (§9.8)    |
-| External providers (Azure Speech/OpenAI/TSA) | Controlled egress (`Information disclosure`, `DoS`) | Mesh AuthorizationPolicy (§3.8), residency waivers (App.O), LLM safety harness (§8.4), provider circuit breakers (§8.1, App.H RB-LLM-003) |
+| Container / trust boundary                   | Primary dataflows & STRIDE focus                                            | Key mitigations & references                                                                                                              |
+| -------------------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Web & Channels (staff + portal)              | Browser ↔ ASGI over TLS (`Spoofing`, `Tampering`, `Information disclosure`) | mTLS terminates at ingress; HSTS/CSP (§11.5); SSE token binding (§10.8); RLS GUC canaries (§4.4); App.B Spoofing mitigations              |
+| Worker cluster (Celery)                      | Jobs ↔ storage/LLM providers (`Tampering`, `Repudiation`, `DoS`)            | Settings snapshots (§6.1), audit JSONL (§6.3/§6.4), advisory locks (§5.4/App.H RB-LOCK-006), FinOps guard (§8.7/§13.5)                    |
+| Guardian & Signer services                   | Artifact promotion, digital seals (`Tampering`, `Repudiation`)              | FOR SHARE parent guard (§7.1), immutable audit sink (§12.1), OCSP/TSA verification (§7.2), ADR-0001 READY/QUARANTINED rules               |
+| Settings service + policy compiler           | Config activation across tenants (`Spoofing`, `Elevation of privilege`)     | HMAC-signed requests (§7.3), dual approval (§9.3/§9.11), compiled RLS tables (§4.4), activation lock advisory key (§9.8)                  |
+| External providers (Azure Speech/OpenAI/TSA) | Controlled egress (`Information disclosure`, `DoS`)                         | Mesh AuthorizationPolicy (§3.8), residency waivers (App.O), LLM safety harness (§8.4), provider circuit breakers (§8.1, App.H RB-LLM-003) |
 
 - Threat reviews must reference both the container diagram and DFD; new services may not progress past **Provisional** until they document ingress/egress paths, STRIDE analysis, and mitigations in Appendix B.
 
@@ -759,16 +770,19 @@ ______________________________________________________________________
 - Runtime guard (binding): every connection must satisfy `rls_context_ok()` immediately after checkout. Web middleware and Celery task bootstrap call `SELECT rls_context_assert();` which wraps `rls_context_ok()` and raises when `active_org`, `active_user`, `active_roles`, `realm_roles`, `operator_scope`, or `search_path` are unset or contain unexpected values. Violations emit a structured log with code `RLS_CONTEXT_MISSING`, record the offending connection id, and hard-fail the request with HTTP 500. The guard also confirms `current_setting('search_path') = 'pg_catalog, public'::text` to prevent implicit table access.
 
 - Secure views (`*_secure`) act as the only read surfaces; application role lacks direct SELECT on base tables. CI lints ensure ORM queries reference views, and production deployments rely on compiled helper tables (e.g., `field_mask_rule_effective`) to avoid per-row subqueries inside those views.
+
 - CI guardrails (binding): `pytest -k test_secure_view_usage` runs a static query-inspection test that fails if any Django queryset or raw SQL in `apps/platform` references base tables instead of `*_secure` views. The lint feeds the release gate and prevents regressions when new endpoints are added.
 
 - Advisory locks (`udlock` schema) encapsulate concurrency primitives with heartbeat registries and GC routines.
 
-- Masking profiles produced by LPE bind directly into `effective_permission` / `field_mask_rule` rows so database policy remains in lock-step with runtime `PolicyContext` decisions. The profile name selected via `db.set_rls_mask_profile(ctx.masking_profile)` is just-in-time translated to a concrete policy set during Settings activation; CI ensures profiles without corresponding `field_mask_rule` coverage fail activation.
+- Masking profiles produced by LPE bind directly into `effective_permission` / `field_mask_rule` rows so database policy remains in lock-step with runtime `PolicyContext` decisions. The profile name selected via `db.set_rls_mask_profile(ctx.masking_profile)` (writes `udocket.mask_profile`) is just-in-time translated to a concrete policy set during Settings activation; CI ensures profiles without corresponding `field_mask_rule` coverage fail activation.
 
 #### 4.4.1 Masking profile mapping (binding)
 
 - LPE emits `masking_profile` values (`default`, `hipaa_strict`, `legal_hold`) in `PolicyContext`. Settings activation compiles those values into `field_mask_rule` rows that parameterize the SQL policies below. Activation fails if any required profile lacks entries for `CASE`, `ARTIFACT`, `QA_LOG`, `GUARDIAN_DECISION`, or `DELIVERY_RECEIPT`.
+
 - Normative enforcement DDL (excerpt; see Appendix J for full catalog):
+
   ```sql
   ALTER TABLE "case"                  FORCE ROW LEVEL SECURITY;
   ALTER TABLE artifact                FORCE ROW LEVEL SECURITY;
@@ -786,14 +800,15 @@ ______________________________________________________________________
     AND udocket_can('CASE','write',"case".id,NULL,NULL)
   );
   ```
-- Masked columns rely on `udocket_mask`/`udocket_mask_json`; the compiler injects `field_mask_rule` rows such as `('default','ARTIFACT','content_uri','REDACT')` and `('hipaa_strict','QA_LOG','notes_md','REDACT')`. Test `tests/platform/db/test_mask_profiles.py::test_mask_profile_matches_policy` verifies each profile masks the expected columns, while `tests/platform/db/test_rls_guard.py` and `tests/platform/db/test_secure_view_usage.py` assert that FORCE RLS remains active and base tables stay inaccessible.
+
+- Masked columns rely on `udocket_mask`/`udocket_mask_json`; the compiler injects `field_mask_rule` rows such as `('{org_uuid}','default','ARTIFACT','content_uri','REDACT',ARRAY['reviewer','auditor'])` and `('{org_uuid}','hipaa_strict','QA_LOG','notes_md','HASH',ARRAY['auditor'])`. Test `tests/platform/db/test_mask_profiles.py::test_mask_profile_matches_policy` verifies each profile masks the expected columns, while `tests/platform/db/test_rls_guard.py` and `tests/platform/db/test_secure_view_usage.py` assert that FORCE RLS remains active and base tables stay inaccessible.
 
 - Normative SQL (binding):
 
 ```sql
 -- Policy tables (compiled by Settings activation job)
 -- effective_permission(org_id, resource, action, role, field NULLABLE)
--- field_mask_rule(org_id, resource, field, mask, allowed_role)
+-- field_mask_rule(org_id, profile, resource, field, mask, allowed_roles text[])
 
 -- Central allow function (deny-by-default; sysadmin bypass)
 CREATE OR REPLACE FUNCTION udocket_can(
@@ -921,10 +936,10 @@ ALTER TABLE guardian_decision_history FORCE ROW LEVEL SECURITY;
 
 - Binding breadcrumbs:
 
-  | Binding | Implementation | Test | Observability |
-  | ------- | -------------- | ---- | ------------- |
-  | `rls_context_assert()` guard | Implementation: `apps/platform/db/guards.py::assert_rls_context` | Test: `tests/platform/db/test_rls_guard.py::test_rls_context_asserts_missing_gucs` | Observability: Grafana “DB Session Guards” panel (`rls_context_missing_total`) |
-  | Secure-view only access | Implementation: `scripts/staticlint/enforce_secure_views.py` (invoked via `make lint-db`) | Test: `tests/platform/db/test_secure_view_usage.py::test_no_base_table_queries` | Observability: Release job `lint-db` output (Buildkite step) |
+  | Binding                      | Implementation                                                                            | Test                                                                               | Observability                                                                  |
+  | ---------------------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+  | `rls_context_assert()` guard | Implementation: `apps/platform/db/guards.py::assert_rls_context`                          | Test: `tests/platform/db/test_rls_guard.py::test_rls_context_asserts_missing_gucs` | Observability: Grafana “DB Session Guards” panel (`rls_context_missing_total`) |
+  | Secure-view only access      | Implementation: `scripts/staticlint/enforce_secure_views.py` (invoked via `make lint-db`) | Test: `tests/platform/db/test_secure_view_usage.py::test_no_base_table_queries`    | Observability: Release job `lint-db` output (Buildkite step)                   |
 
 - Session hardening (binding):
 
@@ -981,18 +996,32 @@ Secure view example (security barrier)
 ```sql
 CREATE VIEW artifact_secure WITH (security_barrier=true) AS
 SELECT id, org_id, case_id, type, state, content_sha256,
-       CASE WHEN (SELECT 1 FROM field_mask_rule r
-                   WHERE r.org_id = artifact.org_id
-                     AND r.resource='ARTIFACT' AND r.field='content_uri'
-                     AND NOT udocket_can('ARTIFACT','read',artifact.case_id,artifact.id,'content_uri')
-                ) IS NULL
-            THEN content_uri
-            ELSE udocket_mask(content_uri,'REDACT') END AS content_uri,
+       CASE
+         WHEN udocket_can('ARTIFACT','read',artifact.case_id,artifact.id,'content_uri') THEN content_uri
+         ELSE udocket_mask(
+                content_uri,
+                COALESCE(
+                  (
+                    SELECT r.mask
+                      FROM field_mask_rule r
+                     WHERE r.org_id = artifact.org_id
+                       AND r.profile = COALESCE(
+                             NULLIF(current_setting('udocket.mask_profile', true),''),
+                             'default'
+                           )
+                       AND r.resource = 'ARTIFACT'
+                       AND r.field = 'content_uri'
+                     LIMIT 1
+                  ),
+                  'REDACT'
+                )
+              )
+       END AS content_uri,
        manifest
   FROM artifact;
 ```
 
-- Settings activation maintains `CREATE INDEX field_mask_rule_org_resource_field ON field_mask_rule(org_id, resource, field)` and precomputes effective allowlists into helper tables so hot paths avoid repeated subqueries; helpers refresh atomically with each activation.
+- Settings activation maintains `CREATE INDEX field_mask_rule_org_profile_resource_field ON field_mask_rule(org_id, profile, resource, field)` and precomputes effective allowlists into helper tables so hot paths avoid repeated subqueries; helpers refresh atomically with each activation.
 
 ### 4.6 Field-level encryption (selected columns)
 
@@ -1023,11 +1052,17 @@ ______________________________________________________________________
 *Purpose: Establish the canonical schema used by agents, reviewers, and audit tooling.*
 
 - **organization:** UUIDv7 `id`, `name`, JSONB `settings`, `region_allowlist`, timestamps (`created_at`, `archived_at`). Enforces residency policy inputs.
+
 - **user_account:** UUIDv7 `id`, `keycloak_sub`, contact fields, optional `default_org_id`. Keeps reference integrity without duplicating org membership logic.
+
 - **case:** UUIDv7 `id`, `org_id` FK, `title`, `representation_type`, `status`, legal hold fields, audit columns. Write-once invariants enforced via triggers (legal hold reason mask applied via secure view).
+
 - **case_member:** Composite PK `(user_id, case_id)` storing per-case role; informs `udocket_is_case_member`.
+
 - **artifact:** UUIDv7 `id`, `org_id`, `case_id`, `type`, `state`, `content_uri`, `content_sha256`, JSONB `manifest`, OCC `version`, review metadata (`approved_at/by`, etc.). Trigger `artifact_immutable_check` blocks changes to immutable fields.
+
 - Immutability trigger (binding):
+
   ```sql
   CREATE OR REPLACE FUNCTION artifact_immutable_check()
   RETURNS trigger LANGUAGE plpgsql AS $$
@@ -1049,15 +1084,19 @@ ______________________________________________________________________
     BEFORE UPDATE ON artifact
     FOR EACH ROW EXECUTE FUNCTION artifact_immutable_check();
   ```
+
 - **job**, **job_task**, **job_checkpoint:** Track orchestration progress, settings snapshot hashes, checkpoint JSONB, and OCC versions to support retries.
+
 - **guardian_decision_history**, **qa_log**, **delivery_receipt**, **audit_event**, **entitlement_snapshot** provide governance history with RLS and secure views.
+
 - **settings bundles:** Stored via Settings Service (see §9) but referenced in jobs (`settings_snapshot_sha256`) and manifests for traceability.
+
 - ERD lives in `App.G`; state diagrams in `App.J` illustrate artifact/job lifecycles.
 
 - Binding breadcrumbs:
 
-  | Binding | Implementation | Test | Observability |
-  | ------- | -------------- | ---- | ------------- |
+  | Binding                       | Implementation                                                                          | Test                                                                                   | Observability                                                                                     |
+  | ----------------------------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
   | Artifact immutability trigger | Implementation: `apps/platform/artifacts/migrations/0024_artifact_immutable_trigger.py` | Test: `tests/platform/artifacts/test_immutability.py::test_update_blocked_after_draft` | Observability: Audit event `ARTIFACT_IMMUTABILITY_VIOLATION` (Alert: “Artifact Immutable Breach”) |
 
 ### 5.2 Artifact lifecycle and state machine semantics
@@ -1123,13 +1162,15 @@ ______________________________________________________________________
 Notes
 
 - Prefer OCC columns (`version INT NOT NULL DEFAULT 0`) on hot rows; use advisory locks only for cross-row invariants like the exclusive swap.
+
 - Settings may define additional exclusive types; the baseline index above remains in place, with settings activation validating coverage.
+
 - This procedure is normative; API behaviours in §10.3.2 defer to it to avoid divergence.
 
 - Binding breadcrumbs:
 
-  | Binding | Implementation | Test | Observability |
-  | ------- | -------------- | ---- | ------------- |
+  | Binding                  | Implementation                                                                 | Test                                                                                            | Observability                                                                   |
+  | ------------------------ | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
   | Concurrent approval swap | Implementation: `packages/udocket_core/approvals/service.py::approve_artifact` | Test: `tests/platform/artifacts/test_approval_swap.py::test_concurrent_approvals_single_winner` | Observability: Alert `approval_swap_conflict_total` (Grafana “Approvals” panel) |
 
 ### 5.5 Partitioning, indexing, and performance considerations
@@ -1463,17 +1504,24 @@ ______________________________________________________________________
 *Purpose: Govern artifact readiness before human review or client exposure.*
 
 - Terminology: See Appendix I for Guardian decision terms, waiver definitions, and failure categories.
+
 - Entry point `POST /api/v1/guardian/submit` with signed request body `{artifact_id, org_id, case_id, content_sha256?}` and optional idempotency key. Guardian retrieves artifact + effective settings snapshot.
+
 - Decision logic evaluates rulesets per org (JSON, versioned) using artifact metadata, manifest fields, settings posture, and optional hashes. If mismatch detected (`content_sha256` vs DB), returns 412 and sets state `QUARANTINED`.
+
 - State update: artifacts in `DRAFT`/`READY` transition to `READY` or remain `QUARANTINED`. Previously `QUARANTINED` artifacts stay quarantined until resubmitted with a passing decision.
+
 - Concurrency guard (binding): Guardian loads upstream artifacts using `SELECT ... FOR SHARE` to anchor the decision to the latest committed state; if a parent artifact is demoted in the same window, the child evaluation observes the demotion before issuing a READY verdict, preventing transient approval of stale derivatives.
+
 - Response includes `decision`, `reasons`, `guardian_decision_id`; idempotency ensures repeated submissions with same payload return prior decision while conflicting payloads yield 409.
+
 - Hard SLO: decision latency ≤ 5 minutes P95; synthetic jobs validate rule engine and database connectivity (`/synthetic/status`). Guardian merges are blocked unless `tests/guardian/test_concurrent_parent_swap.py::test_child_blocks_on_parent_swap` passes, preventing regressions to the parent-child locking guard.
 
 - Binding breadcrumbs:
 
   | Binding | Implementation | Test | Observability |
   | ------- | -------------- | ---- | ------------- |
+
 | FOR SHARE parent guard | `packages/udocket_core/guardian/service.py::evaluate_artifact` | `tests/guardian/test_concurrent_parent_swap.py::test_child_blocks_on_parent_swap` (required CI gate) | Grafana “Guardian Ready Ratio” panel (`guardian_ready_parent_block_total`) |
 
 #### 7.1.2 Reason codes (normative)
@@ -1600,8 +1648,8 @@ ______________________________________________________________________
 
 - Residency enforcement stacks three controls:
   1. **Configuration:** Settings validation rejects `llm.providers[]` or `llm.models[]` entries whose declared regions fall outside `regions.allowlist.compute`. Vector stores declare `vector.providers[]` with the same guard and include storage shard regions; activation lints fail on drift.
-  2. **Runtime firewall:** Service-mesh AuthorizationPolicy mirrors the allowlist so only canadacentral/canadaeast endpoints (plus explicitly waived hosts) pass egress. Vector clients inherit the same mesh policy and record `vector_region` in envelopes for audit.
-  3. **Circuit breaker:** Registry tracks the active region for each provider call. If the SDK reports a fallback to a non-allowlisted region (for example, due to provider-side failover), registry raises `LLM_REGION_FALLBACK` events, opens the circuit (`circuit_state=OPEN`, reason `REGION_DRIFT`), and blocks further calls until the provider returns to an approved region.
+  1. **Runtime firewall:** Service-mesh AuthorizationPolicy mirrors the allowlist so only canadacentral/canadaeast endpoints (plus explicitly waived hosts) pass egress. Vector clients inherit the same mesh policy and record `vector_region` in envelopes for audit.
+  1. **Circuit breaker:** Registry tracks the active region for each provider call. If the SDK reports a fallback to a non-allowlisted region (for example, due to provider-side failover), registry raises `LLM_REGION_FALLBACK` events, opens the circuit (`circuit_state=OPEN`, reason `REGION_DRIFT`), and blocks further calls until the provider returns to an approved region.
 - Fallback hierarchy honours residency before priority: if no healthy model exists in allowed regions, the selection algorithm short-circuits with `PROVIDER_DEGRADED` and surfaces actionable errors rather than silently choosing an out-of-region model.
 - Audit trail: every call logs `{model_id, region, residency_policy_version, waiver_id?}`; Guardian and FinOps dashboards display residency decision distributions (`lpe_policy_context_version` paired with `reference_manager_bundle_adoption_seconds`).
 - Tests: `tests/udocket_core/llm/test_residency_guard.py::test_block_disallowed_region` stubs provider metadata to ensure the guard rejects non-Canadian regions without waiver, while `tests/udocket_core/vector/test_vector_residency.py::test_allowed_regions_only` covers vector stores. A staging synthetic (`synthetics/llm_residency.yaml`) confirms the egress gateway denies traffic when the allowlist is intentionally misconfigured.
@@ -1611,19 +1659,27 @@ ______________________________________________________________________
 *Purpose: Control prompt content and maintain audit-friendly records.*
 
 - Prompt templates validated via Pydantic with explicit version IDs; stored under `packages/udocket_core/config/` and referenced in manifests.
+
 - Redaction layer strips PII before sending to providers; outcomes tracked (`redaction_stats`, `forbidden_patterns_detected`).
+
 - Evidence store (hardened datastore) records `{prompt_template_id, template_version, model_id, model_version, redaction_ruleset_id, input_hashes, output_hashes, request_id, actor_id, case_id, timestamps}`. Access restricted to `auditor|sysadmin`.
+
 - Logs include truncated prompt/response excerpts with redacted content for debugging; raw prompts never persisted outside short-lived buffers.
+
 - HIPAA mode: settings flip `evidence_store.redacted_excerpts.enabled=false`, preventing storage of prompt/response excerpts and requiring downstream consumers to rely on manifests, envelopes, and hashed payloads. Investigations rely on the reproducibility envelope plus redaction metrics; support teams debug provider issues by running a `llm_replay` dry-run with scrubbed synthetic inputs rather than exposing original prompts.
+
 - HIPAA enable guard (binding): Settings activation refuses to persist `privacy.hipaa.enabled=true` until `scripts/privacy/purge_evidence_store.py` completes and uploads a `PRIVACY_PURGE_REPORT` artifact confirming legacy excerpts were removed.
+
 - Sampling: at least 5 % of inference calls per model/org are reviewed daily; the audit sampler writes signed reports under `ops/security/provider_audits/YYYY-MM/` summarizing detections and confirming provider response headers.
+
 - Validators: nightly harness runs template checksum/linting and regeneration smoke tests; failures halt deployments until resolved. Evidence store schema validated via `udocket_core.llm.config` Pydantic models.
+
 - **Vendor assurances:** Contracts and runtime checks assert that Azure Speech, Azure OpenAI, and other sub-processors have “no training on customer data” flags enabled; agent wrappers set `x-ms-azureml-client-env-data-collection=false` (where supported) and audit responses for confirmation. Evidence of the most recent verification lives in `ops/security/provider_audits/`.
 
 - Binding breadcrumbs:
 
-  | Binding | Implementation | Test | Observability |
-  | ------- | -------------- | ---- | ------------- |
+  | Binding                   | Implementation                                                               | Test                                                                                   | Observability                                                        |
+  | ------------------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
   | HIPAA excerpt suppression | Implementation: `packages/udocket_core/llm/evidence_store.py::store_excerpt` | Test: `tests/udocket_core/llm/test_evidence_store.py::test_hipaa_mode_blocks_excerpts` | Observability: Audit event `HIPAA_EXCERPT_BLOCK` (Privacy dashboard) |
 
 PII posture (binding)
@@ -1646,20 +1702,27 @@ PII posture (binding)
 *Purpose: Prevent regressions from shipping without visibility and approval.*
 
 - Trigger: MoM cost regression beyond threshold (default 10%) or trailing 7-day burn exceeding the configured fraction of the monthly cap (default 25%), plus budget breach forecasts for top N orgs.
+
 - Regression formula: compare projected month-end spend (`month_to_date_actual + (run_rate_7d * remaining_days)`) against the prior full month actual. Guard fires when `(projected - prior_actual) / prior_actual ≥ llm.finops.guard.threshold` after applying a 0.5% smoothing window to ignore rounding noise.
+
 - Action: Block deploy; page Product/SRE; require approval or mitigation plan; annotate release.
+
 - CI enforcement: pipeline step `scripts/finops/check_mom_guard.py` runs during release promotion; it fails when either guard (MoM or trailing 7-day) is exceeded and emits a machine-readable report consumed by `deploy-gate:finops`. Results persist as `ops/finops/mom_guard/<release>.json`.
+
 - Metrics: `finops_mom_regression_flag{org}`, dashboards in §12.6; acceptance requires green state prior to release.
+
 - Emergency override: `llm.finops.override_until` (SYSTEM) provides a time-boxed bypass (max 72h) restricted to roles `Security Engineering Lead` + `VP Product`; overrides are logged, surface in App.K controls evidence, and expire automatically at the configured timestamp.
+
 - Trailing 7-day guard: trailing 7-day actual spend must stay ≤ `llm.finops.guard.trailing7d_pct` (default 25%) of the org’s configured `llm.finops.monthly_cap_usd`. Overrides are bounded between 10% and 40% and require Product + Security sign-off.
+
 - Default guardrail: unless overridden, the system blocks deploys if any organization’s projected month-end spend exceeds the prior month by ≥ `llm.finops.guard.threshold_pct` (default 10%). Any override still requires the checker to pass with the new ceiling.
 
 - Binding breadcrumbs:
 
-  | Binding | Implementation | Test | Observability |
-  | ------- | -------------- | ---- | ------------- |
-  | Regression calc | Implementation: `packages/udocket_core/finops/guard.py::projected_regression_pct` | Test: `tests/udocket_core/finops/test_guard.py::test_regression_formula` | Observability: Grafana “FinOps Guard” panel (`finops_mom_regression_flag`) |
-  | Override allowlist | Implementation: `apps/platform/operations/management/commands/set_finops_override.py` (role check) | Test: `tests/platform/finops/test_override_roles.py::test_only_allowlisted_roles` | Observability: Audit event `FINOPS_OVERRIDE_APPLIED` |
+  | Binding            | Implementation                                                                                     | Test                                                                              | Observability                                                              |
+  | ------------------ | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+  | Regression calc    | Implementation: `packages/udocket_core/finops/guard.py::projected_regression_pct`                  | Test: `tests/udocket_core/finops/test_guard.py::test_regression_formula`          | Observability: Grafana “FinOps Guard” panel (`finops_mom_regression_flag`) |
+  | Override allowlist | Implementation: `apps/platform/operations/management/commands/set_finops_override.py` (role check) | Test: `tests/platform/finops/test_override_roles.py::test_only_allowlisted_roles` | Observability: Audit event `FINOPS_OVERRIDE_APPLIED`                       |
 
 ### 8.4 Safety harness (jailbreak tests, policy enforcement)
 
@@ -1815,6 +1878,7 @@ ______________________________________________________________________
 - Security: unsafe change rules flagged; dual approval enforced; audit records complete.
 
 ### 9.11 Security review gates (binding)
+
 - **Immutable logging sink toggle:** activations that set `logging.immutable_sink.enabled=false` are marked **unsafe**; production validators reject the change outright, and lower environments require dual approval (Security + Architecture) with justification captured in the activation audit.
 
 *Purpose: Make governance checkpoints explicit and auditable.*
@@ -1837,7 +1901,7 @@ ______________________________________________________________________
 - Breaking or materially user-visible changes require an ADR (see `docs/adr/README.md` and linked entries such as `ADR-0003-api-versioning-and-sunset.md`) approved by Architecture + Security before the change can progress from **Provisional → Implementable → Implemented**.
 - Versioning policy: monthly “compatible” releases roll on the first business Monday; clients may pin to older behaviour via `X-uDocket-API-Version: YYYY-MM`. Majors ship at most twice per year, demand 90-day notice, and use calendar-versioned prefixes (`2025-02`), while additive changes batch unless explicitly waived.
 - Deprecations follow the cadence published in `docs/api/DEPRECATIONS.md`: announce, provide migration guides, emit `Sunset` headers 90 days before removal, and confirm monitors stay green before final removal (traceability captured in App.T).
-- Deprecation headers follow RFC 9745 (e.g., `Deprecation: date="2026-04-01T00:00:00Z"`) and always pair with `Link: rel="deprecation"` to machine-readable migration notes plus RFC 8594 `Sunset` headers; Spectral rule `sunset-header` enforces the trio.
+- Deprecation headers follow RFC 9745 structured-field syntax (e.g., `Deprecation: @1775001600; sunset="Mon, 01 Jun 2026 00:00:00 GMT"`) and always pair with `Link: rel="deprecation"` to machine-readable migration notes plus RFC 8594 `Sunset` headers; Spectral rule `sunset-header` enforces the trio.
 - Stripe-style public docs and code samples render directly from the OpenAPI bundle so that examples, schemas, and error contracts stay synchronized with the source of truth.
 
 ### 10.1 REST and WebSocket conventions (naming, pagination, errors)
@@ -1932,16 +1996,18 @@ Handler pattern
 1. Optional overlapping-run guard per case/kind: `udlock.try_lock('jobkind', CONCAT(:case_id,'/',:kind))` → 409 `JOB_KIND_BUSY` if held.
 
 - Canonical scopes (binding): `IDEMPOTENCY_SCOPES = {'job:create','job:checkpoint','artifact:approve','artifact:upload','upload:finalize'}` exported from `packages.udocket_core.idem.constants`. Services **MUST NOT** invent ad-hoc strings; CI lints specs and Python call sites to use the constant set.
+
 - Response contract: any API that accepts `Idempotency-Key` **MUST** echo the exact value in the response headers for success and error paths (`Idempotency-Key: <value>`) and emit `Idempotency-Status: fresh|replay|conflict`. OpenAPI lint (`ops/openapi/rules/idempotency-echo.yaml`) enforces the headers on 2xx/4xx/5xx responses.
+
 - Nightly janitor job `ops/idempotency/purge.py` deletes expired rows and runs `VACUUM (ANALYZE)` to keep the table bounded; `expires_at` is pinned to `api.idempotency.ttl_hours`.
 
 - Binding breadcrumbs:
 
-  | Binding | Implementation | Test | Observability |
-  | ------- | -------------- | ---- | ------------- |
-  | Canonical scope constants | Implementation: `packages/udocket_core/idem/constants.py::IDEMPOTENCY_SCOPES` | Test: `tests/udocket_core/idempotency/test_scopes.py::test_scope_constant_matches_db` | Observability: Buildkite `lint-idempotency` step (scope diff) |
-  | Response echo header | Implementation: `apps/platform/common/middleware/idempotency.py::IdempotencyHeaderMiddleware` | Test: `tests/platform/api/test_idempotency_header.py::test_response_echoes_header` | Observability: API metrics `idempotency_echo_missing_total` |
-  | Replay semantics | Implementation: `packages/udocket_core/idem/service.py::upsert_key` | Test: `tests/platform/api/test_idempotency_replay.py::test_same_key_same_body_vs_conflict` | Observability: Audit event `IDEMPOTENCY_CONFLICT` |
+  | Binding                   | Implementation                                                                                | Test                                                                                       | Observability                                                 |
+  | ------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------- |
+  | Canonical scope constants | Implementation: `packages/udocket_core/idem/constants.py::IDEMPOTENCY_SCOPES`                 | Test: `tests/udocket_core/idempotency/test_scopes.py::test_scope_constant_matches_db`      | Observability: Buildkite `lint-idempotency` step (scope diff) |
+  | Response echo header      | Implementation: `apps/platform/common/middleware/idempotency.py::IdempotencyHeaderMiddleware` | Test: `tests/platform/api/test_idempotency_header.py::test_response_echoes_header`         | Observability: API metrics `idempotency_echo_missing_total`   |
+  | Replay semantics          | Implementation: `packages/udocket_core/idem/service.py::upsert_key`                           | Test: `tests/platform/api/test_idempotency_replay.py::test_same_key_same_body_vs_conflict` | Observability: Audit event `IDEMPOTENCY_CONFLICT`             |
 
 #### 10.3.2 Reviews API (approval with OCC; binding)
 
@@ -1973,7 +2039,7 @@ Handler pattern
 *Purpose: Keep API documentation consistent and machine-validated.*
 
 - Authoring rules (binding): new operations must reuse shared components (`ApiError`, pagination envelope, security schemes), declare response examples for 2xx/4xx, include tag + summary, document every required header, and map path parameters to UUID formats where applicable. Specs are edited via `ops/openapi/*.yaml`; commits must update corresponding changelog entries.
-- Specs: OpenAPI 3.1 with `x-stability` tags (`stable|beta|experimental`); deprecations emit RFC 9745-compliant `Deprecation` headers (e.g., `Deprecation: date="2026-04-01T00:00:00Z"`) alongside RFC 8594 `Sunset` headers (≥90 days) in accordance with §10.0 policy.
+- Specs: OpenAPI 3.1 with `x-stability` tags (`stable|beta|experimental`); deprecations emit RFC 9745-compliant `Deprecation` headers (e.g., `Deprecation: @1775001600; sunset="Mon, 01 Jun 2026 00:00:00 GMT"`) alongside RFC 8594 `Sunset` headers (≥90 days) in accordance with §10.0 policy.
 - Spectral rules (`ops/openapi/spectral.yaml`): enforce `oidc`, `hmacSignature` on mutating ops, error envelope on 4xx/5xx, shared pagination, forbid org/role spoof headers, and fail any spec whose `openapi` field is not `3.1.*` via the `openapi-version` rule.
 - Examples must not include real PII; Spectral rule `no-pii-examples` enforces masking, and rate-limit responses (429) must include `Retry-After`/`X-RateLimit-*` headers as shown in Appendix F.
 - CORS exposure (binding): expose `X-Request-ID, X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset, Retry-After, ETag, Deprecation, Sunset`. Preflight MUST allow the header set defined in Appendix F.12 (`Authorization, Content-Type, Idempotency-Key, X-Request-Signature, X-Signature-Key-Id, X-Timestamp, If-Match, If-None-Match, If-Range, X-Style-Nonce, X-Script-Nonce`); update Appendix F.12 first and mirror it here to avoid drift. Add `Vary: Origin, Access-Control-Request-Method, Access-Control-Request-Headers`.
@@ -1989,11 +2055,11 @@ Handler pattern
 
 Binding breadcrumbs:
 
-  | Control | Implementation | Test | Observability |
-  | ------- | -------------- | ---- | ------------- |
-  | OpenAPI 3.1 enforcement | `ops/openapi/rules/openapi-version.yaml` | `make lint-openapi` (`npx spectral lint ops/openapi/**/*.yaml`) | Buildkite `lint-openapi` stage |
-  | Rate-limit header contract | `apps/platform/api/middleware/rate_limiting.py::append_rate_limit_headers` | `tests/e2e/test_rate_limit_headers.py::test_429_headers` | Metric `api_rate_limit_header_miss_total` |
-  | CORS exposure policy | `config/settings.py::CORS_EXPOSE_HEADERS` & Settings bundle `security.cors` | `scripts/security/verify_cors_headers.py` | CI job `security-headers` / Grafana “API Security Headers” panel |
+| Control                    | Implementation                                                              | Test                                                            | Observability                                                    |
+| -------------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------- |
+| OpenAPI 3.1 enforcement    | `ops/openapi/rules/openapi-version.yaml`                                    | `make lint-openapi` (`npx spectral lint ops/openapi/**/*.yaml`) | Buildkite `lint-openapi` stage                                   |
+| Rate-limit header contract | `apps/platform/api/middleware/rate_limiting.py::append_rate_limit_headers`  | `tests/e2e/test_rate_limit_headers.py::test_429_headers`        | Metric `api_rate_limit_header_miss_total`                        |
+| CORS exposure policy       | `config/settings.py::CORS_EXPOSE_HEADERS` & Settings bundle `security.cors` | `scripts/security/verify_cors_headers.py`                       | CI job `security-headers` / Grafana “API Security Headers” panel |
 
 - **Source material:** `§21`, `§44`, `§52`, `§21.9`, `§47`
 
@@ -2019,15 +2085,17 @@ Binding breadcrumbs:
 **Acceptance**
 
 - Unit: `tests/platform/artifacts/test_content_metadata.py::test_content_length_persisted` verifies metadata persistence and ETag helpers.
+
 - Integration: `tests/e2e/test_artifact_range_download.py::test_range_and_conditional_gets` exercises range/conditional flows across staging object storage.
+
 - Security: `scripts/security/verify_download_tokens.py` validates download-token expiry, residency guards, and HIPAA cache directives prior to release.
 
 - Binding breadcrumbs:
 
-  | Binding | Implementation | Test | Observability |
-  | ------- | -------------- | ---- | ------------- |
+  | Binding                      | Implementation                                                                                                                | Test                                                                                     | Observability                                                                         |
+  | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
   | `content_length` persistence | Implementation: Migration `apps/platform/artifacts/migrations/0023_add_content_length.py` & ORM `CaseArtifact.content_length` | Test: `tests/platform/artifacts/test_content_metadata.py::test_content_length_persisted` | Observability: Grafana “Artifact Metadata Drift” panel (alerts on mismatched lengths) |
-  | Range/ETag staging test | Implementation: `tests/e2e/test_artifact_range_download.py` (GitHub Actions `deploy-gate`) | Test: `tests/e2e/test_artifact_range_download.py::test_range_and_conditional_gets` | Observability: Buildkite deploy gate log (`range-etag-contract`) |
+  | Range/ETag staging test      | Implementation: `tests/e2e/test_artifact_range_download.py` (GitHub Actions `deploy-gate`)                                    | Test: `tests/e2e/test_artifact_range_download.py::test_range_and_conditional_gets`       | Observability: Buildkite deploy gate log (`range-etag-contract`)                      |
 
 ### 10.7 Error model and codes (normative)
 
@@ -2078,11 +2146,11 @@ Client retry guidance (normative)
 
 Binding breadcrumbs:
 
-  | Control | Implementation | Test | Observability |
-  | ------- | -------------- | ---- | ------------- |
-  | SSE stream contract | `apps/platform/realtime/sse.py::StreamPublisher` | `tests/platform/realtime/test_sse_payloads.py::test_event_schema` | Metric `sse_payload_size_bytes` / Grafana “Realtime Streams” panel |
-  | Snapshot replay | `apps/platform/realtime/sse.py::snapshot_payload` | `tests/e2e/test_sse_reconnect.py::test_last_event_snapshot` | Metric `sse_snapshot_gap_seconds` |
-  | Token-bound disconnect | `apps/platform/realtime/auth.py::enforce_token_binding` | `tests/e2e/test_sse_token_binding.py::test_disconnect_on_org_switch` | Audit event `SSE_DISCONNECT_TOKEN_MISMATCH` |
+| Control                | Implementation                                          | Test                                                                 | Observability                                                      |
+| ---------------------- | ------------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| SSE stream contract    | `apps/platform/realtime/sse.py::StreamPublisher`        | `tests/platform/realtime/test_sse_payloads.py::test_event_schema`    | Metric `sse_payload_size_bytes` / Grafana “Realtime Streams” panel |
+| Snapshot replay        | `apps/platform/realtime/sse.py::snapshot_payload`       | `tests/e2e/test_sse_reconnect.py::test_last_event_snapshot`          | Metric `sse_snapshot_gap_seconds`                                  |
+| Token-bound disconnect | `apps/platform/realtime/auth.py::enforce_token_binding` | `tests/e2e/test_sse_token_binding.py::test_disconnect_on_org_switch` | Audit event `SSE_DISCONNECT_TOKEN_MISMATCH`                        |
 
 Payloads (illustrative)
 
@@ -2200,6 +2268,7 @@ ______________________________________________________________________
 *Purpose: Govern multi-user interactions without compromising security.*
 
 - SSE streams status updates (`job.update`, `artifact.state`, `qa.notes`) to both staff and clients with token-binding; server disconnects on token expiry or org switch.
+- SSE responses MUST set `Cache-Control: no-store` and, when fronted by Nginx/Envoy, `X-Accel-Buffering: no` (or equivalent) to prevent buffering. Producers emit a heartbeat comment every 15 seconds and advertise `retry: 5000` so clients back off exponentially (max 30 seconds) when reconnecting.
 - Channels-based editors allow Manual/Agent edits with conflict resolution; optimistic locking ensures edits create new artifact versions awaiting approval.
 - Real-time controls (pause/resume jobs, rerun Guardian) restricted to authorized roles; commands processed via Channels with audit events capturing actor and outcome.
 
@@ -2207,9 +2276,9 @@ ______________________________________________________________________
 
 *Purpose: Mitigate browser threats and misuse.*
 
-- Security headers: enforced baseline CSP plus HSTS, frame, and referrer protections. Staff and portal responses MUST emit  
-  `Content-Security-Policy: default-src 'self'; frame-ancestors 'none'; script-src 'self' 'nonce-{csp-script-nonce}'; style-src 'self' 'nonce-{csp-style-nonce}'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://{api_host}; base-uri 'none'; form-action 'self'` (prod). Nonce values are generated per response, injected into rendered templates, and surfaced to the frontend build via the `X-Style-Nonce`/`X-Script-Nonce` headers so components can set matching `nonce` attributes. Lower environments may append `localhost` origins via `security.csp.extra_connect_hosts[]` and register specific hash exceptions through `security.csp.extra_style_hashes[]`; `unsafe-inline` is forbidden in prod. `Strict-Transport-Security: max-age=63072000; includeSubDomains` remains mandatory in prod, optional elsewhere. Additional headers: `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Permissions-Policy: camera=(), microphone=()`. CI test `tests/e2e/test_security_headers.py::test_csp_header_enforced` asserts the header (nonces masked but positionally present); failures block merges. Full header requirements (exposed, allowed, and prohibited) live in Appendix F.12.
-  `Content-Security-Policy: default-src 'self'; frame-ancestors 'none'; script-src 'self' 'nonce-{csp-script-nonce}'; style-src 'self' 'nonce-{csp-style-nonce}'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://{api_host}; base-uri 'none'; form-action 'self'` (prod). Nonce values are generated per response, injected into rendered templates, and surfaced to the frontend build via the `X-Style-Nonce`/`X-Script-Nonce` headers so components can set matching `nonce` attributes. Lower environments may append `localhost` origins via `security.csp.extra_connect_hosts[]` and register specific hash exceptions through `security.csp.extra_style_hashes[]`; `unsafe-inline` is forbidden in prod. `Strict-Transport-Security: max-age=63072000; includeSubDomains` remains mandatory in prod, optional elsewhere. Additional headers: `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Permissions-Policy: camera=(), microphone=()`. CI test `tests/e2e/test_security_headers.py::test_csp_header_enforced` asserts the header (nonces masked but positionally present); failures block merges. Full header requirements (exposed, allowed, and prohibited) live in Appendix F.12.
+- Security headers: enforced baseline CSP plus HSTS, frame, and referrer protections. Staff and portal responses MUST emit\
+  `Content-Security-Policy: default-src 'self'; frame-ancestors 'none'; script-src 'self' 'nonce-{csp-script-nonce}'; style-src 'self' 'nonce-{csp-style-nonce}'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://{api_host} wss://{api_host}; base-uri 'none'; form-action 'self'` (prod). Nonce values are generated per response, injected into rendered templates, and surfaced to the frontend build via the `X-Style-Nonce`/`X-Script-Nonce` headers so components can set matching `nonce` attributes. Lower environments may append `localhost` origins via `security.csp.extra_connect_hosts[]` and register specific hash exceptions through `security.csp.extra_style_hashes[]`; `unsafe-inline` is forbidden in prod. `Strict-Transport-Security: max-age=63072000; includeSubDomains` remains mandatory in prod and may append `; preload` once Chrome preload prerequisites are satisfied and Security approves the submission. Additional headers: `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Permissions-Policy: camera=(), microphone=()`. CI test `tests/e2e/test_security_headers.py::test_csp_header_enforced` asserts the header (nonces masked but positionally present); failures block merges. Full header requirements (exposed, allowed, and prohibited) live in Appendix F.12.
+
 - Hard-fail nonce enforcement: responses missing either nonce trigger an inline guard that writes `CSP_NONCE_MISSING` audit events and returns HTTP 500 rather than rendering partially secured content. Synthetic monitor `synthetics/csp_nonce_failure.yaml` injects a nonce-less template daily and expects a 500 to confirm the guard remains active; the release pipeline blocks if the monitor detects a 200 response.
 
 - Anti-phishing: link verification, suspicious message detection, `Report` workflows logging to audit event.
@@ -2226,11 +2295,11 @@ ______________________________________________________________________
 
 Binding breadcrumbs:
 
-  | Control | Implementation | Test | Observability |
-  | ------- | -------------- | ---- | ------------- |
-  | CSP nonce emission | `apps/platform/ui/security/csp.py::build_csp_header` | `tests/ui/test_csp_nonced.py::test_nonce_roundtrip` | CI job `security-headers`; Grafana “Frontend CSP” panel (`csp_nonce_mismatch_total`) |
-  | Portal download guard | `apps/platform/portal/downloads.py::enforce_if_match` | `tests/e2e/test_portal_download_guard.py::test_if_match_required` | Metric `portal_412_precondition_total` / audit event `PORTAL_DOWNLOAD_PRECONDITION` |
-  | Phishing report logging | `apps/platform/notifications/phishing.py::log_report_event` | `tests/platform/notifications/test_phishing_workflow.py::test_report_logs_audit` | Audit event `PORTAL_PHISHING_REPORT`; Grafana “Abuse Signals” panel |
+| Control                 | Implementation                                              | Test                                                                             | Observability                                                                        |
+| ----------------------- | ----------------------------------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| CSP nonce emission      | `apps/platform/ui/security/csp.py::build_csp_header`        | `tests/ui/test_csp_nonced.py::test_nonce_roundtrip`                              | CI job `security-headers`; Grafana “Frontend CSP” panel (`csp_nonce_mismatch_total`) |
+| Portal download guard   | `apps/platform/portal/downloads.py::enforce_if_match`       | `tests/e2e/test_portal_download_guard.py::test_if_match_required`                | Metric `portal_412_precondition_total` / audit event `PORTAL_DOWNLOAD_PRECONDITION`  |
+| Phishing report logging | `apps/platform/notifications/phishing.py::log_report_event` | `tests/platform/notifications/test_phishing_workflow.py::test_report_logs_audit` | Audit event `PORTAL_PHISHING_REPORT`; Grafana “Abuse Signals” panel                  |
 
 - **Source material:** `§18`, `§11.6`, `§21.2`, `§29.4`, `§45`
 
@@ -2377,9 +2446,11 @@ ______________________________________________________________________
 #### 12.1.6 Log volume & cost controls (binding)
 
 - Settings `logging.cost.daily_budget_mb_per_service` and `logging.cost.alert_threshold_pct` enforce daily budgets; collectors raise `LOG_VOLUME_BUDGET` alerts and dynamically increase sampling when projected volume exceeds 80% of budget.
+
 - Verbosity toggles: production defaults to `INFO`, non-prod to `DEBUG`; overrides live in `logging.level.overrides[service]` and surface via `/healthz/log-level`. Unauthorized runtime changes raise audit events and revert to the stored setting.
 
 - Log retention & sampling:
+
   - Staff/API request logs retained 90 days hot, 365 days cold (object storage) with 10 % sampling for successful 2xx responses; 4xx/5xx retained in full with sensitive fields masked via `logging.redaction.enabled`.
   - LLM evidence logs retained 365 days with `train_on_data=false` confirmation; HIPAA mode reduces retention to 180 days and forces excerpt suppression (§8.2).
   - Masking tests run in CI (`tests/logging/test_redaction.py`) to prevent PII leakage; failures block merges (§13.7).
@@ -3015,7 +3086,7 @@ B.4 Abuse prevention plan & fraud detection checks (normative)
 - Governance: Abuse triad (Security Engineering Lead, Product Abuse PM, SRE) meets monthly to review abuse dashboards, App.T traceability rows, and new reports from Support. Action items flow into the security backlog with SLA tracking.
 - Baseline detectors:
   - API anomaly detector: `api_abuse_scorer` job inspects rolling windows (IP/user/org) for unusual verb/method combinations and increments `api_suspect_request_total{reason}`. Score > threshold auto-enqueues an approval block pending human review.
-  - Portal download sentinel: `portal_download.anomaly_score` (needs trend < 1.5× baseline). 3 consecutive breaches trigger automatic `portal_link_invalidated` + step-up MFA requirement; App.H RB-ETAG handles follow-up messaging.
+  - Portal download sentinel: `portal_download.anomaly_score` (needs trend \< 1.5× baseline). 3 consecutive breaches trigger automatic `portal_link_invalidated` + step-up MFA requirement; App.H RB-ETAG handles follow-up messaging.
   - Messaging fraud rules: heuristics for mass outbound, URL reputation hits, and attachment mismatch log to `messaging_abuse_detected_total` and quarantine threads until Guardian re-approves.
 - Shadow/soak controls: High-risk pipeline changes (payment integrations, new export endpoints) must run in shadow mode (see §6.13) for ≥7 days with abuse detectors enabled; only after the review sign-off do we flip “serving” flags.
 - Threshold waivers: temporary relaxations for shadow soaks or customer beta programs use `abuse.shadow.threshold_per_org` settings with explicit expiry (≤30 days) and are catalogued in App.O. Activation lints reject waivers without matching expiry and justification.
@@ -3191,11 +3262,11 @@ E.1 Key catalog (scope: SYSTEM | ORG | CASE)
 - storage.remote_hash.max_mb — ORG|CASE — 50 — Max remote bytes to hash; §5.3.
 - settings.activation.require_dual_approval — SYSTEM — true — Dual approval for unsafe changes; §9.3.
 - logging.redaction.enabled — SYSTEM — true — Redact PII in logs; §12.1.
-- logging.access.roles[] — SYSTEM — \[\] — Role mapping for log query privileges (`observability.reader|engineer|auditor`); §12.1.2.
+- logging.access.roles\[\] — SYSTEM — \[\] — Role mapping for log query privileges (`observability.reader|engineer|auditor`); §12.1.2.
 - logging.cost.daily_budget_mb_per_service — SYSTEM|ORG — 500 — Daily log volume budget per service; §12.1.6.
 - logging.cost.alert_threshold_pct — SYSTEM|ORG — 80 — Alert threshold as % of daily log budget; §12.1.6.
 - logging.level.default — SYSTEM — "INFO" — Default production log level; §12.1.6.
-- logging.level.overrides[] — ORG — \[\] — Per-service log level overrides; §12.1.6.
+- logging.level.overrides\[\] — ORG — \[\] — Per-service log level overrides; §12.1.6.
 - portal.logging.enabled — ORG — true — Enable client telemetry capture; §12.1.5.
 - evidence_store.redacted_excerpts.enabled — ORG — true — Allow storage of prompt/response excerpts; HIPAA enable guard forces false and triggers purge; §2.2, §8.2.
 - logging.immutable_sink.enabled — SYSTEM — true (prod) — Mirror structured logs to immutable storage alongside the audit sink; validators block `false` in production and mark overrides unsafe (§9.11, §12.1).
@@ -3238,17 +3309,17 @@ ______________________________________________________________________
 
 F.0 Canonical `ApiError.code` values
 
-| Code | Description |
-| ---- | ----------- |
-| `POLICY_BLOCK` | Guardian or settings policy prevented the action. |
-| `QUARANTINED` | Artifact is quarantined and unavailable. |
-| `INTEGRITY_ERROR` | Hash or integrity validation failed. |
-| `VALIDATION_ERROR` | Input payload failed validation. |
-| `AUTH_ERROR` | Authentication or signature failure. |
-| `NOT_FOUND` | Resource not found or not visible. |
-| `CONFLICT` | Optimistic concurrency or idempotency conflict. |
-| `RATE_LIMIT` | Rate, quota, or budget exceeded. |
-| `PROVIDER_DEGRADED` | Downstream provider degraded/unavailable. |
+| Code                | Description                                       |
+| ------------------- | ------------------------------------------------- |
+| `POLICY_BLOCK`      | Guardian or settings policy prevented the action. |
+| `QUARANTINED`       | Artifact is quarantined and unavailable.          |
+| `INTEGRITY_ERROR`   | Hash or integrity validation failed.              |
+| `VALIDATION_ERROR`  | Input payload failed validation.                  |
+| `AUTH_ERROR`        | Authentication or signature failure.              |
+| `NOT_FOUND`         | Resource not found or not visible.                |
+| `CONFLICT`          | Optimistic concurrency or idempotency conflict.   |
+| `RATE_LIMIT`        | Rate, quota, or budget exceeded.                  |
+| `PROVIDER_DEGRADED` | Downstream provider degraded/unavailable.         |
 
 The authoritative schema for these payloads lives at `spec/schemas/api_error.schema.json`. Spectral rule `ops/openapi/rules/apierror-enum.yaml` lints OpenAPI specs to keep responses aligned with this list.
 
@@ -3281,17 +3352,17 @@ CREATE UNIQUE INDEX idempotency_request_dedupe_idx
 
 Scope dimensions
 
-| Column | Description |
-| ------ | ----------- |
-| `scope` | Logical action bucket (`job:create`, `artifact:approve`, etc.); shared constants in `packages.udocket_core.idem.constants`. |
-| `endpoint` | Canonical `METHOD:/api/...` string preventing cross-route collisions. |
-| `case_id` | Optional discriminator for case-scoped flows (null for global jobs). |
-| `request_hash` | `sha256` of the canonicalised request payload (body + sorted query + idempotency key). |
-| `status` | `in_progress` during execution, `succeeded` after persistence, `conflict` when a mismatched replay occurs. |
-| `result_ref` | Identifier returned to the caller (artifact ID, job ID, etc.). |
-| `response_hash` | `sha256` of the serialized response body for auditability. |
-| `response_code` | HTTP status associated with the stored response (used for `Idempotency-Status`). |
-| `last_seen_at`/`expires_at` | Replay window accounting (default TTL = `api.idempotency.ttl_hours`). |
+| Column                      | Description                                                                                                                 |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `scope`                     | Logical action bucket (`job:create`, `artifact:approve`, etc.); shared constants in `packages.udocket_core.idem.constants`. |
+| `endpoint`                  | Canonical `METHOD:/api/...` string preventing cross-route collisions.                                                       |
+| `case_id`                   | Optional discriminator for case-scoped flows (null for global jobs).                                                        |
+| `request_hash`              | `sha256` of the canonicalised request payload (body + sorted query + idempotency key).                                      |
+| `status`                    | `in_progress` during execution, `succeeded` after persistence, `conflict` when a mismatched replay occurs.                  |
+| `result_ref`                | Identifier returned to the caller (artifact ID, job ID, etc.).                                                              |
+| `response_hash`             | `sha256` of the serialized response body for auditability.                                                                  |
+| `response_code`             | HTTP status associated with the stored response (used for `Idempotency-Status`).                                            |
+| `last_seen_at`/`expires_at` | Replay window accounting (default TTL = `api.idempotency.ttl_hours`).                                                       |
 
 Collision handling & headers
 
@@ -3322,7 +3393,6 @@ IDEMPOTENCY_SCOPES = {
   "upload:finalize"
 }
 ```
-
 
 ```bash
 curl -sS -X POST \
@@ -3525,7 +3595,7 @@ F.11 Deprecation response with `Sunset` header (normative)
 HTTP/1.1 200 OK
 Content-Type: application/json
 X-Request-ID: 7d1f1dba-1d6f-4f6a-a7ef-2d2f1c2e9bd3
-Deprecation: date="2026-04-01T00:00:00Z"
+Deprecation: @1775001600; sunset="Mon, 01 Jun 2026 00:00:00 GMT"
 Sunset: Tue, 01 Apr 2026 00:00:00 GMT
 Link: </api/v1/migrations/2026-04-case-export>; rel="deprecation"; type="text/html"
 X-uDocket-API-Version: 2025-01
@@ -3537,13 +3607,13 @@ X-uDocket-API-Version: 2025-01
 
 ### F.12 Header obligations (normative)
 
-| Category | Header(s) | Enforcement & reference | Notes |
-| -------- | --------- | ----------------------- | ----- |
-| Exposed response headers | `X-Request-ID`, `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`, `Retry-After`, `ETag`, `Deprecation`, `Sunset` | `config/settings.py::CORS_EXPOSE_HEADERS`; Settings bundle `security.cors.expose_headers`; validated by `scripts/security/verify_cors_headers.py` | Aligns with §10.5 acceptance; deviations require dual approval. |
-| Allowed preflight headers | `Authorization`, `Content-Type`, `Idempotency-Key`, `X-Request-Signature`, `X-Signature-Key-Id`, `X-Timestamp`, `If-Match`, `If-None-Match`, `If-Range`, `X-Style-Nonce`, `X-Script-Nonce` | Settings bundle `security.cors.allowed_headers`; test `scripts/security/verify_cors_headers.py` | Nonce headers support CSP enforcement per §11.5. |
-| Security baseline | `Content-Security-Policy`, `Strict-Transport-Security`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` | Generated by `apps/platform/ui/security/csp.py` + middleware; asserted in `tests/e2e/test_security_headers.py::test_csp_header_enforced` | CSP requires per-response script/style nonces; see §11.5. |
-| Download guard contract | `If-Match`, `If-None-Match`, `Range`, `If-Range` | `apps/platform/portal/downloads.py::enforce_if_match`; tests in §10.6 acceptance | Clients must echo `If-Match` ETag; violations return 412 `INTEGRITY_ERROR`. |
-| Rate-limit headers | `Retry-After`, `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset` | `apps/platform/api/middleware/rate_limiting.py::append_rate_limit_headers`; monitored via `api_rate_limit_header_miss_total` | Contract referenced in §10.5 acceptance and Appendix F.10. |
+| Category                  | Header(s)                                                                                                                                                                                  | Enforcement & reference                                                                                                                           | Notes                                                                       |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Exposed response headers  | `X-Request-ID`, `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`, `Retry-After`, `ETag`, `Deprecation`, `Sunset`                                                          | `config/settings.py::CORS_EXPOSE_HEADERS`; Settings bundle `security.cors.expose_headers`; validated by `scripts/security/verify_cors_headers.py` | Aligns with §10.5 acceptance; deviations require dual approval.             |
+| Allowed preflight headers | `Authorization`, `Content-Type`, `Idempotency-Key`, `X-Request-Signature`, `X-Signature-Key-Id`, `X-Timestamp`, `If-Match`, `If-None-Match`, `If-Range`, `X-Style-Nonce`, `X-Script-Nonce` | Settings bundle `security.cors.allowed_headers`; test `scripts/security/verify_cors_headers.py`                                                   | Nonce headers support CSP enforcement per §11.5.                            |
+| Security baseline         | `Content-Security-Policy`, `Strict-Transport-Security`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`                                                                         | Generated by `apps/platform/ui/security/csp.py` + middleware; asserted in `tests/e2e/test_security_headers.py::test_csp_header_enforced`          | CSP requires per-response script/style nonces; see §11.5.                   |
+| Download guard contract   | `If-Match`, `If-None-Match`, `Range`, `If-Range`                                                                                                                                           | `apps/platform/portal/downloads.py::enforce_if_match`; tests in §10.6 acceptance                                                                  | Clients must echo `If-Match` ETag; violations return 412 `INTEGRITY_ERROR`. |
+| Rate-limit headers        | `Retry-After`, `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`                                                                                                           | `apps/platform/api/middleware/rate_limiting.py::append_rate_limit_headers`; monitored via `api_rate_limit_header_miss_total`                      | Contract referenced in §10.5 acceptance and Appendix F.10.                  |
 
 Refer to §10.5, §10.6, §11.2.2, and §11.5 for narrative requirements tied to these headers.
 
@@ -3616,7 +3686,7 @@ Decision
 
 Post-remediation
 
-- Ensure `logging_ingest_lag_seconds` < 15 and `logging_drop_rate_pct` = 0 for two consecutive collection intervals.
+- Ensure `logging_ingest_lag_seconds` \< 15 and `logging_drop_rate_pct` = 0 for two consecutive collection intervals.
 - Produce incident summary with root cause, impacted indices, and recovery actions; attach to decision log (§15.3).
 - File follow-up tasks (capacity, query optimization) if backlog exceeded 50% of quota.
 
@@ -4290,18 +4360,18 @@ Quick crosswalk (illustrative)
 
 HMAC key inventory
 
-| Service → Service | Key ID | Last rotated (UTC) | Evidence bundle |
-| ----------------- | ------ | ------------------ | --------------- |
-| web → guardian    | `svc-web-guardian-v3` | 2025-09-12T14:30Z | `ops/security/key_rotation/guardian_2025-09-12.json` |
-| worker → settings | `svc-worker-settings-v4` | 2025-08-01T09:00Z | `ops/security/key_rotation/settings_2025-08-01.json` |
-| guardian → signer | `svc-guardian-signer-v2` | 2025-07-18T16:45Z | `ops/security/key_rotation/signer_2025-07-18.json` |
+| Service → Service | Key ID                   | Last rotated (UTC) | Evidence bundle                                      |
+| ----------------- | ------------------------ | ------------------ | ---------------------------------------------------- |
+| web → guardian    | `svc-web-guardian-v3`    | 2025-09-12T14:30Z  | `ops/security/key_rotation/guardian_2025-09-12.json` |
+| worker → settings | `svc-worker-settings-v4` | 2025-08-01T09:00Z  | `ops/security/key_rotation/settings_2025-08-01.json` |
+| guardian → signer | `svc-guardian-signer-v2` | 2025-07-18T16:45Z  | `ops/security/key_rotation/signer_2025-07-18.json`   |
 
 Key rotation calendar (rolling 90 days)
 
-| Upcoming rotation | Owners | Window | Notes |
-| ----------------- | ------ | ------ | ----- |
-| `svc-web-guardian-v4` | Security Eng Lead, Platform SRE | 2025-12-05 → 2025-12-07 | Requires APP.SEC-117 approval; pre-stage secret in Key Vault |
-| `svc-worker-settings-v5` | Settings Service TL, Security Eng Lead | 2026-01-08 → 2026-01-10 | Align with Settings deploy freeze lift |
+| Upcoming rotation        | Owners                                 | Window                  | Notes                                                        |
+| ------------------------ | -------------------------------------- | ----------------------- | ------------------------------------------------------------ |
+| `svc-web-guardian-v4`    | Security Eng Lead, Platform SRE        | 2025-12-05 → 2025-12-07 | Requires APP.SEC-117 approval; pre-stage secret in Key Vault |
+| `svc-worker-settings-v5` | Settings Service TL, Security Eng Lead | 2026-01-08 → 2026-01-10 | Align with Settings deploy freeze lift                       |
 
 | Control ID / Policy        | Scope                      | Primary coverage (Section/App)                   | Evidence artifact(s)                                                                          | Status |
 | -------------------------- | -------------------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------- | ------ |
@@ -4488,15 +4558,15 @@ ______________________________________________________________________
 
 *Purpose: Tie requirements to validation, observability, and operational response so audits stay frictionless.*
 
-| Requirement (section) | Tests / validation artefacts | Monitors / alerts | Runbook / response |
-| --------------------- | ---------------------------- | ----------------- | ------------------ |
-| Guardian decisions deterministic & parent-aware (§7.1) | `tests/guardian/test_concurrent_parent_swap.py::test_child_blocks_on_parent_swap`; Guardian synthetic `guardian_slo.yaml` job | `guardian_ready_ratio`, `guardian_decision_latency_seconds`, `guardian_ready_parent_block_total` | App.H RB-GUARD-001, App.H RB-GUARD-QUAR |
-| API versioning & Sunset policy enforced (§10.0, §10.5) | `make lint-openapi` (`npx spectral lint ops/openapi/**/*.yaml`), Spectral `sunset-header` rule, ADR-0003 change review checklist | `api_sunset_header_missing_total`, `api_deprecation_notice_age_seconds` | App.H standard runbook template → API Sunset (`docs/runbooks/api/sunset.md`, draft) |
-| FinOps guardrails prevent runaway spend (§8.7, §12.9) | `scripts/finops/check_mom_guard.py`; `tests/udocket_core/finops/test_guard.py::test_regression_formula` | `finops_mom_regression_flag{org}`, `llm_cost_estimate_total` | App.H RB-LLM-003 |
-| Logging pipeline retains structured records (§12.1) | `tests/logging/test_redaction.py::test_forbidden_headers_masked`; `diagram:diff` for log schema | `logging_ingest_lag_seconds`, `logging_drop_rate_pct`, `logging_spool_utilization_pct` | App.H RB-LOG-007 |
-| Advisory locks stay healthy during approvals (§5.4) | `tests/platform/artifacts/test_approval_swap.py::test_concurrent_approvals_single_winner`; `tests/platform/db/test_rls_guard.py::test_rls_context_asserts_missing_gucs` | `udlock_watchdog_stale_total`, `udlock_lock_age_seconds_p95` | App.H RB-LOCK-006 |
-| Portal downloads honour ETag / If-Match (§10.6, App.H RB-ETAG) | `tests/e2e/test_artifact_range_download.py::test_range_and_conditional_gets` | `portal_412_precondition_total`, `alert_portal_412_spike` | App.H RB-ETAG |
-| Abuse-prevention detectors enforce throttles (§B.4, §6.13, §10.9) | `tests/security/test_abuse_checks.py::test_api_abuse_flagged`, `tests/security/test_portal_download_guard.py::test_anomaly_blocks`, shadow soak fixtures (`tests/platform/shadow/test_shadow_thresholds.py`) | `api_suspect_request_total`, `portal_download.anomaly_score`, `messaging_abuse_detected_total`, `abuse_shadow_threshold_expiring_total` | App.H RB-RES-BLOCK (residency), App.H RB-ETAG, App.H abuse triage SOP (`docs/runbooks/security/abuse_triage.md`) |
-| Masking profiles map to FORCE RLS policies (§4.4.1) | `tests/platform/db/test_mask_profiles.py::test_mask_profile_matches_policy`, `tests/platform/db/test_secure_view_usage.py::test_no_base_table_queries` | `rls_context_missing_total`, `mask_profile_mismatch_total` | App.H RB-GOV-008 (settings rollback), App.H RB-LOCK-006 |
-| LLM/vector residency guard prevents out-of-region fallback (§8.1.1) | `tests/udocket_core/llm/test_residency_guard.py::test_block_disallowed_region`, `tests/udocket_core/vector/test_vector_residency.py::test_allowed_regions_only`, synthetic `synthetics/llm_residency.yaml` | `llm_region_fallback_total`, `vector_region_fallback_total` | App.H RB-LLM-003, App.H RB-RES-BLOCK |
-| CSP nonce & HIPAA cache enforcement (§11.5, §10.6) | `tests/ui/test_csp_nonced.py::test_nonce_roundtrip`, synthetic `synthetics/csp_nonce_failure.yaml`, `synthetics/portal_hipaa_cache.yaml`, `tests/e2e/test_portal_policy_context.py::test_disclaimer_l10n` | `csp_nonce_mismatch_total`, `portal_cache_header_violation_total` | App.H RB-PORTAL-005, App.H security headers checklist |
+| Requirement (section)                                               | Tests / validation artefacts                                                                                                                                                                                 | Monitors / alerts                                                                                                                       | Runbook / response                                                                                               |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Guardian decisions deterministic & parent-aware (§7.1)              | `tests/guardian/test_concurrent_parent_swap.py::test_child_blocks_on_parent_swap`; Guardian synthetic `guardian_slo.yaml` job                                                                                | `guardian_ready_ratio`, `guardian_decision_latency_seconds`, `guardian_ready_parent_block_total`                                        | App.H RB-GUARD-001, App.H RB-GUARD-QUAR                                                                          |
+| API versioning & Sunset policy enforced (§10.0, §10.5)              | `make lint-openapi` (`npx spectral lint ops/openapi/**/*.yaml`), Spectral `sunset-header` rule, ADR-0003 change review checklist                                                                             | `api_sunset_header_missing_total`, `api_deprecation_notice_age_seconds`                                                                 | App.H standard runbook template → API Sunset (`docs/runbooks/api/sunset.md`, draft)                              |
+| FinOps guardrails prevent runaway spend (§8.7, §12.9)               | `scripts/finops/check_mom_guard.py`; `tests/udocket_core/finops/test_guard.py::test_regression_formula`                                                                                                      | `finops_mom_regression_flag{org}`, `llm_cost_estimate_total`                                                                            | App.H RB-LLM-003                                                                                                 |
+| Logging pipeline retains structured records (§12.1)                 | `tests/logging/test_redaction.py::test_forbidden_headers_masked`; `diagram:diff` for log schema                                                                                                              | `logging_ingest_lag_seconds`, `logging_drop_rate_pct`, `logging_spool_utilization_pct`                                                  | App.H RB-LOG-007                                                                                                 |
+| Advisory locks stay healthy during approvals (§5.4)                 | `tests/platform/artifacts/test_approval_swap.py::test_concurrent_approvals_single_winner`; `tests/platform/db/test_rls_guard.py::test_rls_context_asserts_missing_gucs`                                      | `udlock_watchdog_stale_total`, `udlock_lock_age_seconds_p95`                                                                            | App.H RB-LOCK-006                                                                                                |
+| Portal downloads honour ETag / If-Match (§10.6, App.H RB-ETAG)      | `tests/e2e/test_artifact_range_download.py::test_range_and_conditional_gets`                                                                                                                                 | `portal_412_precondition_total`, `alert_portal_412_spike`                                                                               | App.H RB-ETAG                                                                                                    |
+| Abuse-prevention detectors enforce throttles (§B.4, §6.13, §10.9)   | `tests/security/test_abuse_checks.py::test_api_abuse_flagged`, `tests/security/test_portal_download_guard.py::test_anomaly_blocks`, shadow soak fixtures (`tests/platform/shadow/test_shadow_thresholds.py`) | `api_suspect_request_total`, `portal_download.anomaly_score`, `messaging_abuse_detected_total`, `abuse_shadow_threshold_expiring_total` | App.H RB-RES-BLOCK (residency), App.H RB-ETAG, App.H abuse triage SOP (`docs/runbooks/security/abuse_triage.md`) |
+| Masking profiles map to FORCE RLS policies (§4.4.1)                 | `tests/platform/db/test_mask_profiles.py::test_mask_profile_matches_policy`, `tests/platform/db/test_secure_view_usage.py::test_no_base_table_queries`                                                       | `rls_context_missing_total`, `mask_profile_mismatch_total`                                                                              | App.H RB-GOV-008 (settings rollback), App.H RB-LOCK-006                                                          |
+| LLM/vector residency guard prevents out-of-region fallback (§8.1.1) | `tests/udocket_core/llm/test_residency_guard.py::test_block_disallowed_region`, `tests/udocket_core/vector/test_vector_residency.py::test_allowed_regions_only`, synthetic `synthetics/llm_residency.yaml`   | `llm_region_fallback_total`, `vector_region_fallback_total`                                                                             | App.H RB-LLM-003, App.H RB-RES-BLOCK                                                                             |
+| CSP nonce & HIPAA cache enforcement (§11.5, §10.6)                  | `tests/ui/test_csp_nonced.py::test_nonce_roundtrip`, synthetic `synthetics/csp_nonce_failure.yaml`, `synthetics/portal_hipaa_cache.yaml`, `tests/e2e/test_portal_policy_context.py::test_disclaimer_l10n`    | `csp_nonce_mismatch_total`, `portal_cache_header_violation_total`                                                                       | App.H RB-PORTAL-005, App.H security headers checklist                                                            |
