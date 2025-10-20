@@ -682,8 +682,9 @@ This example demonstrates how residency outcomes are derived: LPE supplies the d
 *Purpose: Catalog regulated touchpoints subject to policy and audit.*
 
 - **Azure Speech (per-org allowlisted regions):** Batch transcription via SAS URLs and on-demand streaming; operations include hashing uploads, enforcing PCM normalization, and monitoring quotas. Regional endpoints are provisioned according to `regions.allowlist.compute`.
+- **Speech fallback providers (processor-agnostic):** Speechmatics Canada (primary fallback) and any future providers must expose REST APIs with parity guarantees (WER/diarization deltas within policy thresholds) and identical residency attestations. Workers consume them through the same `TranscriptionAgent` interface so jobs remain provider-agnostic.
 
-- **LLM providers:** Restricted to org-approved regions and models; Selection algorithm honors `fallback_priority`. Evidence store records prompts, redaction metrics, and envelope metadata per call.
+- **LLM providers:** Restricted to org-approved regions and models; selection algorithm honors `fallback_priority`/`fallback_chain` and records equivalence evidence for every switchover. Evidence store records prompts, redaction metrics, and envelope metadata per call.
 
 - **Digital trust services:** TSA and OCSP/CRL endpoints defined in settings (`sign.trust_roots[]`); signer enforces drift ≤ ±5s and caches responses ≤12h.
 
@@ -1313,6 +1314,7 @@ Example
 
 - Terminology: Appendix I covers lane names, artifact states, and failure classes referenced throughout §6.
 - Agents implement the `TranscriptionAgent`-style interface: accept structured config (`TranscriptionConfig` family) rather than CLI flags, pull secrets from `.env` mirroring `config/settings.py`.
+- Provider-agnostic planning: agents consult the shared `TranscriptionCapabilityMap` (speech) or equivalent planners to negotiate supported features, pick an execution flow, and guarantee outputs conform to the normalized schema the downstream stages expect.
 - Return value encapsulates success data (`TranscriptionResult`/agent-specific models) and raises rich exceptions with machine-actionable codes; Celery tasks capture and surface to UI.
 - Filesystem layout: artifacts saved under `storage/media/<org_id>/cases/<case_id>/<category>/` with `job_id` prefixes; ops logs in `ops/` with per-run JSON + human-readable log, plus append-only `ops_<agent>.jsonl`.
 - Deterministic naming/versioning: reruns append `_v{n}` suffix; manifests store `settings_snapshot_sha256`, model/provider versions, compute/storage regions, and SHA-256 of outputs.
@@ -1325,11 +1327,55 @@ Example
 - Modes: `on-demand` streaming for shorter recordings (local processing), `batch` for longer files via Azure Batch Transcription (HTTPS SAS URL). Region allowlists from Settings are enforced at job dispatch.
 - Input processing: audio uploads hashed, normalized via ffmpeg (PCM 16 kHz mono). Artifacts created: `TRANSCRIPT_INPUT`, `AUDIO_NORMALIZED`.
 - Malware & format validation: every upload (audio, documents, exhibits) routes through the `upload_scan` pipeline—an isolated Kubernetes job running ClamAV with daily `freshclam` updates plus org-specific YARA rules (`packages/security/yara/`). Files are scanned before workers access them; positive hits set `upload_session.status='SCANNING_FAILED'`, quarantine the staging object, emit `MALWARE_DETECTED` audit events, and notify Security (remediation flow in App.H RB-UPLOAD-SCAN). Format validators (mediainfo/ffprobe, pdfcpu, tika) run in the same sandbox to confirm claimed MIME/codec; malformed files are rejected with actionable error codes and attached diagnostic logs.
-- Multi-track support: batch mode can ingest stereo/multi-channel sources, splitting speakers prior to diarization; single-track on-demand relies on optional diarization metadata when available.
-- Outputs: timestamped transcript (`transcript/<job_id>__transcript.txt`) with header metadata (case, source name, hashes, language, region, duration); optional `DIARIZATION` JSON for batch mode.
+- Capability-aware ingestion: workers inspect `speech.providers[].capabilities` (for example `multi_track`, `speaker_diarization`, `punctuation_normalization`, `numerical_normalization`) to select an execution plan. Multi-track inputs trigger track-aware pipelines; single-track jobs fall back to diarization when providers expose that capability.
+- Capability gates & planning: before dispatch, the `TranscriptionCapabilityMap` evaluates requested features (multi-track, diarization, locale) against provider claims. Unsupported combinations fail fast with `CAPABILITY_UNAVAILABLE`, SSE guidance, and no provider calls. When multiple flows are viable, planners prefer native multi-track, then synthetic track merge, then diarization-only as the final option.
+- Multi-track support: batch mode splits per-channel audio when `multi_track` is available; otherwise the Track Merge sub-task (see §6.2.2) generates per-speaker transcripts by splitting channels, running parallel jobs, and merging on precise timestamps. Single-track jobs without diarization support return policy errors rather than emitting unlabelled transcripts.
+- Outputs: normalized transcript (`transcript/<job_id>__transcript.txt`) with header metadata (case, source name, hashes, language, region, duration) and body rewritten via the shared normalizer (see §6.2.2) so downstream agents receive consistent punctuation, casing, and numeric treatment; optional `DIARIZATION` JSON for batch mode.
 - Ops artifacts: `ops/<job_id>__transcription.log`, `ops/<job_id>__transcription_log.json`, case-level `ops_transcription.jsonl` append. Guardian invoked automatically post-write.
 - Stdout contract: single JSON line `{status, transcript_file, region, language, attempts, duration_s}` enabling CLI automation.
 - See App.D for canonical artifact types and filenames (TRANSCRIPT, AUDIO_NORMALIZED) and versioning rules.
+
+#### 6.2.1 Provider fallback & health-governed resume (binding)
+
+- Provider catalog: `speech.providers[]` mirrors the LLM registry, capturing API endpoints, residency, pricing, and `health_check.url`. Each `speech.jobs[]` entry defines a `fallback_chain` where every hop is validated against an equivalence harness (`tests/udocket_core/agents/test_transcribe_fallback.py`) demonstrating WER delta ≤ 1.5 % and diarization accuracy within tolerance on the golden corpus.
+- Orchestration helper: `packages/udocket_core/failover/speech.py::SpeechFailoverController` applies the fallback chain uniformly across batch/on-demand workers. It shares telemetry/event naming with the LLM orchestrator and exposes `speech.failover.for_request(...)` so Celery tasks and future speech processors remain provider-agnostic.
+- Automated retries: when Azure Speech (primary) degrades or breaches SLA thresholds, workers emit `TRANSCRIBE_FALLBACK_TRIGGERED`, replay the batch against the next healthy provider/region pair, and annotate manifests with `fallback_source_provider_id` and `fallback_attempt`. Retries respect org budgets and residency settings; no human transcription path exists in the automated flow.
+- Pause semantics: if the chain exhausts without a healthy provider, the job enters `PAUSED_AWAITING_PROVIDER`, preserving the queue order. Health monitors run every 60 seconds, requiring three consecutive successes before the job automatically resumes from the point of failure. UI surfaces status with next probe ETA; operators can trigger an on-demand probe via `POST /ops/transcription/{job}/probe`.
+- Observability: metrics `transcribe_fallback_total{provider,reason}`, `transcribe_pause_total`, and `transcribe_paused_jobs` feed dashboards. Audit events capture provider transitions and parity evidence hash; ops logs include health snapshots for every pause/resume cycle.
+- Testing: `tests/udocket_core/failover/test_speech_orchestrator.py` exercises controller parity checks, health-driven pauses, and auto-resume, while `synthetics/transcribe_failover.yaml` validates staging behavior.
+
+#### 6.2.2 Capability negotiation & track merge pipeline (binding)
+
+- Capability registry: `speech.providers[].capabilities` declares booleans + enums (`multi_track`, `diarization`, `dominant_speaker`, `timestamp_precision_ms`, `max_parallel_channels`). Settings validators ensure advertised capabilities match integration tests before activation. Workers resolve execution plans through `TranscriptionCapabilityMap` (new module) that maps provider capability sets to supported processing flows and emits a provider-agnostic plan contract consumed by every `TranscriptionAgent` implementation.
+- Normalization contract: regardless of provider, outputs conform to `NormalizedTranscript@1.1` (Appendix D) with segments shaped as `{start_ms, end_ms, speaker_label, text_norm, raw_text}` plus optional diarization/confidence metadata. The `TranscriptionNormalizer` layer applies shared transforms (numeral expansion, capitalization policy, punctuation smoothing, profanity masking) so Analyze/Compose receive consistent text.
+- Track Merge sub-task: when an audio upload contains ≥2 channels but the active provider lacks native multi-track support, the Track Merge controller (Celery chord) performs:
+  1. `SplitTracks` (ffmpeg) emits isolated WAVs per channel with preserved timestamps and writes `AUDIO_TRACK_SPLIT` artifacts.
+  2. Parallel `TranscriptionAgent` invocations per track using provider capabilities (single-track diarization toggled off).
+  3. `MergeTracks` reconciles segments using timestamp offsets, ordering by `start_ms` and applying deterministic speaker labels (`Speaker A/B/...`). Overlaps trigger merge heuristics (highest confidence wins; otherwise interleave by start time). The merged transcript re-runs normalization to ensure downstream parity.
+  4. Controller persists merge provenance (`track_merge_manifest.json`) capturing channel counts, offsets, and chosen heuristics.
+- Diarization policy: if both `multi_track` and `diarization` exist, multi-track takes precedence (channel identity is more reliable). If neither is available, the job fails fast with `CAPABILITY_UNAVAILABLE` and SSE guidance to select a provider with required capabilities.
+- Testing & drills: `tests/udocket_core/transcription/test_capability_map.py` validates routing, `tests/udocket_core/transcription/test_track_merge.py` verifies merge ordering/conflict resolution, and synthetic `synthetics/transcribe_capabilities.yaml` asserts capability negotiation in staging. Ops drill App.H RB-TRANSCRIBE-CAP ensures runbooks cover channel splits and merge artifact inspection.
+
+#### 6.2.3 Speech capability registry & audio format policy (binding)
+
+- Registry source of truth: `speech.providers[]` (Settings Service) defines each adapter’s declared capabilities, with overrides allowed per organization/case. Activation validators cross-check declarations against integration fixtures (`tests/udocket_core/transcription/providers/fixtures/*.json`) to prevent drift.
+- Capability groups (all required unless noted):
+  - `ingest`: `supported_containers[]` (e.g., `["wav","mp3","m4a","ogg"]`), `preferred_audio_format` (`"wav/pcm16"` default), `max_channels` (int), `max_duration_minutes`, `max_file_mb`, `requires_conversion` (bool) when provider enforces PCM inputs, `streaming_modes[]` (`"on_demand"`, `"batch"`).
+  - `analysis`: `diarization` (`none|provider|external`), `speaker_labels` (bool), `dominant_speaker` (bool), `word_timestamps` (`none|per_word|per_token`), `timestamp_precision_ms` (int), `channel_separation` (bool).
+  - `normalization`: `punctuation_normalization` (enum), `numerical_normalization` (enum), `capitalization` (enum), `profanity_filters` (enum), `locale_support[]` (BCP-47 codes) indicating verified language/localization coverage, `preferred_locale_fallback` (BCP-47).
+  - `operational`: `billing_unit` (`"minute"`, `"second"`, `"character"`), `max_parallel_jobs`, `region_allowlist[]` (subset of Settings region catalog), `requires_data_residency_attestation` (bool), `sla_compliant` (bool), `health_check.url`.
+- Execution planning best practices:
+  - Agents always normalize inputs to `preferred_audio_format`; if the source already matches (e.g., PCM 16 kHz mono) conversion is skipped; otherwise ffmpeg converts to PCM 16-bit little-endian WAV at the provider’s highest verified sample rate ≤ 32 kHz to balance accuracy and cost. Conversion artifacts are saved (`AUDIO_NORMALIZED`) with SHA-256 so replays share a stable baseline.
+  - When `supported_containers` excludes the upload type, the pipeline re-muxes into WAV before plan evaluation, logs the operation in `compile_notes`, and retains original audio under `audio/` for audit parity.
+  - `max_channels` governs whether the pipeline attempts native multi-channel; when the input exceeds this value, the registry can declare `fallback_channel_strategy` (`"synthetic_merge"` or `"reject"`). Synthetic merges are only attempted if integration tests demonstrate <1.5% WER regression compared to provider multi-channel output.
+  - `max_duration_minutes` and `max_file_mb` gate plan selection; exceeding either triggers preflight chunking (feature-flagged) or a policy failure with actionable guidance in SSE and ops logs.
+  - Language/locale negotiation respects `locale_support[]`: if the requested locale is missing, the planner either downgrades to `preferred_locale_fallback` (noting the downgrade in manifest) or fails fast depending on Settings (`speech.require_locale_match`).
+- Audio optimization guidance (binding):
+  - Prefer lossless PCM WAV at 16 kHz mono for dialog; escalate to 24 kHz stereo only when the provider’s accuracy materially improves for music-heavy or courtroom recordings (documented per provider in Appendix Q notes). The planner records any higher sample rate conversions in manifest metadata (`normalization.sample_rate_hz`).
+  - Apply loudness normalization (`-16 LUFS` target, ±1 LU tolerance) and dynamic range compression (light preset) before transcription only when `speech.allow_preprocessing=true`; defaults preserve raw audio aside from format conversion to maintain evidentiary integrity.
+  - Size optimization uses ffmpeg `-ar` (sample rate) and `-ac` (channels) parameters, never applying lossy codecs; storage deduplicates normalized outputs via content hash.
+- Provider capability validation: nightly job `scripts/agents/validate_speech_capabilities.py` runs golden audio fixtures against each provider, verifies declared fields (diarization, timestamps, normalization behaviors), and writes results to `ops/speech_capability_report.json` per org. Failures block new activations and trigger App.H RB-TRANSCRIBE-CAP escalation.
+- Documentation & SDK alignment: OpenAPI schemas expose the negotiated capability plan in `GET /api/v1/speech/providers` for UI/SDK consumers. SDK samples in `docs/examples/api/speech_capabilities/*.md` stay synchronized with Settings keys and the registry schema.
 
 ### 6.3 Analyze agent (LangGraph lanes, QA, artifacts)
 
@@ -1422,13 +1468,13 @@ Node catalog (illustrative)
 | SectionQA              | enforce policy gates      | section text, policies       | QA notes, status        |
 | FinalWeave             | assemble deliverable      | sections, templates          | composed MD/DOCX        |
 
--#### 6.7.2 Adoption guardrails & fallback plan
+#### 6.7.2 Adoption guardrails & fallback plan
 
 - Framework encapsulation: LangGraph graphs execute behind `packages.udocket_core.agents.graph_runner.GraphRunner`. Settings key `agents.langgraph.runner ∈ {'langgraph','linear'}` plus a CLI override allow swapping to the linear runner for smoke tests or incident mitigation. Contract tests run against both runners to ensure parity.
 - Training & SOP: engineering onboarding includes LangGraph workshops, code walkthroughs, and pairing sessions; a living playbook in `docs/runbooks/langgraph-adoption.md` captures patterns, anti-patterns, and upgrade notes.
 - Upgrade cadence: LangGraph pinned via Poetry with weekly review of upstream releases; canary staging job (`synthetics/langgraph_canary.yaml`) executes against new versions before upgrade PRs. Major version bumps require ADR review.
 - UUID safeguards: default UUIDv7/UUIDv5 strategy (see §6.7.1) avoids dependence on draft UUIDv8 implementations while preserving deterministic references.
-- Manual fallback: App.H RB-LLM-003 documents the manual drafting fallback when LangGraph or providers are degraded. Workers honour system setting `agents.langgraph.fallback_mode=true` to short-circuit into manual tasks and notify Product/SRE while Guardian keeps artifacts in `READY`/manual lanes.
+- Automated failover: lanes invoke the shared `ModelFailoverOrchestrator` (§8.1.2) so `llm.models[].fallback_chain` is applied consistently across Analyze/Compose/Audit tasks. The orchestrator surfaces `LLM_FALLBACK_TRIGGERED` events, records parity hashes, and continues processing without human drafting. When the chain is exhausted the queue marks `PAUSED_AWAITING_PROVIDER`; on-call focuses on restoring provider health rather than producing manual content. Manual drafting remains a break-glass SOP only under an explicit executive waiver recorded in Appendix O.
 
 ### 6.8 Compose/Policy lint settings (declarative)
 
@@ -1589,7 +1635,7 @@ Reason matrix (illustrative)
 
 *Purpose: Surface Guardian stalls quickly and keep operators unblocked when automation degrades.*
 
-- Guardian publishes queue gauges `guardian_pending_total` and `guardian_pending_oldest_seconds` from the `guardian_submission_queue` materialized view (fields: `artifact_id`, `org_id`, `submitted_at`, `last_heartbeat_at`). Alert `alert_guardian_queue_stale` fires when pending count exceeds the adaptive KEDA budget or the oldest item age breaches `guardian.queue.backlog_alert_minutes`; App.H RB-GUARD-QUEUE prescribes triage steps and manual fallback sequencing.
+- Guardian publishes queue gauges `guardian_pending_total` and `guardian_pending_oldest_seconds` from the `guardian_submission_queue` materialized view (fields: `artifact_id`, `org_id`, `submitted_at`, `last_heartbeat_at`). Alert `alert_guardian_queue_stale` fires when pending count exceeds the adaptive KEDA budget or the oldest item age breaches `guardian.queue.backlog_alert_minutes`; App.H RB-GUARD-QUEUE prescribes triage steps and automated provider fallback verification before any break-glass waiver is considered.
 - Worker submission watchdogs enforce `guardian.queue.submission_timeout_seconds` (default 300s). When Guardian has not replied within that window the worker marks the run `FAILED_GUARDIAN_TIMEOUT`, leaves the artifact in `DRAFT`, emits SSE `artifact.guardian_timeout`, records audit event `GUARDIAN_TIMEOUT_ESCALATED`, and increments `guardian_submission_timeout_total`. Ops receives a page and the UI surfaces a banner instructing staff to either resubmit once Guardian is healthy or follow the manual review checklist.
 - Reviewer backlog health is tracked via `review_ready_backlog_total` and `review_ready_oldest_seconds`; alerts respect `reviews.backlog.alert_minutes` so reviewers are paged before READY artifacts languish. The approvals panel highlights age bands and links directly to the Guardian decision details that require action.
 - False-positive sampling increments `guardian_quarantine_false_positive_total` whenever an artifact resubmits with the same `content_sha256` and transitions from `QUARANTINED` to `READY` without a ruleset change. Weekly governance checks compare that counter against `guardian_decision_total` to ensure the ≤ 5 % false-positive objective (§6.12) remains on track and to prioritise rule tuning when the ratio trends upward.
@@ -1655,6 +1701,7 @@ ______________________________________________________________________
 - Registry polls providers for latency/error rates; circuit breaker flips to OPEN when thresholds exceeded, with half-open probes every 60s.
 - Circuit transitions append to evidence store envelopes with `circuit_state_before`, `circuit_state_after`, and `sample_reason` so FinOps reviews can tie spend impact to selection decisions; the same payload feeds audit events `LLM_CIRCUIT_STATE_CHANGE`.
 - Selection steps: enforce region allowlists (`regions.allowlist.compute/storage`), filter by language/org preference, honor case-specific overrides if healthy, otherwise iterate `fallback_priority`. Token ceilings per job lane cap prompts.
+- Fallback equivalence matrix (binding): every `llm.models[]` definition enumerates a `fallback_chain` of models that meet pre-agreed parity targets (±3 % quality delta on golden set, identical residency/data-use posture, comparable latency). Activation validators ensure parity evidence (`fallback.evidence_sha256`) is present. When the primary model degrades, the registry replays the request against the next healthy model in the chain automatically via the shared `ModelFailoverOrchestrator` (see §8.1.2); artifacts record `fallback_source_model_id` for audit. If the chain is exhausted the job transitions to `PAUSED_AWAITING_PROVIDER` and queues halt new execution until health probes succeed consistently (three consecutive green probes over 5 minutes) before resuming.
 - Decision trace recorded in logs and evidence store: chosen model, reason code (`PRIMARY_DEGRADED`, `RATE_LIMIT`, `POLICY_REGION_BLOCK`), health snapshot, cost estimate.
 - Model version pinning (binding): settings must include an explicit provider model version or snapshot (`llm.models.version_pin` or provider‑specific snapshot ID). The registry refuses selection when the live provider reports a mismatched version unless a waiver exists. Envelopes persist `{model_id, model_version}` and Settings embed `settings_snapshot_sha256` to support replay. Azure OpenAI deployments must pin dated snapshots where available; upgrades occur only via Settings activation with dual approval.
 - **Provider data-use posture:** Registry enforces vendor toggles (`llm.providers[].log_retention=false`, `llm.providers[].train_on_data=false`) and verifies contract clauses that forbid prompt/output reuse. Health probes include periodic API checks of provider-side `x-ms-logging-enabled` (Azure) headers; deviations generate `PROVIDER_DATA_POLICY_DRIFT` alerts and block selection until remediated.
@@ -1668,6 +1715,13 @@ ______________________________________________________________________
 - Fallback hierarchy honours residency before priority: if no healthy model exists in allowed regions, the selection algorithm short-circuits with `PROVIDER_DEGRADED` and surfaces actionable errors rather than silently choosing an out-of-region model.
 - Audit trail: every call logs `{model_id, region, residency_policy_version, waiver_id?}`; Guardian and FinOps dashboards display residency decision distributions (`lpe_policy_context_version` paired with `reference_manager_bundle_adoption_seconds`).
 - Tests: `tests/udocket_core/llm/test_residency_guard.py::test_block_disallowed_region` stubs provider metadata to ensure the guard rejects non-approved regions without waiver, while `tests/udocket_core/vector/test_vector_residency.py::test_allowed_regions_only` covers vector stores. A staging synthetic (`synthetics/llm_residency.yaml`) confirms the egress gateway denies traffic when the allowlist is intentionally misconfigured.
+
+#### 8.1.2 Failover orchestration helper (binding)
+
+- Implementation: `packages/udocket_core/failover/model.py::ModelFailoverOrchestrator` centralizes fallback evaluation, emitting standardized events (`LLM_FALLBACK_TRIGGERED`, `LLM_FAILOVER_PAUSED`, `LLM_FAILOVER_RESUMED`) and updating evidence envelopes. LangGraph lanes, Celery tasks, and CLI utilities call the orchestrator via `llm.runtime.failover.for_request(...)` instead of embedding lane-specific logic.
+- Guarantees: orchestrator enforces parity validation (`fallback.evidence_sha256`), residency checks, throttling budgets, and pause/resume gating. It records counters (`llm_failover_attempt_total{provider,reason}`, `llm_failover_pause_total`) and appends structured telemetry consumed by dashboards (§12.6).
+- Testing: golden-set replay harness `tests/udocket_core/failover/test_model_orchestrator.py` verifies deterministic selection order, pause semantics, and auto-resume after consecutive health probes. Synthetic monitor `synthetics/llm_failover.yaml` exercises the helper end-to-end in staging.
+- Extensibility: new providers register adapters implementing the `FailoverAdapter` protocol; the orchestrator enforces interface compliance at import time and blocks activation if adapters omit health probes, parity metadata, or residency attestations.
 
 ### 8.2 Prompt management, redaction, and evidence store
 
@@ -2279,6 +2333,7 @@ ______________________________________________________________________
 - Localization: staff UI initially English/French; portal supports additional locales via Settings (`i18n.supported_locales[]`). Strings managed in translation files with fallback logic.
 - Date/time formatting relies on case locale; transcripts labelled with language metadata. Screenreader testing prioritized for approval flows and messaging. All new flows must ship with explicit focus order verification and accessible error messaging (ARIA `role="alert"` or equivalent) for SSR and SPA states.
 - Templates offer locale variants with placeholder linting per locale; cross-language toggle supported for courts/catalogs. RTL readiness documented for supported locales; fallback flags alert admins when translations are missing.
+- Translation operations plan: Phase 1 launches with English/French strings signed off by editorial; Phase 2 (flagged) schedules quarterly localization sprints to add high-priority locales from the sales pipeline. Each release includes manual UX verification in at least one non-English locale (navigation, Guardian approvals, compose review) and user research sessions with accessibility devices (screen readers, switch control) to validate the localized experience.
 - CI runs pseudolocalization suite (`scripts/i18n/pseudolocale.sh`) and axe-core screen-reader scripts; latest WCAG audit summary stored as `ACCESSIBILITY_AUDIT` artifact (referenced in App.L). Every GA release requires a pre-cut `pa11y-ci`/axe DevTools sweep documented in the release checklist. Accessibility KPI dashboard tracks open issues, assistive-technology test passes, and remediation SLAs.
 - Merge-stop checklist: accessibility reviewers block merges when (1) any keyboard trap persists, (2) focus order diverges from visible reading order, (3) form errors fail to raise an ARIA live region announcement, or (4) the automated axe/pa11y run reports level-A/AA violations without documented mitigation.
 - Localization contract test: `tests/e2e/test_portal_policy_context.py::test_disclaimer_l10n` fetches policy contexts for `en-CA` and `fr-CA`, verifies portal banners render the RM-provided disclaimer keys with correct locale-specific formatting (dates, numbers), and ensures attribution badges from §3.5.9 display for licensed content in both languages.
@@ -2640,13 +2695,20 @@ Alert routing
 - Alerts: regression > threshold (default 10%); monthly cap risk > X%; route to Product/SRE with runbooks; annotate releases.
 - Acceptance: dashboards exist and alerts fire in staging drill before enabling in prod, including `LOG_VOLUME_BUDGET` alerts tied to App.H RB-LOG-007.
 
+#### 12.9.1 Portal-facing usage transparency
+
+- *Purpose: Extend FinOps visibility to customers while keeping controls consistent with internal reporting.*
+- Admin usage dashboard (Phase 2 release behind `portal.usage_dashboard.enabled`): portal `Org Admin` view surfaces rolling 7/30-day spend, token consumption, job counts, and export volumes using the same metrics powering internal FinOps dashboards (`llm_cost_estimate_total`, `finops_cost_per_case_usd`, `case_jobs_total`). CSV exports mirror the monthly reports already generated for finance; APIs provide `GET /portal/org/{org_id}/usage` with pagination and granular filters.
+- Guardrails: data is scoped by org and adheres to residency/privacy policies enforced via secure views (§4.3). Rate limits protect against scraping; anomalies raise `PORTAL_USAGE_EXPORT_ANOMALY` events and notify support.
+- Acceptance: feature flag stays limited to pilot orgs until (1) UX copy passes localization review, (2) support playbooks for billing inquiries are published, and (3) synthetic monitors validate parity between staff and portal dashboards for representative orgs.
+
 ### 12.10 Business continuity & degraded operations
 
 *Purpose: Outline how teams sustain service when automation or guardians fail.*
 
-- **LLM outage:** Pause Compose/Analyze submission queues; switch agents to manual review lane per App.H RB-LLM-003; provide fallback templates for staff authorship. Notify customers via incident template (`INCIDENT_TEMPLATE_LLMDOWN`) with expected recovery window.
+- **LLM outage:** The `ModelFailoverOrchestrator` automatically advances to the next healthy provider in the documented `fallback_chain`; envelopes capture the substitute model and parity hash. If every fallback is unhealthy the queue transitions to `PAUSED_AWAITING_PROVIDER`, workers stop launching new runs, and automation polls health every 60 seconds (three consecutive greens required) before resuming. Customer notifications only trigger if the pause exceeds 15 minutes or impacts SLA targets.
 - **Guardian impairment:** Freeze approvals that rely on Guardian READY; manual reviewers follow paper checklist (`docs/runbooks/guardian-manual-review.md`) and log decisions as `MANUAL_GUARDIAN_DECISION` artifacts until service recovers.
-- **Transcription fallback:** Route urgent audio to vetted human transcription vendor under DPA (no cross-border transfer) with manual import once automated pipeline restored.
+- **Transcription fallback:** The `SpeechFailoverController` retries against the next speech provider/region in `speech.jobs[].fallback_chain` with full equivalence logging. When the chain is exhausted jobs enter `PAUSED_AWAITING_PROVIDER` and automatically resume once health probes confirm recovery; no human transcription is used in the automated path.
 - **Communication cadence:** Duty Manager sends initial update within SLA (§1.6) and hourly until resolved; final customer notice includes timeline, data impact, and remediation.
 - **Drills:** Semi-annual BCP exercise simulating combined Guardian + LLM outage; evidence stored as `BCP_DRILL_REPORT` artifacts linked in App.H.
 
@@ -2660,7 +2722,7 @@ Alert routing
 | Settings Service       | New jobs block on snapshot fetch; running jobs continue with embedded snapshots | Operators see queue backlog; activation UI disabled              | App.H Standard template + Settings rollback drill |
 | Audit seal / WORM      | Portal deliveries blocked if seal chain breaks for >1 interval                  | Reviewers cannot promote artifacts; portal download attempts 503 | App.H RB-AUDIT-004                                |
 | Residency policy guard | Jobs error with `RESIDENCY_POLICY_BLOCK` on drift                               | Org must adjust settings or seek waiver before resubmission      | App.H RB-RES-BLOCK                                |
-| LLM provider circuit   | LangGraph lanes halt once fallback exhausted                                    | Compose/Analyze jobs paused; manual drafting invoked             | App.H RB-LLM-003                                  |
+| LLM provider circuit   | Queue enters `PAUSED_AWAITING_PROVIDER`; health probes run every 60 s          | Compose/Analyze jobs paused; auto-resume after consecutive green probes; manual drafting requires waiver | App.H RB-LLM-003                                  |
 
 ______________________________________________________________________
 
@@ -2760,6 +2822,14 @@ ______________________________________________________________________
 
 - Provisioning: create org in Keycloak, configure domains (SPF/DKIM), set residency allowlists, budgets, templates, rotate initial secrets. Onboard staff via invites with role assignments.
 - Offboarding: disable logins, export data with tamper-evident bundles, revoke keys, enforce retention/erasure, archive audit seals. Checklist recorded in App.H.
+
+#### 14.1.1 Legacy case import (roadmap)
+
+*Purpose: Provide an inbound migration path that mirrors export guarantees and preserves chain-of-custody evidence.*
+
+- Phase 1 (Ops-assisted pilot, tracked for Q3 execute): support zipped `case_export@1.0` bundles supplied by customers. Ops runs `scripts/import/validate_case_bundle.py` (new) to verify manifest signatures, per-artifact hashes, and residency tags before invoking an internal `case_import` Celery task. Every run logs to `ops/<job_id>__case_import_log.json` and emits `CASE_IMPORT_ATTEMPT` audit events; App.H will add the corresponding runbook with dual-review steps.
+- Phase 2 (self-service GA, behind `import.legacy_cases.enabled`): ship a Settings-scoped feature gate and admin UI/API (`POST /ops/case-imports`) so org admins can submit bundles directly. The task enforces deterministic ID mapping, replays Guardian states, and produces a reconciliation report highlighting artifacts that require manual reviewer confirmation. Portal visibility remains blocked until Guardian re-approves imported artifacts.
+- Observability & guardrails: metrics `case_import_duration_seconds`, `case_import_artifacts_total{status}`, and drift checks comparing imported hashes to manifest expectations. Synthetic drill runs quarterly to confirm import tooling keeps parity with export schema revisions; failures block expanding the feature flag beyond pilot orgs.
 
 ### 14.2 Artifact retention, legal hold, and destruction flows
 
@@ -2898,6 +2968,7 @@ Implementation phases
 - **MVP-critical (Phase 0/1):** Secure ingest → Guardian → approval → portal delivery; LangGraph runner (single lane fallback acceptable), core dashboards (Guardian SLO, Queue/KEDA, LLM cost, logging), residency enforcement, DSAR/retention jobs, manual edit workflows.
 - **Phase 2+ (post-GA hardening):** Advanced analytics dashboards, ROPA automation, full RACI-backed runbook coverage, timeline/entity agent GA, portal messaging. These remain documented but feature flagged until Product/Architecture approve readiness.
 - Each phase requires update to decision log and appendix references; defer non-critical automations when they would delay MVP, but record manual controls (e.g., quarterly vendor review, manual waiver SOP) to preserve compliance evidence.
+- Complexity guardrail: maintain a feature gating matrix (Appendix T update) mapping every optional service (Localization bundles beyond en/fr, advanced Guardian heuristics, configurable policy catalogs) to explicit enablement criteria: Ops runbook sign-off, load/perf test evidence, and owner bandwidth confirmation. Architecture council reviews the matrix quarterly to ensure deferred capabilities do not silently re-enter scope without the gating checklist.
 
 ### 15.2 Dependencies on external programs (IAM overhaul, infra upgrades)
 
@@ -2911,8 +2982,8 @@ Implementation phases
 
 *Purpose: Surface known risks and capture resolution context.*
 
-- Risks: LLM policy drift, Guardian false negatives, residency waiver backlog, staffing for manual reviews, LangGraph framework maturity.
-- Mitigations: continuous evals, rule dry-run/diff, automated waiver stamping, cross-training reviewers, dual runner fallback (`agents.langgraph.runner`), staged LangGraph upgrades with canary tests.
+- Risks: LLM policy drift, Guardian false negatives, residency waiver backlog, staffing for manual reviews, LangGraph framework maturity, infrastructure/IaC complexity outpacing SRE capacity.
+- Mitigations: continuous evals, rule dry-run/diff, automated waiver stamping, cross-training reviewers, dual runner fallback (`agents.langgraph.runner`), staged LangGraph upgrades with canary tests, plus dedicated DevOps enablement (Terraform/service-mesh training sprints, pairing during first three production releases, and annual certification of App.H runbooks for infra owners).
 - Decision log entries include change rationale, date, owners, references to sections impacted.
 
 ### 15.4 Outstanding research spikes
@@ -3280,11 +3351,15 @@ E.1 Key catalog (scope: SYSTEM | ORG | CASE)
  - llm.moderation.provider — ORG — azure|openai|local — Moderation provider selection; §8.4.
  - llm.moderation.enforcement — SYSTEM|ORG — block — Enforcement mode: `block` (default) or `warn`; §8.4.
  - llm.moderation.thresholds.toxicity — ORG — 0.5 — Classification threshold; §8.4.
- - llm.moderation.thresholds.self_harm — ORG — 0.5 — Classification threshold; §8.4.
- - llm.moderation.thresholds.sexual_content — ORG — 0.5 — Classification threshold; §8.4.
- - llm.moderation.thresholds.pii_reintroduction — ORG — 0.5 — Classification threshold; §8.4.
+- llm.moderation.thresholds.self_harm — ORG — 0.5 — Classification threshold; §8.4.
+- llm.moderation.thresholds.sexual_content — ORG — 0.5 — Classification threshold; §8.4.
+- llm.moderation.thresholds.pii_reintroduction — ORG — 0.5 — Classification threshold; §8.4.
 - agents.langgraph.runner — SYSTEM|ORG — langgraph — Graph runner selection (`langgraph` or `linear`); §6.7.2.
 - agents.langgraph.fallback_mode — SYSTEM — false — Force manual drafting fallback; §6.7.2, App.H RB-LLM-003.
+- speech.providers[] — SYSTEM|ORG — [] — Speech provider catalog (health, residency, parity evidence); §6.2.1.
+- speech.jobs[] — SYSTEM|ORG — [] — Transcription job profiles and fallback chains; §6.2.1.
+- speech.allow_preprocessing — ORG|CASE — false — Permit loudness normalization/compression before transcription; §6.2.3.
+- speech.require_locale_match — ORG|CASE — true — Fail fast when provider lacks requested locale; §6.2.3.
 - llm.finops.monthly_cap_usd — ORG — 0 (disabled) — Monthly LLM spend cap; §8.3, §13.4.
 - jobs.watchdog.no_progress_minutes — SYSTEM|ORG — 5 — Minutes without heartbeat before watchdog warns; §10.2, §12.1, App.H RB-JOB-WATCHDOG.
 - jobs.watchdog.timeout_minutes — SYSTEM|ORG — 15 — Minutes without heartbeat before watchdog fails the job; §10.2, §12.1, App.H RB-JOB-WATCHDOG.
@@ -4793,7 +4868,7 @@ ______________________________________________________________________
 | Entrust TSA / OCSP                                 | Timestamping & revocation         | Global (per org trust bundle)                            | Hashes, certificate metadata               | No content retention; logs retained 90 days for audits; trust roots mapped to Appendix F          |
 | Twilio SendGrid (optional)                         | Email delivery                    | Org-selected sub-account region (NA/EU/APAC)            | Notification metadata, recipient email     | Data residency restriction via regional sub-account; logs 30 days                                 |
 | Telnyx                                             | SMS delivery                      | Org-selected region (NA/EU/APAC)                         | Phone numbers, message metadata            | Opt-out enforcement, no content mining; residency documented in waiver ledger                      |
-| Back-office transcription vendor (manual fallback) | Human transcription (break-glass) | Org-approved locale (per waiver)                         | Audio, transcript                          | Activated only under App.H manual fallback; NDA + DPA prohibits retention beyond 7 days            |
+| Speechmatics Canada (fallback)                     | Automated transcription fallback  | ca-central-1 (org allowlisted)                          | Audio uploads, transcript text             | DPA mirrors Azure terms; retention ≤ 24 h; audited equivalence harness ensures WER/diarization parity with primary |
 
 All sub-processors contractually commit to “no training on customer prompts/outputs” clauses. Annual review ensures residency alignment; updates trigger customer notification per §12.3.
 
