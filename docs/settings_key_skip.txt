@@ -27,6 +27,7 @@ analyze.token_ceiling
 analyze.max_retries
 compose.token_ceiling
 compose.max_retries
+reviews.timeout_hours
 security.tls.min_version
 security.tls.cipher_profile
 llm.finops.monthly_cap_usd
@@ -52,3 +53,14 @@ evidence_store.redacted_excerpts.enabled
 logging.immutable_sink.enabled
 llm.finops.guard.threshold_pct
 llm.finops.guard.trailing7d_pct
+llm.models.version_pin
+llm.enforce_model_version
+llm.moderation.enabled
+llm.moderation.provider
+llm.moderation.enforcement
+llm.moderation.thresholds.toxicity
+llm.moderation.thresholds.self_harm
+llm.moderation.thresholds.sexual_content
+llm.moderation.thresholds.pii_reintroduction
+agents.langgraph.runner
+agents.langgraph.fallback_mode
