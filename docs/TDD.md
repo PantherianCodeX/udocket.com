@@ -713,6 +713,7 @@ ______________________________________________________________________
 - Drift detection: nightly job resolves each configured host, validates SAN entries against `network.egress.allowed_hosts`, compares resulting CIDRs to the allowlist, and pages when drift is detected. The job also verifies that provider metadata still advertises the approved residency posture.
 - Telemetry: `residency_block_total` increments on blocks; audit records include `RESIDENCY_POLICY_BLOCK` reason and settings snapshot hash; dashboards highlight block rates per org/region.
 - Expansion posture: RM catalogs enumerate global regions (NA/EU/APAC). New jurisdictions enable by adding allowlist entries plus waiver or DPA references; App.O ledger tracks approvals. Synthetic tenant “EU-REFERENCE” exercises EU-only paths quarterly to confirm Azure EU endpoints, storage buckets, vector shards, and TSA integrations honor EU residency before production onboarding.
+- Waiver enforcement: active waivers embed `waiver_id`/expiry into `PolicyContext`; Guardian and workers relay this to OPA and stamp manifests with `cross_region=true` plus reason `RESIDENCY_WAIVER_USED`. Absent or expired waivers force `POLICY_BLOCK` responses so operators remediate before promotion.
 
 ______________________________________________________________________
 
@@ -1308,6 +1309,7 @@ Example
 - Inputs: latest transcript (`TRANSCRIPT`), optional `DIARIZATION`, approved exhibits (`EXHIBIT_TEXT`, etc.), and settings snapshot. Retrieval uses chunking + embeddings constrained to allowed regions.
 - Deterministic IDs: row IDs rely on UUIDv7; cross-lane references include a `content_fingerprint_sha256` and a namespace UUIDv5 derived from `{org_id, case_id, lane_scope, canonical_anchor}` so reruns reuse the same identity when anchors match.
 - QA stages: per-lane validation (schema, references, policy lint, token bounds) with `qa_log` entries; final QA ensures cross-lane consistency before Guardian submission.
+- Cross-lane integration tests: `tests/udocket_core/agents/test_analyze_graph.py::test_cross_lane_consistency` (to be implemented) executes the full graph with synthetic transcripts to assert lane ordering, data dependencies, and deterministic fingerprints before Compose consumes outputs.
 - Artifacts: `analysis/<job_id>__summary_v1.md|json`, outline, timeline seeds, entity hints, staff report, plus ops JSON + JSONL audit. Failures surface via SSE with actionable errors.
 - See App.D for summary/outline/timeline/entity artifact schemas, filenames, and versioning.
 
@@ -1499,6 +1501,7 @@ Node catalog (illustrative)
 - Evaluation metrics: compare shadow vs primary outputs using divergence counters (`shadow_match_rate`, `shadow_token_delta`, `shadow_runtime_ratio`) and reviewer sampling tasks. An alert (`agent_shadow_divergence_total`) fires when divergence exceeds configured tolerances.
 - Promotion checklist: (1) shadow match rate ≥ 98% over the agreed soak period, (2) no open Sev-2/3 incidents attributed to the shadow agent, (3) Product/Security sign-off recorded in the decision log, and (4) App.T traceability row updated with tests/monitors/runbooks.
 - Rollback: disable via settings toggle; purge shadow outputs with `ops/scripts/agents/cleanup_shadow.py` to avoid confusing reviewers.
+- Isolation guarantee: shadow artifacts never transition beyond `DRAFT_SHADOW` and are excluded from Guardian submission, portal listings, or cost/billing tallies; only divergence metrics and audit trails are surfaced to staff for analysis.
 - Abuse coverage: shadow runs feed the abuse prevention detectors (§B.4) so fraud heuristics see the same traffic profile before we expose new flows to customers. Per-org thresholds for shadow soak (`abuse.shadow.threshold_per_org`) require dual approval at activation, expire automatically with the soak window, and are linted by `settings:lint-keys` so relaxed thresholds cannot persist once the feature goes live.
 
 ______________________________________________________________________
@@ -1749,6 +1752,7 @@ PII posture (binding)
 
 - Every LLM call persists a reproducibility envelope `{prompt_template_id, template_version, model_id, model_version, provider, provider_region, stop_sequences, truncation_policy_version, temperature, top_p, penalties, redaction_ruleset_id, token_ceiling, settings_snapshot_sha256, input_hashes, output_hashes}`.
 - Replay rules: when `llm.enforce_model_version=true`, replay only occurs against the exact pinned model version/snapshot; otherwise, a warning is recorded and the job must carry a waiver linking the upgraded model version. HIPAA environments combine `privacy.hipaa.prompt_retention_mode` with envelope hashes to allow defensible audits without retaining full prompts.
+- Expectations: reproducibility relies on archived prompts/outputs, settings snapshots, and hashes—not byte-for-byte regeneration. Audit narratives should state that replays produce schema-equivalent artifacts (verified via `content_fingerprint_sha256`) while the original approved output remains the evidence of record.
 
 - Envelope stored in evidence store and keyed by job/artifact ID; Compose/Analyze manifests reference envelope IDs for traceability.
 
@@ -2548,7 +2552,7 @@ Preventive actions
 - Autoscaling policies: HPAs for web/channels (CPU, request latency), workers (queue depth), Guardian/Signer (p95 latency). Compose/Analyze queue lengths monitored for backlog thresholds.
 - Capacity reviews quarterly: evaluate job volume, LLM spend, storage growth. Provide forecasts to FinOps (link to §57).
 - Performance budgets tracked via dashboards: upload finalize ≤ 5s, SSE lag \< 1s, LLM lane runtime budgets (5–15 minutes per lane depending on complexity).
-- Stress tests run pre-release using synthetic workloads; results captured in App.H for regression comparison.
+- Stress tests run pre-release using synthetic workloads (k6 + Locust) that exercise Guardian, LPE/OPA evaluation, and RLS-heavy API paths; results captured in App.H for regression comparison and must meet App.L baselines before shipping.
 - Benchmark snapshots in App.L capture the latest measured baselines feeding these budgets; deviations trigger escalation before release.
 
 #### 12.5.1 Failure taxonomy & resilience (binding)
