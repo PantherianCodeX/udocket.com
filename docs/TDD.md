@@ -172,7 +172,7 @@ ______________________________________________________________________
 
 *Purpose: Make explicit the foundational inputs the solution relies on.*
 
-- Identity provider: Keycloak remains the reference IdP, deployed as an HA, multi-region cluster with database replication and automated failover; the Access service layer supports bring-your-own IdP via OIDC/SAML federation (Azure Entra ID, Okta, Ping) so tenants can elect an alternate IdP while Keycloak acts as broker of last resort.
+- Identity provider: Keycloak remains the reference IdP, deployed as an HA, multi-region cluster with database replication and automated failover. Multi-tenant SaaS customers receive dedicated realms/clients in the uDocket control plane; dedicated and customer-perimeter deployments can run their own Keycloak instance while synchronizing configuration via the management API. The Access service layer supports bring-your-own IdP via OIDC/SAML federation (Azure Entra ID, Okta, Ping), with Keycloak acting as broker or synchronization target and break-glass accounts retained for uDocket support.
 
 - Cloud dependencies: Azure Speech, Azure OpenAI, Azure Blob/S3-compatible storage with versioning, managed Redis/Postgres—each instantiated in the regions declared per org policy bundle or waiver.
 
@@ -335,6 +335,16 @@ metadata:
 
 - **Stack note:** Web and Channels services run on Django 5.2.x (ASGI via uvicorn + gunicorn) and Django Channels 4.1.x, both pinned in `apps/platform/requirements.txt`; SBOM gates block implicit minor upgrades.
 
+### 3.3 Deployment models (SaaS, dedicated, customer-perimeter)
+
+*Purpose: Describe supported hosting patterns, required controls, and identity integrations.*
+
+- **Multi-tenant SaaS (default):** uDocket operates shared regional clusters; org isolation relies on RLS, tenancy-aware storage, and Guardian/LPE policy enforcement. A uDocket-hosted Keycloak instance provides identity with per-org clients/realms that federate to customer IdPs via brokers.
+- **Dedicated SaaS tenant:** Regulated or high-volume customers receive an isolated Kubernetes footprint (separate cluster or namespace boundary) with dedicated storage accounts and Keycloak realm. Reference Manager’s infrastructure catalogue records the deployment ID, residency posture, and compliance attestations so LPE/Settings enforce appropriate defaults.
+- **Customer-perimeter managed:** Large firms may require the stack inside their own security perimeter. uDocket supplies hardened Helm/Terraform bundles, handles release governance, and retains read-only observability. Keycloak can run in the customer environment (synchronized via management APIs) or connect to a uDocket-managed realm through secure outbound tunnels. uDocket maintains a break-glass service account while day-to-day auth flows against the customer’s IdP.
+- **Identity considerations:** Each deployment model maps to a Keycloak realm strategy—shared SaaS realms with per-org clients, dedicated realms for isolated tenants, or customer-hosted realms federated to their IdP. Realm provisioning enforces MFA policies and audit logging aligned with Appendix H.
+- **Configuration surface:** Settings expose `infrastructure.deployment_type ∈ {saas_multi, saas_dedicated, customer_managed}` and `infrastructure.realm_id`. PolicyContext includes the deployment type so Guardian, portal, and automation respect residency, logging, and support boundaries. Infrastructure catalogue entries list optional provider stacks (HIPAA storage, FedRAMP tiers, on-prem references) curated by RM to streamline future cutovers.
+
 ### 3.4 Localization & Policy Engine (LPE)
 
 *Purpose: Elevate the former Reference Engine into the authoritative service for localization, residency, and jurisdictional policy decisions.*
@@ -356,6 +366,7 @@ metadata:
 - **Privacy frameworks:** HIPAA, PHIPA (Ontario), PIPA (British Columbia), GDPR, etc. Each captures retention intervals, permitted compute/storage regions, PHI allowance flags, DSAR semantics, waiver requirements, and audit linkages.
 - **Localization:** i18n string packs (approval banners, invalidation messages, intake copy), formatting rules (date/time, numbers, currencies, measurement units), legal disclaimers keyed by locale. Data is sourced from pinned Unicode CLDR releases, rendered through ICU primitives, and tagged with BCP-47 locale identifiers plus MessageFormat 2 metadata. Centralized in `compiled_l10n_locale`.
 - **Residency policies:** Canonical compute/vector/storage allowlists with waiver metadata and expiry tracking; surfaced as `residency_regions` in `PolicyContext`.
+- **Infrastructure components:** Bundles include `infra_components[]` (approved storage/compute classes, HIPAA eligibility, deployment types, provider IDs) that LPE maps into `storage_requirements` so Settings, planners, and automation can select compliant infrastructure.
 - **Policy bundles:** Signed, versioned Rego + data payloads that OPA consumes to enforce residency, egress, HIPAA, and attachment rules. Bundles include manifests with SHA-256 digests, compatibility range, and monotonic build numbers; LPE rejects unsigned or stale bundles.
 - **OPA discovery manifest (`spec/schemas/opa_discovery_manifest.schema.json`):** Enumerates bundle channels (`stable`, `beta`, `canary`), allowed regions, SHA-256 digests, ETags, rollout windows, and promotion rules so OPA evaluators hot-reload safely.
 - **PolicyContext table (`compiled_policy_context`):** Keyed by `(org_id, case_id, locale, privacy_flags_hash)` (with `case_id` nullable for org-scoped defaults) with values `{policy_context_version, frameworks_enabled[], hipaa_required, residency_regions{compute[],storage[],vector[]}, storage_requirements{hipaa_required?,hipaa_capable_providers[],preferred_classes[]}, retention_days, portal_rules{disclaimer_key,banner_key}, logging_rules, masking_profile, i18n_keys[], digest_sha256}`.
@@ -535,7 +546,7 @@ Reference Manager packages every regulated dataset required for downstream compl
 
 - Reference Manager (RM) owns regulated data acquisition, entity resolution, editorial review, and versioned publishing for the platform’s canonical reference data. LPE consumes RM’s signed bundles as read-only inputs when compiling runtime `PolicyContext` outputs.
 - Scope includes jurisdictions and court hierarchies, residency/privacy policy annotations, localization strings, questionnaires, court forms, identifiers/crosswalks, and any structured lookup used by Guardian, agents, or UI surfaces.
-- Storage capability catalogue: every publish includes `storage_providers[]` describing regional capabilities (HIPAA-eligible?, encryption classes, retention guarantees, BAA reference IDs). LPE uses this data to constrain storage selections and Settings validation checks HIPAA activations against the catalogue.
+- Infrastructure catalogue: RM tracks first-party deployment footprints (primary SaaS regions, disaster-recovery sites, audit environments) plus optional pre-approved provider stacks (HIPAA-ready storage accounts, FedRAMP tiers, on-prem reference architectures). Bundles publish `infra_components[]` describing compute/storage classes, residency posture, BAA references, and availability targets so LPE, Settings, and infrastructure tooling share a single source of truth.
 - RM publishes immutable, signed bundles (JSON datasets, CLDR-derived locale packs, and Rego/data packages) with manifests carrying SHA-256 digests, semantic versions, compatibility ranges, and license metadata. Bundles fuel both LPE compilers and the OPA policy plane; unsigned or stale bundles are rejected.
 - Repository migration: existing `packages/udocket_core/reference/*` modules transition into the RM domain (`packages.udocket_core.reference_manager`). Compilation/runtime logic lives under the new `packages.udocket_core.lpe` namespace. A temporary shim (`packages.udocket_core.reference`) delegates to RM/LPE until clients migrate; once `/reference/*` API shims sunset, the shim is removed.
 
