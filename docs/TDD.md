@@ -1508,6 +1508,38 @@ Example
 - Deterministic naming/versioning: reruns append `_v{n}` suffix; manifests store `settings_snapshot_sha256`, model/provider versions, compute/storage regions, and SHA-256 of outputs.
 - Audit & telemetry: each run logs structured metadata (duration, attempts, cost envelope) and writes SSE updates; metrics exported for `job_duration_seconds`, `agent_retry_total`, etc.
 
+### 6.1.1 Configurable pipeline definitions & stage catalog (binding)
+
+*Purpose: Let sysadmins compose and adjust LangGraph-driven pipelines without redeploying code.*
+
+- System scope Settings key `agents.pipeline.definitions[]` enumerates every agent pipeline variant (`transcription`, `analyze`, `compose`, `assistant.staff`, `assistant.client`, and future agent types). Each entry tracks `pipeline_id`, `graph_version`, `graph_schema_sha256`, default runner (`langgraph` or `linear`), and an ordered `stages[]` array so GraphRunner can hydrate LangGraph graphs directly from configuration. System defaults seed from JSON bundles in `config/*.json` (for example, `config/bootstrap_defaults.json`, `config/guardian_defaults.json`, `config/analyze_defaults.json`) so fresh deployments or sandboxes bootstrap without writing code; subsequent edits reuse the same bundle loader as Settings activations.
+- Stage objects declare `stage_id`, `langgraph_node_id`, `enabled`, `llm_profile_id`, `prompt_template_id`, `tool_ids[]`, retry budgets, token/cost ceilings, and optional `depends_on[]`. Metadata mirrors the LangGraph `NodeSpec` contract, ensuring node composition, input schemas, and tool wiring stay in sync with the runtime.
+- Org/case overrides live in `agents.pipeline.assignments[]` and `agents.pipeline.overrides[]`. Overrides permit toggling stage enablement, swapping prompt or LLM profile references, or tightening budgets within validator bounds; structural edits (adding/removing stages or changing order) require SYSTEM-scope activation to preserve deterministic manifests.
+- Activation diffs run the LangGraph contract tests from §13.4 against the candidate graph, validate schema hashes, and refuse definitions that break the `TranscriptionAgent`/`AnalyzeAgent`/`ComposeAgent` interfaces. Successful activation snapshots `{graph_version, settings_snapshot_sha256}` into the pipeline manifest so replays remain reproducible.
+- Every pipeline activation is labeled `change_class="system"` and must follow the blue/green rollout path in §14.5. Traffic migrates org-by-org with automatic rollback to the prior pipeline when health probes, QA acceptance, or Guardian readiness fail; manifests record which orgs completed cutover.
+- Stage definitions are additive and versioned. Prior versions stay callable for queued jobs and replays until Guardian signs off on the new version and the rollout window closes; deletion is blocked until no active job references the stage and archival manifests exist under `ops/pipeline_manifests/`.
+
+### 6.1.2 LangGraph tool registry & custom tool onboarding (binding)
+
+*Purpose: Provide a configurable, auditable catalog of LangGraph tools for agents and editors.*
+
+- Settings `agents.tools.catalog[]` (SYSTEM scope with ORG allowlists) mirrors the LangGraph `Tool` specification: each entry defines `tool_id`, `description`, `input_schema` (JSON Schema Draft 2020-12), `output_schema`, `binding` (Python module path, gRPC target, or HTTP service), `timeout_seconds`, `cost_profile_id`, and residency/PII classification.
+- Tool bindings reuse adapters in `packages/udocket_core/agents/common/factories.py` and follow the LangGraph `Tool` interface. GraphRunner resolves the `binding` at runtime and injects shared dependencies (Settings client, PolicyContext, Guardian client) through the adapter so tools stay portable across pipelines.
+- Org/case overrides are expressed via `agents.tools.allowlist[]`, enabling or disabling tools per tenant without redefining the base catalog. Overrides can also tune per-tool budgets and concurrency caps inside validator limits; policy validation blocks overrides that widen residency or PII scopes beyond the SYSTEM baseline.
+- Activation lints validate schemas, execute dry-run LangGraph graphs that exercise the tool, and confirm telemetry registration (`tool_invocation_total`, `tool_cost_estimate_total`). Failures surface actionable errors and block promotion until fixed.
+- Tool catalog activations are treated as system-level changes and must follow the blue/green rollout pipeline (§14.5). JSON seeds under `config/` (for example, `config/llm_assignments.json`, `config/llm_providers.json`) preload the baseline catalog; operators extend it by uploading updated JSON bundles or using the Settings UI without touching code. During rollout both blue and green environments load the catalog, but only green advertises new tools; on rollback GraphRunner falls back to the previous allowlist without redeploying workers.
+- Evidence manifests capture `{tool_id, tool_version, binding_sha256}` for every invocation so Guardian, Privacy, and FinOps teams can audit side effects and cost. Tools handling sensitive data must declare `data_classification` and pass Privacy/Architecture review before activation.
+
+### 6.1.3 Conversational assistant pipelines (binding)
+
+*Purpose: Apply the same managed pipeline controls to chat assistants that power staff and client surfaces.*
+
+- Assistant pipelines (`assistant.staff`, `assistant.client`, and future chat variants) are LangGraph graphs composed through `agents.pipeline.definitions[]` with lane metadata mirroring other agents: retrieval nodes, guardrails, responder nodes, moderation gates, and post-processing writers. Stages reference shared tools (retrieval search, citation builder, policy explainer) declared in `agents.tools.catalog[]`.
+- Runtime orchestration lives in `packages/udocket_core/assistants/orchestrator.py::AssistantOrchestrator`, which wraps GraphRunner, handles conversation state checkpoints, and routes telemetry to chat-specific metrics. The orchestrator consumes the same `pipeline_definition_version` manifest as batch agents so replays and rollbacks remain deterministic.
+- Conversation manifests capture `{pipeline_definition_version, llm_profile_id, prompt_template_id, tool_invocations[], moderation_outcomes[]}`. Guardian, FinOps, and Privacy consumers rely on these manifests to audit assistant behaviour; Storage layout mirrors ops logs (`ops/<session_id>__chat_*.jsonl`).
+- Settings overrides allow orgs to adjust retrieval scope (`assistant.retrieval.sources[]`), citation verbosity, or moderation strictness within validator limits. Structural edits (adding/removing lanes, reordering stages) remain SYSTEM-only and must pass LangGraph contract tests plus conversational replay harnesses (§13.4) before rollout.
+- Assistant pipelines participate in the same blue/green rollout flows as other agents. Rollout plans can target staff-only, client-only, or mixed cohorts, with auto-rollback triggered by moderation overruns, SLA breaches, FinOps budget violations, or Guardian quarantines captured in telemetry.
+
 ### 6.2 Transcription agent (batch/on-demand modes)
 
 *Purpose: Summarize ingestion flow from audio to transcript artifacts.*
@@ -1891,11 +1923,20 @@ ______________________________________________________________________
 - Settings (Appendix E): `llm.byo.allowed` (ORG|CASE, default `false`) toggles BYO availability; `llm.byo.evaluation_suite_id` (ORG) references the evaluation configuration; `llm.byo.vpc_endpoints[]` (ORG) enumerates allowed hostnames and is reconciled against mesh policies during activation. CI lints ensure these keys are present whenever a BYO provider is defined.
 - Observability: dashboards segment metrics by `model_kind` (`managed|byo`); synthetic monitor `synthetics/llm_byo_health.yaml` calls each BYO endpoint hourly to confirm SLA adherence and certify moderation telemetry (`chat_policy_block_total`) funnels correctly.
 
+#### 8.1.4 LLM profile registry & assistant routing (binding)
+
+- Profiles: `llm.profiles[]` (SYSTEM/ORG scopes) bundles provider, model, prompt policy, temperature/risk settings, moderation tier, and residency constraints into reusable, named profiles. Pipelines (agents and assistants) reference profiles via `llm_profile_id` so code never hard-codes provider details.
+- Registry integration: profiles resolve to concrete provider/model pairs through the existing LLM registry. The registry stays the single source of truth for health, fallback, pricing, and residency; profiles add a policy layer that maps use cases (Analyze lane, Compose section writer, staff assistant) to registry entries. Separation keeps provider operations centralized while allowing domain-specific guardrails and budgets.
+- Assistant coverage: `assistant.staff` and `assistant.client` pipelines consume profiles declared under `llm.profiles.assistant.*`. Each profile specifies moderation tiers, allowed tool classes, and retrieval policies, ensuring chatbots inherit the same audit trails, fallbacks, and residency enforcement as batch agents.
+- Validation: activation requires registry parity checks to confirm every referenced model exists, passes evaluation, and advertises capabilities needed by the profile (context length, function-calling/tool support, streaming). Contract tests replay conversations with golden transcripts to verify determinism, moderation, and citation quality before profiles go live.
+- Telemetry: manifests include `llm_profile_version`, enabling cost attribution and regression analysis per profile. Dashboards expose `llm_profile_call_total{profile_id}` and `llm_profile_cost_total{profile_id}` so FinOps and product can monitor usage across pipelines and assistants. Override attempts that raise temperature, disable moderation, or widen residency beyond the profile baseline are rejected unless accompanied by an approved waiver.
+
 ### 8.2 Prompt management, redaction, and evidence store
 
 *Purpose: Control prompt content and maintain audit-friendly records.*
 
-- Prompt templates validated via Pydantic with explicit version IDs; stored under `packages/udocket_core/config/` and referenced in manifests.
+- Prompt templates, lane directives, and guardrail instructions are defined in Settings `agents.prompts.*` (SYSTEM scope with ORG/CASE overrides) and materialized into `packages/udocket_core/config/` for offline linting. Pydantic validators enforce explicit version IDs, LangGraph-compatible placeholders, and deterministic variable ordering before manifests reference a template.
+- Prompt and directive activations inherit `change_class="system"` and must traverse the blue/green rollout workflow in §14.5. Rollout metadata (`prompt_version`, `rollout_wave`, `org_id`) is stamped into manifests and evidence store rows so reviewers can verify which prompt produced a given artifact.
 
 - Redaction layer strips PII before sending to providers; outcomes tracked (`redaction_stats`, `forbidden_patterns_detected`).
 
@@ -2119,9 +2160,41 @@ ______________________________________________________________________
 *Purpose: Make governance checkpoints explicit and auditable.*
 
 - Waivers: residency cross‑region waivers require Security + Architecture approvals with step‑up MFA; manifests stamped; Appendix D/E updated.
-- Guardian rule changes: dry‑run/diff required; unsafe reasons enumerated; dual approval enforced; rollback path documented.
+- Guardian rule changes: dry-run/diff required; unsafe reasons enumerated; dual approval enforced; rollback path documented.
 - Settings activation (unsafe): requires dual approval, justification, and audit event; see §9.3 and §36.
-- Org Settings: reviewers and roles configured to reflect these gates; acceptance requires end‑to‑end drill. Governance toggles such as `settings.can_open_source` or cross-org feature pilots must follow App.H RB-GOV-008, including rollback steps and communication checklist before promotion.
+- Org Settings: reviewers and roles configured to reflect these gates; acceptance requires end-to-end drill. Governance toggles such as `settings.can_open_source` or cross-org feature pilots must follow App.H RB-GOV-008, including rollback steps and communication checklist before promotion.
+
+### 9.12 Agent pipeline bundle & staged overrides (binding)
+
+*Purpose: Externalize pipeline composition, prompts, and ceilings into audited settings with safe override paths.*
+
+- Keys: `agents.pipeline.definitions[]` (SYSTEM), `agents.pipeline.assignments[]` (SYSTEM/ORG/CASE), `agents.pipeline.overrides[]` (ORG/CASE), `agents.prompts.*`, and `agents.llm_profiles.*`. Definitions capture the canonical LangGraph manifest (`pipeline_id`, `graph_version`, `graph_schema_sha256`, ordered `stages[]`, default runner); assignments map job kinds to definitions per scope; overrides swap prompts, LLM profiles, or ceilings within validator limits.
+- `agents.llm_profiles.*` wraps the core `llm.profiles[]` registry entries (§8.1.4) with per-scope policy, cost, and moderation constraints, ensuring every pipeline (batch agents or assistants) references a vetted profile rather than raw provider IDs.
+- Assistant-specific knobs (`assistant.retrieval.sources[]`, `assistant.moderation.tiers[]`, `assistant.citation.style`) sit alongside agent overrides and share the same validator framework. These keys always reference shared assets (retrieval index IDs, moderation policy definitions, citation templates) so assistant behaviour stays aligned with underlying policy bundles.
+- `agents.pipeline.rollouts[]` describes staged deployments (`wave_id`, org/case filters, guard conditions, auto-rollback policy). Rollout plans are versioned, emit audit events, and feed the orchestrator outlined in §14.5 so orgs migrate gradually (pilot → cohort → fleet) with automated health gates.
+- Settings validators ensure prompts reference existing templates, `tool_ids[]` exist in `agents.tools.catalog[]`, retries respect safety caps, and residency or FinOps ceilings never relax below SYSTEM baselines. Contract tests from §13.4 run against the candidate graph before activation succeeds.
+- Activations that alter definitions or rollouts are automatically tagged `change_class="system"`; they must link to the change record and ride the blue/green pipeline (§14.5). Diff previews highlight stage order changes, prompt swaps, tool updates, and cost ceilings so reviewers can reason about impact before approving.
+- Effective values snapshot into job manifests (`settings_snapshot_sha256`, `pipeline_definition_version`) and surface via telemetry (`pipeline_definition_version`, `pipeline_stage_version`) to support replay, regression analysis, and support escalations.
+
+### 9.13 Tool catalog & capability gating (binding)
+
+*Purpose: Allow sysadmins to introduce LangGraph tools while preserving safety and auditability.*
+
+- Keys: `agents.tools.catalog[]` (SYSTEM) defines tools; `agents.tools.allowlist[]` (ORG/CASE) enables them per tenant; `agents.tools.policies.*` captures residency, data classification, and approval requirements. Tool entries specify `tool_id`, `binding`, schemas, timeout, cost ceilings, guardian policy hints, and QA tags.
+- Validators reconcile catalog entries with underlying adapters (Python module path, HTTP/gRPC endpoints), verify JSON Schema correctness, and ensure residency/PII classes do not exceed baseline policy. Catalog changes require associated test evidence (link to §13.4 contract suite or targeted tool tests) before activation.
+- Allowlist overrides can only narrow tool access or tighten ceilings; attempts to expand residency, bypass guardian policy, or raise cost limits without matching SYSTEM approvals are rejected. Forced overrides demand `--force` plus dual approval and automatically attach waiver metadata to the bundle.
+- Tool catalog activations emit change events over `/settings.changed` and annotate which blue/green environment currently serves the new catalog. Metrics (`tool_invocation_total{tool_id}`, `tool_error_total{tool_id}`, `tool_cost_estimate_total`) and audit lines (`ops/tools/ops_tools.jsonl`) track adoption.
+- Documentation and support introspection derive from the catalog: `GET /api/v1/settings/tools/catalog` returns the effective JSON so operators and LangGraph editors can validate that custom tools, prompts, and directives match runtime configuration.
+
+### 9.14 JSON seed bundles & no-code configuration (binding)
+
+*Purpose: Ensure every environment can be configured without code changes by loading validated JSON bundles at system or org scope.*
+
+- Seed files: The repository ships versioned JSON bundles under `config/` (`bootstrap_defaults.json`, `guardian_defaults.json`, `analyze_defaults.json`, `llm_assignments.json`, `llm_providers.json`, and future `agents.pipeline/*.json`) describing system defaults for settings, pipelines, prompts, profiles, and tool catalogs. `ops/scripts/bootstrap_platform.py` and the Settings service ingest these bundles during environment bring-up or reset.
+- Validation: Bundles load through the same Pydantic models and JSON Schema checks used for runtime Settings (see §9.3). CI runs `python scripts/docs/check_settings_keys.py`, targeted schema validators, and LangGraph contract tests to block malformed or incomplete seed files. Loading refuses keys not present in Appendix E or values outside validator bounds, preventing drift between code, docs, and configuration.
+- No-code workflow: Admin consoles, service APIs, and the deployment automation pipeline accept these JSON bundles directly. Operators adjust prompts, guardrails, or pipeline topology by editing JSON, running validators, and activating the bundle—no code deploy required. Every activation records diff previews, approvals, and manifests so changes stay auditable.
+- Overrides: System bundles establish the global baseline; org and case overrides are expressed as additive JSON fragments (`agents.pipeline.overrides[]`, `agents.tools.allowlist[]`, `assistant.*`, `chat.*`). Activation merges follow the precedence described in §9.1 (SYSTEM ≺ ORG ≺ CASE), enabling client-specific restrictions or waivers while preserving default safety controls.
+- Change control: Seed updates obey the same blue/green rollout and dual-approval processes as other settings changes (§14.5). Each bundle includes `metadata` (`version`, `source_commit`, `checksum`) so deployments can verify provenance before applying updates.
 
 ______________________________________________________________________
 
@@ -2661,6 +2734,7 @@ ______________________________________________________________________
 
 *Purpose: Provide scoped AI chat experiences for staff and clients while preserving privacy, auditability, and abuse controls.*
 
+- Pipeline integration: both assistants run the LangGraph pipelines defined as `assistant.staff` and `assistant.client` in `agents.pipeline.definitions[]`. Rollouts leverage the shared orchestrator (`AssistantOrchestrator`) and `llm.profiles.assistant.*` profiles so configuration, prompts, and tools align with the broader agent governance model.
 - Staff Copilot (internal):
   - Entry points: case sidebar, job detail panes, and edit dialogs. Sessions are case-scoped; assistants can reference approved artifacts (transcripts, Analyze outputs, Compose drafts), Guardian manifests, settings snapshots, ops logs, and portal messages with redacted PII. Retrieval uses embeddings restricted to the org’s residency allowlist and runs via the LangGraph retrieval wrapper with deterministic prompts in `packages/udocket_core/config/chat_prompts.yaml`.
   - Capabilities: answer questions, summarize evidence, surface related artifacts, draft follow-up checklists, and propose edit suggestions. Copilot cannot mutate artifacts directly; it links to Manual/Agent edit actions so humans approve changes. Generated snippets include citation pointers (`artifact_id`, `source_span`) for reviewers.
@@ -3130,8 +3204,10 @@ ______________________________________________________________________
 
 *Purpose: Ensure coordinated releases across services.*
 
-- Versioning: semantic for APIs, semver-like for settings bundles, `graph_version` for agents. Releases require change tickets referencing TDD sections.
-- Rollouts: run staging canaries followed by controlled production deployments with documented rollback plans (App.H runbooks).
+- Versioning: semantic for APIs, semver-like for settings bundles and `agents.pipeline.definitions`, `graph_version` for agents. Releases require change tickets referencing TDD sections and pipeline definition IDs.
+- Release topology & blue/green (binding): every deployable (web, workers, Guardian, Settings, LangGraph pipelines) maintains paired blue/green environments managed by Flux + Argo. Green receives the candidate build plus staged settings bundles; health, perf, and Guardian synthetics run before any traffic cutover. Green only becomes canonical once success criteria hold for ≥30 minutes; failure auto-reverts traffic, settings, and manifests to blue.
+- Rollout orchestrator & tenant migration (binding): `deploy.rollout_plan` consumes `agents.pipeline.rollouts[]` and infrastructure cohorts to move orgs through pilot → cohort → fleet. Cutovers happen in waves with automatic pauses when QA, FinOps, or residency monitors deviate. Migration state records `{org_id, rollout_wave, prior_definition_version}` so support can trace exposure and revert specific cohorts if needed.
+- Automated rollback & overrides (binding): rollback scripts snapshot DB schema, settings bundles, and object storage manifests before cutover. Snapshots include data-plane validation (logical replication health, storage versioning, LangGraph state) so enterprise data/infra controls stay satisfied during revert. On failure, orchestrator restores the prior snapshot, rebinds traffic to blue, and replays queued jobs against the previous pipeline. Emergency overrides (`deploy hold`, `deploy resume`, `deploy skip`) are audited, require dual approval, and expire automatically to prevent “forgotten” freezes.
 - Communication: notify stakeholders (Product, Support, Security) with release notes summarizing changes, risk, and mitigation.
 - Spec/code parity gate: `docs/settings_key_skip.txt` must remain empty; CI and release pipelines fail immediately if any Appendix E key lacks implementation coverage or automated tests.
 - Case enum migration playbook: settings introduce new `case.status`/`representation_type` values first; DB adds `CHECK ... NOT VALID` constraints, validates post-backfill, and only then removes deprecated values. Deprecations flow through Settings/UI; final removal requires data migration and constraint regeneration.
@@ -3161,7 +3237,7 @@ ______________________________________________________________________
 *Purpose: Keep schema changes, backfills, and seed data predictable and auditable.*
 
 - Migration pipeline: every schema change ships with forward/backward-safe Alembic migrations plus dry-run artefacts (`migrations/README.md`) enumerating pre/post conditions. When mutating hot tables we execute a formal dual-write plan: (1) enable feature-flagged writes to the new table alongside the legacy path, (2) emit divergence metrics (`dualwrite_divergence_total`, `dualwrite_lag_seconds`) from a background reconciler, (3) block promotion until divergence remains 0 for ≥ 24h, (4) cut traffic by flipping the settings toggle, and (5) retire legacy writes only after snapshot/backups are captured. Rollback instructions and toggles live under Settings bundles so releases can revert without code changes.
-- Seed data strategy: baseline organizations, roles, settings bundles, and Guardian rules install via `ops/scripts/bootstrap_platform.py` (idempotent). Seed updates run through the same approval flow as settings activations, with diff previews captured in App.K controls evidence.
+- Seed data strategy: baseline organizations, roles, settings bundles, and Guardian rules install via `ops/scripts/bootstrap_platform.py` (idempotent) by loading the curated JSON bundles in `config/*.json` (and any environment-specific `config/seeds/*.json`). Seed updates run through the same approval flow as settings activations, with diff previews captured in App.K controls evidence and provenance hashes recorded alongside the bundle metadata.
 - Backfills: long-running data backfills execute in Celery workers with OCC guards, chunked pagination, and advisory locks (`udlock.xact_lock('backfill', ...)`) to prevent overlap. Progress metrics and human logs land in `ops/<job_id>__backfill_log.json`.
 - Smoke checks: migrations must register probes (`tests/migrations/test_<id>.py`) verifying secure views, RLS policies, and settings compilers post-upgrade. A staging cutover drill is mandatory before production rollout and recorded in App.M.
 - Rollback: documented `down_revision` paths plus data snapshots for destructive changes; rollback playbooks include verification of recompiled policies, rehydrated caches, and SSE stream health.
