@@ -69,7 +69,7 @@ ______________________________________________________________________
 
 *Purpose: Summarize the end-to-end approach at one glance.*
 
-- Web platform (Django + Channels) for staff/clients, Celery workers for long-running jobs, and dedicated Guardian & Signing services enforcing READY/QUARANTINED and digital seal policies.
+- Web platform (Django + Channels) for staff/clients, Celery workers for long-running jobs, and dedicated Guardian & Signing services enforcing PASS/WARN/BLOCK/WAIVED judgements, OPERATOR_PREP gating, and digital seal policies.
 - Agent pipeline: Transcribe → Analyze → Compose, each producing immutable artifacts under Guardian review, enriched with manifests and ops telemetry.
 - Zero-trust foundation: mTLS between services, Postgres RLS with policy-driven RBAC, object storage with SHA-256 integrity, and centralized Settings snapshots for every job.
 
@@ -125,8 +125,8 @@ ______________________________________________________________________
 
 *Purpose: Anchor architecture decisions to explicit tenets.*
 
-- Artifacts are immutable, content-addressed, and versioned; human approvals elevate READY → APPROVED.
-- Guardian gating: the Guardian service is the decision authority for READY/QUARANTINED; downstream stages accept APPROVED artifacts only.
+- Artifacts are immutable, content-addressed, and versioned; objects flow deterministically from `STORED` → `PROCESSING` → `PENDING_JUDGEMENT` → `CLEARED_FOR_USE`/`OPERATOR_PREP` → `APPROVED`/`RELEASED` without mutating prior versions.
+- Guardian gating: the Guardian service issues PASS/WARN/BLOCK/WAIVED judgements, transitioning WP/CD out of `PENDING_JUDGEMENT` into `CLEARED_FOR_USE`, `OPERATOR_PREP`, or `QUARANTINED`; downstream stages accept only `APPROVED` (or stronger) artifacts.
 - Deterministic controls over non-deterministic LLM output: UUIDv7 row IDs, content fingerprints, namespace UUIDv5 derived IDs per §6.7, Settings snapshots, prompt/version capture.
 - Zero-trust for every hop: deny-by-default RBAC, workload identities, enforced mTLS, and per-request DB GUC binding.
 - Observability and auditability as first-class: every job/action emits structured telemetry with correlation IDs.
@@ -140,13 +140,19 @@ ______________________________________________________________________
 
 - Data residency: compute, storage, and vector workloads must execute inside the region sets declared by each organization (`regions.allowlist.compute|storage|vector`). Defaults provide paired primary/secondary regions per jurisdiction (for example, `na-us-1` + `na-us-2`, `eu-central-1` + `eu-west-2`). Cross-region replication or failover outside the allowlist requires dual-approved waivers stamped in manifests and surfaced to Guardian.
 - SOC 2 / ISO controls: change management, incident response, and logging mapped to specific sections (`§20`, `§24`, `App.E`); mappings extend to PCI DSS logging, FedRAMP Moderate, and audit retention requirements surfaced in Appendix K.
-- Privacy frameworks in scope: GDPR/UK GDPR, CCPA/CPRA, HIPAA, PHIPA, PIPEDA, APP (Australia), LGPD (Brazil), and CPPA (Canada). Reference Manager curates authoritative policy catalogues, Localization & Policy Engine (LPE) compiles them, and OPA enforces runtime decisions so outputs meet or exceed every framework simultaneously rather than generating bespoke policies per org.
+- Privacy frameworks in scope:
+- Sensitive Personal Information (SPI): covers the CPRA/GDPR-style high-risk data classes (for example, biometric identifiers, precise geolocation, racial or ethnic origin, religious beliefs, sexual orientation, union membership, genetic data, immigration status, and government identifiers). SPI is governed alongside PHI: encryption at rest, residency, retention, Guardian gating, and reviewer requirements mirror PHI defaults with additional dual-approval for cross-org distribution. Reference Manager tags SPI-bearing sources so LPE can surface masking requirements and downstream Guardian rules include SPI context.
+ GDPR/UK GDPR, CCPA/CPRA, HIPAA, PHIPA, PIPEDA, APP (Australia), LGPD (Brazil), and CPPA (Canada). Reference Manager curates authoritative policy catalogues, Localization & Policy Engine (LPE) compiles them, and OPA enforces runtime decisions so outputs meet or exceed every framework simultaneously rather than generating bespoke policies per org.
 - CCPA/CPRA specifics: platform does not sell or share personal information; privacy notices and contracts state “no sale/no sharing.” DSAR timelines follow CCPA (45 days, one 45‑day extension with notice) and GDPR (30 days, extensions as allowed). Admin tooling exports DSAR evidence and timelines; audit seals reference the governing framework for each request.
 - ISO/IEC 27701 (privacy extension) alignment: fully mapped and implemented. Appendix K lists the control crosswalk, evidence sources, and quarterly recertification cadence; deviations trigger `ISO27701_GAP` incidents and block releases until remediated.
 - HIPAA mode: disabled by default (`privacy.hipaa.enabled=false`). Enabling HIPAA mode enforces per-org field encryption (`security.field_encryption.enabled=true`, `security.field_encryption.key_scope='per_org'`), requires WebAuthn for privileged roles (`security.mfa.webauthn_required_roles` includes `org_admin|org_manager|org_operator|org_reviewer`), pins PHI retention schedules to Appendix C, and blocks portal delivery of PHI-tagged attachments without a waiver.
 - Prompt retention under HIPAA: storage of prompts/outputs is governed by `privacy.hipaa.prompt_retention_mode` (`'redacted'` default; options: `hash_only`, `full`). Mode selection is an explicit org-level setting reviewed with Compliance; HIPAA mode does **not** suppress storage automatically. Evidence-store pipelines honour the selected mode and record hashes + region metadata either way.
 - The `PHI=true` marker is collected at upload via a staff-facing “Contains PHI” toggle (default false) and may also be asserted by the post-upload classifier; both paths write the flag to artifact metadata. If a downstream classifier later upgrades an artifact to PHI while HIPAA mode is disabled, the artifact is retro-quarantined, downstream approvals are invalidated, and portal links are revoked until an organization enables HIPAA mode or files a waiver.
+- The same capture flow exposes a “Contains SPI” toggle; selections apply SPI detection thresholds, set `spi_review_required=true`, and block portal delivery until sensitive personal data receives explicit reviewer approval.
 - PHI detection pipeline: when HIPAA mode is on, uploads and generated artifacts run through a layered detection sequence—operator declaration, deterministic regex heuristics, Azure Content Safety PHI classifier, and a nightly re-scan job powered by the in-house transformer model. Guardian samples artifacts weekly (minimum 5% or 20 artifacts, whichever is higher) and compares classifier outputs; discrepancies trigger `PHI_DETECTION_DRIFT` incidents and force operators to review the backlog before approvals resume. Artifacts detected as PHI at any stage are immediately quarantined, and Guardian blocks further processing until remediation. Detection settings are governed by `privacy.hipaa.phi_detection.strict_mode` (default true) and `privacy.hipaa.phi_detection.rescan_hours` (default 24).
+- SPI handling: SPI-tagged artifacts inherit PHI safeguards (HIPAA mode, encryption, residency) and add `spi_review_required=true` flags in PolicyContext. Guardian enforces SPI-specific rulesets that require dual review before release; portals surface SPI banners and log consumption under dedicated audit streams (`SPI_ACCESS_EVENT`). Settings `privacy.spi.retention_days` and `privacy.spi.residency` align residency and retention policies with SPI posture.
+- SPI detection augments the PHI pipeline with NLP classifiers, rule-based detectors (government ID numbers, biometric markers, precise location), and Reference Manager-maintained vocabularies for sensitive personal data. Settings keys `privacy.spi.detection.*` govern thresholds and require Security + Legal approval for tuning.
+
 - Portal enforcement: portal fetches hitting PHI-tagged artifacts while HIPAA mode is disabled return `403` with `code="POLICY_BLOCK"` and localization key `portal.hipaa.blocked_download`. The invalidation SSE event includes `reason="HIPAA_REQUIRED"` so clients surface consistent messaging.
 - Evidence-store hygiene: enabling HIPAA mode triggers `scripts/privacy/purge_evidence_store.py`, which validates prompt retention mode, reindexes redactable artifacts, and records a completion artifact (`PRIVACY_PURGE_REPORT`) before the org can ingest PHI. The command refuses to flip the setting if verification fails.
 - Rationale: the platform blocks PHI ingestion unless an org explicitly enables HIPAA mode, preventing accidental handling outside approved compliance footing while preserving audit records aligned with the selected retention mode.
@@ -317,7 +323,7 @@ metadata:
 | Web                                | Django ASGI (uvicorn + gunicorn)            | REST APIs, staff UI, client portal, SSE endpoints, approval workflows                                            | HPA on CPU+request latency; sticky sessions avoided                                       | `web_http_*`, `frontend_latency_seconds`, `audit_event_total`                                                 |
 | Channels                           | Django Channels (Redis-backed)              | Real-time editors, approvals, QA feedback                                                                        | Separate Deployment with autoscale on WS connections                                      | `channels_active_connections`, `channels_msg_latency_seconds`                                                 |
 | Workers                            | Celery (prefork)                            | Media normalization, agent orchestration, notifications, ingestion, destruction                                  | Queue length auto-scaling; dedicated queues per agent class                               | `celery_queue_depth`, `job_duration_seconds`, `task_retry_total`                                              |
-| Guardian                           | FastAPI                                     | Artifact READY/QUARANTINED decisions, policy evaluation, audit history                                           | Pod HPA on latency; 99.9% SLO                                                             | `guardian_decision_latency_seconds`, `guardian_ready_ratio`                                                   |
+| Guardian                           | FastAPI                                     | Guardian PASS/WARN/BLOCK/WAIVED judgements, policy evaluation, audit history                                      | Pod HPA on latency; 99.9% SLO                                                             | `guardian_decision_latency_seconds`, `guardian_cleared_ratio`                                                 |
 | Digital Signer                     | FastAPI                                     | PDF/A signing, OCSP/CRL/TSA validation, bundle creation                                                          | Scales with signing queues; relies on KMS/TSA connectors                                  | `signer_request_latency_seconds`, `tsa_drift_seconds`                                                         |
 | LLM Registry                       | FastAPI                                     | Provider catalog, health probes, token accounting, fallback logic                                                | Low QPS; run ≥2 replicas                                                                  | `llm_provider_health`, `llm_circuit_state`                                                                    |
 | Settings Service                   | FastAPI                                     | Hierarchical settings APIs, bundle activation, diff previews                                                     | Autoscale on QPS; Redis pub/sub for cache invalidation                                    | `settings_activation_total`, `settings_cache_hit_ratio`                                                       |
@@ -523,6 +529,8 @@ This example demonstrates how residency outcomes are derived: LPE supplies the d
 
 ### 3.5 Reference Manager (catalog ingestion & lifecycle)
 
+Reference Manager packages every regulated dataset required for downstream compliance. Each signed publish includes privacy and residency policy catalogues (framework rules, retention defaults, waiver prerequisites), court forms and filing instructions, questionnaires and intake scripts, localization packs, language coverage metadata, and SPI tagging for sources containing sensitive personal information. LPE consumes these bundles directly so PolicyContext reflects the latest policies, supported languages, and court assets, keeping Guardian, Portal, and Settings aligned with the same authoritative catalogue.
+
 *Purpose: Provide the authoritative ingestion, validation, and administration layer for court catalogs, questionnaires, forms, and every reference asset that powers LPE and downstream workflows.*
 
 - Reference Manager (RM) owns regulated data acquisition, entity resolution, editorial review, and versioned publishing for the platform’s canonical reference data. LPE consumes RM’s signed bundles as read-only inputs when compiling runtime `PolicyContext` outputs.
@@ -670,7 +678,7 @@ This example demonstrates how residency outcomes are derived: LPE supplies the d
 
 *Purpose: Describe the critical sequences that tie services together.*
 
-- **Upload → Guardian → Approval:** Web accepts uploads, stages to object storage, inserts DRAFT artifacts, calls Guardian for readiness, then surfaces for reviewer approval (sequence in `App.A.2`).
+- **Upload → Guardian → Approval:** Web accepts uploads, stages to object storage, inserts `class=SA` artifacts (`status='STORED'`), workers derive WP/CD entries (`PROCESSING → PENDING_JUDGEMENT`), Guardian issues PASS/WARN/BLOCK judgements (→ `CLEARED_FOR_USE` / `OPERATOR_PREP` / `QUARANTINED`), and only then do reviewers see CDs in `QUEUED_FOR_REVIEW` (sequence in `App.A.2`).
 - **Agent pipeline:** Workers fetch inputs (audio/transcripts), execute Transcribe/Analyze/Compose stages, write artifacts + manifests, and notify Guardian & SSE. Settings snapshots travel alongside each job to guarantee reproducibility.
 - **Reference curation loop:** Reference Manager harvests external sources, normalizes data, routes diffs to reviewers, and publishes canonical catalogs/questionnaires/forms. Publish events trigger LPE recompiles and propagate version digests to services consuming `PolicyContext`.
 - **Notification loop:** Worker pushes delivery requests to Notification Service; receipts update artifact manifests and audit events. Portal fetches approved deliverables via signed URLs with guardian-enforced readiness.
@@ -760,7 +768,7 @@ ______________________________________________________________________
 | -------------------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | Web & Channels (staff + portal)              | Browser ↔ ASGI over TLS (`Spoofing`, `Tampering`, `Information disclosure`) | mTLS terminates at ingress; HSTS/CSP (§11.5); SSE token binding (§10.8); RLS GUC canaries (§4.4); App.B Spoofing mitigations              |
 | Worker cluster (Celery)                      | Jobs ↔ storage/LLM providers (`Tampering`, `Repudiation`, `DoS`)            | Settings snapshots (§6.1), audit JSONL (§6.3/§6.4), advisory locks (§5.4/App.H RB-LOCK-006), FinOps guard (§8.7/§13.5)                    |
-| Guardian & Signer services                   | Artifact promotion, digital seals (`Tampering`, `Repudiation`)              | FOR SHARE parent guard (§7.1), immutable audit sink (§12.1), OCSP/TSA verification (§7.2), ADR-0001 READY/QUARANTINED rules               |
+| Guardian & Signer services                   | Artifact promotion, digital seals (`Tampering`, `Repudiation`)              | FOR SHARE parent guard (§7.1), immutable audit sink (§12.1), OCSP/TSA verification (§7.2), ADR-0001 judgement/waiver rules               |
 | Settings service + policy compiler           | Config activation across tenants (`Spoofing`, `Elevation of privilege`)     | HMAC-signed requests (§7.3), dual approval (§9.3/§9.11), compiled RLS tables (§4.4), activation lock advisory key (§9.8)                  |
 | External providers (Azure Speech/OpenAI/TSA) | Controlled egress (`Information disclosure`, `DoS`)                         | Mesh AuthorizationPolicy (§3.8), residency waivers (App.O), LLM safety harness (§8.4), provider circuit breakers (§8.1, App.H RB-LLM-003) |
 
@@ -1106,7 +1114,7 @@ ______________________________________________________________________
 
 - **case_member:** Composite PK `(user_id, case_id)` storing per-case role; informs `udocket_is_case_member`.
 
-- **artifact:** UUIDv7 `id`, `org_id`, `case_id`, `type`, `state`, `content_uri`, `content_sha256`, JSONB `manifest`, OCC `version`, review metadata (`approved_at/by`, etc.). Trigger `artifact_immutable_check` blocks changes to immutable fields.
+- **artifact:** UUIDv7 `id`, `org_id`, `case_id`, `type`, `class` (`SA|WP|CD|DL|AR`), `status`, `content_uri`, `content_sha256`, JSONB `manifest`, OCC `version`, review metadata (`review_state`, `approved_at/by`, etc.). Trigger `artifact_immutable_check` blocks changes to immutable fields.
 
 - Immutability trigger (binding):
 
@@ -1114,7 +1122,8 @@ ______________________________________________________________________
   CREATE OR REPLACE FUNCTION artifact_immutable_check()
   RETURNS trigger LANGUAGE plpgsql AS $$
   BEGIN
-    IF TG_OP = 'UPDATE' AND NEW.state <> 'DRAFT' THEN
+    IF TG_OP = 'UPDATE'
+       AND NEW.status NOT IN ('PROCESSING','OPERATOR_PREP','CHANGES_REQUESTED') THEN
       IF NEW.org_id <> OLD.org_id
          OR NEW.case_id <> OLD.case_id
          OR NEW.type <> OLD.type
@@ -1150,13 +1159,175 @@ ______________________________________________________________________
 
 *Purpose: Define how artifacts progress and how exclusivity & approvals apply.*
 
-- States: `DRAFT` (agent output awaiting Guardian), `READY` (Guardian pass), `QUARANTINED` (Guardian fail), `APPROVED` (human reviewer), `REJECTED` (terminal). `ARCHIVED` flag hides without altering state.
-- Review outcomes are binary: reviewers may only choose `APPROVED` or `REJECTED`. Partial approvals are not supported; remediation returns the artifact to `DRAFT` and requires a fresh Guardian review.
-- Guardian transitions only mutate `DRAFT` or `READY`; `QUARANTINED` sticks unless a new submit succeeds. Reviewers promote `READY → APPROVED` and demote any prior approved artifact of the same exclusive type.
-- Exclusive types enforced via unique index `one_approved_per_case_type` (state=`APPROVED`, `archived=false`). Settings maintain the type allowlist.
-- Manifests capture provenance: schema and graph versions, source artifacts, settings snapshot hash, regions, template versions, and optional SHA pins for dependencies.
-- Ops logging: each run writes human-readable `.log`, structured `.json`, and appends to case-level `ops_<agent>.jsonl`.
-- Data lineage: App.R documents end-to-end traceability from source artifacts to signed deliverables, aligning manifest fields with Guardian decisions.
+#### 5.2.1 Object classes (SA/WP/CD/DL/AR)
+
+| Class | Key | Purpose | Examples | Visibility |
+| ----- | --- | ------- | -------- | ---------- |
+| **Source Asset** | **SA** | Raw inputs we ingest. Immutable post-write. | Uploaded audio/video, PDFs, exhibits, notes | Staff (scoped) |
+| **Work Product** | **WP** | Internal derived data used to build deliverables; never client-facing. | Issues/timeline/entities/facts/gaps (JSON), interim LLM outputs, scores | Staff only |
+| **Candidate Deliverable** | **CD** | Human-readable draft intended for potential external release. | Transcript draft, client summary draft, composed report draft | Staff reviewers/ops |
+| **Deliverable** | **DL** | Approved, signed, releasable document (client-visible). | Transcript (final), client summary (final), bundle, signed report | Staff + client |
+| **Auxiliary Record** | **AR** | Proofs/receipts/logs backing compliance. | Audit events, waiver records, hash manifests, TSA tokens, signature envelopes | Auditors/admin |
+
+Separation of concerns: **WP** stays internal, **CD** is the curated draft surface operators work in, **DL** is the only client-visible output, and **AR** carries the attestations that prove what happened.
+
+#### 5.2.2 Canonical statuses
+
+Status is scoped by object class. The unified vocabulary below eliminates the ambiguous `READY` state and standardizes lifecycle semantics.
+
+| Status | Applies to | Meaning | Entered by | Leaves when |
+| ------ | ---------- | ------- | ---------- | ----------- |
+| **STORED** | SA | Source durably persisted and hashed. | System | Pipeline starts → **PROCESSING** |
+| **PROCESSING** | WP, CD | System is generating/transforming. | System | Work done → **PENDING_JUDGEMENT** or **FAILED** |
+| **FAILED** | WP, CD | System error/missing dependency. | System | Retry/repair → **PROCESSING** |
+| **PENDING_JUDGEMENT** | WP, CD | Awaiting Guardian judgement. | System | Guardian decides (see §5.2.3) |
+| **CLEARED_FOR_USE** | WP | Guardian PASS/WARN, internal use allowed. | Guardian | Consumed downstream or superseded |
+| **OPERATOR_PREP** | CD | Guardian PASS/WARN, operator workspace to curate/edit. | Guardian | Operator submits → **QUEUED_FOR_REVIEW** |
+| **QUEUED_FOR_REVIEW** | CD | Awaiting human decision. | Operator/System* | Reviewer acts (see §5.2.4) |
+| **CHANGES_REQUESTED** | CD | Reviewer rejected with edit instructions. | Reviewer | New CD version → **OPERATOR_PREP** or **QUEUED_FOR_REVIEW** |
+| **QUARANTINED** | WP, CD | Policy violation (Guardian or Reviewer). | Guardian/Reviewer | Waiver or remediation → **OPERATOR_PREP**/**CLEARED_FOR_USE** |
+| **APPROVED** | CD | Human-approved draft (or auto-approved). | Reviewer/System* | Signing → **SIGNED** |
+| **SIGNED** | DL | uDocket-signed, TSA timestamped. | Signer | Published → **RELEASED** |
+| **RELEASED** | DL | Visible/downloadable in portal. | System | Replacement policy (see §5.2.6) |
+| **REVOKED** | DL | Explicit pullback (policy/error). | Admin/Guardian | Retained, non-downloadable |
+| **SUPERSEDED** | DL | Newer DL replaced it (retained for audit). | System | Retention → **ARCHIVED** |
+| **ARCHIVED** | SA/WP/CD/DL | Frozen under retention. | System | Purged per policy |
+
+`System*` denotes flows where org configuration permits skipping human review (see §5.2.5).
+
+#### 5.2.3 Guardian judgement → status mapping
+
+Guardian is the single source of record prior to operator access; operators never see WP/CD objects before judgement.
+
+| guardian_judgement | WP next status | CD next status | Notes |
+| ------------------ | -------------- | -------------- | ----- |
+| **PASS** | **CLEARED_FOR_USE** | **OPERATOR_PREP** | Default happy path |
+| **WARN** | **CLEARED_FOR_USE** (banner) | **OPERATOR_PREP** (banner) | Non-blocking annotations |
+| **BLOCK** | **QUARANTINED** | **QUARANTINED** | Remediation or waiver required |
+| **WAIVED** | As **PASS** (records waiver id) | As **PASS** (records waiver id) | Dual approval required |
+
+The events emitted for these transitions are enumerated in §10.3. Guardian always records `guardian_judgement_id`, reason codes, and waivers in `guardian_decision_history`.
+
+#### 5.2.4 Human review (tri-outcome) with enumerated reasons
+
+When a **CD** is **QUEUED_FOR_REVIEW**, reviewers must pick exactly one outcome:
+
+1. **APPROVE** → status **APPROVED** (optional comment).
+2. **REJECT (CHANGES_REQUESTED)** → status **CHANGES_REQUESTED**, mandatory `reject_reason` + free text.
+3. **QUARANTINE** → status **QUARANTINED**, mandatory `quarantine_reason` + free text; routed via Guardian for single source of record.
+
+`RejectReason` enum:
+
+```
+ACCURACY_ISSUE
+INCOMPLETE_CONTENT
+FORMATTING_LAYOUT
+TONE_STYLE_QUALITY
+SCOPE_MISMATCH
+SOURCE_MISMATCH
+REDACTION_REQUIRED
+DUPLICATE_OBSOLETE
+DATA_QUALITY_INPUT
+POLICY_CONCERN
+OTHER
+```
+
+`QuarantineReason` enum:
+
+```
+RESIDENCY_POLICY_BLOCK
+HIPAA_REQUIRED
+PII_UNMASKED
+DLP_VIOLATION
+SAFETY_CONTENT
+MALWARE_DETECTED
+LEGAL_HOLD
+FINOPS_BUDGET_EXCEEDED
+HASH_MISMATCH_TAMPER
+PROVIDER_REGION_UNVERIFIED
+CLASSIFIER_LOW_CONFIDENCE
+REQUESTED_BY_ADMIN
+OTHER
+```
+
+“OTHER” selections join a nightly clustering job; repeating phrases trigger a Reference Manager change request (promoted via the LPE bundle workflow) to add a new enum value.
+
+#### 5.2.5 Org-configurable review flows
+
+Settings surface the following:
+
+```
+review.flow ∈ {
+  MANUAL_OPERATOR_GATE,   # default: PASS/WARN → OPERATOR_PREP → QUEUED_FOR_REVIEW
+  AUTO_ON_CLEAR,          # PASS/WARN → QUEUED_FOR_REVIEW (operators opt out of prep)
+  SKIP_HUMAN              # PASS/WARN → APPROVED (approval_mode=AUTO)
+}
+
+review.risk_overrides:
+  - PHI_DETECTED
+  - LEGAL_HOLD
+  - CLASSIFIER_LOW_CONFIDENCE
+  - NEW_MODEL_OR_PROMPT
+  - QUARANTINE_HISTORY
+```
+
+Default is `MANUAL_OPERATOR_GATE`, giving operators an **OPERATOR_PREP** workspace before requesting review. Risk overrides force human review even when `review.flow=SKIP_HUMAN`. Portal fetch-time checks continue to block revoked or superseded deliverables regardless of flow.
+
+#### 5.2.6 Deliverable replacement policy
+
+Deliverable handling is governed by `deliverables.versioning_mode`:
+
+- **SUPERSEDE** (recommended default): New `DL v+1` releases while the prior version flips to **SUPERSEDED** (hidden from clients, retained for audit). Zero downtime with strongest chain-of-custody.
+- **PULLBACK_THEN_REPLACE**: Current `DL v` must be **REVOKED** before any new **CD** can enter **QUEUED_FOR_REVIEW**, ensuring exactly one live deliverable at a time but introducing potential gaps.
+
+Case-level overrides may tighten, but never loosen, the org default.
+
+#### 5.2.7 Cross-object controls and audit surface
+
+- Hashing: `content_hash` is SHA-256 for every object; multi-file bundles publish Merkle roots as **AR** “hash manifest” records (JWS signed).
+- Signatures: **DL** (and signature-bearing **AR**) require PAdES B-LTA for PDF, JWS RS256 or COSE_Sign1 for JSON, plus RFC-3161 TSA tokens. Metadata includes signer chain, TSA info, `content_hash`, `model_run_id`, `guardian_judgement_id`, settings snapshot hash, `approval_mode`, and `approved_by`.
+- Optional client counter-signatures produce linked **AR** records.
+- Policy & controls matrix (excerpt):
+
+| Control | SA | WP | CD | DL | AR |
+| ------- | --:| --:| --:| --:| --:|
+| SHA-256 on create | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Content-addressed storage | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Guardian judgement | (limited) | **Selective** | **Mandatory** | **Fetch-time re-check** | — |
+| Operator prep workspace | — | — | **Default** | — | — |
+| Human review | — | — | per `review.flow` / overrides | — | — |
+| Digital signature + TSA | — | — | — | **✓** | **✓** (manifests/receipts) |
+| Client counter-sign | — | — | — | **Optional** | — |
+| Residency enforcement | **Strict** | **Strict** | **Strict** | **Strict** | **Strict** |
+| Portal visibility | ✗ | ✗ | ✗ | **Only latest RELEASED** | ✗ |
+
+#### 5.2.8 Minimal schema updates
+
+Shared schema fields:
+
+- `id` (ULID), `class ∈ {SA,WP,CD,DL,AR}`, `status`, `version` (OCC)
+- `org_id`, `case_id`, `created_by`, `created_at`, `updated_at`
+- `content_hash`, `size_bytes`, `mime`, `storage_key`, `labels[]`
+- `guardian_judgement`, `guardian_reason_codes[]`, `guardian_judgement_id`, `judged_at`
+- `qa_assessments[]` (`type`, `score`, `notes`, `model_id`, `threshold_result`)
+- CD-only review metadata: `review_state ∈ {PENDING,APPROVED,CHANGES_REQUESTED,QUARANTINED}`, `approval_mode ∈ {HUMAN,AUTO}`, `approved_by`, `reviewed_at`, `reject_reason`, `reject_note`, `quarantine_reason`, `quarantine_note`
+- DL-specific fields: `signature_type`, `signature_ref`, `tsa_ref`, `released_at`, `revoked_at?`, `revocation_reason?`, `supersedes?`, `superseded_by?` (omitted when using pull-back mode)
+
+Section §10.4 documents the REST/GraphQL surfaces exposing these fields.
+
+#### 5.2.9 Configuration surface
+
+```
+review.flow: MANUAL_OPERATOR_GATE | AUTO_ON_CLEAR | SKIP_HUMAN
+review.risk_overrides: [PHI_DETECTED, LEGAL_HOLD, CLASSIFIER_LOW_CONFIDENCE, NEW_MODEL_OR_PROMPT, QUARANTINE_HISTORY]
+deliverables.versioning_mode: SUPERSEDE | PULLBACK_THEN_REPLACE
+enums.reject_reason: managed via Reference Manager (list in §5.2.4)
+enums.quarantine_reason: managed via Reference Manager (list in §5.2.4)
+```
+
+Settings changes follow the dual-approval process in §9 and emit `SETTINGS_CHANGE_REQUESTED` audit events with diff payloads.
+
+Manifests continue to capture provenance (schema/graph versions, source artifacts, settings snapshot hash, regions, template versions, dependency SHAs), and ops logging remains unchanged: each run writes human-readable `.log`, structured `.json`, and appends to case-level `ops_<agent>.jsonl`. Data lineage for the updated status model is reflected in App.R.
 
 ### 5.3 Object storage layout & integrity guarantees
 
@@ -1176,7 +1347,7 @@ ______________________________________________________________________
 - Telemetry: object storage latency and hash mismatch counters exported; nightly integrity sweeps sample-verify SHA-256 and bucket versioning state.
 - Path template: `storage/media/<ORG_ID>/cases/<CASE_ID>/artifacts/<ARTIFACT_ID>/content.bin|manifest.json`; case-level directories include `audio/`, `transcript/`, `analysis/`, `docs/`, `ops/`. Legacy `storage/media/cases/<CASE_ID>/` layouts are deprecated and blocked in new deployments.
 - Upload staging uses `upload_session` records with expected hashes and single-use tokens; finalize promotes staged object into artifact storage.
-- Staff operators are responsible for submitting artifacts to Guardian once content is ready; submissions are never automatic. Review queues surface only artifacts that a staff user or agent explicitly submitted and received a `READY` decision.
+- Staff operators are responsible for submitting artifacts to Guardian once content is assembled; submissions are never automatic. Review queues surface only CDs that cleared Guardian (`OPERATOR_PREP`) and that an operator explicitly moved to `QUEUED_FOR_REVIEW`.
 - `upload_session` (transient) table persists resumable upload metadata and scan status: `{id UUID PK, org_id, case_id, status ENUM('PENDING','UPLOADED','SCANNING','FINALIZED','ABORTED'), staging_uri, expected_sha256, expires_at, created_at}`. Workers purge expired rows hourly and hard-delete the corresponding staging objects.
 - SHA-256 computed at write; persisted in `artifact.content_sha256`. Reads recompute and quarantine inconsistencies (`ARTIFACT_INTEGRITY_MISMATCH`).
 - Buckets enable versioning + object lock for immutable audit sinks (per §20.1). KMS keys scoped per org when configured (`storage.kms.key_scoping='per_org'`).
@@ -1199,13 +1370,13 @@ ______________________________________________________________________
   ```sql
   CREATE UNIQUE INDEX one_approved_per_case_type
       ON artifact (case_id, type)
-   WHERE state='APPROVED' AND archived=false;
+   WHERE status='APPROVED' AND archived=false;
   ```
 - Approval algorithm (transaction; READ COMMITTED):
   1. Acquire case/type lock: `udlock.xact_lock('case-approval', CONCAT(:org_id,'/',:case_id,'/',:type))`.
-  1. Demote any existing `APPROVED` for `(org_id, case_id, type)` to `READY`.
-  1. Approve target only if `state='READY'` and `version=:expected_version`; increment `version`.
-  1. If no row updated but target already `APPROVED` → return 200 idempotent; else 409 conflict.
+  1. Archive any existing `APPROVED` CD for `(org_id, case_id, type)` (`UPDATE ... SET status='ARCHIVED', archived=true, version=version+1 WHERE status='APPROVED' AND archived=false`).
+  1. Approve target only if `status='QUEUED_FOR_REVIEW'` and `version=:expected_version`; set `status='APPROVED'`, `review_status='APPROVED'`, `approved_by`, `approved_at`, increment `version`.
+  1. If no row updated but target already `APPROVED` with matching `version` → return 200 idempotent; else 409 conflict.
   1. Emit audit + SSE. See §11.2.1 for portal invalidation behavior.
 
 Notes
@@ -1286,7 +1457,7 @@ Notes
 
 *Purpose: Secure intake against malicious payloads while preserving evidence integrity.*
 
-- Pipeline: raw uploads (`EXHIBIT_RAW`, `COURT_DOC_RAW`, `EMAIL_RFC822`, `FINANCIALS_RAW`, audio) land in staging, run through normalization/OCR/parsers to emit structured counterparts (`*_TEXT`, `EMAIL_ATTACHMENTS`, `FINANCIALS_TABLE`, `TRANSCRIPT`, `DIARIZATION`). Structured artifacts remain `DRAFT` until Guardian marks them `READY`; reviewers promote to `APPROVED`.
+- Pipeline: raw uploads (`EXHIBIT_RAW`, `COURT_DOC_RAW`, `EMAIL_RFC822`, `FINANCIALS_RAW`, audio) land in staging, run through normalization/OCR/parsers to emit structured counterparts (`*_TEXT`, `EMAIL_ATTACHMENTS`, `FINANCIALS_TABLE`, `TRANSCRIPT`, `DIARIZATION`). Derived artifacts progress `PROCESSING → PENDING_JUDGEMENT`; Guardian PASS/WARN moves WP to `CLEARED_FOR_USE` and CDs to `OPERATOR_PREP`, after which reviewers advance CDs (`QUEUED_FOR_REVIEW → APPROVED`).
 - Malware scanning: scan on upload/finalize with signatures and heuristics; block/quarantine positive hits; log details to `audit_event`.
 - Archive defenses: enforce archive type allowlist, depth/ratio caps; detect zip bombs and path traversal (Zip Slip) in extractors.
 - MIME & size policies: allowlist content types; settings define max size per type; reject suspicious double extensions.
@@ -1583,95 +1754,37 @@ ______________________________________________________________________
 
 ## 7) Digital signing & Guardian services
 
-### 7.1 Guardian decision pipeline (READY/QUARANTINED rules)
+### 7.1 Guardian judgement pipeline (PASS/WARN/BLOCK/WAIVED)
 
-*Purpose: Govern artifact readiness before human review or client exposure.*
+*Purpose: Govern artifact access before operators or clients can act on generated outputs.*
 
-- Terminology: See Appendix I for Guardian decision terms, waiver definitions, and failure categories.
+- Terminology: Appendices I/N define `guardian_judgement`, reason codes, waiver flows, and the structured payloads written to `guardian_decision_history`.
+- Flow: workers submit artifacts in `PENDING_JUDGEMENT`; Guardian loads policy context, upstream manifests, waiver state, moderation/QA findings, and emits one of four judgements. PASS/WARN transition WP → `CLEARED_FOR_USE` and CD → `OPERATOR_PREP`; BLOCK or reviewer-initiated quarantine force `QUARANTINED`. WAIVED mirrors PASS but records the waiver chain and dual approvers.
+- Operators never see WP/CD objects before a PASS/WARN verdict. Guardian emits SSE/audit events (`GUARDIAN.JUDGEMENT.PASS|WARN|BLOCK|WAIVED`) with `guardian_judgement_id`, reason codes, settings snapshot hash, and pointers to upstream findings.
+- Deterministic reconciliation: Guardian decisions are idempotent per `{artifact_id, content_hash}`. Re-submitting the same content after a BLOCK requires either a waiver or remediation that produces a new hash/version, ensuring policy-bypassing mutations cannot proceed silently.
+- Downstream enforcement: workers, UI, and portal clients must respect the target status (`CLEARED_FOR_USE`, `OPERATOR_PREP`, `QUARANTINED`) before executing dependent actions. Fetch-time checks re-evaluate Guardian decision freshness and invalidate stale deliverables (§11.2.1).
 
-- Entry point `POST /api/v1/guardian/submit` with signed request body `{artifact_id, org_id, case_id, content_sha256?}` and optional idempotency key. Guardian retrieves artifact + effective settings snapshot.
+#### 7.1.1 Decision evaluation (binding)
 
-- Decision logic evaluates rulesets per org (JSON, versioned) using artifact metadata, manifest fields, settings posture, and optional hashes. If mismatch detected (`content_sha256` vs DB), returns 412 and sets state `QUARANTINED`.
+- Concurrency guard: Guardian locks parent artifacts with `SELECT ... FOR SHARE` and re-reads manifests to ensure judgements reflect the latest upstream status. If a parent demotes while evaluation runs, the child request detects the change and returns `BLOCK` with reason `PARENT_NOT_APPROVED`.
+- Idempotency: repeated submissions with the same `content_sha256` reuse the prior decision; Guardian returns HTTP 200 with `idempotent=true` metadata. New content hashes create fresh decision rows, preserving full audit lineage.
+- Policy sources: LPE bundles, waiver tables, moderation signals, classifier outputs, and Reference Manager catalogs are version-pinned. Guardian persists the versions it evaluated alongside each decision, enabling reproducible audits.
+- Reviewer quarantine: when a reviewer selects QUARANTINE, the UI invokes Guardian’s `/quarantine` endpoint so the canonical log remains in Guardian. Reviewer metadata appends to the decision record (`quarantined_by`, `quarantine_reason`).
 
-- State update: artifacts in `DRAFT`/`READY` transition to `READY` or remain `QUARANTINED`. Previously `QUARANTINED` artifacts stay quarantined until resubmitted with a passing decision.
+#### 7.1.2 Waivers & quarantine ownership (binding)
 
-- Concurrency guard (binding): Guardian loads upstream artifacts using `SELECT ... FOR SHARE` to anchor the decision to the latest committed state; if a parent artifact is demoted in the same window, the child evaluation observes the demotion before issuing a READY verdict, preventing transient approval of stale derivatives.
-
-- Response includes `decision`, `reasons`, `guardian_decision_id`; idempotency ensures repeated submissions with same payload return prior decision while conflicting payloads yield 409.
-
-- Hard SLO: decision latency ≤ 5 minutes P95; synthetic jobs validate rule engine and database connectivity (`/synthetic/status`). Guardian merges are blocked unless `tests/guardian/test_concurrent_parent_swap.py::test_child_blocks_on_parent_swap` passes, preventing regressions to the parent-child locking guard.
-
-- Binding breadcrumbs:
-
-  | Binding | Implementation | Test | Observability |
-  | ------- | -------------- | ---- | ------------- |
-
-| FOR SHARE parent guard | `packages/udocket_core/guardian/service.py::evaluate_artifact` | `tests/guardian/test_concurrent_parent_swap.py::test_child_blocks_on_parent_swap` (required CI gate) | Grafana “Guardian Ready Ratio” panel (`guardian_ready_parent_block_total`) |
-
-#### 7.1.2 Reason codes (normative)
-
-*Purpose: Standardize machine-actionable reasons and remediation guidance.*
-
-- Categories and examples:
-  - `INTEGRITY_HASH_MISMATCH`: content SHA mismatch vs DB. Remediation: resubmit with correct content.
-  - `POLICY_FORBIDDEN_PATTERN`: content violates forbidden pattern. Remediation: edit content; re-run QA.
-  - `POLICY_REGION_BLOCK`: compute/storage region disallowed. Remediation: adjust region; or obtain waiver (§3.8).
-  - `MISSING_SECTION`: required section absent (Compose). Remediation: update template or regenerate.
-  - `SOURCE_NOT_APPROVED`: upstream artifact not APPROVED. Remediation: approve source or select valid input.
-  - `DEBUG_MODE_BLOCKED`: DEBUG enabled in production. Remediation: disable DEBUG.
-  - `RESIDENCY_WAIVER_USED`: waiver applied; flagged for audit. Remediation: verify approvals and rationale.
-- Sample decision record (guardian_decision_history):
-  ```json
-  {
-    "artifact_id": "00000000-0000-0000-0000-000000000000",
-    "org_id": "11111111-1111-1111-1111-111111111111",
-    "idempotency_key": "abc-123",
-    "decision": "QUARANTINED",
-    "reasons": ["POLICY_FORBIDDEN_PATTERN", "MISSING_SECTION"],
-    "rules_version": "2025-10-19.3",
-    "settings_snapshot_sha256": "sha256-...",
-    "decided_at": "2025-10-19T20:15:00Z"
-  }
-  ```
-
-Reason matrix (illustrative)
-
-| Code                     | Category  | Human message              | Remediation                                     | Dashboard tag       |
-| ------------------------ | --------- | -------------------------- | ----------------------------------------------- | ------------------- |
-| INTEGRITY_HASH_MISMATCH  | INTEGRITY | Content integrity mismatch | Re-upload or recompute; resubmit                | integrity_mismatch  |
-| POLICY_FORBIDDEN_PATTERN | POLICY    | Forbidden content detected | Edit content; update patterns if false positive | policy_forbidden    |
-| POLICY_REGION_BLOCK      | POLICY    | Region not allowed         | Change region or obtain waiver                  | policy_region       |
-| MISSING_SECTION          | STRUCTURE | Required section missing   | Update template/prompts; regenerate             | missing_section     |
-| SOURCE_NOT_APPROVED      | STATE     | Upstream not approved      | Approve source; rebind                          | source_not_approved |
-| DEBUG_MODE_BLOCKED       | CONFIG    | Debugging mode blocked     | Disable DEBUG; redeploy                         | debug_block         |
-| RESIDENCY_WAIVER_USED    | WAIVER    | Residency waiver applied   | Verify dual approvals; audit                    | waiver_used         |
-
-#### 7.1.1 Invariants & idempotency (binding)
-
-*Purpose: Make Guardian behavior predictable, testable, and safe under retries.*
-
-- Determinism: the same artifact evaluated under the same rules snapshot yields the same decision and reasons.
-- Idempotency: submitting the same artifact with the same `Idempotency-Key` returns the prior decision; conflicting payloads with the same key yield 409. Guardian caches keys for the same 24-hour TTL defined by `api.idempotency.ttl_hours` so replay windows align with API expectations.
-- Scope of mutation: Guardian only sets the state of the submitted artifact (`DRAFT↔READY` or `QUARANTINED`); it never approves artifacts and never mutates other artifacts.
-- History integrity: `guardian_decision_history` defines a unique index on `(org_id, artifact_id, idempotency_key) WHERE idempotency_key IS NOT NULL` to prevent duplicate keys; a `guardian_decision` view exposes the latest decision per artifact.
-- Residency waivers: when `regions.cross_region_waiver=true` (§3.8), Guardian stamps `cross_region=true` into the artifact manifest and logs `REGION_WAIVER_USED`; waivers require dual approval (Security + Architecture).
-- Signals: on `READY` or `QUARANTINED`, emit `artifact_state` SSE and structured audit events with correlation IDs; consumers must treat these as at-least-once.
-- Superusers: production deployments run without a runtime superuser bypass; database superuser access is reserved for break-glass workflows and audited in Appendix O.
-- Unique index (binding):
-  ```sql
-  CREATE UNIQUE INDEX guardian_decision_history_idem_idx
-      ON guardian_decision_history (org_id, artifact_id, idempotency_key)
-   WHERE idempotency_key IS NOT NULL;
-  ```
+- WAIVED decisions require dual approval (`waiver.requested_by`, `waiver.approved_by`) and carry `waiver_id`, expiry, and conditions. Guardian enforces expiry at fetch time; lapses revert artifacts to `QUARANTINED`.
+- Guardian is the sole authority for quarantine status. Reviewer-initiated quarantines round-trip through Guardian; operators cannot override without an approved waiver. Quarantined artifacts remain invisible to operators until remediation resolves the blocker.
+- Deliverable pullbacks leverage the same pipeline: setting a DL to `REVOKED` or `SUPERSEDED` triggers a Guardian decision update and portal invalidation event `DELIVERABLE.REVOKED|DELIVERABLE.SUPERSEDED`.
 
 #### 7.1.3 Queue observability & timeout safeguards (binding)
 
 *Purpose: Surface Guardian stalls quickly and keep operators unblocked when automation degrades.*
 
 - Guardian publishes queue gauges `guardian_pending_total` and `guardian_pending_oldest_seconds` from the `guardian_submission_queue` materialized view (fields: `artifact_id`, `org_id`, `submitted_at`, `last_heartbeat_at`). Alert `alert_guardian_queue_stale` fires when pending count exceeds the adaptive KEDA budget or the oldest item age breaches `guardian.queue.backlog_alert_minutes`; App.H RB-GUARD-QUEUE prescribes triage steps and automated provider fallback verification before any break-glass waiver is considered.
-- Worker submission watchdogs enforce `guardian.queue.submission_timeout_seconds` (default 300s). When Guardian has not replied within that window the worker marks the run `FAILED_GUARDIAN_TIMEOUT`, leaves the artifact in `DRAFT`, emits SSE `artifact.guardian_timeout`, records audit event `GUARDIAN_TIMEOUT_ESCALATED`, and increments `guardian_submission_timeout_total`. Ops receives a page and the UI surfaces a banner instructing staff to either resubmit once Guardian is healthy or follow the manual review checklist.
-- Reviewer backlog health is tracked via `review_ready_backlog_total` and `review_ready_oldest_seconds`; alerts respect `reviews.backlog.alert_minutes` so reviewers are paged before READY artifacts languish. The approvals panel highlights age bands and links directly to the Guardian decision details that require action.
-- False-positive sampling increments `guardian_quarantine_false_positive_total` whenever an artifact resubmits with the same `content_sha256` and transitions from `QUARANTINED` to `READY` without a ruleset change. Weekly governance checks compare that counter against `guardian_decision_total` to ensure the ≤ 5 % false-positive objective (§6.12) remains on track and to prioritise rule tuning when the ratio trends upward.
+- Worker submission watchdogs enforce `guardian.queue.submission_timeout_seconds` (default 300s). When Guardian has not replied within that window the worker marks the run `FAILED_GUARDIAN_TIMEOUT`, leaves the artifact in `PENDING_JUDGEMENT`, emits SSE `artifact.guardian_timeout`, records audit event `GUARDIAN_TIMEOUT_ESCALATED`, and increments `guardian_submission_timeout_total`. Ops receives a page and the UI surfaces a banner instructing staff to either resubmit once Guardian is healthy or follow the manual review checklist.
+- Reviewer backlog health is tracked via `review_queue_backlog_total` and `review_queue_oldest_seconds`; alerts respect `reviews.backlog.alert_minutes` so reviewers are paged before `QUEUED_FOR_REVIEW` items languish. The approvals panel highlights age bands, Guardian reason codes, and linked remediation guidance.
+- False-positive sampling increments `guardian_quarantine_false_positive_total` whenever an artifact resubmits with the same `content_sha256` and transitions from `QUARANTINED` to `CLEARED_FOR_USE|OPERATOR_PREP` without a ruleset change. Weekly governance checks compare that counter against `guardian_decision_total` to ensure the ≤ 5 % false-positive objective (§6.12) remains on track and to prioritise rule tuning when the ratio trends upward.
 
 ### 7.2 Digital signature service (PDF/A, TSA, OCSP)
 
@@ -1841,11 +1954,11 @@ PII posture (binding)
 *Purpose: Guard against prompt injection, bias, and policy breaches.*
 
 - Pre-call injection filters: pattern-based sanitization, allowlist of instructions, region/language cross-check. Policy guard rejects requests hitting forbidden patterns and requires successful moderation check before dispatch.
-- Moderation stack: inbound prompts and retrieved context flow through provider moderation APIs plus in-house classifiers (`toxicity`, `self_harm`, `sexual_content`, `pii_reintroduction`). Post-call outputs run through the same classifiers; violations emit `LLM_CONTENT_FLAGGED` QA issues, place the artifact back into `DRAFT`, and require Guardian approval after staff remediation.
+- Moderation stack: inbound prompts and retrieved context flow through provider moderation APIs plus in-house classifiers (`toxicity`, `self_harm`, `sexual_content`, `pii_reintroduction`). Post-call outputs run through the same classifiers; violations emit `LLM_CONTENT_FLAGGED` QA issues, set the artifact status to `QUARANTINED`, and require remediation plus a fresh Guardian submission before workflow resumes.
  - Moderation configuration & observability: `llm.moderation.enabled`, `llm.moderation.provider`, enforcement mode `llm.moderation.enforcement ∈ {block,warn}`, and threshold keys `llm.moderation.thresholds.*` govern behavior by locale/use‑case. Metrics `llm_content_flagged_total{reason}`, `llm_moderation_latency_seconds`, and `llm_moderation_error_total` feed the “LLM Safety & Moderation” dashboard; redaction efficacy tracked via `redaction_stats{kind}`. Guardian shows moderation verdicts alongside QA issues for reviewer context. Non‑prod orgs may select `warn` to avoid blocking while tuning thresholds; prod defaults to `block` unless a documented waiver is active.
 - Golden-set tests: nightly runs across languages evaluate jailbreak resistance, toxicity, fairness; regressions page on-call and block deploys. Promotion to production is blocked unless the release pipeline’s `golden_set:jailbreak` job re-runs clean within the staging window.
-- QA nodes re-validate outputs against schema, length, references, organization-specific policies (`compose.policy.*`, `analyze.*`), and moderation results. Failures escalate to QA logs and SSE notifications while Guardian keeps the artifact in `READY` until approval.
-- Guardian gating: Guardian consumes moderation verdicts and QA outcomes, blocks promotion when `LLM_CONTENT_FLAGGED` or `POLICY_BLOCK` is present, and forwards only clean artifacts to reviewers for APPROVED/REJECTED decisions.
+- QA nodes re-validate outputs against schema, length, references, organization-specific policies (`compose.policy.*`, `analyze.*`), and moderation results. Failures escalate to QA logs and SSE notifications while Guardian holds the artifact in `OPERATOR_PREP`/`QUARANTINED` until review outcomes progress it.
+- Guardian gating: Guardian consumes moderation verdicts and QA outcomes, blocks promotion when `LLM_CONTENT_FLAGGED` or `POLICY_BLOCK` is present, and forwards only clean artifacts to reviewers for tri-outcome review decisions (APPROVE / CHANGES_REQUESTED / QUARANTINE).
 - Forbidden content detection triggers automatic Guardian quarantine request and records event in `audit_event` with reason `LLM_POLICY_BLOCK`.
 
 ### 8.5 Reproducibility envelopes & replay strategy
@@ -2038,22 +2151,23 @@ List contracts (normative)
 
 - Artifacts
 
-  - List: `GET /api/v1/artifacts?case_id=&type=&state=&archived=&page=&page_size=` (RLS-scoped). Org-wide listing via `scope=org` uses token `active_org_id`; `org_id` param not supported.
-  - Create (DRAFT): `POST /api/v1/cases/{case_id}/artifacts` with `{type, file|json, manifest}`.
-  - Submit to Guardian (idempotent per artifact): `POST /api/v1/artifacts/{artifact_id}/submit_guardian {content_sha256}` → `DRAFT→READY` or `QUARANTINED`.
-  - Get: `GET /api/v1/artifacts/{artifact_id}`; Download: `GET /api/v1/artifacts/{artifact_id}/download` (requires `APPROVED`).
+  - List: `GET /api/v1/artifacts?case_id=&type=&class=&status=&archived=&page=&page_size=` (RLS-scoped). Org-wide listing via `scope=org` uses token `active_org_id`; `org_id` param not supported.
+  - Create: `POST /api/v1/cases/{case_id}/artifacts` with `{type, class?, file|json, manifest}`. Source uploads finalize to `status='STORED'`; derived outputs enter `status='PROCESSING'` until workers flush content and set `status='PENDING_JUDGEMENT'`.
+  - Submit to Guardian (idempotent per artifact): `POST /api/v1/artifacts/{artifact_id}/submit_guardian {content_sha256}` → `PENDING_JUDGEMENT→CLEARED_FOR_USE|OPERATOR_PREP|QUARANTINED` depending on `guardian_judgement`.
+  - Get: `GET /api/v1/artifacts/{artifact_id}`; Download: `GET /api/v1/artifacts/{artifact_id}/download` (requires `status='APPROVED'` for CDs or `status='RELEASED'` for DLs; other classes are never exposed to portal clients).
 
 - Jobs
 
   - Create: `POST /api/v1/cases/{case_id}/jobs/{kind}` with `Idempotency-Key` (TTL default 24h) → returns job id.
-  - Get: `GET /api/v1/jobs/{id}`; Control: `POST /api/v1/jobs/{id}/pause|resume|cancel` (OCC on `version`). Cancelling transitions the job to `CANCELLED`, emits audit event `JOB_CANCELLED` (captures `reason`, `actor_id`), raises SSE `job.update` with `status="CANCELLED"`, and propagates best-effort aborts to external providers (Azure Speech Batch, LangGraph lanes) before marking dependent artifacts `DRAFT`. Repeated cancels are idempotent; only `PENDING|RUNNING|PAUSED` jobs accept the transition.
+  - Get: `GET /api/v1/jobs/{id}`; Control: `POST /api/v1/jobs/{id}/pause|resume|cancel` (OCC on `version`). Cancelling transitions the job to `CANCELLED`, emits audit event `JOB_CANCELLED` (captures `reason`, `actor_id`), raises SSE `job.update` with `status="CANCELLED"`, and propagates best-effort aborts to external providers (Azure Speech Batch, LangGraph lanes) before marking dependent artifacts `FAILED`. Repeated cancels are idempotent; only `PENDING|RUNNING|PAUSED` jobs accept the transition.
   - Progress watchdog (binding): the `job_progress_heartbeat` table records `{job_id, last_heartbeat_at, progress_pct}` updates from workers. A dedicated watchdog task scans for `RUNNING` jobs whose heartbeat age exceeds `jobs.watchdog.no_progress_minutes`; it emits `job_watchdog_warning_total`, raises SSE `job.update` with `status="RUNNING"`, `warning="NO_PROGRESS"`, and annotates the job record. If the heartbeat age exceeds `jobs.watchdog.timeout_minutes`, the watchdog transitions the job to `FAILED`, increments `job_watchdog_timeout_total`, files audit event `JOB_WATCHDOG_TIMEOUT`, and invokes RB-JOB-WATCHDOG. Watchdog actions never mutate jobs already `COMPLETED|FAILED|CANCELLED`; recoverable jobs remain resumable thanks to checkpoint metadata (§6.2, §6.3, §6.4).
   - Overlap guard: advisory lock `jobkind:{case_id}/{kind}`; conflicts → 409 `JOB_KIND_BUSY`.
 
 - Reviews (OCC + swap lock)
 
-  - Approve: `POST /api/v1/reviews/{artifact_id}/approve {note?, expected_version}`; acquire `case-approval:{org}/{case}/{type}`, demote prior APPROVED of same type, approve if `READY` and version matches; already APPROVED → 200 idempotent.
-  - Reject: `POST /api/v1/reviews/{artifact_id}/reject {note?, expected_version}` symmetrical to approve.
+  - Approve: `POST /api/v1/reviews/{artifact_id}/approve {note?, expected_version}`; acquires `case-approval:{org}/{case}/{type}`, archives prior `APPROVED` CDs, and transitions `QUEUED_FOR_REVIEW → APPROVED`. Returns 200 idempotent when already approved with matching version.
+  - Request changes: `POST /api/v1/reviews/{artifact_id}/changes {reject_reason, note, expected_version}`; sets `status='CHANGES_REQUESTED'`, `review_state='CHANGES_REQUESTED'`, and records reviewer metadata. Mandatory `reject_reason` enumerated in §5.2.4.
+  - Quarantine: `POST /api/v1/reviews/{artifact_id}/quarantine {quarantine_reason, note, expected_version}`; records reviewer choice, routes through Guardian so the canonical record lives in `guardian_decision_history`, and sets `status='QUARANTINED'`.
 
 ### 10.3 Upload lifecycle & idempotency model
 
@@ -2065,7 +2179,7 @@ List contracts (normative)
   1. Validate session (`status='PENDING'`, not expired) and presence of staging object.
   1. Verify provided hash/size/type against policy.
   1. Server-side COPY staging object to `/org/{org}/case/{case}/artifact/{artifact_id}/content.bin`.
-  1. Insert artifact row (`state='DRAFT'`, immutable fields set) with new UUIDv7 and manifest payload.
+  1. Insert artifact row (`class='SA'`, `status='STORED'`, immutable fields set) with new UUIDv7 and manifest payload.
   1. Update session `status='FINALIZED'`; optionally auto-submit to Guardian (idempotent).
 - `upload_session` rows remain short-lived; antivirus and content scanners transition `status` through `UPLOADED` and `SCANNING` before finalize. A janitor task clears `EXPIRED`/`ABORTED` sessions and deletes orphan staging blobs.
 - Idempotency: reuse key within TTL returns same `artifact_id`; reuse with different payload → 409 `IDEMPOTENCY_SIGNATURE_MISMATCH`. TTL default 24h (`api.idempotency.ttl_hours`).
@@ -2122,17 +2236,21 @@ Handler pattern
 
 #### 10.3.2 Reviews API (approval with OCC; binding)
 
-*Purpose: Make approval actions safe under concurrency and retries.*
+*Purpose: Make review actions safe under concurrency and retries while supporting tri-outcome decisions.*
 
-- `POST /api/v1/reviews/{artifact_id}/approve { note?, expected_version }` (implementation follows §5.4.1)
+- `POST /api/v1/reviews/{artifact_id}/approve { note?, expected_version }`
   - Step 1: `udlock.xact_lock('case-approval', CONCAT(org_id,'/',case_id,'/',type))`.
-  - Step 2: demote existing `APPROVED` artifact for `(case_id,type)` (`state='READY'`, increment `version`).
-  - Step 3: `UPDATE artifact SET state='APPROVED', review_reason=:note, approved_at=now(), approved_by=:user, version=version+1 WHERE id=:artifact_id AND state='READY' AND version=:expected_version`.
-  - Step 4: if rowcount=0 but artifact already `APPROVED`, return 200 (idempotent); otherwise 409 (stale version or state).
-  - Step 5: emit audit + SSE; on demotion/invalidation trigger portal guard per §11.2.1.
-- `POST /api/v1/reviews/{artifact_id}/reject { reason, expected_version }`
-  - Acquire the same `case-approval` lock, `UPDATE artifact SET state='REJECTED', ...` when state∈{`READY`,`APPROVED`} and version matches.
-  - On success emit audit/SSE and portal invalidation events per §11.2.1; conflicts return 409.
+  - Step 2: archive existing `APPROVED` CDs for `(case_id,type)` (`UPDATE ... SET status='ARCHIVED', archived=true, version=version+1 WHERE status='APPROVED' AND archived=false`).
+  - Step 3: `UPDATE artifact SET status='APPROVED', review_status='APPROVED', review_reason=:note, approved_at=now(), approved_by=:user, version=version+1 WHERE id=:artifact_id AND status='QUEUED_FOR_REVIEW' AND version=:expected_version`.
+  - Step 4: if rowcount=0 but artifact already `APPROVED`, return 200 (idempotent); otherwise 409 (stale version or status mismatch).
+  - Step 5: emit audit + SSE; portal invalidation logic (see §11.2.1) handles deliverable promotion.
+- `POST /api/v1/reviews/{artifact_id}/changes { reject_reason, note, expected_version }`
+  - Acquire the same lock; update `status='CHANGES_REQUESTED'`, `review_state='CHANGES_REQUESTED'`, store reviewer metadata (`reject_reason`, `reject_note`, timestamps, reviewer id).
+  - Emit audit + SSE (`REVIEW.CHANGES_REQUESTED`) and keep the CD available to operators in `OPERATOR_PREP` once they address feedback.
+- `POST /api/v1/reviews/{artifact_id}/quarantine { quarantine_reason, note, expected_version }`
+  - Acquire the lock; call Guardian quarantine endpoint with reviewer metadata so `guardian_decision_history` remains source of record.
+  - Set `status='QUARANTINED'`, `review_state='QUARANTINED'`, persist reviewer note, and emit audit + SSE (`REVIEW.QUARANTINED`).
+  - Portal invalidation removes any derived deliverables until remediation/waiver occurs.
 
 ### 10.4 Guardian, Settings, Reference Manager, and Signature APIs
 
@@ -2180,7 +2298,7 @@ Binding breadcrumbs:
 
 *Purpose: Standardize safe and efficient delivery semantics for approved artifacts.*
 
-- Preconditions: downloads require `state='APPROVED'`; token or signed URL must authorize access to the case/org.
+- Preconditions: downloads require `status='APPROVED'`; token or signed URL must authorize access to the case/org.
 - ETag: responses include a strong validator derived from `artifact.content_sha256` and encoded as a quoted base16 string with a `sha256:` prefix (e.g., `"sha256:0123abcd..."`). The value stays stable across full and ranged requests. Clients may use `If-None-Match` for conditional GETs (304) and `If-Range` for resumable downloads; weak validators are forbidden.
 - Range requests: support `Range: bytes=...`; respond with `206 Partial Content`, include `Content-Range`, `Accept-Ranges: bytes`, and correct `Content-Length` for the segment. Full responses remain `200 OK`.
 - Headers: include `Content-Disposition` with a safe filename; expose `ETag` via CORS (see §10.5). Signed URLs include short TTLs; servers reject expired or mismatched signatures.
@@ -2236,8 +2354,9 @@ Client retry guidance (normative)
 
 *Purpose: Define canonical SSE events and replay behavior.*
 
-- Event types: `job.update`, `artifact.state`, `qa.notes`, `portal_link_invalidated`, `settings.activated`.
+- Event types: `job.update`, `artifact.state`, `qa.notes`, `portal_link_invalidated`, `settings.activated`, plus lifecycle events emitted for the status model (`OBJECT.STORED`, `OBJECT.PROCESSING.START|END`, `OBJECT.FAILED`, `OBJECT.PENDING_JUDGEMENT`, `GUARDIAN.JUDGEMENT.PASS|WARN|BLOCK|WAIVED`, `OBJECT.CLEARED_FOR_USE`, `OBJECT.OPERATOR_PREP`, `REVIEW.REQUESTED`, `REVIEW.APPROVED`, `REVIEW.CHANGES_REQUESTED`, `REVIEW.QUARANTINED`, `SIGNATURE.APPLIED`, `DELIVERABLE.RELEASED`, `DELIVERABLE.REVOKED`, `DELIVERABLE.SUPERSEDED`, `OBJECT.ARCHIVED`).
 - Envelope: `id` (monotonic), `event`, `data` (JSON), `retry` (ms). `data` for snapshot payloads includes `watermark_ts` to indicate the newest event timestamp included. The envelope and payloads validate against `spec/schemas/sse/event_envelope.schema.json`; SSE producers deserialize generated Pydantic models before emit. Schema constraints encode `maxLength`/`maxItems` limits (e.g., snapshot ≤ 500 events, messages ≤ 2 KiB) so the 8 KiB payload budget is enforced mechanically. `id` echoes in `Last-Event-ID`.
+- Payload hints: `data.meta` may include `{phase, percent, next_action, badges[]}` to align with UI progress widgets (e.g., `phase="Judgement"`, `badges=["WARN:PII detector"]`).
 - Sequencing: IDs are monotonic per stream (`sse:case:{case_id}` and `sse:job:{job_id}`) and minted via Redis `INCR`, ensuring ordered delivery across multiple web pods without requiring cross-stream ordering.
 - Sync snapshot: if `Last-Event-ID` predates the 15-minute/500-event replay window (whichever comes first), the server emits a snapshot (RLS‑scoped) containing the last 500 events and `watermark_ts` before tailing live updates.
 - Delivery: at‑least‑once; clients de‑dupe via `id`. Snapshots include a bounded window and `watermark_ts` so consumers know when they are live. Individual events are capped at 8 KiB payloads (post-JSON encoding) and Redis stream memory budgets target ≤ 256 MiB per environment; SREs size `stream.maxlen` accordingly.
@@ -2268,7 +2387,7 @@ Payloads (illustrative)
 | Event                   | data fields                                                          | Notes                                                 |
 | ----------------------- | -------------------------------------------------------------------- | ----------------------------------------------------- |
 | job.update              | `{ job_id, case_id, org_id, status, progress?, error? }`             | `status ∈ {PENDING,RUNNING,PAUSED,FAILED,COMPLETED}`  |
-| artifact.state          | `{ artifact_id, case_id, org_id, type, state, previous_state?, ts }` | `state ∈ {DRAFT,READY,QUARANTINED,APPROVED,REJECTED}` |
+| artifact.state          | `{ artifact_id, case_id, org_id, type, status, previous_status?, ts }` | `status ∈ {STORED,PROCESSING,FAILED,PENDING_JUDGEMENT,CLEARED_FOR_USE,OPERATOR_PREP,QUEUED_FOR_REVIEW,CHANGES_REQUESTED,QUARANTINED,APPROVED,SIGNED,RELEASED,REVOKED,SUPERSEDED,ARCHIVED}` |
 | qa.notes                | `{ job_id?, artifact_id?, case_id, notes:[{level,msg,ts}] }`         | Levels: INFO                                          |
 | portal_link_invalidated | `{ artifact_id, case_id, reason, ts }`                               | Portal consumes to revoke stale links                 |
 | settings.activated      | `{ scope, org_id?, case_id?, bundle_id, version_id, ts }`            | Triggers cache invalidation on clients                |
@@ -2325,7 +2444,7 @@ Payloads (illustrative)
 - `GET /api/v1/chat/rate-limit-status`
   - Optional helper returning `{assistant_id, remaining, resets_at}` per active assistant. Enforced via the same role checks as the assistants endpoint; staff may query for multiple cases by passing `case_id`.
 - `GET /api/v1/chat/manifest/{session_id}`
-  - Fetches the manifest for a completed session (metadata, Guardian decision, citations) without returning message content. Requires artifact read permission and Guardian approval (`state='APPROVED'`). Intended for UI review panels and auditors.
+  - Fetches the manifest for a completed session (metadata, Guardian decision, citations) without returning message content. Requires artifact read permission and Guardian approval (`status='APPROVED'`). Intended for UI review panels and auditors.
 
 Contract requirements (binding)
 
@@ -2347,7 +2466,7 @@ ______________________________________________________________________
 *Purpose: Summarize the operator/reviewer experience and dependencies.*
 
 - Case workspace shows artifact timeline, job status, approvals queue, and Guardian outcomes; integrates with SSE for live updates and Channels for collaborative notes.
-- Approvals panel enforces multi-step review (agent output, manual edits) with OCC guardrails; components display readiness, reviewer count, pending manual edits, Guardian reason codes (with scrubbed excerpts), and backlog ageing banners tied to `review_ready_backlog_total`/`review_ready_oldest_seconds`.
+- Approvals panel enforces multi-step review (agent output, manual edits) with OCC guardrails; components display readiness, reviewer count, pending manual edits, Guardian reason codes (with scrubbed excerpts), and backlog ageing banners tied to `review_queue_backlog_total`/`review_queue_oldest_seconds`.
 - Job tiles surface watchdog warnings (icon + tooltip) when `job_watchdog_warning_total` increments; clicking reveals last heartbeat, current lane, and suggested remediation per RB-JOB-WATCHDOG. Cancelled or timeout jobs link directly to audit events and runbook excerpts.
 - Analytics dashboards surface LLM cost, artifact coverage, QA issues; data sourced from `audit_event`, `ops_*` logs, and FinOps metrics.
 - Component-level permissions derived from Settings-driven policy map; UI respects field masks (e.g., masked SHA values replaced with `[REDACTED]`).
@@ -2385,7 +2504,7 @@ ______________________________________________________________________
 
 *Purpose: Enforce explicit checks on every fetch to avoid stale or unauthorized content.*
 
-- Preconditions: `state='APPROVED'`, case/org membership, and fresh signed URL or token.
+- Preconditions: `status='APPROVED'`, case/org membership, and fresh signed URL or token.
 - Conditional requests: clients **MUST** send `If-Match` with the last seen strong ETag (surfaced inline on the portal artifact detail panel as “Integrity tag” and embedded in the download button tooltip); mismatches or missing headers yield `412 PRECONDITION_FAILED` with guidance (`portal.download.error.etag_mismatch`) to refresh metadata before retrying.
 - Rate limits: per‑user/org caps; anomalies invalidate links and prompt step-up MFA when configured.
 
@@ -2393,7 +2512,7 @@ ______________________________________________________________________
 
 *Purpose: Clarify reviewer and operator expectations for non-happy-path approval scenarios.*
 
-- Rejection path: `REJECTED` artifacts return to `DRAFT` (manual edit) or `READY` (agent rerun) state with QA log references. Guardian keeps the prior APPROVED artifact live until a replacement is READY. Reviewers must provide structured feedback (`reason_code`, `message`, optional `follow_up_owner`) stored in `artifact_review_feedback` and surfaced in UI/state machine diagrams (App.A.5).
+- Remediation path: `CHANGES_REQUESTED` artifacts route back to `OPERATOR_PREP` with reviewer guidance and must re-clear Guardian (PASS/WARN) before re-entering `QUEUED_FOR_REVIEW`. Guardian keeps the prior APPROVED artifact live until the replacement is `APPROVED`. Reviewers must provide structured feedback (`reject_reason`, `reject_note`, optional `follow_up_owner`) stored in `artifact_review_feedback` and surfaced in UI/state machine diagrams (App.A.5).
 - Timeouts & escalation: Settings key `reviews.timeout_hours` (per artifact type) triggers reminders at 50%/90% elapsed windows and auto-escalates to `org_admin` if the window closes without action. Escalation emits `approval_timeout` notification templates and logs `REVIEW_TIMEOUT_ESCALATED` audit events.
 - Reassignment: Org admins with `org_admin` role may reassign pending reviews via `POST /reviews/{artifact}/reassign {from_user,to_user}`; OCC guards prevent reassignment once a decision is recorded. Actions append to the audit trail and notify both reviewers.
 - Guardian degradation: When Guardian is in App.H manual mode, approvals require dual reviewer sign-off plus compliance attestation before promotion; the portal surfaces `MANUAL_GUARDIAN_DECISION` context in download banners.
@@ -2471,7 +2590,7 @@ ______________________________________________________________________
 
 *Purpose: Clarify reviewer counts, state transitions, and UI prompts for edit workflows.*
 
-- Manual Edit: creates a child version (`DRAFT`); reviewers (count configurable per `reviews.required_types[]`) must approve before promotion; demotes any prior APPROVED exclusive artifact.
+- Manual Edit: creates a child version (`OPERATOR_PREP` CD linked to the prior artifact); reviewers (count configurable per `reviews.required_types[]`) must approve before promotion; demotes any prior APPROVED exclusive artifact.
 - Agent Edit: interactive session produces a candidate child; same approval semantics as Manual Edit; UI shows “AI Assisted” badge with audit trail.
 - Stage coverage: every major artifact (transcript, analysis outputs, compose deliverables, portal messaging attachments) exposes both Manual and Agent edit affordances so operators can choose between direct editing and AI-assisted drafting. Agent edits reuse the shared LangGraph infrastructure with the relevant lane templates (transcript cleanup, summary refinement, compose adjustments) while honoring residency and provider caps; manual edits launch a rich text/JSON editor with schema-aware validation.
 - Guardrails: Agent edit prompts template in case metadata and enforce redaction of PHI/PII beyond the case scope; prompts and model settings write to the edit manifest so reviewers can validate provenance. The Agent edit runtime inherits the same moderation/masked-token policies as §8.4 LLM calls plus edit-specific classifiers that block off-topic, speculative, or policy-disallowed requests (`EDIT_POLICY_BLOCK`). Manual edits require operators to provide a change summary that is persisted alongside the diff; reviewers see both the diff and the operator note.
@@ -2522,7 +2641,7 @@ ______________________________________________________________________
 *Purpose: Describe post-Compose rendering, linting, and approval loop.*
 
 - Inputs: latest `COMPOSE_CLIENT`/`COMPOSE_LAWYER` artifacts and organization templates (`TEMPLATE` artifacts) selected via Settings.
-- Steps: lint placeholders, render DOCX (optionally PDF/A), compute SHA-256, write `ASSEMBLED_DOC_*` artifacts (`DRAFT → READY → APPROVED`).
+- Steps: lint placeholders, render DOCX (optionally PDF/A), compute SHA-256, write `ASSEMBLED_DOC_*` artifacts (`PROCESSING → PENDING_JUDGEMENT → OPERATOR_PREP → QUEUED_FOR_REVIEW → APPROVED`).
 - Exclusive types: approving a new assembled document demotes the prior APPROVED version atomically (same swap logic as Compose).
 - Telemetry: emit metrics `document_assembly_duration_seconds`, `document_assembly_error_total`; lint warnings recorded in ops logs for reviewer visibility.
 
@@ -2583,7 +2702,7 @@ ______________________________________________________________________
   ```
 - Emission & formatting (binding): All services emit newline-delimited JSON to stdout for levels `DEBUG` through `ERROR`; only `ERROR` and higher duplicate to stderr so container runtimes and `kubectl logs`/`docker logs` tail a single canonical stream. The `src` field records the compact source location as `package.module:function:line` (max 80 characters) and extended diagnostics belong in structured keys under `extras`. Messages must remain ≤ 160 characters—richer context should be captured in dedicated fields to avoid terminal noise. Local pretty printing is opt-in via `LOG_PRETTY=1`, keeping production streams strict JSON with no ANSI colour or stacktrace spam.
 - Forbidden fields (binding): log scrubber removes `Authorization`, `Cookie`, `Set-Cookie`, `X-Request-Signature`, `X-Signature-Key-Id`, raw signed URLs, and any header matching `*-Token` before serialization. CI test `tests/logging/test_redaction.py::test_forbidden_headers_masked` asserts the mask list, and runtime metrics `logging_redaction_dropped_total` surface any attempt to log a banned key.
-- Metrics: queue depth, job durations, Guardian latency/throughput (`guardian_decision_latency_seconds`, `guardian_ready_ratio`, `guardian_pending_total`, `guardian_pending_oldest_seconds`, `guardian_submission_timeout_total`), Signer verify latency (including `sign_verify_status_total`, `ocsp_latency_seconds`, `ocsp_staple_age_seconds`, `tsa_latency_seconds`, `tsa_time_drift_seconds`), LLM health/circuit state, delivery rates, integrity incidents (`integrity_scan_queue_depth`, `integrity_quarantine_total`), review queue health (`review_ready_backlog_total`, `review_ready_oldest_seconds`), Guardian false-positive sampling (`guardian_quarantine_false_positive_total`), job lifecycle signals (`job_stalled_total`, `job_watchdog_warning_total`, `job_watchdog_timeout_total`, `job_cancellation_total`), watchdog runner health (`watchdog_runner_lag_seconds`, `watchdog_runner_missed_total`), LPE surface health (`lpe_lookup_latency_seconds`, `lpe_cache_hit_ratio`, `lpe_compiler_duration_seconds`, `lpe_policy_block_total`), upload scanning (`upload_scan_duration_seconds`, `upload_scan_infected_total`, `upload_scan_error_total`), Reference Manager ingest health (`reference_manager_ingest_duration_seconds`, `reference_manager_diff_backlog`, `reference_manager_publish_total`), SSE reconnect rate, `artifacts_ready_total`, `artifacts_approved_total`, `time_to_approval_seconds`. All Prometheus metrics use seconds for duration histograms and `_total` counters for events; legacy `*_ms` signals are deprecated and scheduled for removal in v7 GA (§12.6).
+- Metrics: queue depth, job durations, Guardian latency/throughput (`guardian_decision_latency_seconds`, `guardian_cleared_ratio`, `guardian_pending_total`, `guardian_pending_oldest_seconds`, `guardian_submission_timeout_total`), Signer verify latency (including `sign_verify_status_total`, `ocsp_latency_seconds`, `ocsp_staple_age_seconds`, `tsa_latency_seconds`, `tsa_time_drift_seconds`), LLM health/circuit state, delivery rates, integrity incidents (`integrity_scan_queue_depth`, `integrity_quarantine_total`), review queue health (`review_queue_backlog_total`, `review_queue_oldest_seconds`), Guardian false-positive sampling (`guardian_quarantine_false_positive_total`), job lifecycle signals (`job_stalled_total`, `job_watchdog_warning_total`, `job_watchdog_timeout_total`, `job_cancellation_total`), watchdog runner health (`watchdog_runner_lag_seconds`, `watchdog_runner_missed_total`), LPE surface health (`lpe_lookup_latency_seconds`, `lpe_cache_hit_ratio`, `lpe_compiler_duration_seconds`, `lpe_policy_block_total`), upload scanning (`upload_scan_duration_seconds`, `upload_scan_infected_total`, `upload_scan_error_total`), Reference Manager ingest health (`reference_manager_ingest_duration_seconds`, `reference_manager_diff_backlog`, `reference_manager_publish_total`), SSE reconnect rate, `artifacts_cleared_total`, `artifacts_approved_total`, `time_to_approval_seconds`. All Prometheus metrics use seconds for duration histograms and `_total` counters for events; legacy `*_ms` signals are deprecated and scheduled for removal in v7 GA (§12.6).
 - FinOps metrics: `llm_cost_estimate_total{org,case,job,model}`, `finops_cost_per_case_usd{org,case}`, `finops_cost_per_org_usd{org,month}`, `delivery_events_total{org,channel,status}`, `finops_mom_regression_flag{org}`.
 - Privacy/Governance: `residency_block_total`, `dpia_records_total{status}`, `ropa_records_total`, `entitlement_snapshots_total`, `policy_unsafe_activations_blocked_total`.
 - Advisory locks: `udlock_locks_held{scope,kind}`, `udlock_lock_age_seconds_p95{scope,kind}`, `udlock_watchdog_stale_total{action}`, `udlock_registry_gc_total`.
@@ -2647,7 +2766,7 @@ ______________________________________________________________________
 - Logging pipeline synthetic monitors assert `logging_ingest_lag_seconds < 30s`, `logging_drop_rate_pct = 0`, and index freshness; alerts route to App.H RB-LOG-007.
 - Runbooks stored in ops repo (linked in App.H) cover Guardian quarantine handling, PgBouncer pooling misconfig, artifact integrity mismatch, SSE replay issues, and logging pipeline recovery.
 - Automation: watchdog tasks auto-quarantine artifacts with integrity failures, restart pods on failed health checks, and rotate settings caches when invalidation fails. The `watchdog-runner` Celery beat process emits heartbeats (`watchdog_runner_lag_seconds`) and raises PagerDuty incidents if it misses two consecutive intervals; Kubernetes liveness/readiness probes restart the runner on failure.
-- Fail-closed defaults: if Guardian is unavailable, artifacts remain `DRAFT`; if Settings is unavailable, new jobs block on snapshot fetch while running jobs continue with embedded snapshots. These scenarios have dedicated alerts and runbooks in App.H.
+- Fail-closed defaults: if Guardian is unavailable, artifacts remain `PENDING_JUDGEMENT`; if Settings is unavailable, new jobs block on snapshot fetch while running jobs continue with embedded snapshots. These scenarios have dedicated alerts and runbooks in App.H.
 
 ### H.5 RB-LLM-003 — Provider degradation / circuit breaker (normative)
 
@@ -2750,7 +2869,7 @@ ______________________________________________________________________
 *Purpose: Provide common observability views and bind alerts to runbooks.*
 
 - Guardian SLO & Throughput (SRE): decision latency P50/P95/P99, error rate, queue depth/backlog age (`guardian_pending_total`, `guardian_pending_oldest_seconds`), submission timeout rate (`guardian_submission_timeout_total`), false-positive ratio (`guardian_quarantine_false_positive_total / guardian_decision_total`), synthetic success, SLO burn rate.
-- Queues & KEDA (SRE): Celery queue depth per lane, replicas, scaling events, DLQ intake and drain, job cancellation spikes (`job_cancellation_total`), watchdog escalations (`job_watchdog_timeout_total`), and review backlog ageing (`review_ready_backlog_total`, `review_ready_oldest_seconds`).
+- Queues & KEDA (SRE): Celery queue depth per lane, replicas, scaling events, DLQ intake and drain, job cancellation spikes (`job_cancellation_total`), watchdog escalations (`job_watchdog_timeout_total`), and review backlog ageing (`review_queue_backlog_total`, `review_queue_oldest_seconds`).
 - LLM Cost & Circuit (Platform): tokens in/out, estimated spend vs cap, circuit state per model/provider, fallback reason codes.
 - Localization & Policy Engine (Platform/SRE): lookup latency P50/P95/P99, cache hit ratio, compiler duration, policy decision distribution by residency/privacy flags, unsafe activation counters, waiver utilisation.
 - Reference Manager – Ingestion & Quality (Content Ops/Legal Ops): harvest throughput per source, freshness age, selector failure rate, coverage % by jurisdiction/locale, license ledger health.
@@ -2775,7 +2894,7 @@ Alert routing
 *Purpose: Continuously validate critical paths and assumptions.*
 
 - Web: `/readyz` checks RLS GUCs; `/healthz` verifies DB connectivity and cache coherence.
-- Guardian: submit synthetic artifact; expect deterministic READY with known inputs; verifies rules load; latency \< SLO.
+- Guardian: submit synthetic artifact; expect deterministic PASS (→ OPERATOR_PREP) with known inputs; verifies rule load; latency < SLO.
 - Signer: sign a synthetic document against test trust roots; verify TSA/OCSP reachability.
 - Settings: activate a safe test bundle; diff preview matches expected; revert; validators pass.
 - Watchdog runner: `watchdog-runner` Celery beat schedule fires every minute, invoking all watchdog tasks (Guardian backlog, job progress, advisory locks, integrity queue). A self-check endpoint `/ops/watchdog/status` reports the most recent execution timestamp and per-task durations; synthetic monitor verifies the timestamp delta stays \< 120s. Metrics `watchdog_runner_lag_seconds`, `watchdog_runner_missed_total`, and log-based alerts catch missed beats; if the runner stalls, App.H RB-JOB-WATCHDOG and RB-GUARD-QUEUE prescribe manual invocation plus root-cause remediation before re-enabling automation.
@@ -2811,7 +2930,7 @@ Alert routing
 *Purpose: Outline how teams sustain service when automation or guardians fail.*
 
 - **LLM outage:** The `ModelFailoverOrchestrator` automatically advances to the next healthy provider in the documented `fallback_chain`; envelopes capture the substitute model and parity hash. If every fallback is unhealthy the queue transitions to `PAUSED_AWAITING_PROVIDER`, workers stop launching new runs, and automation polls health every 60 seconds (three consecutive greens required) before resuming. Customer notifications only trigger if the pause exceeds 15 minutes or impacts SLA targets.
-- **Guardian impairment:** Freeze approvals that rely on Guardian READY; manual reviewers follow paper checklist (`docs/runbooks/guardian-manual-review.md`) and log decisions as `MANUAL_GUARDIAN_DECISION` artifacts until service recovers.
+- **Guardian impairment:** Freeze approvals that rely on Guardian PASS/WARN judgements; manual reviewers follow paper checklist (`docs/runbooks/guardian-manual-review.md`) and log decisions as `MANUAL_GUARDIAN_DECISION` artifacts until service recovers.
 - **Transcription fallback:** The `SpeechFailoverController` retries against the next speech provider/region in `speech.jobs[].fallback_chain` with full equivalence logging. When the chain is exhausted jobs enter `PAUSED_AWAITING_PROVIDER` and automatically resume once health probes confirm recovery; no human transcription is used in the automated path.
 - **Communication cadence:** Duty Manager sends initial update within SLA (§1.6) and hourly until resolved; final customer notice includes timeline, data impact, and remediation.
 - **Drills:** Semi-annual BCP exercise simulating combined Guardian + LLM outage; evidence stored as `BCP_DRILL_REPORT` artifacts linked in App.H.
@@ -2822,7 +2941,7 @@ Alert routing
 
 | Subsystem              | Fail-closed behavior                                                            | User impact                                                      | Runbook                                           |
 | ---------------------- | ------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------- |
-| Guardian               | Rejects submissions; artifacts remain `DRAFT` until service recovers            | New approvals paused; portal shows READY-only backlog            | App.H RB-GUARD-001                                |
+| Guardian               | Rejects submissions; artifacts remain `PENDING_JUDGEMENT` until service recovers | New approvals paused; portal shows OPERATOR_PREP backlog    | App.H RB-GUARD-001                                |
 | Settings Service       | New jobs block on snapshot fetch; running jobs continue with embedded snapshots | Operators see queue backlog; activation UI disabled              | App.H Standard template + Settings rollback drill |
 | Audit seal / WORM      | Portal deliveries blocked if seal chain breaks for >1 interval                  | Reviewers cannot promote artifacts; portal download attempts 503 | App.H RB-AUDIT-004                                |
 | Residency policy guard | Jobs error with `RESIDENCY_POLICY_BLOCK` on drift                               | Org must adjust settings or seek waiver before resubmission      | App.H RB-RES-BLOCK                                |
@@ -3407,7 +3526,7 @@ Canonical artifact table
     "ended_at": "RFC3339|null",
     "model_id": "string",
     "prompt_version": "string",
-    "guardian_state": "ok|quarantined|blocked",
+    "guardian_judgement": "pass|warn|block|waived|quarantined",
     "messages": [
       {
         "id": "uuid",
@@ -3437,7 +3556,7 @@ Canonical artifact table
     }
   }
   ```
-- Guardian quarantines set `guardian_state="quarantined"` and append a `guardian_decision` block inside the manifest (`decision_id`, `reason`, `acted_at`).
+- Guardian quarantines set `guardian_judgement="quarantined"` and append a `guardian_decision` block inside the manifest (`decision_id`, `reason`, `acted_at`).
 - Staff transcripts retain full conversation (with masked snippets); client transcripts redact internal-only system prompts and any content hidden by moderation for the client audience. Both run through the redaction pipeline before persistence.
 - `CHAT_SUMMARY_JSON` (`chat_summary@1.0`) stores structured summaries for downstream analytics: `{ "schema_version": "chat_summary@1.0", "session_id": "...", "summaries": [{ "audience": "staff|client", "locale": "en-CA", "text_md": "...", "citations": [...] }], "generated_at": "RFC3339", "model_id": "string" }`. Summaries always link back to the source session via `manifest.source_artifacts`.
 
@@ -3538,7 +3657,7 @@ E.1 Key catalog (scope: SYSTEM | ORG | CASE)
 - compose.templates.client.template_id — ORG — default — DOCX/MD template selection; §6.4.
 - compose.templates.lawyer.template_id — ORG — default — DOCX/MD template selection; §6.4.
 - reviews.timeout_hours — ORG — 72 — Approval escalation threshold (reminders/escalations); §11.2.3.
-- reviews.backlog.alert_minutes — ORG — 30 — Minutes before READY artifacts trigger reviewer escalation banners/alerts; §7.1.3, §11.1.
+- reviews.backlog.alert_minutes — ORG — 30 — Minutes before `QUEUED_FOR_REVIEW` items trigger reviewer escalation banners/alerts; §7.1.3, §11.1.
 - guardian.rules.version — ORG — v1 — Ruleset version; §7.1.
 - guardian.decision_slo_ms — SYSTEM|ORG — 300000 — Decision latency SLO; §7.1, §12.
 - guardian.queue.backlog_alert_minutes — SYSTEM|ORG — 5 — Pending Guardian submission age threshold before alerts fire; §7.1.3, §12.6.
@@ -3902,7 +4021,7 @@ components:
       type: object
       required: [decision, guardian_decision_id]
       properties:
-        decision: { type: string, enum: [READY, QUARANTINED] }
+        decision: { type: string, enum: [PASS, WARN, BLOCK, WAIVED] }
         reasons: { type: array, items: { type: string } }
         guardian_decision_id: { type: string, format: uuid }
 ```
@@ -4187,7 +4306,7 @@ Linked alert: `alert_guardian_quarantine_spike` (Grafana: Guardian SLO dashboard
 Signals
 
 - Guardian decisions with `decision=QUARANTINED` increase; reasons include `POLICY_FORBIDDEN_PATTERN`, `INTEGRITY_HASH_MISMATCH`, `SOURCE_NOT_APPROVED`.
-- READY backlog drops, approval throughput slows.
+- `OPERATOR_PREP`/`QUEUED_FOR_REVIEW` backlog drops, approval throughput slows.
 
 Triage
 
@@ -4203,7 +4322,7 @@ Decision
 
 Post-remediation
 
-- Track READY ratio recovery; log incident with counts per reason.
+- Track `guardian_cleared_ratio` recovery; log incident with counts per reason.
 
 ### H.8 RB-RES-BLOCK — Residency block remediation (normative)
 
@@ -4353,7 +4472,7 @@ Usage
 
 ### H.12 RB-GUARD-QUEUE — Guardian backlog watchdog (normative)
 
-Purpose: Restore Guardian submission throughput before READY artifacts stall.
+Purpose: Restore Guardian submission throughput before `PENDING_JUDGEMENT` artifacts stall.
 
 Linked alert: `alert_guardian_queue_stale` (Grafana: Guardian SLO dashboard).
 
@@ -4362,7 +4481,7 @@ Signals
 - `guardian_pending_total` breaching adaptive threshold or trending upward for 3 scrapes.
 - `guardian_pending_oldest_seconds` > `guardian.queue.backlog_alert_minutes * 60`.
 - `guardian_submission_timeout_total` increments within the last 5 minutes.
-- `review_ready_oldest_seconds` approaching `reviews.backlog.alert_minutes`.
+- `review_queue_oldest_seconds` approaching `reviews.backlog.alert_minutes`.
 
 Triage — 5-minute checklist
 
@@ -4524,12 +4643,12 @@ ______________________________________________________________________
 
 Glossary entries
 
-- Artifact: Immutable content record with `content_sha256` and manifest; states `DRAFT|READY|QUARANTINED|APPROVED|REJECTED`; `ARCHIVED` flag hides without state change.
+- Artifact: Immutable content record with `class`, `status`, `content_hash`, and manifest; statuses follow §5.2 (`STORED`, `PROCESSING`, `PENDING_JUDGEMENT`, `CLEARED_FOR_USE`, `OPERATOR_PREP`, `QUEUED_FOR_REVIEW`, `CHANGES_REQUESTED`, `QUARANTINED`, `APPROVED`, `SIGNED`, `RELEASED`, `REVOKED`, `SUPERSEDED`, `ARCHIVED`).
 - Exclusive type: Artifact type for which a case may have at most one `APPROVED` at a time; enforced by unique index and approval swap (§5.4.1).
-- Guardian: Service deciding `READY|QUARANTINED` for artifacts before human approval; writes `guardian_decision_history`.
+- Guardian: Service issuing PASS/WARN/BLOCK/WAIVED judgements before operators see artifacts; writes `guardian_decision_history` as the canonical audit trail.
 - Localization & Policy Engine (LPE): Runtime resolver that consumes RM bundles + Settings to emit deterministic `PolicyContext` objects, masking profiles, and localization packs for every enforcement point (§3.4, §9.9, §10.11).
 - Reference Manager (RM): Editorial/catalog service that ingests and normalizes jurisdictional data, questionnaires, and localization strings; publishes signed catalog bundles to LPE and enforces licensing, attribution, and dual-control workflows (§3.5).
-- Review/Approval: Human action promoting `READY→APPROVED`; idempotent re-approve; may demote prior same-type artifact (§10.3.2).
+- Review/Approval: Human action resolving `QUEUED_FOR_REVIEW` via tri-outcome decisions (APPROVE, CHANGES_REQUESTED, QUARANTINE) with OCC guards (§10.3.2).
 - Manifest: JSON payload embedded in artifacts capturing provenance (regions, hashes, settings snapshot), tool versions, and inputs (§5.6).
 - SSE: Server-Sent Events for streaming job and artifact updates; token-bound; supports `Last-Event-ID`.
 - RLS: PostgreSQL Row Level Security enforcing org/case scoping and deny-by-default policies; secure views restrict field access.
@@ -4925,7 +5044,7 @@ UPDATE download_token
 RETURNING 1;
 ```
 
-- Fetch logic requires this update to succeed before streaming, then validates artifact state (`APPROVED`), SHA match, region allowlists, and audit logging.
+- Fetch logic requires this update to succeed before streaming, then validates artifact status (`APPROVED` or `RELEASED` as appropriate), SHA match, region allowlists, and audit logging.
 
 ______________________________________________________________________
 
@@ -4983,7 +5102,7 @@ ______________________________________________________________________
 | Workload                      | Date (UTC) | Load profile                            | P50 / P95 latency    | Cost / tokens | Source                                                                    |
 | ----------------------------- | ---------- | --------------------------------------- | -------------------- | ------------- | ------------------------------------------------------------------------- |
 | Web API (`GET /api/v1/cases`) | 2025-09-30 | 1k virtual users, 50 RPS step           | 0.112 s / 0.238 s    | n/a           | k6 run `benchmarks/api_caselist.json`, Grafana `web_http_latency_seconds` |
-| Guardian READY decision       | 2025-10-05 | 500 concurrent submissions, 5k/day      | 48 s / 242 s         | n/a           | Synthetic job `guardian_slo.yaml`, `guardian_decision_latency_seconds`    |
+| Guardian judgement decision    | 2025-10-05 | 500 concurrent submissions, 5k/day      | 48 s / 242 s         | n/a           | Synthetic job `guardian_slo.yaml`, `guardian_decision_latency_seconds`    |
 | Compose client deliverable    | 2025-10-11 | Transcript 9k tokens, default templates | 8.3 min / 21.4 min   | 58k tokens    | LangGraph harness `compose_benchmark.py`, `llm_cost_estimate_total`       |
 | Analyze summary lane          | 2025-10-11 | Transcript 9k tokens, 4 exhibits        | 6.1 min / 13.7 min   | 42k tokens    | LangGraph harness `analyze_benchmark.py`, `agent_lane_duration_seconds`   |
 | Portal DOCX download 25 MB    | 2025-09-28 | 500 clients, CDN disabled               | 310 ms / 480 ms TTFB | n/a           | Locust scenario `portal_download.py`, Nginx access logs                   |
@@ -5149,7 +5268,7 @@ ______________________________________________________________________
 
 | Requirement (section)                                               | Tests / validation artefacts                                                                                                                                                                                 | Monitors / alerts                                                                                                                       | Runbook / response                                                                                               |
 | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| Guardian decisions deterministic & parent-aware (§7.1)              | `tests/guardian/test_concurrent_parent_swap.py::test_child_blocks_on_parent_swap`; Guardian synthetic `guardian_slo.yaml` job                                                                                | `guardian_ready_ratio`, `guardian_decision_latency_seconds`, `guardian_ready_parent_block_total`                                        | App.H RB-GUARD-001, App.H RB-GUARD-QUAR                                                                          |
+| Guardian decisions deterministic & parent-aware (§7.1)              | `tests/guardian/test_concurrent_parent_swap.py::test_child_blocks_on_parent_swap`; Guardian synthetic `guardian_slo.yaml` job                                                                                | `guardian_cleared_ratio`, `guardian_decision_latency_seconds`, `guardian_parent_block_total`                                        | App.H RB-GUARD-001, App.H RB-GUARD-QUAR                                                                          |
 | API versioning & Sunset policy enforced (§10.0, §10.5)              | `make lint-openapi` (`npx spectral lint ops/openapi/**/*.yaml`), Spectral `sunset-header` rule, ADR-0003 change review checklist                                                                             | `api_sunset_header_missing_total`, `api_deprecation_notice_age_seconds`                                                                 | App.H standard runbook template → API Sunset (`docs/runbooks/api/sunset.md`, draft)                              |
 | FinOps guardrails prevent runaway spend (§8.7, §12.9)               | `scripts/finops/check_mom_guard.py`; `tests/udocket_core/finops/test_guard.py::test_regression_formula`                                                                                                      | `finops_mom_regression_flag{org}`, `llm_cost_estimate_total`                                                                            | App.H RB-LLM-003                                                                                                 |
 | Logging pipeline retains structured records (§12.1)                 | `tests/logging/test_redaction.py::test_forbidden_headers_masked`; `diagram:diff` for log schema                                                                                                              | `logging_ingest_lag_seconds`, `logging_drop_rate_pct`, `logging_spool_utilization_pct`                                                  | App.H RB-LOG-007                                                                                                 |
@@ -5254,7 +5373,7 @@ class SettingDefinition(BaseModel):
 - Optional fields `progress` (0–100) and `warning` (`"NO_PROGRESS"`, `"CAPACITY_THROTTLED"`, etc.) appear when the watchdog raises alerts or when providers emit granular progress.
 - `artifact.state`
   ```json
-  { "id": "1030", "event": "artifact.state", "data": { "artifact_id": "...", "case_id": "...", "org_id": "...", "type": "SUMMARY_MD", "state": "APPROVED", "previous_state": "READY", "ts": "2025-10-19T21:12:00Z" } }
+  { "id": "1030", "event": "artifact.state", "data": { "artifact_id": "...", "case_id": "...", "org_id": "...", "type": "SUMMARY_MD", "status": "APPROVED", "previous_status": "QUEUED_FOR_REVIEW", "ts": "2025-10-19T21:12:00Z" } }
   ```
 - `portal_link_invalidated`
   ```json
@@ -5262,7 +5381,7 @@ class SettingDefinition(BaseModel):
   ```
 - Snapshot bootstrap payload (truncated)
   ```json
-  { "id": "snapshot", "event": "artifact.snapshot", "data": { "watermark_ts": "2025-10-19T21:14:00Z", "events": [ { "artifact_id": "...", "state": "READY" }, { "artifact_id": "...", "state": "APPROVED" } ] } }
+  { "id": "snapshot", "event": "artifact.snapshot", "data": { "watermark_ts": "2025-10-19T21:14:00Z", "events": [ { "artifact_id": "...", "status": "OPERATOR_PREP" }, { "artifact_id": "...", "status": "APPROVED" } ] } }
   ```
 
 ### U.5 Staff UI job status widget (TypeScript/React)
