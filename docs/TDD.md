@@ -303,6 +303,8 @@ spec:
 
 Ingress TLS policy (snippet)
 
+*TLS 1.3 is the platform default (`security.tls.min_version=TLSv1.3`). TLS 1.2 appears only when a `security.tls.legacy_exceptions[]` entry is active with Security-approved justification and an expiry of 30 days or less.*
+
 ```yaml
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -1370,7 +1372,7 @@ When a **CD** is **QUEUED_FOR_REVIEW**, reviewers must pick exactly one outcome:
   OTHER,
 }
 
-“OTHER” selections require `*_other_text` payloads and feed a weekly clustering job (`ops/reference/suggest_reason_enum.py`). The job publishes candidate enum additions to Reference Manager; accepted values propagate through the LPE bundle workflow. Operations uphold an SLO to triage new candidates within 14 calendar days and either promote or close them (with rationale) within 30 days, with status tracked in the Reference Manager queue dashboard.
+“OTHER” selections require `*_other_text` payloads and feed a weekly clustering job (`ops/reference/suggest_reason_enum.py`). The job publishes candidate enum additions to Reference Manager; accepted values propagate through the LPE bundle workflow. Operations uphold an SLO to triage new candidates within 14 calendar days and either promote or close them (with rationale) within 30 days, with status tracked in the Reference Manager queue dashboard. When a candidate is promoted, Guardian ships the new enum in the next release, bumps the SSE/event schema version noted in §10.3, and publishes an upgrade notice so API consumers can deploy the updated enum set before enforcement.
 
 #### 5.2.5 Review modes & risk overrides
 
@@ -1400,6 +1402,8 @@ Guardian judgments always run **before** these modes and gate whether operators 
 | **SKIP_OPERATOR_PREP** | **QUEUED_FOR_REVIEW** | Reviewer outcome (**APPROVED** / **CHANGES_REQUESTED** / **QUARANTINED**) |
 | **SKIP_REVIEW** | **APPROVED** (`approval_type=SKIPPED_REVIEW`, emit `REVIEW.SKIPPED`) | Sign → **SIGNED** → **RELEASED** |
 | **SKIP_ALL** | **APPROVED** (`approval_type=SKIPPED_REVIEW`, emit `REVIEW.SKIPPED`) | Sign → **SIGNED** → **RELEASED** |
+
+PASS/WARN therefore always place **WP** artifacts into **CLEARED_FOR_USE** and **CD** artifacts into **OPERATOR_PREP** before any review mode applies, ensuring humans only evaluate Guardian-cleared CDs.
 
 Risk overrides force the artifact back through human review regardless of mode: if any listed condition is true, the system transitions to **APPROVAL_REQUESTED → QUEUED_FOR_REVIEW** even when the configured mode would skip the queue. `REVIEW.SKIPPED` events include `{review_mode, overrides_applied}` so auditors can confirm when automation made the decision versus when overrides intervened. App.A’s state diagrams annotate each branch so the default, queue-first, and skip flows remain visually distinct. Portal fetch-time checks continue to block revoked deliverables regardless of mode.
 
@@ -4144,6 +4148,7 @@ E.1 Key catalog (scope: SYSTEM | ORG | CASE)
 
 - regions.allowlist.compute — ORG — \[na-us-1, na-us-2\] — Allowed compute regions; enforced by §3.8.
 - regions.allowlist.storage — ORG — \[na-us-1, na-us-2\] — Allowed storage regions; enforced by §3.8 and §5.3.
+- network.egress.allowed_hosts[] — SYSTEM|ORG — [] — Host allowlist rendered to ServiceEntry/AuthorizationPolicy; §3.2.1.
 - analyze.model.id — ORG|CASE — default profile — LLM model profile for Analyze lanes; see §8 and §6.3.
 - analyze.token_ceiling — ORG|CASE — 100000 — Max tokens per Analyze job; see §8.3.
 - analyze.max_retries — ORG|CASE — 2 — Retry budget per lane; see §6.3 QA loops.
@@ -4164,7 +4169,9 @@ E.1 Key catalog (scope: SYSTEM | ORG | CASE)
 - sign.tsa.max_time_drift_secs — SYSTEM — 5 — NTP drift tolerance; §7.2, §3.2.
 - security.tls.min_version — SYSTEM — TLSv1.3 — Minimum TLS version for ingress; §3.2.
 - security.tls.cipher_profile — SYSTEM — default — TLS cipher profile for ingress; §3.2.
+- security.tls.fips_mode — SYSTEM — false — Enforce FIPS-approved cipher suites and modules; §3.2, §7.2.
 - security.tls.legacy_exceptions\[\] — SYSTEM — \[\] — Temporary TLS 1.2 exceptions (≤30 days, alert at T-7); §3.2, §9.2.
+- db.pgbouncer.pool_mode — SYSTEM — transaction — Allowed PgBouncer pooling mode (`transaction` default, `session` optional); §3.2.1.
 - llm.providers\[\] — SYSTEM|ORG — \[\] — Provider catalog; §8.1.
 - llm.models\[\] — SYSTEM|ORG — \[\] — Model catalog and fallback priorities; §8.1.
   - llm.models.version_pin — SYSTEM|ORG — provider‑specific — Explicit provider model snapshot/version pin; §8.1/§8.5.
@@ -4205,6 +4212,8 @@ E.1 Key catalog (scope: SYSTEM | ORG | CASE)
 - chat.provider.profile — ORG|CASE — null — LLM profile assignment for assistants; §8.1.4, §11.11.
 - portal.chat.hipaa_allowed — ORG — false — Permit client chat when HIPAA mode active; §11.11.
 - portal.chat.export.enabled — ORG|CASE — false — Allow client chat transcript exports; §11.11.
+- notifications.in_app.rate_limit_per_minute — ORG — 60 — In-app notification dispatch rate; §11.9.
+- notifications.in_app.daily_cap — ORG — 500 — In-app notification max per day; §11.9.
 - llm.finops.monthly_cap_usd — ORG — 0 (disabled) — Monthly LLM spend cap; §8.3, §13.4.
 - jobs.watchdog.no_progress_minutes — SYSTEM|ORG — 5 — Minutes without heartbeat before watchdog warns; §10.2, §12.1, App.H RB-JOB-WATCHDOG.
 - jobs.watchdog.timeout_minutes — SYSTEM|ORG — 15 — Minutes without heartbeat before watchdog fails the job; §10.2, §12.1, App.H RB-JOB-WATCHDOG.
@@ -5587,13 +5596,13 @@ Benchmarks run at least quarterly and after significant infra upgrades using the
 | ------------------------ | ----------- | ---------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | Kubernetes               | 1.29        | 1.28       | Minor upgrades every 6 months; patch monthly                  | Managed AKS clusters with PodSecurity restricted profile; next prod upgrade Q1 2026; baseline CIS AKS v1.29 |
 | Docker Compose (dev)     | 2.24.x      | n/a        | Follow Docker Desktop GA; pin via `.docker/compose-version`   | Required for local parity stack (`docker compose up --build`); validated weekly via CI smoke; includes Postgres, Redis, Guardian, Signer, Settings, workers |
-| Service mesh (Istio)     | 1.21.1      | 1.20.4     | N-1 support; canary namespace before prod rollout             | mTLS enforced cluster-wide; cert TTL 24h; targeted prod bump Q2 2025                                        |
+| Service mesh (Istio)     | 1.21.1      | 1.20.4     | N-1 support; canary namespace before prod rollout             | mTLS enforced cluster-wide; cert TTL 24h; last prod bump Jul 2025; next cadence review Apr 2026             |
 | Postgres                 | 15.6        | 15.6 HA    | Major every 18 months; logical replication for blue/green     | Patroni-managed; statement pooling disabled; HA failover drills quarterly                                   |
-| Redis                    | 7.2         | 7.2        | Patch quarterly; persistence `aof` for broker, none for cache | Managed Azure Cache for Redis Enterprise; next review Q2 2025                                               |
+| Redis                    | 7.2         | 7.2        | Patch quarterly; persistence `aof` for broker, none for cache | Managed Azure Cache for Redis Enterprise; last review Aug 2025; next review Feb 2026                        |
 | Python runtime           | 3.12.x      | 3.12.x     | Security releases within 30 days                              | Pinned in `Dockerfile` & dependency locks; min supported 3.11 for tooling; deprecation notice 90 days prior |
 | Node.js (build)          | 20.x LTS    | 20.x LTS   | Upgrade within 45 days of LTS patch                           | Build-time only; no runtime exposure; Node 18 blocked since 2025-07                                         |
 | Terraform                | 1.8.x       | 1.8.x      | Upgrade quarterly with module pin review                      | State stored in Terraform Cloud; nightly drift detection; drift incidents logged in App.H                   |
-| Nginx ingress controller | 1.11.x      | 1.10.x     | Patch monthly; major with Kubernetes cadence                  | TLS 1.3 preferred; OCSP stapling enabled; next prod upgrade Q1 2025                                         |
+| Nginx ingress controller | 1.11.x      | 1.10.x     | Patch monthly; major with Kubernetes cadence                  | TLS 1.3 preferred; OCSP stapling enabled; Mar 2025 upgrade closed; next upgrade window Jan 2026             |
 | Base OS images           | Debian 12   | Debian 12  | Rebuild monthly or on critical CVE                            | Images signed; SBOM generated per build; CIS benchmark level 1 enforced                                     |
 
 Upgrade windows recorded in the change calendar; App.M supports audit inquiries regarding environment parity and upcoming rollouts.
