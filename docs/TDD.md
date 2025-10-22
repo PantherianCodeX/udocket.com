@@ -489,7 +489,7 @@ jurisdictions:
         compute: [na-us-1, na-us-2]
         storage: [na-us-1]
       portal:
-        disclaimers_key: portal.disclaimer.ca
+        disclaimer_key: portal.disclaimer.ca
   EU:
     DE:
       frameworks: [GDPR_DE]
@@ -502,7 +502,7 @@ frameworks:
     requires_mode_enable: true
 localization:
   default_locale: en-US (org override)
-  time_format: "YYYY-MM-DD HH:mm z"
+  time_format: "yyyy-MM-dd HH:mm z"
   number_system: "latn"
 ```
 
@@ -2879,7 +2879,7 @@ Contract requirements (binding)
 
 - Case workspace shows artifact timeline, job status, approvals queue, and Guardian outcomes; integrates with SSE for live updates and Channels for collaborative notes.
 - Approvals panel enforces multi-step review (agent output, manual edits) with OCC guardrails; components display readiness, reviewer count, pending manual edits, Guardian reason codes (with scrubbed excerpts), and backlog ageing banners tied to `review_queue_backlog_total`/`review_queue_oldest_seconds`.
-- Job tiles surface watchdog warnings (icon + tooltip) when `job_watchdog_warning_total` increments; clicking reveals last heartbeat, current lane, and suggested remediation per RB-JOB-WATCHDOG. Cancelled or timeout jobs link directly to audit events and runbook excerpts.
+- Job tiles surface watchdog warnings (icon + tooltip) when `job_watchdog_warning_total` increments; clicking reveals last heartbeat, current lane, and suggested remediation per RB-JOB-WATCHDOG. Canceled or timeout jobs link directly to audit events and runbook excerpts.
 - Analytics dashboards surface LLM cost, artifact coverage, QA issues; data sourced from `audit_event`, `ops_*` logs, and FinOps metrics.
 - Component-level permissions derived from Settings-driven policy map; UI respects field masks (e.g., masked SHA values replaced with `[REDACTED]`).
 
