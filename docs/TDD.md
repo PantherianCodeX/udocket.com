@@ -4053,7 +4053,7 @@ Canonical artifact table
   }
   ```
 
-- Guardian judgments record `guardian_judgment ∈ {PASS,WARN,BLOCK,WAIVED}`. Quarantine outcomes set `status="QUARANTINED"` and append a `guardian_decision` block (`decision`, `decision_id`, `reason`, `acted_at`).
+- Guardian judgments record `guardian_judgment ∈ {PASS,WARN,BLOCK,WAIVED}`. Quarantine outcomes set `status="QUARANTINED"`; manifests rely on `guardian_judgment` + `status` while `guardian_decision_history` persists the detailed decision record for audit.
 - Staff transcripts retain full conversation (with masked snippets); client transcripts redact internal-only system prompts and any content hidden by moderation for the client audience. Both run through the redaction pipeline before persistence.
 - `CHAT_SUMMARY_JSON` (`chat_summary@1.0`) stores structured summaries for downstream analytics: `{ "schema_version": "chat_summary@1.0", "session_id": "...", "summaries": [{ "audience": "staff|client", "locale": "en-CA", "text_md": "...", "citations": [...] }], "generated_at": "RFC3339", "model_id": "string" }`. Summaries always link back to the source session via `manifest.source_artifacts`.
 
