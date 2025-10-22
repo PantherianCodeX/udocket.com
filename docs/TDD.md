@@ -1039,11 +1039,51 @@ ALTER TABLE guardian_decision_history FORCE ROW LEVEL SECURITY;
 
 *Purpose: Detail how sensitive data exposure is minimized while retaining auditability.*
 
-- `udocket_mask` and `udocket_mask_json` functions apply redaction, hashing, or nulling per `field_mask_rule`. JSON fields support only REDACT/NULL; policy compiler blocks invalid masks.
-- Masked views (`case_secure`, `artifact_secure`, `qa_log_secure`, etc.) prevent bypass; application role granted SELECT only on these views. Sysadmin role remains the sole bypass for investigations.
-- Audit trail essentials: `audit_event` captures every significant change; `entitlement_snapshot` records token issuance with device fingerprints.
-- Break-glass usage logs justification, duration, and triggers watchdog that terminates sessions on expiry. Post-event review queues ensure accountability.
-- All read/write paths emit structured logging with correlation IDs and case/job references; anomaly detectors alert on unusual access patterns.
+- `udocket_mask` / `udocket_mask_json` apply redaction, hashing, or nulling per `field_mask_rule`; JSON fields accept only REDACT/NULL so the compiler cannot emit unsupported modes.
+- Masked secure views (`case_secure`, `artifact_secure`, `qa_log_secure`, etc.) are the only read surfaces granted to the application role. Sysadmin remains the sole bypass for investigations, and break-glass events are dual-approved and watermarked.
+- Audit trail essentials: `audit_event` logs every significant read/write; `entitlement_snapshot` records token issuance with device fingerprints; `guardian_span_detection` stores PHI/PII evidence under RLS.
+- Break-glass usage logs justification, duration, reviewer acknowledgement, and triggers watchdogs that terminate sessions on expiry. Post-event review queues ensure accountability.
+- Structured logs (case/job correlated) and anomaly detectors watch for unusual read patterns or mass token reveals; alerts map to RB-GUARD and RB-MASK runbooks (App.H).
+
+#### 4.5.1 Transformation modes & operator view (binding)
+
+| Mode | When to use | Operator view | Deliverable |
+| ---- | ----------- | ------------- | ----------- |
+| **Redaction** (irreversible) | Value must never be stored or restored (for example, API credentials). | `████` or `REDACTED`. | Remains redacted permanently. |
+| **Pseudonymization** (reversible token) | Value needed for analytics/ops but must stay masked during preparation. | Deterministic alias such as `[NAME-1]`, `SSN{•-•-1234}`. | Restored when policy allows. |
+| **Format-Preserving Encryption (FPE)** | Structured identifiers requiring valid shape (SSN, MRN, phone). | Appears syntactically valid, e.g., `***-**-1A92`. | Restored when policy allows. |
+
+- Masking metadata captures `{span_id, mode, token_id?, vault_namespace, policy, restorable}` and is stored alongside Guardian detections (§7.1.0) using deterministic `uuidv7` identifiers.
+- Operators and reviewers receive masked drafts by default; restoration requires explicit policy intents (§4.5.4) or a break-glass workflow.
+- Organization policies decide the default mode per entity type. Profiles ship with HIPAA-safe defaults; Reference Manager entries add jurisdiction-specific overrides.
+
+#### 4.5.2 Token vault & reversible masking (binding)
+
+- Design: replace sensitive spans with deterministic tokens stored in an isolated Token Vault. Namespaces segment by `{org}:{case}` to prevent cross-case collisions.
+- Envelope encryption: each record stores `{token, hash(original|salt), entity_type, format_meta, created_at, created_by, uses[]}`. A per-record DEK encrypts the plaintext; the DEK is wrapped by a KEK in Managed HSM (FIPS mode). Rotation evidence lives in `ops/security/masking_key_rotation/<timestamp>.json`.
+- Determinism: repeated occurrences derive the same token within a namespace. Salts rotate with KEK rotation and are versioned so replay jobs remain deterministic.
+- Access controls: only Compose/Signing services and a tightly scoped “reveal” flow may detokenize. Break-glass requires dual approval, emits `TOKEN_REVEAL_REQUEST` artifacts, and watermarks the reviewer session. Operators never receive detokenize privileges without explicit policy + waiver.
+- Settings: `security.masking.vault_profile ∈ {fpe_v1, aes_gcm_v1}` selects the algorithm (FF3-1 for identifiers, AES-256-GCM for free-form values). `security.masking.vault_key_id` references the active KEK; rotations follow dual-publish (`current`, `next`) with 24-hour overlap.
+- Observability: manifests include `{masking_profile_id, token_vault_version, masking_hash_algorithm, fips_mode, fips_module_cert_id}`. Vault events append to `ops/security/masking_vault.jsonl`; metrics (`masking_vault_token_total`, `masking_vault_reveal_total`, `masking_vault_latency_seconds`) back dashboards.
+- Quality gates: `tests/security/test_fpe_tokenization.py` verifies format preservation; `tests/security/test_masking_restore_flow.py` enforces approval semantics; synthetic `synthetics/masking_vault_health.yaml` checks HSM availability, determinism, and attestation.
+
+#### 4.5.3 Masking rule catalogue (normative)
+
+- **Names:** `[PATIENT-#]`, `[PROVIDER-#]` with case-wide stable numbering derived from span UUID.
+- **Addresses:** `[ADDR-#]`; policy may keep city/state/ZIP visible, masking street-level detail.
+- **Emails / phones:** FPE with final characters visible (`•••••@example.com`, `(***) ***-1234`); `format_meta` retains domain/country metadata.
+- **Identifiers (SSN/MRN/Insurance):** FF1/FF3 FPE with domain constraints; expose last four digits when policy allows.
+- **Dates:** generalized to month/year unless restoration intent is declared.
+- **Free text PHI/SPI:** segmented spans replaced with tokens; token records accumulate `uses[]` entries for each artifact/job referencing them.
+
+#### 4.5.4 Restoration & deliverable policy (binding)
+
+- Compose requests `POST /vault/detokenize` with `{object_urn, token_ids[], purpose ∈ {CLIENT_DL, LEGAL_DL, INTERNAL}}` once a CD reaches APPROVED and policy requires restoration. Vault enforces purpose-based allowlists and expiry windows.
+- Policy intents (for example, `privacy.masking.intent = deidentified` vs `full_record`) decide which entity types restore. “De-identify client copy” keeps tokens; “Full legal record” restores identifiers required for filings.
+- Restoration responses stream plaintext spans directly to Compose; plaintext never hits logs. Deliverables embed an auxiliary record summarizing `{token_count, masking_profile_id, vault_namespace, restored_types[], policy_intent, hsm_key_id}`.
+- Manual/Agent edit flows create new CD versions with inherited tokens; restoration repeats only after Guardian clears the edited version, preserving deterministic lineage.
+
+#### 4.5.5 Masking helpers & enforcement (normative)
 
 Masking helpers (normative)
 
@@ -1102,6 +1142,7 @@ SELECT id, org_id, case_id, type, status, content_sha256,
 
 - Settings activation maintains `CREATE INDEX field_mask_rule_org_profile_resource_field ON field_mask_rule(org_id, profile, resource, field)` and precomputes effective allowlists into helper tables so hot paths avoid repeated subqueries; helpers refresh atomically with each activation.
 - Lint guard: `scripts/db/lint_status_column.py` scans generated DDL and ORM migrations to block accidental reintroduction of a `state` column name; CI job `lint-db-state-column` fails on violations and points to §5.2 for the canonical `status` vocabulary.
+- Vault tables mirror database RLS policies and honour the active masking profile; quarterly audits replay detokenization requests to confirm least-privilege enforcement.
 
 #### 4.4.2 Token vault & reversible masking (binding)
 
@@ -1250,6 +1291,16 @@ Guardian is the single source of record prior to operator access; operators neve
 | **BLOCK** | **QUARANTINED** | **QUARANTINED** | Remediation or waiver required |
 | **WAIVED** | As **PASS** (records waiver id) | As **PASS** (records waiver id) | Dual approval required |
 
+Guardian mappings incorporate HIPAA/SPI policy posture; Guardian attaches `guardian_policy_snapshot_id` so audits can replay the exact rule set.
+
+| Condition | Org policy | Guardian judgement | Artifact status | Notes |
+| --------- | ---------- | ------------------ | --------------- | ----- |
+| PHI present while HIPAA mode **off** | Forbid PHI | **BLOCK** (`HIPAA_REQUIRED`) | **QUARANTINED** | Requires enabling HIPAA mode or removing PHI before progression. |
+| PHI present, HIPAA mode **on**, all spans masked | Allow masked | **PASS/WARN** | **CLEARED_FOR_USE** (WP) / **OPERATOR_PREP** (CD) | WARN prompts reviewers with policy banner; operators still see only masked content. |
+| PHI present, HIPAA mode **on**, restoration requested | Allow full | **PASS** | **APPROVED → SIGNED** | Compose detokenizes permitted spans; manifests record restoration policy. |
+| Detector low confidence on high-risk entity | Any | **WARN** (`CLASSIFIER_LOW_CONFIDENCE`) | Normal flow with banner | Reviewer rail highlights affected spans and recommends manual verification. |
+| Provider flags category our detectors missed | Any | **WARN** (`PROVIDER_CRITICAL_HINT`) | Normal flow | Auto-files detector gap ticket; Guardian decision remains authoritative. |
+
 The events emitted for these transitions are enumerated in §10.3. Guardian always records `guardian_judgement_id`, reason codes, and waivers in `guardian_decision_history`.
 
 #### 5.2.3.1 Judgement API & outcomes (binding)
@@ -1261,6 +1312,66 @@ The events emitted for these transitions are enumerated in §10.3. Guardian alwa
   - `OTHER` (temporary bucket; requires `comment` and feeds the enum suggestion workflow).
 - Guardian emits `GUARDIAN.JUDGEMENT.PASS|WARN|BLOCK|WAIVED` SSE events, while human reviewer actions emit `REVIEW.APPROVED|REVIEW.CHANGES_REQUESTED|REVIEW.QUARANTINED`. QA automation produces `QA.PASS|QA.FAIL` assessments recorded in `qa_assessments[]`.
 - Org policy: artifacts listed in `org.guardian.pre_operator_gates[]` remain hidden from operators until a Guardian judgement of `PASS` or `WARN` exists; humans cannot override this gate. If Guardian returns `BLOCK`, the artifact stays invisible and displays `GUARDIAN_PENDING` banners in the UI until remediation or waiver occurs.
+
+#### 5.2.3.2 Detection & masking payload schema (binding)
+
+Guardian records span-level evidence and masking details using deterministic UUIDv7 identifiers so reruns reconcile reliably.
+
+```json
+{
+  "span_id": "01916f1c-29d4-7c8f-bf1c-8c4e7c632a21",
+  "type": "PHI.MRN",
+  "offset_start": 152,
+  "offset_end": 172,
+  "source": "TIER1_REGEX",
+  "confidence": 0.94,
+  "locale": "en-CA",
+  "attributes": {
+    "format": "mrn_ca",
+    "luhn_pass": true
+  }
+}
+```
+
+```json
+{
+  "span_id": "01916f1c-29d4-7c8f-bf1c-8c4e7c632a21",
+  "mode": "FPE",
+  "mask_value": "***-**-1A92",
+  "token_id": "tok_01HC4G1GR2Z5SXT0W7M8",
+  "vault_namespace": "org_01J2:case_01A8",
+  "policy": "HIPAA_SAFE_HARBOR",
+  "restorable": true
+}
+```
+
+```json
+{
+  "token_id": "tok_01HC4G1GR2Z5SXT0W7M8",
+  "namespace": "org_01J2:case_01A8",
+  "type": "PHI.MRN",
+  "hash": "sha256(plaintext|salt_v3)",
+  "encrypted_value": "JWE(...)",
+  "format_meta": { "case": "TitleCase" },
+  "created_at": "2025-10-21T18:22:11Z",
+  "created_by": "guardian@system",
+  "uses": [
+    { "object_id": "cd_01HC4HHP2M3E2", "action": "MASK" },
+    { "object_id": "dl_01HC4K7X0Y1QF", "action": "RESTORE" }
+  ]
+}
+```
+
+- `source` enumerates `TIER0_SCHEMA`, `TIER1_REGEX`, `TIER2_NER`, `TIER3_LLM`, and downstream enrichment engines. Guardian stores the raw detector version in `attributes.detector_version`.
+- `mode` enumerates `REDACT`, `TOKEN`, `FPE`. `policy` references the policy bundle key that mandated the transformation (`HIPAA_SAFE_HARBOR`, `CPRA_SPI_RESTRICTED`, etc.).
+- Vault records capture salted hashes so analytics/dedupe operate without de-tokenization; salts rotate with KEK changes and version suffix ensures manifests point to the right salt era.
+
+#### 5.2.3.3 Guardian detection APIs (binding)
+
+- `POST /guardian/detect-and-mask` — Input: `{object_urn, content_ref, locale, policy_flags[]?}`. Output: `{detected_entities[], masked_spans[], provider_flags[], judgement, reason_codes[]}`. Workers call this to produce masked working copies and prime Guardian with span evidence.
+- `POST /vault/detokenize` — Restricted to Compose/Signing service. Input: `{object_urn, token_ids[], purpose ∈ {CLIENT_DL, LEGAL_DL, INTERNAL}}`. Output: stream of plaintext spans; responses never persist to logs. Requests include `guardian_decision_id` to ensure restoration matches a cleared judgement.
+- `GET /guardian/policy` — Returns effective masking/judgement policy for the org/case (`{policy_bundle_id, masking_defaults[], restoration_intents[]}`). Used by UI to shape toggles and by workers to lint inputs before submission.
+- All endpoints require service HMAC auth plus mTLS; responses include `guardian_policy_snapshot_id` and `settings_snapshot_sha256` hashes for traceability. Rate limits guard against abuse while still supporting batch pipelines (`detect-and-mask` is token bucket 50 RPS/org with burst 200).
 
 #### 5.2.4 Human review (tri-outcome) with enumerated reasons
 
@@ -1933,6 +2044,8 @@ ______________________________________________________________________
 *Purpose: Govern artifact access before operators or clients can act on generated outputs.*
 
 - Terminology: Appendices I/N define `guardian_judgement`, reason codes, waiver flows, and the structured payloads written to `guardian_decision_history`.
+- Rule enforcement: *No one sees unjudged data.* Every SA/WP/CD version is born `PENDING_JUDGEMENT`; Guardian runs the in-house gating stack before any human or downstream system may inspect content.
+- In-house detection: vendor heuristics (LLM/Speech safety APIs) lack HIPAA guarantees and vary by SKU/region, so Guardian operates first-party detectors to ensure deterministic coverage, auditability, and residency controls before surfacing any content.
 - Flow: any SA/WP/CD creation or version bump transitions the record to `PENDING_JUDGEMENT`; workers automatically enqueue the payload on the regional Guardian submission bus. Guardian hydrates policy context, upstream manifests, waiver state, moderation/QA findings, and emits one of four judgements. PASS/WARN transition WP → `CLEARED_FOR_USE` and CD → `OPERATOR_PREP`; BLOCK or reviewer-initiated quarantine force `QUARANTINED`. WAIVED mirrors PASS but records the waiver chain and dual approvers.
 - Manual replay: the sole administrative override is `POST /guardian/judgements:enqueue`. It accepts `{resource_urn, reason?, requested_by}` (idempotent on `{resource_urn, reason}`) and is restricted to internal tooling. The endpoint reuses the same submission bus and metrics so ad-hoc pushes follow the standard SLOs and audit path. Per-object submit APIs remain prohibited.
 - Metadata: each decision persists `guardian_decision_id`, `reason_codes[]`, optional `guardian_warnings[]` (set on WARN), and `waiver_id` (set on WAIVED) in `guardian_decision_history`, linking to the evaluated `settings_snapshot_sha256` and policy bundle versions for reproducibility.
@@ -1940,6 +2053,20 @@ ______________________________________________________________________
 - Operators never see WP/CD objects before a PASS/WARN verdict. Guardian emits SSE/audit events (`GUARDIAN.JUDGEMENT.PASS|WARN|BLOCK|WAIVED`) with `guardian_judgement_id`, reason codes, settings snapshot hash, and pointers to upstream findings.
 - Deterministic reconciliation: Guardian decisions are idempotent per `{artifact_id, content_hash}`. Re-submitting the same content after a BLOCK requires either a waiver or remediation that produces a new hash/version, ensuring policy-bypassing mutations cannot proceed silently.
 - Downstream enforcement: workers, UI, and portal clients must respect the target status (`CLEARED_FOR_USE`, `OPERATOR_PREP`, `QUARANTINED`) before executing dependent actions. Fetch-time checks re-evaluate Guardian decision freshness and invalidate stale deliverables (§11.2.1).
+
+#### 7.1.0 In-house PHI/PII/SPI gating tiers (binding)
+
+Deterministic order ensures reproducibility and clear provenance. Each tier populates `guardian_detection_evidence` with `{tier, detector_id, span[], confidence}` entries so reviewers can trace findings and auditors can rerun the pipeline.
+
+1. **Tier-0 — schema & field guards:** Object schema validators and policy-aware serializers enforce strict typing on known slots (`dob`, `ssn`, `mrn`, `email`, `phone`, `address`, `insurance_id`, etc.). Locale-aware formatters normalize canonical casing, country codes, and help text before the next tier inspects content. Failures emit `SCHEMA_POLICY_BLOCK` with reason code `INVALID_FIELD_FORMAT`.
+2. **Tier-1 — pattern + checksum:** Regex engines execute jurisdiction-specific packs for PHI/PII/SPI patterns. Domain-aware checksum utilities (Luhn, Verhoeff, ABA routing, ICD/HCPCS/CPT shape, Rx BIN/PCN length) confirm matches before spans advance. Hits append reason `PATTERN_MATCH` and record `rule_id`.
+3. **Tier-2 — ML/NLP detectors:** Guardian invokes pinned NER models (medical, legal, generic PII) scoped per locale and versioned in the LLM Provider Exchange (LPE). Model IDs and confidence scores land in the evidence payload; sub-threshold detections still log telemetry for drift analysis.
+4. **Tier-3 — contextual verifier:** A constrained LLM prompt re-scores contentious spans (for example, disambiguating “Dr. Green” versus the color). Decoding forbids free-form text; output is `{"confirm": true|false, "confidence": float}` which either upgrades or downgrades earlier spans with reason `CONTEXTUAL_VERIFIER`.
+5. **Normalization & span fusion:** Overlapping spans merge with deterministic precedence (higher confidence, stricter policy). Provenance retains contributing tiers and detector IDs. Span fusion also injects field metadata used by the masking engine (§4.5.2).
+6. **Masking & tokenization:** Guardian applies masking profiles to a working copy—operators only receive masked content. Transformation metadata references the vault namespace (`org:case`), masking policy, and whether the span is restorable. See §4.5 for transformation modes and vault controls.
+7. **Guardian judgement:** Guardian aggregates detections, policy context, and provider telemetry to issue `PASS`, `WARN`, `BLOCK`, or `WAIVED`. Reason codes include `HIPAA_REQUIRED`, `PII_DETECTED`, `SPI_DETECTED`, `DLP_VIOLATION`, `CLASSIFIER_LOW_CONFIDENCE`, and `PARENT_NOT_APPROVED`. PASS/WARN transition WP/CD objects as described above; BLOCK quarantines artifacts until remediation or waiver; WAIVED requires dual reviewer approval and is annotated in decision history.
+
+Guardian persists raw span evidence in `guardian_span_detection` (WP scope, RLS-protected) and produces summarized annotations for reviewers (see §11.1.4). Span records include deterministic `uuidv7` identifiers so reruns can reconcile duplicates and restoration requests can reference exact spans. Job stdout prints a single-line JSON status (`{"status":"ok", ...}`) for ingestion by background workers and incident tooling.
 
 #### 7.1.1 Decision evaluation (binding)
 
@@ -1962,6 +2089,14 @@ ______________________________________________________________________
 - Worker submission watchdogs enforce `guardian.queue.submission_timeout_seconds` (default 300s). When Guardian has not replied within that window the worker marks the run `FAILED_GUARDIAN_TIMEOUT`, leaves the artifact in `PENDING_JUDGEMENT`, emits SSE `artifact.guardian_timeout`, records audit event `GUARDIAN_TIMEOUT_ESCALATED`, and increments `guardian_submission_timeout_total`. Ops receives a page and the UI surfaces a banner instructing staff to either resubmit once Guardian is healthy or follow the manual review checklist.
 - Reviewer backlog health is tracked via `review_queue_backlog_total` and `review_queue_oldest_seconds`; alerts respect `reviews.backlog.alert_minutes` so reviewers are paged before `QUEUED_FOR_REVIEW` items languish. The approvals panel highlights age bands, Guardian reason codes, and linked remediation guidance.
 - False-positive sampling increments `guardian_quarantine_false_positive_total` whenever an artifact resubmits with the same `content_sha256` and transitions from `QUARANTINED` to `CLEARED_FOR_USE|OPERATOR_PREP` without a ruleset change. Weekly governance checks compare that counter against `guardian_decision_total` to ensure the ≤ 5 % false-positive objective (§6.12) remains on track and to prioritise rule tuning when the ratio trends upward.
+
+#### 7.1.4 Provider advisory signals (non-binding)
+
+- Coverage: external speech/LLM vendors emit optional `provider_flags[]` (PII, self-harm, violence, harassment, etc.) with coarse confidence and offsets when available. Coverage varies by SKU/region and is never HIPAA contractual assurance.
+- Capture: Guardian stores provider telemetry as advisory metadata on the judgement (`guardian_provider_flags[]`) and surfaces them alongside our detections in the reviewer console. Manifests include the raw provider payloads so audits can reproduce what was received.
+- Enforcement: provider signals never gate access on their own. If a provider reports a severe category that our tiers did not detect, Guardian auto-raises the judgement to `WARN` (reason `PROVIDER_CRITICAL_HINT`) and files a detector gap ticket for Security Engineering. In case of disagreement, Guardian decisions prevail; the advisory remains linked for postmortems.
+- Telemetry: dashboards segment false positive/negative rates with and without provider hints to assess incremental value. When vendors change flag schemas the ingestion pipeline rejects unfamiliar categories until mappings (`provider_flag_catalog`) update, preventing silent downgrades.
+- Waivers & policy: org admins can disable vendor telemetry ingestion per compliance requirements, but the default is to retain them as hints. Disabling requires Security approval and captures `PROVIDER_FLAG_COLLECTION_DISABLED` in the waiver ledger (§5.2.3).
 
 ### 7.2 Digital signature service (PDF/A, TSA, OCSP)
 
@@ -2109,6 +2244,7 @@ ______________________________________________________________________
 - Prompt and directive activations inherit `change_class="system"` and must traverse the blue/green rollout workflow in §14.5. Rollout metadata (`prompt_version`, `rollout_wave`, `org_id`) is stamped into manifests and evidence store rows so reviewers can verify which prompt produced a given artifact.
 
 - Redaction layer strips PII before sending to providers; outcomes tracked (`redaction_stats`, `forbidden_patterns_detected`).
+- Every payload handed to an LLM must use the masked working copy: Guardian span detections replace raw values with deterministic placeholders (for example, `[PATIENT-3]`, `SSN{•-•-1234}`, `(***) ***-1234`) so prompts retain context but never expose actual PHI/PII/SPI. Agent runners enforce this by rejecting attempts to inject raw fields, and contract tests diff prompts to confirm only masked tokens leave the platform.
 
 - Evidence store (hardened datastore) records `{prompt_template_id, template_version, model_id, model_version, redaction_ruleset_id, input_hashes, output_hashes, request_id, actor_id, case_id, timestamps}`. Access restricted to `auditor|sysadmin`.
 
@@ -2767,6 +2903,26 @@ ______________________________________________________________________
 - UI surfaces deterministic status transitions: badges map `data-status` to semantic colors via design tokens (`--badge-processing`, `--badge-cleared`, `--badge-review`, `--badge-error`), ensuring light/dark themes stay in sync without inline overrides.
 - Retry backoff and offline banners reuse the shared `useConnectivity` hook (not shown) so SSE and REST clients show consistent UX when the session expires or the network drops.
 
+#### 11.1.2 Operator workspace (binding)
+
+- CDs enter `OPERATOR_PREP` only after Guardian PASS/WARN; operators receive masked drafts populated with deterministic chips (`[PATIENT-3]`, `[ADDR-2]`, `(***) ***-1234`). Chips display tooltips (“Name (masked) — vault namespace org:case; restorable: true”) and link to help docs.
+- No reveal button exists for operators; attempting to view raw content triggers break-glass flow (`BREAK_GLASS_REQUESTED`) requiring dual approval and watermarks the session with user/time/IP. Approved reveals expire automatically and log to `ops/security/masking_vault.jsonl`.
+- Inline editors preserve token placeholders; lint rules prevent leaving tokens partially edited (guard `masking_token_validator` runs on save). Manual edits propose new versions but keep spans masked until Guardian re-judges the change.
+- Activity panel shows Guardian reason codes, policy banners (`HIPAA_REQUIRED`, `PII_DETECTED`), and any WARN annotations; operators must address WARN notes before submitting for review.
+
+#### 11.1.3 Reviewer console (binding)
+
+- Reviewers in `QUEUED_FOR_REVIEW` see the same masked content plus a right-rail “Guardian findings” table listing `{span_id, type, policy, confidence, mode, provider_flags[]}`. Clicking a row highlights the span in-text with badges for overlapping detections.
+- WARN reasons such as `CLASSIFIER_LOW_CONFIDENCE` render banners with remediation guidance and direct links to detector calibration tickets when relevant. Provider hints display as advisory badges (“Azure Speech: PII — medium confidence”) and never unlock content on their own.
+- Reviewers can request edits, quarantine, or approve. Rejecting prompts requires comment referencing span IDs; the UI pre-fills detection context to minimize transcription errors.
+- All reviewer actions append to `guardian_decision_history` via API (`/guardian/review-actions`) so Guardian remains the single source of truth for artefact status changes.
+
+#### 11.1.4 Restoration intents & span inspector (binding)
+
+- Right rail exposes a “Request restoration for deliverable” switch gated by org policy. Enabling the switch prompts reviewers to choose policy intent (`deidentified` or `full_record`) and required entity types. Submit triggers a Compose update that requests detokenization only for allowed spans (§4.5.4); other spans remain tokenized.
+- Span inspector modal shows full provenance for each detection `{tier, detector_id, provider_flag?, masking_mode, restorable}` and surfaces audit trail of prior reveals. Reviewers can attach notes to spans (stored in `review_span_annotation`) for future runs.
+- Break-glass usage and restoration intents surface in approval summary and manifest preview so approvers understand data exposure decisions before signing. All toggles default off; settings require reviewer acknowledgement of policy references before submission.
+
 ### 11.2 Client portal (document delivery, messaging, access controls)
 
 *Purpose: Outline client-facing surface and data exposure guardrails.*
@@ -3295,6 +3451,15 @@ ______________________________________________________________________
 - DSAR/erasure flows, legal hold enforcement, field masking, and break-glass logging validated with synthetic cases.
 - Residency matrix: activations that violate regional policies are rejected with `VALIDATION_ERROR`; runtime pre-flight blocks cross-jurisdiction runs (`RESIDENCY_POLICY_BLOCK`).
 - Privacy API Spectral stubs warn until GA, then block; endpoints declare security and HMAC; examples avoid PII.
+
+#### 13.3.1 Detection & masking controls (binding)
+
+- **Detector parity suites:** locale-specific golden corpora (`tests/privacy/golden/<locale>`) must meet ≥ target recall/precision; regressions block deployment. CI reports include confusion matrices and drift deltas vs previous release.
+- **Vault round-trip tests:** nightly jobs run `mask → detokenize → compare` for each restorable entity type and vault profile. Failures page Security Engineering and open a Sev-2 incident.
+- **Never-log fuzzing:** property-based tests (`tests/privacy/test_log_scrubbing.py`) generate random PHI/PII payloads and assert logs/traces remain scrubbed. Failures gate merges and trigger lint suggestions for offending modules.
+- **FIPS attestation enforcement:** masking vault and signer services log `fips_module_id` into manifests and auxiliary records; CI verifies module IDs against allowlisted certificates and fails when modules fall out of validation.
+- **Break-glass audits:** weekly job (`ops/audits/break_glass_audit.py`) fails if any reveal lacks justification, dual approval, or linked retrospective ticket. Results land in `audit_event` (`BREAK_GLASS_AUDIT_FAILED`) and block releases until resolved.
+- **Policy drift sampling:** Guardian samples ≥5% (or ≥20) artifacts weekly, recomputes detections, and compares to production runs. Divergence beyond tolerance increments `phi_detection_drift_total` and halts promotion until mitigated.
 
 ### 13.4 LangGraph contract tests and replay harnesses
 
