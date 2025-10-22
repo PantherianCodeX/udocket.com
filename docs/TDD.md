@@ -363,9 +363,9 @@ metadata:
 
 ### 3.4 Localization & Policy Engine (LPE)
 
-*Purpose: Elevate the former Reference Engine into the authoritative service for localization, residency, and jurisdictional policy decisions.*
+*Purpose: An authoritative service for localization, residency, and jurisdictional policy decisions.*
 
-- `ADR-0004-localization-and-policy-engine.md` renames the Reference Engine to **Localization & Policy Engine (LPE)** and expands its charter from court catalogs to a unified localization and policy compiler. The ADR follows the existing lifecycle (Provisional → Implementable → Accepted) and is required before the rename ships; CI checks enforce ADR references for API or schema changes touching LPE.
+- `ADR-0004-localization-and-policy-engine.md` defines the addition of the **Localization & Policy Engine (LPE)**, and expands the charter of the deprecated engine from court catalogs to a unified localization and policy compiler. The ADR follows the existing lifecycle (Provisional → Implementable → Accepted) and is required before the rename ships; CI checks enforce ADR references for API or schema changes touching LPE.
 - LPE exposes a public, versioned API surface that joins the existing OpenAPI bundles. Historic `/reference/*` endpoints remain read-only shims until the migration in §3.4.9 completes; when the cutover flag is on they emit RFC 8594 `Sunset` headers, RFC 8594-compliant `Link: <https://docs.udocket.io/reference-migration>; rel="successor-version"`, and RFC 8594 `Deprecation: @<timestamp>` headers indicating the enforced sunset date.
 - LPE outputs **immutable `PolicyContext` payloads** and localization packs, guaranteeing consistent enforcement across API tier, workers, frontend, and database RLS. Runtime callers treat contexts as deterministic for a `(org_id, case_id?, locale, privacy_flags)` tuple. The compiler persists each unique combination as a row keyed by `(org_id, case_id, locale, privacy_flags_hash)` (with `case_id` nullable), and settings snapshots embed the corresponding `policy_context_version`.
 - Runtime policy decisions (residency, HIPAA, attachment routing) execute through colocated **Open Policy Agent (OPA)** sidecars or a shared OPA tier that continuously downloads the same signed bundles LPE compiles. LPE focuses on producing deterministic data and localization artifacts, while OPA evaluates Rego policies against those datasets and emits decision/status logs for audit.
@@ -2510,7 +2510,7 @@ Notes
 - Breaking or materially user-visible changes require an ADR (see `docs/adr/README.md` and linked entries such as `ADR-0003-api-versioning-and-sunset.md`) approved by Architecture + Security before the change can progress from **Provisional → Implementable → Implemented**.
 - Versioning policy: monthly “compatible” releases roll on the first business Monday; clients may pin to older behaviour via `X-uDocket-API-Version: YYYY-MM`. Majors ship at most twice per year, demand 90-day notice, and use calendar-versioned prefixes (`2025-02`), while additive changes batch unless explicitly waived.
 - Deprecations follow the cadence published in `docs/api/DEPRECATIONS.md`: announce, provide migration guides, emit `Sunset` headers 90 days before removal, and confirm monitors stay green before final removal (traceability captured in App.T).
-- Deprecation headers follow RFC 9745 structured-field syntax (e.g., `Deprecation: @1777956000; sunset="Mon, 01 Jun 2026 00:00:00 GMT"`) and always pair with `Link: rel="deprecation"` to machine-readable migration notes plus RFC 8594 `Sunset` headers; Spectral rule `sunset-header` enforces the trio.
+- Deprecation headers follow RFC 9745 structured-field syntax (e.g., `Deprecation: @1780272000; sunset="Mon, 01 Jun 2026 00:00:00 GMT"`) and always pair with `Link: rel="deprecation"` to machine-readable migration notes plus RFC 8594 `Sunset` headers; Spectral rule `sunset-header` enforces the trio.
 - Stripe-style public docs and code samples render directly from the OpenAPI bundle so that examples, schemas, and error contracts stay synchronized with the source of truth.
 
 ### 10.1 REST and WebSocket conventions (naming, pagination, errors)
@@ -2675,7 +2675,7 @@ Handler pattern
 *Purpose: Keep API documentation consistent and machine-validated.*
 
 - Authoring rules (binding): new operations must reuse shared components (`ApiError`, pagination envelope, security schemes), declare response examples for 2xx/4xx, include tag + summary, document every required header, and map path parameters to UUID formats where applicable. Specs are edited via `ops/openapi/*.yaml`; commits must update corresponding changelog entries.
-- Specs: OpenAPI 3.1 with `x-stability` tags (`stable|beta|experimental`); deprecations emit RFC 9745-compliant `Deprecation` headers (e.g., `Deprecation: @1777956000; sunset="Mon, 01 Jun 2026 00:00:00 GMT"`) alongside RFC 8594 `Sunset` headers (≥90 days) in accordance with §10.0 policy.
+- Specs: OpenAPI 3.1 with `x-stability` tags (`stable|beta|experimental`); deprecations emit RFC 9745-compliant `Deprecation` headers (e.g., `Deprecation: @1780272000; sunset="Mon, 01 Jun 2026 00:00:00 GMT"`) alongside RFC 8594 `Sunset` headers (≥90 days) in accordance with §10.0 policy.
 - Spectral rules (`ops/openapi/spectral.yaml`): enforce `oidc`, `hmacSignature` on mutating ops, error envelope on 4xx/5xx, shared pagination, forbid org/role spoof headers, and fail any spec whose `openapi` field is not `3.1.*` via the `openapi-version` rule.
 - Examples must not include real PII; Spectral rule `no-pii-examples` enforces masking, and rate-limit responses (429) must include `Retry-After`/`X-RateLimit-*` headers as shown in Appendix F.
 - CORS exposure (binding): expose `X-Request-ID, X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset, Retry-After, ETag, Deprecation, Sunset`. Preflight MUST allow the header set defined in Appendix F.12 (`Authorization, Content-Type, Idempotency-Key, X-Request-Signature, X-Signature-Key-Id, X-Timestamp, If-Match, If-None-Match, If-Range, X-Style-Nonce, X-Script-Nonce`); update Appendix F.12 first and mirror it here to avoid drift. Add `Vary: Origin, Access-Control-Request-Method, Access-Control-Request-Headers`.
@@ -3369,7 +3369,7 @@ Alert routing
 *Purpose: Continuously validate critical paths and assumptions.*
 
 - Web: `/readyz` checks RLS GUCs; `/healthz` verifies DB connectivity and cache coherence.
-- Guardian: submit synthetic artifact; expect deterministic PASS (→ OPERATOR_PREP) with known inputs; verifies rule load; latency < SLO.
+- Guardian: submit synthetic artifacts for both a WP (expect PASS → CLEARED_FOR_USE) and a CD under `review.mode=MANUAL` (expect PASS → OPERATOR_PREP) with known inputs; verifies rule load; latency within SSE SLO.
 - Signer: sign a synthetic document against test trust roots; verify TSA/OCSP reachability.
 - Settings: activate a safe test bundle; diff preview matches expected; revert; validators pass.
 - Watchdog runner: `watchdog-runner` Celery beat schedule fires every minute, invoking all watchdog tasks (Guardian backlog, job progress, advisory locks, integrity queue). A self-check endpoint `/ops/watchdog/status` reports the most recent execution timestamp and per-task durations; synthetic monitor verifies the timestamp delta stays \< 120s. Metrics `watchdog_runner_lag_seconds`, `watchdog_runner_missed_total`, and log-based alerts catch missed beats; if the runner stalls, App.H RB-JOB-WATCHDOG and RB-GUARD-QUEUE prescribe manual invocation plus root-cause remediation before re-enabling automation.
@@ -4562,7 +4562,7 @@ F.11 Deprecation response with `Sunset` header (normative)
 HTTP/1.1 200 OK
 Content-Type: application/json
 X-Request-ID: 7d1f1dba-1d6f-4f6a-a7ef-2d2f1c2e9bd3
-Deprecation: @1777956000; sunset="Mon, 01 Jun 2026 00:00:00 GMT"
+Deprecation: @1780272000; sunset="Mon, 01 Jun 2026 00:00:00 GMT"
 Sunset: Mon, 01 Jun 2026 00:00:00 GMT
 Link: </api/v1/migrations/2026-06-case-export>; rel="deprecation"; type="text/html"
 X-uDocket-API-Version: 2025-01
