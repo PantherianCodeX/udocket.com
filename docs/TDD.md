@@ -1295,7 +1295,7 @@ Exclusive deliverables use **approval swap** semantics:
 #### 5.2.7 Cross-object controls and audit surface
 
 - Hashing: `content_hash` is SHA-256 for every object; multi-file bundles publish Merkle roots as **AR** “hash manifest” records (JWS signed).
-- Signatures: **DL** (and signature-bearing **AR**) require PAdES B-LTA for PDF, JWS RS256 or COSE_Sign1 for JSON, plus RFC-3161 TSA tokens. Metadata includes signer chain, TSA info, `content_hash`, `model_run_id`, `guardian_judgement_id`, settings snapshot hash, `approval_mode`, and `approved_by`.
+- Signatures: **DL** (and signature-bearing **AR**) require PAdES B-LTA for PDF, JWS RS256 or COSE_Sign1 for JSON, plus RFC-3161 TSA tokens. Metadata includes signer chain, TSA info, `content_hash`, `model_run_id`, `guardian_judgement_id`, settings snapshot hash, `approval_mode`, `approved_by`, `fips_mode` (`true|false`), and when true the `{fips_module_cert_id, fips_validation_level, fips_drbg_source}` reported by the performing module.
 - Optional client counter-signatures produce linked **AR** records.
 - Policy & controls matrix (excerpt):
 
@@ -1874,6 +1874,19 @@ ______________________________________________________________________
 - Client acknowledgement workflow: if `client_signature=attestation_optional|attestation_required`, portal prompts the client with the `ack_template_id` form after platform signing. Attestations generate `CLIENT_SIGNATURE_CERT` (digital countersignature) or `CLIENT_ATTESTATION` (logged acknowledgement) auxiliary records, both hash-linked to the signed artifact. Deliverables with `client_signature=countersign_required` remain in `PENDING_CLIENT_ACK` until the auxiliary record reaches `status=completed`; Guardian cancels portal URLs if the SLA expires.
 - Additional deliverables (short summary, timeline-only, future timeline exports) inherit `SIGN_POLICY_PLATFORM_REQUIRED` unless their catalog entry specifies otherwise. Implementation toggles from §6.4.1 cannot activate a deliverable whose signature policy demands a higher trust tier than the org’s configured `sign.trust_mode`.
 - Waivers and manual overrides follow existing approval swap semantics: changing a deliverable’s signature policy emits `SIGNATURE_POLICY_CHANGE` audit events, regenerates signed copies, and revokes previously released versions.
+
+#### 7.2.3 FIPS enforcement & runtime guardrails (binding)
+
+*Purpose: Guarantee that every cryptographic operation honours FIPS 140-2/140-3 requirements when enabled.*
+
+- Settings: `security.crypto.fips_requirement ∈ {disabled, optional, required}` (system scope, default `optional`) and org override `security.crypto.fips_mode ∈ {disabled, required}`. When either resolution yields `required`, the service **must** start in FIPS mode or refuse to boot. Guardian, Signer, Settings, Upload Scan, Reference Manager, and LPE are hard-coded to treat `required` as non-overridable once an org, deployment, or deliverable policy demands it.
+- Module attestation: on startup every service invokes the shared `fips_healthcheck.verify()` routine, which validates (1) OpenSSL/BoringCrypto initialized with FIPS provider enabled, (2) module self-test pass/fail from the vendor API, (3) reported CMVP certificate ID matches `security.crypto.expected_cert_id`, and (4) entropy sources map to approved DRBGs (HSM RNG, `/dev/random` in FIPS mode, or cloud KMS FIPS endpoints). Failures abort boot (`EXIT_FIPS_ATTESTATION_FAILED`) and trigger `udocket_fips_startup_failure_total{service}` alerts.
+- Algorithm enforcement: cryptographic helpers (`packages.udocket_core.crypto.*`) expose only FIPS-approved primitives while FIPS mode is effective. Attempts to use non-approved algorithms raise `FipsAlgorithmError`. Static analysis (`scripts/security/fips_cipher_lint.py`) and CI job `ci-fips-scan` block merges introducing disallowed primitives (`md5`, `chacha20`, `rsa1024`, etc.).
+- DRBG & key generation: key material, nonces, and random tokens originate from FIPS-validated sources—HSM-backed RNG for keys, OpenSSL DRBG with approved seed sources for software operations, and `azure.keyvault.keys` FIPS endpoints for managed keys. Services record `fips_drbg_source` inside manifests/auxiliary records and export `crypto_drbg_health_seconds` gauges.
+- Runtime monitoring: metrics (`crypto_fips_mode{service}`, `crypto_fips_module_cert_id{service}`, `crypto_fips_selftest_fail_total`, `crypto_fips_drbg_reseed_total`) feed the central dashboard. Guardian refuses to approve artifacts whose manifests lack `fips_mode=true` when the owning org or deliverable policy specifies FIPS enforcement.
+- Audit logging: every signing, hashing, HMAC, or envelope-encryption event appends `{fips_mode, fips_module_cert_id, fips_validation_level, fips_drbg_source}` to the ops JSON/JSONL entry plus the case-level auxiliary record. Appendix D schemas and App.F examples reflect the new fields; Settings activation runs `scripts/security/validate_fips_tagging.py` to enforce parity.
+- Exception handling: temporary FIPS downgrades require a waiver artifact (`FIPS_MODE_EXCEPTION`) referencing `waiver_id`, justification, scope (`service`, `org`, `artifact_type`), duration (≤ 7 days), and approval chain. Guardian blocks new deliverables during the waiver unless the artifact type explicitly permits non-FIPS outputs. Alerts (`crypto_fips_waiver_active_total`) page Security daily until the waiver expires or is revoked.
+- Disaster recovery: backup regions maintain identical FIPS-certified modules; failover runbooks include a `verify_fips_attestation` step before traffic cutover. CMVP revalidation or certificate expiration is tracked via `crypto_fips_cert_expiry_days` with 90/30/7-day alert thresholds.
 
 ### 7.3 Request signing and verification (HMAC)
 
