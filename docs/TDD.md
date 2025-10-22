@@ -125,7 +125,7 @@ related_adrs:
 
 *Purpose: Anchor architecture decisions to explicit tenets.*
 
-- Artifacts are immutable, content-addressed, and versioned; objects flow deterministically from `STORED` → `PROCESSING` → `PENDING_JUDGMENT` → `CLEARED_FOR_USE`/`OPERATOR_PREP` → `APPROVAL_REQUESTED` → `QUEUED_FOR_REVIEW` → `APPROVED`/`RELEASED` without mutating prior versions.
+- Artifacts are immutable, content-addressed, and versioned; objects flow deterministically from `STORED` → `PROCESSING` → `PENDING_JUDGMENT` → review.mode-dependent hops (`OPERATOR_PREP → APPROVAL_REQUESTED → QUEUED_FOR_REVIEW` when review is required) → `APPROVED`/`RELEASED` without mutating prior versions (see §5.2.5).
 - Guardian gating: the Guardian service issues PASS/WARN/BLOCK/WAIVED judgments that gate operator visibility and drive the workflow service to move WP/CD out of `PENDING_JUDGMENT` into `CLEARED_FOR_USE`, `OPERATOR_PREP`, or `QUARANTINED`; downstream stages accept only `APPROVED` (or stronger) artifacts.
 - Deterministic controls over non-deterministic LLM output: UUIDv7 row IDs, content fingerprints, namespace UUIDv5 derived IDs per §6.7.1, Settings snapshots, prompt/version capture.
 - Zero-trust for every hop: deny-by-default RBAC, workload identities, enforced mTLS, and per-request DB GUC binding.
@@ -1403,7 +1403,7 @@ Guardian judgments always run **before** these modes and gate whether operators 
 | **SKIP_REVIEW** | **APPROVED** (`approval_type=SKIPPED_REVIEW`, emit `REVIEW.SKIPPED`) | Sign → **SIGNED** → **RELEASED** |
 | **SKIP_ALL** | **APPROVED** (`approval_type=SKIPPED_REVIEW`, emit `REVIEW.SKIPPED`) | Sign → **SIGNED** → **RELEASED** |
 
-PASS/WARN therefore always place **WP** artifacts into **CLEARED_FOR_USE** and **CD** artifacts into **OPERATOR_PREP** before any review mode applies, ensuring humans only evaluate Guardian-cleared CDs.
+PASS/WARN transitions follow the table above: WP always enters **CLEARED_FOR_USE** while CD jumps to the next state dictated by `review.mode` (OPERATOR_PREP, QUEUED_FOR_REVIEW, or APPROVED).
 
 Risk overrides force the artifact back through human review regardless of mode: if any listed condition is true, the system transitions to **APPROVAL_REQUESTED → QUEUED_FOR_REVIEW** even when the configured mode would skip the queue. `REVIEW.SKIPPED` events include `{review_mode, overrides_applied}` so auditors can confirm when automation made the decision versus when overrides intervened. App.A’s state diagrams annotate each branch so the default, queue-first, and skip flows remain visually distinct. Portal fetch-time checks continue to block revoked deliverables regardless of mode.
 
@@ -1466,7 +1466,7 @@ enums.reject_reason: managed via Reference Manager (list in §5.2.4)
 enums.quarantine_reason: managed via Reference Manager (list in §5.2.4)
 ```
 
-`review.mode` defaults at the org level (case overrides permitted) and governs the queue/skip behavior described above. `review.approval_type.default` exists for configuration parity during migrations; it must remain `HUMAN` whenever a skip mode is not active. `org.guardian.pre_operator_gates[]` enumerates artifact classes that must receive Guardian PASS/WARN before operators may view them. Masking and i18n settings bind to the token vault (§4.5.2) and locale contract tests (§11.3). Settings changes follow the dual-approval process in §9 and emit `SETTINGS_CHANGE_REQUESTED` audit events with diff payloads.
+`review.mode` defaults at the org level (case overrides permitted) and governs the queue/skip behavior described above. When Guardian returns PASS/WARN it sets **WP → CLEARED_FOR_USE** and chooses the **CD** next state dictated by the configured `review.mode` (OPERATOR_PREP for `MANUAL`, QUEUED_FOR_REVIEW for `SKIP_OPERATOR_PREP`, APPROVED for `SKIP_*`). `review.approval_type.default` exists for configuration parity during migrations; it must remain `HUMAN` whenever a skip mode is not active. `org.guardian.pre_operator_gates[]` enumerates artifact classes that must receive Guardian PASS/WARN before operators may view them. Masking and i18n settings bind to the token vault (§4.5.2) and locale contract tests (§11.3). Settings changes follow the dual-approval process in §9 and emit `SETTINGS_CHANGE_REQUESTED` audit events with diff payloads.
 
 Manifests continue to capture provenance (schema/graph versions, source artifacts, settings snapshot hash, regions, template versions, dependency SHAs), and ops logging remains unchanged: each run writes human-readable `.log`, structured `.json`, and appends to case-level `ops_<agent>.jsonl`. Data lineage for the updated status model is reflected in App.R.
 
@@ -1526,7 +1526,7 @@ Manifests continue to capture provenance (schema/graph versions, source artifact
   3. Approve target only if `status='QUEUED_FOR_REVIEW'` and `version=:expected_version`; set `status='APPROVED'`, populate `approved_by`, `approved_at`, increment `version`.
   4. Revoke the prior deliverable, if present: `UPDATE artifact SET status='REVOKED', revoked_at=now(), revoked_by_artifact_id=:new_cd WHERE class='DL' AND status='RELEASED' AND case_id=:case_id AND type=:type`.
   5. Mint/sign new deliverable row referencing the approved CD (`class='DL'`, `status='SIGNED'`, signature metadata, OCC `version=0`), perform signing/TSA operations, then promote to `status='RELEASED'` within the same transaction. Each step includes OCC assertions on the new DL row to prevent double-release.
-  6. Emit audit + SSE (`artifact.status`, `portal_link_invalidated`, `artifact.deliverable_promoted`). If no row updated in step 3 but the target already satisfies `status='APPROVED'` with the expected version, treat as idempotent success; otherwise raise 409 conflict.
+  6. Emit audit + SSE (`artifact.status`, `portal_link_invalidated`). If no row updated in step 3 but the target already satisfies `status='APPROVED'` with the expected version, treat as idempotent success; otherwise raise 409 conflict.
 
 Notes
 
@@ -2518,7 +2518,7 @@ Notes
 *Purpose: Standardize interface behavior across services for ease of integration.*
 
 - REST base path `/api/v1/` per service; plural resources (`/cases`, `/artifacts`). Mutations use optimistic concurrency (`version`) for idempotent semantics.
-- Mutating operations (`POST`, `PUT`, `PATCH`, `DELETE`) require an `Idempotency-Key` header (UUIDv7, 24h TTL minimum) so retries remain side-effect free across deployments; servers reject missing or replayed keys with `409 IDEMPOTENCY_SIGNATURE_MISMATCH` and surface the original response payload when possible.
+- Mutating operations (`POST`, `PUT`, `PATCH`, `DELETE`) require an `Idempotency-Key` header (UUIDv7, 24h TTL minimum) so retries remain side-effect free across deployments; servers reject missing or replayed keys with `409 CONFLICT` (`details.reason="IDEMPOTENCY_SIGNATURE_MISMATCH"`) and surface the original response payload when possible.
 - Pagination envelope `{items, page, page_size, total, next_page}`; sorting `?sort=field:asc`. Invalid sort or masked fields → 400.
 - Error envelope conforms to `spec/schemas/api_error.schema.json`; servers always include `X-Request-ID` and reuse the schema-generated models in runtime code. Rate-limit headers exposed to browsers (see §10.5 CORS contract).
 
@@ -2588,7 +2588,7 @@ List contracts (normative)
   1. Insert artifact row (`class='SA'`, `status='STORED'`, immutable fields set) with new UUIDv7 and manifest payload.
   1. Update session `status='FINALIZED'`; downstream workers automatically transition derived artifacts to `PENDING_JUDGMENT` and enqueue Guardian evaluation.
 - `upload_session` rows remain short-lived; antivirus and content scanners transition `status` through `UPLOADED` and `SCANNING` before finalize. A janitor task clears `EXPIRED`/`ABORTED` sessions and deletes orphan staging blobs.
-- Idempotency: reuse key within TTL returns same `artifact_id`; reuse with different payload → 409 `IDEMPOTENCY_SIGNATURE_MISMATCH`. TTL default 24h (`api.idempotency.ttl_hours`).
+- Idempotency: reuse key within TTL returns the same `artifact_id`; reuse with different payload → 409 `CONFLICT` (`details.reason="IDEMPOTENCY_SIGNATURE_MISMATCH"`). TTL default 24h (`api.idempotency.ttl_hours`).
 - Retention: expired keys are purged nightly (and opportunistically on insert) so the table stays bounded; retries beyond TTL must supply a fresh key.
 - Session expiry via janitor; stale sessions cleaned with `EXPIRED`. Range requests supported; all downloads require `APPROVED` state.
 
@@ -2623,7 +2623,7 @@ Handler pattern
 
 1. `udlock.xact_lock(scope, CONCAT(:org_id,'/',:key))`.
 1. Normalise endpoint to `METHOD:/path` (path variables preserved) and compute `request_hash = sha256(canonical_request_bytes)` via `packages.udocket_core.idem.hash_request`.
-1. Insert `(org,scope,key,endpoint,case_id,request_hash,result_ref,response_code,response_hash,status,expires_at)` on first execution with `expires_at = now() + make_interval(hours => :ttl_hours)`. Conflicts where `request_hash` differs MUST raise 409 `IDEMPOTENCY_SIGNATURE_MISMATCH`; matching hashes update `last_seen_at` and return `result_ref`.
+1. Insert `(org,scope,key,endpoint,case_id,request_hash,result_ref,response_code,response_hash,status,expires_at)` on first execution with `expires_at = now() + make_interval(hours => :ttl_hours)`. Conflicts where `request_hash` differs MUST raise 409 `CONFLICT` with `details.reason="IDEMPOTENCY_SIGNATURE_MISMATCH"`; matching hashes update `last_seen_at` and return `result_ref`.
 1. Optional overlapping-run guard per case/kind: `udlock.try_lock('jobkind', CONCAT(:case_id,'/',:kind))` → 409 `JOB_KIND_BUSY` if held.
 
 - Canonical scopes (binding): `IDEMPOTENCY_SCOPES = {'job:create','job:checkpoint','artifact:approve','artifact:upload','upload:finalize'}` exported from `packages.udocket_core.idem.constants`. Services **MUST NOT** invent ad-hoc strings; CI lints specs and Python call sites to use the constant set.
@@ -2816,7 +2816,7 @@ Payloads (illustrative)
 
 - Global throttles: `api.rate_limits.web.rpm_per_org`, `api.rate_limits.web.rpm_per_ip`; 429 responses include `Retry-After`, `X-RateLimit-*`, and support exponential backoff guidance.
 - Portal downloads: per-user/org caps (`portal.download.rate_limits.*`) with anomaly detection; exceeding triggers `portal_link_invalidated` and optional step-up MFA.
-- SSE/Channels: server disconnects on org switch or token expiry; reconnects honor backoff (`retry` field) and enforce token binding.
+- SSE/Channels: server disconnects on org switch or token expiry; reconnects honor backoff (`retry` field), enforce token binding, and must respect the 8 KiB per-event payload cap defined in §10.8.
 - Fraud signals: repeated 4xx from a single IP escalate to security incident workflow; rate-limit spikes logged via `API_RATE_ALERT` audit events.
 - Source material: `§21.7`, `§45`
 
@@ -3299,7 +3299,7 @@ Preventive actions
 
 - Autoscaling policies: HPAs for web/channels (CPU + request latency), workers (queue depth), Guardian, Compose, and Signer tiers (p95 latency). Each deployment keeps `minReplicas=2`, `maxReplicas=10`, and targets 70 % CPU unless a service-specific metric overrides it (for example, Guardian latency-based scaling). Compose lanes scale independently from Guardian so summarization surges never starve policy enforcement; KEDA bindings monitor queue depth per lane to add burst capacity without violating residency budgets.
 - Capacity reviews quarterly: evaluate job volume, LLM spend, storage growth. Provide forecasts to FinOps (link to §57).
-- Performance budgets tracked via dashboards: upload finalize ≤ 5s, SSE lag \< 1s, LLM lane runtime budgets (5–15 minutes per lane depending on complexity).
+- Performance budgets tracked via dashboards: upload finalize ≤ 5s, SSE lag P95 \< 2s (P99 \< 5s), LLM lane runtime budgets (5–15 minutes per lane depending on complexity).
 - Stress tests run pre-release using synthetic workloads (k6 + Locust) that exercise Guardian, LPE/OPA evaluation, and RLS-heavy API paths; results captured in App.H for regression comparison and must meet App.L baselines before shipping.
 - Benchmark snapshots in App.L capture the latest measured baselines feeding these budgets; deviations trigger escalation before release.
 
@@ -4022,7 +4022,7 @@ Canonical artifact table
     "ended_at": "RFC3339|null",
     "model_id": "string",
     "prompt_version": "string",
-    "guardian_judgment": "pass|warn|block|waived|quarantined",
+    "guardian_judgment": "PASS|WARN|BLOCK|WAIVED",
     "messages": [
       {
         "id": "uuid",
@@ -4053,7 +4053,7 @@ Canonical artifact table
   }
   ```
 
-- Guardian quarantines set `guardian_judgment="quarantined"` and append a `guardian_decision` block inside the manifest (`decision_id`, `reason`, `acted_at`).
+- Guardian judgments record `guardian_judgment ∈ {PASS,WARN,BLOCK,WAIVED}`. Quarantine outcomes set `status="QUARANTINED"` and append a `guardian_decision` block (`decision`, `decision_id`, `reason`, `acted_at`).
 - Staff transcripts retain full conversation (with masked snippets); client transcripts redact internal-only system prompts and any content hidden by moderation for the client audience. Both run through the redaction pipeline before persistence.
 - `CHAT_SUMMARY_JSON` (`chat_summary@1.0`) stores structured summaries for downstream analytics: `{ "schema_version": "chat_summary@1.0", "session_id": "...", "summaries": [{ "audience": "staff|client", "locale": "en-CA", "text_md": "...", "citations": [...] }], "generated_at": "RFC3339", "model_id": "string" }`. Summaries always link back to the source session via `manifest.source_artifacts`.
 
@@ -4358,7 +4358,7 @@ Scope dimensions
 
 Collision handling & headers
 
-- Services MUST compute `request_hash` using the shared helper and raise `409 IDEMPOTENCY_SIGNATURE_MISMATCH` when an existing `(scope,key)` stores a different hash.
+- Services MUST compute `request_hash` using the shared helper and raise `409 CONFLICT` with `details.reason="IDEMPOTENCY_SIGNATURE_MISMATCH"` when an existing `(scope,key)` stores a different hash.
 - Replay successes update `last_seen_at`, return the stored `result_ref`, and echo `Idempotency-Key` plus `Idempotency-Status: replay`. First-run success emits `Idempotency-Status: fresh`; conflicts return 409 with `Idempotency-Status: conflict`.
 - `Idempotency-Status` joins structured logging (`idempotency_status` field) so SREs can track replay rates; metrics `idempotency_replay_total` and `idempotency_conflict_total` back deploy gates.
 
@@ -4564,10 +4564,10 @@ Content-Type: application/json
 X-Request-ID: 7d1f1dba-1d6f-4f6a-a7ef-2d2f1c2e9bd3
 Deprecation: @1777956000; sunset="Mon, 01 Jun 2026 00:00:00 GMT"
 Sunset: Mon, 01 Jun 2026 00:00:00 GMT
-Link: </api/v1/migrations/2026-04-case-export>; rel="deprecation"; type="text/html"
+Link: </api/v1/migrations/2026-06-case-export>; rel="deprecation"; type="text/html"
 X-uDocket-API-Version: 2025-01
 
-{ "id": "...", "status": "deprecated", "sunset_at": "2026-04-01T00:00:00Z" }
+{ "id": "...", "status": "deprecated", "sunset_at": "2026-06-01T00:00:00Z" }
 ```
 
 - Every response advertises the scheduled removal date via `Sunset` and links to migration notes under `/api/v1/migrations/<version>`. Clients pinned to older versions receive the same headers; monitoring (`api_sunset_header_missing_total`) ensures deprecations remain compliant with §10.0.
