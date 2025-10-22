@@ -38,7 +38,53 @@ related_adrs:
 | Docs validation | `python scripts/docs/lint_docs.py` (see `docs/README.md` for tooling)                                           |
 | Link lint       | `python scripts/docs/link_check.py --strict` (CI `docs-link-check` stage blocks unresolved §/App./ADR refs)     |
 
+Body sections reference appendices instead of duplicating diagrams or schemas—App.A (state diagrams) and App.G (ERD) are authoritative. Link lint already fails missing references; this edition documents that control explicitly. `python scripts/docs/lint_docs.py --check-template` now enforces the Purpose/Contract/State/Failure/Observability/Breadcrumb scaffold for every normative or binding subsection.
+
 **Section tags:** `(binding)` denotes requirements that block launch until implemented and tested; `(normative)` captures default behaviors that may evolve via waivers or roadmap; `(informative)` provides background or examples. When a subsection omits a tag it is treated as informative by default—add the explicit tag when the content carries binding or normative weight.
+
+## Canonical vocabulary (binding)
+
+*Purpose: Provide single-source wording for artifact classes, statuses, and Guardian mappings so specs, code, and UI stay aligned.*
+*Contract: Any change to artifact classes, statuses, or Guardian judgment mappings MUST update §5.2.1–§5.2.3 and this section in the same patch; other sections link back instead of restating tables.*
+*State transitions: Defined exclusively in §5.2.2 (statuses) and §5.2.3 (Guardian mapping).*
+*Failure modes & retries: `scripts/docs/lint_docs.py --check-template` now fails when a normative section lacks Purpose/Breadcrumbs scaffolding; `scripts/db/lint_status_column.py` blocks unknown status strings; CI job `lint-artifact-vocabulary` scans diffs for stray status/judgment terms.*
+*Observability: Docs lint metrics (`docs_template_missing_total`, `docs_vocabulary_drift_total`) feed the Docs Quality dashboard; Guardian and approval metrics remain unchanged.*
+*Binding breadcrumbs: Implementation `packages/udocket_core/artifacts/status.py`, Tests `tests/platform/artifacts/test_status_vocab.py`, Observability `docs.lint_artifact_vocabulary`, `guardian_judgment_latency_seconds`.*
+*References: §5.2, §5.4.1, §7.1, §10.3.2, App.A, App.I.*
+
+### Artifact classes (authoritative definitions)
+
+| Class                 | Key    | Canonical definition                                      | Visibility          |
+| --------------------- | ------ | --------------------------------------------------------- | ------------------- |
+| Source Asset          | **SA** | Raw, immutable inputs we ingest.                          | Staff (scoped)      |
+| Work Product          | **WP** | Internal derived data never exposed to clients.           | Staff only          |
+| Candidate Deliverable | **CD** | Human-readable draft that may be released after approval. | Staff reviewers/ops |
+| Deliverable           | **DL** | Approved, signed, client-visible document.                | Staff + client      |
+| Auxiliary Record      | **AR** | Attestations/receipts that prove what happened.           | Auditors/admin      |
+
+### Canonical statuses (link to §5.2.2)
+
+- `STORED → PROCESSING → PENDING_JUDGMENT` (SA → WP/CD) with deterministic transitions enumerated in §5.2.2.
+- Guardian PASS/WARN moves WP → `CLEARED_FOR_USE` and CD → `OPERATOR_PREP`; review queue states (`APPROVAL_REQUESTED`, `QUEUED_FOR_REVIEW`, `CHANGES_REQUESTED`) apply only to CDs.
+- Deliverables follow `APPROVED → SIGNED → RELEASED → REVOKED → ARCHIVED` and are subject to the ExclusiveSwap invariant in §5.4.1.
+
+### Guardian judgments → statuses (link to §5.2.3)
+
+| Judgment | WP next         | CD next       | Notes              |
+| -------- | --------------- | ------------- | ------------------ |
+| PASS     | CLEARED_FOR_USE | OPERATOR_PREP | default            |
+| WARN     | CLEARED_FOR_USE | OPERATOR_PREP | banners            |
+| BLOCK    | QUARANTINED     | QUARANTINED   | remediation/waiver |
+| WAIVED   | as PASS         | as PASS       | dual approval      |
+
+Guardian policy, risk tiers, and remediation flows continue in §5.2.3 and §7.1; other sections cite these tables instead of rephrasing them.
+
+### Definition locks
+
+- No new status or judgment names appear outside §5.2.2–§5.2.3 without an ADR update and a matching lint rule update; CI job `lint-artifact-vocabulary` blocks unknown terms in diffs.
+- APIs emit events whose values are exactly the canonical statuses/judgments; payload schemas MUST reference this section instead of inventing aliases.
+- Mapping tables live only in §5.2.3. Other sections reference them with `See §5.2.3 (canonical mapping)`.
+- Binding breadcrumbs are mandatory for every normative/binding subsection; missing breadcrumbs fail `scripts/docs/lint_docs.py --check-template`.
 
 ---
 
@@ -198,6 +244,22 @@ related_adrs:
 ---
 
 ## 3) Platform architecture overview
+
+### 3.0 Golden path sequence (binding)
+
+**Purpose:** Surface the end-to-end happy path so readers can anchor the deeper sections that follow.\
+**Contract:** Describes the canonical SA → WP/CD → DL progression; detailed mechanics live in §5.2 (lifecycle), §5.4 (approvals), §7.1 (Guardian), and §10.3 (APIs).\
+**State transitions:** Uses the status vocabulary in §5.2.2 and Guardian mappings in §5.2.3; App.A.2 visualizes the same sequence.\
+**Failure modes & retries:** Guardian `BLOCK` diverts to remediation/waiver workflows; approval conflicts leverage RB-APPROVAL-001; job watchdogs apply per §6.2 if heartbeats stall.\
+**Observability:** Sequence relies on `job.update`, `guardian_judgment_latency_seconds`, `approval_swap_conflict_total`, and portal invalidation events (`portal_link_invalidated`).\
+**Breadcrumbs:** Implementation `apps/platform/operations/tasks/upload.py`, Tests `tests/platform/e2e/test_happy_path.py::test_upload_guardian_approval_flow`, Observability dashboard “Golden Path (Upload→Release)”.\
+**References:** §5.2, §5.4.1, §7.1, §10.3, App.A.2.
+
+1. Upload lands in staging (`POST /uploads`), persists the SA (`status='STORED'`) and emits the initial `job.accepted` event (§10.3, App.A.1).
+2. Workers derive WP/CD artifacts, run transforms, and park them in `PROCESSING → PENDING_JUDGMENT` while Guardian evaluates (§5.2.2, §7.1). Outcome mapping is canonical in §5.2.3.
+3. Guardian PASS/WARN unlocks operator access (`CLEARED_FOR_USE` / `OPERATOR_PREP`); operators or automation advance to review entry (`APPROVAL_REQUESTED → QUEUED_FOR_REVIEW`) (§5.2.4–§5.2.5).
+4. Reviewers invoke the Reviews API which applies the ExclusiveSwap invariant from §5.4.1, atomically approving the CD and promoting the new DL (`RELEASED`) while revoking prior deliverables (§10.3.2).
+5. Portal invalidation notifies clients of the new deliverable and blocks any revoked link; downstream analytics and audit trails attach Guardian judgment IDs, manifests, and settings hashes (§11.2.1, App.A.2).
 
 ### 3.1 High-level system context diagram
 
@@ -1271,9 +1333,20 @@ SELECT id, org_id, case_id, type, status, content_sha256,
   | ----------------------------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
   | Artifact immutability trigger | Implementation: `apps/platform/artifacts/migrations/0024_artifact_immutable_trigger.py` | Test: `tests/platform/artifacts/test_immutability.py::test_update_blocked_after_draft` | Observability: Audit event `ARTIFACT_IMMUTABILITY_VIOLATION` (Alert: “Artifact Immutable Breach”) |
 
-### 5.2 Artifact lifecycle and state machine semantics
+### 5.2 Artifact lifecycle (authoritative)
 
-*Purpose: Define how artifacts progress and how exclusivity & approvals apply.*
+**Purpose:** Define artifact classes, canonical statuses, and the only valid transitions.\
+**Contract:** Agents, services, and APIs MUST emit statuses and judgments exactly as defined in this section; reruns produce additive versions without mutating prior outputs.\
+**State transitions:** Governed by §5.2.2 (statuses), §5.2.3 (Guardian mapping), and §5.4.1 (ExclusiveSwap invariant); App.A.2 diagrams the same state machine.\
+**Failure modes & retries:** Guardian `BLOCK` or reviewer quarantine follow remediation/waiver loops in §5.2.3–§5.2.5; watchdogs and approval conflicts escalate via RB-APPROVAL-001 and RB-JOB-WATCHDOG.\
+**Observability:** `artifact.status`, `guardian_judgment_latency_seconds`, `approval_swap_conflict_total`, `portal_link_invalidated`, and `docs_template_missing_total`.\
+**Breadcrumbs:** Implementation `packages/udocket_core/artifacts/status.py`, Tests `tests/platform/artifacts/test_status_vocab.py::test_all_statuses_linked`, Observability Grafana “Artifact Lifecycle” dashboard.\
+**References:** §5.2.1–§5.2.8, §5.4.1, §7.1, §10.3.2, App.A, App.I.
+
+**Invariants:**\
+– No operator can view WP/CD prior to Guardian PASS/WARN (see §5.2.3).\
+– Only one `RELEASED` DL exists per `(case_id,type)`; approvals atomically revoke the prior DL (ExclusiveSwap invariant, §5.4.1).\
+– Append-only audit: every lifecycle action appends to `ops_<agent>.jsonl` and persists manifests with SHA-256 provenance.
 
 #### 5.2.1 Object classes (SA/WP/CD/DL/AR)
 
@@ -1531,26 +1604,20 @@ Exclusive deliverables use **approval swap** semantics:
 | Residency enforcement | **Strict** | **Strict** | **Strict** | **Strict** | **Strict** |
 | Portal visibility | ✗ | ✗ | ✗ | **Only latest RELEASED** | ✗ |
 
-#### 5.2.8 Minimal schema updates
+#### 5.2.8 Schema & configuration guardrails
 
-*Purpose: Capture the schema updates required to support the lifecycle above.*
+*Purpose: Keep database schema, Settings, and manifests aligned with the authoritative lifecycle.*
 
-Shared schema fields:
-
-- `id` (UUIDv7), `class ∈ {SA,WP,CD,DL,AR}`, `status`, `version` (OCC)
-- `org_id`, `case_id`, `created_by`, `created_at`, `updated_at`
-- `content_hash`, `size_bytes`, `mime`, `storage_key`, `labels[]`
-- `depends_on_canceled_job` (bool, nullable; set when rerun is required after cancellation)
-- `guardian_judgment`, `guardian_reason_codes[]`, `guardian_judgment_id`, `judged_at`
-- `qa_assessments[]` (`type`, `score`, `notes`, `model_id`, `threshold_result`)
-- CD-only review metadata: `approval_type ∈ {HUMAN,SKIPPED_REVIEW}`, `approved_by`, `reviewed_at`, `reject_reason`, `reject_note`, `reject_reason_other_text?`, `quarantine_reason`, `quarantine_note`, `quarantine_reason_other_text?`
-- DL-specific fields: `signature_type`, `signature_ref`, `tsa_ref`, `released_at`, `revoked_at?`, `revocation_reason?`, `revoked_by_artifact_id?` (when set, records the successor created by an approval swap)
-
-- Section §10.4 documents the REST/GraphQL surfaces exposing these fields. UI filters rely on a derived view `artifact_review_phase` that maps the canonical `status` to `{pending, reviewing, changes_requested, quarantined, approved}`; duplicate mutable columns are banned.
-
-#### 5.2.9 Configuration surface
-
-*Purpose: List configuration knobs and Settings that influence artifact behavior.*
+- Shared schema fields:
+  - `id` (UUIDv7), `class ∈ {SA,WP,CD,DL,AR}`, `status`, `version` (OCC)
+  - `org_id`, `case_id`, `created_by`, `created_at`, `updated_at`
+  - `content_hash`, `size_bytes`, `mime`, `storage_key`, `labels[]`
+  - `depends_on_canceled_job` (bool, nullable; set when rerun is required after cancellation)
+  - `guardian_judgment`, `guardian_reason_codes[]`, `guardian_judgment_id`, `judged_at`
+  - `qa_assessments[]` (`type`, `score`, `notes`, `model_id`, `threshold_result`)
+  - CD-only review metadata: `approval_type ∈ {HUMAN,SKIPPED_REVIEW}`, `approved_by`, `reviewed_at`, `reject_reason`, `reject_note`, `reject_reason_other_text?`, `quarantine_reason`, `quarantine_note`, `quarantine_reason_other_text?`
+  - DL-specific fields: `signature_type`, `signature_ref`, `tsa_ref`, `released_at`, `revoked_at?`, `revocation_reason?`, `revoked_by_artifact_id?` (links successor created by ExclusiveSwap)
+- Settings knobs (managed via Settings Service; defaults enforced in §9):
 
 ```pseudocode
 review.mode: MANUAL | SKIP_OPERATOR_PREP | SKIP_REVIEW | SKIP_ALL
@@ -1565,9 +1632,9 @@ enums.reject_reason: managed via Reference Manager (list in §5.2.4)
 enums.quarantine_reason: managed via Reference Manager (list in §5.2.4)
 ```
 
-`review.mode` defaults at the org level (case overrides permitted) and governs the queue/skip behavior described above. When Guardian returns PASS/WARN it sets **WP → CLEARED_FOR_USE** and chooses the **CD** next state dictated by the configured `review.mode` (OPERATOR_PREP for `MANUAL`, QUEUED_FOR_REVIEW for `SKIP_OPERATOR_PREP`, APPROVED for `SKIP_*`). `review.approval_type.default` exists for configuration parity during migrations; it must remain `HUMAN` whenever a skip mode is not active. `org.guardian.pre_operator_gates[]` enumerates artifact classes that must receive Guardian PASS/WARN before operators may view them. Masking and i18n settings bind to the token vault (§4.5.2) and locale contract tests (§11.3). Settings changes follow the dual-approval process in §9 and emit `SETTINGS_CHANGE_REQUESTED` audit events with diff payloads.
-
-Manifests continue to capture provenance (schema/graph versions, source artifacts, settings snapshot hash, regions, template versions, dependency SHAs), and ops logging remains unchanged: each run writes human-readable `.log`, structured `.json`, and appends to case-level `ops_<agent>.jsonl`. Data lineage for the updated status model is reflected in App.R.
+- Settings behaviour: `review.mode` defaults at the org scope (case overrides permitted). Guardian PASS/WARN always set **WP → CLEARED_FOR_USE** and then choose the **CD** next state per `review.mode` (OPERATOR_PREP for `MANUAL`, QUEUED_FOR_REVIEW for `SKIP_OPERATOR_PREP`, APPROVED for the `SKIP_*` family). `review.approval_type.default` MUST remain `HUMAN` whenever a skip mode is inactive. `org.guardian.pre_operator_gates[]` lists classes that require PASS/WARN before operators see content. Masking and i18n settings bind to the vault (§4.5.2) and localization contract tests (§11.3). Settings edits follow dual approval (§9) and emit `SETTINGS_CHANGE_REQUESTED` audit events.
+- API exposure: §10.4 documents REST/GraphQL surfaces for these fields; UI uses derived view `artifact_review_phase` to avoid duplicating status logic.
+- Manifests remain the provenance source (schema/graph versions, input lineage, settings snapshot hash, computed SHA-256, regions, template versions, dependency SHAs). Each agent appends `.log`, `.json`, and `ops_<agent>.jsonl` entries; data lineage diagrams in App.R visualize the same relationships.
 
 ### 5.3 Object storage layout & integrity guarantees
 
@@ -1603,9 +1670,17 @@ Manifests continue to capture provenance (schema/graph versions, source artifact
 - Job orchestration acquires locks before emitting artifacts (`analyze:lifecycle:{job_id}`, `compose:section:{job_id}:{section}`) to avoid duplicates on retries.
 - Upload finalization and approval flows use OCC versions to guarantee single-writer semantics; concurrent approval attempts fail with version mismatch requiring refresh.
 
-#### 5.4.1 Exclusive approval & release swap (binding)
+#### 5.4.1 ExclusiveSwap invariant (binding)
 
-*Purpose: Enforce single-winner semantics for CDs and DLs and make approvals/release idempotent and race-free.*
+**Purpose:** Enforce single-winner semantics for CDs and DLs and make approvals/release idempotent and race-free.\
+**Contract:** The ExclusiveSwap invariant governs every approval or release path; all call sites MUST invoke this procedure rather than reimplementing it.\
+**State transitions:** Applies when moving a CD from `QUEUED_FOR_REVIEW` to `APPROVED` and when promoting the corresponding DL to `RELEASED`; App.A.2 visualizes the swap.\
+**Failure modes & retries:** OCC mismatches surface `409` conflicts, advisory locks prevent duplicate winners, and signer timeouts trigger retryable errors before any DL is promoted.\
+**Observability:** `approval_swap_conflict_total`, `deliverable_release_retries_total`, `portal_link_invalidated`, audit events `APPROVAL_SWAP_APPLIED`.\
+**Breadcrumbs:** Implementation `packages/udocket_core/approvals/service.py::approve_artifact`, Tests `tests/platform/artifacts/test_approval_swap.py::test_concurrent_approvals_single_winner`, Observability Grafana “Approvals” panel.\
+**References:** §5.2.6, §5.2.8, §10.3.2, App.A.2.
+
+This invariant is authoritative; downstream APIs (for example, §10.3.2 Reviews API) and docs MUST reference it instead of restating the algorithm.
 
 - Unique indexes (binding):
 
@@ -2154,6 +2229,7 @@ Node catalog (illustrative)
 - Rule enforcement: *No one sees unjudged data.* Every SA/WP/CD version is born `PENDING_JUDGMENT`; Guardian runs the in-house gating stack before any human or downstream system may inspect content.
 - In-house detection: vendor heuristics (LLM/Speech safety APIs) lack HIPAA guarantees and vary by SKU/region, so Guardian operates first-party detectors to ensure deterministic coverage, auditability, and residency controls before surfacing any content.
 - Flow: any SA/WP/CD creation or version bump transitions the record to `PENDING_JUDGMENT`; workers automatically enqueue the payload on the regional Guardian submission bus. Guardian hydrates policy context, upstream manifests, waiver state, moderation/QA findings, and emits one of four judgments. PASS/WARN transition WP → `CLEARED_FOR_USE` and CD → `OPERATOR_PREP`; BLOCK or reviewer-initiated quarantine force `QUARANTINED`. WAIVED mirrors PASS but records the waiver chain and dual approvers.
+- Mapping: See §5.2.3 (canonical) for the judgment-to-status table; Guardian docs reference it instead of duplicating the mapping.
 - Manual replay: the sole administrative override is `POST /guardian/judgments:enqueue`. It accepts `{resource_urn, reason?, requested_by}` (idempotent on `{resource_urn, reason}`) and is restricted to internal tooling. The endpoint reuses the same submission bus and metrics so ad-hoc pushes follow the standard SLOs and audit path. Per-object submit APIs remain prohibited.
 - Metadata: each judgment persists `guardian_judgment_id`, `reason_codes[]`, optional `guardian_warnings[]` (set on WARN), and `waiver_id` (set on WAIVED) in `guardian_judgment_history`, linking to the evaluated `settings_snapshot_sha256` and policy bundle versions for reproducibility.
 - Deployment & scaling: Guardian runs as a stateless evaluation tier backed by an async submission bus (Kafka in production; Azure Service Bus in regulated tenants). Each data-residency boundary maintains an isolated Guardian deployment (+OPA bundle cache) so PASS/WARN/BLOCK judgments never cross regions. HPAs keep ≥ 2 replicas per region and target ≤ 70 % CPU; submit-time SLO is ≤ 1 s P95 from enqueue to first judgment attempt under nominal load. Queues are drained via workers that hydrate PolicyContext, evaluate OPA bundles, and emit decisions idempotently; failures nack back to the regional queue without poisoning other regions.
@@ -2773,24 +2849,19 @@ Handler pattern
   | Response echo header      | Implementation: `apps/platform/common/middleware/idempotency.py::IdempotencyHeaderMiddleware` | Test: `tests/platform/api/test_idempotency_header.py::test_response_echoes_header`         | Observability: API metrics `idempotency_echo_missing_total`   |
   | Replay semantics          | Implementation: `packages/udocket_core/idem/service.py::upsert_key`                           | Test: `tests/platform/api/test_idempotency_replay.py::test_same_key_same_body_vs_conflict` | Observability: Audit event `IDEMPOTENCY_CONFLICT`             |
 
-#### 10.3.2 Reviews API (approval with OCC; binding)
+#### 10.3.2 Reviews API (binding)
 
-*Purpose: Make review actions safe under concurrency and retries while supporting tri-outcome decisions.*
+**Purpose:** Provide the REST surface for reviewer actions without duplicating lifecycle logic.\
+**Contract:** All approval paths defer to the ExclusiveSwap invariant in §5.4.1; this API performs validation, parameter handling, and audit fan-out only.\
+**State transitions:** `approve` drives `QUEUED_FOR_REVIEW → APPROVED` and promotes the DL via §5.4.1; `changes` sets `CHANGES_REQUESTED`; `quarantine` routes through Guardian and lands in `QUARANTINED`. App.A.2 depicts the same transitions.\
+**Failure modes & retries:** Stale versions raise `409 CONFLICT`, signer timeouts bubble as retryable errors, Guardian unavailability triggers RB-GUARD-001 manual mode, and portal invalidation runs idempotently.\
+**Observability:** `reviews_api_requests_total`, `approval_swap_conflict_total`, `review_decision_latency_seconds`, audit events `REVIEW.APPROVED|CHANGES_REQUESTED|QUARANTINED`.\
+**Breadcrumbs:** Implementation `apps/platform/api/reviews.py`, Tests `tests/platform/api/test_reviews.py::test_review_endpoints_require_exclusive_swap`, Observability Grafana “Reviews API” panel.\
+**References:** §5.2.4–§5.2.6, §5.4.1, §7.1, App.A.2.
 
-- `POST /api/v1/reviews/{artifact_id}/approve { note?, expected_version }`
-  - Step 1: `udlock.xact_lock('case-approval', CONCAT(org_id,'/',case_id,'/',type))`.
-  - Step 2: archive existing `APPROVED` CDs for `(case_id,type)` (`UPDATE ... SET status='ARCHIVED', archived=true, version=version+1 WHERE status='APPROVED' AND archived=false`).
-  - Step 3: `UPDATE artifact SET status='APPROVED', review_reason=:note, approved_at=now(), approved_by=:user, version=version+1 WHERE id=:artifact_id AND status='QUEUED_FOR_REVIEW' AND version=:expected_version`.
-  - Step 4: revoke prior `RELEASED` deliverable (if any), create/sign the new DL referencing the approved CD, and promote it to `status='RELEASED'` with OCC guards (mirrors §5.4.1).
-  - Step 5: if rowcount=0 but artifact already `APPROVED`, return 200 (idempotent); otherwise 409 (stale version or status mismatch).
-  - Step 6: emit audit + SSE; portal invalidation logic (see §11.2.1) handles deliverable promotion.
-- `POST /api/v1/reviews/{artifact_id}/changes { reject_reason, note, expected_version }`
-  - Acquire the same lock; update `status='CHANGES_REQUESTED'`, store reviewer metadata (`reject_reason`, `reject_note`, timestamps, reviewer id).
-  - Emit audit + SSE (`REVIEW.CHANGES_REQUESTED`) and keep the CD available to operators in `OPERATOR_PREP` once they address feedback.
-- `POST /api/v1/reviews/{artifact_id}/quarantine { quarantine_reason, note, expected_version }`
-  - Acquire the lock; call Guardian quarantine endpoint with reviewer metadata so `guardian_judgment_history` remains source of record.
-  - Set `status='QUARANTINED'`, persist reviewer note, and emit audit + SSE (`REVIEW.QUARANTINED`).
-  - Portal invalidation removes any derived deliverables until remediation/waiver occurs.
+- `POST /api/v1/reviews/{artifact_id}/approve {note?, expected_version}` — Validates payload, verifies OCC, and invokes the Shared approval service that applies the ExclusiveSwap invariant. Success returns the promoted artifact envelope; replays (`Idempotency-Key`) surface `Idempotency-Status: replay`.
+- `POST /api/v1/reviews/{artifact_id}/changes {reject_reason, note, expected_version}` — Requires enums from §5.2.4, persists reviewer metadata, emits `REVIEW.CHANGES_REQUESTED`, and returns the updated artifact snapshot.
+- `POST /api/v1/reviews/{artifact_id}/quarantine {quarantine_reason, note, expected_version}` — Registers the decision with Guardian (`POST /guardian/quarantine`) so `guardian_judgment_history` remains source of record, updates the artifact to `QUARANTINED`, and invalidates dependent deliverables.
 
 ### 10.4 Guardian, Settings, Reference Manager, and Signature APIs
 
