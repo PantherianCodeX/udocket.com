@@ -1,6 +1,6 @@
 # Documentation tooling
 
-The `docs/TDDv7.md` file is large enough that it benefits from a dedicated
+The `docs/TDD.md` file is large enough that it benefits from a dedicated
 lint/preview workflow. Everything you need lives in this repository so you
 can keep the document consistent without guessing which tools to run.
 
@@ -19,8 +19,8 @@ python scripts/docs/lint_docs.py
 
 The aggregator runs:
 
-1. `mdformat --check --wrap no docs/TDDv7.md`
-2. `markdownlint-cli2 docs/TDDv7.md` (skipped if the CLI is not on `PATH`)
+1. `mdformat --check --wrap no docs/TDD.md`
+2. `markdownlint-cli2 docs/TDD.md` (skipped if the CLI is not on `PATH`)
 3. `scripts/docs/check_settings_keys.py` to ensure Appendix E only lists
    keys that actually exist in the codebase
 4. `scripts/docs/link_check.py` for appendix/diagram/section sanity checks
@@ -51,7 +51,7 @@ Open the workspace and install the recommended extensions when prompted:
 - `bierner.markdown-preview-github-styles` to preview with GitHub styling
 
 The `.vscode/settings.json` file does not force a formatter, so you can
-delegate formatting to `mdformat` by running `mdformat docs/TDDv7.md`
+delegate formatting to `mdformat` by running `mdformat docs/TDD.md`
 manually or via the lint script above.
 
 ## Tips

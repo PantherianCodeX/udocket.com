@@ -156,6 +156,7 @@ related_adrs:
   | PIPEDA / CPPA / PHIPA  | Residency controls, consent logging, legal hold & retention automation | §2.2, §3.8, §14.2, App.N |
 
 - HIPAA mode: applies only to U.S. workloads with an executed BAA. Org activation (`privacy.hipaa.enabled=true`) requires dual approval (`org_admin` + platform `sysadmin`), verifies BAA-backed storage and compute, and enforces per-org field encryption (`security.field_encryption.enabled=true`, `security.field_encryption.key_scope='per_org'`) plus WebAuthn for privileged roles (`security.mfa.webauthn_required_roles` includes `org_admin|org_manager|org_operator|org_reviewer`). Automated probes (`scripts/compliance/verify_hipaa_storage.py`) validate that primary and replica storage accounts report HIPAA eligibility and list the BAA contract ID before the setting is committed; failures block activation. PHI retention schedules follow Appendix C and portal delivery of PHI-tagged attachments is blocked unless HIPAA mode remains active. Settings expose `privacy.hipaa.enforcement_mode ∈ {optional, required}`—`required` is reserved for U.S. orgs under BAA, while `optional` allows voluntary adoption elsewhere. Outside the U.S. HIPAA stays optional; organizations may opt in for contractual reasons, but enforcement defaults to the general SPI/PHI controls unless HIPAA mode is explicitly enabled.
+- Detection and masking remain a best-effort safeguard: Guardian tiers, policy engines, and classifiers materially reduce PHI/SPI exposure but do not guarantee perfect coverage, so signed HIPAA work still requires operator verification, reviewer accountability, and dual-control approvals before release.
 - Prompt retention under HIPAA: storage of prompts/outputs is governed by `privacy.hipaa.prompt_retention_mode` (`'redacted'` default; options: `hash_only`, `full`). Mode selection is an explicit org-level setting reviewed with Compliance; HIPAA mode does **not** suppress storage automatically. Evidence-store pipelines honor the selected mode and record hashes + region metadata either way.
 - The `PHI=true` marker is collected at upload via a staff-facing “Contains PHI” toggle (default false) and may also be asserted by the post-upload classifier; both paths write the flag to artifact metadata. If a downstream classifier later upgrades an artifact to PHI while HIPAA mode is disabled, the artifact is retro-quarantined, downstream approvals are invalidated, and portal links are revoked until an organization enables HIPAA mode or files a waiver.
 - The same capture flow exposes a “Contains SPI” toggle; selections apply SPI detection thresholds, set `spi_review_required=true`, and block portal delivery until sensitive personal data receives explicit reviewer approval in line with CPRA/GDPR obligations (no HIPAA storage relocation is performed).
@@ -2143,6 +2144,7 @@ Guardian persists raw span evidence in `guardian_span_detection` (WP scope, RLS-
 - Settings key `sign.signature_policies[]` defines reusable policies referenced by `DeliverableDefinition.signature_policy_id` (§6.4.1). Each policy specifies `platform_signature` (`required|optional|none`), `client_signature` (`none|attestation_optional|attestation_required|countersign_required`), `tsa_profile_id`, `ocsp_profile_id`, `fips_required`, and optional `ack_template_id` for client-facing attestations.
 - Default mappings: `SIGN_POLICY_PLATFORM_REQUIRED` enforces platform signatures with optional client attestation (used by transcripts and Analyze summaries); `SIGN_POLICY_PLATFORM_REQUIRED_CLIENT_OPTIONAL` requires platform signatures and exposes a client acknowledgement toggle (Compose client deliverable); `SIGN_POLICY_PLATFORM_REQUIRED_CLIENT_REQUIRED` is reserved for regulated deployments where client countersignature is mandatory before portal release.
 - Signing pipeline: (1) producing stage emits canonical content (TXT/MD/JSON); (2) packager renders PDF/A or COSE/JWS envelope per policy; (3) Document Signer applies platform signature + TSA token; (4) manifest records `signatures[]` with `{policy_id, key_version, tsa_token_hash, ocsp_status}`; (5) Guardian validates signature metadata before promoting the deliverable. Raw TXT/MD artifacts remain stored for traceability but are marked `requires_signature=true` to block release without the signed companion.
+- Staff approval UI and portal download flows read the same manifest metadata; releases block unless a PDF/A with an embedded signature manifest is present, preventing drift between enforcement and the copy presented to reviewers/clients.
 - Client acknowledgement workflow: if `client_signature=attestation_optional|attestation_required`, portal prompts the client with the `ack_template_id` form after platform signing. Attestations generate `CLIENT_SIGNATURE_CERT` (digital countersignature) or `CLIENT_ATTESTATION` (logged acknowledgement) auxiliary records, both hash-linked to the signed artifact. Deliverables with `client_signature=countersign_required` remain in `PENDING_CLIENT_ACK` until the auxiliary record reaches `status=completed`; Guardian cancels portal URLs if the SLA expires.
 - Additional deliverables (short summary, timeline-only, future timeline exports) inherit `SIGN_POLICY_PLATFORM_REQUIRED` unless their catalog entry specifies otherwise. Implementation toggles from §6.4.1 cannot activate a deliverable whose signature policy demands a higher trust tier than the org’s configured `sign.trust_mode`.
 - Waivers and manual overrides follow existing approval swap semantics: changing a deliverable’s signature policy emits `SIGNATURE_POLICY_CHANGE` audit events, regenerates signed copies, and revokes previously released versions.
@@ -3590,12 +3592,15 @@ Alert routing
   ```json
   {
     "schema_version": "erasure@1.0",
-    "org_id": "UUID",
-    "case_id": "UUID|null",
+    "org_id": "22222222-2222-2222-2222-222222222222",
+    "case_id": "33333333-3333-3333-3333-333333333333|null",
     "subject_hash": "sha256-hex",
     "scope": ["ARTIFACTS","QA_LOGS","EVIDENCE","PROMPTS"],
-    "requested_by_user_id": "UUID",
-    "approved_by_user_ids": ["UUID","UUID"],
+    "requested_by_user_id": "44444444-4444-4444-4444-444444444444",
+    "approved_by_user_ids": [
+      "55555555-5555-5555-5555-555555555555",
+      "66666666-6666-6666-6666-666666666666"
+    ],
     "justification": "string",
     "executed_at": "RFC3339",
     "settings_snapshot_sha256": "sha256-hex"
@@ -3962,6 +3967,7 @@ Retention schedule (baseline; orgs may set stricter)
 - QA logs: retained for life of case; hidden from portal; included in WORM audit scope.
 - Entitlement snapshots and audit events: life of case + 2 years; WORM copies per audit policy.
 - Legal hold: any hold on the case supersedes retention timers; destruction jobs must check hold state and emit `DESTRUCTION_CERT` artifacts upon completion.
+- PolicyContext publishes the 90-day baseline retention alongside per-artifact overrides, and both the Settings UI and portal messaging read that metadata directly so user-facing copy and enforcement stay aligned.
 
 HIPAA override mode
 
@@ -4033,10 +4039,10 @@ Canonical artifact table
   ```json
   {
     "schema_version": "chat_session@1.0",
-    "session_id": "uuid",
+    "session_id": "77777777-7777-7777-7777-777777777777",
     "audience": "staff|client",
-    "case_id": "uuid",
-    "org_id": "uuid",
+    "case_id": "88888888-8888-8888-8888-888888888888",
+    "org_id": "99999999-9999-9999-9999-999999999999",
     "started_at": "RFC3339",
     "ended_at": "RFC3339|null",
     "model_id": "string",
@@ -5658,8 +5664,8 @@ Waiver template (JSON, all fields required)
   "waiver_id": "WAIVER-0001",
   "category": "residency",
   "scope": {
-    "org_id": "uuid",
-    "case_id": "uuid|null",
+    "org_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+    "case_id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb|null",
     "settings_key": "regions.allowlist.compute"
   },
   "justification": "string",

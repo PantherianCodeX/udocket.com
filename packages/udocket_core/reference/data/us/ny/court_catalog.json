@@ -5,225 +5,151 @@
     "tables": {
       "jurisdictions": {
         "table": "jurisdictions",
-        "pk": [
-          "country",
-          "subnational"
-        ],
-        "unique": [
-          [
-            "country",
-            "subnational"
-          ]
-        ]
+        "pk": ["country", "subnational"],
+        "unique": [["country", "subnational"]]
       },
       "courts": {
         "table": "courts",
-        "pk": [
-          "key"
-        ],
-        "fk": {
-          "jurisdictions": [
-            "country",
-            "subnational"
-          ]
-        },
-        "unique": [
-          [
-            "country",
-            "subnational",
-            "key"
-          ]
-        ]
+        "pk": ["key"],
+        "fk": { "jurisdictions": ["country", "subnational"] },
+        "unique": [["country", "subnational", "key"]]
       },
       "court_locations": {
         "table": "court_locations",
-        "pk": [
-          "court_key",
-          "slug"
-        ],
-        "fk": {
-          "courts": [
-            "court_key"
-          ]
-        }
+        "pk": ["court_key", "slug"],
+        "fk": { "courts": ["court_key"] }
       },
       "hearing_codes": {
         "table": "hearing_codes",
-        "pk": [
-          "code"
-        ]
+        "pk": ["code"]
       },
       "filing_codes": {
         "table": "filing_codes",
-        "pk": [
-          "code"
-        ]
+        "pk": ["code"]
       },
       "order_codes": {
         "table": "order_codes",
-        "pk": [
-          "code"
-        ]
+        "pk": ["code"]
       }
     }
   },
   "data": [
     {
-      "country": "CA",
-      "subnational": "FED",
-      "note": "CAS serves the FC, FCA, and TCC through a national registry network.",
+      "country": "US",
+      "subnational": "NY",
+      "note": "New York Unified Court System reference catalog (statewide and appellate courts).",
       "courts": {
-        "CA-FED-FC": {
-          "key": "CA-FED-FC",
-          "country": "CA",
-          "subnational": "FED",
-          "level": "FIRST_INSTANCE_SUPERIOR",
-          "formal_name": "Federal Court",
-          "short_name": "FC",
-          "divisions": [
-            "CIVIL",
-            "APPLICATIONS"
-          ],
+        "US-NY-COA": {
+          "key": "US-NY-COA",
+          "country": "US",
+          "subnational": "NY",
+          "level": "COURT_OF_LAST_RESORT",
+          "formal_name": "New York Court of Appeals",
+          "short_name": "NYCOA",
+          "divisions": ["GENERAL"],
           "locations": [
             {
-              "slug": "fc-ottawa",
-              "display_name": "Ottawa (CAS \u2013 90 Sparks St / Thomas D'Arcy McGee)",
+              "slug": "nycoa-albany",
+              "display_name": "Albany (20 Eagle Street)",
               "is_base_point": true,
-              "divisions_served": [
-                "CIVIL",
-                "APPLICATIONS"
-              ]
+              "divisions_served": ["GENERAL"]
             },
             {
-              "slug": "fc-toronto",
-              "display_name": "Toronto (CAS \u2013 180 Queen St W)",
-              "is_base_point": true,
-              "divisions_served": [
-                "CIVIL",
-                "APPLICATIONS"
-              ]
+              "slug": "nycoa-new-york",
+              "display_name": "New York City (27 Madison Avenue)",
+              "is_base_point": false,
+              "divisions_served": ["GENERAL"]
             }
           ],
           "hearing_codes": [
             {
-              "code": {
-                "code": "CA.FED.FC.HEARING.CIVIL.MOTIONS_LIST"
-              },
-              "label": "Motions List",
-              "category": "CIV_MOTIONS_REGULAR",
-              "divisions": [
-                "CIVIL",
-                "APPLICATIONS"
-              ]
+              "code": { "code": "US.NY.COA.HEARING.GENERAL.ORAL_ARGUMENT" },
+              "label": "Oral Argument",
+              "category": "ORAL_ARGUMENT",
+              "divisions": ["GENERAL"]
             },
             {
-              "code": {
-                "code": "CA.FED.FC.HEARING.CIVIL.CASE_MGMT"
-              },
-              "label": "Case Management Conference",
-              "category": "CIV_CASE_MGMT_CONF",
-              "divisions": [
-                "CIVIL",
-                "APPLICATIONS"
-              ]
+              "code": { "code": "US.NY.COA.HEARING.GENERAL.MOTION_CALENDAR" },
+              "label": "Motion Calendar",
+              "category": "MOTION",
+              "divisions": ["GENERAL"]
             }
           ],
-          "filing_codes": [],
-          "order_codes": []
+          "filing_codes": [
+            {
+              "code": { "code": "US.NY.COA.FILING.APPEAL_NOTICE" },
+              "label": "Notice of Appeal",
+              "category": "APPEAL_NOTICE",
+              "divisions": ["GENERAL"]
+            }
+          ],
+          "order_codes": [
+            {
+              "code": { "code": "US.NY.COA.ORDER.MANDATE" },
+              "label": "Mandate Issued",
+              "category": "DISPOSITION",
+              "divisions": ["GENERAL"]
+            }
+          ]
         },
-        "CA-FED-FCA": {
-          "key": "CA-FED-FCA",
-          "country": "CA",
-          "subnational": "FED",
+        "US-NY-AD1": {
+          "key": "US-NY-AD1",
+          "country": "US",
+          "subnational": "NY",
           "level": "INTERMEDIATE_APPEAL",
-          "formal_name": "Federal Court of Appeal",
-          "short_name": "FCA",
-          "divisions": [
-            "APPEALS",
-            "APPLICATIONS"
-          ],
+          "formal_name": "Appellate Division, Supreme Court of the State of New York (First Department)",
+          "short_name": "AD1",
+          "divisions": ["APPEALS", "MOTIONS"],
           "locations": [
             {
-              "slug": "fca-ottawa",
-              "display_name": "Ottawa (CAS)",
+              "slug": "ad1-manhattan",
+              "display_name": "Manhattan (27 Madison Avenue)",
               "is_base_point": true,
-              "divisions_served": [
-                "APPEALS",
-                "APPLICATIONS"
-              ]
+              "divisions_served": ["APPEALS", "MOTIONS"]
             }
           ],
           "hearing_codes": [
             {
-              "code": {
-                "code": "CA.FED.FCA.HEARING.APPEALS.SINGLE_JUDGE"
-              },
-              "label": "Single Judge Motion",
-              "category": "APP_SINGLE_JUDGE_APP",
-              "divisions": [
-                "APPLICATIONS"
-              ]
+              "code": { "code": "US.NY.AD1.HEARING.APPEALS.ORAL_ARGUMENT" },
+              "label": "Appeal Argument",
+              "category": "APPEAL_ARGUMENT",
+              "divisions": ["APPEALS"]
             },
             {
-              "code": {
-                "code": "CA.FED.FCA.HEARING.APPEALS.APPEAL_HEARING"
-              },
-              "label": "Appeal Hearing",
-              "category": "APP_HEARING",
-              "divisions": [
-                "APPEALS"
-              ]
+              "code": { "code": "US.NY.AD1.HEARING.MOTIONS.CALENDAR" },
+              "label": "Motion Calendar",
+              "category": "MOTION",
+              "divisions": ["MOTIONS"]
             }
           ],
-          "filing_codes": [],
-          "order_codes": []
-        },
-        "CA-FED-TCC": {
-          "key": "CA-FED-TCC",
-          "country": "CA",
-          "subnational": "FED",
-          "level": "FIRST_INSTANCE_SUPERIOR",
-          "formal_name": "Tax Court of Canada",
-          "short_name": "TCC",
-          "divisions": [
-            "CIVIL"
-          ],
-          "locations": [
+          "filing_codes": [
             {
-              "slug": "tcc-ottawa",
-              "display_name": "Ottawa (200 Kent St)",
-              "is_base_point": true,
-              "divisions_served": [
-                "CIVIL"
-              ]
+              "code": { "code": "US.NY.AD1.FILING.RECORD_ON_APPEAL" },
+              "label": "Record on Appeal",
+              "category": "APPEAL_RECORD",
+              "divisions": ["APPEALS"]
             }
           ],
-          "hearing_codes": [
+          "order_codes": [
             {
-              "code": {
-                "code": "CA.FED.TCC.HEARING.CIVIL.GENERAL_LIST"
-              },
-              "label": "General List",
-              "category": "CIV_MOTIONS_REGULAR",
-              "divisions": [
-                "CIVIL"
-              ]
+              "code": { "code": "US.NY.AD1.ORDER.DECISION_ORDER" },
+              "label": "Decision and Order",
+              "category": "DISPOSITION",
+              "divisions": ["APPEALS"]
             }
-          ],
-          "filing_codes": [],
-          "order_codes": []
+          ]
         }
       }
     }
   ],
   "meta": {
     "source_urls": [
-      "https://www.fct-cf.ca/en/pages/representing-yourself/registry/registry-offices",
-      "https://www.cas-satj.gc.ca/en/pages/registry/offices/ottawa",
-      "https://www.cas-satj.gc.ca/en/pages/registry/offices/toronto"
+      "https://www.nycourts.gov/ctapps/",
+      "https://www.nycourts.gov/courts/appellatedivision/firstdept/",
+      "https://www.nycourts.gov/whatis/"
     ],
-    "notes": "CAS registry network as of 2025-10-12.",
-    "last_updated": "1970-01-01",
-    "version": "0.0.0"
+    "notes": "Compiled from publicly available New York Unified Court System resources.",
+    "last_updated": "2025-10-19",
+    "version": "1.0.0"
   }
 }
