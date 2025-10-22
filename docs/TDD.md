@@ -424,6 +424,7 @@ metadata:
 #### 3.4.6 Service integrations
 
 - **Policy Agent (OPA):** LPE publishes bundle metadata and rollout channels (`stable`, `beta`, `canary`); OPA sidecars per service download and hot-reload signed Rego/data bundles via discovery. Bundles carry dual signatures: Ed25519 (default fast path) and ECDSA P-256 for FIPS compliance. Both signatures are produced from keys in Managed HSM; manifests record `{ed25519_key_id, ecdsa_key_id, signature_sha256}`. OPA verifies the Ed25519 signature in all modes and, when `security.tls.fips_mode=true`, additionally requires the ECDSA signature to validate before activation—bundles lacking the ECDSA signature are rejected with `OPA_FIPS_SIGNATURE_MISSING` and block rollout. Access to discovery/bundle endpoints requires mTLS + HMAC headers. Decision APIs (`/v1/data/udocket/...`) back the residency, HIPAA, attachment, and egress checks surfaced in Guardian, Workers, and Portal flows; timeouts/5xx responses are converted to `POLICY_BLOCK` errors with alerts. Decision logs (scrubbed of PII) and status logs feed the observability fabric for audit, with retention ≥ 365 days in immutable storage. Release gates enforce dual-sign coverage before promoting bundles to production cohorts; App.J FIPS tracers monitor `opa_bundle_fips_signature_missing_total`.
+  - Discovery manifest freshness: clients poll `/api/v1/lpe/opa/discovery` every 60 seconds with `If-None-Match`; manifests declare `bundle_etag`, `max_age_seconds` (default 300), and rollback pointers. If `max_age_seconds` elapses without a new manifest, sidecars treat the cache as stale, deny all policy requests (`OPA_ERROR` with `reason="DISCOVERY_STALE"`), and page via `opa_discovery_stale_total`. Bundles that fail signature verification force an immediate rollback to the previous `bundle_etag`; if no valid bundle exists the client fails closed with `OPA_ERROR` / `POLICY_BLOCK`. Runbook App.H RB-OPA-ROLLBACK documents operator steps for restoring a healthy channel.
 - **Web/Portal:** Replace ad-hoc localization and policy banners with LPE-driven strings and formatting helpers; UI hydration fetches `PolicyContext` during session bootstrap.
 - **Guardian & Workers:** Consult `PolicyContext` for residency and HIPAA toggles; Guardian blocks PHI artifacts unless HIPAA/PHIPA frameworks enable PHI, logging `POLICY_BLOCK` codes with context digest.
 - **Search/Retrieval:** Index creation chooses locale-aware analyzers and vector-store residency from `PolicyContext`.
@@ -1102,6 +1103,26 @@ SELECT id, org_id, case_id, type, status, content_sha256,
 - Settings activation maintains `CREATE INDEX field_mask_rule_org_profile_resource_field ON field_mask_rule(org_id, profile, resource, field)` and precomputes effective allowlists into helper tables so hot paths avoid repeated subqueries; helpers refresh atomically with each activation.
 - Lint guard: `scripts/db/lint_status_column.py` scans generated DDL and ORM migrations to block accidental reintroduction of a `state` column name; CI job `lint-db-state-column` fails on violations and points to §5.2 for the canonical `status` vocabulary.
 
+#### 4.4.2 Token vault & reversible masking (binding)
+
+- Settings:
+  - `security.masking.vault_profile ∈ {fpe_v1, aes_gcm_v1}` (SYSTEM scope, default `fpe_v1`) selects the tokenization algorithm compiled by LPE. `fpe_v1` uses FF3-1 format-preserving encryption for structured identifiers (SSN/MRN/phone); `aes_gcm_v1` applies AES-256-GCM with deterministic nonce derivation for free-form values (names, email, addresses) while retaining authenticated ciphertext for restoration.
+  - `security.masking.vault_key_id` references the active key in the Managed HSM. Keys MUST be FIPS 140-3 validated; rotations follow the dual-publish model (`current`, `next`) with a 24-hour overlap. Rotation evidence (key IDs, attestation documents) is captured in `ops/security/masking_key_rotation/<timestamp>.json`.
+- Vault service:
+  - Tokenization occurs in a dedicated service that accepts `{org_id, case_id?, masking_profile_id, field_name, plaintext}` and returns `{token, vault_profile, token_vault_version, context_digest}`. The service stores encrypted payloads and metadata in a per-org partition and enforces RLS mirroring the database policies.
+  - Deterministic salted hashes (`masking_hash_sha256`) accompany each token so analytics can deduplicate data without restoration; salts derive from the HSM key and rotate alongside it.
+  - Restoration requires dual approval (`security.masking.restore.approvers >= 2`) and produces `TOKEN_RESTORATION_REQUEST` artifacts referencing the legal basis (legal hold, regulator demand). Operations are executed within the HSM boundary; audit logs capture `{restoration_id, approver_ids[], reason, token_count, hsm_key_id}`.
+- Field strategies:
+  - Masking profiles describe per-field strategies (`FPE_TOKEN`, `AES_TOKEN`, `HASH_ONLY`, `NULL`). LPE serializes these strategies into `PolicyContext.masking_profile` and the compiler generates matching `field_mask_rule` entries and vault policies.
+  - High-risk fields (PHI, SPI) default to reversible tokens so restoration is possible under legal hold, while lower-risk metadata may rely on irreversible hashing.
+- Manifests & audit trails:
+  - All artifact manifests include `{masking_profile_id, token_vault_version, masking_hash_algorithm}`. Deliverables also include `{fips_mode, fips_module_cert_id}` to attest to cryptographic posture (§5.6).
+  - Vault operations append to `ops/security/masking_vault.jsonl` with `{event_type, org_id, case_id?, masking_profile_id, actor_id, token_count, hsm_key_id, fips_mode}`. CI test `tests/security/test_masking_vault_contract.py` validates schema compliance and round-trips representative tokens.
+- Contract tests & monitors:
+  - `tests/security/test_fpe_tokenization.py` verifies format preservation, determinism, and restoration against known fixtures.
+  - `tests/security/test_masking_restore_flow.py` exercises the approval workflow, ensuring unauthorized restorations fail closed.
+  - Synthetic `synthetics/masking_vault_health.yaml` checks HSM availability, token round-trip latency, and FIPS attestation; failures page Security Engineering and block deployment gates.
+
 ### 4.6 Field-level encryption (selected columns)
 
 *Purpose: Protect sensitive fields at rest beyond masking/secure views, with clear key management and performance caveats.*
@@ -1231,6 +1252,16 @@ Guardian is the single source of record prior to operator access; operators neve
 
 The events emitted for these transitions are enumerated in §10.3. Guardian always records `guardian_judgement_id`, reason codes, and waivers in `guardian_decision_history`.
 
+#### 5.2.3.1 Judgement API & outcomes (binding)
+
+- API: `POST /api/v1/judgements` accepts `{target_type: "artifact"|"job", target_id, decision, reason_enum, comment?}`. `decision` enumerates:
+  - `APPROVE` (default; no additional fields).
+  - `REJECT` (requires `reason_enum` and `comment`; transitions CDs to `CHANGES_REQUESTED`).
+  - `QUARANTINE` (requires `reason_enum`, `comment`; routes back through Guardian for canonical record).
+  - `OTHER` (temporary bucket; requires `comment` and feeds the enum suggestion workflow).
+- Guardian emits `GUARDIAN.JUDGEMENT.PASS|WARN|BLOCK|WAIVED` SSE events, while human reviewer actions emit `REVIEW.APPROVED|REVIEW.CHANGES_REQUESTED|REVIEW.QUARANTINED`. QA automation produces `QA.PASS|QA.FAIL` assessments recorded in `qa_assessments[]`.
+- Org policy: artifacts listed in `org.guardian.pre_operator_gates[]` remain hidden from operators until a Guardian judgement of `PASS` or `WARN` exists; humans cannot override this gate. If Guardian returns `BLOCK`, the artifact stays invisible and displays `GUARDIAN_PENDING` banners in the UI until remediation or waiver occurs.
+
 #### 5.2.4 Human review (tri-outcome) with enumerated reasons
 
 When a **CD** is **QUEUED_FOR_REVIEW**, reviewers must pick exactly one outcome:
@@ -1296,6 +1327,8 @@ review.risk_overrides:
 
 Default is `MANUAL_OPERATOR_GATE`, giving operators an **OPERATOR_PREP** workspace before requesting review. `SKIP_OPERATOR_PREP` transitions Guardian `PASS`/`WARN` results straight into `QUEUED_FOR_REVIEW` while preserving reviewer accountability; the operator workspace remains available but optional. `SKIP_REVIEW` is reserved for deterministic, low-risk artifacts where Guardian + QA automation provide sufficient assurance; deliveries still record the Guardian judgement ID and reviewer set to `SYSTEM`. Risk overrides force the artifact back through `OPERATOR_PREP → QUEUED_FOR_REVIEW` even when `review.flow=SKIP_OPERATOR_PREP` or `SKIP_REVIEW`, ensuring Guardian WARN/override triggers always land in a human queue. App.J’s state diagrams annotate each branch so the default, auto-queue, and human-skip paths remain visually distinct. Portal fetch-time checks continue to block revoked deliverables regardless of flow.
 
+`org.review.mode` layers an org-level policy on top of `review.flow`: `manual_by_default` (default) retains the behaviour above, `auto_on_submit` promotes CDs to `QUEUED_FOR_REVIEW` immediately after Guardian PASS/WARN without requiring operators to click “Submit,” and `auto_all_stages` auto-approves eligible CDs once Guardian + QA succeed (still honoring risk overrides). Guardian enforces `org.guardian.pre_operator_gates[]` by blocking operator visibility until PASS/WARN occurs for each listed class (commonly `SA`, `WP`, and `CD` in regulated orgs); UI surfaces a “Guardian pending” banner when operators attempt to open gated artifacts.
+
 #### 5.2.6 Deliverable replacement policy
 
 Exclusive deliverables use **approval swap** semantics:
@@ -1343,11 +1376,17 @@ Shared schema fields:
 ```
 review.flow: MANUAL_OPERATOR_GATE | SKIP_OPERATOR_PREP | SKIP_REVIEW
 review.risk_overrides: [PHI_DETECTED, LEGAL_HOLD, CLASSIFIER_LOW_CONFIDENCE, NEW_MODEL_OR_PROMPT, QUARANTINE_HISTORY]
+org.review.mode: manual_by_default | auto_on_submit | auto_all_stages
+org.guardian.pre_operator_gates[]: ["SA","WP","CD"]
+security.masking.vault_profile: fpe_v1 | aes_gcm_v1
+security.masking.vault_key_id: kv://.../keys/masking-default
+i18n.fallback_chain: { "fr-CA": ["fr","en"], "es-MX": ["es","en"] }
+i18n.required_rtl_locales[]: ["ar-SA","he-IL"]
 enums.reject_reason: managed via Reference Manager (list in §5.2.4)
 enums.quarantine_reason: managed via Reference Manager (list in §5.2.4)
 ```
 
-Settings changes follow the dual-approval process in §9 and emit `SETTINGS_CHANGE_REQUESTED` audit events with diff payloads.
+`org.review.mode` controls whether CDs enter `OPERATOR_PREP` by default (`manual_by_default`), auto-queue to reviewers after Guardian (`auto_on_submit`), or skip human review entirely (`auto_all_stages`) when policy allows; `org.guardian.pre_operator_gates[]` enumerates artifact classes that must receive Guardian PASS/WARN before operators may view them. Masking and i18n settings bind to the token vault (§4.4.2) and locale contract tests (§11.3). Settings changes follow the dual-approval process in §9 and emit `SETTINGS_CHANGE_REQUESTED` audit events with diff payloads.
 
 Manifests continue to capture provenance (schema/graph versions, source artifacts, settings snapshot hash, regions, template versions, dependency SHAs), and ops logging remains unchanged: each run writes human-readable `.log`, structured `.json`, and appends to case-level `ops_<agent>.jsonl`. Data lineage for the updated status model is reflected in App.R.
 
@@ -1448,7 +1487,7 @@ Notes
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://udocket.ca/schemas/artifact_manifest_v1.json",
   "type": "object",
-  "required": ["schema_version","source","provenance","hashes","settings_snapshot_sha256"],
+  "required": ["schema_version","source","provenance","hashes","settings_snapshot_sha256","masking","security","retry"],
   "properties": {
     "schema_version": {"type":"string", "const":"1"},
     "type": {"type":"string"},
@@ -1476,12 +1515,38 @@ Notes
       "properties": {"content_sha256": {"type":"string"}},
       "required":["content_sha256"]
     },
-    "settings_snapshot_sha256": {"type":"string"}
+    "settings_snapshot_sha256": {"type":"string"},
+    "masking": {
+      "type":"object",
+      "properties": {
+        "masking_profile_id": {"type":"string"},
+        "token_vault_version": {"type":"string"},
+        "masking_hash_algorithm": {"type":"string"}
+      },
+      "required":["masking_profile_id","token_vault_version","masking_hash_algorithm"]
+    },
+    "security": {
+      "type":"object",
+      "properties": {
+        "fips_mode": {"type":"boolean"},
+        "fips_module_cert_id": {"type":["string","null"]},
+        "signing_profile_id": {"type":["string","null"]}
+      },
+      "required":["fips_mode","fips_module_cert_id"]
+    },
+    "retry": {
+      "type":"object",
+      "properties": {
+        "retry_token": {"type":["string","null"]},
+        "retry_generation": {"type":"integer","minimum":0}
+      },
+      "required":["retry_generation"]
+    }
   }
 }
 ```
 
-All schema properties marked with `"format": "uuid"` expect UUIDv7 strings; generator tooling annotates each property with `"description": "UUIDv7"` and the non-enforcing extension `"x-udocket-uuid-version": 7`. Runtime validators (`packages.udocket_core.validators.uuid.ensure_v7`) reject non-v7 inputs on write while keeping the public schema interoperable with standard UUID tooling.
+All schema properties marked with `"format": "uuid"` expect UUIDv7 strings; generator tooling annotates each property with `"description": "UUIDv7"` and the non-enforcing extension `"x-udocket-uuid-version": 7`. Runtime validators (`packages.udocket_core.validators.uuid.ensure_v7`) reject non-v7 inputs on write while keeping the public schema interoperable with standard UUID tooling. New `masking`, `security`, and `retry` sections bind manifests to the vault/HSM posture defined in §4.4.2 and capture the replay metadata consumed by the job lifecycle contract (§10.2, §6.2–§6.4). CI fixtures in `tests/spec/test_artifact_manifest_schema.py` assert the additional required fields for every artifact class.
 
 ### 5.7 Ingestion pipelines & malware/archives defenses
 
@@ -1541,7 +1606,7 @@ Example
 
 *Purpose: Provide a configurable, auditable catalog of LangGraph tools for agents and editors.*
 
-- Settings `agents.tools.catalog[]` (SYSTEM scope with ORG allowlists) mirrors the LangGraph `Tool` specification: each entry defines `tool_id`, `description`, `input_schema` (JSON Schema Draft 2020-12), `output_schema`, `binding` (Python module path, gRPC target, or HTTP service), `timeout_seconds`, `cost_profile_id`, and residency/PII classification.
+- Settings `agents.tools.catalog[]` (SYSTEM scope with ORG allowlists) mirrors the LangGraph `Tool` specification: each entry defines `tool_id`, `description`, `input_schema` (JSON Schema Draft 2020-12), `output_schema`, `binding` (Python module path, gRPC target, or HTTP service), `timeout_seconds`, `cost_profile_id`, residency/PII classification, and `idempotent` (`true|false`). When `idempotent=true` the catalog must also include `tool_idempotency_key` (stable across retries) so GraphRunner can deduplicate invocations during job restarts; non-idempotent tools are fenced behind retry guards (`max_attempts=1`) and require human inspection before re-run.
 - Tool bindings reuse adapters in `packages/udocket_core/agents/common/factories.py` and follow the LangGraph `Tool` interface. GraphRunner resolves the `binding` at runtime and injects shared dependencies (Settings client, PolicyContext, Guardian client) through the adapter so tools stay portable across pipelines.
 - Org/case overrides are expressed via `agents.tools.allowlist[]`, enabling or disabling tools per tenant without redefining the base catalog. Overrides can also tune per-tool budgets and concurrency caps inside validator limits; policy validation blocks overrides that widen residency or PII scopes beyond the SYSTEM baseline.
 - Activation lints validate schemas, execute dry-run LangGraph graphs that exercise the tool, and confirm telemetry registration (`tool_invocation_total`, `tool_cost_estimate_total`). Failures surface actionable errors and block promotion until fixed.
@@ -1611,13 +1676,25 @@ Example
 - Language/locale negotiation respects `locale_support[]`: if the requested locale is missing, the planner either downgrades to `preferred_locale_fallback` (noting the downgrade in manifest) or fails fast depending on Settings (`speech.require_locale_match`).
 - Combined transcribe+translate providers (`supports_translation="provider"`) still follow the plan pipeline: planners request both source and target locales explicitly, set `dual_output=true`, and verify capabilities for diarization/timestamps on both outputs. Providers must return a structured payload containing source and translated segments; normalized transcripts split these outputs into discrete artifacts while sharing provenance metadata.
 - Translation coverage guardrails: the registry’s `verified_language_pairs[]` enumerates source→target combinations that have passed integration tests. The planner refuses to dispatch pairs absent from the list unless `speech.translation.allow_unverified_pairs=true` (waiver-only). Per-org overrides may remove pairs for contractual reasons; removals are stored in Settings activation history for audit.
-- Residency redundancy: each residency bundle must approve at least two speech providers per allowed region; nightly health checks validate coverage and raise `SPEECH_REGION_PROVIDER_DEGRADED` alerts if redundancy drops below two active providers, prompting immediate remediation before new jobs are accepted.
-- Audio optimization guidance (binding):
-  - Prefer lossless PCM WAV at 16 kHz mono for dialog; escalate to 24 kHz stereo only when the provider’s accuracy materially improves for music-heavy or courtroom recordings (documented per provider in Appendix Q notes). The planner records any higher sample rate conversions in manifest metadata (`normalization.sample_rate_hz`).
-  - Apply loudness normalization (`-16 LUFS` target, ±1 LU tolerance) and dynamic range compression (light preset) before transcription only when `speech.allow_preprocessing=true`; defaults preserve raw audio aside from format conversion to maintain evidentiary integrity.
-  - Size optimization uses ffmpeg `-ar` (sample rate) and `-ac` (channels) parameters, never applying lossy codecs; storage deduplicates normalized outputs via content hash.
-- Provider capability validation: nightly job `scripts/agents/validate_speech_capabilities.py` runs golden audio fixtures against each provider, verifies declared fields (diarization, timestamps, normalization behaviors, translation language pairs), and writes results to `ops/speech_capability_report.json` per org. Failures block new activations and trigger App.H RB-TRANSCRIBE-CAP escalation; translation pair regressions additionally file `TRANSLATION_PAIR_REGRESSION` incidents and remove the affected pair from `verified_language_pairs[]` until retested.
-- Documentation & SDK alignment: OpenAPI schemas expose the negotiated capability plan in `GET /api/v1/speech/providers` for UI/SDK consumers. SDK samples in `docs/examples/api/speech_capabilities/*.md` stay synchronized with Settings keys and the registry schema.
+  - Residency redundancy: each residency bundle must approve at least two speech providers per allowed region; nightly health checks validate coverage and raise `SPEECH_REGION_PROVIDER_DEGRADED` alerts if redundancy drops below two active providers, prompting immediate remediation before new jobs are accepted.
+  - Audio optimization guidance (binding):
+    - Prefer lossless PCM WAV at 16 kHz mono for dialog; escalate to 24 kHz stereo only when the provider’s accuracy materially improves for music-heavy or courtroom recordings (documented per provider in Appendix Q notes). The planner records any higher sample rate conversions in manifest metadata (`normalization.sample_rate_hz`).
+    - Apply loudness normalization (`-16 LUFS` target, ±1 LU tolerance) and dynamic range compression (light preset) before transcription only when `speech.allow_preprocessing=true`; defaults preserve raw audio aside from format conversion to maintain evidentiary integrity.
+    - Size optimization uses ffmpeg `-ar` (sample rate) and `-ac` (channels) parameters, never applying lossy codecs; storage deduplicates normalized outputs via content hash.
+  - Provider capability validation: nightly job `scripts/agents/validate_speech_capabilities.py` runs golden audio fixtures against each provider, verifies declared fields (diarization, timestamps, normalization behaviors, translation language pairs), and writes results to `ops/speech_capability_report.json` per org. Failures block new activations and trigger App.H RB-TRANSCRIBE-CAP escalation; translation pair regressions additionally file `TRANSLATION_PAIR_REGRESSION` incidents and remove the affected pair from `verified_language_pairs[]` until retested.
+  - Documentation & SDK alignment: OpenAPI schemas expose the negotiated capability plan in `GET /api/v1/speech/providers` for UI/SDK consumers. SDK samples in `docs/examples/api/speech_capabilities/*.md` stay synchronized with Settings keys and the registry schema.
+
+#### 6.2.5 Cancellation & retry semantics (binding)
+
+- Provider hooks: each speech adapter implements `cancel(job_id, retry_token)` and `cleanup(job_id, retry_token)`; `cleanup` executes irrespective of provider success so SAS uploads, staging blobs, and stream leases are always revoked. Both hooks MUST remain idempotent.
+- Azure Batch transcription:
+  - Cancellation deletes the Batch job via Azure Cognitive Services, revokes SAS upload URLs, and purges staging containers (`storage.staging.<region>`). The adapter records `provider_outcome` (`azure_batch:deleted`, `azure_batch:not_found`, or `azure_batch:timeout_force_cancel`) in the job tombstone for audit.
+  - Retries reuse normalized audio artifacts and only submit a fresh Batch job after verifying the stored `retry_token` (`{provider_job_id, audio_sha256, diarization_enabled}`) still matches the source artifact. Hash drift blocks the retry and surfaces `RETRY_INPUT_DIVERGED`.
+- Streaming transcription:
+  - Cancellation closes the streaming session, discards buffered audio, revokes session SAS grants, and commits partial transcripts to the tombstone artifact for operator review.
+  - Retries resume from the last committed segment index contained in `retry_token.segments[]`; adapters skip already confirmed segments so replaying remains safe even if the worker crashed mid-stream.
+- Manifest requirements: speech artifacts append `{retry_token, retry_generation, masking_profile_id, token_vault_version, fips_mode, fips_module_cert_id}` (see §4.4.2 and §5.6) to preserve vault provenance and cryptographic attestation.
+- Validation: `tests/udocket_core/transcription/test_cancel_retry.py` exercises cancellation and replay flows; synthetic job `synthetics/transcription_cancel.yaml` confirms provider cleanup in staging. Failures block deploys until remediation.
 
 #### 6.2.4 Multilingual speech & translation pipeline (binding)
 
@@ -1660,6 +1737,17 @@ Example
 - Artifacts: `analysis/<job_id>__summary_v1.md|json`, outline, timeline seeds, entity hints, staff report, plus ops JSON + JSONL audit. Failures surface via SSE with actionable errors.
 - See App.D for summary/outline/timeline/entity artifact schemas, filenames, and versioning.
 
+#### 6.3.1 Cancellation & retry semantics (binding)
+
+- `GraphRunner.cancel(job_id, retry_token)` stops active lanes, drains tool queues, and guarantees `cleanup()` executes for every registered tool adapter. Tool adapters marked `idempotent=true` in `agents.tools.catalog[]` MAY be re-run during retries; non-idempotent tools log `RETRY_DISALLOWED_NON_IDEMPOTENT`.
+- Cancellation transitions Analyze jobs through the shared lifecycle (§10.2) and emits `job.blocked` when Guardian/FinOps halts processing; `job.quarantined` surfaces Guardian-triggered policy holds.
+- Retry behavior:
+  - Analyze manifests store `{retry_token, retry_generation, lane_progress}`; `lane_progress` records the last successful node per lane so replays resume deterministically without re-invoking completed steps.
+  - LangGraph nodes persist checkpoint digests; `GraphRunner.retry(job_id, retry_token)` compares the stored digest to the queued inputs before resuming.
+  - Tool invocations include `tool_idempotency_key` (when supplied) so GraphRunner can dedupe HTTP/gRPC calls after a worker crash. Replays lacking idempotency data block with `RETRY_IDEMPOTENCY_UNKNOWN`.
+- Cleanup obligations: cancellation purges intermediate artifacts (`analysis/<job_id>__*_tmp.json`) and closes vector search cursors to avoid leaking residency-scoped handles.
+- Contract tests: `tests/udocket_core/agents/test_analyze_cancel_retry.py` exercises cancellation across representative transcripts; synthetic `synthetics/analyze_cancel.yaml` validates SSE emissions and manifest deltas.
+
 ### 6.4 Compose agent (deliverables, QA loops, templates)
 
 *Purpose: Describe final deliverable generation and QA gating.*
@@ -1672,6 +1760,17 @@ Example
 - Envelopes capture LLM metadata (model, prompt version, region) for reproducibility; FinOps counters track token usage per section.
 - See App.D for compose deliverables and QA artifacts and their canonical filenames.
 - Model selection: stage-specific profiles defined in `config/llm_assignments.json` map Analyze/Compose lanes to settings keys (`analyze.model.id`, `compose.model.id`) so org/case overrides stay deterministic.
+
+#### 6.4.0 Cancellation & retry semantics (binding)
+
+- `GraphRunner.cancel(job_id, retry_token)` stops all active lanes, requests `cancel()` on outstanding tool invocations, and records per-lane status snapshots (`{lane_id, node_id, state}`) in the tombstone artifact.
+- Compose retries depend on persistent checkpoints:
+  - Manifests append `{retry_token, retry_generation, lane_progress, weaver_state_digest}`. `lane_progress` records the last committed section per lane; `weaver_state_digest` protects against template drift mid-retry.
+  - Section writers marked `idempotent=true` rerun automatically; others require operator acknowledgement (`RETRY_REQUIRES_OPERATOR`) before resubmission.
+  - QA nodes re-evaluate only sections that changed in the replay; unchanged sections reference their prior fingerprints, preventing double-counting FinOps metrics.
+- Cancellation ensures Document Signer work has not been emitted. If cancellation occurs after signing kicked off, the workflow revokes signatures, deletes draft deliverables, and sets `signing_revoked=true` in the tombstone.
+- SSE events follow the contract defined in §10.8: Compose jobs emit `job.running` per lane, `job.blocked` on policy holds (for example, FinOps budget exhaustion), `job.quarantined` when Guardian intervenes, and `job.completed` once deliverables are stored.
+- Test coverage: `tests/udocket_core/agents/test_compose_cancel_retry.py` exercises lane-level cancellation, replay from checkpoints, and signature revocation. Synthetic monitor `synthetics/compose_cancel.yaml` validates SSE sequencing and manifest updates in staging.
 
 #### 6.4.1 Deliverable catalog & template registry (binding)
 
@@ -2045,7 +2144,7 @@ PII posture (binding)
 - Metrics exported: `llm_call_count`, `llm_tokens_in/out`, `llm_cost_estimate_total{org,case,job,model}` feeding FinOps dashboards (`§57.3`).
 - Monthly CSV artifacts `FINOPS_REPORT` generated per org, listing cost breakdowns; Guardian/Reviewer approvals required for distribution.
 - Deployment gate (`§57.4`) blocks releases when month-over-month cost regression exceeds threshold (default 10%).
-- Budget controller (`FinOpsGuardController`): runs in the worker cluster, tracking `llm_cost_estimate_total` deltas per org. When projected spend exceeds the configured cap mid-execution, the controller marks affected jobs `PAUSED_AWAITING_BUDGET`, emits SSE `job.update` with `warning="BUDGET_HELD"`, and writes an audit event `FINOPS_BUDGET_HELD`. Any in-flight CDs receive `FINOPS_BUDGET_EXCEEDED` as the Guardian quarantine reason; Guardian emits `GUARDIAN.JUDGEMENT.BLOCK` with the same code and appends the decision to `guardian_decision_history`. Resume occurs only after finance/ops clear the alert by either raising the cap (dual-approved Settings activation) or releasing the hold via `POST /api/v1/jobs/{id}:resume` once the controller observes budget headroom.
+- Budget controller (`FinOpsGuardController`): runs in the worker cluster, tracking `llm_cost_estimate_total` deltas per org. When projected spend exceeds the configured cap mid-execution, the controller marks affected jobs `PAUSED_AWAITING_BUDGET`, emits SSE `job.blocked` + `job.update` with `warning="BUDGET_HELD"`, and writes an audit event `FINOPS_BUDGET_HELD`. Any in-flight CDs receive `FINOPS_BUDGET_EXCEEDED` as the Guardian quarantine reason; Guardian emits `GUARDIAN.JUDGEMENT.BLOCK` with the same code and appends the decision to `guardian_decision_history`. Resume occurs only after finance/ops clear the alert by either raising the cap (dual-approved Settings activation) or releasing the hold via `POST /api/v1/jobs/{id}:resume` once the controller observes budget headroom.
 - Alerts: `finops_budget_hold_active_total` pages FinOps + Product, while `finops_budget_hold_duration_seconds` feeds SLA dashboards. Resume events log `FINOPS_BUDGET_RESUMED` and clear outstanding quarantines via Guardian’s auto-waive path once cap relief is confirmed.
 
 ### 8.7 FinOps deploy guard (binding)
@@ -2326,9 +2425,14 @@ List contracts (normative)
 
 - Jobs
 
-  - Create: `POST /api/v1/cases/{case_id}/jobs/{kind}` with `Idempotency-Key` (TTL default 24h) → returns job id.
-  - Get: `GET /api/v1/jobs/{id}`; Control endpoints use RPC-style suffixes: `POST /api/v1/jobs/{id}:pause`, `POST /api/v1/jobs/{id}:resume`, `POST /api/v1/jobs/{id}:cancel`. Each call requires OCC on `version` plus an `Idempotency-Key` header (and optional payload `idempotency_key` for provider propagation). Cancellation is a two-phase operation: the job enters `CANCELING`, emits SSE `job.canceling` with `{schema_version, emitted_at, job_id, actor_id, reason}`, and workers propagate aborts to external providers (Azure Speech Batch delete, LangGraph lane abort, prompt streaming stop). Once providers confirm, the job transitions to `CANCELED`, emits SSE `job.canceled`, appends audit event `JOB_CANCELED` (`reason`, `actor_id`, `provider_outcome`), and writes a tombstone artifact (`class='AR'`, `type='JOB_CANCELLATION_REPORT'`) capturing checkpoints and pending artifacts. Downstream artifact creation halts; any partially staged artifacts persist with `depends_on_cancelled_job=true` so operators can inspect context before retrying. Re-queuing requires an explicit operator rerun. Repeated cancels are idempotent; only `PENDING|RUNNING|PAUSED|PAUSED_AWAITING_BUDGET` jobs accept the transition.
-  - Provider progress normalization: `ProviderProgressAdapter` implementations wrap Azure Speech Batch, Azure OpenAI, and future providers to emit `{phase, percent_complete, estimated_remaining_seconds}` snapshots. Workers surface these snapshots via `job.update` SSE payloads (`provider_progress` field) and persist them in `job_checkpoint.progress_meta`. Pause/resume/cancel commands call into the adapters to ensure idempotent provider control; a failed provider-side pause never advances the internal state machine. Tests live in `tests/platform/jobs/test_provider_progress_adapter.py`.
+  - Create: `POST /api/v1/cases/{case_id}/jobs/{kind}` with `Idempotency-Key` (TTL default 24h) → returns job id. Responses embed a stable `retry_token` that replays the same run when passed to `POST /api/v1/jobs/{id}:retry` after remediation.
+  - Get: `GET /api/v1/jobs/{id}`; Control endpoints use RPC-style suffixes: `POST /api/v1/jobs/{id}:pause`, `POST /api/v1/jobs/{id}:resume`, `POST /api/v1/jobs/{id}:cancel`, `POST /api/v1/jobs/{id}:retry`. Each call requires OCC on `version` plus an `Idempotency-Key` header (and optional payload `idempotency_key` for provider propagation). Cancellation is a three-step contract shared across producers:
+    1. Transition `PENDING|QUEUED|RUNNING|PAUSED|PAUSED_AWAITING_BUDGET|PAUSED_AWAITING_PROVIDER → CANCELING`, emit SSE `job.accepted` (if the job was queued) followed immediately by `job.canceling` `{schema_version, emitted_at, job_id, actor_id, reason}` so clients cease optimistic progress polling.
+    2. Invoke provider-specific aborts (Azure Speech Batch delete, Azure Speech streaming stop, LangGraph lane abort). Azure Speech/SAS uploads revoke signed URLs, purge staging containers, and log `azure_batch_job_deleted`; LangGraph lanes cancel tool execution and release advisory locks. Providers have a 60-second grace period before the platform force-marks them canceled.
+    3. Finalize `CANCELING → CANCELED`, emit SSE `job.canceled` and `artifact.status` updates for affected artifacts, append audit event `JOB_CANCELED` (`reason`, `actor_id`, `provider_outcome`), and write a tombstone auxiliary record (`class='AR'`, `type='JOB_CANCELLATION_REPORT'`) capturing checkpoints, partial outputs, and cleanup actions. Downstream artifact creation halts; any partially staged artifacts persist with `depends_on_cancelled_job=true` so operators can inspect context before retrying. Repeated cancels are idempotent; only the states enumerated above accept the transition.
+  - Provider-specific retry semantics: each manifest stores `retry_token` and `retry_generation`. Workers MUST include that token when re-queuing failed runs so at-least-once retries remain idempotent. Tool invocations obtained through `agents.tools.catalog[]` declare `idempotent=true|false` and expose an optional `tool_idempotency_key` so GraphRunner can dedupe external calls when recovering from job restarts.
+  - Progress SSE: clients subscribe to `GET /api/v1/jobs/{id}/events` with `If-None-Match` (digest of last processed manifest). Servers respond with `ETag` headers and emit the event grammar defined in §10.8 (`job.accepted`, `job.running`, progress updates, policy holds, completion, cancellation).
+  - Provider progress normalization: `ProviderProgressAdapter` implementations wrap Azure Speech Batch, Azure OpenAI, and future providers to emit `{phase, percent_complete, estimated_remaining_seconds}` snapshots. Workers surface these snapshots via `job.update` SSE payloads (`provider_progress` field) and persist them in `job_checkpoint.progress_meta`. Pause/resume/cancel commands call into the adapters to ensure idempotent provider control; a failed provider-side pause never advances the internal state machine. Each adapter implements the `cleanup()` hook invoked during cancellation step 2 above (revoke SAS URLs, purge temporary blobs, finalize manifests). Tests live in `tests/platform/jobs/test_provider_progress_adapter.py`.
   - Provider health endpoint: `GET /api/v1/providers/health` aggregates the latest adapter heartbeats per `{provider, region}`. Responses are cacheable for 10 s, include `status`, `latency_ms_p95`, `error_rate`, and the timestamp of the freshest signal, and drive the `provider.health` SSE tick for operator dashboards. Health degradation raises `provider.health` events even when no jobs are active.
   - Progress watchdog (binding): the `job_progress_heartbeat` table records `{job_id, last_heartbeat_at, progress_pct}` updates from workers. A dedicated watchdog task scans for `RUNNING` jobs whose heartbeat age exceeds `jobs.watchdog.no_progress_minutes`; it emits `job_watchdog_warning_total`, raises SSE `job.update` with `status="RUNNING"`, `warning="NO_PROGRESS"`, and annotates the job record. If the heartbeat age exceeds `jobs.watchdog.timeout_minutes`, the watchdog transitions the job to `FAILED`, increments `job_watchdog_timeout_total`, files audit event `JOB_WATCHDOG_TIMEOUT`, and invokes RB-JOB-WATCHDOG. Watchdog actions never mutate jobs already `COMPLETED|FAILED|CANCELING|CANCELED`; recoverable jobs remain resumable thanks to checkpoint metadata (§6.2, §6.3, §6.4).
   - Overlap guard: advisory lock `jobkind:{case_id}/{kind}`; conflicts → 409 `JOB_KIND_BUSY`.
@@ -2338,6 +2442,7 @@ List contracts (normative)
   - Approve: `POST /api/v1/reviews/{artifact_id}/approve {note?, expected_version}`; acquires `case-approval:{org}/{case}/{type}`, archives prior `APPROVED` CDs, and transitions `QUEUED_FOR_REVIEW → APPROVED`. Returns 200 idempotent when already approved with matching version.
   - Request changes: `POST /api/v1/reviews/{artifact_id}/changes {reject_reason, note, expected_version}`; sets `status='CHANGES_REQUESTED'` and records reviewer metadata. Mandatory `reject_reason` enumerated in §5.2.4.
   - Quarantine: `POST /api/v1/reviews/{artifact_id}/quarantine {quarantine_reason, note, expected_version}`; records reviewer choice, routes through Guardian so the canonical record lives in `guardian_decision_history`, and sets `status='QUARANTINED'`. UI-facing “review phase” filters are derived from `status` only.
+  - Resubmit: `POST /api/v1/artifacts/{artifact_id}:resubmit {retry_token}` re-queues a `CHANGES_REQUESTED` or policy-unblocked `QUARANTINED` artifact. The endpoint requires matching `retry_token` from the prior manifest to guarantee idempotent retries and transitions the artifact back to `PROCESSING → PENDING_JUDGEMENT` with a new version.
 
 ### 10.3 Upload lifecycle & idempotency model
 
@@ -2427,7 +2532,7 @@ Handler pattern
 
 *Purpose: Enumerate service-specific endpoints integrations rely on.*
 
-- Guardian: judgement submissions flow through the worker RPC queue automatically; only health/synthetic endpoints (`/healthz`, `/readyz`, `/rulesz`, `/synthetic/status`) remain exposed for observability. Administrative tooling uses `POST /guardian/judgements:enqueue` for drift corrections and `POST /guardian/quarantine` for reviewer-initiated actions—both require HMAC service tokens and reuse the same async bus/metrics as production traffic. Per-object “submit” routes are forbidden.
+- Guardian: judgement submissions flow through the worker RPC queue automatically; only health/synthetic endpoints (`/healthz`, `/readyz`, `/rulesz`, `/synthetic/status`) remain exposed for observability. Administrative tooling uses `POST /guardian/judgements:enqueue` for drift corrections, `POST /guardian/quarantine` for reviewer-initiated actions, and the public REST helper `POST /api/v1/judgements` (see §5.2.3.1) for recording human decisions—each requires HMAC service tokens and reuses the same async bus/metrics as production traffic. Per-object “submit” routes are forbidden.
 - Settings: `GET /api/v1/settings/<scope>`, `POST /api/v1/settings/bundles`, `/api/v1/settings/validate/*` for regions/privacy, `GET /api/v1/settings/changelog`.
 - Reference Manager: `POST /api/v1/reference_manager/harvests`, `GET /api/v1/reference_manager/diffs`, approval/reject endpoints, catalog/resource readers (`/catalogs/{jurisdiction}`, `/resources/{type}`), and event subscription feed. Responses include diff metadata, reviewer IDs, and source digests; all mutating operations require content-ops scopes plus dual-control audit when touching residency/privacy attributes.
 - Digital Signer: `POST /api/v1/sign`, `POST /api/v1/sign/verify`, `GET /api/v1/sign/certificates/{artifact_id}`.
@@ -2526,9 +2631,9 @@ Client retry guidance (normative)
 
 *Purpose: Define canonical SSE events and replay behavior.*
 
-- Event types: `job.update`, `job.canceling`, `job.canceled`, `artifact.status`, `qa.notes`, `provider.health`, `portal_link_invalidated`, `settings.activated`, plus lifecycle events emitted for the status model (`OBJECT.STORED`, `OBJECT.PROCESSING.START|END`, `OBJECT.FAILED`, `OBJECT.PENDING_JUDGEMENT`, `GUARDIAN.JUDGEMENT.PASS|WARN|BLOCK|WAIVED`, `OBJECT.CLEARED_FOR_USE`, `OBJECT.OPERATOR_PREP`, `REVIEW.REQUESTED`, `REVIEW.APPROVED`, `REVIEW.CHANGES_REQUESTED`, `REVIEW.QUARANTINED`, `SIGNATURE.APPLIED`, `DELIVERABLE.RELEASED`, `DELIVERABLE.REVOKED`, `OBJECT.ARCHIVED`).
+- Event types: `job.accepted`, `job.update`, `job.running`, `job.blocked`, `job.quarantined`, `job.completed`, `job.canceling`, `job.canceled`, `artifact.status`, `qa.notes`, `provider.health`, `portal_link_invalidated`, `settings.activated`, plus lifecycle events emitted for the status model (`OBJECT.STORED`, `OBJECT.PROCESSING.START|END`, `OBJECT.FAILED`, `OBJECT.PENDING_JUDGEMENT`, `GUARDIAN.JUDGEMENT.PASS|WARN|BLOCK|WAIVED`, `OBJECT.CLEARED_FOR_USE`, `OBJECT.OPERATOR_PREP`, `REVIEW.REQUESTED`, `REVIEW.APPROVED`, `REVIEW.CHANGES_REQUESTED`, `REVIEW.QUARANTINED`, `SIGNATURE.APPLIED`, `DELIVERABLE.RELEASED`, `DELIVERABLE.REVOKED`, `OBJECT.ARCHIVED`). `job.accepted` emits once per enqueue, `job.running` and `job.completed` bracket successful execution, and `job.blocked`/`job.quarantined` surface policy holds (FinOps, Guardian) that require human action before resumption.
 - Every payload includes `schema_version` (string, currently `"1"`) and `emitted_at` (RFC3339 with timezone) so clients can branch logic during future revisions without breaking older deployments or relying on local clocks.
-- Envelope: `id` (monotonic), `event`, `data` (JSON), `retry` (ms). `data` for snapshot payloads includes `watermark_ts` to indicate the newest event timestamp included. The envelope and payloads validate against `spec/schemas/sse/event_envelope.schema.json`; SSE producers deserialize generated Pydantic models before emit. Schema constraints encode `maxLength`/`maxItems` limits (e.g., snapshot ≤ 500 events, messages ≤ 2 KiB) so the 8 KiB payload budget is enforced mechanically. `id` echoes in `Last-Event-ID`.
+- Envelope: `id` (monotonic), `event`, `data` (JSON), `retry` (ms). `data` for snapshot payloads includes `watermark_ts` to indicate the newest event timestamp included. Requests to `/api/v1/jobs/{id}/events` and `/api/v1/cases/{id}/events` MUST send `If-None-Match` with the caller’s cached digest (initially `*`). Servers respond with `ETag: sse:{scope}:{digest_sha256}` so reconnecting clients can prove they have processed the latest PolicyContext and artifact manifests; mismatched digests trigger a synthetic snapshot replay before live tailing. The envelope and payloads validate against `spec/schemas/sse/event_envelope.schema.json`; SSE producers deserialize generated Pydantic models before emit. Schema constraints encode `maxLength`/`maxItems` limits (e.g., snapshot ≤ 500 events, messages ≤ 2 KiB) so the 8 KiB payload budget is enforced mechanically. `id` echoes in `Last-Event-ID`.
 - Payload hints: `data.meta` may include `{phase, percent, next_action, badges[]}` to align with UI progress widgets (e.g., `phase="Judgement"`, `badges=["WARN:PII detector"]`).
 - Sequencing: IDs are monotonic per stream (`sse:case:{case_id}` and `sse:job:{job_id}`) and minted via Redis `INCR`, ensuring ordered delivery across multiple web pods without requiring cross-stream ordering.
 - Sync snapshot: if `Last-Event-ID` predates the 15-minute/500-event replay window (whichever comes first), the server emits a snapshot (RLS‑scoped) containing the last 500 events and `watermark_ts` before tailing live updates.
@@ -2559,7 +2664,12 @@ Payloads (illustrative)
 
 | Event                   | data fields                                                                                   | Notes                                                                                   |
 | ----------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| job.accepted            | `{ schema_version, emitted_at, job_id, case_id, org_id }`                                      | Emitted once when a queued job is accepted onto a worker.                               |
+| job.running             | `{ schema_version, emitted_at, job_id, case_id, org_id, phase }`                               | Signifies active execution; `phase` mirrors `provider_progress.phase`.                  |
 | job.update              | `{ schema_version, emitted_at, job_id, case_id, org_id, status, progress?, warning?, error? }` | `status ∈ {PENDING,RUNNING,PAUSED,PAUSED_AWAITING_PROVIDER,PAUSED_AWAITING_BUDGET,CANCELING,FAILED,COMPLETED,CANCELED}` |
+| job.blocked             | `{ schema_version, emitted_at, job_id, case_id, org_id, reason }`                              | Signals policy or budget block; clients surface remediation guidance.                   |
+| job.quarantined         | `{ schema_version, emitted_at, job_id, case_id, org_id, reason }`                              | Guardian-enforced quarantine; operators must resubmit with fixes/waivers.               |
+| job.completed           | `{ schema_version, emitted_at, job_id, case_id, org_id }`                                      | Successful terminal state; emitted before downstream artifact.status updates.           |
 | job.canceling           | `{ schema_version, emitted_at, job_id, case_id, org_id, actor_id, reason }`                    | Emitted once per cancel request; clients stop polling progress UI.                      |
 | job.canceled            | `{ schema_version, emitted_at, job_id, case_id, org_id, actor_id, reason, provider_outcome }`  | Emitted after providers acknowledge abort; pairs with AR `JOB_CANCELLATION_REPORT`.      |
 | artifact.status         | `{ schema_version, emitted_at, artifact_id, case_id, org_id, type, status, previous_status? }` | `status ∈ {STORED,PROCESSING,FAILED,PENDING_JUDGEMENT,CLEARED_FOR_USE,OPERATOR_PREP,QUEUED_FOR_REVIEW,CHANGES_REQUESTED,QUARANTINED,APPROVED,SIGNED,RELEASED,REVOKED,ARCHIVED}` |
@@ -2701,9 +2811,9 @@ ______________________________________________________________________
 - Automated validation: CI pipelines run Storybook/axe-core scans (`npm run test:axe`), `pa11y-ci` against review environments, and Lighthouse accessibility budgets (≥ 95). Failures block merges; waivers require `A11Y_EXCEPTION` artifacts with VP Product + Accessibility Lead approval and expiry ≤ 30 days. ESLint (jsx-a11y), TypeScript lint rules, and Playwright a11y assertions enforce guardrails locally.
 - Manual audits: pre-release sign-off exercises assistive tech pairings (NVDA/Firefox, JAWS/Edge, VoiceOver/Safari + iOS, TalkBack/Android), keyboard-only flows, high-contrast themes, reduced-motion and zoom at ≥ 200 %. Findings feed the `ACCESSIBILITY_AUDIT` artifact (severity, WCAG criterion, reproduction steps, remediation owner/SLA) and block GA cutover until addressed or formally waived.
 - Document & template accessibility: Compose/Analyze templates must satisfy PDF/UA, tagged headings, logical reading order, table summaries, alternative text, and annotation markers for notes. Template metadata captures `{a11y_validation_status, validated_at, validator_tool, reviewer}`; Guardian rejects deliverables lacking `a11y_validation_status=pass`. Short/long summaries and timelines include structured captions for figures and transcript references for screen-reader context.
-- Localization: UI respects locales declared in `i18n.supported_locales[]`; toggles persist per user. Strings come from LPE packs with deterministic fallback: resolve org-level override → org default locale → platform system default (`en-CA` unless overridden in Settings). RTL readiness (mirroring, bidi isolation) is mandatory for supported locales. Manual regression covers at least two non-English locales per release (one RTL) and verifies accessible state announcements, hotkey equivalence, and localized error copy readability. Locale normalization enforces canonical BCP-47 casing/hyphenation (`en_CA` → `en-CA`, `pt-br` → `pt-BR`) via `localization.normalize_locale()`; mismatches raise `LOCALIZATION_INVALID_LOCALE` during Settings activation.
+- Localization: UI respects locales declared in `i18n.supported_locales[]`; toggles persist per user. Strings come from LPE packs with deterministic fallback: `requested_locale → base_language → platform_default` (default `en-CA`, configurable via Settings). The fallback graph is declared in `i18n.fallback_chain` bundles and compiled alongside locale packs. Org-level overrides apply before the fallback chain, and missing keys immediately fail CI (`tests/i18n/test_locale_contract.py`) rather than rendering raw keys. RTL readiness (mirroring, bidi isolation) is mandatory for locales listed in `i18n.required_rtl_locales[]`. Manual regression covers at least two non-English locales per release (one RTL) and verifies accessible state announcements, hotkey equivalence, and localized error copy readability. Locale normalization enforces canonical BCP-47 casing/hyphenation (`en_CA` → `en-CA`, `pt-br` → `pt-BR`) via `localization.normalize_locale()`; mismatches raise `LOCALIZATION_INVALID_LOCALE` during Settings activation.
 - Testing harness: pseudolocalization (`scripts/i18n/pseudolocale.sh`), ICU pluralization snapshots (`localization:acceptance`), and automated accessibility suites run per PR. Nightly BrowserStack jobs replay assistive-technology scripts, storing results under `ops/a11y/<date>` with hashed transcripts for audit.
-- Pseudolocale enforcement: `en-XA` runs are mandatory in CI (`npm run test:pseudolocale`), blocking releases when missing MessageFormat args or string truncation occurs. The job emits `localization_pseudolocale_regression_total`; release checklists require attaching the latest run artifact before approvals close.
+- Pseudolocale enforcement: `en-XA` runs are mandatory in CI (`npm run test:pseudolocale`), blocking releases when missing MessageFormat args or string truncation occurs. The job emits `localization_pseudolocale_regression_total`; release checklists require attaching the latest run artifact before approvals close. Contract tests cover ICU boundaries—numbers, dates, currency, measurement units—via `tests/i18n/test_icu_boundaries.py`, and Playwright RTL snapshots (`tests/ui/test_rtl_layout.spec.ts`) guard bidi behaviour. Failing tests block bundle activation until corrected.
 - Merge-stop checklist: reviewers block merges when (1) keyboard traps or focus misorder occur, (2) pointer-only interactions omit alternative input, (3) focus indicators fall below WCAG contrast/size requirements, (4) error messages fail to raise an `aria-live` announcement, (5) loading states lack accessible names, or (6) automated tooling reports unresolved Level A/AA issues.
 - Localization operations: weekly sync with LPE coordinates glossary updates and locale expansion; editorial QA approves tone guides. Release checklist references Appendix L and requires product sign-off on localized UX snapshots and assistive-technology recordings. `tests/e2e/test_portal_policy_context.py::test_disclaimer_l10n` validates banner rendering and attribution in a rotating locale roster (e.g., `en-CA`, `fr-CA`, `es-MX`, `ar-SA`).
 
@@ -3196,6 +3306,8 @@ ______________________________________________________________________
 - Fallback correctness: force primary model OPEN circuit → fallback chosen; evidence records circuit state.
 - Deterministic IDs: same anchors yield the same UUIDv5-derived reference; changed spans produce new IDs while preserving prior fingerprints in manifests.
 - Policy block: simulate region disallowance → `POLICY_BLOCK` in ContextBuilder; token ceilings truncate prompts within bounds.
+- SDK/OpenAPI alignment: `scripts/sdk/check_openapi_alignment.py` verifies generated client types remain in lock-step with OpenAPI bundles (Guardian, Settings, Jobs, Agents). The check fails when SDK model diffs do not accompany OpenAPI changes, preventing stale DX artifacts.
+- Local policy hot-reload: developers use `scripts/dev/run_lpe_hot_reload.py` to compile LPE bundles, push them to a sandbox OPA, and diff `PolicyContext` digests without staging deploys. The harness emits manifest snapshots that must be attached to PRs touching policy or locale packs.
 
 ### 13.5 Deployment gates (FinOps, error budgets, security scans)
 
