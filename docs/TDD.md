@@ -179,7 +179,7 @@ related_adrs:
 - Guardian decisions ≤ 5 minutes P95; Compose jobs complete ≤ 45 minutes P95 under nominal load.
 - Service availability: web/channels 99.5%, Guardian 99.9%, Settings API 99.9% (due to policy enforcement criticality).
 - Localization & Policy Engine runtime availability 99.9% with an error budget of 43 minutes per 30-day window; bundle compiles hit P95 ≤ 6 minutes and may only roll out during the shared OPA/LPE deployment window (weekday 16:00–18:00 UTC) once telemetry confirms ≥50% remaining error budget. Burn-rate alerts automatically freeze new bundle activations and OPA discovery pushes until stabilization.
-- Latency targets: SSE job progress updates \< 1s lag; artifact download start \< 500ms for approved documents.
+- Latency targets: SSE job progress updates P95 \< 2s (P99 \< 5s); artifact download start \< 500ms for approved documents.
 - Error budgets tie directly to deploy gates (`§41.7`)—breaches block releases until burn rate stabilizes.
 
 ### 2.4 Assumptions & dependencies
@@ -2510,7 +2510,7 @@ Notes
 - Breaking or materially user-visible changes require an ADR (see `docs/adr/README.md` and linked entries such as `ADR-0003-api-versioning-and-sunset.md`) approved by Architecture + Security before the change can progress from **Provisional → Implementable → Implemented**.
 - Versioning policy: monthly “compatible” releases roll on the first business Monday; clients may pin to older behaviour via `X-uDocket-API-Version: YYYY-MM`. Majors ship at most twice per year, demand 90-day notice, and use calendar-versioned prefixes (`2025-02`), while additive changes batch unless explicitly waived.
 - Deprecations follow the cadence published in `docs/api/DEPRECATIONS.md`: announce, provide migration guides, emit `Sunset` headers 90 days before removal, and confirm monitors stay green before final removal (traceability captured in App.T).
-- Deprecation headers follow RFC 9745 structured-field syntax (e.g., `Deprecation: @1775001600; sunset="Mon, 01 Jun 2026 00:00:00 GMT"`) and always pair with `Link: rel="deprecation"` to machine-readable migration notes plus RFC 8594 `Sunset` headers; Spectral rule `sunset-header` enforces the trio.
+- Deprecation headers follow RFC 9745 structured-field syntax (e.g., `Deprecation: @1777956000; sunset="Mon, 01 Jun 2026 00:00:00 GMT"`) and always pair with `Link: rel="deprecation"` to machine-readable migration notes plus RFC 8594 `Sunset` headers; Spectral rule `sunset-header` enforces the trio.
 - Stripe-style public docs and code samples render directly from the OpenAPI bundle so that examples, schemas, and error contracts stay synchronized with the source of truth.
 
 ### 10.1 REST and WebSocket conventions (naming, pagination, errors)
@@ -2518,7 +2518,7 @@ Notes
 *Purpose: Standardize interface behavior across services for ease of integration.*
 
 - REST base path `/api/v1/` per service; plural resources (`/cases`, `/artifacts`). Mutations use optimistic concurrency (`version`) for idempotent semantics.
-- Mutating operations (`POST`, `PUT`, `PATCH`, `DELETE`) require an `Idempotency-Key` header (UUIDv7, 24h TTL minimum) so retries remain side-effect free across deployments; servers reject missing or replayed keys with `409 IDEMPOTENCY_VIOLATION` and surface the original response payload when possible.
+- Mutating operations (`POST`, `PUT`, `PATCH`, `DELETE`) require an `Idempotency-Key` header (UUIDv7, 24h TTL minimum) so retries remain side-effect free across deployments; servers reject missing or replayed keys with `409 IDEMPOTENCY_SIGNATURE_MISMATCH` and surface the original response payload when possible.
 - Pagination envelope `{items, page, page_size, total, next_page}`; sorting `?sort=field:asc`. Invalid sort or masked fields → 400.
 - Error envelope conforms to `spec/schemas/api_error.schema.json`; servers always include `X-Request-ID` and reuse the schema-generated models in runtime code. Rate-limit headers exposed to browsers (see §10.5 CORS contract).
 
@@ -2675,7 +2675,7 @@ Handler pattern
 *Purpose: Keep API documentation consistent and machine-validated.*
 
 - Authoring rules (binding): new operations must reuse shared components (`ApiError`, pagination envelope, security schemes), declare response examples for 2xx/4xx, include tag + summary, document every required header, and map path parameters to UUID formats where applicable. Specs are edited via `ops/openapi/*.yaml`; commits must update corresponding changelog entries.
-- Specs: OpenAPI 3.1 with `x-stability` tags (`stable|beta|experimental`); deprecations emit RFC 9745-compliant `Deprecation` headers (e.g., `Deprecation: @1775001600; sunset="Mon, 01 Jun 2026 00:00:00 GMT"`) alongside RFC 8594 `Sunset` headers (≥90 days) in accordance with §10.0 policy.
+- Specs: OpenAPI 3.1 with `x-stability` tags (`stable|beta|experimental`); deprecations emit RFC 9745-compliant `Deprecation` headers (e.g., `Deprecation: @1777956000; sunset="Mon, 01 Jun 2026 00:00:00 GMT"`) alongside RFC 8594 `Sunset` headers (≥90 days) in accordance with §10.0 policy.
 - Spectral rules (`ops/openapi/spectral.yaml`): enforce `oidc`, `hmacSignature` on mutating ops, error envelope on 4xx/5xx, shared pagination, forbid org/role spoof headers, and fail any spec whose `openapi` field is not `3.1.*` via the `openapi-version` rule.
 - Examples must not include real PII; Spectral rule `no-pii-examples` enforces masking, and rate-limit responses (429) must include `Retry-After`/`X-RateLimit-*` headers as shown in Appendix F.
 - CORS exposure (binding): expose `X-Request-ID, X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset, Retry-After, ETag, Deprecation, Sunset`. Preflight MUST allow the header set defined in Appendix F.12 (`Authorization, Content-Type, Idempotency-Key, X-Request-Signature, X-Signature-Key-Id, X-Timestamp, If-Match, If-None-Match, If-Range, X-Style-Nonce, X-Script-Nonce`); update Appendix F.12 first and mirror it here to avoid drift. Add `Vary: Origin, Access-Control-Request-Method, Access-Control-Request-Headers`.
@@ -4562,8 +4562,8 @@ F.11 Deprecation response with `Sunset` header (normative)
 HTTP/1.1 200 OK
 Content-Type: application/json
 X-Request-ID: 7d1f1dba-1d6f-4f6a-a7ef-2d2f1c2e9bd3
-Deprecation: @1775001600; sunset="Mon, 01 Jun 2026 00:00:00 GMT"
-Sunset: Tue, 01 Apr 2026 00:00:00 GMT
+Deprecation: @1777956000; sunset="Mon, 01 Jun 2026 00:00:00 GMT"
+Sunset: Mon, 01 Jun 2026 00:00:00 GMT
 Link: </api/v1/migrations/2026-04-case-export>; rel="deprecation"; type="text/html"
 X-uDocket-API-Version: 2025-01
 
