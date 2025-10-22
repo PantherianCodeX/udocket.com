@@ -1653,6 +1653,18 @@ Example
 - See App.D for compose deliverables and QA artifacts and their canonical filenames.
 - Model selection: stage-specific profiles defined in `config/llm_assignments.json` map Analyze/Compose lanes to settings keys (`analyze.model.id`, `compose.model.id`) so org/case overrides stay deterministic.
 
+#### 6.4.1 Deliverable catalog & template registry (binding)
+
+*Purpose: Guarantee deliverables stay extensible while remaining policy-gated.*
+
+- System-scope Settings key `deliverables.catalog[]` enumerates every deliverable produced across Transcribe/Analyze/Compose. Each `DeliverableDefinition` captures `deliverable_id`, `stage` (`transcribe|analyze|compose`), `artifact_type`, `default_formats[]` (`txt`, `md`, `pdf`, `docx`), `template_id`, `signature_policy_id`, `client_visibility`, `requires_client_ack`, `default_state` (`enabled|disabled|shadow`), and `implementation_tier` (minor|major) so GraphRunner, Guardian, and the portal share a single source of truth.
+- Base catalog entries ship for `TRANSCRIPT_CANONICAL` (Transcribe: `.txt` + PDF wrapper for signing), `SUMMARY_STANDARD` (Analyze summary deliverable), and `SUMMARY_LAWYER` (Compose lawyer document). Future deliverables—`SUMMARY_BRIEF`, `TIMELINE_ONLY`, `TIMELINE_WITH_EVIDENCE`, etc.—are pre-declared with `default_state=disabled` and `implementation_tier=major`; enabling them requires Architecture/Product sign-off and a recorded Implementation Strategy milestone before Settings activation succeeds.
+- Template registry `reference_manager.templates` stores per-deliverable templates at `templates/<deliverable_id>/<locale>/<version>.(md|docx|jinja)`. Metadata tracks `engine`, `locale`, `version`, `checksum_sha256`, `approved_by`, and `effective_at`. Analyze and Compose lanes resolve templates through this registry; cache invalidations propagate via `reference_manager.template.updated` events and are linted as part of `python scripts/docs/lint_docs.py` (see `docs/README.md` for options).
+- Organization overrides follow the same schema: uploads enter Guardian review, must pass placeholder linting against the corresponding `DeliverableContext` Pydantic model, and create `TEMPLATE_OVERRIDE_PROPOSAL` artifacts before promotion. Rollback keeps prior versions addressable; CI fixtures under `tests/udocket_core/agents/` validate compatibility end-to-end.
+- Every deliverable definition links to a `signature_policy_id` (§7.2.2). Transcripts and summaries default to `SIGN_POLICY_PLATFORM_REQUIRED`; Compose deliverables default to `SIGN_POLICY_PLATFORM_REQUIRED_CLIENT_OPTIONAL`. Pipelines hydrate signature policies when queuing Document Signer work so platform signatures and client attestations stay declarative rather than hard-coded.
+- Feature toggles (`deliverables.features.short_summary`, `deliverables.features.timeline_pdf`, etc.) guard UI/API exposure. Guardian rejects enabling toggles tagged `implementation_tier=major` unless the linked Implementation Strategy artifact is `status=approved`, ensuring large-impact additions follow the agreed rollout path.
+- Appendix D documents artifact schemas keyed by `deliverable_id`; Appendix E cross-references catalog entries with settings/tests/runbooks so auditors can trace coverage for any newly activated deliverable.
+
 ### 6.5 Timeline and relationship graph agents integration checklist
 
 *Purpose: Define integration requirements for the timeline and relationship graph agents.*
@@ -1840,6 +1852,28 @@ ______________________________________________________________________
 - TSA integration enforces ±5 second drift vs platform NTP; out-of-drift timestamps rejected. Metrics track `sign_verify_status_total`, `ocsp_latency_seconds`, `ocsp_staple_age_seconds`, `tsa_latency_seconds`, and `tsa_time_drift_seconds`.
 - Output artifacts include signature certificates (`SIGNATURE_CERT`) and optional destruction certificates, each referencing underlying content SHA and manifest.
 - Manifest schema (Pydantic) captures key version, TSA thumbprint, signer identity (Keycloak subject, display name), device fingerprint metadata, and document context; enforcing provenance on every signed artifact.
+
+#### 7.2.1 PKI & signing modes (binding)
+
+*Purpose: Anchor signatures to trusted, compliant crypto domains.*
+
+- Document Signer uses Azure Key Vault Managed HSM partitions with FIPS 140-3 validation; hardware keys never leave the HSM boundary. Settings key `sign.hsm.vault_uri` (system scope) plus per-environment `sign.hsm.key_id` select the active signing key; health probes verify `attestation_status=fips` before admitting requests.
+- Private PKI hierarchy: offline root `udocket-root` (RSA-4096, air-gapped), online intermediate `udocket-deliverable` (ECDSA P-384) issued per environment, and per-tenant leaf certificates bound to signing keys. Rotation requires dual approval, emits `SIGN_TRUST_ROOTS` artifacts, and runs automated integration tests that replay signature validation with the new chain.
+- Settings `sign.trust_mode ∈ {internal, hybrid, external}` governs trust anchor exposure. Default `hybrid` issues signatures with the internal intermediate **and** requests cross-certification from an external qualified provider so deliverables validate both inside the platform and with public PKI validators. `external` restricts issuance to the public provider for jurisdictions that mandate it; `internal` is reserved for sandbox or fully private deployments.
+- `sign.fips_mode ∈ {optional, required}` controls algorithm enforcement per org. When `required`, the signer restricts to FIPS-approved suites (ECDSA P-384 + SHA-384 for PDF/JWS, RSASSA-PSS 3072 for legacy interop), loads the OpenSSL FIPS provider, and rejects requests referencing non-compliant profiles. Guardian blocks deliverable promotion if the active signature policy conflicts with an org marked `sign.fips_mode=required`.
+- OCSP and TSA integrations run with mutual TLS using certificates issued from the same PKI. Health probes watch `ocsp_last_success_seconds` and `tsa_last_success_seconds`; thresholds differ per profile (`sign.ocsp.profiles[]`, `sign.tsa.profiles[]`) to support vendor-specific SLAs.
+- Non-production environments use distinct PKI roots and TSA sandboxes; manifests are stamped `trust_level=nonprod` to prevent cross-environment replays.
+
+#### 7.2.2 Deliverable signature policies & client affirmation (binding)
+
+*Purpose: Tie deliverable configurations to concrete signing and acknowledgement flows.*
+
+- Settings key `sign.signature_policies[]` defines reusable policies referenced by `DeliverableDefinition.signature_policy_id` (§6.4.1). Each policy specifies `platform_signature` (`required|optional|none`), `client_signature` (`none|attestation_optional|attestation_required|countersign_required`), `tsa_profile_id`, `ocsp_profile_id`, `fips_required`, and optional `ack_template_id` for client-facing attestations.
+- Default mappings: `SIGN_POLICY_PLATFORM_REQUIRED` enforces platform signatures with optional client attestation (used by transcripts and Analyze summaries); `SIGN_POLICY_PLATFORM_REQUIRED_CLIENT_OPTIONAL` requires platform signatures and exposes a client acknowledgement toggle (Compose client deliverable); `SIGN_POLICY_PLATFORM_REQUIRED_CLIENT_REQUIRED` is reserved for regulated deployments where client countersignature is mandatory before portal release.
+- Signing pipeline: (1) producing stage emits canonical content (TXT/MD/JSON); (2) packager renders PDF/A or COSE/JWS envelope per policy; (3) Document Signer applies platform signature + TSA token; (4) manifest records `signatures[]` with `{policy_id, key_version, tsa_token_hash, ocsp_status}`; (5) Guardian validates signature metadata before promoting the deliverable. Raw TXT/MD artifacts remain stored for traceability but are marked `requires_signature=true` to block release without the signed companion.
+- Client acknowledgement workflow: if `client_signature=attestation_optional|attestation_required`, portal prompts the client with the `ack_template_id` form after platform signing. Attestations generate `CLIENT_SIGNATURE_CERT` (digital countersignature) or `CLIENT_ATTESTATION` (logged acknowledgement) auxiliary records, both hash-linked to the signed artifact. Deliverables with `client_signature=countersign_required` remain in `PENDING_CLIENT_ACK` until the auxiliary record reaches `status=completed`; Guardian cancels portal URLs if the SLA expires.
+- Additional deliverables (short summary, timeline-only, future timeline exports) inherit `SIGN_POLICY_PLATFORM_REQUIRED` unless their catalog entry specifies otherwise. Implementation toggles from §6.4.1 cannot activate a deliverable whose signature policy demands a higher trust tier than the org’s configured `sign.trust_mode`.
+- Waivers and manual overrides follow existing approval swap semantics: changing a deliverable’s signature policy emits `SIGNATURE_POLICY_CHANGE` audit events, regenerates signed copies, and revokes previously released versions.
 
 ### 7.3 Request signing and verification (HMAC)
 
