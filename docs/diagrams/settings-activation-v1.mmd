@@ -1,0 +1,27 @@
+%% Mermaid sequence diagram: Settings activation pipeline v1
+sequenceDiagram
+  participant Admin as "Org/System Admin"
+  participant UI as "Settings UI/API"
+  participant Activation as "Settings Activation Service"
+  participant Validators as "Validators (schema, policy, diff)"
+  participant LPE as "LPE Compiler"
+  participant Guardian as "Guardian"
+  participant Bundles as "Policy Bundle Store"
+  participant Audit as "Audit/Event Bus"
+
+  Admin->>UI: Submit settings bundle (draft)
+  UI->>Activation: Create activation request (await approvals)
+  Activation-->>Admin: Approval required (dual review)
+  Admin->>Activation: Approve activation
+  Activation->>Validators: Run schema + unsafe diff checks
+  Validators-->>Activation: Validation pass/fail
+  alt Validation fails
+    Activation->>Audit: Emit SETTINGS_ACTIVATION_FAILED
+    Activation-->>Admin: Reject with errors
+  else Validation succeeds
+    Activation->>LPE: Compile PolicyContext + masking profiles
+    LPE->>Guardian: Push policy snapshot digest
+    LPE->>Bundles: Publish signed bundle
+    Activation->>Audit: Emit SETTINGS_ACTIVATION_COMPLETED
+    Activation-->>UI: Return activation result + snapshot hash
+  end

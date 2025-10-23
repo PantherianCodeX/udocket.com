@@ -2,6 +2,14 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "label": "Render Mermaid (all)",
+      "type": "shell",
+      "command": "npm run mmd:all",
+      "group": "build",
+      "problemMatcher": []
+    },
+
+    {
       "label": "docker: up deps (postgres, redis)",
       "type": "shell",
       "command": "docker compose up -d postgres redis",

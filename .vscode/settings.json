@@ -2,5 +2,10 @@
   "python.defaultInterpreterPath": "/usr/local/bin/python",
   "python.analysis.djangoEnabled": true,
   "python.analysis.djangoSettingsModule": "apps.platform.config.settings.dev",
-  "chatgpt.commentCodeLensEnabled": false
+  "chatgpt.commentCodeLensEnabled": false,
+
+  "markdown.preview.doubleClickToSwitchToEditor": true,
+  "markdown.preview.scrollEditorWithPreview": true,
+  "markdown.preview.scrollPreviewWithEditor": true
+
 }

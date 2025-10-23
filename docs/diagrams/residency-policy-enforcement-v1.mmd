@@ -28,5 +28,5 @@ sequenceDiagram
   alt Residency waiver active
     Org->>Settings: Record waiver (App.O) with expiry & approvals
     Settings->>LPE: Compile waiver flag into PolicyContext
-    Guardian->>OPA: Evaluate with waiver; stamp manifest `cross_region=true`
+    Guardian->>OPA: Evaluate with waiver (stamp manifest cross_region=true)
   end

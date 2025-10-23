@@ -1,0 +1,43 @@
+%% Mermaid class diagram: Settings activation core classes v1
+classDiagram
+  class ActivationService {
+    +submit(bundle: SettingsBundle)
+    +approve(requestId: UUID)
+    +execute(requestId: UUID)
+    -validator: ValidationPipeline
+    -compiler: PolicyCompiler
+    -auditClient: AuditClient
+  }
+  class SettingsBundle {
+    +id: UUID
+    +scope: Scope
+    +payload: JSON
+    +unsafeReasons: List
+  }
+  class ActivationRequest {
+    +id: UUID
+    +bundleId: UUID
+    +status: ActivationStatus
+    +approvers: List
+    +snapshotHash: SHA256
+  }
+  class ValidationPipeline {
+    +run(bundle)
+    -schemaValidators: List
+    -policyValidators: List
+  }
+  class PolicyCompiler {
+    +compile(bundle)
+    +emitSnapshots()
+  }
+  class AuditClient {
+    +record(event, payload)
+  }
+
+  ActivationService --> SettingsBundle : accepts
+  ActivationService --> ActivationRequest : manages
+  ActivationService --> ValidationPipeline : invokes
+  ActivationService --> PolicyCompiler : compiles
+  ActivationService --> AuditClient : emits
+  ValidationPipeline --> SettingsBundle : inspects
+  PolicyCompiler --> ActivationRequest : updates snapshotHash

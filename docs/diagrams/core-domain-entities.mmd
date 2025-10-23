@@ -1,0 +1,88 @@
+%% Mermaid ER diagram: Core domain entities v1
+erDiagram
+    ORGANIZATION ||--o{ CASE : "manages"
+    CASE ||--o{ JOB : "spawns"
+    CASE ||--o{ CASE_MEMBER : "has"
+    USER ||--o{ CASE_MEMBER : "assigned to"
+    JOB ||--o{ ARTIFACT_VERSION : "produces"
+    ARTIFACT_VERSION ||--|| ARTIFACT : "latest"
+    ARTIFACT ||--o{ ARTIFACT_VERSION : "historical"
+    ARTIFACT_VERSION ||--o{ GUARDIAN_JUDGMENT : "evaluated by"
+    ARTIFACT_VERSION ||--o{ DELIVERABLE_META : "metadata"
+    ARTIFACT_VERSION ||--o{ OPS_LOG : "emits"
+    SETTINGS_SNAPSHOT ||--o{ JOB : "applies to"
+    SETTINGS_SNAPSHOT ||--o{ POLICY_CONTEXT : "compiled to"
+    POLICY_CONTEXT ||--o{ GUARDIAN_JUDGMENT : "drives"
+    ARTIFACT ||--o{ PORTAL_DELIVERY : "released via"
+
+    ORGANIZATION {
+        uuid id PK
+        string name
+        jsonb settings_overrides
+    }
+    CASE {
+        uuid id PK
+        uuid org_id FK
+        string title
+        boolean legal_hold
+    }
+    USER {
+        uuid id PK
+        string email
+    }
+    CASE_MEMBER {
+        uuid case_id FK
+        uuid user_id FK
+        string role
+    }
+    JOB {
+        uuid id PK
+        uuid case_id FK
+        text agent_type
+        uuid settings_snapshot_id FK
+    }
+    ARTIFACT {
+        uuid id PK
+        uuid case_id FK
+        text kind
+    }
+    ARTIFACT_VERSION {
+        uuid id PK
+        uuid artifact_id FK
+        uuid job_id FK
+        text status
+        text content_uri
+        uuid guardian_judgment_id FK
+    }
+    GUARDIAN_JUDGMENT {
+        uuid id PK
+        uuid policy_context_id FK
+        text judgment
+    }
+    SETTINGS_SNAPSHOT {
+        uuid id PK
+        uuid org_id FK
+        text hash
+    }
+    POLICY_CONTEXT {
+        uuid id PK
+        uuid settings_snapshot_id FK
+        jsonb compiled_policy
+    }
+    PORTAL_DELIVERY {
+        uuid id PK
+        uuid artifact_version_id FK
+        text portal_state
+    }
+    AGENT_RUN {
+        uuid id PK
+        uuid job_id FK
+        uuid pipeline_definition_id FK
+        text status
+        jsonb manifest
+    }
+    PIPELINE_DEFINITION {
+        uuid id PK
+        text agent_type
+        text graph_version
+    }

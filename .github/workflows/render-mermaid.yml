@@ -1,0 +1,21 @@
+name: render-mermaid
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  build-diagrams:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - run: npm run mmd:all
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mermaid-svgs
+          path: docs/diagrams/out/*.svg

@@ -1,10 +1,20 @@
 %% Mermaid flow: Approvals UX (staff) v1
-flowchart TD
-  A[Artifact READY] --> B{Reviewer opens review}
-  B --> C[View diffs/QA]
-  C --> D{Approve?}
-  D -- Yes --> E[POST /reviews/{id}/approve]
-  D -- No  --> F[POST /reviews/{id}/reject]
-  E --> G[SSE: artifact_state APPROVED]
-  E --> H[Portal: invalidate prior same-type links]
-  F --> I[SSE: artifact_state REJECTED]
+graph TD
+  A["Artifact READY"]
+  B["Reviewer opens review"]
+  C["Reviewer views diffs & QA cues"]
+  D["Decision recorded"]
+  E["Approve call POST /reviews/{id}/approve"]
+  F["Reject call POST /reviews/{id}/reject"]
+  G["SSE emits artifact_state APPROVED"]
+  H["Portal invalidates prior same-type links"]
+  I["SSE emits artifact_state REJECTED"]
+
+  A --> B
+  B --> C
+  C --> D
+  D --> E
+  D --> F
+  E --> G
+  E --> H
+  F --> I

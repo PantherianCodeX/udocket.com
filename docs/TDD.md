@@ -44,12 +44,13 @@ Body sections reference appendices instead of duplicating diagrams or schemas—
 
 ## Canonical vocabulary (binding)
 
+**Breadcrumbs:** Implementation `packages/udocket_core/artifacts/status.py`, Tests `tests/platform/artifacts/test_status_vocab.py::test_all_statuses_linked`, Observability Grafana “Docs Quality – Vocabulary Drift”.
+
 *Purpose: Provide single-source wording for artifact classes, statuses, and Guardian mappings so specs, code, and UI stay aligned.*
 *Contract: Any change to artifact classes, statuses, or Guardian judgment mappings MUST update §5.2.1–§5.2.3 and this section in the same patch; other sections link back instead of restating tables.*
 *State transitions: Defined exclusively in §5.2.2 (statuses) and §5.2.3 (Guardian mapping).*
 *Failure modes & retries: `scripts/docs/lint_docs.py --check-template` now fails when a normative section lacks Purpose/Breadcrumbs scaffolding; `scripts/db/lint_status_column.py` blocks unknown status strings; CI job `lint-artifact-vocabulary` scans diffs for stray status/judgment terms.*
 *Observability: Docs lint metrics (`docs_template_missing_total`, `docs_vocabulary_drift_total`) feed the Docs Quality dashboard; Guardian and approval metrics remain unchanged.*
-*Binding breadcrumbs: Implementation `packages/udocket_core/artifacts/status.py`, Tests `tests/platform/artifacts/test_status_vocab.py`, Observability `docs.lint_artifact_vocabulary`, `guardian_judgment_latency_seconds`.*
 *References: §5.2, §5.4.1, §7.1, §10.3.2, App.A, App.I.*
 
 ### Artifact classes (authoritative definitions)
@@ -98,6 +99,27 @@ Guardian policy, risk tiers, and remediation flows continue in §5.2.3 and §7.1
 - **Audit integration (2025-10-19):** This draft incorporates audit items for CCPA/CPRA coverage (§2.2, §14.2.1), automated LLM moderation (§8.4), and model version pinning/replay rules (§8.1, §8.5). Appendix E is authoritative—every key listed there must exist in code, and CI blocks releases if parity ever drifts.
 - **Doc change protocol:** Every PR that modifies regulated behavior (policy, residency, approvals, agents) must link to the corresponding TDD diff; Architecture/Security reviewers block merges when code and spec diverge. Appendix automation (settings map, API snippets) continues to evolve—when feasible, replace manual tables with generated outputs to minimize churn.
 
+**Role-based quick start (binding)**\
+Use this checklist to jump to the right sections on a first read:
+
+| Stakeholder role | Start here | Must-review highlights |
+| ---------------- | ---------- | ---------------------- |
+| Architecture / Security | §3 (platform architecture), §4 (tenancy & access), §7 (Guardian/Signer), §12 (observability/DR) | §3.8 residency, §4.4–§4.5 masking/RLS, §7.1 judgments, §12.5 resilience |
+| Engineering (agents & API) | §6 (agent ecosystem), §10 (APIs), App.D (artifact schemas) | §6.2–§6.4 pipelines, §10.3 idempotency, Appendix F API contracts |
+| Product / Operations | §1 (executive summary), §11 (UX), §14 (retention & compliance) | §11.1 workspace/portal behaviors, §14.2 DSAR flows, §15 roadmap checkpoints |
+| QA / Compliance | §5 (lifecycle), §13 (testing & governance), App.K (controls map) | §5.2 status vocabulary, §13.3 detection QA, §13.5 deployment gates |
+| SRE / Platform Ops | §3 (infra context), §8 (LLM runtime), §12 (observability/DR), App.H (runbooks) | §8.7 FinOps guard, §12.4–§12.6 DR & dashboards, App.H incident playbooks |
+
+### Diagram usage standard
+
+To keep visuals helpful and consistent:
+
+- Embed a rendered Mermaid diagram when a section introduces a **core control flow, deployment topology, or data lineage** that spans multiple services (sequence/flowchart).
+- Use **ER diagrams** when we describe shared persistence contracts or artifacts that other teams must extend (for example, §9 core domain entities).
+- Produce **class diagrams** when detailing important service classes or agent orchestration objects whose inheritance/composition relationships benefit from a visual (limit to high-signal surfaces such as Guardian, Settings activation engine, or core agents).
+- Reserve diagrams for bounded topics—avoid trying to capture the entire platform in a single chart; favor appendix references for deep dives (App.A/App.G).
+- When behavior changes, update the `.mmd` source under `docs/diagrams/`, regenerate SVGs via `npm run mmd:all`, and ensure the affected TDD section still references the correct image.
+
 ## 1) Executive summary
 
 ### 1.1 Mission & problem statement
@@ -115,6 +137,7 @@ Guardian policy, risk tiers, and remediation flows continue in §5.2.3 and §7.1
 - Web platform (Django + Channels) for staff/clients, Celery workers for long-running jobs, and dedicated Guardian & Signing services enforcing PASS/WARN/BLOCK/WAIVED judgments, OPERATOR_PREP gating, and digital seal policies.
 - Agent pipeline: Transcribe → Analyze → Compose, each producing immutable artifacts under Guardian review, enriched with manifests and ops telemetry.
 - Zero-trust foundation: mTLS between services, Postgres RLS with policy-driven RBAC, object storage with SHA-256 integrity, and centralized Settings snapshots for every job.
+- Launch scale assumptions: first cohort targets ≈25 organizations with 3–5 active cases each, ~40 concurrent staff sessions, and ~150 queued jobs/hour across agents. The design budgets the web tier for 250 ms P95 read latency, Guardian judgments ≤5 minutes P95, Compose cycle time ≤45 minutes P95, and transcription throughput supporting 20 hours of audio per hour of wall-clock time under burst loads. Capacity reviews (see §12.5) validate these numbers and grow quotas linearly toward the 10× volume target called out in App.L benchmarks.
 
 ### 1.3 Out-of-scope items
 
@@ -261,6 +284,8 @@ Guardian policy, risk tiers, and remediation flows continue in §5.2.3 and §7.1
 4. Reviewers invoke the Reviews API which applies the ExclusiveSwap invariant from §5.4.1, atomically approving the CD and promoting the new DL (`RELEASED`) while revoking prior deliverables (§10.3.2).
 5. Portal invalidation notifies clients of the new deliverable and blocks any revoked link; downstream analytics and audit trails attach Guardian judgment IDs, manifests, and settings hashes (§11.2.1, App.A.2).
 
+![Upload → Guardian → Approve happy path](./diagrams/out/upload-guardian-approve-v1.svg)
+
 ### 3.1 High-level system context diagram
 
 *Purpose: Orient readers to major components and trust boundaries before diving into detail.*
@@ -270,6 +295,8 @@ Guardian policy, risk tiers, and remediation flows continue in §5.2.3 and §7.1
 - Supporting services—**Guardian**, **Digital Signer**, **Settings**, **LLM Registry**, **Localization & Policy Engine (LPE)**, **Reference Manager (RM)**, and **Notifications**—communicate over mTLS within the cluster and persist state to Postgres with RLS. RM operates as the editorial/source-of-truth service for catalog bundles, while LPE is the runtime resolver that consumes those bundles.
 - External dependencies (Azure Speech, LLM providers, TSA/OCSP authorities, email/SMS gateways) sit outside the trusted cluster and are accessed under strict egress policies.
 - Visual: see `App.A` for the full context diagram and sequence overlays.
+
+![System context overview](./diagrams/out/system-context-v1.svg)
 
 ### 3.2 Deployment topology (environments, Kubernetes primitives)
 
@@ -281,6 +308,7 @@ Guardian policy, risk tiers, and remediation flows continue in §5.2.3 and §7.1
 - TLS details: TLS 1.3 remains the platform default. When `security.tls.fips_mode=true`, only FIPS-approved AES-GCM ciphers are permitted (`TLS_AES_128_GCM_SHA256`, `TLS_AES_256_GCM_SHA384`) and ChaCha20 suites are rejected at validation time (mirrors OpenSSL FIPS provider guidance). Non-FIPS environments (explicit `security.tls.performance_mode=true`) MAY allow `TLS_CHACHA20_POLY1305_SHA256` to improve mobile performance but must record the exception in the release checklist. TLS 1.2 fallback suites remain explicit (`{'ECDHE-ECDSA-AES128-GCM-SHA256','ECDHE-RSA-AES128-GCM-SHA256','ECDHE-ECDSA-AES256-GCM-SHA384','ECDHE-RSA-AES256-GCM-SHA384'}`). OCSP stapling stays enabled on ingress. Fallback may be enabled via `security.tls.legacy_exceptions[]` entries that include endpoint name, justification, and an expiry ≤ 30 days out; Settings activation validator rejects longer windows, and an alert fires seven days before expiry to force review. Production ingress treats TLS 1.3 (`security.tls.min_version=TLSv1.3`) as the control surface; downgrades require Security approval plus updated attestation for the impacted environment. A synthetic handshake job (`scripts/security/check_tls_ciphers.py`) runs per environment on each deploy and as part of nightly CI, failing the build if CHACHA20 handshakes succeed while FIPS mode is enabled or if AES-GCM suites disappear from the non-FIPS profile.
 - Platform services leverage managed secrets (Vault or Azure Key Vault). Nodes run chrony/NTP with ±100 ms drift to support TSA validation. Redis handles broker/cache needs; Postgres (regional HA) stores relational data.
 - Object storage: Azure Blob (prod) or S3-compatible (dev) buckets configured for versioning, SSE-KMS, and immutable retention for audit sinks. Residency isolation is enforced via dedicated containers per data-residency cohort with no cross-region replication; replication is permitted only within the region boundary declared in `regions.allowlist.storage`, and manifests record the container + key vault backing each cohort so compliance teams can attest to zero-copy guarantees.
+- Database encryption at rest: managed Postgres clusters rely on cloud Transparent Data Encryption; storage, WAL archives, and snapshots are encrypted with Azure-managed keys by default and can swap to customer-managed keys (`security.db.cmk_id`) when an org or regulator requires attestation. Key rotation flows through Key Vault, produces `DB_TDE_ROTATION` artifacts, and triggers automated smoke tests that verify new keys before swaps propagate to replicas.
 - Container runtime: all workloads ship as OCI images. Production deployments run on AKS-managed Kubernetes with Flux CD applying Helm releases per environment; PodSecurity is set to the restricted baseline (no privileged pods, read-only root FS where feasible), and image provenance is enforced via cosign attestations validated by an admission webhook. Local developer workflows use `docker compose` (`docker-compose.yml` + override) to mirror the full stack—web, workers, Guardian, Signer, Settings, Redis, Postgres, object storage emulator, and supporting queues. Compose wiring reuses the same `.env` schema and health checks; developers run `docker compose up --build` to start the stack, while integration tests spin subsets of services (for example, `docker compose -f docker-compose.tests.yml up web worker guardian`) to reproduce production behaviour before pushing changes.
 - Multi-region posture: each environment operates within a primary/secondary region pair; database replicas, blob replication, and queue failover respect the org-specific allowlists. Disaster recovery runbooks document region cutover and data rehydration using only approved regions per §3.8.
 
@@ -862,6 +890,8 @@ Reference Manager packages every regulated dataset required for downstream compl
 
 ### 3.8 Region allowlist enforcement & egress policies (binding)
 
+**Breadcrumbs:** Implementation `apps/platform/operations/services/residency.py::enforce_allowlists`, Tests `tests/platform/operations/test_residency_allowlist.py::test_denies_unapproved_host`, Observability Grafana “Residency & Endpoint Posture”.
+
 *Purpose: Enforce multi-region residency controls and govern outbound traffic to providers.*
 
 - Settings define allowlists per org: `regions.allowlist.compute|storage|vector` accept ISO-like region identifiers (for example, `na-us-1`, `na-us-2`, `eu-west-2`). Activation lints reject entries outside the curated Reference Manager region catalogue or without matching data-processing agreements.
@@ -874,7 +904,11 @@ Reference Manager packages every regulated dataset required for downstream compl
 - Expansion posture: RM catalogs enumerate global regions (NA/EU/APAC). New jurisdictions enable by adding allowlist entries plus waiver or DPA references; App.O ledger tracks approvals. Synthetic tenant “EU-REFERENCE” exercises EU-only paths quarterly to confirm Azure EU endpoints, storage buckets, vector shards, and TSA integrations honor EU residency before production onboarding.
 - Waiver enforcement: active waivers embed `waiver_id`/expiry into `PolicyContext`; Guardian and workers relay this to OPA and stamp manifests with `cross_region=true` plus reason `RESIDENCY_WAIVER_USED`. Absent or expired waivers force `POLICY_BLOCK` responses so operators remediate before promotion.
 
+![Residency policy enforcement sequence](./diagrams/out/residency-policy-enforcement-v1.svg)
+
 #### 3.8.1 Residency endpoint posture detection (binding)
+
+**Breadcrumbs:** Implementation `apps/platform/operations/task_modules/residency_endpoint_scan.py`, Tests `tests/platform/operations/test_residency_endpoint_scan.py::test_blocks_drift`, Observability Grafana “Residency & Endpoint Posture”.
 
 *Purpose: Continuously verify that every outbound endpoint honors the declared residency posture before traffic is permitted.*
 
@@ -885,6 +919,8 @@ Reference Manager packages every regulated dataset required for downstream compl
 
 #### 3.8.2 Reporting & escalation (binding)
 
+**Breadcrumbs:** Implementation `apps/platform/operations/services/residency_reporting.py`, Tests `tests/platform/operations/test_residency_reporting.py::test_alert_routing`, Observability PagerDuty service “Residency Drift” / Grafana “Residency & Endpoint Posture”.
+
 *Purpose: Ensure residency drift is observable and actioned quickly across teams.*
 
 - Metrics: `residency_endpoint_scan_duration_seconds`, `residency_endpoint_drift_total{reason=...}`, and `residency_endpoint_blocks_total` feed the Residency dashboard (Grafana → “Residency & Endpoint Posture”). Alert `alert_residency_endpoint_drift` fires when new `open` findings exist for 10 minutes or a scan fails twice consecutively.
@@ -892,6 +928,8 @@ Reference Manager packages every regulated dataset required for downstream compl
 - Evidence: App.L incorporates residency drift baselines; App.H RB-RES-ENDPOINT holds the detailed remediation runbook referenced from alerts. App.O ledger links waivers to the specific findings they suppress.
 
 #### 3.8.3 Triage & remediation workflow (binding)
+
+**Breadcrumbs:** Implementation `apps/platform/operations/services/residency_triage.py`, Tests `tests/platform/operations/test_residency_triage.py::test_drives_remediation_plan`, Observability App.H runbook “RB-RESIDENCY-TRIAGE” mapped to Grafana “Residency & Endpoint Posture”.
 
 *Purpose: Provide a deterministic path from detection to resolution without violating residency guarantees.*
 
@@ -905,6 +943,8 @@ Reference Manager packages every regulated dataset required for downstream compl
 ---
 
 ### 3.9 C4 containers & STRIDE dataflows (binding)
+
+**Breadcrumbs:** Implementation `docs/diagrams/c4/container-platform-v1.mmd` + `docs/diagrams/threat/dfd-platform-stride-v1.mmd`, Tests `scripts/docs/render_mermaid.sh` (CI job `docs-diagram-render`), Observability CI stage “docs-validate” with artifact drift alerts.
 
 *Purpose: Provide an explicit container-level view with threat annotations that build on the context diagram.*
 
@@ -981,6 +1021,8 @@ Reference Manager packages every regulated dataset required for downstream compl
 - Masking profiles produced by LPE bind directly into `effective_permission` / `field_mask_rule` rows so database policy remains in lock-step with runtime `PolicyContext` decisions. The profile name selected via `db.set_rls_mask_profile(ctx.masking_profile)` (writes `udocket.mask_profile`) is just-in-time translated to a concrete policy set during Settings activation; CI ensures profiles without corresponding `field_mask_rule` coverage fail activation.
 
 #### 4.4.1 Masking profile mapping (binding)
+
+**Breadcrumbs:** Implementation `db/migrations/tenant/002_masking_profile_policies.sql`, Tests `tests/platform/db/test_mask_profiles.py::test_mask_profile_matches_policy`, Observability Grafana “Postgres RLS & Masking” with alert `rls_context_missing_total`.
 
 *Purpose: Map PolicyContext masking profiles onto database enforcement artifacts.*
 
@@ -1139,8 +1181,6 @@ ALTER TABLE delivery_receipt        FORCE ROW LEVEL SECURITY;
 ALTER TABLE guardian_judgment_history FORCE ROW LEVEL SECURITY;
 ```
 
-- Binding breadcrumbs:
-
   | Binding                      | Implementation                                                                            | Test                                                                               | Observability                                                                  |
   | ---------------------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
   | `rls_context_assert()` guard | Implementation: `apps/platform/db/guards.py::assert_rls_context`                          | Test: `tests/platform/db/test_rls_guard.py::test_rls_context_asserts_missing_gucs` | Observability: Grafana “DB Session Guards” panel (`rls_context_missing_total`) |
@@ -1173,6 +1213,8 @@ ALTER TABLE guardian_judgment_history FORCE ROW LEVEL SECURITY;
 
 #### 4.5.1 Transformation modes & operator view (binding)
 
+**Breadcrumbs:** Implementation `packages/udocket_core/masking/profiles.py::render_transformation_modes`, Tests `tests/security/test_masking_profiles.py::test_mode_rendering`, Observability Grafana “Masking Vault & Profiles” dashboard.
+
 *Purpose: Define masking modes, operator experience, and deliverable implications.*
 
 | Mode | When to use | Operator view | Deliverable |
@@ -1186,6 +1228,8 @@ ALTER TABLE guardian_judgment_history FORCE ROW LEVEL SECURITY;
 - Organization policies decide the default mode per entity type. Profiles ship with HIPAA-safe defaults; Reference Manager entries add jurisdiction-specific overrides.
 
 #### 4.5.2 Token vault & reversible masking (binding)
+
+**Breadcrumbs:** Implementation `packages/udocket_core/masking/vault.py`, Tests `tests/security/test_fpe_tokenization.py::test_round_trip`, Observability Grafana “Masking Vault & Profiles” with metric `masking_vault_token_total`.
 
 *Purpose: Describe token vault design, cryptography, and access controls.*
 
@@ -1209,6 +1253,8 @@ ALTER TABLE guardian_judgment_history FORCE ROW LEVEL SECURITY;
 - **Free text PHI/SPI:** segmented spans replaced with tokens; token records accumulate `uses[]` entries for each artifact/job referencing them.
 
 #### 4.5.4 Restoration & deliverable policy (binding)
+
+**Breadcrumbs:** Implementation `packages/udocket_core/masking/restoration.py`, Tests `tests/platform/compose/test_restoration_policy.py::test_restoration_requires_policy_intent`, Observability Grafana “Compose Restoration & Vault” with alert `token_reveal_total`.
 
 *Purpose: Specify restoration scenarios and deliverable policies governed by masking intents.*
 
@@ -1348,6 +1394,8 @@ SELECT id, org_id, case_id, type, status, content_sha256,
 – Only one `RELEASED` DL exists per `(case_id,type)`; approvals atomically revoke the prior DL (ExclusiveSwap invariant, §5.4.1).\
 – Append-only audit: every lifecycle action appends to `ops_<agent>.jsonl` and persists manifests with SHA-256 provenance.
 
+![Artifact lifecycle state machine](./diagrams/out/artifact-lifecycle-state-v1.svg)
+
 #### 5.2.1 Object classes (SA/WP/CD/DL/AR)
 
 *Purpose: Classify artifact types and clarify their lifecycle boundaries.*
@@ -1415,6 +1463,8 @@ The events emitted for these transitions are enumerated in §10.3. Guardian alwa
 
 #### 5.2.3.1 Guardian judgment & outcomes (binding)
 
+**Breadcrumbs:** Implementation `apps/platform/operations/guardian.py::process_judgment_outcome`, Tests `tests/platform/guardian/test_judgment_outcomes.py::test_status_mapping`, Observability Grafana “Guardian Judgments” (metric `guardian_judgment_total`).
+
 *Purpose: Define the Guardian judgment contract and how outcomes change status.*
 
 - Guardian decides one of **`PASS|WARN|BLOCK|WAIVED`** for each WP/CD version; decisions are idempotent per `{artifact_id, content_hash}` and are the single source of truth gating operator visibility.
@@ -1427,6 +1477,8 @@ The events emitted for these transitions are enumerated in §10.3. Guardian alwa
  **Note:** There is no public “submit to Guardian” REST call; production submissions flow via the worker queue. The only administrative surface is `POST /guardian/judgments:enqueue` for replays/drift fixes (internal tooling).
 
 #### 5.2.3.2 Detection & masking payload schema (binding)
+
+**Breadcrumbs:** Implementation `packages/udocket_core/guardian/payloads.py`, Tests `tests/udocket_core/guardian/test_detection_payload.py::test_schema_roundtrip`, Observability CI job “guardian-payload-schema” with contract fixtures.
 
 *Purpose: Describe detection payload schemas and masking metadata handed to Guardian.*
 
@@ -1483,6 +1535,8 @@ Guardian records span-level evidence and masking details using deterministic UUI
 
 #### 5.2.3.3 Guardian detection APIs (binding)
 
+**Breadcrumbs:** Implementation `apps/platform/api/guardian.py::DetectionViewSet`, Tests `tests/platform/api/test_guardian_detection.py::test_detect_and_mask_contract`, Observability Grafana “Guardian API” dashboard with alert `guardian_api_error_rate`.
+
 *Purpose: Explain Guardian detection APIs and their security posture.*
 
 - `POST /guardian/detect-and-mask` — Input: `{object_urn, content_ref, locale, policy_flags[]?}`. Output: `{detected_entities[], masked_spans[], provider_flags[], judgment, reason_codes[]}`. Workers call this to produce masked working copies and prime Guardian with span evidence.
@@ -1535,6 +1589,8 @@ When a **CD** is **QUEUED_FOR_REVIEW**, reviewers must pick exactly one outcome:
 }
 
 “OTHER” selections require `*_other_text` payloads and feed a weekly clustering job (`ops/reference/suggest_reason_enum.py`). The job publishes candidate enum additions to Reference Manager; accepted values propagate through the LPE bundle workflow. Operations uphold an SLO to triage new candidates within 14 calendar days and either promote or close them (with rationale) within 30 days, with status tracked in the Reference Manager queue dashboard. When a candidate is promoted, Guardian ships the new enum in the next release, bumps the SSE/event schema version noted in §10.3, and publishes an upgrade notice so API consumers can deploy the updated enum set before enforcement.
+
+![Manual and agent edit approval flows](./diagrams/out/approvals-edit-flows-v1.svg)
 
 #### 5.2.5 Review modes & risk overrides
 
@@ -1868,7 +1924,12 @@ Example
 - Deterministic naming/versioning: reruns append `_v{n}` suffix; manifests store `settings_snapshot_sha256`, model/provider versions, compute/storage regions, and SHA-256 of outputs.
 - Audit & telemetry: each run logs structured metadata (duration, attempts, cost envelope) and writes SSE updates; metrics exported for `job_duration_seconds`, `agent_retry_total`, etc.
 
+![Analyze and Compose pipeline overview](./diagrams/out/analyze-compose-v1.svg)
+![Agent orchestration classes](./diagrams/out/agent-orchestration-classes-v1.svg)
+
 ### 6.1.1 Configurable pipeline definitions & stage catalog (binding)
+
+**Breadcrumbs:** Implementation `packages/udocket_core/agents/pipeline_catalog.py::PipelineCatalog`, Tests `tests/udocket_core/agents/test_pipeline_catalog.py::test_activation_contract`, Observability Grafana “Agent Pipelines – Activation” dashboard.
 
 *Purpose: Let sysadmins compose and adjust LangGraph-driven pipelines without redeploying code.*
 
@@ -1881,6 +1942,8 @@ Example
 
 ### 6.1.2 LangGraph tool registry & custom tool onboarding (binding)
 
+**Breadcrumbs:** Implementation `packages/udocket_core/agents/tool_registry.py`, Tests `tests/udocket_core/agents/test_tool_registry.py::test_schema_validation`, Observability CI job “agents-tool-registry-lint” plus Grafana “Agent Tooling” panel.
+
 *Purpose: Provide a configurable, auditable catalog of LangGraph tools for agents and editors.*
 
 - Settings `agents.tools.catalog[]` (SYSTEM scope with ORG allowlists) mirrors the LangGraph `Tool` specification: each entry defines `tool_id`, `description`, `input_schema` (JSON Schema Draft 2020-12), `output_schema`, `binding` (Python module path, gRPC target, or HTTP service), `timeout_seconds`, `cost_profile_id`, residency/PII classification, and `idempotent` (`true|false`). When `idempotent=true` the catalog must also include `tool_idempotency_key` (stable across retries) so GraphRunner can deduplicate invocations during job restarts; non-idempotent tools are fenced behind retry guards (`max_attempts=1`) and require human inspection before re-run.
@@ -1891,6 +1954,8 @@ Example
 - Evidence manifests capture `{tool_id, tool_version, binding_sha256}` for every invocation so Guardian, Privacy, and FinOps teams can audit side effects and cost. Tools handling sensitive data must declare `data_classification` and pass Privacy/Architecture review before activation.
 
 ### 6.1.3 Conversational assistant pipelines (binding)
+
+**Breadcrumbs:** Implementation `packages/udocket_core/assistants/orchestrator.py::AssistantOrchestrator`, Tests `tests/udocket_core/assistants/test_pipeline_manifest.py::test_chat_pipeline_roundtrip`, Observability Grafana “Assistant Sessions” dashboard.
 
 *Purpose: Apply the same managed pipeline controls to chat assistants that power staff and client surfaces.*
 
@@ -1917,6 +1982,8 @@ Example
 
 #### 6.2.1 Provider fallback & health-governed resume (binding)
 
+**Breadcrumbs:** Implementation `packages/udocket_core/agents/transcribe_planner.py::plan_with_health_resume`, Tests `tests/udocket_core/transcription/test_fallback_resume.py::test_health_governed_routing`, Observability Grafana “Transcription Health & Retry” dashboard.
+
 *Purpose: Define fallback chains and health checks that govern provider selection and resumption.*
 
 - Provider catalog: `speech.providers[]` mirrors the LLM registry, capturing API endpoints, residency, pricing, and `health_check.url`. Each `speech.jobs[]` entry defines a `fallback_chain` where every hop is validated against an equivalence harness (`tests/udocket_core/agents/test_transcribe_fallback.py`) demonstrating WER delta ≤ 1.5 % and diarization accuracy within tolerance on the golden corpus.
@@ -1927,6 +1994,8 @@ Example
 - Testing: `tests/udocket_core/failover/test_speech_orchestrator.py` exercises controller parity checks, health-driven pauses, and auto-resume, while `synthetics/transcribe_failover.yaml` validates staging behavior.
 
 #### 6.2.2 Capability negotiation & track merge pipeline (binding)
+
+**Breadcrumbs:** Implementation `packages/udocket_core/audio/track_merge.py::plan_capabilities`, Tests `tests/udocket_core/audio/test_track_merge.py::test_capability_negotiation`, Observability Grafana “Transcription Track Merge” panel.
 
 *Purpose: Explain capability negotiation, normalization, and track-merge flows for transcripts.*
 
@@ -1941,6 +2010,8 @@ Example
 - Testing & drills: `tests/udocket_core/transcription/test_capability_map.py` validates routing, `tests/udocket_core/transcription/test_track_merge.py` verifies merge ordering/conflict resolution, and synthetic `synthetics/transcribe_capabilities.yaml` asserts capability negotiation in staging. Ops drill App.H RB-TRANSCRIBE-CAP ensures runbooks cover channel splits and merge artifact inspection.
 
 #### 6.2.3 Speech capability registry & audio format policy (binding)
+
+**Breadcrumbs:** Implementation `packages/udocket_core/audio/policy.py::SpeechCapabilityRegistry`, Tests `tests/udocket_core/audio/test_format_policy.py::test_enforces_policy`, Observability CI job “audio-policy-lint” with ffprobe synthetic monitor.
 
 *Purpose: Record registry fields and policies that govern audio formats and provider capabilities.*
 
@@ -1969,6 +2040,8 @@ Example
 
 #### 6.2.5 Cancellation & retry semantics (binding)
 
+**Breadcrumbs:** Implementation `packages/udocket_core/transcription/runner.py::handle_cancel_retry`, Tests `tests/udocket_core/transcription/test_cancel_retry.py::test_provider_cleanup`, Observability Grafana “Transcription Health & Retry” dashboard (metric `transcription_retry_total`).
+
 *Purpose: Specify cancellation hooks, retry tokens, and validation for speech jobs.*
 
 - Provider hooks: each speech adapter implements `cancel(job_id, retry_token)` and `cleanup(job_id, retry_token)`; `cleanup` executes irrespective of provider success so SAS uploads, staging blobs, and stream leases are always revoked. Both hooks MUST remain idempotent.
@@ -1982,6 +2055,8 @@ Example
 - Validation: `tests/udocket_core/transcription/test_cancel_retry.py` exercises cancellation and replay flows; synthetic job `synthetics/transcription_cancel.yaml` confirms provider cleanup in staging. Failures block deploys until remediation.
 
 #### 6.2.4 Multilingual speech & translation pipeline (binding)
+
+**Breadcrumbs:** Implementation `packages/udocket_core/transcription/multilingual.py`, Tests `tests/udocket_core/transcription/test_multilingual_pipeline.py::test_locale_negotiation`, Observability Grafana “Transcription Multilingual” dashboard with alert `speech_translation_glossary_miss_total`.
 
 *Purpose: Describe multilingual detection, negotiation, and translation workflows.*
 
@@ -2026,6 +2101,8 @@ Example
 
 #### 6.3.1 Cancellation & retry semantics (binding)
 
+**Breadcrumbs:** Implementation `packages/udocket_core/agents/analyze_runner.py::cancel_and_retry`, Tests `tests/udocket_core/agents/test_analyze_cancel_retry.py::test_lane_resume`, Observability Grafana “Analyze Pipeline Health” dashboard.
+
 *Purpose: Define cancellation handling and retry behavior for Analyze lanes.*
 
 - `GraphRunner.cancel(job_id, retry_token)` stops active lanes, drains tool queues, and guarantees `cleanup()` executes for every registered tool adapter. Tool adapters marked `idempotent=true` in `agents.tools.catalog[]` MAY be re-run during retries; non-idempotent tools log `RETRY_DISALLOWED_NON_IDEMPOTENT`.
@@ -2052,6 +2129,8 @@ Example
 
 #### 6.4.0 Cancellation & retry semantics (binding)
 
+**Breadcrumbs:** Implementation `packages/udocket_core/agents/compose_runner.py::cancel_and_retry`, Tests `tests/udocket_core/agents/test_compose_cancel_retry.py::test_checkpoint_resume`, Observability Grafana “Compose Pipeline Health” dashboard.
+
 *Purpose: Explain how Compose manages cancellation, checkpoints, and replay safety.*
 
 - `GraphRunner.cancel(job_id, retry_token)` stops all active lanes, requests `cancel()` on outstanding tool invocations, and records per-lane status snapshots (`{lane_id, node_id, state}`) in the tombstone artifact.
@@ -2065,6 +2144,8 @@ Example
 
 #### 6.4.1 Deliverable catalog & template registry (binding)
 
+**Breadcrumbs:** Implementation `packages/udocket_core/deliverables/catalog.py::DeliverableCatalog`, Tests `tests/udocket_core/deliverables/test_catalog_activation.py::test_registry_contract`, Observability Grafana “Deliverable Catalog & Templates” dashboard with alert `deliverable_catalog_drift_total`.
+
 *Purpose: Guarantee deliverables stay extensible while remaining policy-gated.*
 
 - System-scope Settings key `deliverables.catalog[]` enumerates every deliverable produced across Transcribe/Analyze/Compose. Each `DeliverableDefinition` captures `deliverable_id`, `stage` (`transcribe|analyze|compose`), `artifact_type`, `default_formats[]` (`txt`, `md`, `pdf`, `docx`), `template_id`, `signature_policy_id`, `client_visibility`, `requires_client_ack`, `default_state` (`enabled|disabled|shadow`), and `implementation_tier` (minor|major) so GraphRunner, Guardian, and the portal share a single source of truth.
@@ -2074,6 +2155,8 @@ Example
 - Every deliverable definition links to a `signature_policy_id` (§7.2.2). Transcripts and summaries default to `SIGN_POLICY_PLATFORM_REQUIRED`; Compose deliverables default to `SIGN_POLICY_PLATFORM_REQUIRED_CLIENT_OPTIONAL`. Pipelines hydrate signature policies when queuing Document Signer work so platform signatures and client attestations stay declarative rather than hard-coded.
 - Feature toggles (`deliverables.features.short_summary`, `deliverables.features.timeline_pdf`, etc.) guard UI/API exposure. Guardian rejects enabling toggles tagged `implementation_tier=major` unless the linked Implementation Strategy artifact is `status=approved`, ensuring large-impact additions follow the agreed rollout path.
 - Appendix D documents artifact schemas keyed by `deliverable_id`; Appendix E cross-references catalog entries with settings/tests/runbooks so auditors can trace coverage for any newly activated deliverable.
+
+![Artifact data lineage](./diagrams/out/data-lineage-v1.svg)
 
 ### 6.5 Timeline and relationship graph agents integration checklist
 
@@ -2208,6 +2291,8 @@ Node catalog (illustrative)
 
 ### 6.13 Shadow mode deployments (binding)
 
+**Breadcrumbs:** Implementation `apps/platform/operations/shadow.py::run_shadow_pipeline`, Tests `tests/platform/operations/test_shadow_mode.py::test_divergence_reporting`, Observability Grafana “Agent Shadow Runs” dashboard with metric `agent_shadow_divergence_total`.
+
 *Purpose: Let new agent behaviours soak in production safely before they become user-visible.*
 
 - Activation: flip `agents.shadow_mode.enabled=true` (ORG/CASE scope) to run the new lane/pipeline against live inputs while suppressing downstream writes. Shadow executions read the same settings snapshot as production jobs and log outputs under `ops/<job_id>__shadow_<agent>_log.json` plus case-level JSONL streams (`ops_shadow_<agent>.jsonl`).
@@ -2237,7 +2322,12 @@ Node catalog (illustrative)
 - Deterministic reconciliation: Guardian judgments are idempotent per `{artifact_id, content_hash}`. Re-submitting the same content after a BLOCK requires either a waiver or remediation that produces a new hash/version, ensuring policy-bypassing mutations cannot proceed silently.
 - Downstream enforcement: workers, UI, and portal clients must respect the target status (`CLEARED_FOR_USE`, `OPERATOR_PREP`, `QUARANTINED`) before executing dependent actions. Fetch-time checks re-evaluate Guardian judgment freshness and invalidate stale deliverables (§11.2.1).
 
+![Guardian judgment pipeline](./diagrams/out/guardian-judgment-flow-v1.svg)
+![Guardian service classes](./diagrams/out/guardian-class-model-v1.svg)
+
 #### 7.1.0 In-house PHI/PII/SPI gating tiers (binding)
+
+**Breadcrumbs:** Implementation `packages/udocket_core/guardian/pipeline.py::GuardianTierPipeline`, Tests `tests/udocket_core/guardian/test_tier_pipeline.py::test_detector_precedence`, Observability Grafana “Guardian Detections” dashboard.
 
 *Purpose: Describe Guardian tiers for classified data and the controls each tier enforces.*
 
@@ -2255,6 +2345,8 @@ Guardian persists raw span evidence in `guardian_span_detection` (WP scope, RLS-
 
 #### 7.1.1 Judgment evaluation (binding)
 
+**Breadcrumbs:** Implementation `apps/platform/operations/guardian.py::evaluate_judgment`, Tests `tests/platform/guardian/test_judgment_idempotency.py::test_reuses_prior_decision`, Observability Grafana “Guardian Judgments” (metric `guardian_judgment_latency_seconds`).
+
 *Purpose: Describe how Guardian evaluates judgments, evidence, and upstream signals.*
 
 - Concurrency guard: Guardian locks parent artifacts with `SELECT ... FOR SHARE` and re-reads manifests to ensure judgments reflect the latest upstream status. If a parent demotes while evaluation runs, the child request detects the change and returns `BLOCK` with reason `PARENT_NOT_APPROVED`.
@@ -2264,6 +2356,8 @@ Guardian persists raw span evidence in `guardian_span_detection` (WP scope, RLS-
 
 #### 7.1.2 Waivers & quarantine ownership (binding)
 
+**Breadcrumbs:** Implementation `apps/platform/operations/guardian.py::apply_waiver`, Tests `tests/platform/guardian/test_waiver_flow.py::test_dual_approval_required`, Observability Grafana “Guardian Quarantine” panel with metric `guardian_quarantine_open_total`.
+
 *Purpose: Set responsibilities and workflows for waivers and quarantined artifacts.*
 
 - WAIVED judgments require dual approval (`waiver.requested_by`, `waiver.approved_by`) and carry `waiver_id`, expiry, and conditions. Guardian enforces expiry at fetch time; lapses revert artifacts to `QUARANTINED`.
@@ -2271,6 +2365,8 @@ Guardian persists raw span evidence in `guardian_span_detection` (WP scope, RLS-
 - Deliverable pullbacks leverage the same pipeline: setting a DL to `REVOKED` (via approval swap or compliance takedown) triggers a Guardian judgment update and portal invalidation event `DELIVERABLE.REVOKED`.
 
 #### 7.1.3 Queue observability & timeout safeguards (binding)
+
+**Breadcrumbs:** Implementation `apps/platform/operations/guardian_queue.py::watchdog`, Tests `tests/platform/guardian/test_queue_timeouts.py::test_timeout_guard`, Observability Grafana “Guardian Queue” dashboard with alert `guardian_queue_stalled_total`.
 
 *Purpose: Surface Guardian stalls quickly and keep operators unblocked when automation degrades.*
 
@@ -2302,6 +2398,8 @@ Guardian persists raw span evidence in `guardian_span_detection` (WP scope, RLS-
 
 #### 7.2.1 PKI & signing modes (binding)
 
+**Breadcrumbs:** Implementation `apps/platform/operations/signer.py::issue_signed_document`, Tests `tests/platform/operations/test_signer_modes.py::test_pkcs7_and_cades`, Observability Grafana “Signer & TSA” dashboard with metric `signer_request_latency_seconds`.
+
 *Purpose: Anchor signatures to trusted, compliant crypto domains.*
 
 - Document Signer uses Azure Key Vault Managed HSM partitions with FIPS 140-3 validation; hardware keys never leave the HSM boundary. Settings key `sign.hsm.vault_uri` (system scope) plus per-environment `sign.hsm.key_id` select the active signing key; health probes verify `attestation_status=fips` before admitting requests.
@@ -2313,6 +2411,8 @@ Guardian persists raw span evidence in `guardian_span_detection` (WP scope, RLS-
 
 #### 7.2.2 Deliverable signature policies & client affirmation (binding)
 
+**Breadcrumbs:** Implementation `apps/platform/operations/signer_policy.py::resolve_signature_policy`, Tests `tests/platform/operations/test_signature_policy.py::test_client_ack_enforced`, Observability Grafana “Deliverable Signatures” panel with alert `signature_policy_violation_total`.
+
 *Purpose: Tie deliverable configurations to concrete signing and acknowledgement flows.*
 
 - Settings key `sign.signature_policies[]` defines reusable policies referenced by `DeliverableDefinition.signature_policy_id` (§6.4.1). Each policy specifies `platform_signature` (`required|optional|none`), `client_signature` (`none|attestation_optional|attestation_required|countersign_required`), `tsa_profile_id`, `ocsp_profile_id`, `fips_required`, and optional `ack_template_id` for client-facing attestations.
@@ -2323,7 +2423,11 @@ Guardian persists raw span evidence in `guardian_span_detection` (WP scope, RLS-
 - Additional deliverables (short summary, timeline-only, future timeline exports) inherit `SIGN_POLICY_PLATFORM_REQUIRED` unless their catalog entry specifies otherwise. Implementation toggles from §6.4.1 cannot activate a deliverable whose signature policy demands a higher trust tier than the org’s configured `sign.trust_mode`.
 - Waivers and manual overrides follow existing approval swap semantics: changing a deliverable’s signature policy emits `SIGNATURE_POLICY_CHANGE` audit events, regenerates signed copies, and revokes previously released versions.
 
+![Signing and delivery flow](./diagrams/out/signing-delivery-v1.svg)
+
 #### 7.2.3 FIPS enforcement & runtime guardrails (binding)
+
+**Breadcrumbs:** Implementation `packages/udocket_core/security/fips_guard.py::assert_fips_mode`, Tests `tests/security/test_fips_guard.py::test_rejects_non_fips_cipher`, Observability CI job “fips-mode-check” and Grafana “Signer & TSA” dashboard.
 
 *Purpose: Guarantee that every cryptographic operation honours FIPS 140-2/140-3 requirements when enabled.*
 
@@ -2395,6 +2499,8 @@ Guardian persists raw span evidence in `guardian_span_detection` (WP scope, RLS-
 
 #### 8.1.1 LLM & vector residency guard (binding)
 
+**Breadcrumbs:** Implementation `packages/udocket_core/llm/residency_guard.py::enforce_residency`, Tests `tests/udocket_core/llm/test_residency_guard.py::test_block_disallowed_region`, Observability Grafana “LLM Residency & Failover” dashboard (metric `llm_region_fallback_total`).
+
 *Purpose: Define the residency guardrails governing LLM and vector workloads.*
 
 - Residency enforcement stacks three controls:
@@ -2407,6 +2513,8 @@ Guardian persists raw span evidence in `guardian_span_detection` (WP scope, RLS-
 
 #### 8.1.2 Failover orchestration helper (binding)
 
+**Breadcrumbs:** Implementation `packages/udocket_core/failover/model.py::ModelFailoverOrchestrator`, Tests `tests/udocket_core/failover/test_model_orchestrator.py::test_parity_validation`, Observability Grafana “LLM Failover” dashboard with metric `llm_failover_attempt_total`.
+
 *Purpose: Document the failover helper that orchestrates safe provider rollbacks.*
 
 - Implementation: `packages/udocket_core/failover/model.py::ModelFailoverOrchestrator` centralizes fallback evaluation, emitting standardized events (`LLM_FALLBACK_TRIGGERED`, `LLM_FAILOVER_PAUSED`, `LLM_FAILOVER_RESUMED`) and updating evidence envelopes. LangGraph lanes, Celery tasks, and CLI utilities call the orchestrator via `llm.runtime.failover.for_request(...)` instead of embedding lane-specific logic.
@@ -2414,8 +2522,13 @@ Guardian persists raw span evidence in `guardian_span_detection` (WP scope, RLS-
 - Testing: golden-set replay harness `tests/udocket_core/failover/test_model_orchestrator.py` verifies deterministic selection order, pause semantics, and auto-resume after consecutive health probes. Synthetic monitor `synthetics/llm_failover.yaml` exercises the helper end-to-end in staging.
 - Extensibility: new providers register adapters implementing the `FailoverAdapter` protocol; the orchestrator enforces interface compliance at import time and blocks activation if adapters omit health probes, parity metadata, or residency attestations.
 - Telemetry: `llm_circuit_state` and `llm_fallback_total{model,reason}` power dashboards; on-call alerts fire when circuits remain OPEN beyond 15 minutes or when fallback spend exceeds budget thresholds.
+- Diagram: `docs/diagrams/llm-failover-v1.mmd` captures the orchestrator sequence.
+
+![LLM failover orchestrator](./diagrams/out/llm-failover-v1.svg)
 
 #### 8.1.3 Bring-your-own model integration (binding)
+
+**Breadcrumbs:** Implementation `packages/udocket_core/llm/byo_registry.py::register_provider`, Tests `tests/udocket_core/llm/test_byo_registry.py::test_requires_attestation`, Observability Grafana “LLM Provider Registry” panel with metric `llm_byo_health_check_total`.
 
 *Purpose: Outline requirements for onboarding customer-supplied model endpoints.*
 
@@ -2427,6 +2540,8 @@ Guardian persists raw span evidence in `guardian_span_detection` (WP scope, RLS-
 - Observability: dashboards segment metrics by `model_kind` (`managed|byo`); synthetic monitor `synthetics/llm_byo_health.yaml` calls each BYO endpoint hourly to confirm SLA adherence and certify moderation telemetry (`chat_policy_block_total`) funnels correctly.
 
 #### 8.1.4 LLM profile registry & assistant routing (binding)
+
+**Breadcrumbs:** Implementation `packages/udocket_core/llm/profile_registry.py::resolve_profile`, Tests `tests/udocket_core/llm/test_profile_registry.py::test_profile_activation`, Observability Grafana “LLM Profiles” dashboard with metric `llm_profile_call_total`.
 
 *Purpose: Explain how the LLM profile registry routes traffic to the correct assistants.*
 
@@ -2482,8 +2597,13 @@ PII posture (binding)
 - Deployment gate (`§13.5`) blocks releases when month-over-month cost regression exceeds threshold (default 10%).
 - Budget controller (`FinOpsGuardController`): runs in the worker cluster, tracking `llm_cost_estimate_total` deltas per org. When projected spend exceeds the configured cap mid-execution, the controller marks affected jobs `PAUSED_AWAITING_BUDGET`, emits SSE `job.blocked` + `job.update` with `warning="BUDGET_HELD"`, and writes an audit event `FINOPS_BUDGET_HELD`. Any in-flight CDs receive `FINOPS_BUDGET_EXCEEDED` as the Guardian quarantine reason; Guardian emits `GUARDIAN.JUDGMENT.BLOCK` with the same code and appends the judgment to `guardian_judgment_history`. Resume occurs only after finance/ops clear the alert by either raising the cap (dual-approved Settings activation) or releasing the hold via `POST /api/v1/jobs/{id}:resume` once the controller observes budget headroom.
 - Alerts: `finops_budget_hold_active_total` pages FinOps + Product, while `finops_budget_hold_duration_seconds` feeds SLA dashboards. Resume events log `FINOPS_BUDGET_RESUMED` and clear outstanding quarantines via Guardian’s auto-waive path once cap relief is confirmed.
+- Diagram: `docs/diagrams/finops-guard-v1.mmd` depicts the deploy guard decision flow.
+
+![FinOps deploy guard flow](./diagrams/out/finops-guard-v1.svg)
 
 ### 8.7 FinOps deploy guard (binding)
+
+**Breadcrumbs:** Implementation `packages/udocket_core/finops/guard.py::projected_regression_pct`, Tests `tests/udocket_core/finops/test_guard.py::test_regression_formula`, Observability Grafana “FinOps Guard” panel with metric `finops_mom_regression_flag`.
 
 *Purpose: Prevent regressions from shipping without visibility and approval.*
 
@@ -2502,8 +2622,6 @@ PII posture (binding)
 - Trailing 7-day guard: trailing 7-day actual spend must stay ≤ `llm.finops.guard.trailing7d_pct` (default 25%) of the org’s configured `llm.finops.monthly_cap_usd`. Overrides are bounded between 10% and 40% and require Product + Security sign-off.
 
 - Default guardrail: unless overridden, the system blocks deploys if any organization’s projected month-end spend exceeds the prior month by ≥ `llm.finops.guard.threshold_pct` (default 10%). Any override still requires the checker to pass with the new ceiling.
-
-- Binding breadcrumbs:
 
   | Binding            | Implementation                                                                                     | Test                                                                              | Observability                                                              |
   | ------------------ | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
@@ -2615,11 +2733,15 @@ Notes
 
 - Traceability matrix in Appendix E maps each critical feature (agents, Guardian, FinOps, portal) to settings keys; updates required whenever keys change.
 
+![Core domain entity model](./diagrams/out/core-domain-entities.svg)
+
 - **Source material:** `§9`, `§10.8`, `§9.14`
 
 - **Priority:** High (touches cross-platform config controls)
 
 ### 9.6 Policy bundle versioning & diff preview (binding)
+
+**Breadcrumbs:** Implementation `apps/platform/settings/services/activation.py::render_policy_diff`, Tests `tests/platform/settings/test_policy_diff.py::test_rls_diff_detection`, Observability Grafana “Settings Activation” dashboard (metric `settings_diff_generated_total`).
 
 *Purpose: Safely evolve settings with visibility and rollback.*
 
@@ -2629,11 +2751,16 @@ Notes
 
 ### 9.7 Activation & rollback (binding)
 
+**Breadcrumbs:** Implementation `apps/platform/settings/services/activation.py::activate_bundle`, Tests `tests/platform/settings/test_activation_flow.py::test_rollback_on_failure`, Observability Grafana “Settings Activation” dashboard (metric `settings_activation_duration_seconds`).
+
 *Purpose: Provide guardrails for changes to take effect.*
 
 - Activation requires approvals (see §9.3) when unsafe; otherwise single approver per policy.
 - On failure or regression, roll back to prior bundle; invalidate caches; recompile policies.
 - Record activation window, approvers, and effects in audit.
+
+![Settings activation pipeline](./diagrams/out/settings-activation-v1.svg)
+![Settings activation classes](./diagrams/out/settings-activation-classes-v1.svg)
 
 ### 9.8 Activation lock & uniqueness (helpers + OCC)
 
@@ -2663,6 +2790,8 @@ Notes
 
 ### 9.11 Security review gates (binding)
 
+**Breadcrumbs:** Implementation `apps/platform/settings/validators/security.py::validate_security_gate`, Tests `tests/platform/settings/test_security_gates.py::test_blocks_immutable_sink_disable`, Observability Grafana “Settings Governance” panel with metric `settings_unsafe_request_total`.
+
 *Purpose: Define security review checkpoints required before shipping regulated changes.*
 
 - **Immutable logging sink toggle:** activations that set `logging.immutable_sink.enabled=false` are marked **unsafe**; production validators reject the change outright, and lower environments require dual approval (Security + Architecture) with justification captured in the activation audit.
@@ -2676,6 +2805,8 @@ Notes
 
 ### 9.12 Agent pipeline bundle & staged overrides (binding)
 
+**Breadcrumbs:** Implementation `apps/platform/settings/services/pipeline_bundle.py::apply_pipeline_bundle`, Tests `tests/platform/settings/test_pipeline_bundle.py::test_override_validation`, Observability Grafana “Agent Pipeline Rollouts” dashboard (metric `pipeline_rollout_state`).
+
 *Purpose: Externalize pipeline composition, prompts, and ceilings into audited settings with safe override paths.*
 
 - Keys: `agents.pipeline.definitions[]` (SYSTEM), `agents.pipeline.assignments[]` (SYSTEM/ORG/CASE), `agents.pipeline.overrides[]` (ORG/CASE), `agents.prompts.*`, and `agents.llm_profiles.*`. Definitions capture the canonical LangGraph manifest (`pipeline_id`, `graph_version`, `graph_schema_sha256`, ordered `stages[]`, default runner); assignments map job kinds to definitions per scope; overrides swap prompts, LLM profiles, or ceilings within validator limits.
@@ -2688,6 +2819,8 @@ Notes
 
 ### 9.13 Tool catalog & capability gating (binding)
 
+**Breadcrumbs:** Implementation `apps/platform/settings/services/tool_catalog.py::sync_catalog`, Tests `tests/platform/settings/test_tool_catalog.py::test_catalog_validation`, Observability Grafana “Agent Tooling” panel (metric `tool_invocation_total`).
+
 *Purpose: Allow sysadmins to introduce LangGraph tools while preserving safety and auditability.*
 
 - Keys: `agents.tools.catalog[]` (SYSTEM) defines tools; `agents.tools.allowlist[]` (ORG/CASE) enables them per tenant; `agents.tools.policies.*` captures residency, data classification, and approval requirements. Tool entries specify `tool_id`, `binding`, schemas, timeout, cost ceilings, guardian policy hints, and QA tags.
@@ -2697,6 +2830,8 @@ Notes
 - Documentation and support introspection derive from the catalog: `GET /api/v1/settings/tools/catalog` returns the effective JSON so operators and LangGraph editors can validate that custom tools, prompts, and directives match runtime configuration.
 
 ### 9.14 JSON seed bundles & no-code configuration (binding)
+
+**Breadcrumbs:** Implementation `ops/scripts/bootstrap_platform.py`, Tests `tests/platform/settings/test_seed_bundles.py::test_seed_validation`, Observability CI job “settings-seed-validate” with report `ops/settings/seed_validate.json`.
 
 *Purpose: Ensure every environment can be configured without code changes by loading validated JSON bundles at system or org scope.*
 
@@ -2803,6 +2938,8 @@ List contracts (normative)
 
 #### 10.3.1 Idempotency keys store (binding)
 
+**Breadcrumbs:** Implementation `packages/udocket_core/idem/store.py::IdempotencyStore`, Tests `tests/platform/api/test_idempotency_store.py::test_replay_returns_cached`, Observability Grafana “API Idempotency” dashboard (metric `idempotency_replay_total`).
+
 *Purpose: Provide a generic mechanism for safe retries across create/approve flows.*
 
 ```sql
@@ -2840,8 +2977,6 @@ Handler pattern
 - Response contract: any API that accepts `Idempotency-Key` **MUST** echo the exact value in the response headers for success and error paths (`Idempotency-Key: <value>`) and emit `Idempotency-Status: fresh|replay|conflict`. OpenAPI lint (`ops/openapi/rules/idempotency-echo.yaml`) enforces the headers on 2xx/4xx/5xx responses.
 
 - Nightly janitor job `ops/idempotency/purge.py` deletes expired rows and runs `VACUUM (ANALYZE)` to keep the table bounded; `expires_at` is pinned to `api.idempotency.ttl_hours`.
-
-- Binding breadcrumbs:
 
   | Binding                   | Implementation                                                                                | Test                                                                                       | Observability                                                 |
   | ------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------- |
@@ -2907,6 +3042,8 @@ Binding breadcrumbs:
 
 ### 10.6 HTTP caching & range behavior (binding)
 
+**Breadcrumbs:** Implementation `apps/platform/portal/downloads.py::ArtifactDownloadService`, Tests `tests/e2e/test_artifact_range_download.py::test_range_and_conditional_gets`, Observability Grafana “Artifact Downloads” dashboard (metric `artifact_download_range_total`).
+
 *Purpose: Standardize safe and efficient delivery semantics for approved artifacts.*
 
 - Preconditions: downloads require `status='APPROVED'`; token or signed URL must authorize access to the case/org.
@@ -2929,8 +3066,6 @@ Binding breadcrumbs:
 - Integration: `tests/e2e/test_artifact_range_download.py::test_range_and_conditional_gets` exercises range/conditional flows across staging object storage.
 
 - Security: `scripts/security/verify_download_tokens.py` validates download-token expiry, residency guards, and HIPAA cache directives prior to release.
-
-- Binding breadcrumbs:
 
   | Binding                      | Implementation                                                                                                                | Test                                                                                     | Observability                                                                         |
   | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
@@ -3104,6 +3239,8 @@ Contract requirements (binding)
 
 #### 11.1.2 Operator workspace (binding)
 
+**Breadcrumbs:** Implementation `apps/platform/ui/views/operator_workspace.py::OperatorWorkspaceView`, Tests `tests/platform/ui/test_operator_workspace.py::test_mask_tokens_locked`, Observability Grafana “Operator Workspace” panel (metric `operator_break_glass_requested_total`).
+
 *Purpose: Describe operator tooling for reviewing, annotating, and forwarding artifacts.*
 
 - CDs enter `OPERATOR_PREP` only after Guardian PASS/WARN; operators receive masked drafts populated with deterministic chips (`[PATIENT-3]`, `[ADDR-2]`, `(***) ***-1234`). Chips display tooltips (“Name (masked) — vault namespace org:case; restorable: true”) and link to help docs.
@@ -3113,6 +3250,8 @@ Contract requirements (binding)
 
 #### 11.1.3 Reviewer console (binding)
 
+**Breadcrumbs:** Implementation `apps/platform/ui/views/reviewer_console.py::ReviewerConsoleView`, Tests `tests/platform/ui/test_reviewer_console.py::test_guardian_context_rendered`, Observability Grafana “Review Throughput” dashboard (metric `review_queue_backlog`).
+
 *Purpose: Explain reviewer workflows, triage states, and approval mechanics.*
 
 - Reviewers in `QUEUED_FOR_REVIEW` see the same masked content plus a right-rail “Guardian findings” table listing `{span_id, type, policy, confidence, mode, provider_flags[]}`. Clicking a row highlights the span in-text with badges for overlapping detections.
@@ -3120,7 +3259,11 @@ Contract requirements (binding)
 - Reviewers can request edits, quarantine, or approve. Rejecting prompts requires comment referencing span IDs; the UI pre-fills detection context to minimize transcription errors.
 - All reviewer actions append to `guardian_judgment_history` via API (`/guardian/review-actions`) so Guardian remains the single source of truth for artifact status changes.
 
+![Reviewer approval UX](./diagrams/out/approvals-ux-v1.svg)
+
 #### 11.1.4 Restoration intents & span inspector (binding)
+
+**Breadcrumbs:** Implementation `apps/platform/ui/components/span_inspector.tsx::SpanInspector`, Tests `tests/platform/ui/test_span_inspector.py::test_restoration_request_flow`, Observability Grafana “Restoration Requests” panel (metric `restoration_intent_requested_total`).
 
 *Purpose: Document how reviewers request span restoration and inspect masked content.*
 
@@ -3139,6 +3282,8 @@ Contract requirements (binding)
 
 #### 11.2.1 Portal invalidation (binding)
 
+**Breadcrumbs:** Implementation `apps/platform/portal/notifications.py::invalidate_links`, Tests `tests/platform/portal/test_portal_invalidation.py::test_revoked_artifact_blocks`, Observability Grafana “Portal Integrity” dashboard (metric `portal_link_invalidated_total`).
+
 *Purpose: Ensure clients cannot access stale or revoked artifacts after review actions.*
 
 - The platform invalidates active portal links whenever an approval swap demotes a previously `APPROVED` artifact of the same `(case,type)`, a reviewer rejects an `APPROVED` artifact, Guardian sets the artifact to `QUARANTINED`, or integrity monitoring raises `ARTIFACT_INTEGRITY_MISMATCH`.
@@ -3146,7 +3291,11 @@ Contract requirements (binding)
 - Indexes/search hide demoted or rejected artifacts; portal lists reflect only the latest `APPROVED` artifacts per exclusive type.
 - Copy surfaced to clients is settings-driven via `i18n.portal.invalidation.message_key`, allowing Product/Legal to localize or update messaging without code changes.
 
+![Portal invalidation flow](./diagrams/out/portal-invalidation-v1.svg)
+
 #### 11.2.2 Fetch-time guard (binding)
+
+**Breadcrumbs:** Implementation `apps/platform/portal/downloads.py::enforce_if_match`, Tests `tests/e2e/test_portal_download_guard.py::test_if_match_required`, Observability Grafana “Portal Download Guard” panel (metric `portal_412_precondition_total`).
 
 *Purpose: Enforce explicit checks on every fetch to avoid stale or unauthorized content.*
 
@@ -3155,6 +3304,8 @@ Contract requirements (binding)
 - Rate limits: per‑user/org caps; anomalies invalidate links and prompt step-up MFA when configured.
 
 #### 11.2.3 Approval exception handling (binding)
+
+**Breadcrumbs:** Implementation `apps/platform/operations/reviews.py::handle_exception_paths`, Tests `tests/platform/reviews/test_exception_flows.py::test_timeout_escalation`, Observability Grafana “Review SLA” dashboard (metric `review_timeout_total`).
 
 *Purpose: Clarify reviewer and operator expectations for non-happy-path approval scenarios.*
 
@@ -3179,6 +3330,8 @@ Contract requirements (binding)
 - Localization operations: weekly sync with LPE coordinates glossary updates and locale expansion; editorial QA approves tone guides. Release checklist references Appendix L and requires product sign-off on localized UX snapshots and assistive-technology recordings. `tests/e2e/test_portal_policy_context.py::test_disclaimer_l10n` validates banner rendering and attribution in a rotating locale roster (e.g., `en-CA`, `fr-CA`, `es-MX`, `ar-SA`).
 
 #### 11.3.1 Accessibility governance & remediation (binding)
+
+**Breadcrumbs:** Implementation `apps/platform/accessibility/governance.py::record_accessibility_metrics`, Tests `tests/platform/accessibility/test_governance.py::test_sla_breach_alert`, Observability Grafana “Accessibility Compliance” panel (metric `a11y_open_defects_total`).
 
 *Purpose: Keep WCAG compliance measurable, sustainable, and auditable.*
 
@@ -3396,6 +3549,8 @@ Binding breadcrumbs:
 
 #### 12.1.1 Centralized logging architecture (binding)
 
+**Breadcrumbs:** Implementation `infra/logging/helm/values.yaml::logging`, Tests `tests/logging/test_registration.py::test_service_template_registered`, Observability Grafana “Logging Pipeline” dashboard (metric `logging_queue_depth`).
+
 *Purpose: Lay out the logging pipeline components and data flow.*
 
 - Services emit OpenTelemetry logs to a sidecar collector (`otel-collector`) which fans out to Fluent Bit daemons. Fluent Bit ships into the Observability Fabric (Kafka → Elasticsearch), writing indices named `logs.<env>.<service>-YYYY.MM.DD`.
@@ -3406,6 +3561,8 @@ Binding breadcrumbs:
 
 #### 12.1.2 Log access control & auditing (binding)
 
+**Breadcrumbs:** Implementation `apps/platform/logging/access.py::authorize_log_access`, Tests `tests/logging/test_access_control.py::test_requires_step_up`, Observability Audit event `LOG_QUERY` aggregated in Grafana “Log Access” panel.
+
 *Purpose: State who can access logs and how access is audited.*
 
 - Access roles: `observability.reader` (read-only dashboards), `observability.engineer` (debug queries, pipeline tuning), and `observability.auditor` (auditor-only views). Roles map through Settings `logging.access.roles[]` and require Security + Platform approval to change.
@@ -3414,6 +3571,8 @@ Binding breadcrumbs:
 
 #### 12.1.3 Data minimization & banned fields (binding)
 
+**Breadcrumbs:** Implementation `packages/udocket_core/logging/redaction.py::scrub_forbidden_fields`, Tests `tests/logging/test_neverlog_fuzz.py::test_scrubber_blocks_forbidden_tokens`, Observability Grafana “Log Redaction” dashboard (metric `logging_neverlog_violation_total`).
+
 *Purpose: Enumerate log scrubbing rules and prohibited fields.*
 
 - The “never log” list extends the scrubber to bearer/API/refresh tokens, session cookies, raw request/response bodies, entire transcript or exhibit text, PHI unless HIPAA waiver enabled, full customer email addresses/phone numbers, secrets/keys, signed URLs, and Guardian waiver IDs. Canonical HIPAA identifiers blocked from logs include (non-exhaustive) `patient_name`, `patient_dob`, `medical_record_number`, `diagnosis_codes`, `insurance_member_id`, and `provider_npi`. Violations increment `logging_neverlog_violation_total`; in production they raise Sev-1 incidents. Property-based test `tests/logging/test_neverlog_fuzz.py::test_scrubber_blocks_forbidden_tokens` fuzzes representative payloads to ensure the denylist is enforced.
@@ -3421,6 +3580,8 @@ Binding breadcrumbs:
 - HIPAA mode enforces collector-side redaction; attempts to emit PHI trigger automatic portal invalidation and Guardian quarantine of dependent artifacts.
 
 #### 12.1.4 Trace correlation & sampling (binding)
+
+**Breadcrumbs:** Implementation `apps/platform/logging/tracing.py::inject_trace_context`, Tests `tests/logging/test_trace_correlation.py::test_traceparent_propagation`, Observability Grafana “Trace Correlation” dashboard (metric `trace_sampling_rate`).
 
 *Purpose: Define trace sampling strategy and correlation requirements.*
 
@@ -3437,6 +3598,8 @@ Binding breadcrumbs:
 
 #### 12.1.6 Log volume & cost controls (binding)
 
+**Breadcrumbs:** Implementation `apps/platform/logging/cost_controller.py::enforce_budget`, Tests `tests/logging/test_cost_controls.py::test_budget_enforcement`, Observability Grafana “Logging Cost” panel (metric `logging_volume_budget_violation_total`).
+
 *Purpose: Capture quotas, budgets, and guardrails controlling log volume.*
 
 - Settings `logging.cost.daily_budget_mb_per_service` and `logging.cost.alert_threshold_pct` enforce daily budgets; collectors raise `LOG_VOLUME_BUDGET` alerts and dynamically increase sampling when projected volume exceeds 80% of budget.
@@ -3450,6 +3613,8 @@ Binding breadcrumbs:
   - Masking tests run in CI (`tests/logging/test_redaction.py`) to prevent PII leakage; failures block merges (§13.7).
 
 #### 12.1.7 Stdout ergonomics & operator experience (binding)
+
+**Breadcrumbs:** Implementation `packages/udocket_core/logging/jsonlog.py::StructuredJSONFormatter`, Tests `tests/logging/test_stdout_format.py::test_json_stdout`, Observability CI job “logging-format-lint” with alert `logging_plaintext_detected_total`.
 
 *Purpose: Specify stdout formatting that keeps logs machine- and human-friendly.*
 
@@ -3516,6 +3681,11 @@ Preventive actions
 - Object storage: versioning + lifecycle rules; deletion requires dual confirmation. Immutable audit sinks operate under WORM retention policies.
 - Redis: persistence optional; rely on recomputation for queues. For critical caches, use managed Redis with cross-zone replicas.
 - DR exercises simulate region failure; cross-region read replicas considered once residency waivers approved. Settings and Guardian services replicate configuration backups.
+- Region failover playbook (App.H RB-DR-REGION): warm standby clusters remain idle but patched, with secrets/Settings snapshots synced hourly. On a primary-region outage the sequence is (1) freeze new job intake, (2) promote the standby Postgres instance with latest WAL, (3) swap object storage endpoints using pre-provisioned secondary containers, (4) update Azure Front Door/DNS records (TTL ≤ 60 seconds) to point to the secondary ingress, (5) run smoke tests (`ops/dr/run_region_cutover.py`) before re-opening job intake. Residency waivers govern whether an org may fail into the paired region; orgs without waivers stay paused until the primary returns.
+- After action: once the primary recovers, traffic is rolled back via blue/green cutover, delta data is validated (checksum + manifest diff), and any DSAR/erasure entries executed during the failover are replayed to ensure consistency.
+- Diagram: see `docs/diagrams/dr-region-failover-v1.mmd` for the runbook flow.
+
+![Region failover runbook](./diagrams/out/dr-region-failover-v1.svg)
 
 ### 12.5 Capacity planning, autoscaling, and performance budgets
 
@@ -3529,6 +3699,8 @@ Preventive actions
 
 #### 12.5.1 Failure taxonomy & resilience (binding)
 
+**Breadcrumbs:** Implementation `apps/platform/operations/watchdogs.py::classify_failure`, Tests `tests/platform/operations/test_failure_taxonomy.py::test_failure_mapping`, Observability Grafana “Resilience & Watchdogs” dashboard (metric `job_watchdog_timeout_total`).
+
 *Purpose: Define platform-wide recovery behavior and safety nets.*
 
 - Classes and remedies:
@@ -3538,6 +3710,8 @@ Preventive actions
   - `INPUT` (validation/media): no auto-retry; clear user-facing error; link to docs.
   - `INTEGRITY` (hash mismatch): block pipeline; quarantine; require resubmit; audit `ARTIFACT_INTEGRITY_MISMATCH`.
   - `CONCURRENCY` (OCC/locks): short jittered retries; escalate after N attempts; ensure OCC versions in APIs.
+
+![Error handling taxonomy](./diagrams/out/error-flows-v1.svg)
 
 - Circuits and watchdogs:
 
@@ -3681,6 +3855,8 @@ Alert routing
 
 #### 13.3.1 Detection & masking controls (binding)
 
+**Breadcrumbs:** Implementation `packages/udocket_core/privacy/detection_suite.py::run_quality_suite`, Tests `tests/privacy/test_detection_suite.py::test_golden_corpora_thresholds`, Observability Grafana “Privacy & Masking QA” panel (metric `phi_detection_drift_total`).
+
 *Purpose: Summarize automated detection and masking checks verified by QA.*
 
 - **Detector parity suites:** locale-specific golden corpora (`tests/privacy/golden/<locale>`) must meet ≥ target recall/precision; regressions block deployment. CI reports include confusion matrices and drift deltas vs previous release.
@@ -3778,8 +3954,13 @@ Alert routing
 - Object lock: production buckets enforce versioning + Object Lock (compliance mode) for audit sinks; destroy operations require dual approval and manifest verification.
 - Ops scripts: `ops/scripts/destroy_case.py` (dry-run + execute) logs intended artifacts, checks legal hold, and writes `DESTRUCTION_CERT`; references recorded in Appendix N.
 - HIPAA mode enforcement: when `privacy.hipaa.enabled=true`, retention jobs honor shortened schedules, approvals for HIPAA-classed artifacts require WebAuthn step-up, evidence-store excerpts stay disabled (confirmed via the purge job above), and portal delivery of PHI-tagged attachments is rejected unless a security waiver is recorded.
+- Diagram: DSAR/erasure hard-purge flow lives in `docs/diagrams/dsar-erasure-v1.mmd`.
+
+![DSAR hard-purge workflow](./diagrams/out/dsar-erasure-v1.svg)
 
 #### 14.2.1 DSAR/erasure mode (binding)
+
+**Breadcrumbs:** Implementation `ops/dsar/erasure_job.py::run_erasure`, Tests `tests/privacy/test_dsar_erasure.py::test_hard_purge`, Observability Grafana “DSAR Fulfillment” dashboard (metric `dsar_erasure_completed_total`).
 
 *Purpose: Support hard-purge erasure requests without compromising provenance.*
 
@@ -3967,6 +4148,8 @@ Alert routing
 ---
 
 ### 15.9 Architectural decision records (binding)
+
+**Breadcrumbs:** Implementation `docs/adr/README.md`, Tests `scripts/docs/check_adr_index.py::main`, Observability CI job “docs-adr-lint” with badge in Docs Quality dashboard.
 
 *Purpose: Ensure significant technical choices remain discoverable, immutable, and supersedable.*
 
@@ -4263,6 +4446,8 @@ Canonical artifact table
 
 ### D.1 Chat assistant artifacts (binding)
 
+**Breadcrumbs:** Implementation `packages/udocket_core/assistants/artifacts/chat.py::ChatArtifactWriter`, Tests `tests/udocket_core/assistants/test_chat_artifacts.py::test_manifest_integrity`, Observability Grafana “Assistant Sessions” dashboard (metric `assistant_chat_artifact_total`).
+
 *Purpose: Enumerate chat assistant artifact types, manifests, and retention rules.*
 
 - `CHAT_SESSION_JSON` (staff) and `CHAT_SESSION_CLIENT_JSON` (portal) share schema version `chat_session@1.0`:
@@ -4315,6 +4500,8 @@ Canonical artifact table
 
 ### D.2 Agent edit artifacts (binding)
 
+**Breadcrumbs:** Implementation `apps/platform/operations/agent_edit.py::persist_agent_edit_artifact`, Tests `tests/platform/operations/test_agent_edit_artifacts.py::test_append_only`, Observability Grafana “Agent Edit” panel (metric `agent_edit_artifact_total`).
+
 *Purpose: Define artifacts emitted by agent-assisted edits and their approval flow.*
 
 - `AGENT_EDIT_PROPOSAL_MD` contains the assistant-generated proposal rendered in Markdown with front-matter capturing `{edit_id, parent_artifact_id, locale, model_id, prompt_id, moderation_status}`. Content includes inline citation markers referencing the source artifact segments.
@@ -4335,6 +4522,8 @@ Canonical artifact table
 - Guardian manifests track reviewer-facing phases for each proposal (`manifest.guardian.review_phase ∈ {pending, approved, rejected, quarantined}`) derived from the canonical artifact `status`. Audit events (`EDIT_POLICY_BLOCK`, `EDIT_GUARDIAN_QUARANTINED`) reference the same phase. Reviewers promote an edit only after approving the proposal and diff pair.
 
 ### D.3 Timeline artifacts (binding)
+
+**Breadcrumbs:** Implementation `packages/udocket_core/analysis/timeline.py::TimelineArtifactWriter`, Tests `tests/udocket_core/analysis/test_timeline_artifact.py::test_uuid_stability`, Observability Grafana “Timeline Seeds” panel (metric `timeline_artifact_total`).
 
 *Purpose: Describe timeline artifact structure, identity, and promotion rules.*
 
@@ -4534,6 +4723,8 @@ Notes
 
 ### E.3 Linting (binding)
 
+**Breadcrumbs:** Implementation `scripts/docs/lint_docs.py::main`, Tests `tests/docs/test_lint_rules.py::test_binding_scaffold_required`, Observability CI job “docs-lint” with metric `docs_template_missing_total`.
+
 - CI must flag settings keys referenced in this document that are missing in service repositories. The `settings:lint-keys` pipeline step runs on every PR and fails the build when discrepancies are detected.
 - Script pattern: load Appendix E lists, scan OpenAPI/spec/config code for usage; fail when unmapped keys found.
 - Vocabulary & state names: enforce American spellings (`artifact`, `canceled`), block deprecated states (`READY`, `SUPERSEDED`), and validate Guardian outcomes stay within `{PASS,WARN,BLOCK,WAIVED}` across events/UI.
@@ -4576,6 +4767,8 @@ Notes
 The authoritative schema for these payloads lives at `spec/schemas/api_error.schema.json`. Spectral rule `ops/openapi/rules/apierror-enum.yaml` lints OpenAPI specs to keep responses aligned with this list.
 
 ### F.1 Idempotency contract & Guardian enqueue (binding)
+
+**Breadcrumbs:** Implementation `apps/platform/operations/guardian.py::enqueue_with_idempotency`, Tests `tests/platform/operations/test_guardian_enqueue.py::test_idempotent_submit`, Observability Grafana “Guardian Queue” dashboard (metric `guardian_enqueue_conflict_total`).
 
 Idempotency store schema (restated from §10.3.1 for quick reference)
 
@@ -5436,6 +5629,8 @@ $$;
 
 ### J.3 Secure portal messaging RLS (binding)
 
+**Breadcrumbs:** Implementation `db/migrations/portal/003_secure_messaging_rls.sql`, Tests `tests/platform/portal/test_secure_messaging_rls.py::test_rls_enforced`, Observability Grafana “Portal Messaging” panel (metric `portal_message_rls_violation_total`).
+
 ```sql
 -- Threads visible to case members per policy
 CREATE POLICY msg_thread_vis ON message_thread
@@ -5601,6 +5796,8 @@ WITH CHECK (
 ```
 
 ### J.7 Secure views and privileges (binding)
+
+**Breadcrumbs:** Implementation `db/migrations/security/010_secure_views.sql`, Tests `tests/platform/db/test_secure_view_usage.py::test_only_secure_views`, Observability Grafana “Postgres RLS & Masking” dashboard (metric `secure_view_violation_total`).
 
 ```sql
 CREATE VIEW case_secure WITH (security_barrier=true) AS

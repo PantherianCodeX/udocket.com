@@ -1,0 +1,15 @@
+%% Mermaid state diagram: Artifact lifecycle v1
+stateDiagram-v2
+  [*] --> Draft
+  Draft --> PendingJudgment : submit to Guardian
+  PendingJudgment --> Ready : Guardian PASS/WARN
+  PendingJudgment --> Quarantined : Guardian BLOCK
+  Ready --> PendingReview : Operator submits for review
+  PendingReview --> Approved : Reviewer APPROVE
+  PendingReview --> ChangesRequested : Reviewer REJECT
+  Approved --> Signed : Document Signer completes
+  Signed --> Released : Portal release (ExclusiveSwap)
+  Released --> Revoked : New deliverable approved / compliance action
+  Revoked --> Archived : Retention / case closure
+  ChangesRequested --> Draft : Operator revises
+  Quarantined --> Draft : Remediation

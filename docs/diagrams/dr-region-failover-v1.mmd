@@ -1,0 +1,18 @@
+%% Mermaid flowchart: Region failover runbook v1
+graph TD
+  A["Detect regional outage (alerts/uptime probes)"]
+  B["Freeze new job intake (settings.jobs.enabled=false)"]
+  C["Promote standby Postgres (apply latest WAL)"]
+  D["Swap object storage endpoints to secondary region"]
+  E["Update DNS/Front Door to secondary ingress (TTL ≤ 60s)"]
+  F["Run smoke tests ops/dr/run_region_cutover.py"]
+  G{"Smoke tests pass?"}
+  H["Re-open intake (settings.jobs.enabled=true)"]
+  I["Rollback to primary after recovery"]
+  J["Validate delta data (checksum + manifest diff)"]
+  K["Replay DSAR/erasure journals executed during failover"]
+
+  A --> B --> C --> D --> E --> F --> G
+  G -->|Yes| H
+  G -->|No| B
+  H --> I --> J --> K

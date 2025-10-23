@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")"/../.. && pwd)"
 DIAGRAM_DIR="$ROOT/docs/diagrams"
-OUT_DIR="${MERMAID_OUTPUT_DIR:-$DIAGRAM_DIR/_rendered}"
+OUT_DIR="${MERMAID_OUTPUT_DIR:-$DIAGRAM_DIR/out}"
 CLI="${MERMAID_CLI:-mmdc}"
 PUPPETEER_CONFIG="${MERMAID_PUPPETEER_CONFIG:-$ROOT/scripts/docs/puppeteer.config.cjs}"
 

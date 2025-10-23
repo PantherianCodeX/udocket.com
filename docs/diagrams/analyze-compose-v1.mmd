@@ -14,4 +14,5 @@ sequenceDiagram
   W->>L: Start Compose (Outline→Sections→QA→Weave)
   L-->>W: Deliverables (MD/DOCX)
   W->>Obj: PUT compose deliverables
-  W->>DB: INSERT artifacts (DRAFT); submit to Guardian
+  W->>DB: INSERT deliverable rows (DRAFT)
+  W->>G: submit deliverables for judgment
