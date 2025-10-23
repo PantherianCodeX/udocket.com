@@ -50,6 +50,8 @@ def bounding_box_from_path(d: str) -> Tuple[float, float, float, float]:
 
 def center_edge_labels(root: etree._Element) -> bool:
     line_height_em = 1.1
+    pad_x = 8.0
+    pad_y = 4.0
     changed = False
     for label in root.xpath(".//svg:g[contains(@class,'edgeLabel')]", namespaces=NS_MAP):
         text = label.find(f".//{SVG}text")
@@ -63,6 +65,16 @@ def center_edge_labels(root: etree._Element) -> bool:
             rect_height = float(rect.get("height", "0"))
         except ValueError:
             continue
+        if rect.get("data-udocket-pill") != "1":
+            rect_width += pad_x * 2.0
+            rect_height += pad_y * 2.0
+            rect_x -= pad_x
+            rect_y -= pad_y
+            rect.set("width", f"{rect_width}")
+            rect.set("height", f"{rect_height}")
+            rect.set("x", f"{rect_x}")
+            rect.set("y", f"{rect_y}")
+            rect.set("data-udocket-pill", "1")
         center_x = rect_x + rect_width / 2.0
         center_y = rect_y + rect_height / 2.0
         text.set("text-anchor", "middle")
@@ -90,9 +102,12 @@ def center_edge_labels(root: etree._Element) -> bool:
 def ensure_rect_radius(root: etree._Element, radius: float = 12.0) -> bool:
     changed = False
     for rect in root.findall(f".//{SVG}rect"):
-        rect.set("rx", rect.get("rx") or f"{radius}")
-        rect.set("ry", rect.get("ry") or f"{radius}")
-        changed = True
+        if rect.get("rx") != f"{radius}":
+            rect.set("rx", f"{radius}")
+            changed = True
+        if rect.get("ry") != f"{radius}":
+            rect.set("ry", f"{radius}")
+            changed = True
     return changed
 
 
