@@ -43,6 +43,11 @@ header-includes:
       figure svg text {
         font-family: "DejaVu Sans", "Trebuchet MS", Arial, sans-serif !important;
       }
+      figure.full-width-diagram img {
+        width: 100%;
+        height: auto;
+        display: block;
+      }
     </style>
   - '<header class="page-header">uDocket — Technical Design Document <br> Platform Architecture &amp; Compliance Specification</header>'
   - '<footer class="page-footer">Confidential · Last updated 2025-10-23 · Page <span class="page-number"></span> of <span class="page-count"></span></footer>'
@@ -314,8 +319,8 @@ To keep visuals helpful and consistent:
 4. Reviewers invoke the Reviews API which applies the ExclusiveSwap invariant from §5.4.1, atomically approving the CD and promoting the new DL (`RELEASED`) while revoking prior deliverables (§10.3.2).
 5. Portal invalidation notifies clients of the new deliverable and blocks any revoked link; downstream analytics and audit trails attach Guardian judgment IDs, manifests, and settings hashes (§11.2.1, App.A.2).
 
-<figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/out/upload-guardian-approve-v1.png" style="width: 100%; height: auto;" alt="Upload → Guardian → Approve happy path">
+<figure class="full-width-diagram" style="margin: 1em 0;">
+  <img src="diagrams/out/upload-guardian-approve-v1.png" alt="Upload → Guardian → Approve happy path">
   <figcaption style="font-size: 0.9em; color: #555;">Upload → Guardian → Approve happy path</figcaption>
 </figure>
 
