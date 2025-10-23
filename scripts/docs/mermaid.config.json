@@ -1,7 +1,12 @@
 {
   "securityLevel": "strict",
   "themeVariables": {
-    "fontFamily": "\"DejaVu Sans\", \"Trebuchet MS\", Arial, sans-serif"
+    "fontFamily": "\"DejaVu Sans\", \"Trebuchet MS\", Arial, sans-serif",
+    "fontSize": "18px",
+    "sequenceFontSize": "18px",
+    "actorFontSize": "18px",
+    "noteFontSize": "16px",
+    "sequenceNumberFontSize": "16px"
   },
   "flowchart": {
     "htmlLabels": false,
@@ -35,7 +40,11 @@
   "sequence": {
     "useMaxWidth": false,
     "wrap": true,
-    "width": 1080,
-    "height": 768
+    "width": 1400,
+    "height": 900,
+    "diagramMarginX": 25,
+    "diagramMarginY": 25,
+    "actorMargin": 80,
+    "boxMargin": 20
   }
 }

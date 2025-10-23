@@ -28,7 +28,7 @@ for input in "$DIAGRAM_DIR"/*.mmd; do
   "$CLI" "${args[@]}"
 
   echo "Rendering $input -> $png_output"
-  png_args=(-i "$input" -o "$png_output" -p "$PUPPETEER_CONFIG" -e png)
+  png_args=(-i "$input" -o "$png_output" -p "$PUPPETEER_CONFIG" -e png -s 2)
   if [[ -f "$CONFIG" ]]; then
     png_args+=(-c "$CONFIG")
   fi
