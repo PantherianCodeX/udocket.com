@@ -99,6 +99,68 @@ def center_edge_labels(root: etree._Element) -> bool:
     return changed
 
 
+def wrap_sequence_actor_labels(root: etree._Element) -> bool:
+    changed = False
+    line_height_em = 1.1
+    avg_char_px = 8.0
+    padding_px = 16.0
+
+    for group in root.xpath(".//svg:g[svg:rect[contains(@class,'actor')]]", namespaces=NS_MAP):
+        rect = group.find(f"./{SVG}rect")
+        text = group.find(f"./{SVG}text")
+        if rect is None or text is None:
+            continue
+        content = " ".join(" ".join(tspan.itertext()).strip() for tspan in text.findall(f"./{SVG}tspan")).strip()
+        if not content or len(content.split()) <= 1:
+            continue
+        try:
+            width = float(rect.get("width", "0"))
+            rect_x = float(rect.get("x", "0"))
+            rect_y = float(rect.get("y", "0"))
+            rect_height = float(rect.get("height", "0"))
+        except ValueError:
+            continue
+
+        max_chars = max(1, int((width - padding_px) / avg_char_px))
+        words = content.split()
+        lines: list[str] = []
+        current: list[str] = []
+        for word in words:
+            tentative = " ".join(current + [word]) if current else word
+            if len(tentative) <= max_chars or not current:
+                current.append(word)
+            else:
+                lines.append(" ".join(current))
+                current = [word]
+        if current:
+            lines.append(" ".join(current))
+        if len(lines) <= 1:
+            continue
+
+        center_x = rect_x + width / 2.0
+        text.set("x", f"{center_x}")
+        text.set("text-anchor", "middle")
+        text.set("dominant-baseline", "middle")
+        text.set("alignment-baseline", "middle")
+        text.set("y", f"{rect_y + rect_height / 2.0}")
+
+        for node in list(text):
+            text.remove(node)
+
+        initial_offset = -line_height_em * (len(lines) - 1) / 2.0
+        for idx, line in enumerate(lines):
+            tspan = etree.Element(f"{SVG}tspan")
+            if idx == 0:
+                tspan.set("dy", f"{initial_offset:.3f}em")
+            else:
+                tspan.set("dy", f"{line_height_em:.3f}em")
+            tspan.set("x", f"{center_x}")
+            tspan.text = line
+            text.append(tspan)
+        changed = True
+    return changed
+
+
 def ensure_rect_radius(root: etree._Element, radius: float = 12.0) -> bool:
     changed = False
     for rect in root.findall(f".//{SVG}rect"):
@@ -211,6 +273,7 @@ def process(svg_path: Path) -> None:
     changed |= center_edge_labels(root)
     changed |= ensure_rect_radius(root)
     changed |= make_rounded_backplates(root)
+    changed |= wrap_sequence_actor_labels(root)
 
     if changed:
         svg_path.write_text(etree.tostring(root, encoding="unicode"))
