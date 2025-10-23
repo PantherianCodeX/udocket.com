@@ -22,10 +22,9 @@ related_adrs:
   - ADR-0003-api-versioning-and-sunset.md
   - ADR-0004-localization-and-policy-engine.md
 header-includes:
-  - '<header class="page-header">uDocket — Technical Design Document · Platform Architecture &amp; Compliance Specification</header>'
-  - '<footer class="page-footer">Confidential · Last updated 2025-10-19 · Page <span class="page-number"></span> of <span class="page-count"></span></footer>'
+  - '<header class="page-header">uDocket — Technical Design Document\nPlatform Architecture &amp; Compliance Specification</header>'
+  - '<footer class="page-footer">Confidential · Last updated 2025-10-23 · Page <span class="page-number"></span> of <span class="page-count"></span></footer>'
 ---
-# uDocket — Technical Design Document
 
 **Audience:** Engineering, Security, QA, Ops, Product\
 **Purpose:** Target outline for the next major TDD revision. Optimized for fast LLM parsing (stable identifiers, shallow nesting) and for human navigation during reviews.
@@ -293,12 +292,10 @@ To keep visuals helpful and consistent:
 4. Reviewers invoke the Reviews API which applies the ExclusiveSwap invariant from §5.4.1, atomically approving the CD and promoting the new DL (`RELEASED`) while revoking prior deliverables (§10.3.2).
 5. Portal invalidation notifies clients of the new deliverable and blocks any revoked link; downstream analytics and audit trails attach Guardian judgment IDs, manifests, and settings hashes (§11.2.1, App.A.2).
 
-
 <figure style="margin: 1em 0; text-align: center;">
   <img src="diagrams/out/upload-guardian-approve-v1.svg" style="max-width: 65%;" alt="Upload → Guardian → Approve happy path">
   <figcaption style="font-size: 0.9em; color: #555;">Upload → Guardian → Approve happy path</figcaption>
 </figure>
-
 
 ### 3.1 High-level system context diagram
 
@@ -310,12 +307,10 @@ To keep visuals helpful and consistent:
 - External dependencies (Azure Speech, LLM providers, TSA/OCSP authorities, email/SMS gateways) sit outside the trusted cluster and are accessed under strict egress policies.
 - Visual: see `App.A` for the full context diagram and sequence overlays.
 
-
 <figure style="margin: 1em 0; text-align: center;">
   <img src="diagrams/out/system-context-v1.svg" style="max-width: 80%;" alt="System context overview">
   <figcaption style="font-size: 0.9em; color: #555;">System context overview</figcaption>
 </figure>
-
 
 ### 3.2 Deployment topology (environments, Kubernetes primitives)
 
@@ -923,12 +918,10 @@ Reference Manager packages every regulated dataset required for downstream compl
 - Expansion posture: RM catalogs enumerate global regions (NA/EU/APAC). New jurisdictions enable by adding allowlist entries plus waiver or DPA references; App.O ledger tracks approvals. Synthetic tenant “EU-REFERENCE” exercises EU-only paths quarterly to confirm Azure EU endpoints, storage buckets, vector shards, and TSA integrations honor EU residency before production onboarding.
 - Waiver enforcement: active waivers embed `waiver_id`/expiry into `PolicyContext`; Guardian and workers relay this to OPA and stamp manifests with `cross_region=true` plus reason `RESIDENCY_WAIVER_USED`. Absent or expired waivers force `POLICY_BLOCK` responses so operators remediate before promotion.
 
-
 <figure style="margin: 1em 0; text-align: center;">
   <img src="diagrams/out/residency-policy-enforcement-v1.svg" style="max-width: 70%;" alt="Residency policy enforcement sequence">
   <figcaption style="font-size: 0.9em; color: #555;">Residency policy enforcement sequence</figcaption>
 </figure>
-
 
 #### 3.8.1 Residency endpoint posture detection (binding)
 
@@ -1418,12 +1411,10 @@ SELECT id, org_id, case_id, type, status, content_sha256,
 – Only one `RELEASED` DL exists per `(case_id,type)`; approvals atomically revoke the prior DL (ExclusiveSwap invariant, §5.4.1).\
 – Append-only audit: every lifecycle action appends to `ops_<agent>.jsonl` and persists manifests with SHA-256 provenance.
 
-
 <figure style="margin: 1em 0; text-align: center;">
   <img src="diagrams/out/artifact-lifecycle-state-v1.svg" style="max-width: 60%;" alt="Artifact lifecycle state machine">
   <figcaption style="font-size: 0.9em; color: #555;">Artifact lifecycle state machine</figcaption>
 </figure>
-
 
 #### 5.2.1 Object classes (SA/WP/CD/DL/AR)
 
@@ -1619,12 +1610,10 @@ When a **CD** is **QUEUED_FOR_REVIEW**, reviewers must pick exactly one outcome:
 
 “OTHER” selections require `*_other_text` payloads and feed a weekly clustering job (`ops/reference/suggest_reason_enum.py`). The job publishes candidate enum additions to Reference Manager; accepted values propagate through the LPE bundle workflow. Operations uphold an SLO to triage new candidates within 14 calendar days and either promote or close them (with rationale) within 30 days, with status tracked in the Reference Manager queue dashboard. When a candidate is promoted, Guardian ships the new enum in the next release, bumps the SSE/event schema version noted in §10.3, and publishes an upgrade notice so API consumers can deploy the updated enum set before enforcement.
 
-
 <figure style="margin: 1em 0; text-align: center;">
   <img src="diagrams/out/approvals-edit-flows-v1.svg" style="max-width: 60%;" alt="Manual and agent edit approval flows">
   <figcaption style="font-size: 0.9em; color: #555;">Manual and agent edit approval flows</figcaption>
 </figure>
-
 
 #### 5.2.5 Review modes & risk overrides
 
@@ -1958,18 +1947,15 @@ Example
 - Deterministic naming/versioning: reruns append `_v{n}` suffix; manifests store `settings_snapshot_sha256`, model/provider versions, compute/storage regions, and SHA-256 of outputs.
 - Audit & telemetry: each run logs structured metadata (duration, attempts, cost envelope) and writes SSE updates; metrics exported for `job_duration_seconds`, `agent_retry_total`, etc.
 
-
 <figure style="margin: 1em 0; text-align: center;">
   <img src="diagrams/out/analyze-compose-v1.svg" style="max-width: 70%;" alt="Analyze and Compose pipeline overview">
   <figcaption style="font-size: 0.9em; color: #555;">Analyze and Compose pipeline overview</figcaption>
 </figure>
 
-
 <figure style="margin: 1em 0; text-align: center;">
   <img src="diagrams/out/agent-orchestration-classes-v1.svg" style="max-width: 70%;" alt="Agent orchestration classes">
   <figcaption style="font-size: 0.9em; color: #555;">Agent orchestration classes</figcaption>
 </figure>
-
 
 ### 6.1.1 Configurable pipeline definitions & stage catalog (binding)
 
@@ -2200,12 +2186,10 @@ Example
 - Feature toggles (`deliverables.features.short_summary`, `deliverables.features.timeline_pdf`, etc.) guard UI/API exposure. Guardian rejects enabling toggles tagged `implementation_tier=major` unless the linked Implementation Strategy artifact is `status=approved`, ensuring large-impact additions follow the agreed rollout path.
 - Appendix D documents artifact schemas keyed by `deliverable_id`; Appendix E cross-references catalog entries with settings/tests/runbooks so auditors can trace coverage for any newly activated deliverable.
 
-
 <figure style="margin: 1em 0; text-align: center;">
   <img src="diagrams/out/data-lineage-v1.svg" style="max-width: 70%;" alt="Artifact data lineage">
   <figcaption style="font-size: 0.9em; color: #555;">Artifact data lineage</figcaption>
 </figure>
-
 
 ### 6.5 Timeline and relationship graph agents integration checklist
 
@@ -2371,18 +2355,15 @@ Node catalog (illustrative)
 - Deterministic reconciliation: Guardian judgments are idempotent per `{artifact_id, content_hash}`. Re-submitting the same content after a BLOCK requires either a waiver or remediation that produces a new hash/version, ensuring policy-bypassing mutations cannot proceed silently.
 - Downstream enforcement: workers, UI, and portal clients must respect the target status (`CLEARED_FOR_USE`, `OPERATOR_PREP`, `QUARANTINED`) before executing dependent actions. Fetch-time checks re-evaluate Guardian judgment freshness and invalidate stale deliverables (§11.2.1).
 
-
 <figure style="margin: 1em 0; text-align: center;">
   <img src="diagrams/out/guardian-judgment-flow-v1.svg" style="max-width: 70%;" alt="Guardian judgment pipeline">
   <figcaption style="font-size: 0.9em; color: #555;">Guardian judgment pipeline</figcaption>
 </figure>
 
-
 <figure style="margin: 1em 0; text-align: center;">
   <img src="diagrams/out/guardian-class-model-v1.svg" style="max-width: 65%;" alt="Guardian service classes">
   <figcaption style="font-size: 0.9em; color: #555;">Guardian service classes</figcaption>
 </figure>
-
 
 #### 7.1.0 In-house PHI/PII/SPI gating tiers (binding)
 
@@ -2482,12 +2463,10 @@ Guardian persists raw span evidence in `guardian_span_detection` (WP scope, RLS-
 - Additional deliverables (short summary, timeline-only, future timeline exports) inherit `SIGN_POLICY_PLATFORM_REQUIRED` unless their catalog entry specifies otherwise. Implementation toggles from §6.4.1 cannot activate a deliverable whose signature policy demands a higher trust tier than the org’s configured `sign.trust_mode`.
 - Waivers and manual overrides follow existing approval swap semantics: changing a deliverable’s signature policy emits `SIGNATURE_POLICY_CHANGE` audit events, regenerates signed copies, and revokes previously released versions.
 
-
 <figure style="margin: 1em 0; text-align: center;">
   <img src="diagrams/out/signing-delivery-v1.svg" style="max-width: 65%;" alt="Signing and delivery flow">
   <figcaption style="font-size: 0.9em; color: #555;">Signing and delivery flow</figcaption>
 </figure>
-
 
 #### 7.2.3 FIPS enforcement & runtime guardrails (binding)
 
@@ -2588,12 +2567,10 @@ Guardian persists raw span evidence in `guardian_span_detection` (WP scope, RLS-
 - Telemetry: `llm_circuit_state` and `llm_fallback_total{model,reason}` power dashboards; on-call alerts fire when circuits remain OPEN beyond 15 minutes or when fallback spend exceeds budget thresholds.
 - Diagram: `docs/diagrams/llm-failover-v1.mmd` captures the orchestrator sequence.
 
-
 <figure style="margin: 1em 0; text-align: center;">
   <img src="diagrams/out/llm-failover-v1.svg" style="max-width: 65%;" alt="LLM failover orchestrator">
   <figcaption style="font-size: 0.9em; color: #555;">LLM failover orchestrator</figcaption>
 </figure>
-
 
 #### 8.1.3 Bring-your-own model integration (binding)
 
@@ -2668,12 +2645,10 @@ PII posture (binding)
 - Alerts: `finops_budget_hold_active_total` pages FinOps + Product, while `finops_budget_hold_duration_seconds` feeds SLA dashboards. Resume events log `FINOPS_BUDGET_RESUMED` and clear outstanding quarantines via Guardian’s auto-waive path once cap relief is confirmed.
 - Diagram: `docs/diagrams/finops-guard-v1.mmd` depicts the deploy guard decision flow.
 
-
 <figure style="margin: 1em 0; text-align: center;">
   <img src="diagrams/out/finops-guard-v1.svg" style="max-width: 60%;" alt="FinOps deploy guard flow">
   <figcaption style="font-size: 0.9em; color: #555;">FinOps deploy guard flow</figcaption>
 </figure>
-
 
 ### 8.7 FinOps deploy guard (binding)
 
@@ -2807,12 +2782,10 @@ Notes
 
 - Traceability matrix in Appendix E maps each critical feature (agents, Guardian, FinOps, portal) to settings keys; updates required whenever keys change.
 
-
 <figure style="margin: 1em 0; text-align: center;">
   <img src="diagrams/out/core-domain-entities.svg" style="max-width: 70%;" alt="Core domain entity model">
   <figcaption style="font-size: 0.9em; color: #555;">Core domain entity model</figcaption>
 </figure>
-
 
 - **Source material:** `§9`, `§10.8`, `§9.14`
 
@@ -2838,18 +2811,15 @@ Notes
 - On failure or regression, roll back to prior bundle; invalidate caches; recompile policies.
 - Record activation window, approvers, and effects in audit.
 
-
 <figure style="margin: 1em 0; text-align: center;">
   <img src="diagrams/out/settings-activation-v1.svg" style="max-width: 65%;" alt="Settings activation pipeline">
   <figcaption style="font-size: 0.9em; color: #555;">Settings activation pipeline</figcaption>
 </figure>
 
-
 <figure style="margin: 1em 0; text-align: center;">
   <img src="diagrams/out/settings-activation-classes-v1.svg" style="max-width: 65%;" alt="Settings activation classes">
   <figcaption style="font-size: 0.9em; color: #555;">Settings activation classes</figcaption>
 </figure>
-
 
 ### 9.8 Activation lock & uniqueness (helpers + OCC)
 
@@ -3348,12 +3318,10 @@ Contract requirements (binding)
 - Reviewers can request edits, quarantine, or approve. Rejecting prompts requires comment referencing span IDs; the UI pre-fills detection context to minimize transcription errors.
 - All reviewer actions append to `guardian_judgment_history` via API (`/guardian/review-actions`) so Guardian remains the single source of truth for artifact status changes.
 
-
 <figure style="margin: 1em 0; text-align: center;">
   <img src="diagrams/out/approvals-ux-v1.svg" style="max-width: 60%;" alt="Reviewer approval UX">
   <figcaption style="font-size: 0.9em; color: #555;">Reviewer approval UX</figcaption>
 </figure>
-
 
 #### 11.1.4 Restoration intents & span inspector (binding)
 
@@ -3385,12 +3353,10 @@ Contract requirements (binding)
 - Indexes/search hide demoted or rejected artifacts; portal lists reflect only the latest `APPROVED` artifacts per exclusive type.
 - Copy surfaced to clients is settings-driven via `i18n.portal.invalidation.message_key`, allowing Product/Legal to localize or update messaging without code changes.
 
-
 <figure style="margin: 1em 0; text-align: center;">
   <img src="diagrams/out/portal-invalidation-v1.svg" style="max-width: 60%;" alt="Portal invalidation flow">
   <figcaption style="font-size: 0.9em; color: #555;">Portal invalidation flow</figcaption>
 </figure>
-
 
 #### 11.2.2 Fetch-time guard (binding)
 
@@ -3784,12 +3750,10 @@ Preventive actions
 - After action: once the primary recovers, traffic is rolled back via blue/green cutover, delta data is validated (checksum + manifest diff), and any DSAR/erasure entries executed during the failover are replayed to ensure consistency.
 - Diagram: see `docs/diagrams/dr-region-failover-v1.mmd` for the runbook flow.
 
-
 <figure style="margin: 1em 0; text-align: center;">
   <img src="diagrams/out/dr-region-failover-v1.svg" style="max-width: 60%;" alt="Region failover runbook">
   <figcaption style="font-size: 0.9em; color: #555;">Region failover runbook</figcaption>
 </figure>
-
 
 ### 12.5 Capacity planning, autoscaling, and performance budgets
 
@@ -3815,12 +3779,10 @@ Preventive actions
   - `INTEGRITY` (hash mismatch): block pipeline; quarantine; require resubmit; audit `ARTIFACT_INTEGRITY_MISMATCH`.
   - `CONCURRENCY` (OCC/locks): short jittered retries; escalate after N attempts; ensure OCC versions in APIs.
 
-
 <figure style="margin: 1em 0; text-align: center;">
   <img src="diagrams/out/error-flows-v1.svg" style="max-width: 60%;" alt="Error handling taxonomy">
   <figcaption style="font-size: 0.9em; color: #555;">Error handling taxonomy</figcaption>
 </figure>
-
 
 - Circuits and watchdogs:
 
@@ -4065,12 +4027,10 @@ Alert routing
 - HIPAA mode enforcement: when `privacy.hipaa.enabled=true`, retention jobs honor shortened schedules, approvals for HIPAA-classed artifacts require WebAuthn step-up, evidence-store excerpts stay disabled (confirmed via the purge job above), and portal delivery of PHI-tagged attachments is rejected unless a security waiver is recorded.
 - Diagram: DSAR/erasure hard-purge flow lives in `docs/diagrams/dsar-erasure-v1.mmd`.
 
-
 <figure style="margin: 1em 0; text-align: center;">
   <img src="diagrams/out/dsar-erasure-v1.svg" style="max-width: 60%;" alt="DSAR hard-purge workflow">
   <figcaption style="font-size: 0.9em; color: #555;">DSAR hard-purge workflow</figcaption>
 </figure>
-
 
 #### 14.2.1 DSAR/erasure mode (binding)
 
