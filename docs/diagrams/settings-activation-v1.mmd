@@ -1,14 +1,14 @@
 %% Mermaid sequence diagram: Settings activation pipeline v1
 %%{init: {"flowchart": {"htmlLabels": false}, "class": {"htmlLabels": false}, "state": {"htmlLabels": false}, "er": {"htmlLabels": false}, "journey": {"htmlLabels": false}, "timeline": {"htmlLabels": false}}}%%
 sequenceDiagram
-  participant Admin as "Org/System Admin"
-  participant UI as "Settings UI/API"
-  participant Activation as "Settings Activation Service"
-  participant Validators as "Validators (schema, policy, diff)"
-  participant LPE as "LPE Compiler"
-  participant Guardian as "Guardian"
-  participant Bundles as "Policy Bundle Store"
-  participant Audit as "Audit/Event Bus"
+  participant Admin as Org/System Admin
+  participant UI as Settings UI/API
+  participant Activation as Settings Activation Service
+  participant Validators as Validators (schema, policy, diff)
+  participant LPE as LPE Compiler
+  participant Guardian as Guardian
+  participant Bundles as Policy Bundle Store
+  participant Audit as Audit/Event Bus
 
   Admin->>UI: Submit settings bundle (draft)
   UI->>Activation: Create activation request (await approvals)

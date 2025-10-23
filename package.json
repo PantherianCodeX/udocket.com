@@ -7,6 +7,7 @@
     "mmd:all": "bash scripts/docs/render_mermaid.sh"
   },
   "devDependencies": {
-    "@mermaid-js/mermaid-cli": "^11.3.0"
+    "@mermaid-js/mermaid-cli": "^11.12.0",
+    "puppeteer": "^23.11.1"
   }
 }

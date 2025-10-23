@@ -1,13 +1,13 @@
 %% Mermaid sequence diagram: DSAR hard-purge workflow v1
 %%{init: {"flowchart": {"htmlLabels": false}, "class": {"htmlLabels": false}, "state": {"htmlLabels": false}, "er": {"htmlLabels": false}, "journey": {"htmlLabels": false}, "timeline": {"htmlLabels": false}}}%%
 sequenceDiagram
-  participant Requester as "Privacy Requester"
-  participant Portal as "Admin Portal"
-  participant Scheduler as "DSAR Scheduler"
-  participant Worker as "Erasure Worker"
-  participant Vault as "Token Vault"
-  participant DB as "Postgres / Storage"
-  participant Guardian as "Guardian"
+  participant Requester as Privacy Requester
+  participant Portal as Admin Portal
+  participant Scheduler as DSAR Scheduler
+  participant Worker as Erasure Worker
+  participant Vault as Token Vault
+  participant DB as Postgres / Storage
+  participant Guardian as Guardian
 
   Requester->>Portal: Submit DSAR (subject details, framework)
   Portal->>Scheduler: Create erasure job (scope, deadline)

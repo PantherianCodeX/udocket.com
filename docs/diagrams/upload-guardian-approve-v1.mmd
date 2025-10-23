@@ -1,12 +1,12 @@
 %% Mermaid sequence stub: Upload → Guardian → Approve v1
 %%{init: {"flowchart": {"htmlLabels": false}, "class": {"htmlLabels": false}, "state": {"htmlLabels": false}, "er": {"htmlLabels": false}, "journey": {"htmlLabels": false}, "timeline": {"htmlLabels": false}}}%%
 sequenceDiagram
-  participant U as "User/Client"
-  participant Web as "Web (Django)"
-  participant Obj as "Object Storage"
-  participant DB as "Postgres (RLS)"
-  participant G as "Guardian"
-  participant R as "Reviewer"
+  participant U as User/Client
+  participant Web as Web (Django)
+  participant Obj as Object Storage
+  participant DB as Postgres (RLS)
+  participant G as Guardian
+  participant R as Reviewer
   U->>Web: POST /uploads (create session)
   Web->>Obj: PUT blob (SAS)
   U-->>Obj: Upload file

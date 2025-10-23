@@ -1,10 +1,10 @@
 %% Mermaid sequence diagram: LLM failover orchestrator v1
 %%{init: {"flowchart": {"htmlLabels": false}, "class": {"htmlLabels": false}, "state": {"htmlLabels": false}, "er": {"htmlLabels": false}, "journey": {"htmlLabels": false}, "timeline": {"htmlLabels": false}}}%%
 sequenceDiagram
-  participant Worker as "Agent Worker"
-  participant Orchestrator as "ModelFailoverOrchestrator"
-  participant Registry as "LLM Registry"
-  participant Metrics as "Metrics/Audit"
+  participant Worker as Agent Worker
+  participant Orchestrator as ModelFailoverOrchestrator
+  participant Registry as LLM Registry
+  participant Metrics as Metrics/Audit
 
   Worker->>Orchestrator: Request completion (desired model, policy context)
   Orchestrator->>Registry: Fetch model health + fallback chain

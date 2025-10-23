@@ -8,10 +8,20 @@
       "group": "build",
       "problemMatcher": []
     },
+    { "label": "Build TDD PDF", "type": "shell", "command": "./scripts/docs/build_tdd.sh", "problemMatcher": [] },
     {
-      "label": "Build PDF (Pandoc + WeasyPrint)",
+      "label": "Build PDF (Pandoc + Puppeteer)",
       "type": "shell",
-      "command": "pandoc TDD.md --from=gfm --pdf-engine=weasyprint --css pdf.css --resource-path=.:diagrams/out --metadata title=\"uDocket Technical Design Document\" --toc --standalone -o TDD.pdf",
+      "command": "scripts/docs/tdd_to_pdf.sh",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Build TDD (HTML)",
+      "type": "shell",
+      "command": "pandoc TDD.md --from=gfm --to=html5 --css pdf.css --resource-path=.:diagrams/out --metadata title=\"uDocket Technical Design Document\" --toc --standalone -o TDD.html",
       "options": {
         "cwd": "${workspaceFolder}/docs"
       },
