@@ -9,15 +9,12 @@
       "problemMatcher": []
     },
     {
-      "label": "Render Mermaid (all)",
-      "type": "shell",
-      "command": "npm run mmd:all"
-    },
-    {
       "label": "Build PDF (Pandoc + WeasyPrint)",
       "type": "shell",
-      "command": "pandoc docs/TDD.md --from=gfm --pdf-engine=weasyprint --resource-path=docs:docs/diagrams/out --toc --standalone -o docs/TDD.pdf",
-      "dependsOn": "Render Mermaid (all)",
+      "command": "pandoc TDD.md --from=gfm --pdf-engine=weasyprint --css pdf.css --resource-path=.:diagrams/out --metadata title=\"uDocket Technical Design Document\" --toc --standalone -o TDD.pdf",
+      "options": {
+        "cwd": "${workspaceFolder}/docs"
+      },
       "problemMatcher": []
     },
     {

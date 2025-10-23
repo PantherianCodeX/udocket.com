@@ -9,6 +9,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
        ffmpeg \
+       fonts-dejavu-core \
+       fonts-dejavu-extra \
     && rm -rf /var/lib/apt/lists/*
 
 # Optional dev tools (enabled via build-arg DEV_TOOLS=1)
