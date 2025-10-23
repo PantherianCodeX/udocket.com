@@ -8,7 +8,7 @@ services:
         # Allow choosing a different base image without editing the Dockerfile
         PYTHON_BASE: "${PYTHON_BASE:-mcr.microsoft.com/devcontainers/python:3.12}"
     env_file:
-      - ${PWD}/.env
+      - ./.env
     environment:
       DJANGO_SETTINGS_MODULE: apps.platform.config.settings.dev
       ENV_READ_DOTENV: "1"
@@ -21,9 +21,9 @@ services:
       - home-cache:/root/.cache
       - home-local-share:/root/.local/share
       - codex-data:/root/.codex
-      - ${PWD}:/app
-      - ${PWD}/storage:/app/storage
-      - ${PWD}/.env:/app/.env:rw
+      - .:/app
+      - ./storage:/app/storage
+      - ./.env:/app/.env:rw
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       postgres:

@@ -3,7 +3,7 @@
   "config": {
     "MD013": false,
     "MD033": {
-      "allowed_elements": ["br", "sup", "sub"]
+      "allowed_elements": ["br", "sup", "sub", "figure", "img", "figcaption"]
     },
     "MD036": false,
     "MD046": {
