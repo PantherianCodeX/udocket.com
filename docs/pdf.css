@@ -41,15 +41,30 @@ table {
   border-collapse: collapse;
   width: 100%;
   margin: 1em 0;
+  font-size: 8.5pt;
 }
 
 td, th {
-  
+  font-size: inherit;
   overflow-wrap: anywhere;
   hyphens: auto;
   white-space: normal;
+  word-break: break-word;
   border: 1px solid #ccc;
   padding: 0.4em 0.6em;
+}
+
+table code {
+  font-size: 7.5pt;
+}
+
+figure svg text,
+figure svg tspan {
+  fill: #111 !important;
+}
+
+figure svg text {
+  font-family: "DejaVu Sans", "Trebuchet MS", Arial, sans-serif !important;
 }
 
 @page {

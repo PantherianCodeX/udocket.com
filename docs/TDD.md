@@ -22,7 +22,29 @@ related_adrs:
   - ADR-0003-api-versioning-and-sunset.md
   - ADR-0004-localization-and-policy-engine.md
 header-includes:
-  - '<header class="page-header">uDocket — Technical Design Document\nPlatform Architecture &amp; Compliance Specification</header>'
+  - |
+    <style>
+      table {
+        font-size: 8.5pt;
+      }
+      table td,
+      table th {
+        font-size: inherit;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+      }
+      table code {
+        font-size: 7.5pt;
+      }
+      figure svg text,
+      figure svg tspan {
+        fill: #111 !important;
+      }
+      figure svg text {
+        font-family: "DejaVu Sans", "Trebuchet MS", Arial, sans-serif !important;
+      }
+    </style>
+  - '<header class="page-header">uDocket — Technical Design Document <br> Platform Architecture &amp; Compliance Specification</header>'
   - '<footer class="page-footer">Confidential · Last updated 2025-10-23 · Page <span class="page-number"></span> of <span class="page-count"></span></footer>'
 ---
 
@@ -293,7 +315,7 @@ To keep visuals helpful and consistent:
 5. Portal invalidation notifies clients of the new deliverable and blocks any revoked link; downstream analytics and audit trails attach Guardian judgment IDs, manifests, and settings hashes (§11.2.1, App.A.2).
 
 <figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/out/upload-guardian-approve-v1.svg" style="max-width: 65%;" alt="Upload → Guardian → Approve happy path">
+  <img src="diagrams/out/upload-guardian-approve-v1.png" style="max-width: 65%;" alt="Upload → Guardian → Approve happy path">
   <figcaption style="font-size: 0.9em; color: #555;">Upload → Guardian → Approve happy path</figcaption>
 </figure>
 
@@ -308,7 +330,7 @@ To keep visuals helpful and consistent:
 - Visual: see `App.A` for the full context diagram and sequence overlays.
 
 <figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/out/system-context-v1.svg" style="max-width: 80%;" alt="System context overview">
+  <img src="diagrams/out/system-context-v1.png" style="max-width: 80%;" alt="System context overview">
   <figcaption style="font-size: 0.9em; color: #555;">System context overview</figcaption>
 </figure>
 
@@ -319,7 +341,7 @@ To keep visuals helpful and consistent:
 - Kubernetes namespaces per environment (`dev`, `staging`, `prod`, `audit`) host Deployments for `web`, `channels`, `workers`, `guardian`, `signer`, `llm-registry`, `reference`, `notifications`, `settings`, ingress controllers, Redis broker/cache, and object-storage sidecars.
 - Service mesh or SPIFFE/SPIRE workload identity enforces strict mTLS; certificates rotate with TTL ≤ 24h and SLO of 99.9% renewals within five minutes of expiry. Certificates that exceed `security.tls.cert_ttl_minutes + 5` minutes trigger a hard fail (traffic denied) and page on-call; soft warnings fire 30 minutes before TTL expiry to allow proactive rotation. Mutating RPCs must satisfy both mutual TLS **and** HMAC headers: the mesh validates SANs against SPIFFE IDs (`spiffe://uDocket/<service>`) or an allowlisted CN, and the receiving service reconstructs the shared-secret signature (Appendix F). Calls missing either layer are rejected with `401 AUTH_ERROR` and recorded via `auth_layer_violation_total`.
 - Network policy: ingress terminates TLS (TLS 1.3 preferred; limited TLS 1.2 fallback). Egress is default-deny aside from kube-dns and the Istio egress gateway; the gateway enforces the region-scoped allowlists rendered from the `network.egress.allowed_hosts` Settings bundle, and drift detection nightly resolves each FQDN (for example `*.blob.core.windows.net`, `*.table.core.windows.net`, `*.queue.core.windows.net`, TSA/OCSP hosts) to compare against SAN lists.
-- TLS details: TLS 1.3 remains the platform default. When `security.tls.fips_mode=true`, only FIPS-approved AES-GCM ciphers are permitted (`TLS_AES_128_GCM_SHA256`, `TLS_AES_256_GCM_SHA384`) and ChaCha20 suites are rejected at validation time (mirrors OpenSSL FIPS provider guidance). Non-FIPS environments (explicit `security.tls.performance_mode=true`) MAY allow `TLS_CHACHA20_POLY1305_SHA256` to improve mobile performance but must record the exception in the release checklist. TLS 1.2 fallback suites remain explicit (`{'ECDHE-ECDSA-AES128-GCM-SHA256','ECDHE-RSA-AES128-GCM-SHA256','ECDHE-ECDSA-AES256-GCM-SHA384','ECDHE-RSA-AES256-GCM-SHA384'}`). OCSP stapling stays enabled on ingress. Fallback may be enabled via `security.tls.legacy_exceptions[]` entries that include endpoint name, justification, and an expiry ≤ 30 days out; Settings activation validator rejects longer windows, and an alert fires seven days before expiry to force review. Production ingress treats TLS 1.3 (`security.tls.min_version=TLSv1.3`) as the control surface; downgrades require Security approval plus updated attestation for the impacted environment. A synthetic handshake job (`scripts/security/check_tls_ciphers.py`) runs per environment on each deploy and as part of nightly CI, failing the build if CHACHA20 handshakes succeed while FIPS mode is enabled or if AES-GCM suites disappear from the non-FIPS profile.
+- TLS details: TLS 1.3 remains the platform default. When `security.tls.fips_mode=true`, only FIPS-approved AES-GCM ciphers are permitted (`TLS_AES_128_GCM_SHA256`, `TLS_AES_256_GCM_SHA384`) and ChaCha20 suites are rejected at validation time (mirrors OpenSSL FIPS provider guidance). Non-FIPS environments (explicit `security.tls.performance_mode=true`) MAY allow `TLS_CHACHA20_POLY1305_SHA256` to improve mobile performance but must record the exception in the release checklist. TLS 1.2 fallback suites remain explicit (`{'ECDHE-ECDSA-AES128-GCM-SHA256', 'ECDHE-RSA-AES128-GCM-SHA256', 'ECDHE-ECDSA-AES256-GCM-SHA384', 'ECDHE-RSA-AES256-GCM-SHA384'}`). OCSP stapling stays enabled on ingress. Fallback may be enabled via `security.tls.legacy_exceptions[]` entries that include endpoint name, justification, and an expiry ≤ 30 days out; Settings activation validator rejects longer windows, and an alert fires seven days before expiry to force review. Production ingress treats TLS 1.3 (`security.tls.min_version=TLSv1.3`) as the control surface; downgrades require Security approval plus updated attestation for the impacted environment. A synthetic handshake job (`scripts/security/check_tls_ciphers.py`) runs per environment on each deploy and as part of nightly CI, failing the build if CHACHA20 handshakes succeed while FIPS mode is enabled or if AES-GCM suites disappear from the non-FIPS profile.
 - Platform services leverage managed secrets (Vault or Azure Key Vault). Nodes run chrony/NTP with ±100 ms drift to support TSA validation. Redis handles broker/cache needs; Postgres (regional HA) stores relational data.
 - Object storage: Azure Blob (prod) or S3-compatible (dev) buckets configured for versioning, SSE-KMS, and immutable retention for audit sinks. Residency isolation is enforced via dedicated containers per data-residency cohort with no cross-region replication; replication is permitted only within the region boundary declared in `regions.allowlist.storage`, and manifests record the container + key vault backing each cohort so compliance teams can attest to zero-copy guarantees.
 - Database encryption at rest: managed Postgres clusters rely on cloud Transparent Data Encryption; storage, WAL archives, and snapshots are encrypted with Azure-managed keys by default and can swap to customer-managed keys (`security.db.cmk_id`) when an org or regulator requires attestation. Key rotation flows through Key Vault, produces `DB_TDE_ROTATION` artifacts, and triggers automated smoke tests that verify new keys before swaps propagate to replicas.
@@ -491,7 +513,7 @@ metadata:
 - **Infrastructure components:** Bundles include `infra_components[]` (approved storage/compute classes, HIPAA eligibility, deployment types, provider IDs) that LPE maps into `storage_requirements` so Settings, planners, and automation can select compliant infrastructure.
 - **Policy bundles:** Signed, versioned Rego + data payloads that OPA consumes to enforce residency, egress, HIPAA, and attachment rules. Bundles include manifests with SHA-256 digests, compatibility range, and monotonic build numbers; LPE rejects unsigned or stale bundles.
 - **OPA discovery manifest (`spec/schemas/opa_discovery_manifest.schema.json`):** Enumerates bundle channels (`stable`, `beta`, `canary`), allowed regions, SHA-256 digests, ETags, rollout windows, and promotion rules so OPA evaluators hot-reload safely.
-- **PolicyContext table (`compiled_policy_context`):** Keyed by `(org_id, case_id, locale, privacy_flags_hash)` (with `case_id` nullable for org-scoped defaults) with values `{policy_context_version, frameworks_enabled[], hipaa_required, residency_regions{compute[],storage[],vector[]}, storage_requirements{hipaa_required?,hipaa_capable_providers[],preferred_classes[]}, retention_days, portal_rules{disclaimer_key,banner_key}, logging_rules, masking_profile, i18n_keys[], digest_sha256}`.
+- **PolicyContext table (`compiled_policy_context`):** Keyed by `(org_id, case_id, locale, privacy_flags_hash)` (with `case_id` nullable for org-scoped defaults) with values `{policy_context_version, frameworks_enabled[], hipaa_required, residency_regions{compute[], storage[], vector[]}, storage_requirements{hipaa_required?, hipaa_capable_providers[], preferred_classes[]}, retention_days, portal_rules{disclaimer_key, banner_key}, logging_rules, masking_profile, i18n_keys[], digest_sha256}`.
 - **PolicyContext schema (`spec/schemas/policy_context.schema.json`):** Canonical JSON Schema (draft 2020-12) describing all fields, value types, and optional blocks; versioned separately to allow additive fields. Digests in API responses (`digest_sha256`) sign the canonicalized JSON payload and are exposed by helper libraries as `ctx.digest_sha256`.
 - **Reference Manager integration:** LPE consumes canonical datasets emitted by Reference Manager (RM)—court hierarchy, localization strings, questionnaires, forms. RM supplies signed manifests plus SHA-256 digests; LPE refuses to compile if digests drift or the RM publish event is missing.
 - Outputs include deterministic UUIDs for events/entities when the compiler derives identity; reruns reuse UUID5 of canonical content to satisfy cross-artifact identity rules (§6.3).
@@ -810,7 +832,7 @@ Reference Manager packages every regulated dataset required for downstream compl
 *Purpose: Set observability standards, SLOs, and dashboards for the catalog pipeline.*
 
 - SLOs: harvest success ≥ 99%/day; selector failure rate \< 2% rolling 7d; median proposal review \< 48h; publish latency P95 \< 2h; bundle adoption lag (RM publish → LPE compile) P95 \< 10m.
-- Metrics: `reference_manager_harvest_total{source,result}`, `reference_manager_ingest_duration_seconds`, `reference_manager_selector_failure_total`, `reference_manager_diff_backlog`, `reference_manager_publish_total`, `reference_manager_bundle_adoption_seconds`, `reference_resource_missing_locale_total`, `reference_manager_license_violation_total`.
+- Metrics: `reference_manager_harvest_total{source, result}`, `reference_manager_ingest_duration_seconds`, `reference_manager_selector_failure_total`, `reference_manager_diff_backlog`, `reference_manager_publish_total`, `reference_manager_bundle_adoption_seconds`, `reference_resource_missing_locale_total`, `reference_manager_license_violation_total`.
 - FinOps: `reference_manager_ingest_cost_cents{source}`, `reference_manager_api_credit_total`, and `reference_manager_storage_bytes_total` feed cost dashboards; budgets defined per source family with alerts when 7-day rolling spend exceeds 80% of monthly cap.
 - Dashboards (added to §12.6): “Reference Manager – Ingestion & Quality” (coverage %, freshness age, selector failures), “Reference Manager – Review & Publishing” (diff backlog, review SLA, adoption lag), and bundle adoption overlays alongside LPE dashboards.
 - Alerts: stalled harvests (>2 intervals missed), selector failure spikes, diff backlog > SLA, publish with missing license metadata, adoption lag beyond SLA, or RM publish without subsequent LPE compile (`lpe_policy_context_version` drift).
@@ -919,7 +941,7 @@ Reference Manager packages every regulated dataset required for downstream compl
 - Waiver enforcement: active waivers embed `waiver_id`/expiry into `PolicyContext`; Guardian and workers relay this to OPA and stamp manifests with `cross_region=true` plus reason `RESIDENCY_WAIVER_USED`. Absent or expired waivers force `POLICY_BLOCK` responses so operators remediate before promotion.
 
 <figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/out/residency-policy-enforcement-v1.svg" style="max-width: 70%;" alt="Residency policy enforcement sequence">
+  <img src="diagrams/out/residency-policy-enforcement-v1.png" style="max-width: 70%;" alt="Residency policy enforcement sequence">
   <figcaption style="font-size: 0.9em; color: #555;">Residency policy enforcement sequence</figcaption>
 </figure>
 
@@ -1056,16 +1078,16 @@ Reference Manager packages every regulated dataset required for downstream compl
 
   CREATE POLICY case_visibility ON "case"
   USING (
-    org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
-    AND udocket_can('CASE','read',"case".id,NULL,NULL)
+    org_id = NULLIF(current_setting('udocket.active_org', true), '')::uuid
+    AND udocket_can('CASE', 'read', "case".id, NULL, NULL)
   )
   WITH CHECK (
-    org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
-    AND udocket_can('CASE','write',"case".id,NULL,NULL)
+    org_id = NULLIF(current_setting('udocket.active_org', true), '')::uuid
+    AND udocket_can('CASE', 'write', "case".id, NULL, NULL)
   );
   ```
 
-- Masked columns rely on `udocket_mask`/`udocket_mask_json`; the compiler injects `field_mask_rule` rows such as `('{org_uuid}','default','ARTIFACT','content_uri','REDACT',ARRAY['reviewer','auditor'])` and `('{org_uuid}','hipaa_strict','QA_LOG','notes_md','HASH',ARRAY['auditor'])`. Test `tests/platform/db/test_mask_profiles.py::test_mask_profile_matches_policy` verifies each profile masks the expected columns, while `tests/platform/db/test_rls_guard.py` and `tests/platform/db/test_secure_view_usage.py` assert that FORCE RLS remains active and base tables stay inaccessible.
+- Masked columns rely on `udocket_mask`/`udocket_mask_json`; the compiler injects `field_mask_rule` rows such as `('{org_uuid}', 'default', 'ARTIFACT', 'content_uri', 'REDACT', ARRAY['reviewer', 'auditor'])` and `('{org_uuid}', 'hipaa_strict', 'QA_LOG', 'notes_md', 'HASH', ARRAY['auditor'])`. Test `tests/platform/db/test_mask_profiles.py::test_mask_profile_matches_policy` verifies each profile masks the expected columns, while `tests/platform/db/test_rls_guard.py` and `tests/platform/db/test_secure_view_usage.py` assert that FORCE RLS remains active and base tables stay inaccessible.
 
 - Normative SQL (binding):
 
@@ -1085,8 +1107,8 @@ CREATE OR REPLACE FUNCTION udocket_can(
 RETURNS boolean
 LANGUAGE plpgsql STABLE AS $$
 DECLARE v_org   uuid := NULLIF(current_setting('udocket.active_org',   true), '')::uuid;
-DECLARE v_roles text := coalesce(current_setting('udocket.active_roles', true),'');
-DECLARE v_scope text := coalesce(current_setting('udocket.operator_scope', true),'own_cases');
+DECLARE v_roles text := coalesce(current_setting('udocket.active_roles', true), '');
+DECLARE v_scope text := coalesce(current_setting('udocket.operator_scope', true), 'own_cases');
 DECLARE r text;
 BEGIN
   IF udocket_has_realm_role('sysadmin') THEN RETURN true; END IF;
@@ -1123,69 +1145,69 @@ END $$;
 DROP POLICY IF EXISTS case_visibility ON "case";
 CREATE POLICY case_visibility ON "case"
 USING (
-  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
-  AND udocket_can('CASE','read',"case".id,NULL,NULL)
+  org_id = NULLIF(current_setting('udocket.active_org', true), '')::uuid
+  AND udocket_can('CASE', 'read', "case".id, NULL, NULL)
 )
 WITH CHECK (
-  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
-  AND udocket_can('CASE','write',"case".id,NULL,NULL)
+  org_id = NULLIF(current_setting('udocket.active_org', true), '')::uuid
+  AND udocket_can('CASE', 'write', "case".id, NULL, NULL)
 );
 
 DROP POLICY IF EXISTS artifact_visibility ON artifact;
 CREATE POLICY artifact_visibility ON artifact
 USING (
-  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
+  org_id = NULLIF(current_setting('udocket.active_org', true), '')::uuid
   AND EXISTS (SELECT 1 FROM "case" c WHERE c.id = artifact.case_id)
-  AND udocket_can('ARTIFACT','read',artifact.case_id,artifact.id,NULL)
+  AND udocket_can('ARTIFACT', 'read', artifact.case_id, artifact.id, NULL)
 )
 WITH CHECK (
-  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
-  AND udocket_can('ARTIFACT','write',artifact.case_id,artifact.id,NULL)
+  org_id = NULLIF(current_setting('udocket.active_org', true), '')::uuid
+  AND udocket_can('ARTIFACT', 'write', artifact.case_id, artifact.id, NULL)
 );
 
 DROP POLICY IF EXISTS job_vis ON job;
 CREATE POLICY job_vis ON job
 USING (
-  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
+  org_id = NULLIF(current_setting('udocket.active_org', true), '')::uuid
   AND EXISTS (SELECT 1 FROM "case" c WHERE c.id = job.case_id)
-  AND udocket_can('JOB','read',job.case_id,NULL,NULL)
+  AND udocket_can('JOB', 'read', job.case_id, NULL, NULL)
 )
 WITH CHECK (
-  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
-  AND udocket_can('JOB','write',job.case_id,NULL,NULL)
+  org_id = NULLIF(current_setting('udocket.active_org', true), '')::uuid
+  AND udocket_can('JOB', 'write', job.case_id, NULL, NULL)
 );
 
 DROP POLICY IF EXISTS qa_vis ON qa_log;
 CREATE POLICY qa_vis ON qa_log
 USING (
-  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
+  org_id = NULLIF(current_setting('udocket.active_org', true), '')::uuid
   AND EXISTS (SELECT 1 FROM "case" c WHERE c.id = qa_log.case_id)
-  AND udocket_can('QA_LOG','read',qa_log.case_id,NULL,NULL)
+  AND udocket_can('QA_LOG', 'read', qa_log.case_id, NULL, NULL)
 );
 
 DROP POLICY IF EXISTS gdh_vis ON guardian_judgment_history;
 CREATE POLICY gdh_vis ON guardian_judgment_history
 USING (
-  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
+  org_id = NULLIF(current_setting('udocket.active_org', true), '')::uuid
   AND EXISTS (
     SELECT 1
       FROM artifact a
       JOIN "case" c ON c.id = a.case_id
      WHERE a.id = guardian_judgment_history.artifact_id
-       AND udocket_can('GUARDIAN_JUDGMENT','read', c.id, a.id, NULL)
+       AND udocket_can('GUARDIAN_JUDGMENT', 'read', c.id, a.id, NULL)
   )
 );
 
 DROP POLICY IF EXISTS delivery_vis ON delivery_receipt;
 CREATE POLICY delivery_vis ON delivery_receipt
 USING (
-  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
+  org_id = NULLIF(current_setting('udocket.active_org', true), '')::uuid
   AND EXISTS (
     SELECT 1
       FROM artifact a
       JOIN "case" c ON c.id = a.case_id
      WHERE a.id = delivery_receipt.artifact_id
-       AND udocket_can('DELIVERY_RECEIPT','read', c.id, a.id, NULL)
+       AND udocket_can('DELIVERY_RECEIPT', 'read', c.id, a.id, NULL)
   )
 );
 
@@ -1198,10 +1220,10 @@ ALTER TABLE delivery_receipt        FORCE ROW LEVEL SECURITY;
 ALTER TABLE guardian_judgment_history FORCE ROW LEVEL SECURITY;
 ```
 
-  | Binding                      | Implementation                                                                            | Test                                                                               | Observability                                                                  |
-  | ---------------------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-  | `rls_context_assert()` guard | Implementation: `apps/platform/db/guards.py::assert_rls_context`                          | Test: `tests/platform/db/test_rls_guard.py::test_rls_context_asserts_missing_gucs` | Observability: Grafana “DB Session Guards” panel (`rls_context_missing_total`) |
-  | Secure-view only access      | Implementation: `scripts/staticlint/enforce_secure_views.py` (invoked via `make lint-db`) | Test: `tests/platform/db/test_secure_view_usage.py::test_no_base_table_queries`    | Observability: Release job `lint-db` output (Buildkite step)                   |
+  | Binding                      | Implementation                                                                            | Test                                                                               | Observability                                                                     |
+  | ---------------------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+  | `rls_context_assert()` guard | Implementation: `apps/platform/db/guards.py::assert_rls_context`                          | Test: `tests/platform/db/test_rls_guard.py::test_rls_context_asserts_missing_gucs` | Grafana “DB Session Guards” panel — metric `rls_context_missing_total`            |
+  | Secure-view only access      | Implementation: `scripts/staticlint/enforce_secure_views.py` (invoked via `make lint-db`) | Test: `tests/platform/db/test_secure_view_usage.py::test_no_base_table_queries`    | Buildkite Release job output (`lint-db` step) for policy validation observability |
 
 - Session hardening (binding):
 
@@ -1292,7 +1314,7 @@ RETURNS text LANGUAGE plpgsql STABLE AS $$
 BEGIN
   CASE mask
     WHEN 'REDACT' THEN RETURN '[REDACTED]';
-    WHEN 'HASH' THEN RETURN encode(digest(coalesce(value,''), 'sha256'),'hex');
+    WHEN 'HASH' THEN RETURN encode(digest(coalesce(value, ''), 'sha256'), 'hex');
     WHEN 'NULL' THEN RETURN NULL;
     ELSE RAISE EXCEPTION 'Invalid mask %', mask;
   END CASE;
@@ -1315,7 +1337,7 @@ Secure view example (security barrier)
 CREATE VIEW artifact_secure WITH (security_barrier=true) AS
 SELECT id, org_id, case_id, type, status, content_sha256,
        CASE
-         WHEN udocket_can('ARTIFACT','read',artifact.case_id,artifact.id,'content_uri') THEN content_uri
+         WHEN udocket_can('ARTIFACT', 'read', artifact.case_id, artifact.id, 'content_uri') THEN content_uri
          ELSE udocket_mask(
                 content_uri,
                 COALESCE(
@@ -1324,7 +1346,7 @@ SELECT id, org_id, case_id, type, status, content_sha256,
                       FROM field_mask_rule r
                      WHERE r.org_id = artifact.org_id
                        AND r.profile = COALESCE(
-                             NULLIF(current_setting('udocket.mask_profile', true),''),
+                             NULLIF(current_setting('udocket.mask_profile', true), ''),
                              'default'
                            )
                        AND r.resource = 'ARTIFACT'
@@ -1364,7 +1386,7 @@ SELECT id, org_id, case_id, type, status, content_sha256,
   RETURNS trigger LANGUAGE plpgsql AS $$
   BEGIN
     IF TG_OP = 'UPDATE'
-       AND NEW.status NOT IN ('PROCESSING','OPERATOR_PREP','CHANGES_REQUESTED') THEN
+       AND NEW.status NOT IN ('PROCESSING', 'OPERATOR_PREP', 'CHANGES_REQUESTED') THEN
       IF NEW.org_id <> OLD.org_id
          OR NEW.case_id <> OLD.case_id
          OR NEW.type <> OLD.type
@@ -1408,11 +1430,11 @@ SELECT id, org_id, case_id, type, status, content_sha256,
 
 **Invariants:**\
 – No operator can view WP/CD prior to Guardian PASS/WARN (see §5.2.3).\
-– Only one `RELEASED` DL exists per `(case_id,type)`; approvals atomically revoke the prior DL (ExclusiveSwap invariant, §5.4.1).\
+– Only one `RELEASED` DL exists per `(case_id, type)`; approvals atomically revoke the prior DL (ExclusiveSwap invariant, §5.4.1).\
 – Append-only audit: every lifecycle action appends to `ops_<agent>.jsonl` and persists manifests with SHA-256 provenance.
 
 <figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/out/artifact-lifecycle-state-v1.svg" style="max-width: 60%;" alt="Artifact lifecycle state machine">
+  <img src="diagrams/out/artifact-lifecycle-state-v1.png" style="max-width: 60%;" alt="Artifact lifecycle state machine">
   <figcaption style="font-size: 0.9em; color: #555;">Artifact lifecycle state machine</figcaption>
 </figure>
 
@@ -1611,7 +1633,7 @@ When a **CD** is **QUEUED_FOR_REVIEW**, reviewers must pick exactly one outcome:
 “OTHER” selections require `*_other_text` payloads and feed a weekly clustering job (`ops/reference/suggest_reason_enum.py`). The job publishes candidate enum additions to Reference Manager; accepted values propagate through the LPE bundle workflow. Operations uphold an SLO to triage new candidates within 14 calendar days and either promote or close them (with rationale) within 30 days, with status tracked in the Reference Manager queue dashboard. When a candidate is promoted, Guardian ships the new enum in the next release, bumps the SSE/event schema version noted in §10.3, and publishes an upgrade notice so API consumers can deploy the updated enum set before enforcement.
 
 <figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/out/approvals-edit-flows-v1.svg" style="max-width: 60%;" alt="Manual and agent edit approval flows">
+  <img src="diagrams/out/approvals-edit-flows-v1.png" style="max-width: 60%;" alt="Manual and agent edit approval flows">
   <figcaption style="font-size: 0.9em; color: #555;">Manual and agent edit approval flows</figcaption>
 </figure>
 
@@ -1688,13 +1710,13 @@ Exclusive deliverables use **approval swap** semantics:
 *Purpose: Keep database schema, Settings, and manifests aligned with the authoritative lifecycle.*
 
 - Shared schema fields:
-  - `id` (UUIDv7), `class ∈ {SA,WP,CD,DL,AR}`, `status`, `version` (OCC)
+  - `id` (UUIDv7), `class ∈ {SA, WP, CD, DL, AR}`, `status`, `version` (OCC)
   - `org_id`, `case_id`, `created_by`, `created_at`, `updated_at`
   - `content_hash`, `size_bytes`, `mime`, `storage_key`, `labels[]`
   - `depends_on_canceled_job` (bool, nullable; set when rerun is required after cancellation)
   - `guardian_judgment`, `guardian_reason_codes[]`, `guardian_judgment_id`, `judged_at`
   - `qa_assessments[]` (`type`, `score`, `notes`, `model_id`, `threshold_result`)
-  - CD-only review metadata: `approval_type ∈ {HUMAN,SKIPPED_REVIEW}`, `approved_by`, `reviewed_at`, `reject_reason`, `reject_note`, `reject_reason_other_text?`, `quarantine_reason`, `quarantine_note`, `quarantine_reason_other_text?`
+  - CD-only review metadata: `approval_type ∈ {HUMAN, SKIPPED_REVIEW}`, `approved_by`, `reviewed_at`, `reject_reason`, `reject_note`, `reject_reason_other_text?`, `quarantine_reason`, `quarantine_note`, `quarantine_reason_other_text?`
   - DL-specific fields: `signature_type`, `signature_ref`, `tsa_ref`, `released_at`, `revoked_at?`, `revocation_reason?`, `revoked_by_artifact_id?` (links successor created by ExclusiveSwap)
 - Settings knobs (managed via Settings Service; defaults enforced in §9):
 
@@ -1702,11 +1724,11 @@ Exclusive deliverables use **approval swap** semantics:
 review.mode: MANUAL | SKIP_OPERATOR_PREP | SKIP_REVIEW | SKIP_ALL
 review.risk_overrides: [PHI_DETECTED, LEGAL_HOLD, CLASSIFIER_LOW_CONFIDENCE, NEW_MODEL_OR_PROMPT, QUARANTINE_HISTORY]
 review.approval_type.default: HUMAN | SKIPPED_REVIEW
-org.guardian.pre_operator_gates[]: ["SA","WP","CD"]
+org.guardian.pre_operator_gates[]: ["SA", "WP", "CD"]
 security.masking.vault_profile: fpe_v1 | aes_gcm_v1
 security.masking.vault_key_id: kv://.../keys/masking-default
-i18n.fallback_chain: { "fr-CA": ["fr","en"], "es-MX": ["es","en"] }
-i18n.required_rtl_locales[]: ["ar-SA","he-IL"]
+i18n.fallback_chain: { "fr-CA": ["fr", "en"], "es-MX": ["es", "en"] }
+i18n.required_rtl_locales[]: ["ar-SA", "he-IL"]
 enums.reject_reason: managed via Reference Manager (list in §5.2.4)
 enums.quarantine_reason: managed via Reference Manager (list in §5.2.4)
 ```
@@ -1735,7 +1757,7 @@ enums.quarantine_reason: managed via Reference Manager (list in §5.2.4)
 - Ingest sequence: uploads land in an encrypted staging container per residency region (`storage.staging.<region>`). Malware/PII scanners, checksum verification, and optional format normalization operate on the staging copy. Only once Guardian returns `PASS` or `WARN` does the finalize step promote the asset into the permanent case directory; `BLOCK` or failed scans trigger `storage.purge_blocked_uploads` so unreviewed data never persists beyond the staging SLA defined by `storage.staging.retention_hours`. Redaction jobs write sanitized derivatives back into staging; the promoted artifact always references the redacted output, preserving zero-copy residency guarantees.
 - Upload staging uses `upload_session` records with expected hashes and single-use tokens; finalize promotes staged object into artifact storage.
 - Guardian submission is event-driven: inserting or versioning any SA/WP/CD transitions it to `PENDING_JUDGMENT`, and workers enqueue the payload on the Guardian bus without operator intervention. An admin-only backfill API (`POST /guardian/judgments:enqueue {resource_urn, reason?, requested_by}`) exists for manual replays or drift correction; per-object “submit” endpoints are forbidden to keep the contract uniform. Review queues surface only CDs that cleared Guardian (`OPERATOR_PREP`), that an operator explicitly moved to `APPROVAL_REQUESTED`, and that the queueing service elevated into `QUEUED_FOR_REVIEW`.
-- `upload_session` (transient) table persists resumable upload metadata and scan status: `{id UUID PK, org_id, case_id, status ENUM('PENDING','UPLOADED','SCANNING','FINALIZED','ABORTED'), staging_uri, expected_sha256, expires_at, created_at}`. Workers purge expired rows hourly and hard-delete the corresponding staging objects.
+- `upload_session` (transient) table persists resumable upload metadata and scan status: `{id UUID PK, org_id, case_id, status ENUM('PENDING', 'UPLOADED', 'SCANNING', 'FINALIZED', 'ABORTED'), staging_uri, expected_sha256, expires_at, created_at}`. Workers purge expired rows hourly and hard-delete the corresponding staging objects.
 - SHA-256 computed at write; persisted in `artifact.content_sha256`. Reads recompute and quarantine inconsistencies (`ARTIFACT_INTEGRITY_MISMATCH`).
 - Buckets enable versioning + object lock for immutable audit sinks (per §14.2). KMS keys scoped per org when configured (`storage.kms.key_scoping='per_org'`).
 - QA diagnostics stored separately under `/job/{job}/qa_logs/{qa_log}/` to keep non-artifact notes; reviewer-visible QA reports remain Guardian-gated artifacts under `docs/`.
@@ -1774,7 +1796,7 @@ This invariant is authoritative; downstream APIs (for example, §10.3.2 Reviews 
   ```
 
 - Approval + release algorithm (single transaction; READ COMMITTED):
-  1. Acquire case/type lock: `udlock.xact_lock('case-approval', CONCAT(:org_id,'/',:case_id,'/',:type))`.
+  1. Acquire case/type lock: `udlock.xact_lock('case-approval', CONCAT(:org_id, '/', :case_id, '/', :type))`.
   2. Archive any existing `APPROVED` CD for `(org_id, case_id, type)` (`UPDATE ... SET status='ARCHIVED', archived=true, version=version+1 WHERE status='APPROVED' AND archived=false`).
   3. Approve target only if `status='QUEUED_FOR_REVIEW'` and `version=:expected_version`; set `status='APPROVED'`, populate `approved_by`, `approved_at`, increment `version`.
   4. Revoke the prior deliverable, if present: `UPDATE artifact SET status='REVOKED', revoked_at=now(), revoked_by_artifact_id=:new_cd WHERE class='DL' AND status='RELEASED' AND case_id=:case_id AND type=:type`.
@@ -1822,7 +1844,7 @@ Notes
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://udocket.ca/schemas/artifact_manifest_v1.json",
   "type": "object",
-  "required": ["schema_version","source","provenance","hashes","settings_snapshot_sha256","masking","security","retry"],
+  "required": ["schema_version", "source", "provenance", "hashes", "settings_snapshot_sha256", "masking", "security", "retry"],
   "properties": {
     "schema_version": {"type":"string", "const":"1"},
     "type": {"type":"string"},
@@ -1833,7 +1855,7 @@ Notes
         "job_id": {"type":"string", "format":"uuid"},
         "inputs": {"type":"array", "items": {"type":"string", "format":"uuid"}}
       },
-      "required":["case_id","job_id"]
+      "required":["case_id", "job_id"]
     },
     "provenance": {
       "type": "object",
@@ -1841,9 +1863,9 @@ Notes
         "compute_region": {"type":"string"},
         "storage_region": {"type":"string"},
         "tool_versions": {"type":"object"},
-        "template_version": {"type":["string","null"]}
+        "template_version": {"type":["string", "null"]}
       },
-      "required":["compute_region","storage_region","tool_versions"]
+      "required":["compute_region", "storage_region", "tool_versions"]
     },
     "hashes": {
       "type":"object",
@@ -1858,22 +1880,22 @@ Notes
         "token_vault_version": {"type":"string"},
         "masking_hash_algorithm": {"type":"string"}
       },
-      "required":["masking_profile_id","token_vault_version","masking_hash_algorithm"]
+      "required":["masking_profile_id", "token_vault_version", "masking_hash_algorithm"]
     },
     "security": {
       "type":"object",
       "properties": {
         "fips_mode": {"type":"boolean"},
-        "fips_module_cert_id": {"type":["string","null"]},
-        "signing_profile_id": {"type":["string","null"]}
+        "fips_module_cert_id": {"type":["string", "null"]},
+        "signing_profile_id": {"type":["string", "null"]}
       },
-      "required":["fips_mode","fips_module_cert_id"]
+      "required":["fips_mode", "fips_module_cert_id"]
     },
     "retry": {
       "type":"object",
       "properties": {
-        "retry_token": {"type":["string","null"]},
-        "retry_generation": {"type":"integer","minimum":0}
+        "retry_token": {"type":["string", "null"]},
+        "retry_generation": {"type":"integer", "minimum":0}
       },
       "required":["retry_generation"]
     }
@@ -1948,12 +1970,12 @@ Example
 - Audit & telemetry: each run logs structured metadata (duration, attempts, cost envelope) and writes SSE updates; metrics exported for `job_duration_seconds`, `agent_retry_total`, etc.
 
 <figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/out/analyze-compose-v1.svg" style="max-width: 70%;" alt="Analyze and Compose pipeline overview">
+  <img src="diagrams/out/analyze-compose-v1.png" style="max-width: 70%;" alt="Analyze and Compose pipeline overview">
   <figcaption style="font-size: 0.9em; color: #555;">Analyze and Compose pipeline overview</figcaption>
 </figure>
 
 <figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/out/agent-orchestration-classes-v1.svg" style="max-width: 70%;" alt="Agent orchestration classes">
+  <img src="diagrams/out/agent-orchestration-classes-v1.png" style="max-width: 70%;" alt="Agent orchestration classes">
   <figcaption style="font-size: 0.9em; color: #555;">Agent orchestration classes</figcaption>
 </figure>
 
@@ -2020,7 +2042,7 @@ Example
 - Orchestration helper: `packages/udocket_core/failover/speech.py::SpeechFailoverController` applies the fallback chain uniformly across batch/on-demand workers. It shares telemetry/event naming with the LLM orchestrator and exposes `speech.failover.for_request(...)` so Celery tasks and new speech processors remain provider-agnostic.
 - Automated retries: when Azure Speech (primary) degrades or breaches SLA thresholds, workers emit `TRANSCRIBE_FALLBACK_TRIGGERED`, replay the batch against the next healthy provider/region pair, and annotate manifests with `fallback_source_provider_id` and `fallback_attempt`. Retries respect org budgets and residency settings; no human transcription path exists in the automated flow.
 - Pause semantics: if the chain exhausts without a healthy provider, the job enters `PAUSED_AWAITING_PROVIDER`, preserving the queue order. Health monitors run every 60 seconds, requiring three consecutive successes before the job automatically resumes from the point of failure. UI surfaces status with next probe ETA; operators can trigger an on-demand probe via `POST /ops/transcription/{job}/probe`.
-- Observability: metrics `transcribe_fallback_total{provider,reason}`, `transcribe_pause_total`, and `transcribe_paused_jobs` feed dashboards. Audit events capture provider transitions and parity evidence hash; ops logs include health snapshots for every pause/resume cycle.
+- Observability: metrics `transcribe_fallback_total{provider, reason}`, `transcribe_pause_total`, and `transcribe_paused_jobs` feed dashboards. Audit events capture provider transitions and parity evidence hash; ops logs include health snapshots for every pause/resume cycle.
 - Testing: `tests/udocket_core/failover/test_speech_orchestrator.py` exercises controller parity checks, health-driven pauses, and auto-resume, while `synthetics/transcribe_failover.yaml` validates staging behavior.
 
 #### 6.2.2 Capability negotiation & track merge pipeline (binding)
@@ -2047,10 +2069,10 @@ Example
 
 - Registry source of truth: `speech.providers[]` (Settings Service) defines each adapter’s declared capabilities, with overrides allowed per organization/case. Activation validators cross-check declarations against integration fixtures (`tests/udocket_core/transcription/providers/fixtures/*.json`) to prevent drift.
 - Capability groups (all required unless noted):
-  - `ingest`: `supported_containers[]` (e.g., `["wav","mp3","m4a","ogg"]`), `preferred_audio_format` (`"wav/pcm16"` default), `max_channels` (int), `max_duration_minutes`, `max_file_mb`, `requires_conversion` (bool) when provider enforces PCM inputs, `streaming_modes[]` (`"on_demand"`, `"batch"`).
+  - `ingest`: `supported_containers[]` (e.g., `["wav", "mp3", "m4a", "ogg"]`), `preferred_audio_format` (`"wav/pcm16"` default), `max_channels` (int), `max_duration_minutes`, `max_file_mb`, `requires_conversion` (bool) when provider enforces PCM inputs, `streaming_modes[]` (`"on_demand"`, `"batch"`).
   - `analysis`: `diarization` (`none|provider|external`), `speaker_labels` (bool), `dominant_speaker` (bool), `word_timestamps` (`none|per_word|per_token`), `timestamp_precision_ms` (int), `channel_separation` (bool).
   - `normalization`: `punctuation_normalization` (enum), `numerical_normalization` (enum), `capitalization` (enum), `profanity_filters` (enum), `locale_support[]` (BCP-47 codes) indicating verified language/localization coverage, `preferred_locale_fallback` (BCP-47).
-  - `translation` (optional): `supports_translation` (`none|provider|external`), `translation_modes[]` (for example `["source_to_target","source_to_many"]`), `verified_target_locales[]` (BCP-47), `verified_language_pairs[]` (array of `{source,target[],mode}` records), `max_parallel_targets` (int), `pivot_locale` (BCP-47) when the provider requires an intermediate locale, `requires_custom_glossary` (bool), `supports_glossary` (bool), `supports_formality_tone` (enum), and `fallback_translation_strategy` (`"pivot"`, `"reject"`, `"external"`) for unsupported pairs.
+  - `translation` (optional): `supports_translation` (`none|provider|external`), `translation_modes[]` (for example `["source_to_target", "source_to_many"]`), `verified_target_locales[]` (BCP-47), `verified_language_pairs[]` (array of `{source, target[], mode}` records), `max_parallel_targets` (int), `pivot_locale` (BCP-47) when the provider requires an intermediate locale, `requires_custom_glossary` (bool), `supports_glossary` (bool), `supports_formality_tone` (enum), and `fallback_translation_strategy` (`"pivot"`, `"reject"`, `"external"`) for unsupported pairs.
   - `operational`: `billing_unit` (`"minute"`, `"second"`, `"character"`), `max_parallel_jobs`, `region_allowlist[]` (subset of Settings region catalog), `requires_data_residency_attestation` (bool), `sla_compliant` (bool), `health_check.url`.
 - Execution planning best practices:
 - Agents always normalize inputs to `preferred_audio_format`; if the source already matches (e.g., PCM 16 kHz mono) conversion is skipped; otherwise ffmpeg converts to PCM 16-bit little-endian WAV at the provider’s highest verified sample rate ≤ 32 kHz to balance accuracy and cost. Conversion artifacts are saved (`AUDIO_NORMALIZED`) with SHA-256 so replays share a stable baseline.
@@ -2095,7 +2117,7 @@ Example
   - Inputs declare `source_language` (BCP-47) and optional `requested_locales[]`. If `source_language` is omitted and `speech.detect_language.enabled=true`, the `LanguageProbe` step samples audio snippets (≤30 seconds) using CLD3 + provider hints to produce a ranked list with confidence. Detections below confidence threshold (default 0.75) require human confirmation before dispatch (SSE `LANGUAGE_CONFIRMATION_REQUIRED`).
   - Providers must have the requested locale in `locale_support[]`; otherwise the planner either downgrades to `preferred_locale_fallback` (recorded in manifest `locale_resolution`) or blocks execution when `speech.require_locale_match=true`.
 - Native multilingual transcription:
-  - When a provider supports direct transcription into the source language (`supports_translation in {"none","external"}` but `locale_support` includes the source), the agent emits a single normalized transcript tagged with `language`/`locale` fields. Multi-language sessions (code-switching) use diarization segments to attach `segment.language` metadata; transcripts remain in the predominant locale unless `speech.multilingual_segments.enabled=true`, which produces language-tagged segments and writes `compile_notes` describing each language span.
+  - When a provider supports direct transcription into the source language (`supports_translation in {"none", "external"}` but `locale_support` includes the source), the agent emits a single normalized transcript tagged with `language`/`locale` fields. Multi-language sessions (code-switching) use diarization segments to attach `segment.language` metadata; transcripts remain in the predominant locale unless `speech.multilingual_segments.enabled=true`, which produces language-tagged segments and writes `compile_notes` describing each language span.
   - Segment-level metadata stores `language_confidence` (0-1) and optional `transliteration` for scripts requiring romanization (provider capability `supports_transliteration=true`). Transliteration is stored separately from the normalized text to preserve original script in downstream artifacts.
 - Translation workflow:
   - Translation requests create derivative artifacts `transcript/<job_id>__transcript_<locale>.txt` alongside JSON manifests referencing the source transcript ID, translation provider, glossary version, and pivot locale (if used). The base transcript remains the source of truth; translated transcripts carry `schema_version: "speech_translation@1.0"` with fields `{source_locale, target_locale, translation_mode, glossary_ids[], segments[]}`.
@@ -2111,7 +2133,7 @@ Example
   - HIPAA/PHI rules apply identically: translations inherit PHI tags from the source transcript. If a translation provider lacks HIPAA attestation, the planner blocks translation when HIPAA mode is on.
   - Never-log still applies; raw translated text is confined to artifacts. Audit logs capture only identifiers, locale codes, provider IDs, and hashes.
 - Observability:
-  - Metrics: `speech_language_detect_total{result}`, `speech_translation_jobs_total{locale,provider}`, `speech_translation_duration_seconds`, `speech_locale_downgrade_total`, `speech_translation_glossary_miss_total`.
+  - Metrics: `speech_language_detect_total{result}`, `speech_translation_jobs_total{locale, provider}`, `speech_translation_duration_seconds`, `speech_locale_downgrade_total`, `speech_translation_glossary_miss_total`.
   - Dashboards correlate translation costs with FinOps budgets; alerts fire when translation error rates exceed thresholds or when locale downgrades occur repeatedly for an org.
 - Testing & fixtures:
   - Golden audio/translation pairs stored under `tests/udocket_core/transcription/multilingual/`; CI asserts locale negotiation, glossary application, and parity between provider-native translation and fallback external translation within documented tolerance.
@@ -2187,7 +2209,7 @@ Example
 - Appendix D documents artifact schemas keyed by `deliverable_id`; Appendix E cross-references catalog entries with settings/tests/runbooks so auditors can trace coverage for any newly activated deliverable.
 
 <figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/out/data-lineage-v1.svg" style="max-width: 70%;" alt="Artifact data lineage">
+  <img src="diagrams/out/data-lineage-v1.png" style="max-width: 70%;" alt="Artifact data lineage">
   <figcaption style="font-size: 0.9em; color: #555;">Artifact data lineage</figcaption>
 </figure>
 
@@ -2257,7 +2279,7 @@ Node catalog (illustrative)
 
 *Purpose: Establish guardrails and rollback paths for LangGraph adoption.*
 
-- Framework encapsulation: LangGraph graphs execute behind `packages.udocket_core.agents.graph_runner.GraphRunner`. Settings key `agents.langgraph.runner ∈ {'langgraph','linear'}` plus a CLI override allow swapping to the linear runner for smoke tests or incident mitigation. Contract tests run against both runners to ensure parity.
+- Framework encapsulation: LangGraph graphs execute behind `packages.udocket_core.agents.graph_runner.GraphRunner`. Settings key `agents.langgraph.runner ∈ {'langgraph', 'linear'}` plus a CLI override allow swapping to the linear runner for smoke tests or incident mitigation. Contract tests run against both runners to ensure parity.
 - Training & SOP: engineering onboarding includes LangGraph workshops, code walkthroughs, and pairing sessions; a living playbook in `docs/runbooks/langgraph-adoption.md` captures patterns, anti-patterns, and upgrade notes.
 - Upgrade cadence: LangGraph pinned via Poetry with weekly review of upstream releases; canary staging job (`synthetics/langgraph_canary.yaml`) executes against new versions before upgrade PRs. Major version bumps require ADR review.
 - UUID safeguards: default UUIDv7/UUIDv5 strategy (see §6.7.1) is mandatory; no experimental UUID versions are permitted in manifests or identifiers.
@@ -2315,7 +2337,7 @@ Node catalog (illustrative)
 
 *Purpose: Make analysis, transcription, and Guardian quality targets measurable and auditable.*
 
-- **Speech accuracy:** Word Error Rate (WER) target ≤ 8 % for on-demand, ≤ 6 % for batch transcripts measured against quarterly golden sets; dashboards plot WER trend per language with alerts when ≥ 2 % regression (`metrics: transcription_wer_pct{mode,language}`).
+- **Speech accuracy:** Word Error Rate (WER) target ≤ 8 % for on-demand, ≤ 6 % for batch transcripts measured against quarterly golden sets; dashboards plot WER trend per language with alerts when ≥ 2 % regression (`metrics: transcription_wer_pct{mode, language}`).
 - **Guardian effectiveness:** False-negative rate (quarantined after customer exposure) ≤ 0.5 % per quarter, false-positive (unjustified quarantine) ≤ 5 % with remediation documented in App.H RB-GUARD-QUAR review log. Weekly sampling validates judgment reasons against policy matrix using `guardian_quarantine_false_positive_total` vs `guardian_judgment_total` to quantify drift and trigger policy tuning.
 - **Review delta:** Reviewer change rate for Analyze/Compose deliverables \< 15 % of sections (measured via `qa_log` issue density and Manual/Agent edit diffs). Exceeding thresholds triggers regression analysis in LangGraph acceptance tests (§13.3).
 - **QA defect density:** `qa_issue_density` metric targets ≤ 0.2 blocking defects per artifact; Compose/Analyze QA lanes surface severity distribution for release gates.
@@ -2356,12 +2378,12 @@ Node catalog (illustrative)
 - Downstream enforcement: workers, UI, and portal clients must respect the target status (`CLEARED_FOR_USE`, `OPERATOR_PREP`, `QUARANTINED`) before executing dependent actions. Fetch-time checks re-evaluate Guardian judgment freshness and invalidate stale deliverables (§11.2.1).
 
 <figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/out/guardian-judgment-flow-v1.svg" style="max-width: 70%;" alt="Guardian judgment pipeline">
+  <img src="diagrams/out/guardian-judgment-flow-v1.png" style="max-width: 70%;" alt="Guardian judgment pipeline">
   <figcaption style="font-size: 0.9em; color: #555;">Guardian judgment pipeline</figcaption>
 </figure>
 
 <figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/out/guardian-class-model-v1.svg" style="max-width: 65%;" alt="Guardian service classes">
+  <img src="diagrams/out/guardian-class-model-v1.png" style="max-width: 65%;" alt="Guardian service classes">
   <figcaption style="font-size: 0.9em; color: #555;">Guardian service classes</figcaption>
 </figure>
 
@@ -2464,7 +2486,7 @@ Guardian persists raw span evidence in `guardian_span_detection` (WP scope, RLS-
 - Waivers and manual overrides follow existing approval swap semantics: changing a deliverable’s signature policy emits `SIGNATURE_POLICY_CHANGE` audit events, regenerates signed copies, and revokes previously released versions.
 
 <figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/out/signing-delivery-v1.svg" style="max-width: 65%;" alt="Signing and delivery flow">
+  <img src="diagrams/out/signing-delivery-v1.png" style="max-width: 65%;" alt="Signing and delivery flow">
   <figcaption style="font-size: 0.9em; color: #555;">Signing and delivery flow</figcaption>
 </figure>
 
@@ -2561,14 +2583,14 @@ Guardian persists raw span evidence in `guardian_span_detection` (WP scope, RLS-
 *Purpose: Document the failover helper that orchestrates safe provider rollbacks.*
 
 - Implementation: `packages/udocket_core/failover/model.py::ModelFailoverOrchestrator` centralizes fallback evaluation, emitting standardized events (`LLM_FALLBACK_TRIGGERED`, `LLM_FAILOVER_PAUSED`, `LLM_FAILOVER_RESUMED`) and updating evidence envelopes. LangGraph lanes, Celery tasks, and CLI utilities call the orchestrator via `llm.runtime.failover.for_request(...)` instead of embedding lane-specific logic.
-- Guarantees: orchestrator enforces parity validation (`fallback.evidence_sha256`), residency checks, throttling budgets, and pause/resume gating. It records counters (`llm_failover_attempt_total{provider,reason}`, `llm_failover_pause_total`) and appends structured telemetry consumed by dashboards (§12.6).
+- Guarantees: orchestrator enforces parity validation (`fallback.evidence_sha256`), residency checks, throttling budgets, and pause/resume gating. It records counters (`llm_failover_attempt_total{provider, reason}`, `llm_failover_pause_total`) and appends structured telemetry consumed by dashboards (§12.6).
 - Testing: golden-set replay harness `tests/udocket_core/failover/test_model_orchestrator.py` verifies deterministic selection order, pause semantics, and auto-resume after consecutive health probes. Synthetic monitor `synthetics/llm_failover.yaml` exercises the helper end-to-end in staging.
 - Extensibility: new providers register adapters implementing the `FailoverAdapter` protocol; the orchestrator enforces interface compliance at import time and blocks activation if adapters omit health probes, parity metadata, or residency attestations.
-- Telemetry: `llm_circuit_state` and `llm_fallback_total{model,reason}` power dashboards; on-call alerts fire when circuits remain OPEN beyond 15 minutes or when fallback spend exceeds budget thresholds.
+- Telemetry: `llm_circuit_state` and `llm_fallback_total{model, reason}` power dashboards; on-call alerts fire when circuits remain OPEN beyond 15 minutes or when fallback spend exceeds budget thresholds.
 - Diagram: `docs/diagrams/llm-failover-v1.mmd` captures the orchestrator sequence.
 
 <figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/out/llm-failover-v1.svg" style="max-width: 65%;" alt="LLM failover orchestrator">
+  <img src="diagrams/out/llm-failover-v1.png" style="max-width: 65%;" alt="LLM failover orchestrator">
   <figcaption style="font-size: 0.9em; color: #555;">LLM failover orchestrator</figcaption>
 </figure>
 
@@ -2638,7 +2660,7 @@ PII posture (binding)
 *Purpose: Prevent runaway spend and provide transparency to orgs.*
 
 - Pre-call guard enforces tokens-in ≤ `analyze|compose.token_ceiling` and ensures projected cost + month-to-date ≤ `llm.finops.monthly_cap_usd`. Violations return `429 RATE_LIMIT` with reasons `TOKEN_CEILING` or `BUDGET_EXCEEDED`.
-- Metrics exported: `llm_call_count`, `llm_tokens_in/out`, `llm_cost_estimate_total{org,case,job,model}` feeding FinOps dashboards (`§12.9`).
+- Metrics exported: `llm_call_count`, `llm_tokens_in/out`, `llm_cost_estimate_total{org, case, job, model}` feeding FinOps dashboards (`§12.9`).
 - Monthly CSV artifacts `FINOPS_REPORT` generated per org, listing cost breakdowns; Guardian/Reviewer approvals required for distribution.
 - Deployment gate (`§13.5`) blocks releases when month-over-month cost regression exceeds threshold (default 10%).
 - Budget controller (`FinOpsGuardController`): runs in the worker cluster, tracking `llm_cost_estimate_total` deltas per org. When projected spend exceeds the configured cap mid-execution, the controller marks affected jobs `PAUSED_AWAITING_BUDGET`, emits SSE `job.blocked` + `job.update` with `warning="BUDGET_HELD"`, and writes an audit event `FINOPS_BUDGET_HELD`. Any in-flight CDs receive `FINOPS_BUDGET_EXCEEDED` as the Guardian quarantine reason; Guardian emits `GUARDIAN.JUDGMENT.BLOCK` with the same code and appends the judgment to `guardian_judgment_history`. Resume occurs only after finance/ops clear the alert by either raising the cap (dual-approved Settings activation) or releasing the hold via `POST /api/v1/jobs/{id}:resume` once the controller observes budget headroom.
@@ -2646,7 +2668,7 @@ PII posture (binding)
 - Diagram: `docs/diagrams/finops-guard-v1.mmd` depicts the deploy guard decision flow.
 
 <figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/out/finops-guard-v1.svg" style="max-width: 60%;" alt="FinOps deploy guard flow">
+  <img src="diagrams/out/finops-guard-v1.png" style="max-width: 60%;" alt="FinOps deploy guard flow">
   <figcaption style="font-size: 0.9em; color: #555;">FinOps deploy guard flow</figcaption>
 </figure>
 
@@ -2683,7 +2705,7 @@ PII posture (binding)
 
 - Pre-call injection filters: pattern-based sanitization, allowlist of instructions, region/language cross-check. Policy guard rejects requests hitting forbidden patterns and requires successful moderation check before dispatch.
 - Moderation stack: inbound prompts and retrieved context flow through provider moderation APIs plus in-house classifiers (`toxicity`, `self_harm`, `sexual_content`, `pii_reintroduction`). Post-call outputs run through the same classifiers; violations emit `LLM_CONTENT_FLAGGED` QA issues, set the artifact status to `QUARANTINED`, and require remediation plus a fresh Guardian submission before workflow resumes.
-- Moderation configuration & observability: `llm.moderation.enabled`, `llm.moderation.provider`, enforcement mode `llm.moderation.enforcement ∈ {block,warn}`, and threshold keys `llm.moderation.thresholds.*` govern behavior by locale/use‑case. Metrics `llm_content_flagged_total{reason}`, `llm_moderation_latency_seconds`, and `llm_moderation_error_total` feed the “LLM Safety & Moderation” dashboard; redaction efficacy tracked via `redaction_stats{kind}`. Guardian shows moderation verdicts alongside QA issues for reviewer context. Non‑prod orgs may select `warn` to avoid blocking while tuning thresholds; prod defaults to `block` unless a documented waiver is active.
+- Moderation configuration & observability: `llm.moderation.enabled`, `llm.moderation.provider`, enforcement mode `llm.moderation.enforcement ∈ {block, warn}`, and threshold keys `llm.moderation.thresholds.*` govern behavior by locale/use‑case. Metrics `llm_content_flagged_total{reason}`, `llm_moderation_latency_seconds`, and `llm_moderation_error_total` feed the “LLM Safety & Moderation” dashboard; redaction efficacy tracked via `redaction_stats{kind}`. Guardian shows moderation verdicts alongside QA issues for reviewer context. Non‑prod orgs may select `warn` to avoid blocking while tuning thresholds; prod defaults to `block` unless a documented waiver is active.
 - Golden-set tests: nightly runs across languages evaluate jailbreak resistance, toxicity, fairness; regressions page on-call and block deploys. Promotion to production is blocked unless the release pipeline’s `golden_set:jailbreak` job re-runs clean within the staging window.
 - QA nodes re-validate outputs against schema, length, references, organization-specific policies (`compose.policy.*`, `analyze.*`), and moderation results. Configuration key `qa.confidence.threshold` (mirrored in env var `QA_CONFIDENCE_THRESHOLD`) sets the minimum acceptable classifier confidence; runs below the threshold automatically request human review even if the job opted into `SKIP_REVIEW`. Each QA evaluation stamps `{qa_model_id, qa_model_version, qa_confidence_score, qa_reason_codes[]}` into the artifact manifest and emits telemetry via the unified judgment event stream. Failures escalate to QA logs and SSE notifications while Guardian holds the artifact in `OPERATOR_PREP`/`QUARANTINED` until review outcomes progress it.
 - Guardian gating: Guardian consumes moderation verdicts and QA outcomes, blocks promotion when `LLM_CONTENT_FLAGGED` or `POLICY_BLOCK` is present, and forwards only clean artifacts to reviewers for tri-outcome review decisions (APPROVE / CHANGES_REQUESTED / QUARANTINE).
@@ -2783,7 +2805,7 @@ Notes
 - Traceability matrix in Appendix E maps each critical feature (agents, Guardian, FinOps, portal) to settings keys; updates required whenever keys change.
 
 <figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/out/core-domain-entities.svg" style="max-width: 70%;" alt="Core domain entity model">
+  <img src="diagrams/out/core-domain-entities.png" style="max-width: 70%;" alt="Core domain entity model">
   <figcaption style="font-size: 0.9em; color: #555;">Core domain entity model</figcaption>
 </figure>
 
@@ -2812,12 +2834,12 @@ Notes
 - Record activation window, approvers, and effects in audit.
 
 <figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/out/settings-activation-v1.svg" style="max-width: 65%;" alt="Settings activation pipeline">
+  <img src="diagrams/out/settings-activation-v1.png" style="max-width: 65%;" alt="Settings activation pipeline">
   <figcaption style="font-size: 0.9em; color: #555;">Settings activation pipeline</figcaption>
 </figure>
 
 <figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/out/settings-activation-classes-v1.svg" style="max-width: 65%;" alt="Settings activation classes">
+  <img src="diagrams/out/settings-activation-classes-v1.png" style="max-width: 65%;" alt="Settings activation classes">
   <figcaption style="font-size: 0.9em; color: #555;">Settings activation classes</figcaption>
 </figure>
 
@@ -2945,7 +2967,7 @@ List contracts (normative)
 
 - Sorting: only on whitelisted fields; multiple fields separated by comma; direction with `:asc|:desc` (default asc). Invalid field/direction → 400.
 - Filtering: query params match exact fields; masked fields are not filterable; server may return 400 if filter would breach masking.
-- Examples: `?sort=created_at:desc,type:asc&page=2&page_size=50`; `?case_id=<uuid>&type=SUMMARY_MD`.
+- Examples: `?sort=created_at:desc, type:asc&page=2&page_size=50`; `?case_id=<uuid>&type=SUMMARY_MD`.
 
 ### 10.2 Artifact/job/review endpoints
 
@@ -3009,7 +3031,7 @@ CREATE TABLE idempotency_keys (
   endpoint TEXT NOT NULL,              -- canonical "METHOD:/api/v1/..." string
   case_id UUID NULL,
   request_hash BYTEA NOT NULL,         -- sha256 of canonicalised body+query payload
-  status TEXT NOT NULL DEFAULT 'in_progress', -- {'in_progress','succeeded','conflict'}
+  status TEXT NOT NULL DEFAULT 'in_progress', -- {'in_progress', 'succeeded', 'conflict'}
   result_ref TEXT NULL,                -- e.g., job_id
   response_code INTEGER NULL,
   response_hash BYTEA NULL,            -- sha256 of JSON response/body when persisted
@@ -3026,12 +3048,12 @@ CREATE UNIQUE INDEX idempotency_request_dedupe_idx
 
 Handler pattern
 
-1. `udlock.xact_lock(scope, CONCAT(:org_id,'/',:key))`.
+1. `udlock.xact_lock(scope, CONCAT(:org_id, '/', :key))`.
 2. Normalise endpoint to `METHOD:/path` (path variables preserved) and compute `request_hash = sha256(canonical_request_bytes)` via `packages.udocket_core.idem.hash_request`.
-3. Insert `(org,scope,key,endpoint,case_id,request_hash,result_ref,response_code,response_hash,status,expires_at)` on first execution with `expires_at = now() + make_interval(hours => :ttl_hours)`. Conflicts where `request_hash` differs MUST raise 409 `CONFLICT` with `details.reason="IDEMPOTENCY_SIGNATURE_MISMATCH"`; matching hashes update `last_seen_at` and return `result_ref`.
-4. Optional overlapping-run guard per case/kind: `udlock.try_lock('jobkind', CONCAT(:case_id,'/',:kind))` → 409 `JOB_KIND_BUSY` if held.
+3. Insert `(org, scope, key, endpoint, case_id, request_hash, result_ref, response_code, response_hash, status, expires_at)` on first execution with `expires_at = now() + make_interval(hours => :ttl_hours)`. Conflicts where `request_hash` differs MUST raise 409 `CONFLICT` with `details.reason="IDEMPOTENCY_SIGNATURE_MISMATCH"`; matching hashes update `last_seen_at` and return `result_ref`.
+4. Optional overlapping-run guard per case/kind: `udlock.try_lock('jobkind', CONCAT(:case_id, '/', :kind))` → 409 `JOB_KIND_BUSY` if held.
 
-- Canonical scopes (binding): `IDEMPOTENCY_SCOPES = {'job:create','job:checkpoint','artifact:approve','artifact:upload','upload:finalize'}` exported from `packages.udocket_core.idem.constants`. Services **MUST NOT** invent ad-hoc strings; CI lints specs and Python call sites to use the constant set.
+- Canonical scopes (binding): `IDEMPOTENCY_SCOPES = {'job:create', 'job:checkpoint', 'artifact:approve', 'artifact:upload', 'upload:finalize'}` exported from `packages.udocket_core.idem.constants`. Services **MUST NOT** invent ad-hoc strings; CI lints specs and Python call sites to use the constant set.
 
 - Response contract: any API that accepts `Idempotency-Key` **MUST** echo the exact value in the response headers for success and error paths (`Idempotency-Key: <value>`) and emit `Idempotency-Status: fresh|replay|conflict`. OpenAPI lint (`ops/openapi/rules/idempotency-echo.yaml`) enforces the headers on 2xx/4xx/5xx responses.
 
@@ -3195,14 +3217,14 @@ Payloads (illustrative)
 | ----------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | job.accepted            | `{ schema_version, emitted_at, job_id, case_id, org_id }`                                      | Emitted once when a queued job is accepted onto a worker.                               |
 | job.running             | `{ schema_version, emitted_at, job_id, case_id, org_id, phase }`                               | Signifies active execution; `phase` mirrors `provider_progress.phase`.                  |
-| job.update              | `{ schema_version, emitted_at, job_id, case_id, org_id, status, progress?, warning?, error? }` | `status ∈ {PENDING,RUNNING,PAUSED,PAUSED_AWAITING_PROVIDER,PAUSED_AWAITING_BUDGET,CANCELING,FAILED,COMPLETED,CANCELED}` |
+| job.update              | `{ schema_version, emitted_at, job_id, case_id, org_id, status, progress?, warning?, error? }` | `status ∈ {PENDING, RUNNING, PAUSED, PAUSED_AWAITING_PROVIDER, PAUSED_AWAITING_BUDGET, CANCELING, FAILED, COMPLETED, CANCELED}` |
 | job.blocked             | `{ schema_version, emitted_at, job_id, case_id, org_id, reason }`                              | Signals policy or budget block; clients surface remediation guidance.                   |
 | job.quarantined         | `{ schema_version, emitted_at, job_id, case_id, org_id, reason }`                              | Guardian-enforced quarantine; operators must resubmit with fixes/waivers.               |
 | job.completed           | `{ schema_version, emitted_at, job_id, case_id, org_id }`                                      | Successful terminal state; emitted before downstream artifact.status updates.           |
 | job.canceling           | `{ schema_version, emitted_at, job_id, case_id, org_id, actor_id, reason }`                    | Emitted once per cancel request; clients stop polling progress UI.                      |
 | job.canceled            | `{ schema_version, emitted_at, job_id, case_id, org_id, actor_id, reason, provider_outcome }`  | Emitted after providers acknowledge abort; pairs with AR `JOB_CANCELLATION_REPORT`.      |
-| artifact.status         | `{ schema_version, emitted_at, artifact_id, case_id, org_id, type, status, previous_status? }` | `status ∈ {STORED,PROCESSING,FAILED,PENDING_JUDGMENT,CLEARED_FOR_USE,OPERATOR_PREP,APPROVAL_REQUESTED,QUEUED_FOR_REVIEW,CHANGES_REQUESTED,QUARANTINED,APPROVED,SIGNED,RELEASED,REVOKED,ARCHIVED}` |
-| qa.notes                | `{ schema_version, emitted_at, job_id?, artifact_id?, case_id, notes:[{level,msg,emitted_at}] }` | Levels: INFO                                                                             |
+| artifact.status         | `{ schema_version, emitted_at, artifact_id, case_id, org_id, type, status, previous_status? }` | `status ∈ {STORED, PROCESSING, FAILED, PENDING_JUDGMENT, CLEARED_FOR_USE, OPERATOR_PREP, APPROVAL_REQUESTED, QUEUED_FOR_REVIEW, CHANGES_REQUESTED, QUARANTINED, APPROVED, SIGNED, RELEASED, REVOKED, ARCHIVED}` |
+| qa.notes                | `{ schema_version, emitted_at, job_id?, artifact_id?, case_id, notes:[{level, msg, emitted_at}] }` | Levels: INFO                                                                             |
 | portal_link_invalidated | `{ schema_version, emitted_at, artifact_id, case_id, reason }`                                 | Portal consumes to revoke stale links                                                   |
 | settings.activated      | `{ schema_version, emitted_at, scope, org_id?, case_id?, bundle_id, version_id }`             | Triggers cache invalidation on clients                                                  |
 
@@ -3319,7 +3341,7 @@ Contract requirements (binding)
 - All reviewer actions append to `guardian_judgment_history` via API (`/guardian/review-actions`) so Guardian remains the single source of truth for artifact status changes.
 
 <figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/out/approvals-ux-v1.svg" style="max-width: 60%;" alt="Reviewer approval UX">
+  <img src="diagrams/out/approvals-ux-v1.png" style="max-width: 60%;" alt="Reviewer approval UX">
   <figcaption style="font-size: 0.9em; color: #555;">Reviewer approval UX</figcaption>
 </figure>
 
@@ -3348,13 +3370,13 @@ Contract requirements (binding)
 
 *Purpose: Ensure clients cannot access stale or revoked artifacts after review actions.*
 
-- The platform invalidates active portal links whenever an approval swap demotes a previously `APPROVED` artifact of the same `(case,type)`, a reviewer rejects an `APPROVED` artifact, Guardian sets the artifact to `QUARANTINED`, or integrity monitoring raises `ARTIFACT_INTEGRITY_MISMATCH`.
+- The platform invalidates active portal links whenever an approval swap demotes a previously `APPROVED` artifact of the same `(case, type)`, a reviewer rejects an `APPROVED` artifact, Guardian sets the artifact to `QUARANTINED`, or integrity monitoring raises `ARTIFACT_INTEGRITY_MISMATCH`.
 - Invalidations emit `portal_link_invalidated {artifact_id, reason, ts}` events and SSE notifications; subsequent downloads return `403` and the portal shows a denial banner.
 - Indexes/search hide demoted or rejected artifacts; portal lists reflect only the latest `APPROVED` artifacts per exclusive type.
 - Copy surfaced to clients is settings-driven via `i18n.portal.invalidation.message_key`, allowing Product/Legal to localize or update messaging without code changes.
 
 <figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/out/portal-invalidation-v1.svg" style="max-width: 60%;" alt="Portal invalidation flow">
+  <img src="diagrams/out/portal-invalidation-v1.png" style="max-width: 60%;" alt="Portal invalidation flow">
   <figcaption style="font-size: 0.9em; color: #555;">Portal invalidation flow</figcaption>
 </figure>
 
@@ -3365,7 +3387,7 @@ Contract requirements (binding)
 *Purpose: Enforce explicit checks on every fetch to avoid stale or unauthorized content.*
 
 - Preconditions: `status='APPROVED'`, case/org membership, and fresh signed URL or token.
-- Conditional requests: clients **MUST** send `If-Match` with the last seen strong ETag (surfaced inline on the portal artifact detail panel as “Integrity tag,” localized via LPE key `portal.integrity.tag`, and embedded in the download button tooltip); mismatches or missing headers yield `412 PRECONDITION_FAILED` with guidance (`portal.download.error.etag_mismatch`) to refresh metadata before retrying.
+- Conditional requests: clients **MUST** send `If-Match` with the last seen strong ETag (surfaced inline on the portal artifact detail panel as “Integrity tag, ” localized via LPE key `portal.integrity.tag`, and embedded in the download button tooltip); mismatches or missing headers yield `412 PRECONDITION_FAILED` with guidance (`portal.download.error.etag_mismatch`) to refresh metadata before retrying.
 - Rate limits: per‑user/org caps; anomalies invalidate links and prompt step-up MFA when configured.
 
 #### 11.2.3 Approval exception handling (binding)
@@ -3376,7 +3398,7 @@ Contract requirements (binding)
 
 - Remediation path: `CHANGES_REQUESTED` artifacts route back to `OPERATOR_PREP` with reviewer guidance and must re-clear Guardian (PASS/WARN) before re-entering `APPROVAL_REQUESTED → QUEUED_FOR_REVIEW`. Guardian keeps the prior APPROVED artifact live until the replacement is `APPROVED`. Reviewers must provide structured feedback (`reject_reason`, `reject_note`, optional `follow_up_owner`) stored in `artifact_review_feedback` and surfaced in UI/state machine diagrams (App.A.5).
 - Timeouts & escalation: Settings key `reviews.timeout_hours` (per artifact type) triggers reminders at 50%/90% elapsed windows and auto-escalates to `org_admin` if the window closes without action. Escalation emits `approval_timeout` notification templates and logs `REVIEW_TIMEOUT_ESCALATED` audit events.
-- Reassignment: Org admins with `org_admin` role may reassign pending reviews via `POST /reviews/{artifact}/reassign {from_user,to_user}`; OCC guards prevent reassignment once a decision is recorded. Actions append to the audit trail and notify both reviewers.
+- Reassignment: Org admins with `org_admin` role may reassign pending reviews via `POST /reviews/{artifact}/reassign {from_user, to_user}`; OCC guards prevent reassignment once a decision is recorded. Actions append to the audit trail and notify both reviewers.
 - Guardian degradation: When Guardian is in App.H manual mode, approvals require dual reviewer sign-off plus compliance attestation before promotion; the portal surfaces `MANUAL_GUARDIAN_JUDGMENT` context in download banners.
 - Urgent overrides: Break-glass flow (`/reviews/{artifact}/urgent-approval`) available only to Security-approved roles. Invocations require two-factor confirmation, record rationale, and expire automatically after delivery; artifacts flagged `URGENT_APPROVAL_USED` must be re-reviewed within 72 hours.
 
@@ -3472,7 +3494,7 @@ Binding breadcrumbs:
 - Stage coverage: every major artifact (transcript, analysis outputs, compose deliverables, portal messaging attachments) exposes both Manual and Agent edit affordances so operators can choose between direct editing and AI-assisted drafting. Agent edits reuse the shared LangGraph infrastructure with the relevant lane templates (transcript cleanup, summary refinement, compose adjustments) while honoring residency and provider caps; manual edits launch a rich text/JSON editor with schema-aware validation.
 - Guardrails: Agent edit prompts template in case metadata and enforce redaction of PHI/PII beyond the case scope; prompts and model settings write to the edit manifest so reviewers can validate provenance. The Agent edit runtime inherits the same moderation/masked-token policies as §8.4 LLM calls plus edit-specific classifiers that block off-topic, speculative, or policy-disallowed requests (`EDIT_POLICY_BLOCK`). Manual edits require operators to provide a change summary that is persisted alongside the diff; reviewers see both the diff and the operator note.
 - Dual approval: certain artifacts (e.g., legal deliverables) require two distinct reviewers (roles defined in Settings); UI displays remaining approvals and enforces step-up MFA when configured.
-- Database guardrails enforce distinct approvers via a partial unique index (e.g., `CREATE UNIQUE INDEX approve_once_per_user ON artifact_review (artifact_id, reviewer_id, approval_type) WHERE state IN ('PENDING','APPROVED')`), preventing the same reviewer from consuming multiple required slots.
+- Database guardrails enforce distinct approvers via a partial unique index (e.g., `CREATE UNIQUE INDEX approve_once_per_user ON artifact_review (artifact_id, reviewer_id, approval_type) WHERE state IN ('PENDING', 'APPROVED')`), preventing the same reviewer from consuming multiple required slots.
 - Telemetry & audit: every edit (manual or agent) appends to `ops/<job_id>__edit_log.jsonl` with `{edit_type, editor_id, locale, diff_fingerprint_sha256, model_id?, prompt_id?, moderation_outcome}`. Metrics (`edit_sessions_total{type}`, `edit_rejected_total`, `edit_agent_retry_total`, `edit_policy_block_total`) feed QA dashboards; repeated rejections (`>=3` within 24h) automatically page the owning engineering team. Guardian monitors moderation outcomes and can auto-quarantine edits flagged `critical` (`EDIT_GUARDIAN_QUARANTINE`) pending compliance review.
 - SSE + notifications: editors emit SSE events (`edit.started`, `edit.updated`, `edit.ready_for_review`, `edit.policy_blocked`) so collaborators stay aware of in-flight edits. Reviewers receive actionable notifications with deep links to the diff view; declined edits record the reviewer feedback and push a follow-up task to the originating operator. Guardian-triggered quarantines notify Security/Compliance with contextual metadata.
 - i18n: all approval banners, edit prompts, and invalidation copy are localized via settings-driven strings (`i18n.*`).
@@ -3606,9 +3628,9 @@ Binding breadcrumbs:
 - Emission & formatting (binding): All services emit newline-delimited JSON to stdout for levels `DEBUG` through `ERROR`; only `ERROR` and higher duplicate to stderr so container runtimes and `kubectl logs`/`docker logs` tail a single canonical stream. The `src` field records the compact source location as `package.module:function:line` (max 80 characters) and extended diagnostics belong in structured keys under `extras`. Messages must remain ≤ 160 characters—richer context should be captured in dedicated fields to avoid terminal noise. Local pretty printing is opt-in via `LOG_PRETTY=1`, keeping production streams strict JSON with no ANSI colour or stacktrace spam.
 - Forbidden fields (binding): log scrubber removes `Authorization`, `Cookie`, `Set-Cookie`, `X-Request-Signature`, `X-Signature-Key-Id`, raw signed URLs, and any header matching `*-Token` before serialization. CI test `tests/logging/test_redaction.py::test_forbidden_headers_masked` asserts the mask list, and runtime metrics `logging_redaction_dropped_total` surface any attempt to log a banned key.
 - Metrics: queue depth, job durations, Guardian latency/throughput (`guardian_judgment_latency_seconds`, `guardian_cleared_ratio`, `guardian_pending_total`, `guardian_pending_oldest_seconds`, `guardian_submission_timeout_total`), Signer verify latency (including `sign_verify_status_total`, `ocsp_latency_seconds`, `ocsp_staple_age_seconds`, `tsa_latency_seconds`, `tsa_time_drift_seconds`), LLM health/circuit state, delivery rates, integrity incidents (`integrity_scan_queue_depth`, `integrity_quarantine_total`), review queue health (`review_queue_backlog_total`, `review_queue_oldest_seconds`), Guardian false-positive sampling (`guardian_quarantine_false_positive_total`), job lifecycle signals (`job_stalled_total`, `job_watchdog_warning_total`, `job_watchdog_timeout_total`, `job_cancellation_total`), watchdog runner health (`watchdog_runner_lag_seconds`, `watchdog_runner_missed_total`), LPE surface health (`lpe_lookup_latency_seconds`, `lpe_cache_hit_ratio`, `lpe_compiler_duration_seconds`, `lpe_policy_block_total`), upload scanning (`upload_scan_duration_seconds`, `upload_scan_infected_total`, `upload_scan_error_total`), Reference Manager ingest health (`reference_manager_ingest_duration_seconds`, `reference_manager_diff_backlog`, `reference_manager_publish_total`), SSE reconnect rate, `artifacts_cleared_total`, `artifacts_approved_total`, `time_to_approval_seconds`. All Prometheus metrics use seconds for duration histograms and `_total` counters for events; legacy `*_ms` signals are deprecated and scheduled for removal in v7 GA (§12.6).
-- FinOps metrics: `llm_cost_estimate_total{org,case,job,model}`, `finops_cost_per_case_usd{org,case}`, `finops_cost_per_org_usd{org,month}`, `delivery_events_total{org,channel,status}`, `finops_mom_regression_flag{org}`.
+- FinOps metrics: `llm_cost_estimate_total{org, case, job, model}`, `finops_cost_per_case_usd{org, case}`, `finops_cost_per_org_usd{org, month}`, `delivery_events_total{org, channel, status}`, `finops_mom_regression_flag{org}`.
 - Privacy/Governance: `residency_block_total`, `dpia_records_total{status}`, `ropa_records_total`, `entitlement_snapshots_total`, `policy_unsafe_activations_blocked_total`.
-- Advisory locks: `udlock_locks_held{scope,kind}`, `udlock_lock_age_seconds_p95{scope,kind}`, `udlock_watchdog_stale_total{action}`, `udlock_registry_gc_total`.
+- Advisory locks: `udlock_locks_held{scope, kind}`, `udlock_lock_age_seconds_p95{scope, kind}`, `udlock_watchdog_stale_total{action}`, `udlock_registry_gc_total`.
 - Traces correlate web → workers → Guardian/Signer/LLM; ingress injects `X-Request-ID` on missing. API SLOs: Availability ≥ 99.9%/30d; P95: reads 250 ms, writes 500 ms; Portal TTFB ≤ 400 ms in-region, calculated over rolling 5-minute windows.
 - Immutable audit sink + logging immutability: dual-stream `audit_event` to DB + WORM storage and, when `logging.immutable_sink.enabled=true`, mirror structured logs to an immutable store. Hourly `AUDIT_SEAL` artifacts with rolling Merkle roots validate chain continuity. Metrics `audit_worm_lag_seconds` and `audit_seal_errors_total` back alerts; if verification fails for more than one interval, the release pipeline blocks new approvals and portal deliveries until the seal returns to green and Security signs off.
 
@@ -3751,7 +3773,7 @@ Preventive actions
 - Diagram: see `docs/diagrams/dr-region-failover-v1.mmd` for the runbook flow.
 
 <figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/out/dr-region-failover-v1.svg" style="max-width: 60%;" alt="Region failover runbook">
+  <img src="diagrams/out/dr-region-failover-v1.png" style="max-width: 60%;" alt="Region failover runbook">
   <figcaption style="font-size: 0.9em; color: #555;">Region failover runbook</figcaption>
 </figure>
 
@@ -3780,7 +3802,7 @@ Preventive actions
   - `CONCURRENCY` (OCC/locks): short jittered retries; escalate after N attempts; ensure OCC versions in APIs.
 
 <figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/out/error-flows-v1.svg" style="max-width: 60%;" alt="Error handling taxonomy">
+  <img src="diagrams/out/error-flows-v1.png" style="max-width: 60%;" alt="Error handling taxonomy">
   <figcaption style="font-size: 0.9em; color: #555;">Error handling taxonomy</figcaption>
 </figure>
 
@@ -4028,7 +4050,7 @@ Alert routing
 - Diagram: DSAR/erasure hard-purge flow lives in `docs/diagrams/dsar-erasure-v1.mmd`.
 
 <figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/out/dsar-erasure-v1.svg" style="max-width: 60%;" alt="DSAR hard-purge workflow">
+  <img src="diagrams/out/dsar-erasure-v1.png" style="max-width: 60%;" alt="DSAR hard-purge workflow">
   <figcaption style="font-size: 0.9em; color: #555;">DSAR hard-purge workflow</figcaption>
 </figure>
 
@@ -4038,7 +4060,7 @@ Alert routing
 
 *Purpose: Support hard-purge erasure requests without compromising provenance.*
 
-- Settings: `compliance.erasure_mode ∈ {'off','hard_purge'}` (ORG) toggles hard purge; `compliance.subject_hkdf_salt` (SYSTEM, KMS-backed) seeds deterministic subject hashes. See Appendix E for key traceability.
+- Settings: `compliance.erasure_mode ∈ {'off', 'hard_purge'}` (ORG) toggles hard purge; `compliance.subject_hkdf_salt` (SYSTEM, KMS-backed) seeds deterministic subject hashes. See Appendix E for key traceability.
 - Scope: Hard purge deletes artifacts, QA logs, evidence, and prompts tied to the subject; legal hold supersedes erasure requests and blocks purge.
 - Artifact proof: Every purge emits an `ERASURE_JOURNAL` artifact capturing minimal evidence (subject hash, scope, approvals) and referencing the job manifest hash. Guardian review ensures readiness before portal exposure.
 - Approval: Dual approval when policy requires (`privacy.dpia.reviewers.roles`), with audit records referencing erasure justification and timestamps. Waivers recorded when residency/retention conflicts arise.
@@ -4053,7 +4075,7 @@ Alert routing
     "org_id": "22222222-2222-2222-2222-222222222222",
     "case_id": "33333333-3333-3333-3333-333333333333|null",
     "subject_hash": "sha256-hex",
-    "scope": ["ARTIFACTS","QA_LOGS","EVIDENCE","PROMPTS"],
+    "scope": ["ARTIFACTS", "QA_LOGS", "EVIDENCE", "PROMPTS"],
     "requested_by_user_id": "44444444-4444-4444-4444-444444444444",
     "approved_by_user_ids": [
       "55555555-5555-5555-5555-555555555555",
@@ -4568,7 +4590,7 @@ Canonical artifact table
   }
   ```
 
-- Guardian judgments record `guardian_judgment ∈ {PASS,WARN,BLOCK,WAIVED}`. Quarantine outcomes set `status="QUARANTINED"`; manifests rely on `guardian_judgment` + `status` while `guardian_judgment_history` persists the detailed judgment record for audit.
+- Guardian judgments record `guardian_judgment ∈ {PASS, WARN, BLOCK, WAIVED}`. Quarantine outcomes set `status="QUARANTINED"`; manifests rely on `guardian_judgment` + `status` while `guardian_judgment_history` persists the detailed judgment record for audit.
 - Staff transcripts retain full conversation (with masked snippets); client transcripts redact internal-only system prompts and any content hidden by moderation for the client audience. Both run through the redaction pipeline before persistence.
 - `CHAT_SUMMARY_JSON` (`chat_summary@1.0`) stores structured summaries for downstream analytics: `{ "schema_version": "chat_summary@1.0", "session_id": "...", "summaries": [{ "audience": "staff|client", "locale": "en-CA", "text_md": "...", "citations": [...] }], "generated_at": "RFC3339", "model_id": "string" }`. Summaries always link back to the source session via `manifest.source_artifacts`.
 
@@ -4801,7 +4823,7 @@ Notes
 
 - CI must flag settings keys referenced in this document that are missing in service repositories. The `settings:lint-keys` pipeline step runs on every PR and fails the build when discrepancies are detected.
 - Script pattern: load Appendix E lists, scan OpenAPI/spec/config code for usage; fail when unmapped keys found.
-- Vocabulary & state names: enforce American spellings (`artifact`, `canceled`), block deprecated states (`READY`, `SUPERSEDED`), and validate Guardian outcomes stay within `{PASS,WARN,BLOCK,WAIVED}` across events/UI.
+- Vocabulary & state names: enforce American spellings (`artifact`, `canceled`), block deprecated states (`READY`, `SUPERSEDED`), and validate Guardian outcomes stay within `{PASS, WARN, BLOCK, WAIVED}` across events/UI.
 - Regions/Residency → regions.allowlist.*, privacy.* (Sections §3.8, App.C)
 - APIs/Rate limits → api.*, portal.download.* (Sections §10)
 - FinOps → llm.finops.\* (Sections §8.3, §12.6, §13.4)
@@ -4885,7 +4907,7 @@ Scope dimensions
 
 Collision handling & headers
 
-- Services MUST compute `request_hash` using the shared helper and raise `409 CONFLICT` with `details.reason="IDEMPOTENCY_SIGNATURE_MISMATCH"` when an existing `(scope,key)` stores a different hash.
+- Services MUST compute `request_hash` using the shared helper and raise `409 CONFLICT` with `details.reason="IDEMPOTENCY_SIGNATURE_MISMATCH"` when an existing `(scope, key)` stores a different hash.
 - Replay successes update `last_seen_at`, return the stored `result_ref`, and echo `Idempotency-Key` plus `Idempotency-Status: replay`. First-run success emits `Idempotency-Status: fresh`; conflicts return 409 with `Idempotency-Status: conflict`.
 - `Idempotency-Status` joins structured logging (`idempotency_status` field) so SREs can track replay rates; metrics `idempotency_replay_total` and `idempotency_conflict_total` back deploy gates.
 
@@ -4922,7 +4944,7 @@ curl -sS -X POST \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   https://platform.local/api/v1/reviews/$ARTIFACT_ID/approve \
-  -d '{"note":"Looks good","expected_version":3}'
+  -d '{"note":"Looks good", "expected_version":3}'
 ```
 
 ### F.3 Signing request (HMAC)
@@ -4935,7 +4957,7 @@ curl -sS -X POST \
   -H "X-Timestamp: $(date -u +%FT%TZ)" \
   -H "X-Request-Signature: $(./scripts/sign.sh body.json)" \
   https://platform.local/api/v1/sign \
-  -d '{"artifact_id":"...","content_uri":"..."}'
+  -d '{"artifact_id":"...", "content_uri":"..."}'
 ```
 
 ### F.4 SSE events with Last-Event-ID
@@ -5215,7 +5237,7 @@ Signals (any triggers page on-call):
 
 - Metric `udlock_watchdog_stale_total{action=alert}` increased in last 5m
 - Lock age P95 > `udlock.max_session_hold_seconds`
-- Repeated stale detections for the same `(scope,k)` within 15m
+- Repeated stale detections for the same `(scope, k)` within 15m
 
 Triage — 5-minute checklist
 
@@ -5232,7 +5254,7 @@ Triage — 5-minute checklist
       ORDER BY age DESC;
      ```
 
-   - If `a.state IN ('idle','idle in transaction')` or heartbeat > 2× interval → stale.
+   - If `a.state IN ('idle', 'idle in transaction')` or heartbeat > 2× interval → stale.
 3. Check job/case impact (if `scope='jobkind'`)
    - `SELECT id, kind, status, started_at, finished_at FROM job WHERE case_id=:case LIMIT 1;`
    - If job still making progress (recent checkpoints) → prefer notify over terminate.
@@ -5250,7 +5272,7 @@ Decision tree
 Post-remediation
 
 - Confirm metrics return to baseline (`udlock_locks_held`, `udlock_watchdog_stale_total` plateau).
-- Open a defect if the same `(scope,k)` reappears within 24h; include `node_id`, last 200 lines of the worker pod logs, and query plan of the blocking transaction (if any).
+- Open a defect if the same `(scope, k)` reappears within 24h; include `node_id`, last 200 lines of the worker pod logs, and query plan of the blocking transaction (if any).
 
 Preventive actions
 
@@ -5421,27 +5443,27 @@ $$;
 
 -- Session-scoped lock wrappers (instrumented variants `*_i` record registry rows)
 CREATE OR REPLACE FUNCTION udlock.lock(scope text, k text) RETURNS void AS $$
-  SELECT pg_advisory_lock(udlock.key64(scope,k));
+  SELECT pg_advisory_lock(udlock.key64(scope, k));
 $$ LANGUAGE sql VOLATILE;
 
 CREATE OR REPLACE FUNCTION udlock.try_lock(scope text, k text) RETURNS boolean AS $$
-  SELECT pg_try_advisory_lock(udlock.key64(scope,k));
+  SELECT pg_try_advisory_lock(udlock.key64(scope, k));
 $$ LANGUAGE sql VOLATILE;
 
 CREATE OR REPLACE FUNCTION udlock.unlock(scope text, k text) RETURNS void AS $$
-  SELECT pg_advisory_unlock(udlock.key64(scope,k));
+  SELECT pg_advisory_unlock(udlock.key64(scope, k));
 $$ LANGUAGE sql VOLATILE;
 
 -- Transaction-scoped lock
 CREATE OR REPLACE FUNCTION udlock.xact_lock(scope text, k text) RETURNS void AS $$
-  SELECT pg_advisory_xact_lock(udlock.key64(scope,k));
+  SELECT pg_advisory_xact_lock(udlock.key64(scope, k));
 $$ LANGUAGE sql VOLATILE;
 ```
 
 Usage
 
-- Exclusive approval swap: `udlock.xact_lock('case-approval', CONCAT(:org,'/',:case,'/',:type))` (see §5.4.1).
-- Overlapping job guard: `udlock.try_lock('jobkind', CONCAT(:case,'/',:kind))` (see §10.3.1).
+- Exclusive approval swap: `udlock.xact_lock('case-approval', CONCAT(:org, '/', :case, '/', :type))` (see §5.4.1).
+- Overlapping job guard: `udlock.try_lock('jobkind', CONCAT(:case, '/', :kind))` (see §10.3.1).
 - Python helper (psycopg3):
 
   ```python
@@ -5678,7 +5700,7 @@ SELECT set_config('udocket.active_org',    :active_org_uuid::text, true);
 SELECT set_config('udocket.active_user',   :active_user_uuid::text, true);
 SELECT set_config('udocket.active_roles',  :active_roles_csv, true);
 SELECT set_config('udocket.realm_roles',   :realm_roles_csv, true);
-SELECT set_config('udocket.operator_scope',:operator_scope, true); -- 'own_cases' | 'all_org_cases'
+SELECT set_config('udocket.operator_scope', :operator_scope, true); -- 'own_cases' | 'all_org_cases'
 ```
 
 ### J.2 Helpers (realm role, case membership)
@@ -5686,13 +5708,13 @@ SELECT set_config('udocket.operator_scope',:operator_scope, true); -- 'own_cases
 ```sql
 CREATE OR REPLACE FUNCTION udocket_has_realm_role(role text)
 RETURNS boolean LANGUAGE sql STABLE AS $$
-  SELECT position(',' || role || ',' IN ',' || coalesce(current_setting('udocket.realm_roles', true),'') || ',') > 0
+  SELECT position(', ' || role || ', ' IN ', ' || coalesce(current_setting('udocket.realm_roles', true), '') || ', ') > 0
 $$;
 
 CREATE OR REPLACE FUNCTION udocket_is_case_member(p_case uuid)
 RETURNS boolean LANGUAGE sql STABLE AS $$
   WITH v_user AS (
-    SELECT NULLIF(current_setting('udocket.active_user', true),'')::uuid AS uid
+    SELECT NULLIF(current_setting('udocket.active_user', true), '')::uuid AS uid
   )
   SELECT EXISTS (
     SELECT 1 FROM case_member cm, v_user u
@@ -5709,41 +5731,41 @@ $$;
 -- Threads visible to case members per policy
 CREATE POLICY msg_thread_vis ON message_thread
 USING (
-  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
-  AND udocket_can('MESSAGE_THREAD','read',case_id,NULL,NULL)
+  org_id = NULLIF(current_setting('udocket.active_org', true), '')::uuid
+  AND udocket_can('MESSAGE_THREAD', 'read', case_id, NULL, NULL)
 )
 WITH CHECK (
-  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
-  AND udocket_can('MESSAGE_THREAD','write',case_id,NULL,NULL)
+  org_id = NULLIF(current_setting('udocket.active_org', true), '')::uuid
+  AND udocket_can('MESSAGE_THREAD', 'write', case_id, NULL, NULL)
 );
 
 CREATE POLICY msg_vis ON message
 USING (
-  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
-  AND udocket_can('MESSAGE','read',case_id,NULL,NULL)
+  org_id = NULLIF(current_setting('udocket.active_org', true), '')::uuid
+  AND udocket_can('MESSAGE', 'read', case_id, NULL, NULL)
 )
 WITH CHECK (
-  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
-  AND udocket_can('MESSAGE','write',case_id,NULL,NULL)
+  org_id = NULLIF(current_setting('udocket.active_org', true), '')::uuid
+  AND udocket_can('MESSAGE', 'write', case_id, NULL, NULL)
 );
 
 CREATE POLICY msg_att_vis ON message_attachment
 USING (
-  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
-  AND udocket_can('MESSAGE_ATTACHMENT','read',case_id,NULL,NULL)
+  org_id = NULLIF(current_setting('udocket.active_org', true), '')::uuid
+  AND udocket_can('MESSAGE_ATTACHMENT', 'read', case_id, NULL, NULL)
 )
 WITH CHECK (
-  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
-  AND udocket_can('MESSAGE_ATTACHMENT','write',case_id,NULL,NULL)
+  org_id = NULLIF(current_setting('udocket.active_org', true), '')::uuid
+  AND udocket_can('MESSAGE_ATTACHMENT', 'write', case_id, NULL, NULL)
 );
 
 CREATE POLICY msg_read_vis ON message_read_receipt
 USING (
-  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
+  org_id = NULLIF(current_setting('udocket.active_org', true), '')::uuid
   AND EXISTS (
     SELECT 1 FROM message m
     WHERE m.id = message_read_receipt.message_id
-      AND udocket_can('MESSAGE','read',m.case_id,NULL,NULL)
+      AND udocket_can('MESSAGE', 'read', m.case_id, NULL, NULL)
   )
 );
 ```
@@ -5794,8 +5816,8 @@ CREATE TABLE message_read_receipt (
 CREATE OR REPLACE FUNCTION udocket_can(p_resource text, p_action text, p_case uuid, p_artifact uuid, p_field text DEFAULT NULL)
 RETURNS boolean LANGUAGE plpgsql STABLE AS $$
 DECLARE v_org uuid := NULLIF(current_setting('udocket.active_org', true), '')::uuid;
-DECLARE v_roles text := coalesce(current_setting('udocket.active_roles', true),'');
-DECLARE v_scope text := coalesce(current_setting('udocket.operator_scope', true),'own_cases');
+DECLARE v_roles text := coalesce(current_setting('udocket.active_roles', true), '');
+DECLARE v_scope text := coalesce(current_setting('udocket.operator_scope', true), 'own_cases');
 DECLARE r text;
 BEGIN
   IF udocket_has_realm_role('sysadmin') THEN RETURN true; END IF;
@@ -5819,53 +5841,53 @@ END $$;
 ```sql
 CREATE POLICY case_visibility ON "case"
 USING (
-  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
-  AND udocket_can('CASE','read',"case".id,NULL,NULL)
+  org_id = NULLIF(current_setting('udocket.active_org', true), '')::uuid
+  AND udocket_can('CASE', 'read', "case".id, NULL, NULL)
 )
 WITH CHECK (
-  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
-  AND udocket_can('CASE','write',"case".id,NULL,NULL)
+  org_id = NULLIF(current_setting('udocket.active_org', true), '')::uuid
+  AND udocket_can('CASE', 'write', "case".id, NULL, NULL)
 );
 
 CREATE POLICY artifact_visibility ON artifact
 USING (
-  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
+  org_id = NULLIF(current_setting('udocket.active_org', true), '')::uuid
   AND EXISTS (SELECT 1 FROM "case" c WHERE c.id=artifact.case_id)
-  AND udocket_can('ARTIFACT','read',artifact.case_id,artifact.id,NULL)
+  AND udocket_can('ARTIFACT', 'read', artifact.case_id, artifact.id, NULL)
 )
 WITH CHECK (
-  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
-  AND udocket_can('ARTIFACT','write',artifact.case_id,artifact.id,NULL)
+  org_id = NULLIF(current_setting('udocket.active_org', true), '')::uuid
+  AND udocket_can('ARTIFACT', 'write', artifact.case_id, artifact.id, NULL)
 );
 
 CREATE POLICY gdh_visibility ON guardian_judgment_history
 USING (
-  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
-  AND udocket_can('GUARDIAN_HISTORY','read',artifact_id,NULL,NULL)
+  org_id = NULLIF(current_setting('udocket.active_org', true), '')::uuid
+  AND udocket_can('GUARDIAN_HISTORY', 'read', artifact_id, NULL, NULL)
 )
 WITH CHECK (
-  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
-  AND udocket_can('GUARDIAN_HISTORY','write',artifact_id,NULL,NULL)
+  org_id = NULLIF(current_setting('udocket.active_org', true), '')::uuid
+  AND udocket_can('GUARDIAN_HISTORY', 'write', artifact_id, NULL, NULL)
 );
 
 CREATE POLICY ent_hist_vis ON entitlement_snapshot
 USING (
-  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
-  AND udocket_can('ENTITLEMENT_HISTORY','read',NULL,NULL,NULL)
+  org_id = NULLIF(current_setting('udocket.active_org', true), '')::uuid
+  AND udocket_can('ENTITLEMENT_HISTORY', 'read', NULL, NULL, NULL)
 )
 WITH CHECK (
-  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
-  AND udocket_can('ENTITLEMENT_HISTORY','write',NULL,NULL,NULL)
+  org_id = NULLIF(current_setting('udocket.active_org', true), '')::uuid
+  AND udocket_can('ENTITLEMENT_HISTORY', 'write', NULL, NULL, NULL)
 );
 
 CREATE POLICY audit_vis ON audit_event
 USING (
-  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
-  AND udocket_can('AUDIT_EVENT','read',NULL,NULL,NULL)
+  org_id = NULLIF(current_setting('udocket.active_org', true), '')::uuid
+  AND udocket_can('AUDIT_EVENT', 'read', NULL, NULL, NULL)
 )
 WITH CHECK (
-  org_id = NULLIF(current_setting('udocket.active_org', true),'')::uuid
-  AND udocket_can('AUDIT_EVENT','write',NULL,NULL,NULL)
+  org_id = NULLIF(current_setting('udocket.active_org', true), '')::uuid
+  AND udocket_can('AUDIT_EVENT', 'write', NULL, NULL, NULL)
 );
 ```
 
@@ -5882,7 +5904,7 @@ SELECT
   representation_type,
   status,
   legal_hold,
-  udocket_mask('CASE','legal_hold_reason', legal_hold_reason) AS legal_hold_reason,
+  udocket_mask('CASE', 'legal_hold_reason', legal_hold_reason) AS legal_hold_reason,
   legal_hold_since,
   created_at
 FROM "case";
@@ -5900,10 +5922,10 @@ SELECT id,
                 WHERE r.org_id = artifact.org_id
                   AND r.resource='ARTIFACT'
                   AND r.field='content_uri'
-                  AND NOT udocket_can('ARTIFACT','read',artifact.case_id,artifact.id,'content_uri')
+                  AND NOT udocket_can('ARTIFACT', 'read', artifact.case_id, artifact.id, 'content_uri')
               ) IS NULL
          THEN content_uri
-         ELSE udocket_mask(content_uri,'REDACT')
+         ELSE udocket_mask(content_uri, 'REDACT')
        END AS content_uri,
        manifest,
        created_by,

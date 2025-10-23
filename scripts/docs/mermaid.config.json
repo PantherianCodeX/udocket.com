@@ -1,0 +1,41 @@
+{
+  "securityLevel": "strict",
+  "themeVariables": {
+    "fontFamily": "\"DejaVu Sans\", \"Trebuchet MS\", Arial, sans-serif"
+  },
+  "flowchart": {
+    "htmlLabels": false,
+    "wrap": true,
+    "diagramPadding": 8
+  },
+  "class": {
+    "htmlLabels": false
+  },
+  "er": {
+    "htmlLabels": false
+  },
+  "journey": {
+    "htmlLabels": false
+  },
+  "requirement": {
+    "htmlLabels": false
+  },
+  "gitGraph": {
+    "htmlLabels": false
+  },
+  "state": {
+    "htmlLabels": false
+  },
+  "timeline": {
+    "htmlLabels": false
+  },
+  "pie": {
+    "htmlLabels": false
+  },
+  "sequence": {
+    "useMaxWidth": false,
+    "wrap": true,
+    "width": 1080,
+    "height": 768
+  }
+}
