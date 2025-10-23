@@ -76,19 +76,20 @@ table {
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  overflow: hidden; /* round corners */
+  border: 1px solid #d8dee4;
+  border-radius: 12px;
+  overflow: hidden;
   font-size: 9pt;
+  background: #fcfdff;
 }
 thead th {
-  background: #eef2f6;
+  background: #eef4fb;
   color: #0f172a;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid #d8dee4;
   font-weight: 700;
 }
 th, td {
-  border-right: 1px solid var(--border);
+  border-right: 1px solid #e1e7ef;
   padding: 8px 10px;
   vertical-align: top;
   word-break: break-word;
@@ -110,8 +111,12 @@ svg[src*="diagrams/"] {
   display: block;
   margin: 0.6em auto;
   max-width: min(100%, 9in) !important;
-  max-height: 6.5in;
+  max-height: 6in;
   height: auto !important;
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 0.25em;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.05);
 }
 
 /* Encourage crisp vectors & safer text paint order for SVGs */
@@ -120,8 +125,17 @@ svg text { paint-order: stroke fill markers; dominant-baseline: text-before-edge
 svg tspan { dominant-baseline: text-before-edge; }
 .erDiagram .edgeLabel text,
 .erDiagram .edgeLabel tspan {
-  dominant-baseline: alphabetic !important;
-  alignment-baseline: baseline !important;
+  dominant-baseline: middle !important;
+  alignment-baseline: middle !important;
+  fill: #1f2328 !important;
+  text-anchor: middle;
+}
+.erDiagram .edgeLabel rect.background {
+  fill: rgba(248, 250, 252, 0.94) !important;
+  stroke: #9370db;
+  stroke-width: 0.5px;
+  rx: 6px;
+  ry: 6px;
 }
 
 /* If WeasyPrint build is used, ensure node labels aren't clipped.

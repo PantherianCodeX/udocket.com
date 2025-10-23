@@ -33,6 +33,7 @@ header-includes:
         font-size: inherit;
         word-break: break-word;
         overflow-wrap: anywhere;
+      }
       figure svg text,
       figure svg tspan {
         fill: #111 !important;
