@@ -24,6 +24,7 @@ pre {
   padding: 0.5em;
   white-space: pre-wrap;
   word-wrap: break-word;
+  overflow-wrap: anywhere;
   overflow: hidden;
 }
 
@@ -43,7 +44,7 @@ table {
 }
 
 td, th {
-  word-break: break-word;
+  
   overflow-wrap: anywhere;
   hyphens: auto;
   white-space: normal;
@@ -53,4 +54,35 @@ td, th {
 
 @page {
   margin: 1in;
+  @top-center { content: element(page-header); }
+  @bottom-center { content: element(page-footer); }
+}
+
+
+header.page-header {
+  position: running(page-header);
+  text-align: center;
+  font-size: 10pt;
+  color: #555;
+  border-bottom: 1px solid #ccc;
+  padding-bottom: 0.2em;
+  margin-bottom: 0.4em;
+}
+
+footer.page-footer {
+  position: running(page-footer);
+  text-align: center;
+  font-size: 9pt;
+  color: #777;
+  border-top: 1px solid #ccc;
+  padding-top: 0.2em;
+  margin-top: 0.4em;
+}
+
+footer.page-footer .page-number::before {
+  content: counter(page);
+}
+
+footer.page-footer .page-count::before {
+  content: counter(pages);
 }

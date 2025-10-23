@@ -1,5 +1,11 @@
 ---
+title: "uDocket — Technical Design Document"
+subtitle: "Platform Architecture & Compliance Specification"
+author:
+  - uDocket Platform Architecture Team
+version: 0.1-draft
 status: implementable
+classification: Confidential
 last_updated: 2025-10-19
 owners:
   - Platform Architecture
@@ -15,6 +21,9 @@ related_adrs:
   - ADR-0001-guardian-ready-quarantine.md
   - ADR-0003-api-versioning-and-sunset.md
   - ADR-0004-localization-and-policy-engine.md
+header-includes:
+  - '<header class="page-header">uDocket — Technical Design Document · Platform Architecture &amp; Compliance Specification</header>'
+  - '<footer class="page-footer">Confidential · Last updated 2025-10-19 · Page <span class="page-number"></span> of <span class="page-count"></span></footer>'
 ---
 # uDocket — Technical Design Document
 
