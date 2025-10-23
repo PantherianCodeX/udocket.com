@@ -315,7 +315,7 @@ To keep visuals helpful and consistent:
 5. Portal invalidation notifies clients of the new deliverable and blocks any revoked link; downstream analytics and audit trails attach Guardian judgment IDs, manifests, and settings hashes (§11.2.1, App.A.2).
 
 <figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/out/upload-guardian-approve-v1.png" style="max-width: 65%;" alt="Upload → Guardian → Approve happy path">
+  <img src="diagrams/out/upload-guardian-approve-v1.png" style="width: 100%; height: auto;" alt="Upload → Guardian → Approve happy path">
   <figcaption style="font-size: 0.9em; color: #555;">Upload → Guardian → Approve happy path</figcaption>
 </figure>
 

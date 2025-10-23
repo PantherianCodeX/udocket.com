@@ -68,7 +68,7 @@ figure svg text {
 }
 
 @page {
-  margin: 1in;
+  margin: 0.5in;
   @top-center { content: element(page-header); }
   @bottom-center { content: element(page-footer); }
 }
