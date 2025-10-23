@@ -185,6 +185,8 @@ def make_rounded_backplates(root: etree._Element, radius: float = 12.0) -> bool:
             tokens = cls.split()
             if any(token.startswith(prefix) for token in tokens for prefix in ("divider", "subGraph")):
                 return None
+            if any(token.startswith("row-rect") for token in tokens):
+                return ancestor
             if any(
                 token in ("node", "node-default", "node_default", "classGroup", "cluster")
                 or token.startswith("node")
@@ -192,8 +194,7 @@ def make_rounded_backplates(root: etree._Element, radius: float = 12.0) -> bool:
             ):
                 return ancestor
         return None
-
-    def process_path(path: etree._Element, radius_multiplier: float = 1.0) -> None:
+    def process_path(path: etree._Element, container: etree._Element, radius_multiplier: float = 1.0) -> None:
         nonlocal changed
         try:
             x, y, width, height = bounding_box_from_path(path.get("d", ""))
@@ -220,6 +221,9 @@ def make_rounded_backplates(root: etree._Element, radius: float = 12.0) -> bool:
             "ry": f"{radius * radius_multiplier}",
             "fill": path.get("fill", "#fff"),
         }
+        container_class = container.get("class") or ""
+        if container_class:
+            rect_attrs["class"] = container_class
         for attr in ("fill-opacity", "style", "class"):
             val = path.get(attr)
             if val:
@@ -256,16 +260,12 @@ def make_rounded_backplates(root: etree._Element, radius: float = 12.0) -> bool:
         container = eligible_container(path)
         if container is None:
             continue
-        radius_multiplier = 0.0
         cls = container.get("class", "")
         tokens = cls.split()
-        if "row-rect-odd" in tokens or "row-rect-even" in tokens or any(token.startswith("row-rect") for token in tokens):
-            radius_multiplier = 0.0
-        elif "node" in tokens or any(token.startswith("node") for token in tokens):
-            radius_multiplier = 1.0
-        else:
-            radius_multiplier = 1.0
-        process_path(path, radius_multiplier=radius_multiplier)
+        if any(token.startswith("row-rect") for token in tokens):
+            continue
+        radius_multiplier = 1.0
+        process_path(path, container, radius_multiplier)
 
     return changed
 
