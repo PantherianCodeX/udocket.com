@@ -22,6 +22,8 @@ code, pre {
 
 pre {
   padding: 0.5em;
+  white-space: pre-wrap;
+  word-wrap: break-word;
   overflow: hidden;
 }
 
