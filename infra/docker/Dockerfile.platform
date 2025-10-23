@@ -56,6 +56,12 @@ RUN if [ "$DEV_TOOLS" = "1" ]; then \
         docker-compose-plugin; \
       git lfs install --system; \
       rm -rf /var/lib/apt/lists/*; \
+      # Install Pandoc + WeasyPrint dependencies
+      RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+          python3-pip libcairo2 libpango-1.0-0 libgdk-pixbuf-xlib-2.0-0 \
+          shared-mime-info fonts-liberation pandoc && \
+          pip3 install --no-cache-dir weasyprint && \
+          rm -rf /var/lib/apt/lists/* \
     fi
 
 WORKDIR /app

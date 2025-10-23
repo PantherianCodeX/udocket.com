@@ -6,6 +6,14 @@
 
   "markdown.preview.doubleClickToSwitchToEditor": true,
   "markdown.preview.scrollEditorWithPreview": true,
-  "markdown.preview.scrollPreviewWithEditor": true
+  "markdown.preview.scrollPreviewWithEditor": true,
+
+  "markdown-pdf.executablePath": "/usr/bin/chromium",
+  "markdown-pdf.launchOptions": [
+    "--no-sandbox",
+    "--disable-setuid-sandbox",
+    "--disable-dev-shm-usage"
+  ],
+  "markdown-pdf.type": ["pdf"]
 
 }

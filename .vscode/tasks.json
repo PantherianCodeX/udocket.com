@@ -8,7 +8,18 @@
       "group": "build",
       "problemMatcher": []
     },
-
+    {
+      "label": "Render Mermaid (all)",
+      "type": "shell",
+      "command": "npm run mmd:all"
+    },
+    {
+      "label": "Build PDF (Pandoc + WeasyPrint)",
+      "type": "shell",
+      "command": "pandoc docs/TDD.md --from=gfm --pdf-engine=weasyprint --resource-path=docs:docs/diagrams/out --toc --standalone -o docs/TDD.pdf",
+      "dependsOn": "Render Mermaid (all)",
+      "problemMatcher": []
+    },
     {
       "label": "docker: up deps (postgres, redis)",
       "type": "shell",
