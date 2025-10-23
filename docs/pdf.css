@@ -34,12 +34,17 @@ img {
 }
 
 table {
+  table-layout: fixed;
   border-collapse: collapse;
   width: 100%;
   margin: 1em 0;
 }
 
 td, th {
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  hyphens: auto;
+  white-space: normal;
   border: 1px solid #ccc;
   padding: 0.4em 0.6em;
 }
