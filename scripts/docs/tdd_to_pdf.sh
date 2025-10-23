@@ -19,12 +19,12 @@ PDF="$BUILD/TDD.pdf"
 
 mkdir -p "$BUILD" "$OUT_DIR"
 
-echo "== Render Mermaid =="
-# Give mmdc a hard stop if it misbehaves (adjust 180s if needed)
-timeout 180s "$ROOT/scripts/docs/render_mermaid.sh" --verbose || {
-  echo "Mermaid render timed out or failed; check logs above." >&2
-  exit 1
-}
+# echo "== Render Mermaid =="
+# # Give mmdc a hard stop if it misbehaves (adjust 180s if needed)
+# timeout 180s "$ROOT/scripts/docs/render_mermaid.sh" --verbose || {
+#   echo "Mermaid render timed out or failed; check logs above." >&2
+#   exit 1
+# }
 
 echo "== Pandoc → HTML =="
 pandoc "$MD" \
