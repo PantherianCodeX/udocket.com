@@ -22,6 +22,7 @@ related_adrs:
   - ADR-0003-api-versioning-and-sunset.md
   - ADR-0004-localization-and-policy-engine.md
 header-includes:
+  - '<base href="..">'
   - |
     <style>
       table {
@@ -32,10 +33,6 @@ header-includes:
         font-size: inherit;
         word-break: break-word;
         overflow-wrap: anywhere;
-      }
-      table code {
-        font-size: 7.5pt;
-      }
       figure svg text,
       figure svg tspan {
         fill: #111 !important;
@@ -320,7 +317,7 @@ To keep visuals helpful and consistent:
 5. Portal invalidation notifies clients of the new deliverable and blocks any revoked link; downstream analytics and audit trails attach Guardian judgment IDs, manifests, and settings hashes (§11.2.1, App.A.2).
 
 <figure class="full-width-diagram" style="margin: 1em 0;">
-  <img src="diagrams/out/upload-guardian-approve-v1.png" alt="Upload → Guardian → Approve happy path">
+  <img src="diagrams/_rendered/upload-guardian-approve-v1.svg" alt="Upload → Guardian → Approve happy path">
   <figcaption style="font-size: 0.9em; color: #555;">Upload → Guardian → Approve happy path</figcaption>
 </figure>
 
@@ -335,7 +332,7 @@ To keep visuals helpful and consistent:
 - Visual: see `App.A` for the full context diagram and sequence overlays.
 
 <figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/out/system-context-v1.png" style="max-width: 80%;" alt="System context overview">
+  <img src="diagrams/_rendered/system-context-v1.svg" style="max-width: 80%;" alt="System context overview">
   <figcaption style="font-size: 0.9em; color: #555;">System context overview</figcaption>
 </figure>
 
@@ -946,7 +943,7 @@ Reference Manager packages every regulated dataset required for downstream compl
 - Waiver enforcement: active waivers embed `waiver_id`/expiry into `PolicyContext`; Guardian and workers relay this to OPA and stamp manifests with `cross_region=true` plus reason `RESIDENCY_WAIVER_USED`. Absent or expired waivers force `POLICY_BLOCK` responses so operators remediate before promotion.
 
 <figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/out/residency-policy-enforcement-v1.png" style="max-width: 70%;" alt="Residency policy enforcement sequence">
+  <img src="diagrams/_rendered/residency-policy-enforcement-v1.svg" style="max-width: 70%;" alt="Residency policy enforcement sequence">
   <figcaption style="font-size: 0.9em; color: #555;">Residency policy enforcement sequence</figcaption>
 </figure>
 
@@ -1439,7 +1436,7 @@ SELECT id, org_id, case_id, type, status, content_sha256,
 – Append-only audit: every lifecycle action appends to `ops_<agent>.jsonl` and persists manifests with SHA-256 provenance.
 
 <figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/out/artifact-lifecycle-state-v1.png" style="max-width: 60%;" alt="Artifact lifecycle state machine">
+  <img src="diagrams/_rendered/artifact-lifecycle-state-v1.svg" style="max-width: 60%;" alt="Artifact lifecycle state machine">
   <figcaption style="font-size: 0.9em; color: #555;">Artifact lifecycle state machine</figcaption>
 </figure>
 
@@ -1638,7 +1635,7 @@ When a **CD** is **QUEUED_FOR_REVIEW**, reviewers must pick exactly one outcome:
 “OTHER” selections require `*_other_text` payloads and feed a weekly clustering job (`ops/reference/suggest_reason_enum.py`). The job publishes candidate enum additions to Reference Manager; accepted values propagate through the LPE bundle workflow. Operations uphold an SLO to triage new candidates within 14 calendar days and either promote or close them (with rationale) within 30 days, with status tracked in the Reference Manager queue dashboard. When a candidate is promoted, Guardian ships the new enum in the next release, bumps the SSE/event schema version noted in §10.3, and publishes an upgrade notice so API consumers can deploy the updated enum set before enforcement.
 
 <figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/out/approvals-edit-flows-v1.png" style="max-width: 60%;" alt="Manual and agent edit approval flows">
+  <img src="diagrams/_rendered/approvals-edit-flows-v1.svg" style="max-width: 60%;" alt="Manual and agent edit approval flows">
   <figcaption style="font-size: 0.9em; color: #555;">Manual and agent edit approval flows</figcaption>
 </figure>
 
@@ -1975,12 +1972,12 @@ Example
 - Audit & telemetry: each run logs structured metadata (duration, attempts, cost envelope) and writes SSE updates; metrics exported for `job_duration_seconds`, `agent_retry_total`, etc.
 
 <figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/out/analyze-compose-v1.png" style="max-width: 70%;" alt="Analyze and Compose pipeline overview">
+  <img src="diagrams/_rendered/analyze-compose-v1.svg" style="max-width: 70%;" alt="Analyze and Compose pipeline overview">
   <figcaption style="font-size: 0.9em; color: #555;">Analyze and Compose pipeline overview</figcaption>
 </figure>
 
 <figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/out/agent-orchestration-classes-v1.png" style="max-width: 70%;" alt="Agent orchestration classes">
+  <img src="diagrams/_rendered/agent-orchestration-classes-v1.svg" style="max-width: 70%;" alt="Agent orchestration classes">
   <figcaption style="font-size: 0.9em; color: #555;">Agent orchestration classes</figcaption>
 </figure>
 
@@ -2214,7 +2211,7 @@ Example
 - Appendix D documents artifact schemas keyed by `deliverable_id`; Appendix E cross-references catalog entries with settings/tests/runbooks so auditors can trace coverage for any newly activated deliverable.
 
 <figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/out/data-lineage-v1.png" style="max-width: 70%;" alt="Artifact data lineage">
+  <img src="diagrams/_rendered/data-lineage-v1.svg" style="max-width: 70%;" alt="Artifact data lineage">
   <figcaption style="font-size: 0.9em; color: #555;">Artifact data lineage</figcaption>
 </figure>
 
@@ -2383,12 +2380,12 @@ Node catalog (illustrative)
 - Downstream enforcement: workers, UI, and portal clients must respect the target status (`CLEARED_FOR_USE`, `OPERATOR_PREP`, `QUARANTINED`) before executing dependent actions. Fetch-time checks re-evaluate Guardian judgment freshness and invalidate stale deliverables (§11.2.1).
 
 <figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/out/guardian-judgment-flow-v1.png" style="max-width: 70%;" alt="Guardian judgment pipeline">
+  <img src="diagrams/_rendered/guardian-judgment-flow-v1.svg" style="max-width: 70%;" alt="Guardian judgment pipeline">
   <figcaption style="font-size: 0.9em; color: #555;">Guardian judgment pipeline</figcaption>
 </figure>
 
 <figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/out/guardian-class-model-v1.png" style="max-width: 65%;" alt="Guardian service classes">
+  <img src="diagrams/_rendered/guardian-class-model-v1.svg" style="max-width: 65%;" alt="Guardian service classes">
   <figcaption style="font-size: 0.9em; color: #555;">Guardian service classes</figcaption>
 </figure>
 
@@ -2491,7 +2488,7 @@ Guardian persists raw span evidence in `guardian_span_detection` (WP scope, RLS-
 - Waivers and manual overrides follow existing approval swap semantics: changing a deliverable’s signature policy emits `SIGNATURE_POLICY_CHANGE` audit events, regenerates signed copies, and revokes previously released versions.
 
 <figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/out/signing-delivery-v1.png" style="max-width: 65%;" alt="Signing and delivery flow">
+  <img src="diagrams/_rendered/signing-delivery-v1.svg" style="max-width: 65%;" alt="Signing and delivery flow">
   <figcaption style="font-size: 0.9em; color: #555;">Signing and delivery flow</figcaption>
 </figure>
 
@@ -2595,7 +2592,7 @@ Guardian persists raw span evidence in `guardian_span_detection` (WP scope, RLS-
 - Diagram: `docs/diagrams/llm-failover-v1.mmd` captures the orchestrator sequence.
 
 <figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/out/llm-failover-v1.png" style="max-width: 65%;" alt="LLM failover orchestrator">
+  <img src="diagrams/_rendered/llm-failover-v1.svg" style="max-width: 65%;" alt="LLM failover orchestrator">
   <figcaption style="font-size: 0.9em; color: #555;">LLM failover orchestrator</figcaption>
 </figure>
 
@@ -2673,7 +2670,7 @@ PII posture (binding)
 - Diagram: `docs/diagrams/finops-guard-v1.mmd` depicts the deploy guard decision flow.
 
 <figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/out/finops-guard-v1.png" style="max-width: 60%;" alt="FinOps deploy guard flow">
+  <img src="diagrams/_rendered/finops-guard-v1.svg" style="max-width: 60%;" alt="FinOps deploy guard flow">
   <figcaption style="font-size: 0.9em; color: #555;">FinOps deploy guard flow</figcaption>
 </figure>
 
@@ -2810,7 +2807,7 @@ Notes
 - Traceability matrix in Appendix E maps each critical feature (agents, Guardian, FinOps, portal) to settings keys; updates required whenever keys change.
 
 <figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/out/core-domain-entities.png" style="max-width: 70%;" alt="Core domain entity model">
+  <img src="diagrams/_rendered/core-domain-entities.svg" style="max-width: 70%;" alt="Core domain entity model">
   <figcaption style="font-size: 0.9em; color: #555;">Core domain entity model</figcaption>
 </figure>
 
@@ -2839,12 +2836,12 @@ Notes
 - Record activation window, approvers, and effects in audit.
 
 <figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/out/settings-activation-v1.png" style="max-width: 65%;" alt="Settings activation pipeline">
+  <img src="diagrams/_rendered/settings-activation-v1.svg" style="max-width: 65%;" alt="Settings activation pipeline">
   <figcaption style="font-size: 0.9em; color: #555;">Settings activation pipeline</figcaption>
 </figure>
 
 <figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/out/settings-activation-classes-v1.png" style="max-width: 65%;" alt="Settings activation classes">
+  <img src="diagrams/_rendered/settings-activation-classes-v1.svg" style="max-width: 65%;" alt="Settings activation classes">
   <figcaption style="font-size: 0.9em; color: #555;">Settings activation classes</figcaption>
 </figure>
 
@@ -3346,7 +3343,7 @@ Contract requirements (binding)
 - All reviewer actions append to `guardian_judgment_history` via API (`/guardian/review-actions`) so Guardian remains the single source of truth for artifact status changes.
 
 <figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/out/approvals-ux-v1.png" style="max-width: 60%;" alt="Reviewer approval UX">
+  <img src="diagrams/_rendered/approvals-ux-v1.svg" style="max-width: 60%;" alt="Reviewer approval UX">
   <figcaption style="font-size: 0.9em; color: #555;">Reviewer approval UX</figcaption>
 </figure>
 
@@ -3381,7 +3378,7 @@ Contract requirements (binding)
 - Copy surfaced to clients is settings-driven via `i18n.portal.invalidation.message_key`, allowing Product/Legal to localize or update messaging without code changes.
 
 <figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/out/portal-invalidation-v1.png" style="max-width: 60%;" alt="Portal invalidation flow">
+  <img src="diagrams/_rendered/portal-invalidation-v1.svg" style="max-width: 60%;" alt="Portal invalidation flow">
   <figcaption style="font-size: 0.9em; color: #555;">Portal invalidation flow</figcaption>
 </figure>
 
@@ -3778,7 +3775,7 @@ Preventive actions
 - Diagram: see `docs/diagrams/dr-region-failover-v1.mmd` for the runbook flow.
 
 <figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/out/dr-region-failover-v1.png" style="max-width: 60%;" alt="Region failover runbook">
+  <img src="diagrams/_rendered/dr-region-failover-v1.svg" style="max-width: 60%;" alt="Region failover runbook">
   <figcaption style="font-size: 0.9em; color: #555;">Region failover runbook</figcaption>
 </figure>
 
@@ -3807,7 +3804,7 @@ Preventive actions
   - `CONCURRENCY` (OCC/locks): short jittered retries; escalate after N attempts; ensure OCC versions in APIs.
 
 <figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/out/error-flows-v1.png" style="max-width: 60%;" alt="Error handling taxonomy">
+  <img src="diagrams/_rendered/error-flows-v1.svg" style="max-width: 100%;" alt="Error handling taxonomy">
   <figcaption style="font-size: 0.9em; color: #555;">Error handling taxonomy</figcaption>
 </figure>
 
@@ -4055,7 +4052,7 @@ Alert routing
 - Diagram: DSAR/erasure hard-purge flow lives in `docs/diagrams/dsar-erasure-v1.mmd`.
 
 <figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/out/dsar-erasure-v1.png" style="max-width: 60%;" alt="DSAR hard-purge workflow">
+  <img src="diagrams/_rendered/dsar-erasure-v1.svg" style="max-width: 60%;" alt="DSAR hard-purge workflow">
   <figcaption style="font-size: 0.9em; color: #555;">DSAR hard-purge workflow</figcaption>
 </figure>
 
