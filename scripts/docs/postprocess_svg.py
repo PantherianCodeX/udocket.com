@@ -164,6 +164,9 @@ def wrap_sequence_actor_labels(root: etree._Element) -> bool:
 def ensure_rect_radius(root: etree._Element, radius: float = 12.0) -> bool:
     changed = False
     for rect in root.findall(f".//{SVG}rect"):
+        cls = rect.get("class", "")
+        if "divider" in cls or "row-rect" in cls and "background" not in cls:
+            continue
         if rect.get("rx") != f"{radius}":
             rect.set("rx", f"{radius}")
             changed = True
@@ -176,13 +179,11 @@ def ensure_rect_radius(root: etree._Element, radius: float = 12.0) -> bool:
 def make_rounded_backplates(root: etree._Element, radius: float = 12.0) -> bool:
     changed = False
 
-    processed: set[int] = set()
-
     def eligible_container(path: etree._Element) -> etree._Element | None:
         for ancestor in path.iterancestors(f"{SVG}g"):
             cls = ancestor.get("class") or ""
             tokens = cls.split()
-            if any(token.startswith(prefix) for token in tokens for prefix in ("row-rect", "divider", "subGraph")):
+            if any(token.startswith(prefix) for token in tokens for prefix in ("divider", "subGraph")):
                 return None
             if any(
                 token in ("node", "node-default", "node_default", "classGroup", "cluster")
@@ -192,7 +193,7 @@ def make_rounded_backplates(root: etree._Element, radius: float = 12.0) -> bool:
                 return ancestor
         return None
 
-    def process_path(path: etree._Element) -> None:
+    def process_path(path: etree._Element, radius_multiplier: float = 1.0) -> None:
         nonlocal changed
         try:
             x, y, width, height = bounding_box_from_path(path.get("d", ""))
@@ -215,8 +216,8 @@ def make_rounded_backplates(root: etree._Element, radius: float = 12.0) -> bool:
             "y": f"{y}",
             "width": f"{width}",
             "height": f"{height}",
-            "rx": f"{radius}",
-            "ry": f"{radius}",
+            "rx": f"{radius * radius_multiplier}",
+            "ry": f"{radius * radius_multiplier}",
             "fill": path.get("fill", "#fff"),
         }
         for attr in ("fill-opacity", "style", "class"):
@@ -255,10 +256,16 @@ def make_rounded_backplates(root: etree._Element, radius: float = 12.0) -> bool:
         container = eligible_container(path)
         if container is None:
             continue
-        if id(container) in processed:
-            continue
-        processed.add(id(container))
-        process_path(path)
+        radius_multiplier = 0.0
+        cls = container.get("class", "")
+        tokens = cls.split()
+        if "row-rect-odd" in tokens or "row-rect-even" in tokens or any(token.startswith("row-rect") for token in tokens):
+            radius_multiplier = 0.0
+        elif "node" in tokens or any(token.startswith("node") for token in tokens):
+            radius_multiplier = 1.0
+        else:
+            radius_multiplier = 1.0
+        process_path(path, radius_multiplier=radius_multiplier)
 
     return changed
 
