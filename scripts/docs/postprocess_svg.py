@@ -112,7 +112,10 @@ def wrap_sequence_actor_labels(root: etree._Element) -> bool:
             continue
         content = " ".join(" ".join(tspan.itertext()).strip() for tspan in text.findall(f"./{SVG}tspan")).strip()
         if not content or len(content.split()) <= 1:
-            continue
+            segments = re.findall(r"[A-Z]?[a-z0-9]+|[A-Z]+(?=[A-Z][a-z]|$)", content)
+            if len(segments) <= 1:
+                continue
+            content = " ".join(segments)
         try:
             width = float(rect.get("width", "0"))
             rect_x = float(rect.get("x", "0"))
