@@ -1,0 +1,70 @@
+# VCS
+.git
+.gitignore
+
+# Python
+**/__pycache__/
+**/*.pyc
+.venv/
+.pytest_cache/
+.mypy_cache/
+
+# Node / frontend
+node_modules/
+dist/
+build/
+
+# Python build artifacts
+.eggs/
+*.egg-info/
+*.egg
+.installed.cfg
+pip-wheel-metadata/
+__pypackages__/
+wheels/
+share/python-wheels/
+downloads/
+sdist/
+var/
+
+# Virtual environments
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.pdm-python
+.pdm-build/
+.pixi/
+
+# Tool & test caches
+.tox/
+.nox/
+.typewiz_cache/
+.ruff_cache/
+.hypothesis/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+.pybuilder/
+htmlcov/
+
+# Env & local data
+.env
+.env.*        # any env variants
+storage/
+.cache/
+.local/
+.vscode/
+
+# Editors/OS
+.DS_Store
+Thumbs.db
+
+# Test artifacts / coverage
+.coverage
+.coverage.*
+coverage/
+coverage.xml
+junit.xml

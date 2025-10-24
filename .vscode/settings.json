@@ -14,6 +14,37 @@
     "--disable-setuid-sandbox",
     "--disable-dev-shm-usage"
   ],
-  "markdown-pdf.type": ["pdf"]
-
+  "markdown-pdf.type": ["pdf"],
+  "files.watcherExclude": {
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/.hg/store/**": true,
+    "**/.venv/**": true,
+    "**/env/**": true,
+    "**/venv/**": true,
+    "**/__pycache__/**": true,
+    "**/.pytest_cache/**": true,
+    "**/.mypy_cache/**": true,
+    "**/.ruff_cache/**": true,
+    "**/.typewiz_cache/**": true,
+    "**/.tox/**": true,
+    "**/.nox/**": true,
+    "**/.hypothesis/**": true,
+    "**/.pytype/**": true,
+    "**/.pyre/**": true,
+    "**/node_modules/**": true,
+    "**/_build/**": true,
+    "**/_rendered/**": true,
+    "typings/external_stubs/**": true,
+    "typings/vendor/**": true,
+    "storage/**": true,
+    "apps/storage/**": true,
+    "reports/**": true,
+    "build/**": true,
+    "dist/**": true,
+    "downloads/**": true,
+    "marimo/_static/**": true,
+    "marimo/_lsp/**": true,
+    "__marimo__/**": true
+  }
 }

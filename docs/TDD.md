@@ -100,7 +100,7 @@ Body sections reference appendices instead of duplicating diagrams or schemas—
 
 - `STORED → PROCESSING → PENDING_JUDGMENT` (SA → WP/CD) with deterministic transitions enumerated in §5.2.2.
 - Guardian PASS/WARN moves WP → `CLEARED_FOR_USE` and CD → `OPERATOR_PREP`; review queue states (`APPROVAL_REQUESTED`, `QUEUED_FOR_REVIEW`, `CHANGES_REQUESTED`) apply only to CDs.
-- Deliverables follow `APPROVED → SIGNED → RELEASED → REVOKED → ARCHIVED` and are subject to the ExclusiveSwap invariant in §5.4.1.
+- Deliverables follow `APPROVED → SIGNED → RELEASED → REVOKED → ARCHIVED → DELETED` and are subject to the ExclusiveSwap invariant in §5.4.1; transitions into `ARCHIVED/DELETED` only occur through the retention/erasure gate.
 
 ### Guardian judgments → statuses (link to §5.2.3)
 
@@ -1364,6 +1364,7 @@ SELECT id, org_id, case_id, type, status, content_sha256,
   FROM artifact;
 ```
 
+- `artifact` stores tombstone metadata columns (`deleted_at`, `deleted_by`, `deletion_trigger`, `deletion_certificate_id`, `deletion_request_id`, `erasure_journal_id`, `retention_schedule_version`, `deletion_manifest_sha256`, `tombstone_pruned_at`). Populating them is mandatory whenever `status IN ('ARCHIVED', 'DELETED')`; retention automation records its service principal in `deleted_by`.
 - Settings activation maintains `CREATE INDEX field_mask_rule_org_profile_resource_field ON field_mask_rule(org_id, profile, resource, field)` and precomputes effective allowlists into helper tables so hot paths avoid repeated subqueries; helpers refresh atomically with each activation.
 - Lint guard: `scripts/db/lint_status_column.py` scans generated DDL and ORM migrations to block accidental reintroduction of a `state` column name; CI job `lint-db-state-column` fails on violations and points to §5.2 for the canonical `status` vocabulary.
 - Vault tables mirror database RLS policies and honor the active masking profile; quarterly audits replay detokenization requests to confirm least-privilege enforcement.
@@ -1436,10 +1437,25 @@ SELECT id, org_id, case_id, type, status, content_sha256,
 – Only one `RELEASED` DL exists per `(case_id, type)`; approvals atomically revoke the prior DL (ExclusiveSwap invariant, §5.4.1).\
 – Append-only audit: every lifecycle action appends to `ops_<agent>.jsonl` and persists manifests with SHA-256 provenance.
 
-<figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/_rendered/artifact-lifecycle-state-v1.svg" style="max-width: 60%;" alt="Artifact lifecycle state machine">
-  <figcaption style="font-size: 0.9em; color: #555;">Artifact lifecycle state machine</figcaption>
-</figure>
+<div style="display: flex; flex-wrap: wrap; gap: 1.5rem; margin: 1.25rem 0;">
+  <figure style="flex: 1 1 18rem; text-align: center; margin: 0;">
+    <img src="diagrams/_rendered/artifact-lifecycle-overview-v1.svg" style="width: 100%; height: auto;" alt="Artifact lifecycle overview">
+    <figcaption style="font-size: 0.9em; color: #555; margin-top: 0.5rem;">Overview — SA ➜ WP ➜ CD ➜ DL.RELEASED ➜ Retention gate</figcaption>
+  </figure>
+  <figure style="flex: 1 1 18rem; text-align: center; margin: 0;">
+    <img src="diagrams/_rendered/artifact-wp-lifecycle-v1.svg" style="width: 100%; height: auto;" alt="Work Product lifecycle">
+    <figcaption style="font-size: 0.9em; color: #555; margin-top: 0.5rem;">Work Product — Guardian gating to <code>CLEARED_FOR_USE</code></figcaption>
+  </figure>
+  <figure style="flex: 1 1 18rem; text-align: center; margin: 0;">
+    <img src="diagrams/_rendered/artifact-cd-lifecycle-v1.svg" style="width: 100%; height: auto;" alt="Candidate Deliverable lifecycle">
+    <figcaption style="font-size: 0.9em; color: #555; margin-top: 0.5rem;">Candidate Deliverable — operator and reviewer rail to release</figcaption>
+  </figure>
+</div>
+<div style="font-size: 0.85em; color: #666; margin: -0.5em 0 1.5em 0;">
+  Legacy diagrams labeled the post-Guardian handoff as <code>READY</code>; the canonical vocabulary is now <code>CLEARED_FOR_USE</code> (WP) and <code>OPERATOR_PREP</code> (CD). The overview’s diamond depicts the retention/erasure gate as a policy decision rather than a lifecycle status, while the detailed diagrams enumerate the class-specific states that feed that gate.
+</div>
+
+Work Product that reaches `CLEARED_FOR_USE` becomes selectable input for Analyze/Compose/Timeline lanes and may emit new CDs without re-submitting source assets. Candidate Deliverables inherit the prior Guardian verdict and either progress through operator/reviewer approval (`OPERATOR_PREP → APPROVAL_REQUESTED → QUEUED_FOR_REVIEW → APPROVED`) or loop for remediation. Signing and portal release convert an approved CD into the Deliverable class at status `RELEASED`; replacements revoke the previous release but retain manifests for audit. At any point, retention jobs or certified client erasure requests may invoke the gate, which records the tombstone metadata required in §5.2.2 and §14.2 before entering `ARCHIVED` or `DELETED`.
 
 #### 5.2.1 Object classes (SA/WP/CD/DL/AR)
 
@@ -1467,7 +1483,7 @@ Status is scoped by object class. The unified vocabulary below eliminates the am
 | **PROCESSING** | WP, CD | System is generating/transforming. | System | Work done → **PENDING_JUDGMENT** or **FAILED** |
 | **FAILED** | WP, CD | System error/missing dependency. | System | Retry/repair → **PROCESSING** |
 | **PENDING_JUDGMENT** | WP, CD | Awaiting Guardian judgment. | System | Guardian decides (see §5.2.3) |
-| **CLEARED_FOR_USE** | WP | Guardian PASS/WARN, internal use allowed. | Guardian | Consumed downstream or replaced |
+| **CLEARED_FOR_USE** | WP | Guardian PASS/WARN unlocks internal use; downstream agents may spawn new CDs/deliverables. | Guardian | Consumed downstream or replaced |
 | **OPERATOR_PREP** | CD | Guardian PASS/WARN, operator workspace to curate/edit. | Guardian | Operator requests review → **APPROVAL_REQUESTED** |
 | **APPROVAL_REQUESTED** | CD | Operator submitted for review; awaiting queue assignment/triage. | Operator/System* | Reviewer accepts assignment → **QUEUED_FOR_REVIEW** |
 | **QUEUED_FOR_REVIEW** | CD | Reviewer actively evaluating the draft. | System | Reviewer acts (see §5.2.4) |
@@ -1477,7 +1493,16 @@ Status is scoped by object class. The unified vocabulary below eliminates the am
 | **SIGNED** | DL | uDocket-signed, TSA timestamped. | Signer | Published → **RELEASED** |
 | **RELEASED** | DL | Visible/downloadable in portal. | System | Replacement policy (see §5.2.6) |
 | **REVOKED** | DL | Pullback due to approval swap, policy error, or compliance request. | System/Admin/Guardian | Retained, non-downloadable; archived via retention |
-| **ARCHIVED** | SA/WP/CD/DL | Frozen under retention. | System | Purged per policy |
+| **ARCHIVED** | SA/WP/CD/DL | Frozen under retention; content retained under legal/ops hold. | System | Retention clock expires or approved erasure → **DELETED** |
+| **DELETED** | SA/WP/CD/DL/AR | Content removed; only tombstone + audit metadata remain. | System | Retention evidence window closes → purged tombstone (§14.2) |
+
+Transitions into **ARCHIVED** or **DELETED** are mediated by the retention/erasure gate captured in App.A.2. The gate only opens when legal holds are clear *and* one of two triggers fires: (a) retention scheduler reaches the configured destruction window, or (b) a certified client erasure request is approved. Every call path MUST populate tombstone metadata before committing the status change:
+
+- `deleted_at TIMESTAMPTZ`, `deleted_by UUID` (service or human actor), and `deletion_trigger TEXT` (`retention_expired` | `client_erasure`).
+- `deletion_certificate_id UUID` pointing to the authoritative `DESTRUCTION_CERT` (case purge) or `deletion_request_id UUID` pointing to the DSAR request; both reference immutable `ERASURE_JOURNAL` manifests.
+- `erasure_journal_id UUID`, `retention_schedule_version TEXT`, and `deletion_manifest_sha256 TEXT` so auditors can verify provenance even after payload removal.
+
+Tombstones persist in primary storage until the retention evidence window in §14.2 elapses; pruning the tombstone emits an audit event (`ARTIFACT_TOMBSTONE_PURGED`) and updates the same metadata fields with `tombstone_pruned_at`.
 
 `System*` denotes flows where org configuration auto-submits for review or permits skipping human review (see §5.2.5).
 
@@ -3226,7 +3251,7 @@ Payloads (illustrative)
 | job.completed           | `{ schema_version, emitted_at, job_id, case_id, org_id }`                                      | Successful terminal state; emitted before downstream artifact.status updates.           |
 | job.canceling           | `{ schema_version, emitted_at, job_id, case_id, org_id, actor_id, reason }`                    | Emitted once per cancel request; clients stop polling progress UI.                      |
 | job.canceled            | `{ schema_version, emitted_at, job_id, case_id, org_id, actor_id, reason, provider_outcome }`  | Emitted after providers acknowledge abort; pairs with AR `JOB_CANCELLATION_REPORT`.      |
-| artifact.status         | `{ schema_version, emitted_at, artifact_id, case_id, org_id, type, status, previous_status? }` | `status ∈ {STORED, PROCESSING, FAILED, PENDING_JUDGMENT, CLEARED_FOR_USE, OPERATOR_PREP, APPROVAL_REQUESTED, QUEUED_FOR_REVIEW, CHANGES_REQUESTED, QUARANTINED, APPROVED, SIGNED, RELEASED, REVOKED, ARCHIVED}` |
+| artifact.status         | `{ schema_version, emitted_at, artifact_id, case_id, org_id, type, status, previous_status? }` | `status ∈ {STORED, PROCESSING, FAILED, PENDING_JUDGMENT, CLEARED_FOR_USE, OPERATOR_PREP, APPROVAL_REQUESTED, QUEUED_FOR_REVIEW, CHANGES_REQUESTED, QUARANTINED, APPROVED, SIGNED, RELEASED, REVOKED, ARCHIVED, DELETED}` |
 | qa.notes                | `{ schema_version, emitted_at, job_id?, artifact_id?, case_id, notes:[{level, msg, emitted_at}] }` | Levels: INFO                                                                             |
 | portal_link_invalidated | `{ schema_version, emitted_at, artifact_id, case_id, reason }`                                 | Portal consumes to revoke stale links                                                   |
 | settings.activated      | `{ schema_version, emitted_at, scope, org_id?, case_id?, bundle_id, version_id }`             | Triggers cache invalidation on clients                                                  |
@@ -4049,6 +4074,7 @@ Alert routing
 - Destruction: queued jobs with Guardian oversight produce `DESTRUCTION_CERT` artifacts; double-check via manifest before final delete.
 - Object lock: production buckets enforce versioning + Object Lock (compliance mode) for audit sinks; destroy operations require dual approval and manifest verification.
 - Ops scripts: `ops/scripts/destroy_case.py` (dry-run + execute) logs intended artifacts, checks legal hold, and writes `DESTRUCTION_CERT`; references recorded in Appendix N.
+- Status & metadata: Retention and erasure jobs move artifacts through the `ARCHIVED → DELETED` path in §5.2.2 only after populating tombstone fields (`deleted_at`, `deleted_by`, `deletion_trigger`, `deletion_certificate_id`, `erasure_journal_id`, `retention_schedule_version`, `deletion_manifest_sha256`). Deletion certs reference the same IDs, and automation emits `ARTIFACT_TOMBSTONE_PURGED` when retention evidence is pruned.
 - HIPAA mode enforcement: when `privacy.hipaa.enabled=true`, retention jobs honor shortened schedules, approvals for HIPAA-classed artifacts require WebAuthn step-up, evidence-store excerpts stay disabled (confirmed via the purge job above), and portal delivery of PHI-tagged attachments is rejected unless a security waiver is recorded.
 - Diagram: DSAR/erasure hard-purge flow lives in `docs/diagrams/dsar-erasure-v1.mmd`.
 
@@ -4536,6 +4562,7 @@ Canonical artifact table
 | ATTACHMENT_TEXT           | \`docs/\<job_id>\_\_attachment_text_v1.json | md\`      | No                                     | `<attachment_text>.manifest.json`                                 |
 | TIMELINE_JSON              | `timeline/<job_id>__timeline_v2.json`       | No        | `<timeline_v2>.manifest.json`         | Normalized timeline events (speakers, timestamps, UUID anchors) |
 | ERASURE_JOURNAL           | `privacy/<job_id>__erasure_journal_v1.json` | No        | `<erasure_journal>.manifest.json`      | Hard-purge DSAR evidence; subject hashed with HKDF salt           |
+| DESTRUCTION_CERT          | `privacy/<job_id>__destruction_cert_v1.json` | No       | `<destruction_cert>.manifest.json`     | Case-level destruction attestation; links retention trigger + tombstone IDs |
 
 | CHAT_SESSION_JSON         | `ops/<session_id>__chat_staff.jsonl`        | No        | `<chat_session>.manifest.json`         | Staff Copilot conversation log with citations + moderation metadata |
 | CHAT_SESSION_CLIENT_JSON  | `ops/<session_id>__chat_client.jsonl`       | No        | `<chat_client_session>.manifest.json`  | Client portal chat conversation; portal-visible subset; Guardian-audited |
@@ -5678,7 +5705,7 @@ Field runbook snippets
 
 Glossary entries
 
-- Artifact: Immutable content record with `class`, `status`, `content_hash`, and manifest; statuses follow §5.2 (`STORED`, `PROCESSING`, `PENDING_JUDGMENT`, `CLEARED_FOR_USE`, `OPERATOR_PREP`, `APPROVAL_REQUESTED`, `QUEUED_FOR_REVIEW`, `CHANGES_REQUESTED`, `QUARANTINED`, `APPROVED`, `SIGNED`, `RELEASED`, `REVOKED`, `ARCHIVED`).
+- Artifact: Immutable content record with `class`, `status`, `content_hash`, and manifest; statuses follow §5.2 (`STORED`, `PROCESSING`, `PENDING_JUDGMENT`, `CLEARED_FOR_USE`, `OPERATOR_PREP`, `APPROVAL_REQUESTED`, `QUEUED_FOR_REVIEW`, `CHANGES_REQUESTED`, `QUARANTINED`, `APPROVED`, `SIGNED`, `RELEASED`, `REVOKED`, `ARCHIVED`, `DELETED`).
 - Exclusive type: Artifact type for which a case may have at most one `APPROVED` at a time; enforced by unique index and approval swap (§5.4.1).
 - Guardian: Service issuing PASS/WARN/BLOCK/WAIVED judgments that gate operator visibility and drive workflow transitions before review; writes `guardian_judgment_history` as the canonical audit trail.
 - Localization & Policy Engine (LPE): Runtime resolver that consumes RM bundles + Settings to emit deterministic `PolicyContext` objects, masking profiles, and localization packs for every enforcement point (§3.4, §9.9, §10.11).

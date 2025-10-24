@@ -1,0 +1,19 @@
+%% Mermaid state diagram: Work Product lifecycle v1
+%%{init: {"state": {"htmlLabels": false}}}%%
+stateDiagram-v2
+  [*] --> PROCESSING : derive / transform
+  PROCESSING --> FAILED : system error / dependency
+  FAILED --> PROCESSING : retry / repair
+  PROCESSING --> PENDING_JUDGMENT : submit to Guardian
+  PENDING_JUDGMENT --> QUARANTINED : Guardian BLOCK
+  QUARANTINED --> PROCESSING : remediation
+  QUARANTINED --> CLEARED_FOR_USE : waiver approval
+  PENDING_JUDGMENT --> CLEARED_FOR_USE : PASS/WARN
+  CLEARED_FOR_USE --> PROCESSING : regenerate successor
+  CLEARED_FOR_USE --> [*]
+
+  note right of CLEARED_FOR_USE
+    Downstream agents (Analyze, Compose, Timeline)
+    may spawn Candidate Deliverables or additional WP.
+    Retention/erasure can transition from any state.
+  end note

@@ -1,5 +1,7 @@
 services:
   platform:
+    build:
+      network: host
     volumes:
       - .:/app
     environment:
@@ -16,6 +18,8 @@ services:
           action: rebuild
 
   platform_worker:
+    build:
+      network: host
     volumes:
       - .:/app
     environment:
@@ -32,6 +36,8 @@ services:
           action: rebuild
 
   platform_beat:
+    build:
+      network: host
     volumes:
       - .:/app
     environment:

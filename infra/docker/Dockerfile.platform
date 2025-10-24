@@ -1,82 +1,70 @@
+# syntax=docker/dockerfile:1.7-labs
+
 # Allow overriding the Python base image (useful for mirrors/registries)
-ARG PYTHON_BASE=mcr.microsoft.com/devcontainers/python:3.12
+ARG PYTHON_BASE=python:3.12-slim-bookworm
 FROM ${PYTHON_BASE}
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1
+    DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-       ffmpeg \
-       fonts-dejavu-core \
-       fonts-dejavu-extra \
-    && rm -rf /var/lib/apt/lists/*
+# Install ffmpeg for all builds
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
+      ffmpeg \
+      ca-certificates \
+      curl \
+ && rm -rf /var/lib/apt/lists/*
 
 # Optional dev tools (enabled via build-arg DEV_TOOLS=1)
 ARG DEV_TOOLS=0
-RUN if [ "$DEV_TOOLS" = "1" ]; then \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    if [ "$DEV_TOOLS" = "1" ]; then \
       set -eux; \
-      # Base utilities
-      apt-get update && apt-get install -y --no-install-recommends \
-        bash \
-        ca-certificates \
-        build-essential \
-        curl \
-        gcc \
-        g++ \
-        git \
-        git-lfs \
-        htop \
-        iputils-ping \
-        jq \
-        less \
-        libpq-dev \
-        lsof \
-        make \
-        nano \
-        netcat-openbsd \
-        postgresql-client \
-        pkg-config \
-        procps \
-        ripgrep \
-        sqlite3 \
-        strace \
-        tcpdump \
-        tree \
-        unzip \
-        vim-tiny \
-        wget; \
-      # Install Docker CLI + Compose v2 from Docker's official repo (works on Debian trixie)
+      # Install Docker's official repo
       install -m 0755 -d /etc/apt/keyrings; \
       curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc; \
       chmod a+r /etc/apt/keyrings/docker.asc; \
       echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(. /etc/os-release && echo $VERSION_CODENAME) stable" > /etc/apt/sources.list.d/docker.list; \
-      apt-get update && apt-get install -y --no-install-recommends \
-        docker-ce-cli \
-        docker-buildx-plugin \
-        docker-compose-plugin; \
+      # Base utilities
+      apt-get update; \
+      apt-get install -y --no-install-recommends \
+        # toolchain & headers
+        build-essential gcc g++ pkg-config libpq-dev \
+        # dev CLIs
+        git git-lfs htop iputils-ping jq less lsof nano ripgrep strace tree unzip vim-tiny wget netcat-openbsd \
+        postgresql-client \
+        # docker cli
+        docker-ce-cli docker-buildx-plugin docker-compose-plugin \
+        # (dev-only) chrome shared libs for puppeteer/mermaid rendering
+        fonts-liberation libasound2 libatk-bridge2.0-0 libatk1.0-0 \
+        libcairo2 libcups2 libdbus-1-3 libexpat1 libfontconfig1 libgbm1 \
+        libglib2.0-0 libgtk-3-0 libnspr4 libnss3 libpango-1.0-0 libpangocairo-1.0-0 \
+        libx11-6 libx11-xcb1 libxcb1 libxcomposite1 libxcursor1 libxdamage1 \
+        libxext6 libxfixes3 libxi6 libxrandr2 libxrender1 libxss1 libxtst6 xdg-utils \
+        # pandoc for doc generation
+        pandoc \
+      ; \
+      # --- Install git lfs ---
       git lfs install --system; \
       rm -rf /var/lib/apt/lists/*; \
-      # Install Pandoc + WeasyPrint dependencies
-      apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
-          python3-pip libcairo2 libpango-1.0-0 libgdk-pixbuf-xlib-2.0-0 \
-          shared-mime-info fonts-liberation pandoc && \
-          pip3 install --no-cache-dir weasyprint && \
-          rm -rf /var/lib/apt/lists/* \
     fi
 
 WORKDIR /app
 
-# Install Python dependencies with better layer caching
+# Install Python dependencies (cached)
 COPY apps/platform/requirements.txt /tmp/platform-requirements.txt
 COPY packages/udocket_core/requirements.txt /tmp/udocket-core-requirements.txt
-RUN python -m pip install --upgrade pip \
-    && pip install -r /tmp/platform-requirements.txt \
-    && pip install -r /tmp/udocket-core-requirements.txt \
-    && pip install pyright \
-    && pip install git+https://github.com/PantherianCodeX/typewiz@main \
-    && rm -f /tmp/platform-requirements.txt /tmp/udocket-core-requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python -m pip install --upgrade pip \
+ && pip install -r /tmp/platform-requirements.txt \
+ && pip install -r /tmp/udocket-core-requirements.txt \
+ && pip install pyright \
+ && pip install git+https://github.com/PantherianCodeX/typewiz@main \
+ && rm -f /tmp/platform-requirements.txt /tmp/udocket-core-requirements.txt
+
 
 # Copy project
 COPY . /app
