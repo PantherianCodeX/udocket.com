@@ -53,13 +53,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
       rm -rf /var/lib/apt/lists/*; \
     fi
 
-# Typing helpers live only in the dev-image when requested.
-RUN --mount=type=cache,target=/root/.cache/pip \
-    if [ "$DEV_TOOLS" = "1" ]; then \
-      pip install pyright \
-      && pip install git+https://github.com/PantherianCodeX/typewiz@main; \
-    fi
-
 FROM toolchain AS wheels
 ARG DEV_TOOLS
 
