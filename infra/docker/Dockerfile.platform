@@ -2,13 +2,15 @@
 
 # Allow overriding the Python base image (useful for mirrors/registries)
 ARG PYTHON_BASE=python:3.12-slim-bookworm
-FROM ${PYTHON_BASE}
+ARG DEV_TOOLS=0
+
+FROM ${PYTHON_BASE} AS python-base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive
 
-# Install ffmpeg for all builds
+# Core packages needed for every image
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
@@ -18,56 +20,61 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
       git \
  && rm -rf /var/lib/apt/lists/*
 
-# Optional dev tools (enabled via build-arg DEV_TOOLS=1)
-ARG DEV_TOOLS=0
+# Keep pip modern once so every downstream stage benefits.
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python -m pip install --upgrade pip
+
+FROM python-base AS toolchain
+ARG DEV_TOOLS
+
+# Optional developer tooling (docker CLI, browsers, etc.)
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     if [ "$DEV_TOOLS" = "1" ]; then \
       set -eux; \
-      # Install Docker's official repo
       install -m 0755 -d /etc/apt/keyrings; \
       curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc; \
       chmod a+r /etc/apt/keyrings/docker.asc; \
       echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(. /etc/os-release && echo $VERSION_CODENAME) stable" > /etc/apt/sources.list.d/docker.list; \
-      # Base utilities
       apt-get update; \
       apt-get install -y --no-install-recommends \
-        # toolchain & headers
         build-essential gcc g++ pkg-config libpq-dev \
-        # dev CLIs
-        git git-lfs htop iputils-ping jq less lsof nano ripgrep strace tree unzip vim-tiny wget netcat-openbsd \
+        git-lfs htop iputils-ping jq less lsof nano ripgrep strace tree unzip vim-tiny wget netcat-openbsd \
         postgresql-client \
-        # docker cli
         docker-ce-cli docker-buildx-plugin docker-compose-plugin \
-        # (dev-only) chrome shared libs for puppeteer/mermaid rendering
         fonts-liberation libasound2 libatk-bridge2.0-0 libatk1.0-0 \
         libcairo2 libcups2 libdbus-1-3 libexpat1 libfontconfig1 libgbm1 \
         libglib2.0-0 libgtk-3-0 libnspr4 libnss3 libpango-1.0-0 libpangocairo-1.0-0 \
         libx11-6 libx11-xcb1 libxcb1 libxcomposite1 libxcursor1 libxdamage1 \
         libxext6 libxfixes3 libxi6 libxrandr2 libxrender1 libxss1 libxtst6 xdg-utils \
-        # pandoc for doc generation
         pandoc \
       ; \
-      # --- Install git lfs ---
       git lfs install --system; \
       rm -rf /var/lib/apt/lists/*; \
     fi
 
+# Typing helpers live only in the dev-image when requested.
+RUN --mount=type=cache,target=/root/.cache/pip \
+    if [ "$DEV_TOOLS" = "1" ]; then \
+      pip install pyright \
+      && pip install git+https://github.com/PantherianCodeX/typewiz@main; \
+    fi
+
+FROM toolchain AS python-deps
+
 WORKDIR /app
 
-# Install Python dependencies (cached)
+# Install Python dependencies (shared across services)
 COPY apps/platform/requirements.txt /tmp/platform-requirements.txt
 COPY packages/udocket_core/requirements.txt /tmp/udocket-core-requirements.txt
 RUN --mount=type=cache,target=/root/.cache/pip \
-    python -m pip install --upgrade pip \
- && pip install -r /tmp/platform-requirements.txt \
+    pip install -r /tmp/platform-requirements.txt \
  && pip install -r /tmp/udocket-core-requirements.txt \
- && pip install pyright \
- && pip install git+https://github.com/PantherianCodeX/typewiz@main \
  && rm -f /tmp/platform-requirements.txt /tmp/udocket-core-requirements.txt
 
+FROM python-deps AS app
 
-# Copy project
+# Copy project source last to keep dependency layers hot
 COPY . /app
 
 EXPOSE 8000
