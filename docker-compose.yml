@@ -20,6 +20,10 @@ services:
     build:
       context: .
       dockerfile: infra/docker/Dockerfile.platform
+      cache_from:
+        - type=local,src=.docker/buildx-cache
+      cache_to:
+        - type=local,dest=.docker/buildx-cache
     develop: *platform-watch
     restart: unless-stopped
     env_file: .env
@@ -46,6 +50,10 @@ services:
     build:
       context: .
       dockerfile: infra/docker/Dockerfile.platform
+      cache_from:
+        - type=local,src=.docker/buildx-cache
+      cache_to:
+        - type=local,dest=.docker/buildx-cache
     develop: *platform-watch
     restart: unless-stopped
     env_file: .env
@@ -74,6 +82,10 @@ services:
     build:
       context: .
       dockerfile: infra/docker/Dockerfile.platform
+      cache_from:
+        - type=local,src=.docker/buildx-cache
+      cache_to:
+        - type=local,dest=.docker/buildx-cache
     develop: *platform-watch
     restart: unless-stopped
     env_file: .env

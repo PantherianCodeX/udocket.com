@@ -173,6 +173,9 @@ __azurite_db_*.json
 .dmypy.json
 dmypy.json
 
+# BuildKit caches
+.docker/
+
 # Pyre type checker
 .pyre/
 

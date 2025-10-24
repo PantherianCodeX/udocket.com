@@ -63,6 +63,7 @@ COPY packages/udocket_core/requirements.txt core.txt
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     mkdir -p /wheels \
+ && pip wheel --wheel-dir /wheels wheel \
  && pip wheel --wheel-dir /wheels --requirement runtime.txt \
  && pip wheel --wheel-dir /wheels --requirement core.txt
 
