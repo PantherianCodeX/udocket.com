@@ -255,7 +255,7 @@ To keep visuals helpful and consistent:
   | PIPEDA / CPPA / PHIPA  | Residency controls, consent logging, legal hold & retention automation | §2.2, §3.8, §14.2, App.N |
 
 - HIPAA mode: applies only to U.S. workloads with an executed BAA. Org activation (`privacy.hipaa.enabled=true`) requires dual approval (`org_admin` + platform `sysadmin`), verifies BAA-backed storage and compute, and enforces per-org field encryption (`security.field_encryption.enabled=true`, `security.field_encryption.key_scope='per_org'`) plus WebAuthn for privileged roles (`security.mfa.webauthn_required_roles` includes `org_admin|org_manager|org_operator|org_reviewer`). Settings expose `privacy.hipaa.enforcement_mode ∈ {optional, required}`—`required` is reserved for U.S. orgs under BAA, while `optional` allows voluntary adoption elsewhere. Outside the U.S. HIPAA stays optional; organizations may opt in for contractual reasons, but enforcement defaults to the general SPI/PHI controls unless HIPAA mode is explicitly enabled.
-- Guardian-driven enforcement runs entirely within the Guardian service; teams rely on this TDD for the cross-service triggers and escalate to the Guardian specification for service-level procedures.
+- Guardian-driven enforcement runs entirely within the Guardian service; see the Guardian specification for service-level procedures.
 - Baseline enforcement: Reference Manager maintains jurisdiction-specific minimum controls for PII, SPI, and PHI (residency, retention, disclosure logging). LPE encodes these baselines in `PolicyContext`; org-level Settings may tighten requirements (for example, opting into HIPAA storage where available), but validation rejects configurations that fall below the locale’s regulatory floor. Guardian applies the compiled policies to artifact decisions once workers submit them for judgment.
 
 - Legal hold and destruction policies align with jurisdictional obligations captured in Appendix C.
@@ -1486,7 +1486,7 @@ Tombstones persist in primary storage until the retention evidence window in §1
 
 #### 5.2.3 Guardian judgment → status mapping (binding)
 
-*Purpose: Summarize how Guardian outcomes advance artifact states while deferring canonical behavior to the standalone specification.*
+*Purpose: Summarize how Guardian outcomes advance artifact states and reference the Guardian specification for detailed mechanics.*
 *Contract: Judgment vocabulary, policy enforcement, detection pipelines, and APIs live in the Guardian service specification; this section covers the lifecycle impacts other services must honor.*
 
 - `PASS` / `WARN` / `WAIVED` → **WP:** `CLEARED_FOR_USE`, **CD:** `OPERATOR_PREP`.
@@ -1665,7 +1665,7 @@ enums.quarantine_reason: managed via Reference Manager (list in §5.2.4)
 - Path template: `storage/media/<ORG_ID>/cases/<CASE_ID>/artifacts/<ARTIFACT_ID>/content.bin|manifest.json`; case-level directories include `audio/`, `transcript/`, `analysis/`, `docs/`, `ops/`. Legacy `storage/media/cases/<CASE_ID>/` layouts are deprecated and blocked in new deployments.
 - Ingest sequence: uploads land in an encrypted staging container per residency region (`storage.staging.<region>`). Malware/PII scanners, checksum verification, and optional format normalization operate on the staging copy. Only once Guardian returns `PASS` or `WARN` does the finalize step promote the asset into the permanent case directory; `BLOCK` or failed scans trigger `storage.purge_blocked_uploads` so unreviewed data never persists beyond the staging SLA defined by `storage.staging.retention_hours`. Redaction jobs write sanitized derivatives back into staging; the promoted artifact always references the redacted output, preserving zero-copy residency guarantees.
 - Upload staging uses `upload_session` records with expected hashes and single-use tokens; finalize promotes staged object into artifact storage.
-- Guardian submission is event-driven: inserting or versioning any SA/WP/CD transitions it to `PENDING_JUDGMENT`, and workers enqueue the payload on the Guardian bus without operator intervention. Administrative replay tooling, bus semantics, and manual quarantine flows are maintained with the Guardian service; this TDD notes only that review queues list CDs after Guardian clearance (`OPERATOR_PREP` onward).
+- Guardian submission is event-driven: inserting or versioning any SA/WP/CD transitions it to `PENDING_JUDGMENT`, and workers enqueue the payload on the Guardian bus without operator intervention. Administrative replay tooling, bus semantics, and manual quarantine flows are maintained with the Guardian service; review queues list CDs after Guardian clearance (`OPERATOR_PREP` onward).
 - `upload_session` (transient) table persists resumable upload metadata and scan status: `{id UUID PK, org_id, case_id, status ENUM('PENDING', 'UPLOADED', 'SCANNING', 'FINALIZED', 'ABORTED'), staging_uri, expected_sha256, expires_at, created_at}`. Workers purge expired rows hourly and hard-delete the corresponding staging objects.
 - SHA-256 computed at write; persisted in `artifact.content_sha256`. Reads recompute and quarantine inconsistencies (`ARTIFACT_INTEGRITY_MISMATCH`).
 - Buckets enable versioning + object lock for immutable audit sinks (per §14.2). KMS keys scoped per org when configured (`storage.kms.key_scoping='per_org'`).
@@ -2270,17 +2270,15 @@ Node catalog (illustrative)
 
 ## 7) Digital signing & Guardian services
 
-> **Canonical reference:** Guardian-specific architecture, policy, interfaces, and runbooks now live in [`docs/guardian-service.md`](guardian-service.md). This section summarizes interactions for platform context and defers to the standalone specification for authoritative details.
-
 ### 7.1 Guardian service (summary)
 
-*Purpose: Provide cross-service context while deferring canonical Guardian details to the standalone specification.*\
-*Contract: Treat [`docs/guardian-service.md`](guardian-service.md) as the single source of truth for Guardian architecture, policy, interfaces, and operations; this section only captures how platform services integrate with Guardian.*
+*Purpose: Highlight platform touchpoints with Guardian.*\
+*Contract: Guardian architecture, policy, interfaces, and operations are defined in [`docs/guardian-service.md`](guardian-service.md); this section lists the integration points.*
 
-- Lifecycle gating: Guardian remains the enforcement point for SA/WP/CD artifacts. Workers transition artifacts to `PENDING_JUDGMENT`, await Guardian outcomes, and only promote statuses per §5.2.3 after PASS/WARN/WAIVED decisions. Detailed queue semantics and detection tiers stay in the Guardian specification.
-- Policy & waivers: Policy bundles, waiver handling, and quarantine ownership are maintained within the Guardian specification; this TDD references those controls only when describing approvals (§5.4) and retention (§14) flows.
-- Operations: Guardian SLOs, runbooks, and manual review procedures remain documented with the Guardian service. Platform operations rely on those guides while this TDD tracks cross-service dependencies such as review queue gating (§5.2) and portal invalidation (§11.2.1).
-- Artifacts & manifests: Guardian judgment IDs, reason codes, and settings hashes persist in manifests consumed by Signer and Portal; schema specifics and payload examples live in the Guardian specification.
+- Lifecycle gating: Guardian enforces SA/WP/CD transitions from `PENDING_JUDGMENT` to the statuses in §5.2.3 after PASS/WARN/WAIVED decisions. Queue semantics and detection tiers appear in the Guardian specification.
+- Policy & waivers: Policy bundles, waiver handling, and quarantine ownership stay with Guardian; approvals (§5.4) and retention (§14) depend on those controls.
+- Operations: Guardian SLOs, runbooks, and manual review procedures stay with Guardian; review queue gating (§5.2) and portal invalidation (§11.2.1) represent the platform dependencies.
+- Artifacts & manifests: Guardian judgment IDs, reason codes, and settings hashes persist in manifests consumed by Signer and Portal; schema and payload examples are provided with the Guardian service.
 
 ### 7.2 Digital signature service (PDF/A, TSA, OCSP)
 
@@ -5429,7 +5427,7 @@ Glossary entries
 
 - Artifact: Immutable content record with `class`, `status`, `content_hash`, and manifest; statuses follow §5.2 (`STORED`, `PROCESSING`, `PENDING_JUDGMENT`, `CLEARED_FOR_USE`, `OPERATOR_PREP`, `APPROVAL_REQUESTED`, `QUEUED_FOR_REVIEW`, `CHANGES_REQUESTED`, `QUARANTINED`, `APPROVED`, `SIGNED`, `RELEASED`, `REVOKED`, `ARCHIVED`, `DELETED`).
 - Exclusive type: Artifact type for which a case may have at most one `APPROVED` at a time; enforced by unique index and approval swap (§5.4.1).
-- Guardian: Service issuing PASS/WARN/BLOCK/WAIVED judgments that gate operator visibility and drive workflow transitions before review; see the Guardian service specification for architecture, judgment history, and audit trail requirements.
+- Guardian: Service issuing PASS/WARN/BLOCK/WAIVED judgments that gate operator visibility and drive workflow transitions before review; see the Guardian service specification for architecture and audit details.
 - Localization & Policy Engine (LPE): Runtime resolver that consumes RM bundles + Settings to emit deterministic `PolicyContext` objects, masking profiles, and localization packs for every enforcement point (§3.4, §9.9, §10.11).
 - Reference Manager (RM): Editorial/catalog service that ingests and normalizes jurisdictional data, questionnaires, and localization strings; publishes signed catalog bundles to LPE and enforces licensing, attribution, and dual-control workflows (§3.5).
 - Review/Approval: Process that moves CDs from `OPERATOR_PREP` → `APPROVAL_REQUESTED` → `QUEUED_FOR_REVIEW`, emits `REVIEW.REQUESTED/REVIEW.QUEUED`, and culminates in human decisions (`REVIEW.APPROVED`, `REVIEW.CHANGES_REQUESTED`, `REVIEW.QUARANTINED`) or automated `REVIEW.SKIPPED` when skip modes apply (§5.2.5, §10.3.2).
