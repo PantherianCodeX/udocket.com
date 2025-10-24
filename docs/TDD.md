@@ -239,7 +239,7 @@ To keep visuals helpful and consistent:
 
 - Data residency: compute, storage, and vector workloads must execute inside the region sets declared by each organization (`regions.allowlist.compute|storage|vector`). Defaults provide paired primary/secondary regions per jurisdiction (for example, `na-us-1` + `na-us-2`, `eu-central-1` + `eu-west-2`). Cross-region replication or failover outside the allowlist requires dual-approved waivers stamped in manifests and surfaced to Guardian.
 - SOC 2 / ISO controls: change management, incident response, and logging mapped to specific sections (`§12`, `§12`, `App.E`); mappings extend to PCI DSS logging, FedRAMP Moderate, and audit retention requirements surfaced in Appendix K.
-- Privacy frameworks in scope: GDPR/UK GDPR, CCPA/CPRA, HIPAA (US/BAA-backed workloads), PHIPA, PIPEDA, APP (Australia), LGPD (Brazil), and CPPA (Canada). Reference Manager curates authoritative policy catalogues, Localization & Policy Engine (LPE) compiles them, and OPA enforces runtime decisions so outputs meet or exceed every framework simultaneously rather than generating bespoke policies per org.
+- Privacy frameworks in scope: GDPR/UK GDPR, CCPA/CPRA, HIPAA (US/BAA-backed workloads), PHIPA, PIPEDA, APP (Australia), LGPD (Brazil), and CPPA (Canada). Reference Manager curates authoritative policy catalogues, LPE compiles them (see `docs/tdd-lpe.md §1.3`), and OPA enforces runtime decisions so outputs meet or exceed every framework simultaneously rather than generating bespoke policies per org.
 - Sensitive Personal Information (SPI): covers CPRA “sensitive personal information”, GDPR Article 9 special categories, and analogous provincial/federal classifications (for example: biometric identifiers, precise geolocation, racial or ethnic origin, religious beliefs, sexual orientation, union membership, genetic data, immigration status, and government identifiers). SPI inherits the platform’s high-security baseline (encryption, residency controls, reviewer accountability). Guardian enforces SPI gating, detection, and waiver flows; see `docs/guardian-service.md` for enforcement mechanics.
 - CCPA/CPRA specifics: platform does not sell or share personal information; privacy notices and contracts state “no sale/no sharing.” DSAR timelines follow CCPA (45 days, one 45‑day extension with notice) and GDPR (30 days, extensions as allowed). Admin tooling exports DSAR evidence and timelines; audit seals reference the governing framework for each request.
 - ISO/IEC 27701 (privacy extension) alignment: fully mapped and implemented. Appendix K lists the control crosswalk, evidence sources, and quarterly recertification cadence; deviations trigger `ISO27701_GAP` incidents and block releases until remediated.
@@ -267,7 +267,7 @@ To keep visuals helpful and consistent:
 
 - Guardian judgments ≤ 5 minutes P95; Compose jobs complete ≤ 45 minutes P95 under nominal load.
 - Service availability: web/channels 99.5%, Guardian 99.9%, Settings API 99.9% (due to policy enforcement criticality).
-- Localization & Policy Engine runtime availability 99.9% with an error budget of 43 minutes per 30-day window; bundle compiles hit P95 ≤ 6 minutes and may only roll out during the shared OPA/LPE deployment window (weekday 16:00-18:00 UTC) once telemetry confirms ≥50% remaining error budget. Burn-rate alerts automatically freeze new bundle activations and OPA discovery pushes until stabilization.
+- LPE availability, compiler latency targets, and deployment windows are defined in `docs/tdd-lpe.md §1.5`; burn-rate policies there govern bundle activations and OPA discovery pushes.
 - Latency targets: SSE job progress updates P95 \< 2s (P99 \< 5s); artifact download start \< 500 ms for approved documents.
 - Error budgets tie directly to deploy gates (`§10.8`)—breaches block releases until burn rate stabilizes.
 
@@ -318,7 +318,7 @@ To keep visuals helpful and consistent:
 
 - Staff users, reviewers, and clients interact with the **Web App** (Django ASGI) via browser connections protected by TLS 1.3; SSE provides status streaming while Channels enables bidirectional collaboration. SSE payloads include only IDs and metadata already permitted by RLS—no raw PII or artifact bodies traverse the channel.
 - Background processing occurs in the **Worker cluster** (Celery) which orchestrates agent pipelines, storage operations, and notifications.
-- Supporting services—**Guardian**, **Digital Signer**, **Settings**, **LLM Registry**, **Localization & Policy Engine (LPE)**, **Reference Manager (RM)**, and **Notifications**—communicate over mTLS within the cluster and persist state to Postgres with RLS. RM operates as the editorial/source-of-truth service for catalog bundles, while LPE is the runtime resolver that consumes those bundles.
+- Supporting services—**Guardian**, **Digital Signer**, **Settings**, **LLM Registry**, **Localization & Policy Engine (LPE; see `docs/tdd-lpe.md`)**, **Reference Manager (RM)**, and **Notifications**—communicate over mTLS within the cluster and persist state to Postgres with RLS. RM operates as the editorial/source-of-truth service for catalog bundles, while LPE is the runtime resolver that consumes those bundles.
 - External dependencies (Azure Speech, LLM providers, TSA/OCSP authorities, email/SMS gateways) sit outside the trusted cluster and are accessed under strict egress policies.
 - Visual: see `App.A` for the full context diagram and sequence overlays.
 
@@ -459,7 +459,7 @@ metadata:
 | Digital Signer                     | FastAPI                                     | PDF/A signing, OCSP/CRL/TSA validation, bundle creation                                                          | Scales with signing queues; relies on KMS/TSA connectors                                  | `signer_request_latency_seconds`, `tsa_drift_seconds`                                                         |
 | LLM Registry                       | FastAPI                                     | Provider catalog, health probes, token accounting, fallback logic                                                | Low QPS; run ≥2 replicas                                                                  | `llm_provider_health`, `llm_circuit_state`                                                                    |
 | Settings Service                   | FastAPI                                     | Hierarchical settings APIs, bundle activation, diff previews                                                     | Autoscale on QPS; Redis pub/sub for cache invalidation                                    | `settings_activation_total`, `settings_cache_hit_ratio`                                                       |
-| Localization & Policy Engine (LPE) | FastAPI + worker cron + compiler jobs       | Localization (locale/i18n packs), policy contexts (privacy/residency), court catalogs                            | Compiler pods scale on activation; lookup API horizontally replicated                     | `lpe_lookup_latency_seconds`, `lpe_policy_context_version`, `lpe_cache_hit_ratio`                             |
+| Localization & Policy Engine (LPE) | FastAPI + worker cron + compiler jobs       | Localization (locale/i18n packs), policy contexts (privacy/residency), court catalogs (see `docs/tdd-lpe.md`)    | Compiler pods scale on activation; lookup API horizontally replicated                     | `lpe_lookup_latency_seconds`, `lpe_policy_context_version`, `lpe_cache_hit_ratio`                             |
 | Policy Agent (OPA)                 | Open Policy Agent (sidecar or centralized)  | Evaluates signed policy bundles for residency, HIPAA, egress, attachment rules; emits decision logs              | Colocates sidecar per service for low latency; central cluster fans out discovery bundles | `opa_decision_latency_seconds`, `opa_bundle_status`, `opa_denied_total`                                       |
 | Reference Manager                  | FastAPI + Celery ingest workers + review UI | Source connectors (Wikipedia, court sites, vendor feeds), catalog lifecycle, questionnaires/forms administration | Ingest workers autoscale on harvest queues; reviewer workload tracked via task backlog    | `reference_manager_ingest_duration_seconds`, `reference_manager_pending_reviews`, `reference_catalog_version` |
 | Notification Service               | Celery beat + worker                        | Outbox delivery (email/SMS/in-app), receipt tracking                                                             | Scales with delivery volume; provider specific adapters                                   | `delivery_success_ratio`, `delivery_retry_total`                                                              |
@@ -479,225 +479,9 @@ metadata:
 
 ### 3.4 Localization & Policy Engine (LPE)
 
-*Purpose: An authoritative service for localization, residency, and jurisdictional policy decisions.*
+*Purpose: Point to the dedicated LPE specification that governs localization, residency, and policy enforcement.*
 
-- `ADR-0004-localization-and-policy-engine.md` defines the addition of the **Localization & Policy Engine (LPE)**, and expands the charter of the deprecated engine from court catalogs to a unified localization and policy compiler. The ADR follows the existing lifecycle (Provisional → Implementable → Accepted) and is required before the rename ships; CI checks enforce ADR references for API or schema changes touching LPE.
-- LPE exposes a public, versioned API surface that joins the existing OpenAPI bundles. Historic `/reference/*` endpoints remain read-only shims until the migration in §3.4.9 completes; when the cutover flag is on they emit RFC 8594 `Sunset` headers, RFC 8594-compliant `Link: <https://docs.udocket.io/reference-migration>; rel="successor-version"`, and RFC 8594 `Deprecation: @<timestamp>` headers indicating the enforced sunset date.
-- LPE outputs **immutable `PolicyContext` payloads** and localization packs, guaranteeing consistent enforcement across API tier, workers, frontend, and database RLS. Runtime callers treat contexts as deterministic for a `(org_id, case_id?, locale, privacy_flags)` tuple. The compiler persists each unique combination as a row keyed by `(org_id, case_id, locale, privacy_flags_hash)` (with `case_id` nullable), and settings snapshots embed the corresponding `policy_context_version`.
-- Runtime policy decisions (residency, HIPAA, attachment routing) execute through colocated **Open Policy Agent (OPA)** sidecars or a shared OPA tier that continuously downloads the same signed bundles LPE compiles. LPE focuses on producing deterministic data and localization artifacts, while OPA evaluates Rego policies against those datasets and emits decision/status logs for audit.
-
-#### 3.4.1 Objectives & mandate
-
-*Purpose: State LPE's charter, success criteria, and service level expectations.*
-
-- Single source of truth for locale (language, date/time, number, units), court and jurisdiction names, residency allowlists, privacy frameworks, disclaimers, and enforcement hints.
-- Deterministic, auditable enforcement: every runtime decision consults `PolicyContext`, removing ad-hoc copies inside Web, Guardian, Workers, or DB RLS.
-- Availability SLO 99.9%, lookup P95 ≤ 50 ms, compiler jobs complete within 10 minutes of Settings activation. Violations page SRE and block risky deployments.
-
-#### 3.4.2 Domain scope & compiled outputs
-
-*Purpose: Enumerate the datasets and artifacts the compiler produces for downstream systems.*
-
-- **Jurisdictions:** Country → province/state → court system → court metadata, inclusive of localized labels and canonical abbreviations. Versioned in `compiled_court_catalog`.
-- **Privacy frameworks:** HIPAA, PHIPA (Ontario), PIPA (British Columbia), GDPR, etc. Each captures retention intervals, permitted compute/storage regions, PHI allowance flags, DSAR semantics, waiver requirements, and audit linkages.
-- **Localization:** i18n string packs (approval banners, invalidation messages, intake copy), formatting rules (date/time, numbers, currencies, measurement units), legal disclaimers keyed by locale. Data is sourced from pinned Unicode CLDR releases, rendered through ICU primitives, and tagged with BCP-47 locale identifiers plus MessageFormat 2 metadata. Centralized in `compiled_l10n_locale`.
-- **Frontend implementation:** Staff UI and portal standardize on `react-intl` (FormatJS) for runtime rendering; shared hooks wrap ICU `MessageFormat 2` messages, plural/gender selectors, and number/date/unit formatting. Translation coverage target ≥ 80 % for each supported locale, measured via `yarn intl:coverage`; releases block when coverage falls below the threshold or when missing strings exceed the variance budget defined in Appendix L. Server-rendered assets and email templates use `babel` for locale-sensitive formatting to match client behavior. Locale fallback order is deterministic: `case_locale → org_default → en-CA`, with per-string logging when a fallback occurs. CI enforces coverage by running `yarn intl:lint` (plural/gender checks, missing ICU arguments), `yarn intl:coverage`, and Playwright RTL snapshots (`ar-SA`) on every merge; failures block release candidates until fixed.
-- **Residency policies:** Canonical compute/vector/storage allowlists with waiver metadata and expiry tracking; surfaced as `residency_regions` in `PolicyContext`.
-- **Infrastructure components:** Bundles include `infra_components[]` (approved storage/compute classes, HIPAA eligibility, deployment types, provider IDs) that LPE maps into `storage_requirements` so Settings, planners, and automation can select compliant infrastructure.
-- **Policy bundles:** Signed, versioned Rego + data payloads that OPA consumes to enforce residency, egress, HIPAA, and attachment rules. Bundles include manifests with SHA-256 digests, compatibility range, and monotonic build numbers; LPE rejects unsigned or stale bundles.
-- **OPA discovery manifest (`spec/schemas/opa_discovery_manifest.schema.json`):** Enumerates bundle channels (`stable`, `beta`, `canary`), allowed regions, SHA-256 digests, ETags, rollout windows, and promotion rules so OPA evaluators hot-reload safely.
-- **PolicyContext table (`compiled_policy_context`):** Keyed by `(org_id, case_id, locale, privacy_flags_hash)` (with `case_id` nullable for org-scoped defaults) with values `{policy_context_version, frameworks_enabled[], hipaa_required, residency_regions{compute[], storage[], vector[]}, storage_requirements{hipaa_required?, hipaa_capable_providers[], preferred_classes[]}, retention_days, portal_rules{disclaimer_key, banner_key}, logging_rules, masking_profile, i18n_keys[], digest_sha256}`.
-- **PolicyContext schema (`spec/schemas/policy_context.schema.json`):** Canonical JSON Schema (draft 2020-12) describing all fields, value types, and optional blocks; versioned separately to allow additive fields. Digests in API responses (`digest_sha256`) sign the canonicalized JSON payload and are exposed by helper libraries as `ctx.digest_sha256`.
-- **Reference Manager integration:** LPE consumes canonical datasets emitted by Reference Manager (RM)—court hierarchy, localization strings, questionnaires, forms. RM supplies signed manifests plus SHA-256 digests; LPE refuses to compile if digests drift or the RM publish event is missing.
-- Outputs include deterministic UUIDs for events/entities when the compiler derives identity; reruns reuse UUID5 of canonical content to satisfy cross-artifact identity rules (§6.3).
-
-#### 3.4.3 PolicyContext contract & enforcement matrix
-
-*Purpose: Explain PolicyContext structure and how enforcement points consume it.*
-
-- Runtime helpers (`udocket_lpe.PolicyContext` in Python, `@uDocket/lpe-client` in TypeScript) supply immutable contexts per request. Callers must not mutate records; each instance records `generated_at`, `source_settings_version`, and `policy_context_version`.
-- Enforcement points consuming `PolicyContext`:
-
-| Enforcement point (§9.9) | LPE decisions provided                                                                                 | Consuming surfaces                               |
-| ------------------------ | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------ |
-| API gateway & web tier   | Locale headers, residency posture, CORS templates, download banners, HIPAA messaging, rate-limit hints | Web, Channels, REST/SSE                          |
-| Worker/agent execution   | Allowed model providers & regions, storage class requirements (HIPAA-capable when required), compute/token budgets, retention timers, waiver gating              | Celery workers and Guardian review/budget checks |
-| Frontend rendering       | Localization strings, number/date/unit formats, accessibility copy, approval/invalidation banners      | Staff UI, Portal                                 |
-| Database layer           | `masking_profile`, PHI redaction toggles, RLS policy selectors                                         | Postgres secure views, data warehouse exports    |
-
-- `PolicyContext` is cached in-process with a default TTL of 5 minutes; cache invalidation fires when Settings activation emits an `lpe.policy_context.updated` event or when RM publishes a new bundle version. Clients reuse digest-based `ETag`s for conditional GETs and fall back to snapshot bootstrap when the requested digest is older than 30 minutes or 500 events in the SSE stream. Background refresh keeps hot tenants warm while respecting the lookup P95 SLO.
-
-#### 3.4.4 APIs & SDKs
-
-*Purpose: Describe the API surface and SDKs that expose LPE decisions to callers.*
-
-- REST surface added under `/api/v1/lpe/`:
-  - `GET /policy_context?org_id&case_id?&privacy_flags?&locale?` → returns `{policy_context_version, generated_at, digest_sha256, data: {...}}`; supports `If-None-Match`/`ETag` (digest) and `Cache-Control: private, max-age=300`.
-  - `GET /policy_context/schema` → JSON Schema describing the context payload (stable `schema_version`), served verbatim from `spec/schemas/policy_context.schema.json`.
-  - `GET /courts?jurisdiction=&q=&locale=` → paginated search with `page`, `page_size`, and deterministic sort.
-  - `GET /locales/:locale` → locale pack with CLDR/ICU metadata, MessageFormat resource identifiers, and attribution requirements (validates against `spec/schemas/locale.schema.json`).
-  - `GET /catalog_versions` → exposes active bundle versions per domain (`courts`, `localization`, `policy`, `opa`).
-- Error model: `POLICY_CONTEXT_NOT_FOUND`, `POLICY_CONTEXT_STALE`, `WAIVER_REQUIRED`, and `VALIDATION_ERROR` follow the shared `ApiError` envelope (§10.7). Responses include `Idempotency-Key` (echo), `X-PolicyContext-Version`, and `Deprecation/Sunset` headers when applicable.
-- Endpoints follow standard envelopes, include idempotency echo headers, and participate in the public OpenAPI bundle with autogenerated SDK references. Old `/reference/*` routes proxy to LPE read paths until the cutover flag in §3.4.9 flips, and as soon as the proxy is active they attach `Deprecation`, `Sunset`, and `Link: <https://docs.udocket.io/reference-migration>; rel="successor-version"` headers with the canonical migration guide URL.
-- OPA evaluators (sidecar or shared) subscribe to discovery manifests exposed at `/api/v1/lpe/opa/discovery` and fetch signed bundles from `/api/v1/lpe/opa/bundles/{channel}`. Each manifest advertises region-specific bundle URIs, expected SHA-256 digests/ETags, and rollout windows; OPA status/decision logs (`opa_bundle_status`, `opa_decision_latency_seconds`, `opa_denied_total`) ship to the observability stack for governance review.
-- SDKs (`udocket_lpe`, `@uDocket/lpe-client`) expose LRU caches, background refresh, Settings activation hooks, and typed responses. Canonical error codes map to the shared API error model (§10.7).
-
-#### 3.4.5 Settings alignment & compiler gates
-
-*Purpose: Link Settings activation to compiler validations and safety gates.*
-
-- New or consolidated keys under `localization.*`, `privacy.*`, and `regions.*`:
-  - `localization.default_locale`, `localization.timezone_default`, `localization.units` (`metric|imperial`).
-  - `privacy.frameworks.enabled[]`, `privacy.retention_overrides{jurisdiction -> duration}`, `privacy.portal.disclaimer_key`.
-  - `regions.allowlist.compute|storage|vector[]` (compiler owns enforcement; settings capture requested allowlists).
-- Activation pipeline runs LPE compiler in dry-run mode, produces diffs for review, and marks unsafe changes (e.g., loosening residency) requiring dual approval per §9.11.
-- Compiler validation suite covers schema drift, missing localization strings, residency overrides without waiver metadata, and ensures `PolicyContext` hashes remain deterministic.
-
-#### 3.4.6 Service integrations
-
-*Purpose: Map LPE integrations with adjacent services and data sources.*
-
-- **Policy Agent (OPA):** LPE publishes bundle metadata and rollout channels (`stable`, `beta`, `canary`); OPA sidecars per service download and hot-reload signed Rego/data bundles via discovery. Bundles carry dual signatures: Ed25519 (default fast path) and ECDSA P-256 for FIPS compliance. Both signatures are produced from keys in Managed HSM; manifests record `{ed25519_key_id, ecdsa_key_id, signature_sha256}`. OPA verifies the Ed25519 signature in all modes and, when `security.tls.fips_mode=true`, additionally requires the ECDSA signature to validate before activation—bundles lacking the ECDSA signature are rejected with `OPA_FIPS_SIGNATURE_MISSING` and block rollout. Access to discovery/bundle endpoints requires mTLS + HMAC headers. Decision APIs (`/v1/data/uDocket/...`) back the residency, HIPAA, attachment, and egress checks surfaced in Guardian, Workers, and Portal flows; timeouts/5xx responses are converted to `POLICY_BLOCK` errors with alerts. Decision logs (scrubbed of PII) and status logs feed the observability fabric for audit, with retention ≥ 365 days in immutable storage. Release gates enforce dual-sign coverage before promoting bundles to production cohorts; App.J FIPS tracers monitor `opa_bundle_fips_signature_missing_total`.
-  - Discovery manifest freshness: clients poll `/api/v1/lpe/opa/discovery` every 60 seconds with `If-None-Match`; manifests declare `bundle_etag`, `max_age_seconds` (default 300), and rollback pointers. If `max_age_seconds` elapses without a new manifest, sidecars treat the cache as stale, deny all policy requests (`OPA_ERROR` with `reason="DISCOVERY_STALE"`), and page via `opa_discovery_stale_total`. Bundles that fail signature verification force an immediate rollback to the previous `bundle_etag`; if no valid bundle exists the client fails closed with `OPA_ERROR` / `POLICY_BLOCK`. Runbook App.H RB-OPA-ROLLBACK documents operator steps for restoring a healthy channel.
-- **Web/Portal:** Replace ad-hoc localization and policy banners with LPE-driven strings and formatting helpers; UI hydration fetches `PolicyContext` during session bootstrap.
-- **Guardian & workers:** Blocks PHI artifacts unless HIPAA/PHIPA frameworks enable PHI, logging `POLICY_BLOCK` codes with the context digest. Consult `PolicyContext` for residency and HIPAA toggles.
-- **Search/Retrieval:** Index creation chooses locale-aware analyzers and vector-store residency from `PolicyContext`.
-- **Notifications:** Template selection, disclaimers, and delivery restrictions derive from context outputs; outbox retains idempotency semantics.
-- **DB layer:** `PolicyContext.masking_profile` drives secure view selections; migrations enforce FORCE RLS for contexts requiring PHI redaction.
-
-Decision logs validate against `spec/schemas/opa_decision_log.schema.json`. `reason_code` values (`OK`, `REGION_NOT_ALLOWED`, `WAIVER_REQUIRED`, `HIPAA_REQUIRED`, `ATTACHMENT_FORBIDDEN`, `OPA_ERROR`) map to downstream actions:
-
-| `reason_code`          | `policy_block_code` surfaced to callers   |
-| ---------------------- | ----------------------------------------- |
-| `OK`                   | `null` (decision allow)                   |
-| `REGION_NOT_ALLOWED`   | `RESIDENCY_POLICY_BLOCK`                  |
-| `WAIVER_REQUIRED`      | `POLICY_BLOCK` (UI prompts for waiver)    |
-| `HIPAA_REQUIRED`       | `HIPAA_REQUIRED`                          |
-| `ATTACHMENT_FORBIDDEN` | `ATTACHMENT_BLOCK`                        |
-| `OPA_ERROR`            | `POLICY_BLOCK` (with remediation message) |
-
-CI (`scripts/opa/validate_decision_logs.py`) verifies that emitted logs comply with the schema, and dashboards aggregate `reason_code` to drive alerts and FinOps reporting.
-
-#### 3.4.7 Gap-closure owners
-
-*Purpose: Assign accountable owners for closing outstanding LPE gaps.*
-
-- **Security:** Ship STRIDE-by-component threat model artifacts for LPE and its call-sites; unsafe activations must reference threat IDs.
-- **UX/QA:** Integrate WCAG 2.2 AA checks (axe-core/Pa11y) into CI; approval/invalidation copy reads from LPE localization packs; dashboards expose a11y defect rate.
-- **Compliance:** Encode PHIPA (ON) and PIPA (BC) retention/DSAR/PHI overrides with DPIA/RoPA linkages; portal and Guardian behaviors reflect provincial flags.
-- **SRE/Product:** Extend FinOps compute/token SLO dashboards (“LLM Cost & Circuit”) and enforce back-pressure using LPE hints; alerts route with runbook IDs.
-- **SRE:** BCDR drills log restoration evidence and `PolicyContext` replay of DSAR erasures post-restore.
-
-#### 3.4.8 Observability & cost posture
-
-*Purpose: Define telemetry, SLOs, and cost controls for LPE operations.*
-
-- Metrics: `lpe_lookup_latency_seconds`, `lpe_policy_context_version`, `lpe_compiler_duration_seconds`, `lpe_cache_hit_ratio`, `lpe_policy_block_total`, `lpe_privacy_framework_enabled_total`.
-- Dashboards: “LPE – Enforcement & Residency” (latency, cache hits, decision distribution, `opa_bundle_status`, OPA decision P95 ≤ 20 ms target) and “LPE Compiler” (diff volume, unsafe flags). Add both to §12.6 Named dashboards.
-- Logs honor the never-log list (§12.1.3); responses contain identifiers/flags only—no raw PII or legal text. Sampling ties into the dynamic budgets described in §12.1.6.
-
-#### 3.4.9 Testing, rollout & migration
-
-*Purpose: Document validation coverage, rollout sequencing, and migration toggles.*
-
-- Contract tests validate OpenAPI schemas, golden `PolicyContext` fixtures for HIPAA/PHIPA/PIPA/GDPR combinations, and compiler diff outputs.
-- Activation dry-run surfaces computed diffs; unsafe flags demand dual approval before publication.
-- Synthetic monitors invoke `GET /lpe/policy_context` for HIPAA/PHIPA/PIPA cases post-deploy and verify Guardian/Portal behavior end-to-end.
-- Rollout timeline (target start Mon 2025-10-20, America/Vancouver):
-  - **Weeks 1-2:** ADR + TDD updates, schema/compiler scaffolding, seed jurisdiction data, `PolicyContext` draft, Threat Model v1.
-  - **Weeks 3-4:** Web/Portal, Guardian/Workers, and Search integrations wired to LPE; vector residency enforcement live.
-  - **Week 5:** A11y CI gates, Notifications templates via LPE, dashboards, synthetic monitors.
-  - **Week 6:** Cutover flag enabled, `/reference/*` deprecation notices, BCDR + DSAR replay drill, publish lessons-learned artifact.
-- Repository migration: existing `packages/udocket_core/reference/*` modules become the Reference Manager domain (`packages.udocket_core.reference_manager` namespace). New `packages/udocket_core/lpe/*` modules house compilers/access helpers. A temporary compatibility shim keeps `packages.udocket_core.reference` imports valid while callers migrate, and it delegates to the appropriate RM or LPE component. Remove the shim once `/reference/*` API sunset completes and SDKs consume the new bundles.
-- Compatibility: `/reference/*` routes proxy to LPE read APIs until sunset; clients receive `Deprecation`, `Sunset`, and `Link: <https://docs.udocket.io/reference-migration>; rel="successor-version"` headers with migration guidance.
-
-#### 3.4.10 Example configuration & runtime usage
-
-*Purpose: Show configuration examples illustrating runtime consumption of LPE outputs.*
-
-```yaml
-jurisdictions:
-  US:
-    CA:
-      frameworks: [CCPA_CA]
-      retention_overrides:
-        QA_LOGS: 365d
-        PRIVACY_ARTIFACTS: 730d
-      residency:
-        compute: [na-us-1, na-us-2]
-        storage: [na-us-1]
-      portal:
-        disclaimer_key: portal.disclaimer.ca
-  EU:
-    DE:
-      frameworks: [GDPR_DE]
-      residency:
-        compute: [eu-central-1]
-        storage: [eu-central-1]
-frameworks:
-  HIPAA:
-    phi_allowed: true
-    requires_mode_enable: true
-localization:
-  default_locale: en-US (org override)
-  time_format: "yyyy-MM-dd HH:mm z"
-  number_system: "latn"
-```
-
-```python
-ctx = lpe.get_policy_context(
-    org_id=org_id,
-    case_id=case_id,
-    privacy_flags={"PHI": True},
-    locale="en-US",
-)
-if ctx.frameworks.HIPAA.required and not ctx.frameworks.HIPAA.enabled:
-    raise PolicyBlock("HIPAA_REQUIRED", context_digest=ctx.digest_sha256)
-db.set_rls_mask_profile(ctx.masking_profile)
-vector_client = vector_pool.for_regions(ctx.residency_regions.compute)
-formatter = lpe.get_locale("en-US").formatters
-rendered_date = formatter.date_short(approved_at)
-
-#### Residency/egress lookup
-
-*Purpose: Demonstrate how residency lookups resolve allowed regions for a case.*
-
-decision = opa_client.evaluate(
-    policy="uDocket/residency/allow",
-    input={
-        "org_id": org_id,
-        "case_id": case_id,
-        "artifact_type": "COMPOSE_CLIENT_MD",
-        "requested_region": "na-us-1",
-        "context_digest": ctx.digest_sha256,
-    },
-)
-if not decision["allow"]:
-    raise PolicyBlock(decision["reason"], context_digest=ctx.digest_sha256)
-```
-
-This example demonstrates how residency outcomes are derived: LPE supplies the deterministic `PolicyContext` (with compute/storage/vector allowlists per `(org_id, locale, privacy_flags)`), while OPA enforces deny-by-default egress rules and returns structured deny codes (`REGION_NOT_ALLOWED`, `WAIVER_REQUIRED`) that propagate to Guardian and portal clients. See App.A.9 (`docs/diagrams/residency-policy-enforcement-v1.mmd`) for the end-to-end activation → evaluation → enforcement sequence, including waiver stamping.
-
-#### 3.4.11 Risks & mitigations
-
-*Purpose: Capture LPE-specific risks and the mitigations required before launch.*
-
-- **Policy drift between Settings and runtime:** Compiler diff + activation dry-run block inconsistent deployments; golden-case monitors detect divergence early.
-- **Performance regressions on hot paths:** In-process caches with TTLs, async refresh, and P95 alerting; SRE can shed load via neutral fallback `PolicyContext` guarded by feature flag while issue triaged.
-- **Logging leaks of sensitive policy detail:** Never-log enforcement, log redaction filters, and audit seals review.
-
-#### 3.4.12 Deliverables at cutover
-
-*Purpose: List the deliverables needed to declare the LPE cutover complete.*
-
-- ADR + updated TDD chapter + diagrams.
-- New OpenAPI bundle plus SDKs with contract tests.
-- LPE compiler outputs (`compiled_*` tables) with diff artifacts.
-- Enforcement matrix wired through API/Workers/Portal/RLS.
-- A11y CI gates and metrics dashboard.
-- Provincial privacy mappings + DPIA/RoPA linkage.
-- FinOps compute SLO dashboards tied to LPE hints.
-- BCDR drill + DSAR replay artifact recorded.
+The full service charter, compiler pipeline, PolicyContext contract, integrations, APIs, observability, and rollout plan now live in `docs/tdd-lpe.md`. Refer to that document for normative requirements, examples, testing matrices, and migration milestones. This platform TDD cites LPE outputs (PolicyContext digests, localization packs, waiver metadata) where needed but does not duplicate their definitions.
 
 ### 3.5 Reference Manager (catalog ingestion & lifecycle)
 
@@ -885,7 +669,7 @@ Reference Manager packages every regulated dataset required for downstream compl
 
 - **Upload → Guardian → Approval:** Web accepts uploads, stages to object storage, inserts `class=SA` artifacts (`status='STORED'`), workers derive WP/CD entries (`PROCESSING → PENDING_JUDGMENT`), Guardian issues PASS/WARN/BLOCK judgments (→ `CLEARED_FOR_USE` / `OPERATOR_PREP` / `QUARANTINED`), operators submit from `OPERATOR_PREP` (→ `APPROVAL_REQUESTED`) and queue routing moves the draft into `QUEUED_FOR_REVIEW` before any reviewer touches it (sequence in `App.A.2`).
 - **Agent pipeline:** Workers fetch inputs (audio/transcripts), execute Transcribe/Analyze/Compose stages, write artifacts + manifests, and notify Guardian & SSE. Settings snapshots travel alongside each job to guarantee reproducibility.
-- **Reference curation loop:** Reference Manager harvests external sources, normalizes data, routes diffs to reviewers, and publishes canonical catalogs/questionnaires/forms. Publish events trigger LPE recompiles and propagate version digests to services consuming `PolicyContext`.
+- **Reference curation loop:** Reference Manager harvests external sources, normalizes data, routes diffs to reviewers, and publishes regulated catalogs/questionnaires/forms. Publish events trigger LPE recompiles and propagate version digests to services consuming `PolicyContext` (see `docs/tdd-lpe.md §1.4`).
 - **Notification loop:** Worker pushes delivery requests to Notification Service; receipts update artifact manifests and audit events. Portal fetches approved deliverables via signed URLs with guardian-enforced readiness.
 - **Telemetry stream:** All services emit logs/metrics/traces to the Observability Fabric (Elastic/OTel stack). Guardian judgments and settings activations append to ops audit JSONL under each case.
 - **Settings change propagation:** Activations in Settings Service publish invalidation events; consuming services flush caches and rehydrate GUC policies on next request/task.
@@ -903,7 +687,7 @@ Reference Manager packages every regulated dataset required for downstream compl
 
 - **Notification channels:** Email/SMS providers configured per organization; webhook adapters log request/response pairs with PII masking.
 
-- **Localization & Policy Engine (LPE):** Compiles jurisdictional policy, residency allowlists, localization packs, and court catalogs into versioned `PolicyContext` payloads exposed over REST/SDKs; compiler jobs run on Settings activation and publish immutable digests for downstream caches (see §3.4).
+- **Localization & Policy Engine (LPE):** Compiles jurisdictional policy, residency allowlists, localization packs, and court catalogs into versioned `PolicyContext` payloads exposed over REST/SDKs; compiler jobs run on Settings activation and publish immutable digests for downstream caches (see `docs/tdd-lpe.md`).
 
 - **Reference Manager sources:** Connectors for Wikipedia/Wikidata, provincial/territorial court sites, federal and provincial legislation portals, vendor feeds, and manual CSV uploads. Harvest jobs treat each source as a regulated integration with throttle policies, citation capture, and evidence storage for compliance review (see §3.5).
 
@@ -1002,7 +786,7 @@ Reference Manager packages every regulated dataset required for downstream compl
 
 *Purpose: Define the identity backbone and token contract consumed by all services.*
 
-- Realm `uDocket` with clients `staff-ui`, `client-portal`, `service-api`, `guardian`, `signer`, `settings`, `notifications`, `llm-registry`, `reference-manager`, `lpe` (former `reference` client retained temporarily as read-only shim until §3.4.9 cutover).
+- Realm `uDocket` with clients `staff-ui`, `client-portal`, `service-api`, `guardian`, `signer`, `settings`, `notifications`, `llm-registry`, `reference-manager`, `lpe` (former `reference` client retained temporarily as read-only shim until the migration window in `docs/tdd-lpe.md §6.3`).
 - Roles split into realm (`sysadmin`, `auditor`) and organization scope (`org_admin`, `org_manager`, `org_operator`, `org_reviewer`, `org_external_counsel`, `org_client`).
 - Tokens include `org_ids[]`, `active_org_id`, `active_org_roles[]`, optional `org_directory[]`. Middleware rejects any request where `active_org_id ∉ org_ids[]`.
 - Access tokens ≤15 minutes, refresh tokens 12h (staff) / 2h (portal); offline tokens disabled unless security approves exceptions. Step-up MFA signaled via OIDC `acr` claim for sensitive endpoints.
@@ -1050,7 +834,7 @@ Reference Manager packages every regulated dataset required for downstream compl
 
 - Advisory locks (`udlock` schema) encapsulate concurrency primitives with heartbeat registries and GC routines.
 
-- Masking profiles produced by LPE bind directly into `effective_permission` / `field_mask_rule` rows so database policy remains in lock-step with runtime `PolicyContext` decisions. The profile name selected via `db.set_rls_mask_profile(ctx.masking_profile)` (writes `udocket.mask_profile`) is just-in-time translated to a concrete policy set during Settings activation; CI ensures profiles without corresponding `field_mask_rule` coverage fail activation.
+- Masking profiles produced by LPE bind directly into `effective_permission` / `field_mask_rule` rows so database policy remains in lock-step with runtime `PolicyContext` decisions (see `docs/tdd-lpe.md §2.6`). The profile name selected via `db.set_rls_mask_profile(ctx.masking_profile)` (writes `udocket.mask_profile`) is just-in-time translated to a concrete policy set during Settings activation; CI ensures profiles without corresponding `field_mask_rule` coverage fail activation.
 
 #### 4.4.1 Masking profile mapping (binding)
 
@@ -1058,7 +842,7 @@ Reference Manager packages every regulated dataset required for downstream compl
 
 *Purpose: Map PolicyContext masking profiles onto database enforcement artifacts.*
 
-- LPE emits `masking_profile` values (`default`, `hipaa_strict`, `legal_hold`) in `PolicyContext`. Settings activation compiles those values into `field_mask_rule` rows that parameterize the SQL policies below. Activation fails if any required profile lacks entries for `CASE`, `ARTIFACT`, `QA_LOG`, `GUARDIAN_JUDGMENT`, or `DELIVERY_RECEIPT`.
+- LPE emits `masking_profile` values (`default`, `hipaa_strict`, `legal_hold`) in `PolicyContext` (see `docs/tdd-lpe.md §2.6`). Settings activation compiles those values into `field_mask_rule` rows that parameterize the SQL policies below. Activation fails if any required profile lacks entries for `CASE`, `ARTIFACT`, `QA_LOG`, `GUARDIAN_JUDGMENT`, or `DELIVERY_RECEIPT`.
 
 - Normative enforcement DDL (excerpt; see Appendix J for full catalog):
 
@@ -2687,7 +2471,7 @@ Notes
 
 *Purpose: Enumerate where runtime must consult Settings or compiled policy.*
 
-- All enforcement paths fetch an LPE `PolicyContext` (see §3.4.3) and record the `policy_context_version` + digest in structured logs. Cache TTL defaults to 5 minutes; expiries must trigger a refresh before decision-making.
+- All enforcement paths fetch an LPE `PolicyContext` (see `docs/tdd-lpe.md §2.3`) and record the `policy_context_version` + digest in structured logs. Cache TTL defaults to 5 minutes; expiries must trigger a refresh before decision-making.
 - API: authorization (RBAC writes, approvals), CORS, rate limits, portal download guards, HIPAA/PHIPA banner selection, residency enforcement for download URLs.
 - Workers: agent configurations (models, budgets), residency policy, Guardian/Signer configs, FinOps cost ceilings, waiver gating.
 - Frontend: feature flags, UI flows for approvals and messaging, locale + formatting decisions, accessibility copy.
@@ -3084,15 +2868,9 @@ Payloads (illustrative)
 
 ### 10.11 Localization & Policy Engine APIs
 
-*Purpose: Publish the formal interface for retrieving `PolicyContext`, localization packs, and jurisdictional catalogs.*
+*Purpose: Defer to the dedicated LPE API specification.*
 
-- **Endpoints:** `GET /api/v1/lpe/policy_context?org_id&case_id?&privacy_flags?&locale?`, `GET /api/v1/lpe/courts?jurisdiction=&q=`, `GET /api/v1/lpe/locales/{locale}`. Responses include `policy_context_version`, `settings_snapshot_version`, `generated_at`, and SHA‑256 `digest`. `privacy_flags` accepts deterministic key/value pairs (sorted) to keep caching viable.
-- **Versioning:** LPE ships as a dedicated OpenAPI bundle with `x-surface: lpe`. Specs adopt the same change log policy as Guardian/Settings; breaking changes require ADR + major version bump. `/reference/*` endpoints remain read-only pass-throughs until §3.4.9 cutover, returning RFC 8594 `Sunset`, RFC 8594 `Deprecation`, and RFC 5988 `Link: <https://docs.udocket.io/reference-migration>; rel="successor-version"` headers with migration docs.
-- **Upstream coordination:** Responses include `X-Reference-Catalog-Version` derived from Reference Manager publishes (§3.5). Clients compare this value with Settings snapshots to detect drift; LPE refuses to serve contexts when the referenced RM version is missing or flagged as revoked.
-- **Caching & headers:** Responses set `Cache-Control: private, max-age=300` and `ETag: <digest>`; clients must revalidate on `412` to pick up new contexts. `PolicyContext` payloads include `expires_at` hints derived from residency/retention rules and never expose raw legal text (only localization keys).
-- **Authentication:** Standard service tokens (Keycloak + HMAC). Auditing requires callers to log the `policy_context_version` they acted upon; middleware persists it alongside `settings_snapshot_version`.
-- **SDKs:** `udocket_lpe` (Python) and `@uDocket/lpe-client` (TypeScript) provide LRU caches, activation hooks, and typed helpers (`policy_context()`, `get_locale()`, `lookup_court()`). SDKs perform background refresh and surface telemetry counters to `lpe_cache_hit_ratio`.
-- **Error model:** Uses shared `ApiError`; notable codes include `POLICY_CONTEXT_NOT_FOUND`, `LOCALE_NOT_AVAILABLE`, `JURISDICTION_NOT_SUPPORTED`. Clients must surface `error.context_digest` to logs for post-incident reconstruction.
+See `docs/tdd-lpe.md §4` for endpoint definitions, SDK responsibilities, legacy shim guidance, and error models. This section intentionally references that document to avoid divergence.
 
 ### 10.12 Assistant capability & settings APIs
 
@@ -3242,11 +3020,8 @@ Contract requirements (binding)
 - Automated validation: CI pipelines run Storybook/axe-core scans (`npm run test:axe`), `pa11y-ci` against review environments, and Lighthouse accessibility budgets (≥ 95). Failures block merges; waivers require `A11Y_EXCEPTION` artifacts with VP Product + Accessibility Lead approval and expiry ≤ 30 days. ESLint (jsx-a11y), TypeScript lint rules, and Playwright a11y assertions enforce guardrails locally.
 - Manual audits: pre-release sign-off exercises assistive tech pairings (NVDA/Firefox, JAWS/Edge, VoiceOver/Safari + iOS, TalkBack/Android), keyboard-only flows, high-contrast themes, reduced-motion and zoom at ≥ 200 %. Findings feed the `ACCESSIBILITY_AUDIT` artifact (severity, WCAG criterion, reproduction steps, remediation owner/SLA) and block GA cutover until addressed or formally waived.
 - Document & template accessibility: Compose/Analyze templates must satisfy PDF/UA, tagged headings, logical reading order, table summaries, alternative text, and annotation markers for notes. Template metadata captures `{a11y_validation_status, validated_at, validator_tool, reviewer}`; Guardian rejects deliverables lacking `a11y_validation_status=pass`. Short/long summaries and timelines include structured captions for figures and transcript references for screen-reader context.
-- Localization: UI respects locales declared in `i18n.supported_locales[]`; toggles persist per user. Strings come from LPE packs with deterministic fallback: `requested_locale → base_language → platform_default` (default `en-CA`, configurable via Settings). The fallback graph is declared in `i18n.fallback_chain` bundles and compiled alongside locale packs. Org-level overrides apply before the fallback chain, and missing keys immediately fail CI (`tests/i18n/test_locale_contract.py`) rather than rendering raw keys. RTL readiness (mirroring, bidi isolation) is mandatory for locales listed in `i18n.required_rtl_locales[]`. Manual regression covers at least two non-English locales per release (one RTL) and verifies accessible state announcements, hotkey equivalence, and localized error copy readability. Locale normalization enforces canonical BCP-47 casing/hyphenation (`en_CA` → `en-CA`, `pt-br` → `pt-BR`) via `localization.normalize_locale()`; mismatches raise `LOCALIZATION_INVALID_LOCALE` during Settings activation.
-- Testing harness: pseudolocalization (`scripts/i18n/pseudolocale.sh`), ICU pluralization snapshots (`localization:acceptance`), and automated accessibility suites run per PR. Nightly BrowserStack jobs replay assistive-technology scripts, storing results under `ops/a11y/<date>` with hashed transcripts for audit.
-- Pseudolocale enforcement: `en-XA` runs are mandatory in CI (`npm run test:pseudolocale`), blocking releases when missing MessageFormat args or string truncation occurs. The job emits `localization_pseudolocale_regression_total`; release checklists require attaching the latest run artifact before approvals close. Contract tests cover ICU boundaries—numbers, dates, currency, measurement units—via `tests/i18n/test_icu_boundaries.py`, and Playwright RTL snapshots (`tests/ui/test_rtl_layout.spec.ts`) guard bidi behaviour. Failing tests block bundle activation until corrected.
+- Localization governance, QA automation, pseudolocale enforcement, and release evidence now live in `docs/tdd-lpe.md §2.4` and Appendix A. This platform TDD references those controls only via the shared localization keys surfaced in UI/portal flows.
 - Merge-stop checklist: reviewers block merges when (1) keyboard traps or focus misorder occur, (2) pointer-only interactions omit alternative input, (3) focus indicators fall below WCAG contrast/size requirements, (4) error messages fail to raise an `aria-live` announcement, (5) loading states lack accessible names, or (6) automated tooling reports unresolved Level A/AA issues.
-- Localization operations: weekly sync with LPE coordinates glossary updates and locale expansion; editorial QA approves tone guides. Release checklist references Appendix L and requires product sign-off on localized UX snapshots and assistive-technology recordings. `tests/e2e/test_portal_policy_context.py::test_disclaimer_l10n` validates banner rendering and attribution in a rotating locale roster (e.g., `en-CA`, `fr-CA`, `es-MX`, `ar-SA`).
 
 #### 11.3.1 Accessibility governance & remediation (binding)
 
@@ -4308,7 +4083,7 @@ Retention schedule (baseline; orgs may set stricter)
 - QA logs: retained for life of case; hidden from portal; included in WORM audit scope.
 - Entitlement snapshots and audit events: life of case + 2 years; WORM copies per audit policy.
 - Legal hold: any hold on the case supersedes retention timers; destruction jobs must check hold state and emit `DESTRUCTION_CERT` artifacts upon completion.
-- PolicyContext publishes the 90-day baseline retention alongside per-artifact overrides, and both the Settings UI and portal messaging read that metadata directly so user-facing copy and enforcement stay aligned.
+- PolicyContext retention metadata and override governance are defined in `docs/tdd-lpe.md §2.3` and Appendix C; this appendix references those digests only when mapping artifact classes to residency and retention groups.
 
 HIPAA override mode
 
@@ -5423,7 +5198,7 @@ Glossary entries
 - Artifact: Immutable content record with `class`, `status`, `content_hash`, and manifest; statuses follow §5.2 (`STORED`, `PROCESSING`, `PENDING_JUDGMENT`, `CLEARED_FOR_USE`, `OPERATOR_PREP`, `APPROVAL_REQUESTED`, `QUEUED_FOR_REVIEW`, `CHANGES_REQUESTED`, `QUARANTINED`, `APPROVED`, `SIGNED`, `RELEASED`, `REVOKED`, `ARCHIVED`, `DELETED`).
 - Exclusive type: Artifact type for which a case may have at most one `APPROVED` at a time; enforced by unique index and approval swap (§5.4.1).
 - Guardian: Service issuing PASS/WARN/BLOCK/WAIVED judgments that gate operator visibility and drive workflow transitions before review; see `docs/guardian-service.md` for architecture and audit details.
-- Localization & Policy Engine (LPE): Runtime resolver that consumes RM bundles + Settings to emit deterministic `PolicyContext` objects, masking profiles, and localization packs for every enforcement point (§3.4, §9.9, §10.11).
+- Localization & Policy Engine (LPE): Runtime resolver that consumes RM bundles + Settings to emit deterministic `PolicyContext` objects, masking profiles, and localization packs for every enforcement point (see `docs/tdd-lpe.md`).
 - Reference Manager (RM): Editorial/catalog service that ingests and normalizes jurisdictional data, questionnaires, and localization strings; publishes signed catalog bundles to LPE and enforces licensing, attribution, and dual-control workflows (§3.5).
 - Review/Approval: Process that moves CDs from `OPERATOR_PREP` → `APPROVAL_REQUESTED` → `QUEUED_FOR_REVIEW`, emits `REVIEW.REQUESTED/REVIEW.QUEUED`, and culminates in human decisions (`REVIEW.APPROVED`, `REVIEW.CHANGES_REQUESTED`, `REVIEW.QUARANTINED`) or automated `REVIEW.SKIPPED` when skip modes apply (§5.2.5, §10.3.2).
 - Manifest: JSON payload embedded in artifacts capturing provenance (regions, hashes, settings snapshot), tool versions, and inputs (§5.6).
