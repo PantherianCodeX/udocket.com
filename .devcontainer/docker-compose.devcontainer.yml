@@ -28,11 +28,6 @@ services:
       - ./storage:/app/storage
       - ./.env:/app/.env:rw
       - /var/run/docker.sock:/var/run/docker.sock
-    depends_on:
-      postgres:
-        condition: service_started
-      redis:
-        condition: service_started
     security_opt:
       - seccomp=unconfined
     cap_add:

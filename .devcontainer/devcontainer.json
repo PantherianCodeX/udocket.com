@@ -7,8 +7,6 @@
   ],
   "service": "platform-dev",
   "runServices": [
-    "postgres",
-    "redis",
     "platform-dev"
   ],
   "shutdownAction": "stopCompose",
