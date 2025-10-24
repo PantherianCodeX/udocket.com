@@ -18,6 +18,9 @@ __pycache__/
 node_modules/
 .cache/
 
+# BuildKit/Buildx caches
+.docker/
+
 # Local storage & emulator data
 storage/
 __blobstorage__/
