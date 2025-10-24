@@ -21,9 +21,8 @@ services:
       context: .
       dockerfile: infra/docker/Dockerfile.platform
       cache_from:
-        - type=local,src=.docker/buildx-cache
-      cache_to:
-        - type=local,dest=.docker/buildx-cache
+        - type=local,src=.docker/buildx-cache/dev
+        - type=local,src=.docker/buildx-cache/platform
     develop: *platform-watch
     restart: unless-stopped
     env_file: .env
@@ -51,9 +50,9 @@ services:
       context: .
       dockerfile: infra/docker/Dockerfile.platform
       cache_from:
-        - type=local,src=.docker/buildx-cache
-      cache_to:
-        - type=local,dest=.docker/buildx-cache
+        - type=local,src=.docker/buildx-cache/dev
+        - type=local,src=.docker/buildx-cache/platform
+        - type=local,src=.docker/buildx-cache/platform_worker
     develop: *platform-watch
     restart: unless-stopped
     env_file: .env
@@ -83,9 +82,9 @@ services:
       context: .
       dockerfile: infra/docker/Dockerfile.platform
       cache_from:
-        - type=local,src=.docker/buildx-cache
-      cache_to:
-        - type=local,dest=.docker/buildx-cache
+        - type=local,src=.docker/buildx-cache/dev
+        - type=local,src=.docker/buildx-cache/platform
+        - type=local,src=.docker/buildx-cache/platform_beat
     develop: *platform-watch
     restart: unless-stopped
     env_file: .env

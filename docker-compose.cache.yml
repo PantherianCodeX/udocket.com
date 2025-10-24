@@ -1,0 +1,13 @@
+services:
+  platform:
+    build:
+      cache_to:
+        - type=local,dest=.docker/buildx-cache/platform,mode=max
+  platform_worker:
+    build:
+      cache_to:
+        - type=local,dest=.docker/buildx-cache/platform_worker,mode=max
+  platform_beat:
+    build:
+      cache_to:
+        - type=local,dest=.docker/buildx-cache/platform_beat,mode=max
