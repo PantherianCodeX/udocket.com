@@ -97,6 +97,8 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 
 FROM python-deps AS app
 
+WORKDIR /app
+
 # Copy project source last to keep dependency layers hot
 COPY . /app
 
