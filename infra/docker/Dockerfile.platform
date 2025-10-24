@@ -54,27 +54,34 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
       rm -rf /var/lib/apt/lists/*; \
     fi
 
-FROM toolchain AS wheels
-ARG DEV_TOOLS
+FROM toolchain AS runtime-wheels
 
 WORKDIR /tmp/pip
 
 COPY apps/platform/requirements.txt runtime.txt
 COPY packages/udocket_core/requirements.txt core.txt
-COPY apps/platform/requirements-dev.txt dev.txt
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     mkdir -p /wheels \
  && pip wheel --wheel-dir /wheels --requirement runtime.txt \
- && pip wheel --wheel-dir /wheels --requirement core.txt \
- && if [ "$DEV_TOOLS" = "1" ]; then pip wheel --wheel-dir /wheels --requirement dev.txt; fi
+ && pip wheel --wheel-dir /wheels --requirement core.txt
+
+FROM runtime-wheels AS dev-wheels
+ARG DEV_TOOLS
+
+COPY apps/platform/requirements-dev.txt dev.txt
+
+RUN --mount=type=cache,target=/root/.cache/pip \
+    if [ "$DEV_TOOLS" = "1" ]; then \
+      pip wheel --wheel-dir /wheels --requirement dev.txt; \
+    fi
 
 FROM toolchain AS python-deps
 ARG DEV_TOOLS
 
 WORKDIR /app
 
-COPY --from=wheels /wheels /tmp/wheels
+COPY --from=dev-wheels /wheels /tmp/wheels
 
 # Install Python dependencies (shared across services)
 COPY apps/platform/requirements.txt /tmp/platform-requirements.txt
