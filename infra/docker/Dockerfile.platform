@@ -60,17 +60,38 @@ RUN --mount=type=cache,target=/root/.cache/pip \
       && pip install git+https://github.com/PantherianCodeX/typewiz@main; \
     fi
 
+FROM toolchain AS wheels
+ARG DEV_TOOLS
+
+WORKDIR /tmp/pip
+
+COPY apps/platform/requirements.txt runtime.txt
+COPY packages/udocket_core/requirements.txt core.txt
+COPY apps/platform/requirements-dev.txt dev.txt
+
+RUN --mount=type=cache,target=/root/.cache/pip \
+    mkdir -p /wheels \
+ && pip wheel --wheel-dir /wheels --requirement runtime.txt \
+ && pip wheel --wheel-dir /wheels --requirement core.txt \
+ && if [ "$DEV_TOOLS" = "1" ]; then pip wheel --wheel-dir /wheels --requirement dev.txt; fi
+
 FROM toolchain AS python-deps
+ARG DEV_TOOLS
 
 WORKDIR /app
 
+COPY --from=wheels /wheels /tmp/wheels
+
 # Install Python dependencies (shared across services)
 COPY apps/platform/requirements.txt /tmp/platform-requirements.txt
+COPY apps/platform/requirements-dev.txt /tmp/platform-requirements-dev.txt
 COPY packages/udocket_core/requirements.txt /tmp/udocket-core-requirements.txt
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install -r /tmp/platform-requirements.txt \
- && pip install -r /tmp/udocket-core-requirements.txt \
- && rm -f /tmp/platform-requirements.txt /tmp/udocket-core-requirements.txt
+    pip install --no-index --find-links=/tmp/wheels -r /tmp/platform-requirements.txt \
+ && pip install --no-index --find-links=/tmp/wheels -r /tmp/udocket-core-requirements.txt \
+ && if [ "$DEV_TOOLS" = "1" ]; then pip install --no-index --find-links=/tmp/wheels -r /tmp/platform-requirements-dev.txt; fi \
+ && rm -f /tmp/platform-requirements.txt /tmp/platform-requirements-dev.txt /tmp/udocket-core-requirements.txt \
+ && rm -rf /tmp/wheels
 
 FROM python-deps AS app
 
