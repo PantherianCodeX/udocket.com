@@ -245,8 +245,8 @@ To keep visuals helpful and consistent:
 - ISO/IEC 27701 (privacy extension) alignment: fully mapped and implemented. Appendix K lists the control crosswalk, evidence sources, and quarterly recertification cadence; deviations trigger `ISO27701_GAP` incidents and block releases until remediated.
 - Compliance mapping (binding): traceable connection between regulation, platform controls, and evidence ensures auditors can verify posture without ad-hoc spreadsheets.
 
-  | Regulation / Framework | Key platform controls & features                               | Canonical references |
-  | ---------------------- | ---------------------------------------------------------------- | -------------------- |
+  | Regulation / Framework | Key platform controls & features | Canonical references |
+  | ---------------------- | ---------------------------- | --------- |
   | GDPR & UK GDPR         | DSAR/erasure workflow (`ERASURE_JOURNAL`), data minimization, audit seals, residency enforcement | §2.2, §14.2.1, App.N, App.K |
   | CCPA / CPRA            | “No sale/share” enforcement, notice ledgers, SPI routing and disclosure logging | §2.2 (SPI), §11.5, App.K |
   | HIPAA                  | HIPAA mode activation gates, Guardian PHI quarantine, evidence-store excerpt suppression, WebAuthn enforcement | §2.2, §7.1, §8.2, App.N |
@@ -318,7 +318,7 @@ To keep visuals helpful and consistent:
 
 - Staff users, reviewers, and clients interact with the **Web App** (Django ASGI) via browser connections protected by TLS 1.3; SSE provides status streaming while Channels enables bidirectional collaboration. SSE payloads include only IDs and metadata already permitted by RLS—no raw PII or artifact bodies traverse the channel.
 - Background processing occurs in the **Worker cluster** (Celery) which orchestrates agent pipelines, storage operations, and notifications.
-- Supporting services—**Guardian**, **Digital Signer**, **Settings**, **LLM Registry**, **Localization & Policy Engine (LPE; see `docs/tdd-lpe.md`)**, **Reference Manager (RM; see `docs/tdd-rm.md`)**, and **Notifications**—communicate over mTLS within the cluster and persist state to Postgres with RLS. RM operates as the editorial/source-of-truth service for catalog bundles, while LPE is the runtime resolver that consumes those bundles.
+- Supporting services—**Guardian**, **Digital Signer**, **Settings**, **LLM Registry**, **Localization & Policy Engine (LPE)**, **Reference Manager (RM)**, and **Notifications**—communicate over mTLS within the cluster and persist state to Postgres with RLS. RM operates as the editorial/source-of-truth service for catalog bundles, while LPE is the runtime resolver that consumes those bundles.
 - External dependencies (Azure Speech, LLM providers, TSA/OCSP authorities, email/SMS gateways) sit outside the trusted cluster and are accessed under strict egress policies.
 - Visual: see `App.A` for the full context diagram and sequence overlays.
 
@@ -450,20 +450,20 @@ metadata:
 
 *Purpose: Provide a tabular summary for capacity planning and onboarding.*
 
-| Service                            | Runtime                                     | Responsibilities                                                                                                 | Scaling & notes                                                                           | Observability anchors                                                                                         |
-| ---------------------------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| Web                                | Django ASGI (uvicorn + gunicorn)            | REST APIs, staff UI, client portal, SSE endpoints, approval workflows                                            | HPA on CPU+request latency; sticky sessions avoided                                       | `web_http_*`, `frontend_latency_seconds`, `audit_event_total`                                                 |
-| Channels                           | Django Channels (Redis-backed)              | Real-time editors, approvals, QA feedback                                                                        | Separate Deployment with autoscale on WS connections                                      | `channels_active_connections`, `channels_msg_latency_seconds`                                                 |
-| Workers                            | Celery (prefork)                            | Media normalization, agent orchestration, notifications, ingestion, destruction                                  | Queue length auto-scaling; dedicated queues per agent class                               | `celery_queue_depth`, `job_duration_seconds`, `task_retry_total`                                              |
-| Guardian                           | FastAPI                                     | PASS/WARN/BLOCK/WAIVED judgments, policy evaluation, audit history                                      | Pod HPA on latency; 99.9% SLO                                                             | `guardian_judgment_latency_seconds`, `guardian_cleared_ratio`                                                 |
-| Digital Signer                     | FastAPI                                     | PDF/A signing, OCSP/CRL/TSA validation, bundle creation                                                          | Scales with signing queues; relies on KMS/TSA connectors                                  | `signer_request_latency_seconds`, `tsa_drift_seconds`                                                         |
-| LLM Registry                       | FastAPI                                     | Provider catalog, health probes, token accounting, fallback logic                                                | Low QPS; run ≥2 replicas                                                                  | `llm_provider_health`, `llm_circuit_state`                                                                    |
-| Settings Service                   | FastAPI                                     | Hierarchical settings APIs, bundle activation, diff previews                                                     | Autoscale on QPS; Redis pub/sub for cache invalidation                                    | `settings_activation_total`, `settings_cache_hit_ratio`                                                       |
-| Localization & Policy Engine (LPE) | FastAPI + worker cron + compiler jobs       | Runtime localization/policy resolution; see `docs/tdd-lpe.md` for charter, assets, and contracts               | Compiler pods scale on activation; lookup API horizontally replicated                     | See `docs/tdd-lpe.md §5` for observability anchors                                        |
-| Policy Agent (OPA)                 | Open Policy Agent (sidecar or centralized)  | Evaluates signed policy bundles for residency, HIPAA, egress, attachment rules; emits decision logs              | Colocates sidecar per service for low latency; central cluster fans out discovery bundles | `opa_decision_latency_seconds`, `opa_bundle_status`, `opa_denied_total`                                       |
-| Reference Manager                  | FastAPI + Celery ingest workers + review UI | Editorial/source-of-truth for regulated catalog bundles; see `docs/tdd-rm.md` for charter, connectors, and publishing lifecycle | Scaling, staffing, and harvest cadence controls documented in `docs/tdd-rm.md §2`–§3    | See `docs/tdd-rm.md §5.1` for observability anchors |
-| Notification Service               | Celery beat + worker                        | Outbox delivery (email/SMS/in-app), receipt tracking                                                             | Scales with delivery volume; provider specific adapters                                   | `delivery_success_ratio`, `delivery_retry_total`                                                              |
-| Storage adapters                   | Sidecar / init jobs                         | Object storage integrity checks, audio normalization caching                                                     | Scoped per namespace                                                                      | `storage_hash_mismatch_total`, `object_store_latency_seconds`                                                 |
+| Service | Runtime | Responsibilities | Scaling & notes | Observability anchors |
+| ------ | -------- | ------------- | -------------- | --------------- |
+| Web | Django ASGI (uvicorn + gunicorn) | REST APIs, staff UI, client portal, SSE endpoints, approval workflows | HPA on CPU+request latency; sticky sessions avoided | `web_http_*`, `frontend_latency_seconds`, `audit_event_total` |
+| Channels | Django Channels (Redis-backed) | Real-time editors, approvals, QA feedback | Separate Deployment with autoscale on WS connections | `channels_active_connections`, `channels_msg_latency_seconds` |
+| Workers | Celery (prefork) | Media normalization, agent orchestration, notifications, ingestion, destruction | Queue length auto-scaling; dedicated queues per agent class | `celery_queue_depth`, `job_duration_seconds`, `task_retry_total` |
+| Guardian | FastAPI | PASS/WARN/BLOCK/WAIVED judgments, policy evaluation, audit history | Pod HPA on latency; 99.9% SLO | `guardian_judgment_latency_seconds`, `guardian_cleared_ratio` |
+| Digital Signer | FastAPI | PDF/A signing, OCSP/CRL/TSA validation, bundle creation | Scales with signing queues; relies on KMS/TSA connectors | `signer_request_latency_seconds`, `tsa_drift_seconds` |
+| LLM Registry | FastAPI | Provider catalog, health probes, token accounting, fallback logic | Low QPS; run ≥2 replicas | `llm_provider_health`, `llm_circuit_state` |
+| Settings Service | FastAPI  | Hierarchical settings APIs, bundle activation, diff previews | Autoscale on QPS; Redis pub/sub for cache invalidation | `settings_activation_total`, `settings_cache_hit_ratio` |
+| Localization & Policy Engine (LPE) | FastAPI + worker cron + compiler jobs | Localization (locale/i18n packs), policy contexts (privacy/residency), court catalogs | Compiler pods scale on activation; lookup API horizontally replicated | `lpe_lookup_latency_seconds`, `lpe_policy_context_version`, `lpe_cache_hit_ratio` |
+| Policy Agent (OPA) | Open Policy Agent (sidecar or centralized) | Evaluates signed policy bundles for residency, HIPAA, egress, attachment rules; emits decision logs | Colocates sidecar per service for low latency; central cluster fans out discovery bundles | `opa_decision_latency_seconds`, `opa_bundle_status`, `opa_denied_total` |
+| Reference Manager | FastAPI + Celery ingest workers + review UI | Source connectors (Wikipedia, court sites, vendor feeds), catalog lifecycle, questionnaires/forms administration | Ingest workers autoscale on harvest queues; reviewer workload tracked via task backlog | `reference_manager_ingest_duration_seconds`, `reference_manager_pending_reviews`, `reference_catalog_version` |
+| Notification Service | Celery beat + worker | Outbox delivery (email/SMS/in-app), receipt tracking | Scales with delivery volume; provider specific adapters | `delivery_success_ratio`, `delivery_retry_total` |
+| Storage adapters | Sidecar / init jobs| Object storage integrity checks, audio normalization caching | Scoped per namespace | `storage_hash_mismatch_total`, `object_store_latency_seconds` |
 
 - **Stack note:** Web and Channels services run on Django 5.2.x (ASGI via uvicorn + gunicorn) and Django Channels 4.1.x, both pinned in `apps/platform/requirements.txt`; SBOM gates block implicit minor upgrades.
 
@@ -530,10 +530,6 @@ All normative requirements for Reference Manager—including connectors, governa
 - **Optional analytics sinks:** Metrics exported to Grafana/Prometheus; FinOps dashboards consume cost metrics for monthly guardrails.
 
 - Sub-processor directory: see App.Q for approved vendors, residency posture, and DPA commitments.
-
-- **Source material:** `§1.2`, `§1.3`, `App.A`, `§3`, `§12`
-
-- **Priority:** High (core architecture reference)
 
 ---
 
@@ -604,8 +600,8 @@ All normative requirements for Reference Manager—including connectors, governa
 - The platform threat DFD (`docs/diagrams/threat/dfd-platform-stride-v1.mmd`) applies STRIDE categories per dataflow: ingress/egress gateways, service-mesh mTLS, Guardian/Signer decision loops, and outbound provider calls. Appendix B enumerates the detailed scenarios; this subsection records the binding between the DFD and container view.
 - Container threats and mitigations:
 
-| Container / trust boundary                   | Primary dataflows & STRIDE focus                                            | Key mitigations & references                                                                                                              |
-| -------------------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Container / trust boundary | Primary dataflows & STRIDE focus | Key mitigations & references |
+| ------------------------ | ------------------------ | -------------- |
 | Web & Channels (staff + portal)              | Browser ↔ ASGI over TLS (`Spoofing`, `Tampering`, `Information disclosure`) | mTLS terminates at ingress; HSTS/CSP (§11.5); SSE token binding (§10.8); RLS GUC canaries (§4.4); App.B Spoofing mitigations              |
 | Worker cluster (Celery)                      | Jobs ↔ storage/LLM providers (`Tampering`, `Repudiation`, `DoS`)            | Settings snapshots (§6.1), audit JSONL (§6.3/§6.4), advisory locks (§5.4/App.H RB-LOCK-006), FinOps guard (§8.7/§13.5)                    |
 | Guardian & Signer services                   | Artifact promotion, digital seals (`Tampering`, `Repudiation`)              | FOR SHARE parent guard (§7.1), immutable audit sink (§12.1), OCSP/TSA verification (§7.2), ADR-0001 (judgment & waiver scope)               |
@@ -669,8 +665,6 @@ All normative requirements for Reference Manager—including connectors, governa
 - CI guardrails (binding): `pytest -k test_secure_view_usage` runs a static query-inspection test that fails if any Django queryset or raw SQL in `apps/platform` references base tables instead of `*_secure` views. The lint feeds the release gate and prevents regressions when new endpoints are added.
 
 - Advisory locks (`udlock` schema) encapsulate concurrency primitives with heartbeat registries and GC routines.
-
-- Masking profiles defined in `docs/tdd-lpe.md §2.6` compile into `effective_permission` / `field_mask_rule` rows so database policy stays aligned with runtime `PolicyContext` decisions. Settings activation translates the selected profile into concrete policy rows and fails activation when coverage is incomplete.
 
 #### 4.4.1 Masking profile mapping (binding)
 
@@ -1016,8 +1010,8 @@ SELECT id, org_id, case_id, type, status, content_sha256,
 
 - Binding breadcrumbs:
 
-  | Binding                       | Implementation                                                                          | Test                                                                                   | Observability                                                                                     |
-  | ----------------------------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+  | Binding | Implementation | Test | Observability |
+  | ------- | -------------- | ---- | ------------- |
   | Artifact immutability trigger | Implementation: `apps/platform/artifacts/migrations/0024_artifact_immutable_trigger.py` | Test: `tests/platform/artifacts/test_immutability.py::test_update_blocked_after_draft` | Observability: Audit event `ARTIFACT_IMMUTABILITY_VIOLATION` (Alert: “Artifact Immutable Breach”) |
 
 ### 5.2 Artifact lifecycle (authoritative)
@@ -1654,7 +1648,7 @@ Example
   - If the provider requires separate translation calls (`supports_translation="external"`), the planner first generates the normalized source-language transcript and then fans out translation jobs per target locale. Each target locale job inherits Guardian gating and writes ops logs (`ops/<job_id>__translation_<locale>.log`), JSON metadata (`..._log.json`), and case-level audit entries (`ops_transcription_translation.jsonl`).
   - Glossary management integrates with Reference Manager: settings key `speech.translation.glossary_set` references immutable glossary bundles. Providers advertising `requires_custom_glossary=true` block activation until a glossary is configured and parity tests (`tests/udocket_core/transcription/test_translation_glossary.py`) pass.
 - Accessibility & locale formatting:
-  - Normalize punctuation/casing per target locale using locale packs published via Reference Manager and compiled by LPE (see `docs/tdd-lpe.md §3`). Number/date normalization respects locale-specific rules (for example, decimal separators). Each translated transcript records the locale pack version for downstream traceability.
+  - Normalize punctuation/casing per target locale using LPE formatters. Number/date normalization respects locale-specific rules (for example, decimal separators). Each translated transcript includes `normalization.locale_pack_version` linking back to the LPE bundle used for formatting.
   - Right-to-left scripts store `direction: "rtl"` in metadata; UI renderers consume this flag to adjust layout without altering stored content.
 - Policy & compliance:
   - Residency rules mirror primary transcription; translation providers must belong to the same (or stricter) region allowlist. Manifest fields record `translation_provider_region` and `waiver_id` when applicable.
