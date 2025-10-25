@@ -567,7 +567,7 @@ Body sections follow the Purpose/Contract/State/Failure/Observability/Breadcrumb
 *Observability: Adoption dashboards display bundle coverage per service.*
 
 - Agents → `analyze.*`, `compose.*`, `llm.*` (TDD §6, §8).
-- Guardian → `guardian.*` (judgment policies; see `docs/guardian-service.md`).
+- Guardian → `guardian.*` (judgment policies; see Services · Guardian).
 - Signer → `sign.*` (digital signature policies; TDD §7).
 - Storage & integrity → `storage.*`, `logging.*` (TDD §5, §12).
 - Portal & client UX → `portal.*`, `i18n.*`, `chat.*`, `security.*` (TDD §11).

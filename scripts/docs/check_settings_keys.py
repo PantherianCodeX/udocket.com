@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Validate that every settings key documented in Appendix E exists somewhere in the codebase.
 
-Reads `docs/TDD.md`, extracts settings keys from Appendix E, then uses ripgrep to
+Reads `docs/src/tdd/TDD.md`, extracts settings keys from Appendix E, then uses ripgrep to
 search for each key outside the document. Prints any keys that are missing so CI can
 fail fast when docs reference non-existent keys.
 
