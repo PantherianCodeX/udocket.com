@@ -129,7 +129,7 @@ Guardian policy, risk tiers, and remediation flows continue in §5.2.3 and §7.1
 - **Cross-references:** Use `§<number>` for sections and `App.<letter>` for appendices.
 - **LLM hint:** Each subsection starts with a one-line purpose statement before implementation details.
 - **Maintenance:** Run `python scripts/docs/lint_docs.py` (or see `docs/README.md`) before submitting edits to keep references, formatting, and settings keys synchronized with the codebase.
-- **Audit integration (2025-10-19):** This draft incorporates audit items for CCPA/CPRA coverage (§2.2, §14.2.1), automated LLM moderation (§8.4), and model version pinning/replay rules (§8.1, §8.5). Appendix E is authoritative—every key listed there must exist in code, and CI blocks releases if parity ever drifts.
+- **Audit integration (2025-10-19):** This draft incorporates audit items for CCPA/CPRA coverage (§2.2, §14.2.1), automated LLM moderation (§8.4), and model version pinning/replay rules (§8.1, §8.5). Settings key coverage and traceability now live in [`docs/tdd-settings.md Appendix A`](tdd-settings.md#appendix-a--settings-key-map--traceability-index); CI blocks releases if parity ever drifts.
 - **Doc change protocol:** Every PR that modifies regulated behavior (policy, residency, approvals, agents) must link to the corresponding TDD diff; Architecture/Security reviewers block merges when code and spec diverge. Appendix automation (settings map, API snippets) continues to evolve—when feasible, replace manual tables with generated outputs to minimize churn.
 
 **Role-based quick start (binding)**\
@@ -141,7 +141,7 @@ Use this checklist to jump to the right sections on a first read:
 | Engineering (agents & API) | §6 (agent ecosystem), §10 (APIs), App.D (artifact schemas) | §6.2–§6.4 pipelines, §10.3 idempotency, Appendix F API contracts |
 | Product / Operations | §1 (executive summary), §11 (UX), §14 (retention & compliance) | §11.1 workspace/portal behaviors, §14.2 DSAR flows, §15 roadmap checkpoints |
 | QA / Compliance | §5 (lifecycle), §13 (testing & governance), App.K (controls map) | §5.2 status vocabulary, §13.3 detection QA, §13.5 deployment gates |
-| SRE / Platform Ops | §3 (infra context), §8 (LLM runtime), §12 (observability/DR), App.H (runbooks) | §8.7 FinOps guard, §12.4–§12.6 DR & dashboards, App.H incident playbooks |
+| SRE / Platform Ops | §3 (infra context), §8 (LLM runtime), §12 (observability/DR), [Runbook catalog](runbooks.md) | §8.7 FinOps guard, §12.4–§12.6 DR & dashboards, `docs/runbooks/index.md` |
 
 ### Diagram usage standard
 
@@ -211,7 +211,7 @@ To keep visuals helpful and consistent:
 
 *Purpose: Publish external commitments distinct from internal SLOs and make escalation paths obvious to buyers and auditors.*
 
-- **Availability:** 99.5 % rolling 30 day for staff UI/API; 99.0 % for client portal. Breaches trigger customer notice within 24 h and a public incident postmortem within 5 business days (`App.H` templates).
+- **Availability:** 99.5 % rolling 30 day for staff UI/API; 99.0 % for client portal. Breaches trigger customer notice within 24 h and a public incident postmortem within 5 business days (`docs/runbooks/index.md` templates).
 - **Support response:** Severity 1 (production outage/legal exposure) acknowledged ≤ 1 hour, mitigated or workaround shared ≤ 4 hours; Sev 2 ≤ 4 hour acknowledgement, Sev 3/4 within one business day. Support queue owned by Platform Support with SRE on-call backup.
 - **Restore targets:** RTO ≤ 1 hour for Postgres/object storage (see §12.4) and ≤ 4 hours for Guardian/Signer; RPO ≤ 15 minutes. Manual fallback playbooks in §12.10 describe degraded operations while restoration proceeds.
 - **Escalation:** Customer SLA breaches escalate to Duty Manager + SRE on-call + Product within 30 minutes; regulators and contractual stakeholders notified per §12.3 templates. Decision log entries capture SLA breaches and remediation commitments (§15.3).
@@ -238,7 +238,7 @@ To keep visuals helpful and consistent:
 *Purpose: Spell out compliance rails enforced across the stack.*
 
 - Data residency: compute, storage, and vector workloads must execute inside the region sets declared by each organization (`regions.allowlist.compute|storage|vector`). Defaults provide paired primary/secondary regions per jurisdiction (for example, `na-us-1` + `na-us-2`, `eu-central-1` + `eu-west-2`). Cross-region replication or failover outside the allowlist requires dual-approved waivers stamped in manifests and surfaced to Guardian.
-- SOC 2 / ISO controls: change management, incident response, and logging mapped to specific sections (`§12`, `§12`, `App.E`); mappings extend to PCI DSS logging, FedRAMP Moderate, and audit retention requirements surfaced in Appendix K.
+- SOC 2 / ISO controls: change management, incident response, and logging mapped to specific sections (`§12`, `§12`, [`docs/tdd-settings.md Appendix A`](tdd-settings.md#appendix-a--settings-key-map--traceability-index)); mappings extend to PCI DSS logging, FedRAMP Moderate, and audit retention requirements surfaced in Appendix K.
 - Privacy frameworks in scope: GDPR/UK GDPR, CCPA/CPRA, HIPAA (US/BAA-backed workloads), PHIPA, PIPEDA, APP (Australia), LGPD (Brazil), and CPPA (Canada). Reference Manager curates policy catalogues (`docs/tdd-rm.md §1.2`); Localization & Policy Engine (LPE) compiles them for enforcement (see `docs/tdd-lpe.md §1.3`).
 - Sensitive Personal Information (SPI): covers CPRA “sensitive personal information”, GDPR Article 9 special categories, and analogous provincial/federal classifications (for example: biometric identifiers, precise geolocation, racial or ethnic origin, religious beliefs, sexual orientation, union membership, genetic data, immigration status, and government identifiers). SPI inherits the platform’s high-security baseline (encryption, residency controls, reviewer accountability). Guardian enforces SPI gating, detection, and waiver flows; see `docs/guardian-service.md` for enforcement mechanics.
 - CCPA/CPRA specifics: platform does not sell or share personal information; privacy notices and contracts state “no sale/no sharing.” DSAR timelines follow CCPA (45 days, one 45‑day extension with notice) and GDPR (30 days, extensions as allowed). Admin tooling exports DSAR evidence and timelines; audit seals reference the governing framework for each request.
@@ -250,7 +250,7 @@ To keep visuals helpful and consistent:
   | GDPR & UK GDPR         | DSAR/erasure workflow (`ERASURE_JOURNAL`), data minimization, audit seals, residency enforcement | §2.2, §14.2.1, App.N, App.K |
   | CCPA / CPRA            | “No sale/share” enforcement, notice ledgers, SPI routing and disclosure logging | §2.2 (SPI), §11.5, App.K |
   | HIPAA                  | HIPAA mode activation gates, Guardian PHI quarantine, evidence-store excerpt suppression, WebAuthn enforcement | §2.2, §7.1, §8.2, App.N |
-  | SOC 2 (CC6 / CC7)      | Audit logging, approvals workflows, change management, monitoring dashboards | §12, §14.5, App.H, App.K |
+  | SOC 2 (CC6 / CC7)      | Audit logging, approvals workflows, change management, monitoring dashboards | §12, §14.5, Appendix H, App.K |
   | ISO/IEC 27001 & 27701  | Security management, retention schedules, risk assessments, policy bundles | §2.2, §12.6, §14, App.K |
   | PIPEDA / CPPA / PHIPA  | Residency controls, consent logging, legal hold & retention automation | §2.2, §3.8, §14.2, App.N |
 
@@ -573,11 +573,11 @@ All normative requirements for Reference Manager—including connectors, governa
 
 - Metrics: `residency_endpoint_scan_duration_seconds`, `residency_endpoint_drift_total{reason=...}`, and `residency_endpoint_blocks_total` feed the Residency dashboard (Grafana → “Residency & Endpoint Posture”). Alert `alert_residency_endpoint_drift` fires when new `open` findings exist for 10 minutes or a scan fails twice consecutively.
 - Notifications: the scanner emits structured PagerDuty incidents tagged `RESIDENCY_DRIFT`, posts to `#residency-alerts`, and attaches the latest JSONL snippet plus catalogue diff. Weekly digest reports aggregate findings, waivers, and remediation SLAs; digests store under `ops/residency/digest_<iso_week>.json`.
-- Evidence: App.L incorporates residency drift baselines; App.H RB-RES-ENDPOINT holds the detailed remediation runbook referenced from alerts. App.O ledger links waivers to the specific findings they suppress.
+- Evidence: App.L incorporates residency drift baselines; [Runbook RB-RES-ENDPOINT](runbooks.md#rb-res-endpoint) holds the detailed remediation steps referenced from alerts. App.O ledger links waivers to the specific findings they suppress.
 
 #### 3.8.3 Triage & remediation workflow (binding)
 
-**Breadcrumbs:** Implementation `apps/platform/operations/services/residency_triage.py`, Tests `tests/platform/operations/test_residency_triage.py::test_drives_remediation_plan`, Observability App.H runbook “RB-RESIDENCY-TRIAGE” mapped to Grafana “Residency & Endpoint Posture”.
+**Breadcrumbs:** Implementation `apps/platform/operations/services/residency_triage.py`, Tests `tests/platform/operations/test_residency_triage.py::test_drives_remediation_plan`, Observability [Runbook RB-RES-ENDPOINT](runbooks.md#rb-res-endpoint) mapped to Grafana “Residency & Endpoint Posture”.
 
 *Purpose: Provide a deterministic path from detection to resolution without violating residency guarantees.*
 
@@ -603,10 +603,10 @@ All normative requirements for Reference Manager—including connectors, governa
 | Container / trust boundary | Primary dataflows & STRIDE focus | Key mitigations & references |
 | ------------------------ | ------------------------ | -------------- |
 | Web & Channels (staff + portal)              | Browser ↔ ASGI over TLS (`Spoofing`, `Tampering`, `Information disclosure`) | mTLS terminates at ingress; HSTS/CSP (§11.5); SSE token binding (§10.8); RLS GUC canaries (§4.4); App.B Spoofing mitigations              |
-| Worker cluster (Celery)                      | Jobs ↔ storage/LLM providers (`Tampering`, `Repudiation`, `DoS`)            | Settings snapshots (§6.1), audit JSONL (§6.3/§6.4), advisory locks (§5.4/App.H RB-LOCK-006), FinOps guard (§8.7/§13.5)                    |
+| Worker cluster (Celery)                      | Jobs ↔ storage/LLM providers (`Tampering`, `Repudiation`, `DoS`)            | Settings snapshots (§6.1), audit JSONL (§6.3/§6.4), advisory locks (§5.4/[Runbook RB-LOCK-006](runbooks.md#rb-lock-006)), FinOps guard (§8.7/§13.5)                    |
 | Guardian & Signer services                   | Artifact promotion, digital seals (`Tampering`, `Repudiation`)              | FOR SHARE parent guard (§7.1), immutable audit sink (§12.1), OCSP/TSA verification (§7.2), ADR-0001 (judgment & waiver scope)               |
 | Settings service + policy compiler           | Config activation across tenants (`Spoofing`, `Elevation of privilege`)     | HMAC-signed requests (§7.3), dual approval (§9.3/§9.11), compiled RLS tables (§4.4), activation lock advisory key (§9.8)                  |
-| External providers (Azure Speech/OpenAI/TSA) | Controlled egress (`Information disclosure`, `DoS`)                         | Mesh AuthorizationPolicy (§3.8), residency waivers (App.O), LLM safety harness (§8.4), provider circuit breakers (§8.1, App.H RB-LLM-003) |
+| External providers (Azure Speech/OpenAI/TSA) | Controlled egress (`Information disclosure`, `DoS`)                         | Mesh AuthorizationPolicy (§3.8), residency waivers (App.O), LLM safety harness (§8.4), provider circuit breakers (§8.1, [Runbook RB-LLM-003](runbooks.md#rb-llm-003)) |
 
 - Threat reviews must reference both the container diagram and DFD; new services may not progress past **Provisional** until they document ingress/egress paths, STRIDE analysis, and mitigations in Appendix B.
 
@@ -625,7 +625,7 @@ All normative requirements for Reference Manager—including connectors, governa
 - Login flow for org switching triggers re-authentication to mint new tokens bound to the selected organization—no custom headers for impersonation allowed.
 - High availability: Keycloak runs as an active-active cluster across at least two zones per permitted region with Galera-backed MariaDB or Aurora Postgres, sticky session disabled. Ingress health probing and Envoy failover drain unhealthy pods. Backup realm exports run hourly; disaster recovery rehydrates a warm standby in the paired region identified in `regions.allowlist.compute`.
 - IdP federation: organizations can register external IdPs (Azure Entra ID, Okta, Ping, ADFS) through Keycloak identity brokering. Each federation mapping undergoes automated policy linting (MFA enforcement, group-to-role mapping) before activation. Tokens always originate from Keycloak, so revocation/audit remain centralized even when primary credential verification happens upstream.
-- Emergency access: if an external IdP fails, operators flip the org to Keycloak-native credentials via a feature flag (`identity.org.{org_id}.primary_idp=keycloak`) with dual approval. Runbook App.H RB-IDP-FAILOVER covers rollback. Conversely, if the Keycloak control plane is degraded, traffic fails over to the warm standby while orgs using external IdPs continue authenticating directly with their provider, minimizing downtime.
+- Emergency access: if an external IdP fails, operators flip the org to Keycloak-native credentials via a feature flag (`identity.org.{org_id}.primary_idp=keycloak`) with dual approval. Runbook `docs/runbooks/index.md (RB-IDP-FAILOVER)` covers rollback. Conversely, if the Keycloak control plane is degraded, traffic fails over to the warm standby while orgs using external IdPs continue authenticating directly with their provider, minimizing downtime.
 - Federation flows: Keycloak brokers both OIDC (`authorization_code+PKCE`, signed JWT access tokens, enforced `acr` claims) and SAML 2.0 integrations. Each org-specific IdP registration supplies metadata (JWKS endpoint or SAML metadata URL), required MFA assurance levels, group-to-role mappers, and SCIM provisioning endpoints. SCIM sync (see §14.6) keeps org membership aligned; onboarding rejects providers that cannot assert MFA or pass signed-response validation. All tokens ultimately originate from Keycloak so audit, revocation, and Guardian controls remain centralized.
 
 ### 4.2 Org/case membership model and RBAC lattice
@@ -843,7 +843,7 @@ ALTER TABLE delivery_receipt        FORCE ROW LEVEL SECURITY;
 - Masked secure views (`case_secure`, `artifact_secure`, `qa_log_secure`, etc.) are the only read surfaces granted to the application role. Sysadmin remains the sole bypass for investigations, and break-glass events are dual-approved and watermarked.
 - Audit trail essentials: `audit_event` logs every significant read/write; `entitlement_snapshot` records token issuance with device fingerprints; `guardian_span_detection` stores PHI/PII evidence under RLS.
 - Break-glass usage logs justification, duration, reviewer acknowledgement, and triggers watchdogs that terminate sessions on expiry. Post-event review queues ensure accountability.
-- Structured logs (case/job correlated) and anomaly detectors watch for unusual read patterns or mass token reveals; alerts map to Guardian Appendix B runbooks (`RB-GUARD-*`) and RB-MASK (App.H).
+- Structured logs (case/job correlated) and anomaly detectors watch for unusual read patterns or mass token reveals; alerts map to Guardian Appendix B runbooks (`RB-GUARD-*`) and RB-MASK (`docs/runbooks/index.md`).
 
 #### 4.5.1 Transformation modes & operator view (binding)
 
@@ -1019,7 +1019,7 @@ SELECT id, org_id, case_id, type, status, content_sha256,
 **Purpose:** Define artifact classes, canonical statuses, and the only valid transitions.\
 **Contract:** Agents, services, and APIs MUST emit statuses and judgments exactly as defined in this section; reruns produce additive versions without mutating prior outputs.\
 **State transitions:** Governed by §5.2.2 (statuses), §5.2.3 (Guardian mapping), and §5.4.1 (ExclusiveSwap invariant); App.A.2 diagrams the same state machine.\
-**Failure modes & retries:** Guardian `BLOCK` or reviewer quarantine follow remediation/waiver loops in §5.2.3–§5.2.5; watchdogs and approval conflicts escalate via RB-APPROVAL-001 and RB-JOB-WATCHDOG.\
+**Failure modes & retries:** Guardian `BLOCK` or reviewer quarantine follow remediation/waiver loops in §5.2.3–§5.2.5; watchdogs and approval conflicts escalate via RB-APPROVAL-001 and [Runbook RB-JOB-WATCHDOG](runbooks.md#rb-job-watchdog).\
 **Observability:** `artifact.status`, `guardian_judgment_latency_seconds`, `approval_swap_conflict_total`, `portal_link_invalidated`, and `docs_template_missing_total`.\
 **Breadcrumbs:** Implementation `packages/udocket_core/artifacts/status.py`, Tests `tests/platform/artifacts/test_status_vocab.py::test_all_statuses_linked`, Observability Grafana “Artifact Lifecycle” dashboard.\
 **References:** §5.2.1–§5.2.8, §5.4.1, §7.1, §10.3.2, App.A, App.I.
@@ -1545,7 +1545,7 @@ Example
 
 - Modes: `on-demand` streaming for shorter recordings (local processing), `batch` for longer files via Azure Batch Transcription (HTTPS SAS URL). Region allowlists from Settings are enforced at job dispatch.
 - Input processing: audio uploads hashed, normalized via ffmpeg (PCM 16 kHz mono). Artifacts created: `TRANSCRIPT_INPUT`, `AUDIO_NORMALIZED`.
-- Malware & format validation: every upload (audio, documents, exhibits) routes through the `upload_scan` pipeline—an isolated Kubernetes job running ClamAV with daily `freshclam` updates plus org-specific YARA rules (`packages/security/yara/`). Files are scanned before workers access them; positive hits set `upload_session.status='SCANNING_FAILED'`, quarantine the staging object, emit `MALWARE_DETECTED` audit events, and notify Security (remediation flow in App.H RB-UPLOAD-SCAN). Format validators (mediainfo/ffprobe, pdfcpu, tika) run in the same sandbox to confirm claimed MIME/codec; malformed files are rejected with actionable error codes and attached diagnostic logs.
+- Malware & format validation: every upload (audio, documents, exhibits) routes through the `upload_scan` pipeline—an isolated Kubernetes job running ClamAV with daily `freshclam` updates plus org-specific YARA rules (`packages/security/yara/`). Files are scanned before workers access them; positive hits set `upload_session.status='SCANNING_FAILED'`, quarantine the staging object, emit `MALWARE_DETECTED` audit events, and notify Security (remediation flow in [Runbook RB-UPLOAD-SCAN](runbooks.md#rb-upload-scan)). Format validators (mediainfo/ffprobe, pdfcpu, tika) run in the same sandbox to confirm claimed MIME/codec; malformed files are rejected with actionable error codes and attached diagnostic logs.
 - Capability-aware ingestion: workers inspect `speech.providers[].capabilities` (for example `multi_track`, `speaker_diarization`, `punctuation_normalization`, `numerical_normalization`) to select an execution plan. Multi-track inputs trigger track-aware pipelines; single-track jobs fall back to diarization when providers expose that capability.
 - Capability gates & planning: before dispatch, the `TranscriptionCapabilityMap` evaluates requested features (multi-track, diarization, locale) against provider claims. Unsupported combinations fail fast with `CAPABILITY_UNAVAILABLE`, SSE guidance, and no provider calls. When multiple flows are viable, planners prefer native multi-track, then synthetic track merge, then diarization-only as the final option.
 - Multi-track support: batch mode splits per-channel audio when `multi_track` is available; otherwise the Track Merge sub-task (see §6.2.2) generates per-speaker transcripts by splitting channels, running parallel jobs, and merging on precise timestamps. Single-track jobs without diarization support return policy errors rather than emitting unlabelled transcripts.
@@ -1581,7 +1581,7 @@ Example
   3. `MergeTracks` reconciles segments using timestamp offsets, ordering by `start_ms` and applying deterministic speaker labels (`Speaker A/B/...`). Overlaps trigger merge heuristics (highest confidence wins; otherwise interleave by start time). The merged transcript re-runs normalization to ensure downstream parity.
   4. Controller persists merge provenance (`track_merge_manifest.json`) capturing channel counts, offsets, and chosen heuristics.
 - Diarization policy: if both `multi_track` and `diarization` exist, multi-track takes precedence (channel identity is more reliable). If neither is available, the job fails fast with `CAPABILITY_UNAVAILABLE` and SSE guidance to select a provider with required capabilities.
-- Testing & drills: `tests/udocket_core/transcription/test_capability_map.py` validates routing, `tests/udocket_core/transcription/test_track_merge.py` verifies merge ordering/conflict resolution, and synthetic `synthetics/transcribe_capabilities.yaml` asserts capability negotiation in staging. Ops drill App.H RB-TRANSCRIBE-CAP ensures runbooks cover channel splits and merge artifact inspection.
+- Testing & drills: `tests/udocket_core/transcription/test_capability_map.py` validates routing, `tests/udocket_core/transcription/test_track_merge.py` verifies merge ordering/conflict resolution, and synthetic `synthetics/transcribe_capabilities.yaml` asserts capability negotiation in staging. Ops drill `docs/runbooks/index.md (RB-TRANSCRIBE-CAP)` ensures runbooks cover channel splits and merge artifact inspection.
 
 #### 6.2.3 Speech capability registry & audio format policy (binding)
 
@@ -1609,7 +1609,7 @@ Example
     - Prefer lossless PCM WAV at 16 kHz mono for dialog; escalate to 24 kHz stereo only when the provider’s accuracy materially improves for music-heavy or courtroom recordings (documented per provider in Appendix Q notes). The planner records any higher sample rate conversions in manifest metadata (`normalization.sample_rate_hz`).
     - Apply loudness normalization (`-16 LUFS` target, ±1 LU tolerance) and dynamic range compression (light preset) before transcription only when `speech.allow_preprocessing=true`; defaults preserve raw audio aside from format conversion to maintain evidentiary integrity.
     - Size optimization uses ffmpeg `-ar` (sample rate) and `-ac` (channels) parameters, never applying lossy codecs; storage deduplicates normalized outputs via content hash.
-  - Provider capability validation: nightly job `scripts/agents/validate_speech_capabilities.py` runs golden audio fixtures against each provider, verifies declared fields (diarization, timestamps, normalization behaviors, translation language pairs), and writes results to `ops/speech_capability_report.json` per org. Failures block new activations and trigger App.H RB-TRANSCRIBE-CAP escalation; translation pair regressions additionally file `TRANSLATION_PAIR_REGRESSION` incidents and remove the affected pair from `verified_language_pairs[]` until retested.
+  - Provider capability validation: nightly job `scripts/agents/validate_speech_capabilities.py` runs golden audio fixtures against each provider, verifies declared fields (diarization, timestamps, normalization behaviors, translation language pairs), and writes results to `ops/speech_capability_report.json` per org. Failures block new activations and trigger `docs/runbooks/index.md (RB-TRANSCRIBE-CAP)` escalation; translation pair regressions additionally file `TRANSLATION_PAIR_REGRESSION` incidents and remove the affected pair from `verified_language_pairs[]` until retested.
   - Documentation & SDK alignment: OpenAPI schemas expose the negotiated capability plan in `GET /api/v1/speech/providers` for UI/SDK consumers. SDK samples in `docs/examples/api/speech_capabilities/*.md` stay synchronized with Settings keys and the registry schema.
 
 #### 6.2.5 Cancellation & retry semantics (binding)
@@ -1728,7 +1728,7 @@ Example
 - Organization overrides follow the same schema: uploads enter Guardian review, must pass placeholder linting against the corresponding `DeliverableContext` Pydantic model, and create `TEMPLATE_OVERRIDE_PROPOSAL` artifacts before promotion. Rollback keeps prior versions addressable; CI fixtures under `tests/udocket_core/agents/` validate compatibility end-to-end.
 - Every deliverable definition links to a `signature_policy_id` (§7.2.2). Transcripts and summaries default to `SIGN_POLICY_PLATFORM_REQUIRED`; Compose deliverables default to `SIGN_POLICY_PLATFORM_REQUIRED_CLIENT_OPTIONAL`. Pipelines hydrate signature policies when queuing Document Signer work so platform signatures and client attestations stay declarative rather than hard-coded.
 - Feature toggles (`deliverables.features.short_summary`, `deliverables.features.timeline_pdf`, etc.) guard UI/API exposure. Guardian rejects enabling toggles tagged `implementation_tier=major` unless the linked Implementation Strategy artifact is `status=approved`, ensuring large-impact additions follow the agreed rollout path.
-- Appendix D documents artifact schemas keyed by `deliverable_id`; Appendix E cross-references catalog entries with settings/tests/runbooks so auditors can trace coverage for any newly activated deliverable.
+- Appendix D documents artifact schemas keyed by `deliverable_id`; [`docs/tdd-settings.md Appendix A`](tdd-settings.md#appendix-a--settings-key-map--traceability-index) cross-references catalog entries with settings/tests/runbooks so auditors can trace coverage for any newly activated deliverable.
 
 <figure style="margin: 1em 0; text-align: center;">
   <img src="diagrams/_rendered/data-lineage-v1.svg" style="max-width: 70%;" alt="Artifact data lineage">
@@ -2050,7 +2050,7 @@ Node catalog (illustrative)
 - Security & compliance: onboarding runs `scripts/llm/byo_onboarding.py`, which validates TLS posture, performs automated vulnerability scans, confirms data-retention clauses, and executes the jailbreak/red-team corpus. Approval requires dual sign-off (Security + Architecture) recorded in the onboarding manifest (`ops/llm/byo/<provider_id>__onboarding.json`).
 - Evaluation requirements: BYO models must pass the golden evaluation suite (`tests/llm/byo/test_eval_matrix.py`) with ≤3 % delta on accuracy metrics and matching safety classifier outcomes. The evaluation digest (`byo_evaluation_sha256`) is stored with the provider definition; registry refuses activation when the digest is missing or older than 90 days.
 - Runtime enforcement: BYO models run through the same moderation harness (§8.4) and evidence-store logging. Guardian leverages the manifests to apply policy sampling; policy violations set the circuit to OPEN with reason `BYO_POLICY_DRIFT` and quarantine the provider until a fresh evaluation passes.
-- Settings (Appendix E): `llm.byo.allowed` (ORG|CASE, default `false`) toggles BYO availability; `llm.byo.evaluation_suite_id` (ORG) references the evaluation configuration; `llm.byo.vpc_endpoints[]` (ORG) enumerates allowed hostnames and is reconciled against mesh policies during activation. CI lints ensure these keys are present whenever a BYO provider is defined.
+- Settings (see [`docs/tdd-settings.md Appendix A`](tdd-settings.md#appendix-a--settings-key-map--traceability-index)): `llm.byo.allowed` (ORG|CASE, default `false`) toggles BYO availability; `llm.byo.evaluation_suite_id` (ORG) references the evaluation configuration; `llm.byo.vpc_endpoints[]` (ORG) enumerates allowed hostnames and is reconciled against mesh policies during activation. CI lints ensure these keys are present whenever a BYO provider is defined.
 - Observability: dashboards segment metrics by `model_kind` (`managed|byo`); synthetic monitor `synthetics/llm_byo_health.yaml` calls each BYO endpoint hourly to confirm SLA adherence and certify moderation telemetry (`chat_policy_block_total`) funnels correctly.
 
 #### 8.1.4 LLM profile registry & assistant routing (binding)
@@ -2195,178 +2195,19 @@ Notes
 
 ---
 
-## 9) Configuration & settings platform
+## 9) Configuration & settings platform (binding)
 
-### 9.1 Hierarchical scopes (system/org/case)
+**Breadcrumbs:** See [`docs/tdd-settings.md`](tdd-settings.md) for implementation, test, and observability anchors that govern the Settings Registry.
+*Purpose: Keep the platform TDD aligned with the dedicated Settings Registry specification while summarizing integration obligations.*
+*Contract: Platform services MUST consume Settings Registry snapshots, honor activation governance, and surface audit metadata per [`docs/tdd-settings.md`](tdd-settings.md).*
+*State: Jobs, artifacts, and policy contexts record `settings_snapshot_sha256` and version identifiers supplied by the Settings Registry; activation history, waivers, and diff artifacts persist in the service tables described there.*
+*Failure modes & retries: When snapshot fetches fail or unsafe activations occur, platform workloads pause new jobs and follow the rollback/approval workflows referenced in [`docs/tdd-settings.md §4`](tdd-settings.md#4-activation-workflow--governance).*
+*Observability: Platform dashboards monitor `settings_snapshot_stale_total`, `settings_activation_total`, and governance alerts emitted by the Settings Registry; see [`docs/tdd-settings.md Appendix B`](tdd-settings.md#appendix-b--metrics--alerts).*
 
-*Purpose: Describe how configuration inherits and overrides safely across tenants.*
-
-- Scopes: `SYSTEM` (platform-wide defaults), `ORG` (organization-specific overrides), `CASE` (per-case refinement). Effective settings calculated by overlaying lower scopes onto SYSTEM.
-- Settings defined via Pydantic models, grouped into bundles (e.g., `analyze.*`, `compose.*`, `regions.*`). Bundles track versioning and change metadata.
-- Sensitive keys (secrets, trustroots) stored encrypted; read APIs redact values where necessary. Some keys enforce immutability at certain scopes (e.g., residency constraints cannot be relaxed at CASE level).
-- Each bundle includes validation rules referencing Appendix E for full key catalog and default values.
-
-### 9.2 Settings service APIs and SDK usage
-
-*Purpose: Provide contract for services fetching and snapshotting settings.*
-
-- FastAPI service exposes REST endpoints: `GET /api/v1/settings/<scope>` (effective values), `POST /api/v1/settings/bundles` (activation), `GET /api/v1/settings/bundles/<id>` (metadata), `/api/v1/settings/validate/*` endpoints for region/privacy lints.
-- SDK (`SettingsClient`) caches reads per request/context, supports type-safe access (`get(key, type=...)`), and snapshotting (`snapshot()`) to embed in jobs with `settings_snapshot_sha256`.
-- Authentication via service tokens + HMAC signing for mutating endpoints. Responses include `version_id`, `bundle_id`, and list of contributing scopes for auditing.
-- Clients must avoid direct `.env` reads except for bootstrapping; runtime decisions rely on Settings API to respect dual approvals.
-- Definitions expressed via Pydantic models (illustrative): refer to App.U.3 for the Settings definition model (`SettingDefinition`) with literal datatypes and scope enforcement helpers.
-  - Case-scoped keys (examples): `compose.tone`, `compose.section.length_limits`, `compose.max_retries`, `analyze.token_ceiling`, `portal.link.expiry`, `visibility.operators.scope`.
-  - Org/system keys include residency allowlists, quotas, notifications, LLM provider/model catalogs, TLS policies, `security.field_encryption.*`, `integrity.downstream_action`, request-signing keys, FinOps thresholds, and case enumerations (`case.status.enum`, `case.representation_type.enum`).
-- Privacy helpers: `/api/v1/settings/privacy/templates` exposes DPIA/RoPA template metadata by matrix version so Privacy tooling stays aligned with Appendix H.
-
-### 9.3 Activation workflow, diff preview, and dual approval
-
-*Purpose: Ensure configuration changes are intentional and auditable.*
-
-- Activation flow: proposed bundle submitted with desired overrides and metadata; Settings service computes diff against current effective values, runs validators (policy, residency, safety), and returns `unsafe_reasons[]`.
-- If `unsafe_reasons[]` populated, activation blocked unless `--force` with dual approval (Security + Architecture) and step-up MFA per `§9.11`. Forcing logs justification and attaches to bundle record.
-- Approved activations produce `settings_activation` records with signature, actor IDs, `authorized_roles`, and diff summary; propagate invalidation events over Redis pub/sub.
-- Rollback path leverages stored history; last known good bundle can be re-applied with identical diff log. Activation lock prevents concurrent modifications to same bundle (`activation_lock` advisory key).
-
-### 9.4 Caching, invalidation, and policy compilation
-
-*Purpose: Keep runtime consistent without stale policy decisions.*
-
-- Services maintain in-memory cache keyed by `(scope, org_id, case_id, bundle_id)` with TTL + version checks. Redis distributed cache optional for cross-instance sharing.
-- Invalidation: Settings service publishes `settings.changed` events `{scope, org_id, case_id, bundle_id}`; subscribers flush caches and reload on next access. Health checks verify caches clear after activation.
-- Reference Manager publishes `reference_manager.catalog.updated` and `reference_manager.resource.updated` topics with affected jurisdiction/resource IDs; LPE consumes these events and updates compiled artifacts (see `docs/tdd-lpe.md §4.2`) so downstream caches refresh deterministically.
-- Policy compilation pipeline materializes `effective_permission` and `field_mask_rule` tables per org. Activation jobs run inside workers with transaction-scope locks to avoid race conditions.
-- Drift detection compares cached hash vs actual database values; mismatch triggers warnings and eventual forced reload.
-
-### 9.5 Settings telemetry and drift detection
-
-*Purpose: Provide visibility into config usage and anomalies.*
-
-- Metrics: `settings_cache_hit_ratio`, `settings_activation_total{result}`, `settings_validation_failure_total{reason}`, `policy_compile_duration_seconds`.
-
-- Audit events recorded for every activation, validation failure, and forced override. FinOps monitors track cost-related settings changes.
-
-- Drift detection job scans for stale `settings_snapshot_sha256` on jobs vs current effective hash; results logged and optionally flagged in UI.
-
-- Traceability matrix in Appendix E maps each critical feature (agents, Guardian, FinOps, portal) to settings keys; updates required whenever keys change.
-
-<figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/_rendered/core-domain-entities.svg" style="max-width: 70%;" alt="Core domain entity model">
-  <figcaption style="font-size: 0.9em; color: #555;">Core domain entity model</figcaption>
-</figure>
-
-- **Source material:** `§9`, `§10.8`, `§9.14`
-
-- **Priority:** High (touches cross-platform config controls)
-
-### 9.6 Policy bundle versioning & diff preview (binding)
-
-**Breadcrumbs:** Implementation `apps/platform/settings/services/activation.py::render_policy_diff`, Tests `tests/platform/settings/test_policy_diff.py::test_rls_diff_detection`, Observability Grafana “Settings Activation” dashboard (metric `settings_diff_generated_total`).
-
-*Purpose: Safely evolve settings with visibility and rollback.*
-
-- Version every activation; retain prior bundle; provide human‑readable diff and machine JSON diff.
-- Validate policies (RBAC writes, field unmasking, region widening) and flag `unsafe_reasons[]`.
-- Dry‑run mode compares compiled tables (`effective_permission`, `field_mask_rule`) before/after.
-
-### 9.7 Activation & rollback (binding)
-
-**Breadcrumbs:** Implementation `apps/platform/settings/services/activation.py::activate_bundle`, Tests `tests/platform/settings/test_activation_flow.py::test_rollback_on_failure`, Observability Grafana “Settings Activation” dashboard (metric `settings_activation_duration_seconds`).
-
-*Purpose: Provide guardrails for changes to take effect.*
-
-- Activation requires approvals (see §9.3) when unsafe; otherwise single approver per policy.
-- On failure or regression, roll back to prior bundle; invalidate caches; recompile policies.
-- Record activation window, approvers, and effects in audit.
-
-<figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/_rendered/settings-activation-v1.svg" style="max-width: 65%;" alt="Settings activation pipeline">
-  <figcaption style="font-size: 0.9em; color: #555;">Settings activation pipeline</figcaption>
-</figure>
-
-<figure style="margin: 1em 0; text-align: center;">
-  <img src="diagrams/_rendered/settings-activation-classes-v1.svg" style="max-width: 65%;" alt="Settings activation classes">
-  <figcaption style="font-size: 0.9em; color: #555;">Settings activation classes</figcaption>
-</figure>
-
-### 9.8 Activation lock & uniqueness (helpers + OCC)
-
-*Purpose: Prevent concurrent conflicting activations and ensure uniqueness.*
-
-- Acquire advisory lock `settings-activate:{org_id}`; enforce OCC on `setting_bundle` row.
-- Unique constraint on `ACTIVE` state per org; migrations ensure constraint; OCC update flips active bundle.
-- Source material: `§9.7-36.11`
-
-### 9.9 Enforcement points
-
-*Purpose: Enumerate where runtime must consult Settings or compiled policy.*
-
-- All enforcement paths fetch an LPE `PolicyContext` (see `docs/tdd-lpe.md §2.3`) and record the `policy_context_version` + digest in structured logs. Cache TTL defaults to 5 minutes; expiries must trigger a refresh before decision-making.
-- API: authorization (RBAC writes, approvals), CORS, rate limits, portal download guards, HIPAA/PHIPA banner selection, residency enforcement for download URLs.
-- Workers: agent configurations (models, budgets), residency policy, Guardian/Signer configs, FinOps cost ceilings, waiver gating.
-- Frontend: feature flags, UI flows for approvals and messaging, locale + formatting decisions, accessibility copy.
-- DB: RLS policies and secure masking views referencing compiled tables; masking profile selection derives from `PolicyContext.masking_profile`.
-
-### 9.10 Acceptance
-
-*Purpose: Define completion gates for Settings platform changes.*
-
-- Unit tests: precedence, validators, compilers.
-- Integration: activation dry‑run/diff, rollback, cache invalidation.
-- Security: unsafe change rules flagged; dual approval enforced; audit records complete.
-
-### 9.11 Security review gates (binding)
-
-**Breadcrumbs:** Implementation `apps/platform/settings/validators/security.py::validate_security_gate`, Tests `tests/platform/settings/test_security_gates.py::test_blocks_immutable_sink_disable`, Observability Grafana “Settings Governance” panel with metric `settings_unsafe_request_total`.
-
-*Purpose: Define security review checkpoints required before shipping regulated changes.*
-
-- **Immutable logging sink toggle:** activations that set `logging.immutable_sink.enabled=false` are marked **unsafe**; production validators reject the change outright, and lower environments require dual approval (Security + Architecture) with justification captured in the activation audit.
-
-*Purpose: Make governance checkpoints explicit and auditable.*
-
-- Waivers: residency cross‑region waivers require Security + Architecture approvals with step‑up MFA; manifests stamped; Appendix D/E updated.
-- Guardian rule changes: dry-run/diff required; unsafe reasons enumerated; dual approval enforced; rollback path documented.
-- Settings activation (unsafe): requires dual approval, justification, and audit event; see §9.3 and §9.
-- Org Settings: reviewers and roles configured to reflect these gates; acceptance requires end-to-end drill. Governance toggles such as `settings.can_open_source` or cross-org feature pilots must follow App.H RB-GOV-008, including rollback steps and communication checklist before promotion.
-
-### 9.12 Agent pipeline bundle & staged overrides (binding)
-
-**Breadcrumbs:** Implementation `apps/platform/settings/services/pipeline_bundle.py::apply_pipeline_bundle`, Tests `tests/platform/settings/test_pipeline_bundle.py::test_override_validation`, Observability Grafana “Agent Pipeline Rollouts” dashboard (metric `pipeline_rollout_state`).
-
-*Purpose: Externalize pipeline composition, prompts, and ceilings into audited settings with safe override paths.*
-
-- Keys: `agents.pipeline.definitions[]` (SYSTEM), `agents.pipeline.assignments[]` (SYSTEM/ORG/CASE), `agents.pipeline.overrides[]` (ORG/CASE), `agents.prompts.*`, and `agents.llm_profiles.*`. Definitions capture the canonical LangGraph manifest (`pipeline_id`, `graph_version`, `graph_schema_sha256`, ordered `stages[]`, default runner); assignments map job kinds to definitions per scope; overrides swap prompts, LLM profiles, or ceilings within validator limits.
-- `agents.llm_profiles.*` wraps the core `llm.profiles[]` registry entries (§8.1.4) with per-scope policy, cost, and moderation constraints, ensuring every pipeline (batch agents or assistants) references a vetted profile rather than raw provider IDs.
-- Assistant-specific knobs (`assistant.retrieval.sources[]`, `assistant.moderation.tiers[]`, `assistant.citation.style`) sit alongside agent overrides and share the same validator framework. These keys always reference shared assets (retrieval index IDs, moderation policy definitions, citation templates) so assistant behaviour stays aligned with underlying policy bundles.
-- `agents.pipeline.rollouts[]` describes staged deployments (`wave_id`, org/case filters, guard conditions, auto-rollback policy). Rollout plans are versioned, emit audit events, and feed the orchestrator outlined in §14.5 so orgs migrate gradually (pilot → cohort → fleet) with automated health gates.
-- Settings validators ensure prompts reference existing templates, `tool_ids[]` exist in `agents.tools.catalog[]`, retries respect safety caps, and residency or FinOps ceilings never relax below SYSTEM baselines. Contract tests from §13.4 run against the candidate graph before activation succeeds.
-- Activations that alter definitions or rollouts are automatically tagged `change_class="system"`; they must link to the change record and ride the blue/green pipeline (§14.5). Diff previews highlight stage order changes, prompt swaps, tool updates, and cost ceilings so reviewers can reason about impact before approving.
-- Effective values snapshot into job manifests (`settings_snapshot_sha256`, `pipeline_definition_version`) and surface via telemetry (`pipeline_definition_version`, `pipeline_stage_version`) to support replay, regression analysis, and support escalations.
-
-### 9.13 Tool catalog & capability gating (binding)
-
-**Breadcrumbs:** Implementation `apps/platform/settings/services/tool_catalog.py::sync_catalog`, Tests `tests/platform/settings/test_tool_catalog.py::test_catalog_validation`, Observability Grafana “Agent Tooling” panel (metric `tool_invocation_total`).
-
-*Purpose: Allow sysadmins to introduce LangGraph tools while preserving safety and auditability.*
-
-- Keys: `agents.tools.catalog[]` (SYSTEM) defines tools; `agents.tools.allowlist[]` (ORG/CASE) enables them per tenant; `agents.tools.policies.*` captures residency, data classification, and approval requirements. Tool entries specify `tool_id`, `binding`, schemas, timeout, cost ceilings, guardian policy hints, and QA tags.
-- Validators reconcile catalog entries with underlying adapters (Python module path, HTTP/gRPC endpoints), verify JSON Schema correctness, and ensure residency/PII classes do not exceed baseline policy. Catalog changes require associated test evidence (link to §13.4 contract suite or targeted tool tests) before activation.
-- Allowlist overrides can only narrow tool access or tighten ceilings; attempts to expand residency, bypass guardian policy, or raise cost limits without matching SYSTEM approvals are rejected. Forced overrides demand `--force` plus dual approval and automatically attach waiver metadata to the bundle.
-- Tool catalog activations emit change events over `/settings.changed` and annotate which blue/green environment currently serves the new catalog. Metrics (`tool_invocation_total{tool_id}`, `tool_error_total{tool_id}`, `tool_cost_estimate_total`) and audit lines (`ops/tools/ops_tools.jsonl`) track adoption.
-- Documentation and support introspection derive from the catalog: `GET /api/v1/settings/tools/catalog` returns the effective JSON so operators and LangGraph editors can validate that custom tools, prompts, and directives match runtime configuration.
-
-### 9.14 JSON seed bundles & no-code configuration (binding)
-
-**Breadcrumbs:** Implementation `ops/scripts/bootstrap_platform.py`, Tests `tests/platform/settings/test_seed_bundles.py::test_seed_validation`, Observability CI job “settings-seed-validate” with report `ops/settings/seed_validate.json`.
-
-*Purpose: Ensure every environment can be configured without code changes by loading validated JSON bundles at system or org scope.*
-
-- Seed files: The repository ships versioned JSON bundles under `config/` (`bootstrap_defaults.json`, `guardian_defaults.json`, `analyze_defaults.json`, `llm_assignments.json`, `llm_providers.json`, and future `agents.pipeline/*.json`) describing system defaults for settings, pipelines, prompts, profiles, and tool catalogs. `ops/scripts/bootstrap_platform.py` and the Settings service ingest these bundles during environment bring-up or reset.
-- Validation: Bundles load through the same Pydantic models and JSON Schema checks used for runtime Settings (see §9.3). CI runs `python scripts/docs/check_settings_keys.py`, targeted schema validators, and LangGraph contract tests to block malformed or incomplete seed files. Loading refuses keys not present in Appendix E or values outside validator bounds, preventing drift between code, docs, and configuration.
-- No-code workflow: Admin consoles, service APIs, and the deployment automation pipeline accept these JSON bundles directly. Operators adjust prompts, guardrails, or pipeline topology by editing JSON, running validators, and activating the bundle—no code deploy required. Every activation records diff previews, approvals, and manifests so changes stay auditable.
-- Overrides: System bundles establish the global baseline; org and case overrides are expressed as additive JSON fragments (`agents.pipeline.overrides[]`, `agents.tools.allowlist[]`, `assistant.*`, `chat.*`). Activation merges follow the precedence described in §9.1 (SYSTEM ≺ ORG ≺ CASE), enabling client-specific restrictions or waivers while preserving default safety controls.
-- Change control: Seed updates obey the same blue/green rollout and dual-approval processes as other settings changes (§14.5). Each bundle includes `metadata` (`version`, `source_commit`, `checksum`) so deployments can verify provenance before applying updates.
+- Service charter, APIs, activation workflow, caching, telemetry, and governance controls for the Settings Registry live in [`docs/tdd-settings.md`](tdd-settings.md).
+- Agent pipeline bundles, tool catalogs, LLM profiles, and seed bundle processes are defined in [`docs/tdd-settings.md §5`](tdd-settings.md#5-agent--automation-configuration); platform agent sections reference those contracts instead of re-describing keys here.
+- Integration requirements for Guardian, Localization & Policy Engine, Reference Manager, portal, and worker pipelines are captured in [`docs/tdd-settings.md §6`](tdd-settings.md#6-integrations--enforcement-points).
+- Residency controls, rate limits, FinOps guardrails, compliance toggles, and approval behaviour rely on settings enumerated in [`docs/tdd-settings.md Appendix A`](tdd-settings.md#appendix-a--settings-key-map--traceability-index); platform sections cite that inventory for authoritative key coverage.
 
 ---
 
@@ -2436,7 +2277,7 @@ List contracts (normative)
   - Progress SSE: clients subscribe to `GET /api/v1/jobs/{id}/events` with `If-None-Match` (digest of last processed manifest). Servers respond with `ETag` headers and emit the event grammar defined in §10.8 (`job.accepted`, `job.running`, progress updates, policy holds, completion, cancellation).
   - Provider progress normalization: `ProviderProgressAdapter` implementations wrap Azure Speech Batch, Azure OpenAI, and future providers to emit `{phase, percent_complete, estimated_remaining_seconds}` snapshots. Workers surface these snapshots via `job.update` SSE payloads (`provider_progress` field) and persist them in `job_checkpoint.progress_meta`. Pause/resume/cancel commands call into the adapters to ensure idempotent provider control; a failed provider-side pause never advances the internal state machine. Each adapter implements the `cleanup()` hook invoked during cancellation step 2 above (revoke SAS URLs, purge temporary blobs, finalize manifests). Tests live in `tests/platform/jobs/test_provider_progress_adapter.py`.
   - Provider health endpoint: `GET /api/v1/providers/health` aggregates the latest adapter heartbeats per `{provider, region}`. Responses are cacheable for 10 s, include `status`, `latency_ms_p95`, `error_rate`, and the timestamp of the freshest signal, and drive the `provider.health` SSE tick for operator dashboards. Health degradation raises `provider.health` events even when no jobs are active.
-  - Progress watchdog (binding): the `job_progress_heartbeat` table records `{job_id, last_heartbeat_at, progress_pct}` updates from workers. A dedicated watchdog task scans for `RUNNING` jobs whose heartbeat age exceeds `jobs.watchdog.no_progress_minutes`; it emits `job_watchdog_warning_total`, raises SSE `job.update` with `status="RUNNING"`, `warning="NO_PROGRESS"`, and annotates the job record. If the heartbeat age exceeds `jobs.watchdog.timeout_minutes`, the watchdog transitions the job to `FAILED`, increments `job_watchdog_timeout_total`, files audit event `JOB_WATCHDOG_TIMEOUT`, and invokes RB-JOB-WATCHDOG. Watchdog actions never mutate jobs already `COMPLETED|FAILED|CANCELING|CANCELED`; recoverable jobs remain resumable thanks to checkpoint metadata (§6.2, §6.3, §6.4).
+  - Progress watchdog (binding): the `job_progress_heartbeat` table records `{job_id, last_heartbeat_at, progress_pct}` updates from workers. A dedicated watchdog task scans for `RUNNING` jobs whose heartbeat age exceeds `jobs.watchdog.no_progress_minutes`; it emits `job_watchdog_warning_total`, raises SSE `job.update` with `status="RUNNING"`, `warning="NO_PROGRESS"`, and annotates the job record. If the heartbeat age exceeds `jobs.watchdog.timeout_minutes`, the watchdog transitions the job to `FAILED`, increments `job_watchdog_timeout_total`, files audit event `JOB_WATCHDOG_TIMEOUT`, and invokes [Runbook RB-JOB-WATCHDOG](runbooks.md#rb-job-watchdog). Watchdog actions never mutate jobs already `COMPLETED|FAILED|CANCELING|CANCELED`; recoverable jobs remain resumable thanks to checkpoint metadata (§6.2, §6.3, §6.4).
   - Overlap guard: advisory lock `jobkind:{case_id}/{kind}`; conflicts → 409 `JOB_KIND_BUSY`.
 
 - Reviews (OCC + swap lock)
@@ -2545,7 +2386,7 @@ Handler pattern
 - Spectral rules (`ops/openapi/spectral.yaml`): enforce `oidc`, `hmacSignature` on mutating ops, error envelope on 4xx/5xx, shared pagination, forbid org/role spoof headers, and fail any spec whose `openapi` field is not `3.1.*` via the `openapi-version` rule.
 - Examples must not include real PII; Spectral rule `no-pii-examples` enforces masking, and rate-limit responses (429) must include `Retry-After`/`X-RateLimit-*` headers as shown in Appendix F.
 - CORS exposure (binding): expose `X-Request-ID, X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset, Retry-After, ETag, Deprecation, Sunset`. Preflight MUST allow the header set defined in Appendix F.11 (`Authorization, Content-Type, Idempotency-Key, X-Request-Signature, X-Signature-Key-Id, X-Timestamp, If-Match, If-None-Match, If-Range, X-Style-Nonce, X-Script-Nonce`); update Appendix F.11 first and mirror it here to avoid drift. Add `Vary: Origin, Access-Control-Request-Method, Access-Control-Request-Headers`.
-- Rate limits & antifraud: per-org and per-IP thresholds; portal download caps with anomaly trip expiring active links; 429 includes rate-limit headers and `Retry-After`. Binding defaults (`api.rate_limits.web.rpm_per_org=600`, `api.rate_limits.web.rpm_per_ip=300`, `portal.download.rate_limits.user_rpm=60`, `portal.download.rate_limits.org_rpm=200`) live in Appendix E; overrides must stay within the 10-2000 RPM guardrails enforced by Settings validation.
+- Rate limits & antifraud: per-org and per-IP thresholds; portal download caps with anomaly trip expiring active links; 429 includes rate-limit headers and `Retry-After`. Binding defaults (`api.rate_limits.web.rpm_per_org=600`, `api.rate_limits.web.rpm_per_ip=300`, `portal.download.rate_limits.user_rpm=60`, `portal.download.rate_limits.org_rpm=200`) live in [`docs/tdd-settings.md Appendix A`](tdd-settings.md#appendix-a--settings-key-map--traceability-index); overrides must stay within the 10-2000 RPM guardrails enforced by Settings validation.
 - Idempotency TTL (binding): default 24h; reusing keys after TTL executes anew; conflicting reuse returns 409.
 - CI: `spectral lint` and schema diff checks gate merges; examples validate. Appendix F holds canonical payloads.
 
@@ -2743,7 +2584,7 @@ Contract requirements (binding)
 
 - Case workspace shows artifact timeline, job status, approvals queue, and Guardian outcomes; integrates with SSE for live updates and Channels for collaborative notes.
 - Approvals panel enforces multi-step review (agent output, manual edits) with OCC guardrails; components display readiness, reviewer count, pending manual edits, Guardian reason codes (with scrubbed excerpts), and backlog ageing banners tied to `review_queue_backlog_total`/`review_queue_oldest_seconds`.
-- Job tiles surface watchdog warnings (icon + tooltip) when `job_watchdog_warning_total` increments; clicking reveals last heartbeat, current lane, and suggested remediation per RB-JOB-WATCHDOG. Canceled or timeout jobs link directly to audit events and runbook excerpts.
+- Job tiles surface watchdog warnings (icon + tooltip) when `job_watchdog_warning_total` increments; clicking reveals last heartbeat, current lane, and suggested remediation per [Runbook RB-JOB-WATCHDOG](runbooks.md#rb-job-watchdog). Canceled or timeout jobs link directly to audit events and runbook excerpts.
 - Analytics dashboards surface LLM cost, artifact coverage, QA issues; data sourced from `audit_event`, `ops_*` logs, and FinOps metrics.
 - Component-level permissions derived from Settings-driven policy map; UI respects field masks (e.g., masked SHA values replaced with `[REDACTED]`).
 
@@ -2839,7 +2680,7 @@ Contract requirements (binding)
 - Remediation path: `CHANGES_REQUESTED` artifacts route back to `OPERATOR_PREP` with reviewer guidance and must re-clear the review service (PASS/WARN) before re-entering `APPROVAL_REQUESTED → QUEUED_FOR_REVIEW`. The service keeps the prior APPROVED artifact live until the replacement is `APPROVED`. Reviewers must provide structured feedback (`reject_reason`, `reject_note`, optional `follow_up_owner`) stored in `artifact_review_feedback` and surfaced in UI/state machine diagrams (App.A.5).
 - Timeouts & escalation: Settings key `reviews.timeout_hours` (per artifact type) triggers reminders at 50%/90% elapsed windows and auto-escalates to `org_admin` if the window closes without action. Escalation emits `approval_timeout` notification templates and logs `REVIEW_TIMEOUT_ESCALATED` audit events.
 - Reassignment: Org admins with `org_admin` role may reassign pending reviews via `POST /reviews/{artifact}/reassign {from_user, to_user}`; OCC guards prevent reassignment once a decision is recorded. Actions append to the audit trail and notify both reviewers.
-- Guardian degradation: When the service is in App.H manual mode, approvals require dual reviewer sign-off plus compliance attestation before promotion; the portal surfaces `MANUAL_GUARDIAN_JUDGMENT` context in download banners.
+- Guardian degradation: When the service is in manual mode per `docs/runbooks/index.md`, approvals require dual reviewer sign-off plus compliance attestation before promotion; the portal surfaces `MANUAL_GUARDIAN_JUDGMENT` context in download banners.
 - Urgent overrides: Break-glass flow (`/reviews/{artifact}/urgent-approval`) available only to Security-approved roles. Invocations require two-factor confirmation, record rationale, and expire automatically after delivery; artifacts flagged `URGENT_APPROVAL_USED` must be re-reviewed within 72 hours.
 
 ### 11.3 Accessibility (WCAG 2.2 AA) and localization strategy
@@ -2972,7 +2813,7 @@ Binding breadcrumbs:
 - Channels: rendered through SSE/Channels with read receipts; stored as `IN_APP_NOTIFICATION` artifacts when audit needs persistency.
 - Rate limits: share same quotas as outbox notifications; Settings keys `notifications.in_app.rate_limit_per_minute` and `notifications.in_app.daily_cap`.
 - L10n: UI strings localized via `i18n.notifications.*`; actions link to case resources with RLS checks.
-- Observability: metrics `inapp_notification_sent_total`, `inapp_notification_click_total`; anomalies trigger `alert_notifications_inapp_anomaly` with App.H runbook reference.
+- Observability: metrics `inapp_notification_sent_total`, `inapp_notification_click_total`; anomalies trigger `alert_notifications_inapp_anomaly` with `docs/runbooks/index.md` runbook reference.
 
 ### 11.10 Document assembly pipeline
 
@@ -3151,41 +2992,10 @@ Binding breadcrumbs:
 *Purpose: Ensure operational readiness and quick diagnosis.*
 
 - Synthetic checks: `/readyz` with RLS enforcement, settings cache validation, NTP drift. Guardian synthetic job ensures policy enforcement; Signer synthetic verifies TSA reachability.
-- Logging pipeline synthetic monitors assert `logging_ingest_lag_seconds < 30s`, `logging_drop_rate_pct = 0`, and index freshness; alerts route to App.H RB-LOG-007.
-- Runbooks stored in ops repo (linked in App.H) cover Guardian quarantine handling, PgBouncer pooling misconfig, artifact integrity mismatch, SSE replay issues, and logging pipeline recovery.
+- Logging pipeline synthetic monitors assert `logging_ingest_lag_seconds < 30s`, `logging_drop_rate_pct = 0`, and index freshness; alerts route to `docs/runbooks/index.md (RB-LOG-007)`.
+- Runbooks stored in ops repo (`docs/runbooks/index.md`) cover Guardian quarantine handling, PgBouncer pooling misconfig, artifact integrity mismatch, SSE replay issues, and logging pipeline recovery.
 - Automation: watchdog tasks auto-quarantine artifacts with integrity failures, restart pods on failed health checks, and rotate settings caches when invalidation fails. The `watchdog-runner` Celery beat process emits heartbeats (`watchdog_runner_lag_seconds`) and raises PagerDuty incidents if it misses two consecutive intervals; Kubernetes liveness/readiness probes restart the runner on failure.
-- Fail-closed defaults: if Guardian is unavailable, artifacts remain `PENDING_JUDGMENT`; if Settings is unavailable, new jobs block on snapshot fetch while running jobs continue with embedded snapshots. These scenarios have dedicated alerts and runbooks in App.H.
-
-### H.5 RB-LLM-003 — Provider degradation / circuit breaker (normative)
-
-*Purpose: Detect and act on degraded LLM providers to protect budgets and SLAs.*
-
-Linked alert: `alert_llm_circuit_open` (Grafana: FinOps → LLM Cost & Circuit dashboard).
-
-Signals
-
-- Metrics: `llm_circuit_state{model}`, error rate > threshold (e.g., >5%/5m), latency P95 > budget, provider 429s.
-- Health probes failing; registry marks provider as `DEGRADED`.
-
-Triage (5-minute)
-
-1. Confirm models affected; inspect dashboard panels filtered by `model` and `org`.
-2. Check fallback outcomes in logs (reason `PRIMARY_DEGRADED`), and cost deltas.
-3. Verify region policy not cause (see `POLICY_REGION_BLOCK`).
-
-Decision
-
-- If OPEN circuits present: keep OPEN; allow half-open probes every 60s. Ensure fallback models are healthy and within budgets.
-- If latency/error just over threshold: raise replicas; notify Product if budget impact > X.
-
-Post-remediation
-
-- Track `llm_circuit_state` returning to CLOSED; annotate incident with timestamps and budget impact.
-- File provider incident with vendor ticket if persistent.
-
-Preventive actions
-
-- Tighten timeouts; raise pre-call token ceilings checks; adjust fallback priorities; add synthetic prompts to golden set.
+- Fail-closed defaults: if Guardian is unavailable, artifacts remain `PENDING_JUDGMENT`; if Settings is unavailable, new jobs block on snapshot fetch while running jobs continue with embedded snapshots. These scenarios have dedicated alerts and runbooks in [runbooks.md](runbooks.md) and `docs/runbooks/index.md`.
 
 ### 12.3 Incident response workflows & escalation paths
 
@@ -3193,9 +3003,9 @@ Preventive actions
 
 - Incident severity levels with defined on-call rotations (Engineering, Security, Product). Playbooks for RBAC breaches, data residency violations, Guardian outages.
 - Post-incident reviews required within 48h; actions tracked in ops backlog. Metrics `incident_count_total`, `mttr_minutes`, and `logging_incident_total`.
-- Communication templates for customer notifications, regulators, and internal leadership included in App.H; latest redlines stored as `INCIDENT_TEMPLATE` artifacts covering PII disclosure, residency breach, and major outage scenarios.
+- Communication templates for customer notifications, regulators, and internal leadership included in `docs/runbooks/index.md`; latest redlines stored as `INCIDENT_TEMPLATE` artifacts covering PII disclosure, residency breach, and major outage scenarios.
 - Logging ingestion incidents (dropped events or ingest lag > 2 minutes) automatically raise Sev-2, reference RB-LOG-007, and block prod deploys until the pipeline stabilizes for two consecutive collection intervals.
-- Upload scanning outages or sustained `upload_scan_error_total` spikes trigger security incidents with App.H RB-UPLOAD-SCAN; uploads remain disabled (`uploads.enabled=false`) until the pipeline clears and signatures are verified current.
+- Upload scanning outages or sustained `upload_scan_error_total` spikes trigger security incidents with [Runbook RB-UPLOAD-SCAN](runbooks.md#rb-upload-scan); uploads remain disabled (`uploads.enabled=false`) until the pipeline clears and signatures are verified current.
 
 ### 12.4 Backup, DR objectives, and failover drills
 
@@ -3205,7 +3015,7 @@ Preventive actions
 - Object storage: versioning + lifecycle rules; deletion requires dual confirmation. Immutable audit sinks operate under WORM retention policies.
 - Redis: persistence optional; rely on recomputation for queues. For critical caches, use managed Redis with cross-zone replicas.
 - DR exercises simulate region failure; cross-region read replicas considered once residency waivers approved. Settings and Guardian services replicate configuration backups.
-- Region failover playbook (App.H RB-DR-REGION): warm standby clusters remain idle but patched, with secrets/Settings snapshots synced hourly. On a primary-region outage the sequence is (1) freeze new job intake, (2) promote the standby Postgres instance with latest WAL, (3) swap object storage endpoints using pre-provisioned secondary containers, (4) update Azure Front Door/DNS records (TTL ≤ 60 seconds) to point to the secondary ingress, (5) run smoke tests (`ops/dr/run_region_cutover.py`) before re-opening job intake. Residency waivers govern whether an org may fail into the paired region; orgs without waivers stay paused until the primary returns.
+- Region failover playbook (`docs/runbooks/index.md (RB-DR-REGION)`): warm standby clusters remain idle but patched, with secrets/Settings snapshots synced hourly. On a primary-region outage the sequence is (1) freeze new job intake, (2) promote the standby Postgres instance with latest WAL, (3) swap object storage endpoints using pre-provisioned secondary containers, (4) update Azure Front Door/DNS records (TTL ≤ 60 seconds) to point to the secondary ingress, (5) run smoke tests (`ops/dr/run_region_cutover.py`) before re-opening job intake. Residency waivers govern whether an org may fail into the paired region; orgs without waivers stay paused until the primary returns.
 - After action: once the primary recovers, traffic is rolled back via blue/green cutover, delta data is validated (checksum + manifest diff), and any DSAR/erasure entries executed during the failover are replayed to ensure consistency.
 - Diagram: see `docs/diagrams/dr-region-failover-v1.mmd` for the runbook flow.
 
@@ -3221,7 +3031,7 @@ Preventive actions
 - Autoscaling policies: HPAs for web/channels (CPU + request latency), workers (queue depth), Guardian, Compose, and Signer tiers (p95 latency). Each deployment keeps `minReplicas=2`, `maxReplicas=10`, and targets 70 % CPU unless a service-specific metric overrides it (for example, review-service latency-based scaling). Compose lanes scale independently from Guardian so summarization surges never starve policy enforcement; KEDA bindings monitor queue depth per lane to add burst capacity without violating residency budgets.
 - Capacity reviews quarterly: evaluate job volume, LLM spend, storage growth. Provide forecasts to FinOps (link to §12.9).
 - Performance budgets tracked via dashboards: upload finalize ≤ 5s, SSE lag P95 \< 2s (P99 \< 5s), LLM lane runtime budgets (5-15 minutes per lane depending on complexity).
-- Stress tests run pre-release using synthetic workloads (k6 + Locust) that exercise Guardian, LPE/OPA evaluation, and RLS-heavy API paths; results captured in App.H for regression comparison and must meet App.L baselines before shipping.
+- Stress tests run pre-release using synthetic workloads (k6 + Locust) that exercise Guardian, LPE/OPA evaluation, and RLS-heavy API paths; results captured in `docs/runbooks/index.md` for regression comparison and must meet App.L baselines before shipping.
 - Benchmark snapshots in App.L capture the latest measured baselines feeding these budgets; deviations trigger escalation before release.
 
 #### 12.5.1 Failure taxonomy & resilience (binding)
@@ -3245,15 +3055,15 @@ Preventive actions
 
 - Circuits and watchdogs:
 
-  - LLM circuits: OPEN/HALF-OPEN/CLOSED; metrics `llm_circuit_state`, reason codes (`PRIMARY_DEGRADED`, `RATE_LIMIT`). Runbook App.H RB-LLM-003.
-  - Advisory lock watchdog: metrics `udlock_watchdog_stale_total`, `udlock_lock_age_seconds_p95`; defaults `udlock.max_session_hold_seconds=300`, `udlock.heartbeat.interval_seconds=5`. Runbook App.H RB-LOCK-006. `kill_stale=false` in prod; remediation flows through the operator-only endpoint `POST /ops/v1/udlock/{scope}/{key}/mark` which tags the holder, adds trace attribute `lock.triage=manual_review`, and (when explicitly requested) issues `pg_terminate_backend` after human confirmation.
-  - Job progress watchdog: metrics `job_watchdog_warning_total`, `job_watchdog_timeout_total`; thresholds driven by `jobs.watchdog.*` settings. Runbook App.H RB-JOB-WATCHDOG guides remediation.
+  - LLM circuits: OPEN/HALF-OPEN/CLOSED; metrics `llm_circuit_state`, reason codes (`PRIMARY_DEGRADED`, `RATE_LIMIT`). Runbook [RB-LLM-003](runbooks.md#rb-llm-003).
+  - Advisory lock watchdog: metrics `udlock_watchdog_stale_total`, `udlock_lock_age_seconds_p95`; defaults `udlock.max_session_hold_seconds=300`, `udlock.heartbeat.interval_seconds=5`. Runbook [RB-LOCK-006](runbooks.md#rb-lock-006). `kill_stale=false` in prod; remediation flows through the operator-only endpoint `POST /ops/v1/udlock/{scope}/{key}/mark` which tags the holder, adds trace attribute `lock.triage=manual_review`, and (when explicitly requested) issues `pg_terminate_backend` after human confirmation.
+  - Job progress watchdog: metrics `job_watchdog_warning_total`, `job_watchdog_timeout_total`; thresholds driven by `jobs.watchdog.*` settings. Runbook [RB-JOB-WATCHDOG](runbooks.md#rb-job-watchdog) guides remediation.
 
 - Queues and DLQ:
 
   - Outbox pattern for notifications with retries/backoff; poison messages routed to DLQ with capped replays and operator alerts.
 
-- Integrity scan DLQ: dead-letter queue `q.integrity.deadletter` captures items exceeding retry budget (`last_error`, `attempts`, `cause`). DLQ processing emits on-call alerts and requires manual triage per App.H runbook.
+- Integrity scan DLQ: dead-letter queue `q.integrity.deadletter` captures items exceeding retry budget (`last_error`, `attempts`, `cause`). DLQ processing emits on-call alerts and requires manual triage per `docs/runbooks/index.md` runbook.
 
 - Downstream propagation: when a source artifact is quarantined for integrity mismatch, workers walk `manifest.source_artifacts[]` and apply `integrity.downstream_action ∈ {mark_stale, quarantine}` to dependents so UI surfaces NEEDS_REVIEW banners; defaults are `quarantine` for legal deliverables (`COMPOSE_*`, `ATTACHMENT_*`) and `mark_stale` for Analyze outputs per Appendix D.
 
@@ -3261,7 +3071,7 @@ Preventive actions
 
   - Guardian judgment P95 ≤ 5m; Compose ≤ 45m P95; upload finalize ≤ 5s. Alerts on burn rates and budget breaches; see §12.6 dashboards.
 
-- **Source material:** `§12`, `§12`, `§10.8`, `App.H`
+- **Source material:** `§12`, `§12`, `§10.8`, `docs/runbooks/index.md`
 
 - **Priority:** Medium (operational readiness)
 
@@ -3280,12 +3090,12 @@ Preventive actions
 - Audit Seal & WORM (SecEng): seal cadence, seal errors, WORM lag, verification status.
 - Portal Security (SecEng): download rate per org/user, anomaly triggers, link invalidations, adaptive MFA prompts.
 - PHI Detection & HIPAA (SecEng/Compliance): `phi_detection_scan_total`, `phi_detection_positive_total{stage}`, `phi_detection_drift_total`, rescan latency, Guardian quarantines triggered; dashboards link to sampled artifacts for manual review.
-- Advisory Locks (SRE): locks held by scope/kind, age percentiles, stale detections, terminations; tied to App.H RB-LOCK-006.
-- Logging Pipeline (SRE): ingest lag, drop rate, spool utilization, index health; alerts map to App.H RB-LOG-007.
-- Upload Scanning (Security): queue depth, scan duration, infected/errored totals, signature freshness metrics; alerts route to App.H RB-UPLOAD-SCAN.
+- Advisory Locks (SRE): locks held by scope/kind, age percentiles, stale detections, terminations; tied to [Runbook RB-LOCK-006](runbooks.md#rb-lock-006).
+- Logging Pipeline (SRE): ingest lag, drop rate, spool utilization, index health; alerts map to `docs/runbooks/index.md (RB-LOG-007)`.
+- Upload Scanning (Security): queue depth, scan duration, infected/errored totals, signature freshness metrics; alerts route to [Runbook RB-UPLOAD-SCAN](runbooks.md#rb-upload-scan).
 - Unit Economics & Delivery (PM/SRE): cost per case/org; MoM deltas; top 10 expensive cases; delivery counts and failure rates.
 
-Instrumentation rollout: All dashboards listed here are live in production with paging alerts. SRE and Platform teams control alert thresholds via Settings; when a team pauses ownership (for example, onboarding a new runbook), the associated dashboard can be switched to warning-only mode using the documented change process in App.H.
+Instrumentation rollout: All dashboards listed here are live in production with paging alerts. SRE and Platform teams control alert thresholds via Settings; when a team pauses ownership (for example, onboarding a new runbook), the associated dashboard can be switched to warning-only mode using the documented change process in `docs/runbooks/index.md`.
 
 Alert routing
 
@@ -3300,7 +3110,7 @@ Alert routing
 - Guardian: submit synthetic artifacts for both a WP (expect PASS → CLEARED_FOR_USE) and a CD under `review.mode=MANUAL` (expect PASS → OPERATOR_PREP) with known inputs; verifies rule load; latency within SSE SLO.
 - Signer: sign a synthetic document against test trust roots; verify TSA/OCSP reachability.
 - Settings: activate a safe test bundle; diff preview matches expected; revert; validators pass.
-- Watchdog runner: `watchdog-runner` Celery beat schedule fires every minute, invoking all watchdog tasks (Guardian backlog, job progress, advisory locks, integrity queue). A self-check endpoint `/ops/watchdog/status` reports the most recent execution timestamp and per-task durations; synthetic monitor verifies the timestamp delta stays \< 120s. Metrics `watchdog_runner_lag_seconds`, `watchdog_runner_missed_total`, and log-based alerts catch missed beats; if the runner stalls, App.H RB-JOB-WATCHDOG and Appendix B.3 prescribe manual invocation plus root-cause remediation before re-enabling automation.
+- Watchdog runner: `watchdog-runner` Celery beat schedule fires every minute, invoking all watchdog tasks (Guardian backlog, job progress, advisory locks, integrity queue). A self-check endpoint `/ops/watchdog/status` reports the most recent execution timestamp and per-task durations; synthetic monitor verifies the timestamp delta stays \< 120s. Metrics `watchdog_runner_lag_seconds`, `watchdog_runner_missed_total`, and log-based alerts catch missed beats; if the runner stalls, [Runbook RB-JOB-WATCHDOG](runbooks.md#rb-job-watchdog) and Appendix B.3 prescribe manual invocation plus root-cause remediation before re-enabling automation.
 - Portal: download approved synthetic artifact; ETag/Range behavior validated; portal invalidation simulated.
 - Reference Manager (EU-REFERENCE tenant): synthetic monitoring, residency assertions, and escalation criteria are documented in `docs/tdd-rm.md §5.3`.
 - Alert thresholds: burn-rate SLO alerts and synthetic failures must page on-call with proper runbook IDs.
@@ -3320,7 +3130,7 @@ Alert routing
 
 - Dashboards: `llm_cost_estimate_total`, `finops_cost_per_case_usd`, MoM regression panel, top N expensive cases, budget forecasts, and logging volume views (`logging_bytes_ingested_total`, budget vs actual per service).
 - Alerts: regression > threshold (default 10%); monthly cap risk > X%; route to Product/SRE with runbooks; annotate releases.
-- Acceptance: dashboards exist and alerts fire in staging drill before enabling in prod, including `LOG_VOLUME_BUDGET` alerts tied to App.H RB-LOG-007.
+- Acceptance: dashboards exist and alerts fire in staging drill before enabling in prod, including `LOG_VOLUME_BUDGET` alerts tied to `docs/runbooks/index.md (RB-LOG-007)`.
 
 #### 12.9.1 Portal-facing usage transparency
 
@@ -3339,7 +3149,7 @@ Alert routing
 - **Guardian impairment:** Freeze approvals that rely on Guardian PASS/WARN judgments; manual reviewers follow Appendix B.1 in `docs/guardian-service.md` and log judgments as `MANUAL_GUARDIAN_JUDGMENT` artifacts until the service recovers.
 - **Transcription fallback:** The `SpeechFailoverController` retries against the next speech provider/region in `speech.jobs[].fallback_chain` with full equivalence logging. When the chain is exhausted jobs enter `PAUSED_AWAITING_PROVIDER` and automatically resume once health probes confirm recovery; no human transcription is used in the automated path.
 - **Communication cadence:** Duty Manager sends initial update within SLA (§1.6) and hourly until resolved; final customer notice includes timeline, data impact, and remediation.
-- **Drills:** Semi-annual BCP exercise simulating combined Guardian + LLM outage; evidence stored as `BCP_DRILL_REPORT` artifacts linked in App.H.
+- **Drills:** Semi-annual BCP exercise simulating combined Guardian + LLM outage; evidence stored as `BCP_DRILL_REPORT` artifacts linked in `docs/runbooks/index.md`.
 
 ### 12.11 Fail-closed behaviors matrix
 
@@ -3348,10 +3158,10 @@ Alert routing
 | Subsystem              | Fail-closed behavior                                                            | User impact                                                      | Runbook                                           |
 | ---------------------- | ------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------- |
 | Guardian               | Rejects submissions; artifacts remain `PENDING_JUDGMENT` until service recovers | New approvals paused; portal shows OPERATOR_PREP backlog    | Appendix B.1                                |
-| Settings Service       | New jobs block on snapshot fetch; running jobs continue with embedded snapshots | Operators see queue backlog; activation UI disabled              | App.H Standard template + Settings rollback drill |
-| Audit seal / WORM      | Portal deliveries blocked if seal chain breaks for >1 interval                  | Reviewers cannot promote artifacts; portal download attempts 503 | App.H RB-AUDIT-004                                |
-| Residency policy guard | Jobs error with `RESIDENCY_POLICY_BLOCK` on drift                               | Org must adjust settings or seek waiver before resubmission      | App.H RB-RES-BLOCK                                |
-| LLM provider circuit   | Queue enters `PAUSED_AWAITING_PROVIDER`; health probes run every 60 s          | Compose/Analyze jobs paused; auto-resume after consecutive green probes; manual drafting requires waiver | App.H RB-LLM-003                                  |
+| Settings Service       | New jobs block on snapshot fetch; running jobs continue with embedded snapshots | Operators see queue backlog; activation UI disabled              | [Runbook RB-GOV-008](runbooks.md#rb-gov-008) |
+| Audit seal / WORM      | Portal deliveries blocked if seal chain breaks for >1 interval                  | Reviewers cannot promote artifacts; portal download attempts 503 | `docs/runbooks/index.md (RB-AUDIT-004)`                                |
+| Residency policy guard | Jobs error with `RESIDENCY_POLICY_BLOCK` on drift                               | Org must adjust settings or seek waiver before resubmission      | [Runbook RB-RES-BLOCK](runbooks.md#rb-res-block)                                |
+| LLM provider circuit   | Queue enters `PAUSED_AWAITING_PROVIDER`; health probes run every 60 s          | Compose/Analyze jobs paused; auto-resume after consecutive green probes; manual drafting requires waiver | [Runbook RB-LLM-003](runbooks.md#rb-llm-003)                                  |
 
 ---
 
@@ -3450,7 +3260,7 @@ Alert routing
 
 - Diagram drift check (binding): CI job `diagram:diff` ensures exported ERD/service-map assets only change alongside their `.mmd`/`.drawio` sources and associated commit notes.
 
-- **Source material:** `§12`, `§14.4`, `§12.9`, `§10.8`, `App.E`
+- **Source material:** `§12`, `§14.4`, `§12.9`, `§10.8`, [`docs/tdd-settings.md Appendix A`](tdd-settings.md#appendix-a--settings-key-map--traceability-index)
 
 - **Priority:** Medium (QA & compliance alignment)
 
@@ -3465,13 +3275,13 @@ Alert routing
 *Purpose: Standardize customer lifecycle in ops tools.*
 
 - Provisioning: create org in Keycloak, configure domains (SPF/DKIM), set residency allowlists, budgets, templates, rotate initial secrets. Onboard staff via invites with role assignments.
-- Offboarding: disable logins, export data with tamper-evident bundles, revoke keys, enforce retention/erasure, archive audit seals. Checklist recorded in App.H.
+- Offboarding: disable logins, export data with tamper-evident bundles, revoke keys, enforce retention/erasure, archive audit seals. Checklist recorded in `docs/runbooks/index.md`.
 
 #### 14.1.1 Legacy case import (roadmap)
 
 *Purpose: Provide an inbound migration path that mirrors export guarantees and preserves chain-of-custody evidence.*
 
-- Legacy case import supports both ops-assisted and self-service flows. Ops-assisted imports use `scripts/import/validate_case_bundle.py` to verify manifest signatures, residency tags, and hashes before queueing the `case_import` Celery task; every run logs to `ops/<job_id>__case_import_log.json` and emits `CASE_IMPORT_ATTEMPT` audit events (see App.H runbook). Self-service org admin workflows (`POST /ops/case-imports`, guarded by `import.legacy_cases.enabled`) apply deterministic ID mapping, replay Guardian review states, and produce reconciliation reports for reviewer confirmation. Portal visibility stays blocked until the service approves the imported artifacts.
+- Legacy case import supports both ops-assisted and self-service flows. Ops-assisted imports use `scripts/import/validate_case_bundle.py` to verify manifest signatures, residency tags, and hashes before queueing the `case_import` Celery task; every run logs to `ops/<job_id>__case_import_log.json` and emits `CASE_IMPORT_ATTEMPT` audit events (see `docs/runbooks/index.md` runbook). Self-service org admin workflows (`POST /ops/case-imports`, guarded by `import.legacy_cases.enabled`) apply deterministic ID mapping, replay Guardian review states, and produce reconciliation reports for reviewer confirmation. Portal visibility stays blocked until the service approves the imported artifacts.
 - Observability & guardrails: metrics `case_import_duration_seconds`, `case_import_artifacts_total{status}`, and drift checks comparing imported hashes to manifest expectations. Synthetic drill runs quarterly to confirm import tooling keeps parity with export schema revisions; failures block expanding the feature flag beyond pilot orgs.
 
 ### 14.2 Artifact retention, legal hold, and destruction flows
@@ -3498,7 +3308,7 @@ Alert routing
 
 *Purpose: Support hard-purge erasure requests without compromising provenance.*
 
-- Settings: `compliance.erasure_mode ∈ {'off', 'hard_purge'}` (ORG) toggles hard purge; `compliance.subject_hkdf_salt` (SYSTEM, KMS-backed) seeds deterministic subject hashes. See Appendix E for key traceability.
+- Settings: `compliance.erasure_mode ∈ {'off', 'hard_purge'}` (ORG) toggles hard purge; `compliance.subject_hkdf_salt` (SYSTEM, KMS-backed) seeds deterministic subject hashes. See [`docs/tdd-settings.md Appendix A`](tdd-settings.md#appendix-a--settings-key-map--traceability-index) for key traceability.
 - Scope: Hard purge deletes artifacts, QA logs, evidence, and prompts tied to the subject; legal hold supersedes erasure requests and blocks purge.
 - Artifact proof: Every purge emits an `ERASURE_JOURNAL` artifact capturing minimal evidence (subject hash, scope, approvals) and referencing the job manifest hash. Guardian review ensures readiness before portal exposure.
 - Approval: Dual approval when policy requires (`privacy.dpia.reviewers.roles`), with audit records referencing erasure justification and timestamps. Waivers recorded when residency/retention conflicts arise.
@@ -3539,7 +3349,7 @@ Alert routing
 - Hardware-backed keys: production signing keys live in cloud HSM (Azure Key Vault HSM) with policy `KV-Policy-Prod-001`; audit logs exported nightly and referenced in App.K evidence.
 - Rotation automation pipelines: TLS certs rotate via GitHub Action `secops/rotate-certs.yml`, which writes attestations to `ops/security/cert_rotation/<date>.json` and updates `azure-key-vault://platform-secrets/certs/*`; Guardian/Signer HMAC keys rotate with `ops/security/rotate_guardian_keys.py`. A quarterly drill exercises the dual-publish → canary → cutover flow: enable the `svc-*-next` secret, replay synthetic signed requests (`scripts/security/key_rotation_canary.py`) across staging and a prod shadow job, observe `key_rotation_canary_success_total`, then revoke the old key. Rollback cue: if error rate or canary metric deviates >1%, revert `current` pointer and reissue the previous key bundle. Evidence bundles are attached to App.K control entries.
 - Rotation cadence summary: TLS certs ≤24h TTL, API HMAC quarterly, Guardian/Signer keys semi-annually, customer-supplied keys per contract or ≤90 days. Upcoming rotations tracked in change calendar; overdue keys page SecEng.
-- Escape hatch: should KMS become unavailable, documented manual signing path (App.H RB-SIGNER-HSM) allows temporary softkey use capped at 24 h with post-incident review.
+- Escape hatch: should KMS become unavailable, documented manual signing path (`docs/runbooks/index.md (RB-SIGNER-HSM)`) allows temporary softkey use capped at 24 h with post-incident review.
 
 ### 14.4 Vulnerability management & supply chain updates
 
@@ -3636,7 +3446,7 @@ Alert routing
 *Purpose: Surface known risks and capture resolution context.*
 
 - Risks: LLM policy drift, Guardian false negatives, residency waiver backlog, staffing for manual reviews, LangGraph framework maturity, infrastructure/IaC complexity outpacing SRE capacity.
-- Mitigations: continuous evals, rule dry-run/diff, automated waiver stamping, cross-training reviewers, dual runner fallback (`agents.langgraph.runner`), staged LangGraph upgrades with canary tests, plus dedicated DevOps enablement (Terraform/service-mesh training sprints, pairing during first three production releases, and annual certification of App.H runbooks for infra owners).
+- Mitigations: continuous evals, rule dry-run/diff, automated waiver stamping, cross-training reviewers, dual runner fallback (`agents.langgraph.runner`), staged LangGraph upgrades with canary tests, plus dedicated DevOps enablement (Terraform/service-mesh training sprints, pairing during first three production releases, and annual certification of `docs/runbooks/index.md` runbooks for infra owners).
 - Decision log entries include change rationale, date, owners, references to sections impacted.
 
 ### 15.4 Outstanding research spikes
@@ -3674,7 +3484,7 @@ Alert routing
 *Purpose: Link roadmap milestones to owners and dependencies so this TDD stays actionable.*
 
 - Milestones → Epics:
-  - Milestone M1 (Analyze LangGraph GA) → Product epic `P-123`; depends on App.A diagrams, §6.7/§6.11 completion, App.H RB-LLM-003 drill.
+- Milestone M1 (Analyze LangGraph GA) → Product epic `P-123`; depends on App.A diagrams, §6.7/§6.11 completion, [Runbook RB-LLM-003](runbooks.md#rb-llm-003) drill.
   - Milestone M2 (Portal messaging GA) → Product epic `P-207`; references §11.6 and Appendix J; depends on App.A A.8 flow and security review gates (§9.11).
 - Milestone M3 (FinOps deploy guard) → SRE epic `SRE-88`; depends on §8.7, §12.9, FinOps dashboards wiring acceptance.
 - Dependency notes: provider template updates (Appendix D) tracked in backlog; cross-team sequence captured in roadmap doc linking to this section.
@@ -3744,7 +3554,7 @@ Alert routing
 
 - Plan retirement for non-Settings-based configuration files; ensure agents rely solely on Settings service.
 
-- **Source material:** `§16`, `§16`, `§16`, `§12.9`, `App.E` decision log
+- **Source material:** `§16`, `§16`, `§16`, `§12.9`, [`docs/tdd-settings.md Appendix A`](tdd-settings.md#appendix-a--settings-key-map--traceability-index) decision log
 
 - **Priority:** Medium (keeps roadmap aligned)
 
@@ -3756,10 +3566,10 @@ Alert routing
 - **App.B** Threat model catalog *(source: §14.4, App.B)*
 - **App.C** Data classification & retention matrices *(source: App.C, §15)*
 - **App.D** Canonical artifact catalog *(source: App.F)*
-- **App.E** Settings key map and traceability index *(source: §9.14)*
+- **See also:** [`docs/tdd-settings.md Appendix A`](tdd-settings.md#appendix-a--settings-key-map--traceability-index) *(source: §5.4)*
 - **App.F** API reference snippets / example payloads *(source: §10.8)*
 - **App.G** ERD and schema migrations history *(source: App.I)*
-- **App.H** Ops runbooks & health check playbooks *(source: §12.2, App.H)*
+- **Appendix H** Ops runbooks & health check playbooks *(source: §12.2, Appendix H)*
 - **App.I** Glossary and taxonomy *(source: Glossary, §16 taxonomy notes)*
 - **App.J** SQL policy patterns *(source: §4.4, §11.6)*
 - **App.K** Controls assurance map *(source: §2.2, §12, §14)*
@@ -3823,7 +3633,7 @@ Alert routing
 
 *Purpose: Centralize high‑value threats, mitigations, and validations (STRIDE).*
 
-### B.1 STRIDE summary (illustrative; see App.H for runbooks)
+### B.1 STRIDE summary (illustrative; see `docs/runbooks/index.md` for runbooks)
 
 - Spoofing (identity):
   - Vector: forged inter‑service calls
@@ -3862,7 +3672,7 @@ Alert routing
 
 - Portal scraping → rate limits, anomaly triggers, forced invalidation, step-up MFA (§11.2.2, §12.8).
 - Messaging misuse → content scanning, attachment limits, abuse reporting, audit trails (§11.6).
-- Brute forcing APIs → global/org rate limits, IP throttles, 429 guidance, runbooks (§10.7, §12.6, App.H). *Purpose: Document top risks, mitigations, and residual risk ratings.*
+- Brute forcing APIs → global/org rate limits, IP throttles, 429 guidance, runbooks (§10.7, §12.6, `docs/runbooks/index.md`). *Purpose: Document top risks, mitigations, and residual risk ratings.*
 - **Threat tables:** Expanded STRIDE matrix covering RLS bypass, region leakage, LLM prompt exfiltration, Guardian rule poisoning, signature spoofing, SSE replay, and portal phishing.
 - **Mitigation mapping:** For each threat, list preventive/detective controls (section references) and automation coverage (synthetics, alerts). Residual risk rated (Low/Medium/High) with owner.
 - **Abuse cases:** Scenarios such as malicious reviewer approval, compromised client account, and mass download scraping with corresponding throttles and anomaly detection.
@@ -3873,11 +3683,11 @@ Alert routing
 - Governance: Abuse triad (Security Engineering Lead, Product Abuse PM, SRE) meets monthly to review abuse dashboards, App.T traceability rows, and new reports from Support. Action items flow into the security backlog with SLA tracking.
 - Baseline detectors:
   - API anomaly detector: `api_abuse_scorer` job inspects rolling windows (IP/user/org) for unusual verb/method combinations and increments `api_suspect_request_total{reason}`. Score > threshold auto-enqueues an approval block pending human review.
-  - Portal download sentinel: `portal_download.anomaly_score` (needs trend \< 1.5× baseline). 3 consecutive breaches trigger automatic `portal_link_invalidated` + step-up MFA requirement; App.H RB-ETAG handles follow-up messaging.
+  - Portal download sentinel: `portal_download.anomaly_score` (needs trend \< 1.5× baseline). 3 consecutive breaches trigger automatic `portal_link_invalidated` + step-up MFA requirement; `docs/runbooks/index.md (RB-ETAG)` handles follow-up messaging.
   - Messaging fraud rules: heuristics for mass outbound, URL reputation hits, and attachment mismatch log to `messaging_abuse_detected_total` and quarantine threads until Guardian re-approves.
 - Shadow/soak controls: High-risk pipeline changes (payment integrations, new export endpoints) must run in shadow mode (see §6.13) for ≥7 days with abuse detectors enabled; only after the review sign-off do we flip “serving” flags.
 - Threshold waivers: temporary relaxations for shadow soaks or customer beta programs use `abuse.shadow.threshold_per_org` settings with explicit expiry (≤30 days) and are catalogued in App.O. Activation lints reject waivers without matching expiry and justification.
-- For every new abuse vector, engineering must add: (1) detector metric + alert, (2) runbook entry (App.H), (3) test fixture covering expected vs blocked flows, (4) traceability row in App.T.
+- For every new abuse vector, engineering must add: (1) detector metric + alert, (2) runbook entry (`docs/runbooks/index.md`), (3) test fixture covering expected vs blocked flows, (4) traceability row in App.T.
 
 ---
 
@@ -4123,155 +3933,7 @@ Notes
 
 ## Appendix E — Settings key map & traceability index
 
-*Purpose: Link platform behavior to configuration keys for audit and troubleshooting.*
-
-*Guardian-specific configuration lives in `docs/guardian-service.md` (§5 configuration contract, Appendix B runbooks); Appendix E focuses on shared platform keys only.* TODO: Replace this with a general statement once all services have been migrated - until then continue this pattern.
-
-### E.1 Key catalog (scope: SYSTEM | ORG | CASE)
-
-- regions.allowlist.compute — ORG — \[na-us-1, na-us-2\] — Allowed compute regions; enforced by §3.8.
-- regions.allowlist.storage — ORG — \[na-us-1, na-us-2\] — Allowed storage regions; enforced by §3.8 and §5.3.
-- network.egress.allowed_hosts[] — SYSTEM|ORG — [] — Host allowlist rendered to ServiceEntry/AuthorizationPolicy; §3.2.1.
-- analyze.model.id — ORG|CASE — default profile — LLM model profile for Analyze lanes; see §8 and §6.3.
-- analyze.token_ceiling — ORG|CASE — 100000 — Max tokens per Analyze job; see §8.3.
-- analyze.max_retries — ORG|CASE — 2 — Retry budget per lane; see §6.3 QA loops.
-- compose.model.id — ORG|CASE — default profile — LLM model profile for Compose; see §8 and §6.4.
-- compose.token_ceiling — ORG|CASE — 100000 — Max tokens per Compose job; §8.3.
-- compose.max_retries — ORG|CASE — 2 — Retry budget per lane; §6.4.
-- compose.policy.forbidden_patterns\[\] — ORG — \[\] — Content forbids; §6.4 QA.
-- compose.templates.client.template_id — ORG — default — DOCX/MD template selection; §6.4.
-- compose.templates.lawyer.template_id — ORG — default — DOCX/MD template selection; §6.4.
-- reviews.timeout_hours — ORG — 72 — Approval escalation threshold (reminders/escalations); §11.2.3.
-- reviews.backlog.alert_minutes — ORG — 30 — Minutes before `QUEUED_FOR_REVIEW` items trigger reviewer escalation banners/alerts; §7.1.3, §11.1.
-- sign.trust_roots\[\] — SYSTEM|ORG — \[\] — Trust roots for signing; §7.2.
-- sign.tsa.endpoint — SYSTEM|ORG — null — TSA API endpoint; §7.2.
-- sign.tsa.max_time_drift_secs — SYSTEM — 5 — NTP drift tolerance; §7.2, §3.2.
-- security.tls.min_version — SYSTEM — TLSv1.3 — Minimum TLS version for ingress; §3.2.
-- security.tls.cipher_profile — SYSTEM — default — TLS cipher profile for ingress; §3.2.
-- security.tls.fips_mode — SYSTEM — false — Enforce FIPS-approved cipher suites and modules; §3.2, §7.2.
-- security.tls.legacy_exceptions\[\] — SYSTEM — \[\] — Temporary TLS 1.2 exceptions (≤30 days, alert at T-7); §3.2, §9.2.
-- db.pgbouncer.pool_mode — SYSTEM — transaction — Allowed PgBouncer pooling mode (`transaction` default, `session` optional); §3.2.1.
-- llm.providers\[\] — SYSTEM|ORG — \[\] — Provider catalog; §8.1.
-- llm.models\[\] — SYSTEM|ORG — \[\] — Model catalog and fallback priorities; §8.1.
-  - llm.models.version_pin — SYSTEM|ORG — provider‑specific — Explicit provider model snapshot/version pin; §8.1/§8.5.
-  - llm.enforce_model_version — ORG|CASE — true — Fail when provider model version drifts from pin; §8.1/§8.5.
-  - llm.moderation.enabled — ORG — true — Enable automated input/output moderation; §8.4.
-  - llm.moderation.provider — ORG — azure|openai|local — Moderation provider selection; §8.4.
-- llm.moderation.enforcement — SYSTEM|ORG — block — Enforcement mode: `block` (default) or `warn`; §8.4.
-- llm.moderation.thresholds.toxicity — ORG — 0.5 — Classification threshold; §8.4.
-- llm.moderation.thresholds.self_harm — ORG — 0.5 — Classification threshold; §8.4.
-- llm.moderation.thresholds.sexual_content — ORG — 0.5 — Classification threshold; §8.4.
-- llm.moderation.thresholds.pii_reintroduction — ORG — 0.5 — Classification threshold; §8.4.
-- llm.byo.allowed — ORG|CASE — false — Permit bring-your-own model endpoints; §8.1.3.
-- llm.byo.evaluation_suite_id — ORG — default — Evaluation suite applied to BYO providers; §8.1.3.
-- llm.byo.vpc_endpoints[] — ORG — [] — Allowed BYO endpoint hostnames (reconciled with mesh policies); §8.1.3.
-- agents.langgraph.runner — SYSTEM|ORG — langgraph — Graph runner selection (`langgraph` or `linear`); §6.7.2.
-- agents.langgraph.fallback_mode — SYSTEM — false — Force manual drafting fallback; §6.7.2, App.H RB-LLM-003.
-- speech.providers[] — SYSTEM|ORG — [] — Speech provider catalog (health, residency, parity evidence); §6.2.1.
-- speech.jobs[] — SYSTEM|ORG — [] — Transcription job profiles and fallback chains; §6.2.1.
-- speech.allow_preprocessing — ORG|CASE — false — Permit loudness normalization/compression before transcription; §6.2.3.
-- speech.require_locale_match — ORG|CASE — true — Fail fast when provider lacks requested locale; §6.2.3.
-- speech.detect_language.enabled — ORG|CASE — false — Enable automatic source-language detection; §6.2.4.
-- speech.multilingual_segments.enabled — ORG|CASE — false — Emit language-tagged segments for code-switched audio; §6.2.4.
-- speech.translation.enabled — ORG|CASE — false — Allow generation of translated transcripts; §6.2.4.
-- speech.translation.targets_default[] — ORG — [] — Default target locales for translation requests; §6.2.4.
-- speech.translation.provider — ORG|CASE — null — Translation provider identifier; §6.2.4.
-- speech.translation.glossary_set — ORG|CASE — null — Reference Manager glossary bundle for translations; §6.2.4.
-- speech.translation.max_parallel_targets — ORG|CASE — 3 — Parallel translation limit per job; §6.2.4.
-- speech.translation.allow_unverified_pairs — ORG|CASE — false — Permit translation pairs not in the verified registry (waiver required); §6.2.3, §6.2.4.
-- speech.translation.language_pair_overrides[] — ORG|CASE — [] — Disable or remap specific source→target pairs for contractual/compliance reasons; §6.2.3, §6.2.4.
-- chat.staff.enabled — ORG|CASE — false — Enable staff Copilot assistant; §11.11.
-- chat.staff.rate_limit.rpm — ORG|CASE — 30 — Staff assistant requests per minute; §11.11.
-- chat.staff.token_cap_daily — ORG|CASE — 20000 — Staff assistant daily token budget; §11.11.
-- chat.client.enabled — ORG|CASE — false — Enable portal chat assistant; §11.11.
-- chat.client.rate_limit.rpm — ORG|CASE — 10 — Client assistant requests per minute; §11.11.
-- chat.client.token_cap_daily — ORG|CASE — 10000 — Client assistant daily token budget; §11.11.
-- chat.session.max_active_per_user — ORG|CASE — 2 — Concurrent chat sessions allowed per user; §11.11.
-- chat.auto_disable_on_abuse — ORG|CASE — true — Auto-disable assistants on policy violations; §11.11.
-- chat.provider.profile — ORG|CASE — null — LLM profile assignment for assistants; §8.1.4, §11.11.
-- portal.chat.hipaa_allowed — ORG — false — Permit client chat when HIPAA mode active; §11.11.
-- portal.chat.export.enabled — ORG|CASE — false — Allow client chat transcript exports; §11.11.
-- notifications.in_app.rate_limit_per_minute — ORG — 60 — In-app notification dispatch rate; §11.9.
-- notifications.in_app.daily_cap — ORG — 500 — In-app notification max per day; §11.9.
-- llm.finops.monthly_cap_usd — ORG — 0 (disabled) — Monthly LLM spend cap; §8.3, §13.4.
-- jobs.watchdog.no_progress_minutes — SYSTEM|ORG — 5 — Minutes without heartbeat before watchdog warns; §10.2, §12.1, App.H RB-JOB-WATCHDOG.
-- jobs.watchdog.timeout_minutes — SYSTEM|ORG — 15 — Minutes without heartbeat before watchdog fails the job; §10.2, §12.1, App.H RB-JOB-WATCHDOG.
-- uploads.scan.engine — SYSTEM — clamav — Malware engine used in the upload scan pipeline; §6.2, §12.1.
-- uploads.scan.yara_ruleset_version — SYSTEM — latest — Version tag for YARA rules synced from Security; §6.2.
-- uploads.scan.timeout_seconds — SYSTEM|ORG — 120 — Max scan duration before treating file as suspicious and quarantining; §6.2, App.H RB-UPLOAD-SCAN.
-- uploads.scan.override_hashes[] — SYSTEM|ORG — [] — Temporary allowlist for known-clean artifacts while rules are tuned (dual approval, time-boxed); App.H RB-UPLOAD-SCAN.
-- uploads.enabled — SYSTEM|ORG — true — Toggle to accept new uploads; disabled during major scanner outages; App.H RB-UPLOAD-SCAN.
-- api.idempotency.ttl_hours — SYSTEM — 24 — TTL for idempotency; §10.3.
-- api.rate_limits.web.rpm_per_org — SYSTEM|ORG — 600 (guardrail 10-2000; activation validator enforces range) — Org RPM; §10.5.
-- api.rate_limits.web.rpm_per_ip — SYSTEM|ORG — 300 (guardrail 10-2000) — IP RPM; §10.5.
-- portal.download.rate_limits.user_rpm — ORG — 60 (guardrail 10-2000) — Portal download/user; §10.5.
-- portal.download.rate_limits.org_rpm — ORG — 200 (guardrail 10-2000) — Portal download/org; §10.5.
-- security.org_switch.step_up_required — SYSTEM — true — Enforce step-up on privilege increase; §4.3.
-- security.disclosure.contact — SYSTEM — null — Security.txt contact; §14.9.
-- security.disclosure.encryption_key_url — SYSTEM — null — PGP key URL; §14.9.
-- security.pentest.cadence — SYSTEM — annual — Pentest schedule; §14.9.
-- security.mfa.webauthn_required_roles — ORG — \[\] — Roles requiring WebAuthn step-up (HIPAA mode); §2.2, §4.3.
-- security.session.device_bind.ip_prefix_len_v4 — ORG — 24 — IPv4 prefix length for device binding; §4.3 (soft/hard modes).
-- security.session.device_bind.ip_prefix_len_v6 — ORG — 48 — IPv6 prefix length for device binding; §4.3 (soft/hard modes).
-- security.session.device_bind.mode — ORG — "soft" — Device fingerprint reaction (`soft` or `hard`); §4.3.
-- udlock.max_session_hold_seconds — SYSTEM — 300 — Advisory lock hold time; App.H RB-LOCK-006.
-- udlock.heartbeat.interval_seconds — SYSTEM — 5 — Heartbeat period; App.H RB-LOCK-006.
-- compliance.erasure_mode — ORG — off — Hard-purge toggle for DSAR mode; §14.2.1.
-- compliance.subject_hkdf_salt — SYSTEM — managed secret — HKDF salt for DSAR subject hashing; §14.2.1.
-- privacy.legal.matrix_version — SYSTEM — semver — Data residency/legal matrix version; App.C.
-- privacy.hipaa.enabled — ORG — false — HIPAA override mode toggle; §2.2, §14.2, App.C.
-- privacy.hipaa.bundle_version — SYSTEM — semver — HIPAA policy bundle version pin; §2.2, App.C.
-- privacy.hipaa.phi_detection.strict_mode — ORG|CASE — true — Enforce layered PHI detection (waiver required to relax); §2.2.
-- privacy.hipaa.phi_detection.rescan_hours — ORG — 24 — Interval for scheduled PHI re-scan jobs; §2.2.
-- i18n.supported_locales\[\] — ORG — \[\] — Supported locales (BCP-47 codes) surfaced in UI toggles; must include at least one locale; §11.3.
-- identity.org.primary_idp — ORG — keycloak — Primary IdP assignment (`keycloak` or `external:<id>`); §4.1.
-- storage.bucket_versioning_required — SYSTEM — true — Bucket versioning must be enabled; §5.3, §12.1.
-- storage.remote_hash.enabled — ORG|CASE — false — Record remote hashes for batch inputs; §5.3.
-- storage.remote_hash.max_mb — ORG|CASE — 50 — Max remote bytes to hash; §5.3.
-- settings.activation.require_dual_approval — SYSTEM — true — Dual approval for unsafe changes; §9.3.
-- logging.redaction.enabled — SYSTEM — true — Redact PII in logs; §12.1.
-- logging.access.roles\[\] — SYSTEM — \[\] — Role mapping for log query privileges (`observability.reader|engineer|auditor`); §12.1.2.
-- logging.cost.daily_budget_mb_per_service — SYSTEM|ORG — 500 — Daily log volume budget per service; §12.1.6.
-- logging.cost.alert_threshold_pct — SYSTEM|ORG — 80 — Alert threshold as % of daily log budget; §12.1.6.
-- logging.level.default — SYSTEM — "INFO" — Default production log level; §12.1.6.
-- logging.level.overrides\[\] — ORG — \[\] — Per-service log level overrides; §12.1.6.
-- portal.logging.enabled — ORG — true — Enable client telemetry capture; §12.1.5.
-- evidence_store.redacted_excerpts.enabled — ORG — true — Allow storage of prompt/response excerpts; HIPAA enable guard forces false and triggers purge; §2.2, §8.2.
-- logging.immutable_sink.enabled — SYSTEM — true (prod) — Mirror structured logs to immutable storage alongside the audit sink; validators block `false` in production and mark overrides unsafe (§9.11, §12.1).
-- llm.finops.guard.threshold_pct — SYSTEM|ORG — 10 — MoM regression ceiling for deploy gate; §8.7, §13.5.
-- llm.finops.guard.trailing7d_pct — SYSTEM|ORG — 25 — Trailing 7-day burn ceiling (% of monthly cap) for deploy gate; §8.7, §13.5.
-- llm.finops.override_until — SYSTEM — null — Optional timestamp (max +72h) to temporarily relax FinOps guard (dual approval required); §8.7.
-
-### E.2 Traceability map
-
-- Agents → analyze.*, compose.*, llm.\* (Sections §6, §8)
-- Guardian → guardian.* (Sections §7; configuration and operational thresholds reference `docs/guardian-service.md` §5 & Appendix B)
-- Signer → sign.* (Sections §7)
-- Storage & integrity → storage.\* (Sections §5, §12)
-- Portal/Frontend → portal.*, i18n.*, security.\* (Sections §11)
-- APIs → api.\*, rate limits, CORS (Sections §10)
-- Operations → udlock.\*, logging.\*, privacy.legal.\*, security.pentest.\* (Sections §12, §14, App.H)
-
-### E.3 Linting (binding)
-
-**Breadcrumbs:** Implementation `scripts/docs/lint_docs.py::main`, Tests `tests/docs/test_lint_rules.py::test_binding_scaffold_required`, Observability CI job “docs-lint” with metric `docs_template_missing_total`.
-
-- CI must flag settings keys referenced in this document that are missing in service repositories. The `settings:lint-keys` pipeline step runs on every PR and fails the build when discrepancies are detected.
-- Script pattern: load Appendix E lists, scan OpenAPI/spec/config code for usage; fail when unmapped keys found.
-- Vocabulary & state names: enforce American spellings (`ARTIFACT`, `CANCELED`, 'JUDGMENT'), and validate Guardian outcomes stay within `{PASS, WARN, BLOCK, WAIVED}` across events/UI.
-- Regions/Residency → regions.allowlist.\*, privacy.\* (Sections §3.8, App.C)
-- APIs/Rate limits → api.\*, portal.download.\* (Sections §10)
-- FinOps → llm.finops.\* (Sections §8.3, §12.6, §13.4)
-- Security/Compliance → security.\*, privacy.\*, logging.redaction.\* (Sections §4, §12, §14.9)
-- Ops/Locks → udlock.\* (App.H)
-
-### E.3 Audit checklist (activation)
-
-- Include justification, reviewers, validation results (`unsafe_reasons[]`), impacted scopes, and rollout timeline. Ensure lints pass (residency, safety, cost) and link to decision log (§15.3).
-
-### E.4 Change log
-
-- Maintain a rolling history of key modifications with references to PRs, decision log entries, and rollout notes.
+See [`docs/tdd-settings.md Appendix A`](tdd-settings.md#appendix-a--settings-key-map--traceability-index) for the complete key catalog, traceability matrix, and telemetry obligations.
 
 ---
 
@@ -4584,440 +4246,17 @@ Refer to §10.5, §10.6, §11.2.2, and §11.5 for narrative requirements tied to
 
 ---
 
-## Appendix H — Ops runbooks & health check playbooks
-
-*Purpose: Collect operational runbooks referenced from alerts and dashboards; enable fast, consistent remediation.*
-
-### H.1 Runbook index
-
-*Purpose: Point responders to the correct runbook for a given alert or failure.*
-
-- RB-QUEUE-002 Backlog saturation & KEDA tuning
-- RB-JOB-WATCHDOG Job stall watchdog
-- RB-UPLOAD-SCAN Upload malware scan failures
-- RB-LLM-003 Provider degradation / circuit breaker
-- RB-AUDIT-004 Audit seal failure
-- RB-PORTAL-005 Download anomaly & link revoke
-- RB-LOCK-006 Advisory-lock stale detection & remediation
-- RB-LOG-007 Logging pipeline ingestion health
-- RB-RES-ENDPOINT Residency endpoint drift remediation
-- RB-RES-BLOCK Residency waiver / policy block handling
-- RB-GOV-008 Settings governance toggle / rollback
-- Guardian runbooks (RB-GUARD-001, RB-GUARD-QUAR, RB-GUARD-QUEUE) are maintained in Appendix B of `docs/guardian-service.md` (binding).
-
-### H.2 Standard runbook template
-
-*Purpose: Provide the common structure every operational runbook must follow.*
-
-- Purpose: one sentence describing the operational objective.
-- Signals: metrics/logs/traces that trigger or inform the runbook.
-- Triage (5-minute checklist): quick steps to confirm scope, blast radius, and holder liveness.
-- Decision tree: conditional actions based on environment and risk (prod vs staging), including guardrails.
-- Post-remediation: verification steps to ensure system health and to capture evidence.
-- Preventive actions: changes that reduce recurrence (tuning, automation, code fixes).
-- Field snippets: vetted commands and SQL queries with placeholders.
-
-### H.3 RB-LOG-007 — Logging pipeline ingestion health (normative)
-
-*Purpose: Keep centralized logging ingest within SLOs and prevent silent data loss.*
-
-Linked alert: `alert_logging_ingest_lag` (Grafana: Observability → Logging pipeline dashboard).
-
-Signals
-
-- `logging_ingest_lag_seconds` > 30 for 3 consecutive scrapes
-- `logging_drop_rate_pct` > 0.1 or `logging_spool_utilization_pct` > 80
-- Fluent Bit / otel-collector health checks failing or queue file growth beyond 12h buffer
-
-Triage — 5-minute checklist
-
-1. Confirm scope & blast radius
-    - Grafana dashboard filtered by environment and service; note affected indices.
-    - Check Kafka topic lag (`kafka_consumergroup_lag`); capture screenshot for incident log.
-2. Collector health
-    - `kubectl exec <collector> -- otelcol status` to verify pipeline state.
-    - Inspect Fluent Bit metrics endpoint (`/api/v1/metrics/prometheus`) for retries/back-pressure.
-3. Downstream availability
-    - Verify Elasticsearch cluster green state and disk watermark.
-
-Decision
-
-- If collectors overloaded: scale `otel-collector` deployment and flush queue with `kubectl rollout restart`.
-- If downstream unavailable (Elasticsearch/Kafka), switch collectors to file-buffer mode using `kubectl patch configmap logging-collector --type merge ...` (template in runbook repo), notify on-call DB/SRE.
-- If drop rate persists after scaling, pause non-critical DEBUG logs via `logging.level.overrides` until backlog clears.
-
-Post-remediation
-
-- Ensure `logging_ingest_lag_seconds` \< 15 and `logging_drop_rate_pct` = 0 for two consecutive collection intervals.
-- Produce incident summary with root cause, impacted indices, and recovery actions; attach to decision log (§15.3).
-- File follow-up tasks (capacity, query optimization) if backlog exceeded 50% of quota.
-
-Preventive actions
-
-- Validate new services against `log_schema@1` (`spec/schemas/log_record.schema.json`) before deploying.
-- Review log verbosity budgets quarterly and adjust `logging.cost.daily_budget_mb_per_service`.
-- Exercise disaster recovery by simulating downstream outage each quarter; capture evidence under App.H.
-
-Field runbook snippets
-
-- Collector status: `kubectl -n observability logs deploy/otel-collector --tail=200`
-- Kafka lag: `kafka-consumer-groups.sh --bootstrap-server $BROKER --describe --group logs-indexer`
-- Force rollover when index nearly full: `POST /logs-*/_rollover` (requires observability.engineer role)
-
-### H.4 RB-LOCK-006 — Advisory-lock stale detection & remediation (normative)
-
-*Purpose: Detect and remediate session-scoped advisory locks that exceed the configured hold time without breaking correctness.*
-
-Signals (any triggers page on-call):
-
-- Metric `udlock_watchdog_stale_total{action=alert}` increased in last 5m
-- Lock age P95 > `udlock.max_session_hold_seconds`
-- Repeated stale detections for the same `(scope, k)` within 15m
-
-Triage — 5-minute checklist
-
-1. Confirm scope & blast radius
-   - Grafana → Advisory Locks dashboard: filter by `scope` and `node_id`.
-   - Note affected `case_id`/`job_id` if `k` is of the form `caseId/jobkind` or `org/case/type`.
-2. Verify holder liveness
-   - Query:
-
-     ```sql
-     SELECT r.scope, r.k, r.node_id, r.backend_pid, now()-r.acquired_at AS age, a.state, a.query
-       FROM udlock.registry r JOIN pg_stat_activity a ON a.pid=r.backend_pid
-      WHERE now()-r.acquired_at > make_interval(secs => :threshold_seconds)
-      ORDER BY age DESC;
-     ```
-
-   - If `a.state IN ('idle', 'idle in transaction')` or heartbeat > 2× interval → stale.
-3. Check job/case impact (if `scope='jobkind'`)
-   - `SELECT id, kind, status, started_at, finished_at FROM job WHERE case_id=:case LIMIT 1;`
-   - If job still making progress (recent checkpoints) → prefer notify over terminate.
-
-Decision tree
-
-- Prod default (`udlock.watchdog.kill_stale=false`)
-  - Action: Alert only. Post a remediation note in incident channel; ask owner pod to release lock (rolling restart of that worker Deployment if needed).
-  - Evidence: attach top 5 rows from the query above and last job checkpoint id.
-- Staging / controlled prod exception (approved by on-call SRE + service owner):
-  - Terminate session: `SELECT pg_terminate_backend(:backend_pid);`
-  - Verify release: lock disappears from `pg_locks`; `udlock.registry` row GC’d within 60s or by `SELECT udlock.gc_registry();`
-  - Resume: If a job was blocked, it resumes on next retry loop.
-
-Post-remediation
-
-- Confirm metrics return to baseline (`udlock_locks_held`, `udlock_watchdog_stale_total` plateau).
-- Open a defect if the same `(scope, k)` reappears within 24h; include `node_id`, last 200 lines of the worker pod logs, and query plan of the blocking transaction (if any).
-
-Preventive actions
-
-- Ensure all session locks are taken via `udlock.try_lock_i(...)` (instrumented) and held \< `udlock.max_session_hold_seconds`.
-- Tune `udlock.heartbeat.interval_seconds` to 5-10s; avoid noisy heartbeats (\<3s) in production.
-- Add a short “finally” clause in workers to call `udlock.unlock(...)` on early abort paths.
-
-Field runbook snippets
-
-- Identify pod from `node_id`: `kubectl get pod -A | grep <node_id>`
-- Bounce a single worker pod: `kubectl delete pod <pod> -n <ns> --grace-period=5`
-- Force GC registry (safe): `SELECT udlock.gc_registry();`
-
-### H.5 RB-RES-ENDPOINT — Residency endpoint drift remediation (normative)
-
-*Purpose: Restore compliant residency posture when outbound endpoints drift or new hosts appear unexpectedly.*
-
-Linked alert: `alert_residency_endpoint_drift` (Grafana: Residency & Endpoint Posture dashboard).
-
-Signals
-
-- Metrics: `residency_endpoint_drift_total{state="open"}`, `residency_endpoint_scan_duration_seconds` failures, `residency_endpoint_blocks_total`.
-- Audit/stringers: recent `RESIDENCY_ENDPOINT_NEW`, `RESIDENCY_ENDPOINT_DRIFT`, or `RESIDENCY_POLICY_BLOCK` entries; PagerDuty incidents tagged `RESIDENCY_DRIFT`.
-
-Triage — 5-minute checklist
-
-1. Confirm current findings
-   - Query `residency_endpoint_findings` for `state='open'` sorted by `detected_at`.
-   - Inspect attached evidence from `ops/residency/endpoint_scan.jsonl` (last entry) and verify which service attempted egress.
-2. Verify enforcement is blocking
-   - Check Istio AuthorizationPolicy revisions (`istioctl proxy-config endpoints <pod>`); ensure offending host absent.
-   - Confirm Guardian logged blocks as expected when jobs attempted the endpoint.
-3. Determine scope
-   - Identify affected provider/org(s); review Settings activation diff (`settings_activation` table) linked in alert payload.
-
-Decision
-
-- **Provider expansion/new host**: engage Reference Manager on-call to ingest metadata; once catalogue updated, re-run `residency_endpoint_scan --host <fqdn>` and `settings activate` bundle. Verify SAN + GeoIP match before clearing finding.
-- **Misconfiguration or DNS drift**: flush DNS caches (`scripts/residency/flush_dns_cache.py --host <fqdn>`), validate upstream provider records, and roll Istio egress gateway if stale endpoints persist.
-- **Waiver path**: if business-critical and no in-region endpoint exists, escalate for dual approval via App.O; set temporary waiver in Settings and confirm Guardian stamps `RESIDENCY_WAIVER_USED` before unblocking.
-- **False positive/no traffic**: annotate finding, keep block in place, and downgrade alert severity after evidence review.
-
-Post-remediation
-
-- Ensure `residency_endpoint_findings.state` transitions to `mitigated` within two scans; leave comment referencing catalogue commit or Settings activation.
-- Close PagerDuty incident with root cause and corrective actions; attach evidence to decision log (§15.3) and App.O waiver entry if used.
-- File preventive follow-ups (provider attestation request, automation gap) within 24h.
-
-### H.6 RB-RES-BLOCK — Residency block remediation (normative)
-
-*Purpose: Enforce residency allowlists while providing a waiver path when approved.*
-
-Linked alert: `alert_residency_policy_block` (Grafana: Residency dashboard).
-
-Signals
-
-- Errors `RESIDENCY_POLICY_BLOCK` in logs; settings validation failures; egress policy denies to non-allowlisted endpoints.
-
-Triage
-
-1. Confirm org allowlists (`regions.allowlist.*`).
-2. Check provider endpoints; DNS drift; mesh egress policies.
-
-Decision
-
-- If legitimate cross-region need: require dual approval (Security + Architecture), set `cross_region_waiver=true`, re-run; Guardian stamps waiver in manifest referencing the approved region pair.
-- Else: adjust settings to allowed regions; update provider config.
-
-Post-remediation
-
-- Verify blocks drop to zero; audit waiver usage in ops.
-
-### H.7 RB-ETAG — If-Match/ETag failures (normative)
-
-*Purpose: Ensure clients download the exact approved bytes and handle invalidations correctly.*
-
-Linked alert: `alert_portal_412_spike` (Grafana: Portal Security dashboard).
-
-Signals
-
-- 412 PRECONDITION_FAILED spikes on portal downloads.
-
-Triage
-
-1. Confirm approval swap or rejection; check portal invalidation events.
-2. Verify ETag equals artifact `content_sha256`.
-
-Decision
-
-- Instruct clients to re-fetch metadata and retry with fresh ETag.
-- If portal link stale: regenerate signed URL; ensure portal displays denial banner for revoked artifacts.
-
-Post-remediation
-
-- Monitor 412 rate returning to baseline; verify portal behavior in staging.
-
-### H.8 RB-GOV-008 — Settings governance toggle / rollback (normative)
-
-*Purpose: Safely activate and, if necessary, revert high-sensitivity settings such as `settings.can_open_source`, residency waivers, or cross-organization pilots.*
-
-Linked trigger: Settings activation flagged `unsafe` for governance toggles, change ticket type `GOV-TOGGLE`, or alert `settings_governance_override_total`.
-
-Approvers & prerequisites
-
-- Required approvals: Architecture Steering Committee + Security Review Board (aligns with TDD front matter).
-- Preconditions: Approved ADR (if applicable), drafted customer/internal comms, staging dry-run using identical bundle hash, rollback window defined.
-- Coordination: Product owner confirms rollout audience; Support prepares FAQ.
-
-Execution steps
-
-1. Announce maintenance/change window in `#ops-announcements` with activation + rollback timestamps.
-2. Activate via Settings CLI/UI, capturing activation ID and justification referencing change ticket.
-3. Monitor propagation: verify Redis/cache invalidation, run `settings.snapshot --org <id>` sanity check, and execute targeted smoke tests (API, portal, worker flows) tied to the toggle.
-4. Update change ticket with activation ID, verification evidence, and next review checkpoint.
-
-Rollback
-
-- If monitors fail or stakeholders report regression inside the rollback window, reapply prior bundle (`settings rollback --bundle <previous_id>`), confirm `settings.changed` event emitted, and rerun smoke tests.
-- Communicate rollback to stakeholders and note reason/actions in change ticket and decision log (§15.3).
-
-Evidence & artifacts
-
-- Store activation/rollback JSON under `ops/settings/<date>/` (`ACTIVATION_<id>.json`, `ROLLBACK_<id>.json`).
-- Append decision log entry, citing ADR, activation ID, and outcome.
-- Runbook reference material: `docs/runbooks/settings/governance_toggle.md`, communication template `docs/runbooks/settings/templates/governance_toggle_announce.md`.
-
-### H.9 SQL helper — Two-key advisory lock (normative)
-
-*Purpose: Provide a stable 64-bit advisory lock key derived from a scope and key, minimizing collisions and supporting both session- and xact-scoped locks.*
-
-Helper (PostgreSQL)
-
-```sql
--- Two-part hashing to 64-bit key space
-CREATE OR REPLACE FUNCTION udlock.key64(scope text, k text)
-RETURNS bigint
-LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
-  SELECT ((hashtextextended(scope, 0)::bigint << 32)
-       #  (hashtextextended(k,     0)::bigint       ))::bigint;
-$$;
-
--- Session-scoped lock wrappers (instrumented variants `*_i` record registry rows)
-CREATE OR REPLACE FUNCTION udlock.lock(scope text, k text) RETURNS void AS $$
-  SELECT pg_advisory_lock(udlock.key64(scope, k));
-$$ LANGUAGE sql VOLATILE;
-
-CREATE OR REPLACE FUNCTION udlock.try_lock(scope text, k text) RETURNS boolean AS $$
-  SELECT pg_try_advisory_lock(udlock.key64(scope, k));
-$$ LANGUAGE sql VOLATILE;
-
-CREATE OR REPLACE FUNCTION udlock.unlock(scope text, k text) RETURNS void AS $$
-  SELECT pg_advisory_unlock(udlock.key64(scope, k));
-$$ LANGUAGE sql VOLATILE;
-
--- Transaction-scoped lock
-CREATE OR REPLACE FUNCTION udlock.xact_lock(scope text, k text) RETURNS void AS $$
-  SELECT pg_advisory_xact_lock(udlock.key64(scope, k));
-$$ LANGUAGE sql VOLATILE;
-```
-
-Usage
-
-- Exclusive approval swap: `udlock.xact_lock('case-approval', CONCAT(:org, '/', :case, '/', :type))` (see §5.4.1).
-- Overlapping job guard: `udlock.try_lock('jobkind', CONCAT(:case, '/', :kind))` (see §10.3.1).
-- Python helper (psycopg3):
-
-  ```python
-  from contextlib import contextmanager
-
-  @contextmanager
-  def advisory_lock(cur, org_id: str, scope_key: str) -> None:
-      cur.execute(
-          """
-          SELECT pg_advisory_xact_lock(
-            (("x" || replace(%s, '-', ''))::bit(128)::bigint >> 64),
-            hashtextextended(%s, 0)
-          );
-          """,
-          [org_id, scope_key],
-      )
-      try:
-          yield
-      finally:
-          cur.execute(
-              """
-              SELECT pg_advisory_unlock(
-                (("x" || replace(%s, '-', ''))::bit(128)::bigint >> 64),
-                hashtextextended(%s, 0)
-              );
-              """,
-              [org_id, scope_key],
-          )
-  ```
-
-- Canonical scopes: `artifact:{artifact_id}`, `case-type:{case_id}/{type}`, `jobkind:{case_id}/{kind}`, `idempotency:{scope}:{key}`, `settings:activate:{scope}/{case_id}`. Align helpers under `udlock.*` to ensure watchdog visibility.
-
-### H.10 RB-JOB-WATCHDOG — Job stall watchdog (normative)
-
-*Purpose: Detect and remediate jobs that stop progressing despite remaining RUNNING.*
-
-Linked alerts: `alert_job_watchdog_timeout` (Grafana: Queues & KEDA dashboard) and `alert_job_watchdog_warning` (warning tier).
-
-Signals
-
-- `job_watchdog_warning_total` increments for a job.
-- `job_watchdog_timeout_total` increments (hard failure).
-- Log sample contains `JOB_WATCHDOG_TIMEOUT` audit event or worker error `WATCHDOG_NO_PROGRESS`.
-- Support tickets referencing stuck progress bars for specific jobs/cases.
-
-Triage — 5-minute checklist
-
-1. Identify impacted job(s): query
-
-    ```sql
-    SELECT j.id,
-            j.case_id,
-            j.kind,
-            j.status,
-            j.progress_pct,
-            now() - heartbeat.last_heartbeat_at AS heartbeat_age
-        FROM job j
-        JOIN job_progress_heartbeat heartbeat ON heartbeat.job_id = j.id
-      WHERE j.status = 'RUNNING'
-        AND heartbeat.last_heartbeat_at < now() - make_interval(mins => current_setting('jobs.watchdog.no_progress_minutes')::int)
-        ORDER BY heartbeat.last_heartbeat_at;
-    ```
-
-2. Inspect worker logs (`kubectl -n platform logs deploy/platform-worker -c worker --since=10m`) for exceptions, provider errors, or stalled external calls.
-3. Verify dependent services: for transcription, check Azure Batch job status; for Compose/Analyze, review LangGraph lane envelopes and Guardian readiness.
-
-Decision
-
-- **Transient dependency issue:** pause/resume the job to trigger fresh attempt; monitor heartbeat.
-- **Provider/API failure:** cancel the job (`POST /api/v1/jobs/{id}/cancel`) and notify product; capture provider ticket ID; follow RB-LLM-003 or relevant provider runbook.
-- **Worker crash:** restart impacted worker deployment, ensure queue drains, and requeue the job via manual retry.
-- **Data issue (bad input/exhibit):** fail the job with actionable message explaining remediation; ensure audit trail references offending artifact.
-
-Post-remediation
-
-- Confirm heartbeats resume and `job_status` transitions to `RUNNING` (with progress) or `FAILED/CANCELED` with explicit reason.
-- Update incident/decision log with root cause and resolution; attach logs or provider responses.
-- If watchdog thresholds proved too aggressive/lenient, propose tuned values for `jobs.watchdog.no_progress_minutes` / `jobs.watchdog.timeout_minutes` via Settings activation.
-
-Preventive actions
-
-- Add synthetic coverage for new job kinds before GA.
-- Instrument provider adapters with finer-grained heartbeats when adding new long-running stages.
-- Review worker resource limits; scale concurrency when CPU saturation or queue backlog contributed to stalls.
-
-Field runbook snippets
-
-- Check heartbeat age: `python scripts/jobs/print_watchdog.py --case <case_id>`.
-- Force retry: `python manage.py jobs_retry --job-id <job_id>`.
-- Pause/resume: `curl -X POST -H 'Authorization: Bearer ...' /api/v1/jobs/<id>/pause` then `/resume` once dependencies healthy.
-
-### H.11 RB-UPLOAD-SCAN — Upload malware scan failures (normative)
-
-*Purpose: Keep malicious or malformed uploads out of the pipeline and restore scanning capacity quickly when the pipeline degrades.*
-
-Linked alerts: `alert_upload_scan_failure_rate`, `alert_upload_scan_lag`, and security ticket automation when `upload_scan_infected_total` spikes.
-
-Signals
-
-- `upload_scan_error_total` increases or `upload_scan_duration_seconds` P95 exceeds `uploads.scan.timeout_seconds`.
-- Queue backlog on `upload-scan` workers (`celery_queue_depth{queue="upload-scan"}`) grows faster than drain rate.
-- Audit events `MALWARE_DETECTED`, `UPLOAD_SCAN_TIMEOUT`, or `UPLOAD_SCAN_UNSCANNED` appear for the same case/org.
-- Support tickets referencing stuck uploads (`status='SCANNING'`) or users unable to proceed after repeated antivirus hits.
-
-Triage — 5-minute checklist
-
-1. Validate scanner health: `kubectl -n platform logs deploy/upload-scan --since=5m` for ClamAV errors, signature update failures, or YARA compilation issues. Confirm pods are Ready.
-2. Check signature freshness: `kubectl -n platform exec deploy/upload-scan -- freshclam --version` (expect timestamp < 4h). Verify YARA bundle version matches `uploads.scan.yara_ruleset_version`.
-3. Inspect backlog:
-
-    ```sql
-    SELECT id, org_id, case_id, status, submitted_at
-        FROM upload_session
-      WHERE status = 'SCANNING'
-      ORDER BY submitted_at
-      LIMIT 50;
-    ```
-
-4. Review infected detections: confirm whether positives correlate to a specific user/org or file type; cross-reference audit events for escalation history.
-
-Decision
-
-- **Scanner unhealthy (errors/timeouts):** cordon uploads by setting `uploads.enabled=false` (org or system scope) if backlog > alert threshold, restart scanner deployment, and rerun synthetic upload test. If ClamAV definitions are stale, force `freshclam`, re-run signature sync, and document cause.
-- **Malware outbreak (true positives):** keep uploads blocked for affected org, notify Security, capture indicators (hash, filename) in incident ticket, and work with the customer on clean replacements. Ensure Guardian waivers are *not* used to bypass scans.
-- **False positives / rule regression:** escalate to Security to adjust YARA signatures; apply temporary allowlist via `uploads.scan.override_hashes` (time-boxed, dual approval) and note in App.O waiver ledger.
-- **Performance bottleneck:** scale `upload-scan` workers, validate resource limits (CPU/Mem), and review queue metrics. Consider adjusting `uploads.scan.timeout_seconds` after root cause understood (e.g., legitimate large PDFs).
-
-Post-remediation
-
-- Confirm queue drains (`celery_queue_depth{queue="upload-scan"} → 0`) and `upload_session` rows progress to `FINALIZED` within expected SLA.
-- Ensure metrics `upload_scan_error_total` and `upload_scan_lag_seconds` return to baseline for consecutive scrapes.
-- Document findings in incident/decision log with malware hashes, remediation actions, and follow-up tasks (ruleset update, customer comms).
-
-Preventive actions
-
-- Schedule weekly synthetic uploads (clean + EICAR) to verify detection paths and alarms.
-- Rotate YARA/ClamAV updates through staging before production; maintain changelog of rule deltas.
-- Review throughput quarterly; add GPU-accelerated scanners or sandboxed detonation for high-risk orgs if volume grows.
-
-Field runbook snippets
-
-- Force signature update: `kubectl -n platform exec deploy/upload-scan -- freshclam`.
-- Manual rescan: `python manage.py uploads_rescan --session-id <uuid>`.
-- Temporarily disable uploads (system scope): `python manage.py settings activate --key uploads.enabled --value false`.
-
----
+## Appendix H — Runbook catalog references
+
+*Purpose: Point platform teams to the maintained runbook library without duplicating procedures in this document.*\
+*Contract: Operational playbooks reside under `docs/runbooks/` and service-specific specifications; this appendix links to those sources.*\
+*State: Runbook owners track RB identifiers, alert bindings, and evidence requirements in the referenced documents.*\
+*Failure modes & retries: `scripts/docs/lint_docs.py` flags missing runbook links; update the runbook catalog when adding or retiring alerts.*\
+*Observability: Docs lint metric `docs_runbook_missing_total` and OnCall drill analytics monitor coverage.*
+
+- **Platform runbooks:** `docs/runbooks/index.md`
+- **Settings Registry runbooks:** [`docs/tdd-settings.md Appendix D`](tdd-settings.md#appendix-d--runbooks--drills)
+- **Guardian runbooks:** [`docs/guardian-service.md Appendix B`](guardian-service.md#appendix-b)
 
 ## Appendix I — Glossary & taxonomy
 
@@ -5413,7 +4652,7 @@ Quick crosswalk (illustrative)
 | ----------------- | ------------------ |
 | SOC2 CC1 / ISO 5  | §2, §15.3, App.S   |
 | SOC2 CC6 / ISO 9  | §4, App.J          |
-| SOC2 CC7 / ISO 12 | §12, §14.5, App.H  |
+| SOC2 CC7 / ISO 12 | §12, §14.5, Appendix H  |
 | SOC2 CC8 / ISO 14 | §3.2, §12.5, App.L |
 | SOC2 PI / ISO 18  | §2.2, §14.2, App.N |
 | Vendor CUECs      | §3.7, §8, App.Q    |
@@ -5436,15 +4675,15 @@ Key rotation calendar (rolling 90 days)
 | Control ID / Policy        | Scope                      | Primary coverage (Section/App)                   | Evidence artifact(s)                                                                          | Status |
 | -------------------------- | -------------------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------- | ------ |
 | SOC2 CC1.1 / ISO 5.1       | Governance & principles    | §2 Core principles; §15.3 Risks                  | App.K map, App.O waivers ledger, decision log exports                                         | Pass   |
-| SOC2 CC6.x / ISO 9         | Access control             | §4 Identity & RLS; App.J SQL policies            | `case_secure`/`artifact_secure` views, Settings activation audit trail (App.E)                | Pass   |
-| SOC2 CC7.x / ISO 12        | Operations & change        | §12 Observability; §14.5 Change mgmt             | App.H runbooks, Guardian/Signer synthetics, deployment playbooks                              | Pass   |
+| SOC2 CC6.x / ISO 9         | Access control             | §4 Identity & RLS; App.J SQL policies            | `case_secure`/`artifact_secure` views, Settings activation audit trail ([`docs/tdd-settings.md Appendix A`](tdd-settings.md#appendix-a--settings-key-map--traceability-index))                | Pass   |
+| SOC2 CC7.x / ISO 12        | Operations & change        | §12 Observability; §14.5 Change mgmt             | `docs/runbooks/index.md` runbooks, Guardian/Signer synthetics, deployment playbooks                              | Pass   |
 | SOC2 CC8.x / ISO 14        | Availability & resilience  | §3.2 topology; §12.5 capacity                    | App.L benchmarks, autoscaling dashboards, synthetic monitor reports                           | Pass   |
 | SOC2 PI1 / ISO 18          | Privacy & retention        | §2.2 regulatory constraints; §14.2 retention     | App.N privacy traceability matrix, DPIA/ROPA artifacts                                        | Pass   |
 | SOC2 CUEC / Vendor reviews | Third-party oversight      | §3.7 external integrations; §8 LLM governance    | Provider registry health logs, evidence store envelopes, vendor reassessment checklist        | Pass   |
 | Internal POL-SC-01         | Security incident response | §12.3 incident workflows; §14.9 disclosure       | Incident register exports, security.txt contact, on-call rotation docs                        | Pass   |
 | Internal POL-DS-02         | Data residency             | §3.8 region enforcement; §7.1 Guardian judgments | Egress AuthorizationPolicy manifests, App.O waiver entries, ops logs `RESIDENCY_POLICY_BLOCK` | Pass   |
 | Internal POL-AU-01         | Audit & approvals          | §10 API contracts; §11 approvals UX              | Guardian history, audit_event partitions, reviewer swap algorithm logs                        | Pass   |
-| Internal POL-BCP-03        | Business continuity        | §12.10 BCP drills; App.H runbooks                | `BCP_DRILL_REPORT` artifacts, incident templates                                              | Pass   |
+| Internal POL-BCP-03        | Business continuity        | §12.10 BCP drills; `docs/runbooks/index.md` runbooks                | `BCP_DRILL_REPORT` artifacts, incident templates                                              | Pass   |
 
 Controls mapped here drive quarterly evidence reviews. Each entry references runbooks, dashboards, or artifacts cited in the final column; missing evidence must be captured before release sign-off.
 
@@ -5479,7 +4718,7 @@ Benchmarks run at least quarterly and after significant infra upgrades using the
 | Redis                    | 7.2         | 7.2        | Patch quarterly; persistence `aof` for broker, none for cache | Managed Azure Cache for Redis Enterprise; last review Aug 2025; next review Feb 2026                        |
 | Python runtime           | 3.12.x      | 3.12.x     | Security releases within 30 days                              | Pinned in `Dockerfile` & dependency locks; min supported 3.11 for tooling; deprecation notice 90 days prior |
 | Node.js (build)          | 20.x LTS    | 20.x LTS   | Upgrade within 45 days of LTS patch                           | Build-time only; no runtime exposure; Node 18 blocked since 2025-07                                         |
-| Terraform                | 1.8.x       | 1.8.x      | Upgrade quarterly with module pin review                      | State stored in Terraform Cloud; nightly drift detection; drift incidents logged in App.H                   |
+| Terraform                | 1.8.x       | 1.8.x      | Upgrade quarterly with module pin review                      | State stored in Terraform Cloud; nightly drift detection; drift incidents logged in Appendix H                   |
 | Nginx ingress controller | 1.11.x      | 1.10.x     | Patch monthly; major with Kubernetes cadence                  | TLS 1.3 preferred; OCSP stapling enabled; Mar 2025 upgrade closed; next upgrade window Jan 2026             |
 | Base OS images           | Debian 12   | Debian 12  | Rebuild monthly or on critical CVE                            | Images signed; SBOM generated per build; CIS benchmark level 1 enforced                                     |
 
@@ -5497,9 +4736,9 @@ Upgrade windows recorded in the change calendar; App.M supports audit inquiries 
 | DPIA / RoPA maintenance (GDPR Art.35/30)   | `privacy.dpia.*`, `privacy.ropa.*`                                                                          | Privacy activation workflow (§9.3)                         | DPIA/ROPA artifacts, audit seals, App.K mapping                                 |
 | HIPAA override mode (HIPAA section 164.312)       | `privacy.hipaa.enabled`, `security.mfa.webauthn_required_roles`, `evidence_store.redacted_excerpts.enabled` | Dual approval (§9.11), Guardian/portal guards              | HIPAA manifest entries, audit events, QA logs                                   |
 | Legal hold & retention (GDPR Art.5, CPPA)  | `privacy.legal.matrix_version`, `compliance.erasure_mode`                                                   | Destruction job approval (§14.2), DSAR scheduler (§14.2.1) | `DESTRUCTION_CERT`, `ERASURE_JOURNAL`, secure views showing masked reasons      |
-| DSAR / erasure fulfillment (GDPR Art.17)   | `compliance.subject_hkdf_salt`, `compliance.erasure_mode`                                                   | DSAR operations runbook (§14.2.1)                          | Ops logs, audit events `DSAR_ERASURE_EXECUTED`, App.H drills                    |
+| DSAR / erasure fulfillment (GDPR Art.17)   | `compliance.subject_hkdf_salt`, `compliance.erasure_mode`                                                   | DSAR operations runbook (§14.2.1)                          | Ops logs, audit events `DSAR_ERASURE_EXECUTED`, Appendix H drills                    |
 | Masking & field protection (SOC2 CC6.6)    | `field_mask_rule`, `security.field_encryption.*`                                                            | Secure views (§4.5) and encryption routines (§4.5)         | Masking helper tests, encryption key rotation records                           |
-| Client portal delivery (PIPEDA Safeguards) | `portal.download.rate_limits.*`, `compose.policy.forbidden_patterns[]`                                      | Guardian readiness + portal invalidation (§11.2.1)         | Portal invalidation SSE events, QA reports, App.H RB-ETAG output                |
+| Client portal delivery (PIPEDA Safeguards) | `portal.download.rate_limits.*`, `compose.policy.forbidden_patterns[]`                                      | Guardian readiness + portal invalidation (§11.2.1)         | Portal invalidation SSE events, QA reports, `docs/runbooks/index.md (RB-ETAG)` output                |
 
 Matrix reviewed quarterly with Privacy & Security; updates required whenever referenced settings or obligations change.
 
@@ -5637,15 +4876,15 @@ RACI reviewed every release train; updates recorded in decision log (§15.3) and
 | Requirement (section) | Tests / validation artifacts | Monitors / alerts | Runbook / response |
 | --------------- | --------------- | --------------- | --------------- |
 | Guardian judgments deterministic & parent-aware (§7.1) | `tests/guardian/test_concurrent_parent_swap.py::test_child_blocks_on_parent_swap`; Guardian synthetic `guardian_slo.yaml` job | `guardian_cleared_ratio`, `guardian_judgment_latency_seconds`, `guardian_parent_block_total` | Appendix B.1, Appendix B.2 |
-| API versioning & Sunset policy enforced (§10.0, §10.5) | `make lint-openapi` (`npx spectral lint ops/openapi/**/*.yaml`), Spectral `sunset-header` rule, ADR-0003 change review checklist | `api_sunset_header_missing_total`, `api_deprecation_notice_age_seconds` | App.H standard runbook template → API Sunset (`docs/runbooks/api/sunset.md`, draft) |
-| FinOps guardrails prevent runaway spend (§8.7, §12.9) | `scripts/finops/check_mom_guard.py`; `tests/udocket_core/finops/test_guard.py::test_regression_formula` | `finops_mom_regression_flag{org}`, `llm_cost_estimate_total` | App.H RB-LLM-003 |
-| Logging pipeline retains structured records (§12.1) | `tests/logging/test_redaction.py::test_forbidden_headers_masked`; `diagram:diff` for log schema | `logging_ingest_lag_seconds`, `logging_drop_rate_pct`, `logging_spool_utilization_pct` | App.H RB-LOG-007 |
-| Advisory locks stay healthy during approvals (§5.4) | `tests/platform/artifacts/test_approval_swap.py::test_concurrent_approvals_single_winner`; `tests/platform/db/test_rls_guard.py::test_rls_context_asserts_missing_gucs` | `udlock_watchdog_stale_total`, `udlock_lock_age_seconds_p95` | App.H RB-LOCK-006 |
-| Portal downloads honor ETag / If-Match (§10.6, App.H RB-ETAG) | `tests/e2e/test_artifact_range_download.py::test_range_and_conditional_gets` | `portal_412_precondition_total`, `alert_portal_412_spike` | App.H RB-ETAG |
-| Abuse-prevention detectors enforce throttles (§B.4, §6.13, §10.9) | `tests/security/test_abuse_checks.py::test_api_abuse_flagged`, `tests/security/test_portal_download_guard.py::test_anomaly_blocks`, shadow soak fixtures (`tests/platform/shadow/test_shadow_thresholds.py`) | `api_suspect_request_total`, `portal_download.anomaly_score`, `messaging_abuse_detected_total`, `abuse_shadow_threshold_expiring_total` | App.H RB-RES-BLOCK (residency), App.H RB-ETAG, App.H abuse triage SOP (`docs/runbooks/security/abuse_triage.md`) |
-| Masking profiles map to FORCE RLS policies (§4.4.1) | `tests/platform/db/test_mask_profiles.py::test_mask_profile_matches_policy`, `tests/platform/db/test_secure_view_usage.py::test_no_base_table_queries` | `rls_context_missing_total`, `mask_profile_mismatch_total` | App.H RB-GOV-008 (settings rollback), App.H RB-LOCK-006 |
-| LLM/vector residency guard prevents out-of-region fallback (§8.1.1) | `tests/udocket_core/llm/test_residency_guard.py::test_block_disallowed_region`, `tests/udocket_core/vector/test_vector_residency.py::test_allowed_regions_only`, synthetic `synthetics/llm_residency.yaml` | `llm_region_fallback_total`, `vector_region_fallback_total` | App.H RB-LLM-003, App.H RB-RES-BLOCK |
-| CSP nonce & HIPAA cache enforcement (§11.5, §10.6) | `tests/ui/test_csp_nonced.py::test_nonce_roundtrip`, synthetic `synthetics/csp_nonce_failure.yaml`, `synthetics/portal_hipaa_cache.yaml`, `tests/e2e/test_portal_policy_context.py::test_disclaimer_l10n` | `csp_nonce_mismatch_total`, `portal_cache_header_violation_total` | App.H RB-PORTAL-005, App.H security headers checklist |
+| API versioning & Sunset policy enforced (§10.0, §10.5) | `make lint-openapi` (`npx spectral lint ops/openapi/**/*.yaml`), Spectral `sunset-header` rule, ADR-0003 change review checklist | `api_sunset_header_missing_total`, `api_deprecation_notice_age_seconds` | `docs/runbooks/index.md` standard runbook template → API Sunset (`docs/runbooks/api/sunset.md`, draft) |
+| FinOps guardrails prevent runaway spend (§8.7, §12.9) | `scripts/finops/check_mom_guard.py`; `tests/udocket_core/finops/test_guard.py::test_regression_formula` | `finops_mom_regression_flag{org}`, `llm_cost_estimate_total` | [Runbook RB-LLM-003](runbooks.md#rb-llm-003) |
+| Logging pipeline retains structured records (§12.1) | `tests/logging/test_redaction.py::test_forbidden_headers_masked`; `diagram:diff` for log schema | `logging_ingest_lag_seconds`, `logging_drop_rate_pct`, `logging_spool_utilization_pct` | `docs/runbooks/index.md (RB-LOG-007)` |
+| Advisory locks stay healthy during approvals (§5.4) | `tests/platform/artifacts/test_approval_swap.py::test_concurrent_approvals_single_winner`; `tests/platform/db/test_rls_guard.py::test_rls_context_asserts_missing_gucs` | `udlock_watchdog_stale_total`, `udlock_lock_age_seconds_p95` | [Runbook RB-LOCK-006](runbooks.md#rb-lock-006) |
+| Portal downloads honor ETag / If-Match (§10.6, `docs/runbooks/index.md (RB-ETAG)`) | `tests/e2e/test_artifact_range_download.py::test_range_and_conditional_gets` | `portal_412_precondition_total`, `alert_portal_412_spike` | `docs/runbooks/index.md (RB-ETAG)` |
+| Abuse-prevention detectors enforce throttles (§B.4, §6.13, §10.9) | `tests/security/test_abuse_checks.py::test_api_abuse_flagged`, `tests/security/test_portal_download_guard.py::test_anomaly_blocks`, shadow soak fixtures (`tests/platform/shadow/test_shadow_thresholds.py`) | `api_suspect_request_total`, `portal_download.anomaly_score`, `messaging_abuse_detected_total`, `abuse_shadow_threshold_expiring_total` | [Runbook RB-RES-BLOCK](runbooks.md#rb-res-block) (residency), `docs/runbooks/index.md (RB-ETAG)`, `docs/runbooks/security/abuse_triage.md` |
+| Masking profiles map to FORCE RLS policies (§4.4.1) | `tests/platform/db/test_mask_profiles.py::test_mask_profile_matches_policy`, `tests/platform/db/test_secure_view_usage.py::test_no_base_table_queries` | `rls_context_missing_total`, `mask_profile_mismatch_total` | [Runbook RB-GOV-008](runbooks.md#rb-gov-008) (settings rollback), [Runbook RB-LOCK-006](runbooks.md#rb-lock-006) |
+| LLM/vector residency guard prevents out-of-region fallback (§8.1.1) | `tests/udocket_core/llm/test_residency_guard.py::test_block_disallowed_region`, `tests/udocket_core/vector/test_vector_residency.py::test_allowed_regions_only`, synthetic `synthetics/llm_residency.yaml` | `llm_region_fallback_total`, `vector_region_fallback_total` | [Runbook RB-LLM-003](runbooks.md#rb-llm-003), [Runbook RB-RES-BLOCK](runbooks.md#rb-res-block) |
+| CSP nonce & HIPAA cache enforcement (§11.5, §10.6) | `tests/ui/test_csp_nonced.py::test_nonce_roundtrip`, synthetic `synthetics/csp_nonce_failure.yaml`, `synthetics/portal_hipaa_cache.yaml`, `tests/e2e/test_portal_policy_context.py::test_disclaimer_l10n` | `csp_nonce_mismatch_total`, `portal_cache_header_violation_total` | `docs/runbooks/index.md (RB-PORTAL-005)`, Appendix H security headers checklist |
 
 ---
 

@@ -79,7 +79,7 @@ Body sections follow the Purpose/Contract/State/Failure/Observability/Breadcrumb
 
 - **Scope:** Service charter, source ingestion, editorial workflows, publishing, integrations, and observability for Reference Manager.
 - **Structure:** Numbered sections limited to three levels of depth; shared diagrams remain in the platform TDD appendices (App.A state flows, App.G ERD).
-- **Cross-references:** Use `§<number>` for this document, `TDD §<number>` for the platform TDD, and `App.<letter>` when pointing at shared appendices or runbooks.
+- **Cross-references:** Use `§<number>` for this document, `TDD §<number>` for the platform TDD, and `App.<letter>` when pointing at shared appendices or Appendix R entries.
 - **Maintenance:** Run `python scripts/docs/lint_docs.py` before submitting edits. Schema snippets must match `spec/schemas/reference_*` fixtures; CI verifies locale coverage and bundle manifests.
 - **Doc change protocol:** Any PR touching Reference Manager ingestion, bundles, or review workflows must update this document alongside linked ADRs. Architecture/Security reviewers block merges if services diverge from these contracts.
 
@@ -137,7 +137,7 @@ Dedicated SaaS tenants record deployment IDs, residency posture, and compliance 
 *Purpose: Outline launch deliverables and rollout gates.*
 *Contract: RM launches with governance, bundle schema/signing automation, MediaWiki adapter, manual proposal workflow, operational dashboards, and integration tests that publish `courts@0.1.0`.*
 *State: Rollout checklist artifacts track completion; `/reference/*` shims remain read-only until adoption metrics remain green for 30 days.*
-*Failure modes & retries: Deploy gate `deploy:reference-adoption` blocks release when stale bundles persist; rollback cookbook must execute within SLA.*
+*Failure modes & retries: Deploy gate `deploy:reference-adoption` blocks release when stale bundles persist; Appendix R entry [RB-RM-ROLLBACK](runbooks.md#rb-rm-rollback) must execute within SLA.*
 *Observability: Adoption lag monitors, deploy gate status, and quarterly rollback drills feed release readiness.*
 
 Harvesting includes court scraper framework, crosswalk schema, questionnaire/form ingestion, dual-approval enforcement, and synthetic monitors. Deprecation workflows, diff endpoints, locale coverage tooling, and FinOps dashboards operate continuously. Exit criteria require no direct writes outside RM, read-only shims for legacy APIs, adoption lag SLO adherence, golden snapshot validation, and quarterly rollback exercises.
@@ -158,6 +158,9 @@ Harvesting includes court scraper framework, crosswalk schema, questionnaire/for
 Connectors include:
 - **MediaWiki/Wikidata adapters:** Delta pulls keyed by page IDs or QIDs, watchlists for change notifications, and license capture (Wikipedia → CC BY-SA 4.0 with attribution propagation, Wikidata structured data → CC0) so downstream surfaces render correct attribution automatically.
 - **Court and tribunal websites:** Respectful scraping with robots compliance, per-domain rate limits, randomized user agents, selector health checks, and sanitized HTML parsing into structured metadata.
+- **Bulk file feeds:** SFTP/HTTPS collectors with checksum validation, manifest reconciliation, and quarantine for unsigned payloads.
+
+Connector outages or sustained selector failures trigger Appendix R entry [RB-RM-HARVEST](runbooks.md#rb-rm-harvest) for coordinated remediation with Content Ops and partner contacts.
 - **Government/open-data portals:** CSV/JSON/API feeds with schema version tracking and checksum validation across provincial datasets, justice ministry APIs, and federal open-data hubs.
 - **Vendor feeds & authenticated sources:** Signed downloads or webhook-triggered updates with HMAC verification; API keys rotate via Vault and failures auto-disable connectors.
 - **Internal editorial submissions:** UI/API for staff to propose corrections, additions, or emergency updates with justification and attachments.
@@ -208,7 +211,7 @@ Daily jobs run MediaWiki delta sync, selector health checks, and localization co
 *Failure modes & retries: SLA breaches trigger `reference_manager_review_sla_violation`; emergency hotfixes require retrospective approval within 48h.*
 *Observability: Pending review counts, SLA timers, and emergency workflow usage appear on dashboards.*
 
-Dual approval is mandatory for residency/privacy flags, HIPAA/PHIPA toggles, and identifier removals, with distinct roles (Content Ops + Legal Ops). Deprecations record replacement pointers, effective dates, and user guidance. Emergency guardrails require an incident captain, automated tickets, and completion of the adoption rollback checklist within 24h.
+Dual approval is mandatory for residency/privacy flags, HIPAA/PHIPA toggles, and identifier removals, with distinct roles (Content Ops + Legal Ops). Deprecations record replacement pointers, effective dates, and user guidance. Emergency guardrails require an incident captain, automated tickets, and completion of the Appendix R entry [RB-RM-ROLLBACK](runbooks.md#rb-rm-rollback) checklist within 24h.
 
 Governance RACI (binding):
 
@@ -263,6 +266,8 @@ Deliverable definitions reference template UUIDs and locale coverage enforced he
 
 Scraped HTML is sanitized before storage; allowed MIME types enforce TLS-only downloads. License ledger tracks source licenses and downstream attribution requirements; pipelines block bundles missing metadata. Rate limits and access controls guard adapters and APIs; scraping credentials rotate via Vault. Sensitive metadata changes trigger `REFERENCE_SENSITIVE_CHANGE` events. Attribution enforcement requires UI/API clients to display badges via `reference_attribution.render(metadata)`; Guardian rejects artifacts missing required attribution metadata.
 
+License or attribution violations escalate via Appendix R entry [RB-RM-LICENSE](runbooks.md#rb-rm-license) to coordinate remediation, customer communication, and waiver tracking.
+
 ### 3.6 Testing & safeguards (binding)
 
 **Breadcrumbs:** Implementation `packages/udocket_core/reference_manager/tests.py`, Tests `tests/reference/test_bundle_validation.py::test_validation_suite`, Observability CI job “reference-manager-validate”.
@@ -272,7 +277,9 @@ Scraped HTML is sanitized before storage; allowed MIME types enforce TLS-only do
 *Failure modes & retries: Validation failures halt signing; adoption drills failing re-open incidents until resolved.*
 *Observability: CI pipeline results, synthetic adoption checks, and rollback exercise reports track readiness.*
 
-Golden snapshots enforce deterministic outputs; scraper contract tests use recorded fixtures. Semantic publish guard blocks breaking changes without replacements. Each publish runs `reference_manager.validate_bundle` to verify schema integrity, license metadata, and diff thresholds, then triggers staging adoption tests verifying LPE compiles and surfaces updates. Adoption rollback cookbook `ops/reference/rollback_bundle.py` reverses releases and records `BUNDLE_ROLLBACK_REPORT` artifacts within the 15 minute SLA.
+Golden snapshots enforce deterministic outputs; scraper contract tests use recorded fixtures. Semantic publish guard blocks breaking changes without replacements. Each publish runs `reference_manager.validate_bundle` to verify schema integrity, license metadata, and diff thresholds, then triggers staging adoption tests verifying LPE compiles and surfaces updates. Appendix R entry [RB-RM-ROLLBACK](runbooks.md#rb-rm-rollback) leverages `ops/reference/rollback_bundle.py` to reverse releases and record `BUNDLE_ROLLBACK_REPORT` artifacts within the 15 minute SLA.
+
+Publish guard failures or validation regressions invoke Appendix R entry [RB-RM-PUBLISH](runbooks.md#rb-rm-publish) to triage schema diffs, coordinate hotfixes, and manage stakeholder notifications.
 
 ### 3.7 Risks & mitigations (normative)
 
@@ -332,7 +339,7 @@ RM publishes `reference_manager.catalog.published`, `.updated`, and `reference_m
 
 Settings defines region allowlists and activation lints against RM catalogues, rejecting entries outside curated regions or missing DPAs. Guardian applies compiled policies and attribution metadata, while Portal surfaces questionnaires, forms, and localized copy with deterministic UUIDs from RM.
 
-Residency and provider endpoint updates follow the runbook: ingest provider metadata, attach attestation references, publish an updated `provider_endpoints` bundle, and trigger Settings activation replay. Adoption completes only after residency scanners confirm SAN and GeoIP alignment and Guardian acknowledges the refreshed digests; failures raise `reference_manager_provider_endpoint_violation_total` and remain paged until remediation closes.
+Residency and provider endpoint updates follow Appendix R entry [RB-RM-RESIDENCY](runbooks.md#rb-rm-residency): ingest provider metadata, attach attestation references, publish an updated `provider_endpoints` bundle, and trigger Settings activation replay. Adoption completes only after residency scanners confirm SAN and GeoIP alignment and Guardian acknowledges the refreshed digests; failures raise `reference_manager_provider_endpoint_violation_total` and remain paged until remediation closes.
 
 ---
 
@@ -364,13 +371,160 @@ Locale coverage heatmap highlights missing translations; machine translation ass
 
 **Breadcrumbs:** Implementation `ops/reference/rollback_bundle.py`, Tests `tests/reference/test_rollback.py::test_restores_previous_version`, Observability PagerDuty service “Reference Manager On-Call”.
 *Purpose: Ensure rollback tooling and incident workflows meet SLAs.*
-*Contract: On-call follows adoption rollback cookbook, executes within 15 minutes, and records evidence artifacts.*
-*State: `BUNDLE_ROLLBACK_REPORT` artifacts capture timestamps, reason, and validation evidence; incident tickets reference cookbook steps.*
+*Contract: On-call follows Appendix R entry [RB-RM-ROLLBACK](runbooks.md#rb-rm-rollback), executes within 15 minutes, and records evidence artifacts.*
+*State: `BUNDLE_ROLLBACK_REPORT` artifacts capture timestamps, reason, and validation evidence; incident tickets reference Appendix R steps.*
 *Failure modes & retries: Rollback failures auto-page escalation path; unresolved incidents block further publishes.*
-*Observability: Incident metrics, rollback execution times, and cookbook audit logs feed the on-call review cadence.*
+*Observability: Incident metrics, rollback execution times, and Appendix R audit logs feed the on-call review cadence.*
 
 Synthetic adoption tests run in staging after every publish; quarterly drills exercise rollback tooling. Incident retros attach scanner evidence, Settings diffs, and Guardian waiver logs to the decision log (`TDD §15.3`), with follow-up tickets capturing provider engagement or automation gaps.
 
 The EU-REFERENCE synthetic tenant executes `synthetics/reference_eu_residency.yaml` nightly, authenticating against the EU deployment, downloading `/reference/*` shims, and verifying `Sunset`, `Deprecation`, and successor headers alongside residency-constrained storage locations. The monitor raises `reference_eu_residency_violation_total` and pages Content Ops plus Security Engineering when residency assertions fail or bundles fall back to non-EU storage.
 
+On-call responders follow Appendix R entry [RB-RM-ROLLBACK](runbooks.md#rb-rm-rollback) for adoption freezes, Appendix R entry [RB-RM-RESIDENCY](runbooks.md#rb-rm-residency) for residency violations, and Appendix R entry [RB-RM-LICENSE](runbooks.md#rb-rm-license) when license escalations surface during incidents.
+
 ---
+
+## Appendix R — Runbooks & drills
+
+**Breadcrumbs:** Implementation guides under `ops/reference/runbooks/`, Tests `tests/reference/test_runbooks.py::test_catalog_alignment`, Observability PagerDuty service “Reference Manager On-Call”.\\
+*Purpose: Centralize operational procedures for Reference Manager incidents and drills.*\\
+*Contract: Alerts enumerated in §5 point to these runbooks; responders keep the procedures current through quarterly tabletop reviews.*\\
+*State: Source of truth lives in the ops repository and is mirrored here for quick reference.*\\
+*Failure modes & retries: Missing or stale entries trigger post-incident corrective actions and block publish approvals.*\\
+*Observability: Docs lint (`docs_runbook_missing_total`) and incident reviews track coverage and freshness.*
+
+### R.1 Runbook index (informative)
+
+**Breadcrumbs:** Implementation `ops/reference/runbooks/index.md`, Tests `tests/reference/test_runbooks.py::test_index_complete`, Observability Docs lint metric `docs_runbook_missing_total`.\\
+*Purpose: Provide a fast lookup table from alerts and incidents to runbook identifiers.*\\
+*Contract: Each Reference Manager alert references an ID listed here before shipping.*\\
+*State: Maintained alongside monitoring configuration and mirrored in this appendix.*\\
+*Failure modes & retries: Lint failures require index updates before merge.*\\
+*Observability: Weekly docs lint verifies parity with PagerDuty and alertmanager routing.*
+
+- RB-RM-ROLLBACK — Reference bundle rollback & adoption freeze
+- RB-RM-HARVEST — Source harvest incident triage
+- RB-RM-PUBLISH — Publish guard failure response
+- RB-RM-LICENSE — License violation remediation
+- RB-RM-RESIDENCY — Residency endpoint alignment
+
+### R.2 RB-RM-ROLLBACK — Reference bundle rollback & adoption freeze (binding)
+
+**Breadcrumbs:** Implementation `ops/reference/rollback_bundle.py`, Tests `tests/reference/test_rollback.py::test_restores_previous_version`, Observability PagerDuty service “Reference Manager On-Call” (alert `reference_manager_adoption_lag_sla`).\\
+*Purpose: Restore a stable bundle when adoption freezes or downstream services reject a release.*\\
+*Contract: Rollbacks execute within 15 minutes, capture evidence, and keep downstream caches synchronized.*\\
+*State: `BUNDLE_ROLLBACK_REPORT` artifacts store execution logs, adoption status, and validation evidence.*\\
+*Failure modes & retries: Partial rollbacks or missing adoption validation trigger escalation to Architecture and freeze further publishes.*\\
+*Observability: Alert resolves when adoption lag returns to budget and downstream acknowledgements report the restored bundle hash.*
+
+Trigger conditions:
+
+- `reference_manager_adoption_lag_sla` alert firing for >10 minutes.
+- Downstream compile failures (LPE, Settings, Guardian) referencing the latest bundle hash.
+- Manual escalation tagged `RM-ROLLBACK` in incident management.
+
+Execution checklist:
+
+1. Declare incident in `#ref-manager-oncall`, assign commander/scribe, and capture affected bundle IDs.
+2. Halt new publishes (`reference publish --freeze`) and notify integrators.
+3. Execute `reference rollback --bundle <previous_id>`; record CLI output and resulting bundle hash.
+4. Re-run staging adoption suite (`reference adoption verify --bundle <previous_id>`) and confirm downstream acknowledgements.
+5. Document outcome in the incident ticket with links to metrics, adoption diffs, and customer impact summary.
+
+Post-rollback validation:
+
+- Confirm `reference_manager_bundle_adoption_seconds` returns below SLA.
+- Ensure Settings activation replay completes (`settings.activation.last_success` timestamp updated).
+- Schedule root-cause review within 48 hours; capture corrective actions before unfreezing publishes.
+
+### R.3 RB-RM-HARVEST — Source harvest incident triage (binding)
+
+**Breadcrumbs:** Implementation `ops/reference/runbooks/harvest_incident.md`, Tests `tests/reference/test_harvest_incident.py::test_selector_decision_tree`, Observability Grafana “Reference Manager – Ingestion & Quality” (alert `reference_manager_harvest_total`).\\
+*Purpose: Restore healthy harvesting when connectors fail or data drift threatens bundle freshness.*\\
+*Contract: Incidents remain active until the affected connectors produce clean ingests and evidence is archived.*\\
+*State: Harvest incident ledger `reference_harvest_incident` stores status, root cause, and remediation steps.*\\
+*Failure modes & retries: Re-enabling connectors without sanitizing payloads or validating licensing risks corrupt bundles; escalate if two retry cycles fail.*\\
+*Observability: Alert clears after successful ingest and selector health checks remain green for two intervals.*
+
+Decision tree:
+
+1. Identify failing sources (`reference harvest status --failing`) and confirm alert payload scope.
+2. For selector regressions, pull last-good HTML snapshot, update parser fixtures, and replay ingest in staging.
+3. For licensing or robots.txt changes, coordinate with Legal Ops and update provenance manifests before re-enabling.
+4. For infrastructure outages, engage provider contacts, increase backoff, and stage manual uploads if SLAs demand.
+5. Re-enable connector only after validation passes and ledger entry updated with evidence links.
+
+Communication & evidence:
+
+- Update incident ledger with timestamps, owner, and validation artifacts (`ops/reference/harvest/<date>/`).
+- Notify downstream services if freshness gap exceeds 24 hours or impacts regulatory filings.
+- Document preventive tasks (selector monitoring, provider engagement) before closing incident.
+
+### R.4 RB-RM-PUBLISH — Publish guard failure response (binding)
+
+**Breadcrumbs:** Implementation `ops/reference/runbooks/publish_guard.md`, Tests `tests/reference/test_publish_guard.py::test_block_on_breaking_change`, Observability CI job “reference-manager-validate” and alert `reference_manager_publish_guard_failure`.\\
+*Purpose: Triage schema or validation failures that block publish pipelines.*\\
+*Contract: Guard failures remain blocking until validation diffs resolved, schema updates approved, and integration tests rerun.*\\
+*State: Validation artifacts persist alongside bundle drafts in `reference_bundle_registry` with diff snapshots.*\\
+*Failure modes & retries: Ignoring guard signals risks pushing inconsistent bundles; escalate to Architecture if fix exceeds 12 hours.*\\
+*Observability: Alert clears when validation suite passes and guard pipeline returns green.*
+
+Response steps:
+
+1. Collect failing validation artifacts (`reference validate --bundle <id> --export artifacts/guard/<id>`).
+2. Categorize failure: schema incompatibility, missing assets, license metadata, or diff threshold breach.
+3. Assign owners per category (Schema Council, Content Ops, Localization) and capture remediation plan in incident doc.
+4. Apply fixes in staging, rerun validation, and ensure unit/integration suites covering affected domains stay green.
+5. Communicate readiness in `#ref-manager-oncall`, secure approvals, and resume publish pipeline.
+
+Post-resolution:
+
+- Attach diff snapshots, approvals, and validation logs to incident ticket.
+- Update risk register if failure exposed undocumented dependency or schema gap.
+- Trigger follow-up tabletop if guard was bypassed or detection lagged.
+
+### R.5 RB-RM-LICENSE — License violation remediation (binding)
+
+**Breadcrumbs:** Implementation `ops/reference/runbooks/license_violation.md`, Tests `tests/reference/test_license_ledger.py::test_violation_alert`, Observability Grafana “Reference Manager – Compliance” (alert `reference_manager_license_violation_total`).\\
+*Purpose: Resolve licensing or attribution violations before they propagate to customers.*\\
+*Contract: Violations remain open until offending content removed or relicensed, and attribution updates verified downstream.*\\
+*State: License ledger entries store violation metadata, remediation steps, and waiver approvals.*\\
+*Failure modes & retries: Publishing without resolving violations risks contractual breaches; escalate to Legal Ops immediately.*\\
+*Observability: Alert clears when ledger marks violation mitigated and attribution scanners pass.*
+
+Remediation workflow:
+
+1. Review violation payload (source, license, impacted assets) and freeze related publishes.
+2. Remove or quarantine offending content from staging/curated schemas; note bundle versions impacted.
+3. Coordinate with Legal Ops for relicensing or replacement assets; track approvals in waiver ledger.
+4. Update attribution metadata, regenerate affected bundles, and validate Guardian/UI surfaces show correct badges.
+5. Close ledger entry with evidence links (tickets, approvals, artifact hashes) and notify stakeholders.
+
+Follow-up:
+
+- Audit other domains for similar exposure; document preventive tasks.
+- Update intake checklists to capture new licensing conditions if applicable.
+- Record customer communications in incident ticket and App.O decision log.
+
+### R.6 RB-RM-RESIDENCY — Residency endpoint alignment (binding)
+
+**Breadcrumbs:** Implementation `ops/reference/runbooks/residency_alignment.md`, Tests `tests/reference/test_provider_endpoints.py::test_alignment_runbook`, Observability Grafana “Residency & Endpoint Posture” (alert `reference_manager_provider_endpoint_violation_total`).\\
+*Purpose: Restore residency compliance when provider endpoint catalogues drift from approved footprints.*\\
+*Contract: Findings stay open until catalogues updated, Settings activations rerun, and residency scanners confirm remediation.*\\
+*State: Findings tracked in `reference_provider_endpoint_finding` with attestation references and waiver metadata.*\\
+*Failure modes & retries: Allowing stale endpoints risks policy violations; escalate to Security Engineering if remediation exceeds SLA.*\\
+*Observability: Alert resolves after two clean scans and Settings activation diff reports match updated catalogue.*
+
+Remediation checklist:
+
+1. Inspect finding details and gather attestation or SAN mismatch evidence.
+2. Engage provider to confirm intended footprint; request updated attestation or schedule decommission.
+3. Update RM catalogue entries (`provider_endpoints[]`), including CIDRs, SAN expectations, and residency notes.
+4. Publish refreshed bundle, rerun Settings activation replay, and verify Guardian acknowledges new digest.
+5. Archive evidence in incident folder and update waiver ledger if temporary exceptions granted.
+
+Post-remediation validation:
+
+- Confirm `reference_manager_provider_endpoint_violation_total` returns to zero.
+- Ensure residency synthetic monitors (EU-REFERENCE, CA-REFERENCE) pass twice consecutively.
+- Document lessons learned and automation improvements (scanner coverage, provider notifications).

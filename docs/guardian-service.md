@@ -67,7 +67,7 @@ header-includes:
 | Approvers       | Architecture Steering Committee; Security Review Board |
 | Reviewers       | QA Engineering Lead; SRE Manager |
 | ADR index       | `docs/adr/README.md` |
-| Migration plan  | Establishes this specification as the canonical Guardian reference, absorbing the former TDD Guardian sections and Appendix H runbooks; platform TDD now links here for service-level details. |
+| Migration plan  | Establishes this specification as the authoritative Guardian reference, absorbing the former TDD Guardian sections and Appendix H operational guides; platform TDD now links here for service-level details. |
 | Docs validation | `python scripts/docs/lint_docs.py` |
 | Link lint       | `python scripts/docs/link_check.py --strict` |
 
@@ -78,7 +78,7 @@ header-includes:
 *Purpose: Define Guardian responsibilities, posture, and success criteria as the authoritative source for dependent teams.*\\
 *Contract: Any change to Guardian behavior, judgment vocabulary, queue semantics, or SLOs MUST be reflected here and linked from PRs touching Guardian code.*\\
 *State transitions: Guardian gates the `SA → WP/CD → DL` lifecycle using the canonical statuses in §3.2.*\\
-*Failure modes & retries: Covered in §6.3 (queue) and §7 (runbooks).*\\
+*Failure modes & retries: Covered in §6.3 (queue) and §7 (operational readiness).*\\
 *Observability: Dashboard “Guardian SLO” tracks `guardian_judgment_latency_seconds`, `guardian_cleared_ratio`, and queue backlog metrics.*\\
 *References: §2, §3, §4, §5, §6, §7.*
 
@@ -213,9 +213,9 @@ Guardian persists span evidence in `guardian_span_detection` (deterministic UUID
 
 - Reviewer actions (`approve`, `changes`, `quarantine`, `waive`) round-trip through Guardian so the service remains the canonical history authority. Platform APIs call `POST /guardian/quarantine`, `POST /guardian/review-actions`, and `POST /guardian/judgments:enqueue` on behalf of reviewers to persist `{guardian_judgment_id, artifact_id, org_id, actor_id, action, reason_codes[], waiver_id?, notes}` entries.
 - Guardian writes every decision to `guardian_judgment_history` with deterministic UUIDv7 IDs, preserving prior verdicts even when artifacts re-enter `PENDING_JUDGMENT`. Replays with matching `{artifact_id, content_sha256}` reuse the latest record, while new hashes create a fresh entry so history stays append-only.
-- Manual and automated decisions both emit SSE/audit events (`GUARDIAN.JUDGMENT.*`) containing the same identifiers the workflow service uses for manifests, approval UIs, and downstream runbooks. Client code MUST rely on these IDs instead of synthesizing review metadata.
+- Manual and automated decisions both emit SSE/audit events (`GUARDIAN.JUDGMENT.*`) containing the same identifiers the workflow service uses for manifests, approval UIs, and downstream response guides. Client code MUST rely on these IDs instead of synthesizing review metadata.
 - Reviewer console integrations (`/guardian/review-actions`) attach structured comments and span references to history rows; Guardian enforces that the referenced artifact version matches the submitted `expected_version` before accepting the action.
-- Guardian exposes read-only helpers (`GET /api/v1/guardian/<id>`, `GET /api/v1/guardian?artifact_id=`) guarded by service-to-service RLS so downstream analytics and runbooks can surface the latest review outcome without bypassing the canonical store.
+- Guardian exposes read-only helpers (`GET /api/v1/guardian/<id>`, `GET /api/v1/guardian?artifact_id=`) guarded by service-to-service RLS so downstream analytics and response guides can surface the latest review outcome without bypassing the canonical store.
 
 ---
 
@@ -276,31 +276,31 @@ Guardian persists span evidence in `guardian_span_detection` (deterministic UUID
 
 ---
 
-## 7) Operations & runbooks (binding)
+## 7) Operational readiness (binding)
 
-*Purpose: Summarize Guardian operational posture and direct responders to the canonical runbooks that govern action.*\\
-*Contract: Any edit to Guardian runbooks or incident triggers MUST update Appendix B to keep this document authoritative.*\\
+*Purpose: Summarize Guardian operational posture and direct responders to Appendix R procedures that govern action.*\\
+*Contract: Any edit to Guardian response procedures or incident triggers MUST update Appendix R to keep this document authoritative.*\\
 *Observability: Guardian SLO dashboards (metrics in §6.1) and audit streams (§6.2) remain the single source for responder context.*
 
-- Primary runbooks — RB-GUARD-001 (SLO breach), RB-GUARD-QUAR (quarantine spike), RB-GUARD-QUEUE (submission backlog) — are maintained in Appendix B (binding). Step-by-step triage and decision trees live there to keep the main flow concise.
-- Manual review checklists live in Appendix B.1; responders reference them alongside this specification.
+- Response IDs RB-GUARD-001 (SLO breach), RB-GUARD-QUAR (quarantine spike), and RB-GUARD-QUEUE (submission backlog) are maintained in Appendix R (binding). Step-by-step triage and decision trees live there to keep the main flow concise.
+- Manual review checklists live in Appendix R entry RB-GUARD-MANUAL; responders reference them alongside this specification.
 
 ### 7.1 Operational posture
 
 - Guardian on-call rotations monitor `guardian_judgment_latency_seconds`, `guardian_pending_total`, and `guardian_policy_block_total` to confirm the 99.9% availability / ≤ 5 minute P95 latency commitments.
-- Queue submission health depends on Celery worker heartbeats and Settings/LPE dependencies; Appendix B.3 describes how to remediate backlog growth while preserving auditability.
-- Quarantine volume and waiver approvals follow Appendix B.2, keeping manifests and waiver artifacts in lockstep with Security/Architecture approvals.
+- Queue submission health depends on Celery worker heartbeats and Settings/LPE dependencies; Appendix R entry RB-GUARD-QUEUE describes how to remediate backlog growth while preserving auditability.
+- Quarantine volume and waiver approvals follow Appendix R entry RB-GUARD-QUAR, keeping manifests and waiver artifacts in lockstep with Security/Architecture approvals.
 
 ### 7.2 Incident triggers
 
-- `alert_guardian_queue_stale` (Grafana) fires when backlog age exceeds `guardian.queue.backlog_alert_minutes`; responders follow Appendix B.3.
-- `guardian_policy_block_total` spikes or synthetic job failures (`guardian_slo.yaml`) escalate via Appendix B.1 and Appendix B.2, depending on whether latency or policy regression drives the alert.
-- `PHI_DETECTION_DRIFT` incidents originate from classifier sampling (§6.3); Appendix B.2 covers containment and follow-up requirements.
+- `alert_guardian_queue_stale` (Grafana) fires when backlog age exceeds `guardian.queue.backlog_alert_minutes`; responders follow Appendix R entry RB-GUARD-QUEUE.
+- `guardian_policy_block_total` spikes or synthetic job failures (`guardian_slo.yaml`) escalate via Appendix R entries RB-GUARD-001 and RB-GUARD-QUAR, depending on whether latency or policy regression drives the alert.
+- `PHI_DETECTION_DRIFT` incidents originate from classifier sampling (§6.3); Appendix R entry RB-GUARD-QUAR covers containment and follow-up requirements.
 
 ### 7.3 Manual review mode
 
-- When Guardian automation is paused, operations invoke Appendix B.1 to route artifacts through manual review queues and capture `MANUAL_GUARDIAN_JUDGMENT` records.
-- Reconciliation jobs replay queued artifacts once health recovers; responders document the waiver/incident outcomes according to Appendix B.1 post-remediation notes.
+- When Guardian automation is paused, operations invoke Appendix R entry RB-GUARD-001 to route artifacts through manual review queues and capture `MANUAL_GUARDIAN_JUDGMENT` records.
+- Reconciliation jobs replay queued artifacts once health recovers; responders document the waiver/incident outcomes according to Appendix R entry RB-GUARD-001 post-remediation notes.
 
 ---
 
@@ -345,30 +345,53 @@ This specification is the canonical source for Guardian behavior. Sections in th
 
 ---
 
-## Appendix B — Operations runbooks (binding)
+## Appendix R — Runbooks & drills (binding)
 
-*Purpose: Preserve the authoritative, step-by-step response guides referenced in §7 without overloading the main flow.*
+**Breadcrumbs:** Implementation `ops/runbooks/guardian/`, Tests `tests/ops/test_runbook_integrity.py::test_guardian_runbooks`, Observability PagerDuty service “Guardian SLO” with Grafana dashboard “Guardian SLO”.\\
+*Purpose: Maintain actionable Guardian recovery guides and manual review playbooks.*\\
+*Contract: Alerts enumerated in §7 map to RB-GUARD identifiers here; responders update these procedures after every incident or drill.*\\
+*State: Procedures live beside automation scripts in `ops/runbooks/guardian/`; this appendix summarizes triggers, decision trees, and evidence requirements.*\\
+*Failure modes & retries: Missing or stale procedures trigger corrective actions and block deploy sign-off.*\\
+*Observability: Incident retros attach the executed RB-GUARD identifier and confirm Appendix R coverage during quarterly reviews.*
 
-### B.1 RB-GUARD-001 — Guardian SLO breach (binding)
+### R.1 Response index (informative)
 
-- **Purpose:** Restore Guardian availability and route artifacts through manual review when automated judgments breach SLO.
+- RB-GUARD-001 — Guardian SLO breach stabilization.
+- RB-GUARD-QUAR — Quarantine spike investigation.
+- RB-GUARD-QUEUE — Submission backlog watchdog.
+- RB-GUARD-MANUAL — Manual review reconciliation.
+
+### R.2 RB-GUARD-001 — Guardian SLO breach (binding)
+
+**Breadcrumbs:** Implementation `ops/runbooks/guardian/slo_breach.md`, Automation `ops/scripts/guardian/scale_guardian.py`, Tests `tests/ops/test_runbook_integrity.py::test_guardian_slo_runbook`, Observability Grafana dashboard “Guardian SLO” (alerts `guardian_judgment_latency_seconds`, `guardian_submission_timeout_total`).\\
+*Purpose: Restore Guardian availability and route artifacts through manual review when automated judgments breach SLO.*\\
+*Contract: Any breach of the availability or latency SLO uses this sequence before re-enabling automated progression.*\\
+*State: Manual review ledger entries persist under `ops/guardian/manual_review/<date>.jsonl`.*\\
+*Failure modes & retries: Skipping manual review tracking risks losing audit history and invalidating waivers.*\\
+*Observability: Alert clears after two healthy scrapes and manual review backlog drains.*
+
 - **Signals:** `guardian_judgment_latency_seconds` P95 > SLO, `guardian_submission_timeout_total` increasing, synthetic job failure (`guardian_slo.yaml`).
 - **Triage (≤5 minutes):**
   1. Check `/readyz` and `/synthetic/status`; capture latency panels in Grafana (“Guardian SLO”).
   2. Confirm queue depth (`guardian_pending_total`, `guardian_pending_oldest_seconds`) and worker health (Celery heartbeat, pod restarts).
   3. Inspect recent deploys/settings (`guardian.rules.version`, Helm releases) for regressions.
 - **Decision tree:**
-  - *Service unhealthy*: place Guardian in manual review mode (pause submissions, notify ops). Operators record `MANUAL_GUARDIAN_JUDGMENT` artifacts while following the Appendix B.1 checklist.
+  - *Service unhealthy*: place Guardian in manual review mode (pause submissions, notify ops). Operators record `MANUAL_GUARDIAN_JUDGMENT` artifacts while following this checklist.
   - *Compute exhaustion*: scale deployment (`kubectl -n platform scale deploy/guardian --replicas=<n>`), update HPA floor post-incident.
   - *Upstream dependency slowdown*: coordinate with LPE/Settings owners; consider throttling new submissions until latency stabilizes.
 - **Post-remediation:**
   - Ensure `guardian_judgment_latency_seconds` P95 ≤ SLO for 2 consecutive scrapes and `guardian_submission_timeout_total` plateaued.
   - Clear manual review backlog by replaying queued artifacts once service healthy; annotate incident log with root cause and follow-ups.
 
-### B.2 RB-GUARD-QUAR — Guardian quarantine handling (binding)
+### R.3 RB-GUARD-QUAR — Quarantine spike investigation (binding)
 
-- **Purpose:** Diagnose QUARANTINED spikes without bypassing policy controls.
-- **Linked alert:** `alert_guardian_quarantine_spike` (Grafana: Guardian SLO dashboard).
+**Breadcrumbs:** Implementation `ops/runbooks/guardian/quarantine_spike.md`, Automation `ops/scripts/guardian/replay_quarantine.py`, Tests `tests/ops/test_runbook_integrity.py::test_guardian_quarantine_runbook`, Observability Grafana dashboard “Guardian Enforcement” (alert `alert_guardian_quarantine_spike`).\\
+*Purpose: Diagnose QUARANTINED spikes without bypassing policy controls.*\\
+*Contract: Any surge in quarantine outcomes requires this investigation before promoting new releases or waivers.*\\
+*State: Findings logged under `ops/guardian/quarantine/<incident_id>.md` with root-cause summary and evidence attachments.*\\
+*Failure modes & retries: Missing waiver documentation or misaligned settings snapshots risk repeat incidents.*\\
+*Observability: Alert resolves when `guardian_cleared_ratio` recovers and reason-code distribution returns to baseline.*
+
 - **Signals:** Increased `guardian_policy_block_total{reason=...}` (e.g., `POLICY_FORBIDDEN_PATTERN`, `INTEGRITY_HASH_MISMATCH`, `SOURCE_NOT_APPROVED`); drop in `OPERATOR_PREP`/`QUEUED_FOR_REVIEW` backlog throughput.
 - **Triage:**
   1. Filter Guardian dashboard by `reason_codes[]` and `org_id` to locate affected cohorts.
@@ -378,12 +401,17 @@ This specification is the canonical source for Guardian behavior. Sections in th
   - `POLICY_FORBIDDEN_PATTERN`: engage Product/QA; adjust templates or policies; consider waiver only with dual approval.
   - `SOURCE_NOT_APPROVED`: instruct operators to remediate upstream artifacts or rebind inputs; Guardian enforces parent gating.
   - Region/debug issues: enforce settings fix, resubmit, and confirm waiver stamping (`RESIDENCY_WAIVER_USED`) where applicable.
-- **Post-remediation:** track `guardian_cleared_ratio` recovery, log incident with counts per reason, and file rule-tuning tasks if false positives exceed thresholds.
+- **Post-remediation:** Track `guardian_cleared_ratio` recovery, log incident with counts per reason, and file rule-tuning tasks if false positives exceed thresholds.
 
-### B.3 RB-GUARD-QUEUE — Guardian backlog watchdog (binding)
+### R.4 RB-GUARD-QUEUE — Submission backlog watchdog (binding)
 
-- **Purpose:** Restore submission throughput before `PENDING_JUDGMENT` artifacts stall.
-- **Linked alert:** `alert_guardian_queue_stale` (Grafana: Guardian SLO dashboard).
+**Breadcrumbs:** Implementation `ops/runbooks/guardian/submission_backlog.md`, Automation `ops/scripts/guardian/queue_drain.py`, Tests `tests/ops/test_runbook_integrity.py::test_guardian_queue_runbook`, Observability Grafana dashboard “Guardian Queue Health” (alert `alert_guardian_queue_stale`).\\
+*Purpose: Restore submission throughput before `PENDING_JUDGMENT` artifacts stall.*\\
+*Contract: Any backlog alert follows this playbook before artifacts are promoted or waived.*\\
+*State: Queue samples exported to `ops/guardian/queue_samples/<timestamp>.csv` for audit.*\\
+*Failure modes & retries: Failing to drain backlog before resuming automation risks out-of-order judgments.*\\
+*Observability: Alert resolves when backlog age drops below threshold and throughput returns to baseline.*
+
 - **Signals:** `guardian_pending_total` trending upward for 3 scrapes, `guardian_pending_oldest_seconds` > `guardian.queue.backlog_alert_minutes * 60`, `guardian_submission_timeout_total` incrementing, `review_queue_oldest_seconds` approaching `reviews.backlog.alert_minutes`.
 - **Triage (≤5 minutes):**
   1. Verify Guardian health endpoints and latency dashboards.
@@ -412,10 +440,17 @@ This specification is the canonical source for Guardian behavior. Sections in th
   - Ensure `guardian_submission_timeout_total` stopped increasing and queued artifacts receive fresh judgments.
   - Document incident with root cause, remediation, SQL excerpt, and follow-up tasks; update HPA/alert thresholds if burst patterns changed.
 
-### B.4 Manual review reconciliation (informative)
+### R.5 RB-GUARD-MANUAL — Manual review reconciliation (informative)
+
+**Breadcrumbs:** Implementation `ops/runbooks/guardian/manual_review.md`, Automation `ops/scripts/guardian/reconcile_manual.py`, Tests `tests/ops/test_runbook_integrity.py::test_guardian_manual_runbook`, Observability Grafana dashboard “Guardian Manual Review” (panels `guardian_manual_pending_total`, `guardian_manual_age_seconds`).\\
+*Purpose: Ensure manual decisions stay auditable and rejoin automated flow once Guardian recovers.*\\
+*Contract: Manual review ledger updates must precede replay jobs so judgment history remains complete.*\\
+*State: Ledger updates stored alongside incident tickets within `ops/guardian/manual_review/<date>.jsonl`.*\\
+*Failure modes & retries: Omitting ledger updates or skipping reconciliation replays invalidates artifact provenance.*\\
+*Observability: Manual review metrics return to baseline before incident closure.*
 
 - Operators record manual decisions with manifest annotations while Guardian automation is paused.
-- Reconciliation job replays queued artifacts once health recovers; incident owners capture waiver IDs, policy bundle hashes, and remediation tasks in the postmortem per Appendix B.1.
+- Reconciliation job replays queued artifacts once health recovers; incident owners capture waiver IDs, policy bundle hashes, and remediation tasks in the postmortem per RB-GUARD-001 follow-up checklist.
 
 ---
 

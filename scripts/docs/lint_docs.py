@@ -64,6 +64,10 @@ def build_tasks() -> list[Task]:
     py = sys.executable
     return [
         Task(
+            name="build_runbook_catalog.py --check",
+            cmd=[py, str(ROOT / "scripts" / "docs" / "build_runbook_catalog.py"), "--check"],
+        ),
+        Task(
             name="mdformat --check docs/TDD.md",
             cmd=[py, "-m", "mdformat", "--wrap", "no", "--check", str(DOC)],
             install_hint="pip install -r requirements-docs.txt",

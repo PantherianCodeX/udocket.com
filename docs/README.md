@@ -28,6 +28,30 @@ The aggregator runs:
 All steps are wired into the `Docs Validation` GitHub workflow, so a clean
 run locally mirrors CI.
 
+## Runbook catalog
+
+Runbook sections live in individual service specifications but are
+aggregated into `docs/runbooks.md` for responders. To refresh the catalog:
+
+```bash
+python scripts/docs/build_runbook_catalog.py
+```
+
+Authoring guidelines:
+
+- Each runbook section in a source document must start with an H2 heading
+  that contains the word “runbook” so the builder can detect the block.
+- Use consistent anchors by including the RB identifier (for example
+  `RB-LPE-COMPILER`) in the heading; the generator emits `<a id="...">`
+  anchors automatically so other docs can deep-link to the catalog.
+- Keep Purpose/Contract/State/Failure/Observability scaffolding in every
+  runbook to satisfy `lint_docs.py` template checks and provide operators
+  with fast context before the detailed steps.
+- Follow the single runbook template defined here—no alternate classes or
+  formats—so responders see consistent Purpose/Contract/State/Failure/
+  Observability scaffolding across services, mirroring the Platform
+  Operations standard.
+
 ## Rendering Mermaid diagrams
 
 The repository already contains source `.mmd` files under `docs/diagrams/`.
