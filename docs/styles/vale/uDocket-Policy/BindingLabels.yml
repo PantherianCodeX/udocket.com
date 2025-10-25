@@ -1,0 +1,10 @@
+extends: existence
+message: "Label policy statements with (binding), (normative), or (informative)."
+level: warning
+scope: paragraph
+ignorecase: true
+tokens:
+  - '\\(binding\\)'
+  - '\\(normative\\)'
+  - '\\(informative\\)'
+

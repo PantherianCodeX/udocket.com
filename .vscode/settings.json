@@ -40,6 +40,8 @@
     "storage/**": true,
     "apps/storage/**": true,
     "reports/**": true,
+    "docs/build/**": true,
+    "docs/site/**": true,
     "build/**": true,
     "dist/**": true,
     "downloads/**": true,

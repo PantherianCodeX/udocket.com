@@ -225,3 +225,9 @@ marimo/_lsp/
 __marimo__/
 
 docs/diagrams/_rendered/
+
+/docs/site/
+/docs/build/
+/docs/src/**/.cache/
+/docs/src/**/.pytest_cache/
+/**/_rendered/

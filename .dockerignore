@@ -28,6 +28,8 @@ __azurite_db_*.json
 
 # Generated docs & reports
 docs/_rendered/
+docs/build/
+docs/site/
 reports/
 
 # IDE state

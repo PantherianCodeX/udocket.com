@@ -4,7 +4,9 @@
   "version": "1.0.0",
   "description": "Doc tooling for uDocket diagrams",
   "scripts": {
-    "mmd:all": "bash scripts/docs/render_mermaid.sh"
+    "mmd:all": "bash scripts/docs/render_mermaid.sh --all --verbose",
+    "mmd:changed": "bash scripts/docs/render_mermaid.sh --changed --verbose",
+    "mmd:paths": "bash scripts/docs/render_mermaid.sh --paths"
   },
   "devDependencies": {
     "@mermaid-js/mermaid-cli": "^11.12.0",

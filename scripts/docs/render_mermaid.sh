@@ -1,58 +1,115 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Unified Mermaid renderer
+# - Scans docs/src by default and writes to docs/build/mermaid
+# - Supports rendering all, changed, or specific paths
+# - Uses mmdc (via MERMAID_CLI or npx fallback) with optional configs
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")"/../.. && pwd)"
-DIAGRAM_DIR="$ROOT/docs/diagrams"
-OUT_DIR="${MERMAID_OUTPUT_DIR:-$DIAGRAM_DIR/_rendered}"
-CLI="${MERMAID_CLI:-mmdc}"
+SRC_ROOT="${MERMAID_SRC_ROOT:-$ROOT/docs/src}"
+OUT_ROOT="${MERMAID_OUT_ROOT:-$ROOT/docs/build/mermaid}"
+FORMAT="${MERMAID_FORMAT:-svg}"   # svg|png
+CLI_BIN="${MERMAID_CLI:-}"
 PUPPETEER_CONFIG="${MERMAID_PUPPETEER_CONFIG:-$ROOT/scripts/docs/puppeteer.config.json}"
 CONFIG="${MERMAID_CONFIG:-$ROOT/scripts/docs/mermaid.config.json}"
 POSTPROCESS="${MERMAID_POSTPROCESSOR:-$ROOT/scripts/docs/postprocess_svg.py}"
+DIFF_BASE="${MERMAID_DIFF_BASE:-origin/main}"
 
-if ! command -v "$CLI" >/dev/null 2>&1; then
-  echo "Mermaid CLI ($CLI) not found. Install @mermaid-js/mermaid-cli and ensure 'mmdc' is on PATH." >&2
-  exit 1
+usage() {
+  cat <<EOF
+Usage: $(basename "$0") [--all] [--changed] [--paths <file1.mmd> [file2.mmd ...]] [--out-dir DIR] [--format svg|png] [--verbose]
+
+Defaults:
+  src root:   $SRC_ROOT
+  out root:   $OUT_ROOT
+  format:     $FORMAT
+  diff base:  $DIFF_BASE
+EOF
+}
+
+VERBOSE=0
+MODE="all"
+declare -a PATHS
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --all) MODE="all"; shift ;;
+    --changed) MODE="changed"; shift ;;
+    --paths) MODE="paths"; shift; while [[ $# -gt 0 && ! "$1" =~ ^-- ]]; do PATHS+=("$1"); shift; done ;;
+    --out-dir) OUT_ROOT="$2"; shift 2 ;;
+    --format) FORMAT="$2"; shift 2 ;;
+    --verbose|-v) VERBOSE=1; shift ;;
+    --help|-h) usage; exit 0 ;;
+    *) echo "Unknown arg: $1" >&2; usage; exit 2 ;;
+  esac
+done
+
+if [[ -z "$CLI_BIN" ]]; then
+  if command -v mmdc >/dev/null 2>&1; then
+    CLI_BIN="mmdc"
+  else
+    CLI_BIN="npx --yes @mermaid-js/mermaid-cli"
+  fi
 fi
 
-mkdir -p "$OUT_DIR"
+mkdir -p "$OUT_ROOT"
 
-shopt -s nullglob
-shopt -s dotglob
-rendered_any=0
-failed=()
-while IFS= read -r -d '' input; do
-  rel_path="${input#$DIAGRAM_DIR/}"
-  rel_dir="$(dirname "$rel_path")"
-  rel_dir="${rel_dir#.}"  # strip leading ./ when basename
-  filename="$(basename "$input" .mmd)"
-  output_dir="$OUT_DIR"
-  if [[ -n "$rel_dir" && "$rel_dir" != "." ]]; then
-    output_dir="$OUT_DIR/$rel_dir"
-    mkdir -p "$output_dir"
-  fi
-  svg_output="$output_dir/$filename.svg"
-  echo "Rendering $rel_path -> ${svg_output#$ROOT/}"
-  args=(-i "$input" -o "$svg_output" -p "$PUPPETEER_CONFIG")
-  if [[ -f "$CONFIG" ]]; then
-    args+=(-c "$CONFIG")
-  fi
-  if ! "$CLI" "${args[@]}"; then
-    echo "❌ Failed to render $rel_path" >&2
-    failed+=("$rel_path")
-    continue
-  fi
-  if [[ -x "$POSTPROCESS" ]]; then
-    python "$POSTPROCESS" "$svg_output" || true
-  fi
-  rendered_any=1
-done < <(find "$DIAGRAM_DIR" -type f -name '*.mmd' ! -path "$OUT_DIR/*" -print0 | sort -z)
+collect_all() {
+  find "$SRC_ROOT" -type f -name '*.mmd' -not -path "$OUT_ROOT/*" -print0 | sort -z
+}
 
-if [[ "$rendered_any" -eq 0 ]]; then
-  echo "No Mermaid sources found under $DIAGRAM_DIR"
-elif [[ "${#failed[@]}" -gt 0 ]]; then
-  echo "⚠️ Completed with ${#failed[@]} failure(s):" >&2
-  printf '  - %s\n' "${failed[@]}" >&2
-  exit 1
-else
-  echo "Rendered diagrams into $OUT_DIR"
-fi
+collect_changed() {
+  git -C "$ROOT" diff --name-only --diff-filter=ACMRTUXB "$DIFF_BASE" -- '*.mmd' -z 2>/dev/null || true
+}
+
+collect_paths() {
+  if [[ ${#PATHS[@]} -eq 0 ]]; then return; fi
+  printf '%s\0' "${PATHS[@]}"
+}
+
+render_one() {
+  local input="$1"
+  # Normalize to absolute
+  if [[ ! "$input" = /* ]]; then input="$ROOT/$input"; fi
+  # Compute path relative to SRC_ROOT
+  local rel="${input#$SRC_ROOT/}"
+  local dir="$(dirname "$rel")"
+  local base="$(basename "$rel" .mmd)"
+  local outdir="$OUT_ROOT/$dir"
+  mkdir -p "$outdir"
+  local out="$outdir/$base.$FORMAT"
+  [[ $VERBOSE -eq 1 ]] && echo "Rendering ${rel} -> ${out#$ROOT/}"
+  local args=(-i "$input" -o "$out")
+  [[ -f "$PUPPETEER_CONFIG" ]] && args+=(-p "$PUPPETEER_CONFIG")
+  [[ -f "$CONFIG" ]] && args+=(-c "$CONFIG")
+  # shellcheck disable=SC2086
+  if ! $CLI_BIN ${args[@]}; then
+    echo "❌ Failed: $rel" >&2
+    return 1
+  fi
+  if [[ "$FORMAT" == "svg" && -x "$POSTPROCESS" ]]; then
+    python "$POSTPROCESS" "$out" || true
+  fi
+}
+
+render() {
+  local rc=0
+  local rendered=0
+  while IFS= read -r -d '' f; do
+    # Skip non-existent files (e.g., deleted in diff)
+    [[ -f "$f" ]] || continue
+    if ! render_one "$f"; then rc=1; fi
+    rendered=1
+  done
+  if [[ $rendered -eq 0 ]]; then
+    echo "No Mermaid sources to render (mode=$MODE)"
+  fi
+  return $rc
+}
+
+case "$MODE" in
+  all) collect_all | render ;;
+  changed) collect_changed | render ;;
+  paths) collect_paths | render ;;
+esac

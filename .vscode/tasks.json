@@ -2,29 +2,22 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Render Mermaid (all)",
+      "label": "Docs: Render Mermaid (all)",
       "type": "shell",
       "command": "npm run mmd:all",
       "group": "build",
       "problemMatcher": []
     },
-    { "label": "Build TDD PDF", "type": "shell", "command": "./scripts/docs/build_tdd.sh", "problemMatcher": [] },
     {
-      "label": "Build PDF (Pandoc + Puppeteer)",
+      "label": "Docs: Build site (MkDocs)",
       "type": "shell",
-      "command": "scripts/docs/tdd_to_pdf.sh",
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
+      "command": "bash scripts/docs/build_site.sh",
       "problemMatcher": []
     },
     {
-      "label": "Build TDD (HTML)",
+      "label": "Docs: Build TDD PDF (Pandoc)",
       "type": "shell",
-      "command": "pandoc TDD.md --from=gfm --to=html5 --css pdf.css --resource-path=.:diagrams/out --metadata title=\"uDocket Technical Design Document\" --toc --standalone -o TDD.html",
-      "options": {
-        "cwd": "${workspaceFolder}/docs"
-      },
+      "command": "bash scripts/docs/build_pdf_tdd.sh",
       "problemMatcher": []
     },
     {
