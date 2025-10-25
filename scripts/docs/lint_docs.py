@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-DOC = ROOT / "docs" / "TDD.md"
+DOC = ROOT / "docs" / "src" / "tdd" / "TDD.md"
 
 
 @dataclass
@@ -68,12 +68,12 @@ def build_tasks() -> list[Task]:
             cmd=[py, str(ROOT / "scripts" / "docs" / "build_runbook_catalog.py"), "--check"],
         ),
         Task(
-            name="mdformat --check docs/TDD.md",
+            name="mdformat --check docs/src/tdd/TDD.md",
             cmd=[py, "-m", "mdformat", "--wrap", "no", "--check", str(DOC)],
             install_hint="pip install -r requirements-docs.txt",
         ),
         Task(
-            name="markdownlint-cli2 docs/TDD.md",
+            name="markdownlint-cli2 docs/src/tdd/TDD.md",
             cmd=["markdownlint-cli2", str(DOC)],
             optional=True,
             install_hint="npm install --location=global markdownlint-cli2 markdownlint-cli2-config-standard",

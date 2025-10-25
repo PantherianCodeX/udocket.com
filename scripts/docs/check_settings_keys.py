@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-DOC_PATH = ROOT / "docs" / "TDD.md"
+DOC_PATH = ROOT / "docs" / "src" / "tdd" / "TDD.md"
 SKIP_FILE = ROOT / "docs" / "settings_key_skip.txt"
 
 
@@ -43,7 +43,7 @@ def find_missing(keys: list[str], skip: set[str]) -> list[str]:
             [
                 "rg",
                 "--glob",
-                "!docs/TDD.md",
+                "!docs/src/tdd/TDD.md",
                 "--glob",
                 "!scripts/docs/check_settings_keys.py",
                 key,

@@ -1,6 +1,6 @@
 # Documentation tooling
 
-The `docs/TDD.md` file is large enough that it benefits from a dedicated
+The `docs/src/tdd/TDD.md` file is large enough that it benefits from a dedicated
 lint/preview workflow. Everything you need lives in this repository so you
 can keep the document consistent without guessing which tools to run.
 
@@ -19,8 +19,8 @@ python scripts/docs/lint_docs.py
 
 The aggregator runs:
 
-1. `mdformat --check --wrap no docs/TDD.md`
-2. `markdownlint-cli2 docs/TDD.md` (skipped if the CLI is not on `PATH`)
+1. `mdformat --check --wrap no docs/src/tdd/TDD.md`
+2. `markdownlint-cli2 docs/src/tdd/TDD.md` (skipped if the CLI is not on `PATH`)
 3. `scripts/docs/check_settings_keys.py` to ensure Appendix E only lists
    keys that actually exist in the codebase
 4. `scripts/docs/link_check.py` for appendix/diagram/section sanity checks
@@ -31,7 +31,7 @@ run locally mirrors CI.
 ## Runbook catalog
 
 Runbook sections live in individual service specifications but are
-aggregated into `docs/runbooks.md` for responders. To refresh the catalog:
+aggregated into `docs/src/ops/runbooks/index.md` for responders. To refresh the catalog:
 
 ```bash
 python scripts/docs/build_runbook_catalog.py
@@ -54,16 +54,16 @@ Authoring guidelines:
 
 ## Rendering Mermaid diagrams
 
-The repository already contains source `.mmd` files under `docs/diagrams/`.
-To render them locally:
+Source `.mmd` files live under `docs/src/tdd/appendices/diagrams/`.
+To render them locally (to `docs/build/mermaid/`):
 
 ```bash
 npm install --location=global @mermaid-js/mermaid-cli
-scripts/docs/render_mermaid.sh
+scripts/docs/render_mermaid.sh --all
 ```
 
-Rendered SVGs land in `docs/diagrams/_rendered/` (git-ignored). The CI job
-`render-diagrams` performs the same action so broken diagrams are caught
+Rendered SVGs land in `docs/build/mermaid/` (git-ignored). The CI job
+`Docs CI` performs the same action so broken diagrams are caught
 automatically.
 
 ## VS Code setup
@@ -75,7 +75,7 @@ Open the workspace and install the recommended extensions when prompted:
 - `bierner.markdown-preview-github-styles` to preview with GitHub styling
 
 The `.vscode/settings.json` file does not force a formatter, so you can
-delegate formatting to `mdformat` by running `mdformat docs/TDD.md`
+delegate formatting to `mdformat` by running `mdformat docs/src/tdd/TDD.md`
 manually or via the lint script above.
 
 ## Tips
