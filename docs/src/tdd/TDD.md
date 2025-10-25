@@ -4260,25 +4260,7 @@ Refer to §10.5, §10.6, §11.2.2, and §11.5 for narrative requirements tied to
 
 ## Appendix I — Glossary & taxonomy
 
-*Purpose: Ensure consistent terminology across platform, docs, and UI.*
-
-Glossary entries
-
-- Artifact: Immutable content record with `class`, `status`, `content_hash`, and manifest; statuses follow §5.2 (`STORED`, `PROCESSING`, `PENDING_JUDGMENT`, `CLEARED_FOR_USE`, `OPERATOR_PREP`, `APPROVAL_REQUESTED`, `QUEUED_FOR_REVIEW`, `CHANGES_REQUESTED`, `QUARANTINED`, `APPROVED`, `SIGNED`, `RELEASED`, `REVOKED`, `ARCHIVED`, `DELETED`).
-- Exclusive type: Artifact type for which a case may have at most one `APPROVED` at a time; enforced by unique index and approval swap (§5.4.1).
-- Guardian: Service issuing PASS/WARN/BLOCK/WAIVED judgments that gate operator visibility and drive workflow transitions before review; see `docs/guardian-service.md` for architecture and audit details.
-- Localization & Policy Engine (LPE): Runtime resolver that consumes RM bundles + Settings to emit deterministic `PolicyContext` objects, masking profiles, and localization packs for every enforcement point (see `docs/tdd-lpe.md`).
-- Reference Manager (RM): Editorial/catalog service that ingests and normalizes jurisdictional data, questionnaires, and localization strings; publishes signed catalog bundles to LPE and enforces licensing, attribution, and dual-control workflows (`docs/tdd-rm.md`).
-- Review/Approval: Process that moves CDs from `OPERATOR_PREP` → `APPROVAL_REQUESTED` → `QUEUED_FOR_REVIEW`, emits `REVIEW.REQUESTED/REVIEW.QUEUED`, and culminates in human decisions (`REVIEW.APPROVED`, `REVIEW.CHANGES_REQUESTED`, `REVIEW.QUARANTINED`) or automated `REVIEW.SKIPPED` when skip modes apply (§5.2.5, §10.3.2).
-- Manifest: JSON payload embedded in artifacts capturing provenance (regions, hashes, settings snapshot), tool versions, and inputs (§5.6).
-- SSE: Server-Sent Events for streaming job and artifact updates; token-bound; supports `Last-Event-ID`.
-- RLS: PostgreSQL Row Level Security enforcing org/case scoping and deny-by-default policies; secure views restrict field access.
-- OCC: Optimistic concurrency control using `version` columns to avoid lost updates.
-- udlock: Advisory lock helpers (`scope:key`) supporting session and transaction locks with registry visibility.
-- Residency waiver: Temporary exception allowing cross-region processing; requires dual approval; manifest stamped and audited (§3.8, §7.1.1).
-- FinOps metrics: Cost/time series including `llm_cost_estimate_total`, `finops_cost_per_case_usd`, `finops_mom_regression_flag` used for dashboards and deploy guards (§8.3, §12.9).
-- LangGraph node: Typed step in Analyze/Compose graphs (e.g., OutlineBuilder, SectionWriter) producing deterministic outputs with envelopes (§6.7–§6.10).
-- Quota: Per-org limits (uploads/day, concurrent jobs, portal downloads) enforced via rate limiting and monitored in §12.8.
+This glossary has moved to a dedicated appendix page. See: tdd/appendices/glossary.md
 
 ## Appendix J — SQL policy patterns (normative)
 
