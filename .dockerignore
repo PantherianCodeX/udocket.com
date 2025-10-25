@@ -1,3 +1,8 @@
+# uDocket
+docs/build/
+docs/site/
+reports/
+
 # Version control
 .git
 .gitignore
@@ -25,12 +30,6 @@ node_modules/
 storage/
 __blobstorage__/
 __azurite_db_*.json
-
-# Generated docs & reports
-docs/_rendered/
-docs/build/
-docs/site/
-reports/
 
 # IDE state
 .vscode/
