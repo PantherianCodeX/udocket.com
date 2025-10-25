@@ -7,10 +7,11 @@ from pathlib import Path
 import os
 
 ROOT = Path(__file__).resolve().parents[2]
-DOC = ROOT / "docs" / "TDD.md"
+DOC = ROOT / "docs" / "src" / "tdd" / "TDD.md"
 
 def find_diagram_refs(text: str) -> set[str]:
-    return set(re.findall(r"docs/diagrams/[\w\-/]+\.mmd", text))
+    # Diagrams now live under docs/src/tdd/appendices/diagrams/
+    return set(re.findall(r"docs/src/tdd/appendices/diagrams/[\w\-/]+\.mmd", text))
 
 def check_diagrams(text: str) -> list[str]:
     problems: list[str] = []
@@ -34,9 +35,11 @@ def find_appendix_defs(text: str) -> set[str]:
 def check_appendices(text: str) -> list[str]:
     refs = find_appendix_refs(text)
     defs = find_appendix_defs(text)
-    missing = refs - defs
+    # Allow certain appendices to live in external appendix pages (e.g., Glossary App.I)
+    external_ok = {"I"}
+    missing = {x for x in refs if x not in defs and x not in external_ok}
     if missing:
-        return [f"Appendix referenced but not defined: App.{x}" for x in sorted(missing)]
+        return [f"Appendix referenced but not defined in TDD: App.{x}" for x in sorted(missing)]
     return []
 
 def find_section_defs(text: str) -> set[str]:

@@ -9,8 +9,8 @@ from pathlib import Path
 from typing import Iterable, Sequence
 
 ROOT = Path(__file__).resolve().parents[2]
-DOCS_DIR = ROOT / "docs"
-OUTPUT_FILE = DOCS_DIR / "runbooks.md"
+SRC_DIR = ROOT / "docs" / "src"
+OUTPUT_FILE = SRC_DIR / "ops" / "runbooks" / "index.md"
 
 RUNBOOK_HEADING_RE = re.compile(r"^(#{2,6})\s+.*runbook", re.IGNORECASE)
 HEADING_RE = re.compile(r"^(#{1,6})\s+(.*)")
@@ -32,14 +32,13 @@ def slugify(text: str) -> str:
 def iter_source_files() -> Iterable[Path]:
     """Yield documentation files that may embed runbook sections."""
 
-    patterns: Sequence[str] = ("tdd-*.md", "*-service.md")
+    # Scan service and app docs; TDD stays out to avoid duplicate high-level runbooks
+    roots = [SRC_DIR / "services", SRC_DIR / "apps"]
     seen: set[Path] = set()
-    for pattern in patterns:
-        for path in sorted(DOCS_DIR.glob(pattern)):
-            if path.name in {"runbooks.md"}:
-                continue
-            if path.name == "TDD.md":
-                continue
+    for root in roots:
+        if not root.exists():
+            continue
+        for path in sorted(root.glob("*.md")):
             if path in seen:
                 continue
             seen.add(path)
