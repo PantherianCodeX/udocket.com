@@ -6,7 +6,7 @@ author:
 version: 0.1-draft
 status: implementable
 classification: Confidential
-last_updated: 2025-10-19
+last_updated: 2025-10-25
 owners:
   - Platform Architecture
   - Security Engineering
@@ -1216,17 +1216,17 @@ Exclusive deliverables use **approval swap** semantics:
 - Optional client counter-signatures produce linked **AR** records.
 - Policy & controls matrix (excerpt):
 
-| Control | SA | WP | CD | DL | AR |
-| ------- | --:| --:| --:| --:| --:|
-| SHA-256 on create | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Content-addressed storage | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Control                       | SA | WP | CD | DL | AR |
+| ----------------------------- | --:| --:| --:| --:| --:|
+| SHA-256 on create             | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Content-addressed storage     | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Guardian judgment | (limited) | **Selective** | **Mandatory** | **Fetch-time re-check** | — |
-| Operator prep workspace | — | — | **Default** | — | — |
-| Human review | — | — | per `review.mode` / overrides | — | — |
-| Digital signature + TSA | — | — | — | **✓** | **✓** (manifests/receipts) |
-| Client counter-sign | — | — | — | **Optional** | — |
-| Residency enforcement | **Strict** | **Strict** | **Strict** | **Strict** | **Strict** |
-| Portal visibility | ✗ | ✗ | ✗ | **Only latest RELEASED** | ✗ |
+| Operator prep workspace       | — | — | **Default** | — | — |
+| Human review                  | — | — | per `review.mode` / overrides | — | — |
+| Digital signature + TSA       | — | — | — | **✓** | **✓** (manifests/receipts) |
+| Client counter-sign           | — | — | — | **Optional** | — |
+| Residency enforcement         | **Strict** | **Strict** | **Strict** | **Strict** | **Strict** |
+| Portal visibility             | ✗ | ✗ | ✗ | **Only latest RELEASED** | ✗ |
 
 #### 5.2.8 Schema & configuration guardrails
 
@@ -1334,8 +1334,8 @@ Notes
 
 - Binding breadcrumbs:
 
-  | Binding                           | Implementation                                                                 | Test                                                                                               | Observability                                                                         |
-  | --------------------------------- | ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+  | Binding                           | Implementation  | Test | Observability |
+  | --------------------------------- | --------------- | ---- | ------------- |
   | Concurrent approval swap          | `packages/udocket_core/approvals/service.py::approve_artifact`                 | `tests/platform/artifacts/test_approval_swap.py::test_concurrent_approvals_single_winner`          | Alert `approval_swap_conflict_total` (Grafana “Approvals” panel)                     |
   | Deliverable release exclusivity   | `packages/udocket_core/approvals/service.py::promote_deliverable`              | `tests/platform/artifacts/test_deliverable_release.py::test_single_released_deliverable_enforced` | Metric `deliverable_release_retries_total`; alert `deliverable_release_uniqueness`   |
 
@@ -3569,7 +3569,7 @@ Alert routing
 - **See also:** [`docs/tdd-settings.md Appendix A`](tdd-settings.md#appendix-a--settings-key-map--traceability-index) *(source: §5.4)*
 - **App.F** API reference snippets / example payloads *(source: §10.8)*
 - **App.G** ERD and schema migrations history *(source: App.I)*
-- **Appendix H** Ops runbooks & health check playbooks *(source: §12.2, Appendix H)*
+- **App.H** Ops runbooks & health check playbooks *(source: §12.2, Appendix H)*
 - **App.I** Glossary and taxonomy *(source: Glossary, §16 taxonomy notes)*
 - **App.J** SQL policy patterns *(source: §4.4, §11.6)*
 - **App.K** Controls assurance map *(source: §2.2, §12, §14)*
@@ -3758,35 +3758,35 @@ Ingestion inputs (binding)
 
 Artifact table
 
-| Artifact type             | Directory / pattern                         | Exclusive | Manifest pointer                       | Notes                                                             |
-| ------------------------- | ------------------------------------------- | --------- | -------------------------------------- | ----------------------------------------------------------------- |
-| TRANSCRIPT                | `transcript/<job_id>__transcript.txt`       | **Yes**     | `<transcript>.manifest.json`           | Header includes case, source, language, hashes                    |
-| AUDIO_NORMALIZED          | `audio/<job_id>__<normalized_name>`         | No        | n/a                                    | PCM 16 kHz mono copy for reproducibility                          |
-| OUTLINE_JSON              | `analysis/<job_id>__outline_v1.json`        | No        | `<outline>.manifest.json`              | Hierarchical outline for Compose                                  |
-| TIMELINE_JSON              | `timeline/<job_id>__timeline_v2.json`       | No        | `<timeline_v2>.manifest.json`         | Normalized timeline events (speakers, timestamps, UUID anchors) |
-| ENTITIES_JSON             | `analysis/<job_id>__entitIES_v1.json`       | No        | `<entities>.manifest.json`             | Deterministic UUID per entity/relationship                        |
-| ISSUES_JSON              | `analysis/<job_id>__issues_v1.json`        | No       | `<issues>.manifest.json`              | Issues presented or evident                                    |
-| FACTS_JSON                | `analysis/<job_id>__facts_v1.md`          | No        | `<facts>.manifest.json`                | Facts as they are presented                        |
-| GAPS_JSON                 | `analysis/<job_id>__gaps_v1.md`           | No        | `<gaps>.manifest.json`                 | information gaps and other unknowns                |
-| REPORT_MD                 | `analysis/<job_id>__analyze_report_v1.md`     | No        | `<report>.manifest.json`         | Human readable report containing internal notes, QA logs and run logs      |
-| COMPOSE_CLIENT_MD/DOCX    | `docs/<job_id>__compose_client_v1.md \| docx`    | **Yes**                                | `<compose_client>.manifest.json`                 |
-| COMPOSE_LAWYER_MD/DOCX    | `docs/<job_id>__compose_lawyer_v1.md \| docx\`    | **Yes**                                | `<compose_lawyer>.manifest.json`                 |
-| COMPOSE_BUNDLE_EXCERPT_MD | `docs/<job_id>__compose_bundle_v1.md`       | **Yes**   | `<compose_bundle>.manifest.json`       | Excerpt for bundle                                                |
-| COMPOSE_STAFF_REPORT_MD   | `docs/<job_id>__compose_staff_report_v1.md` | No        | `<compose_staff_report>.manifest.json` | QA staff notes                                                    |
-| COMPOSE_QA_REPORT_MD      | `docs/<job_id>__compose_qa_report_v1.md`    | No        | `<compose_qa_report>.manifest.json`    | QA outcomes                                                       |
-| DPIA_RECORD               | `privacy/<job_id>__dpia_v1.json \| md`      | No                                     | `<dpia>.manifest.json`                                            ||
-| ROPA_RECORD               | `privacy/<job_id>__ropa_v1.json \| md`      | No                                     | `<ropa>.manifest.json`                                            ||
-| AUDIT_SEAL                | `ops/<timestamp>__audit_seal_v1.json`       | No        | `<audit_seal>.manifest.json`           | Rolling Merkle root                                               |
-| SIGNATURE_CERT            | `docs/<job_id>__signature_cert_v1.json`     | No        | `<signature_cert>.manifest.json`       | Signer certificate bundle                                         |
-| ATTACHMENT_RAW            | `docs/<job_id>__attachment_raw_v1.bin`      | No        | `<attachment_raw>.manifest.json`       | Source binary for portal messaging/client uploads; Guardian-gated |
-| ATTACHMENT_TEXT           | \`docs/\<job_id>\_\_attachment_text_v1.json | md\`      | No                                     | `<attachment_text>.manifest.json`                                 |
-| ERASURE_JOURNAL           | `privacy/<job_id>__erasure_journal_v1.json` | No        | `<erasure_journal>.manifest.json`      | Hard-purge DSAR evidence; subject hashed with HKDF salt           |
-| DESTRUCTION_CERT          | `privacy/<job_id>__destruction_cert_v1.json` | No       | `<destruction_cert>.manifest.json`     | Case-level destruction attestation; links retention trigger + tombstone IDs |
-| CHAT_SESSION_JSON         | `ops/<session_id>__chat_staff.jsonl`        | No        | `<chat_session>.manifest.json`         | Staff Copilot conversation log with citations + moderation metadata |
-| CHAT_SESSION_CLIENT_JSON  | `ops/<session_id>__chat_client.jsonl`       | No        | `<chat_client_session>.manifest.json`  | Client portal chat conversation; portal-visible subset; Guardian-audited |
-| CHAT_SUMMARY_JSON         | `analysis/<job_id>__chat_summary_v1.json`   | No        | `<chat_summary>.manifest.json`         | Optional summarization of chat session; includes references and moderation outcome |
-| AGENT_EDIT_PROPOSAL_MD    | `analysis/<job_id>__edit_proposal_v1.md`    | No        | `<agent_edit_proposal>.manifest.json`  | AI-assisted edit proposal human-reviewed before promotion |
-| AGENT_EDIT_DIFF_JSON      | `analysis/<job_id>__edit_diff_v1.json`      | No        | `<agent_edit_diff>.manifest.json`      | Machine-readable diff for Agent edit proposals |
+| Artifact type             | Directory / pattern                          | Exclusive | Manifest pointer                       | Notes                                                             |
+| ------------------------- | -------------------------------------------- | --------- | -------------------------------------- | ----------------------------------------------------------------- |
+| TRANSCRIPT                | `transcript/<job_id>__transcript.txt`        | **Yes**   | `<transcript>.manifest.json`           | Header includes case, source, language, hashes                    |
+| AUDIO_NORMALIZED          | `audio/<job_id>__<normalized_name>`          | No        | n/a                                    | PCM 16 kHz mono copy for reproducibility                          |
+| OUTLINE_JSON              | `analysis/<job_id>__outline_v1.json`         | No        | `<outline>.manifest.json`              | Hierarchical outline for Compose                                  |
+| TIMELINE_JSON             | `timeline/<job_id>__timeline_v1.json`        | No        | `<timeline>.manifest.json`             | Normalized timeline events (speakers, timestamps, UUID anchors)   |
+| ENTITIES_JSON             | `analysis/<job_id>__entitIES_v1.json`        | No        | `<entities>.manifest.json`             | Deterministic UUID per entity/relationship                        |
+| ISSUES_JSON               | `analysis/<job_id>__issues_v1.json`          | No        | `<issues>.manifest.json`               | Issues presented or evident                                       |
+| FACTS_JSON                | `analysis/<job_id>__facts_v1.md`             | No        | `<facts>.manifest.json`                | Facts as they are presented                                       |
+| GAPS_JSON                 | `analysis/<job_id>__gaps_v1.md`              | No        | `<gaps>.manifest.json`                 | information gaps and other unknowns                               |
+| REPORT_MD                 | `analysis/<job_id>__analyze_report_v1.md`    | No        | `<report>.manifest.json`               | Human readable report containing internal notes, QA logs and run logs |
+| COMPOSE_CLIENT_MD/DOCX    | `docs/<job_id>__compose_client_v1.md\|docx`  | **Yes**   | `<compose_client>.manifest.json`       | |
+| COMPOSE_LAWYER_MD/DOCX    | `docs/<job_id>__compose_lawyer_v1.md\|docx`  | **Yes**   | `<compose_lawyer>.manifest.json`       | |
+| COMPOSE_BUNDLE_EXCERPT_MD | `docs/<job_id>__compose_bundle_v1.md`        | **Yes**   | `<compose_bundle>.manifest.json`       | Excerpt for bundle                                                |
+| COMPOSE_STAFF_REPORT_MD   | `docs/<job_id>__compose_staff_report_v1.md`  | No        | `<compose_staff_report>.manifest.json` | QA staff notes                                                    |
+| COMPOSE_QA_REPORT_MD      | `docs/<job_id>__compose_qa_report_v1.md`     | No        | `<compose_qa_report>.manifest.json`    | QA outcomes                                                       |
+| DPIA_RECORD               | `privacy/<job_id>__dpia_v1.json\|md`         | No        | `<dpia>.manifest.json`                 | |
+| ROPA_RECORD               | `privacy/<job_id>__ropa_v1.json\|md`         | No        | `<ropa>.manifest.json`                 | |
+| AUDIT_SEAL                | `ops/<timestamp>__audit_seal_v1.json`        | No        | `<audit_seal>.manifest.json`           | Rolling Merkle root                                               |
+| SIGNATURE_CERT            | `docs/<job_id>__signature_cert_v1.json`      | No        | `<signature_cert>.manifest.json`       | Signer certificate bundle                                         |
+| ATTACHMENT_RAW            | `docs/<job_id>__attachment_raw_v1.bin`       | No        | `<attachment_raw>.manifest.json`       | Source binary for portal messaging/client uploads; Guardian-gated |
+| ATTACHMENT_TEXT           | `docs/<job_id>__attachment_text_v1.json\|md` | No        | `<attachment_text>.manifest.json`      | |
+| ERASURE_JOURNAL           | `privacy/<job_id>__erasure_journal_v1.json`  | No        | `<erasure_journal>.manifest.json`      | Hard-purge DSAR evidence; subject hashed with HKDF salt           |
+| DESTRUCTION_CERT          | `privacy/<job_id>__destruction_cert_v1.json` | No        | `<destruction_cert>.manifest.json`     | Case-level destruction attestation; links retention trigger + tombstone IDs |
+| CHAT_SESSION_JSON         | `ops/<session_id>__chat_staff.jsonl`         | No        | `<chat_session>.manifest.json`         | Staff Copilot conversation log with citations + moderation metadata |
+| CHAT_SESSION_CLIENT_JSON  | `ops/<session_id>__chat_client.jsonl`        | No        | `<chat_client_session>.manifest.json`  | Client portal chat conversation; portal-visible subset; Guardian-audited |
+| CHAT_SUMMARY_JSON         | `analysis/<job_id>__chat_summary_v1.json`    | No        | `<chat_summary>.manifest.json`         | Optional summarization of chat session; includes references and moderation outcome |
+| AGENT_EDIT_PROPOSAL_MD    | `analysis/<job_id>__edit_proposal_v1.md`     | No        | `<agent_edit_proposal>.manifest.json`  | AI-assisted edit proposal human-reviewed before promotion         |
+| AGENT_EDIT_DIFF_JSON      | `analysis/<job_id>__edit_diff_v1.json`       | No        | `<agent_edit_diff>.manifest.json`      | Machine-readable diff for Agent edit proposals                    |
 
 - **NOTE:** Replace "v1" with v{n}
 
@@ -3941,7 +3941,7 @@ See [`docs/tdd-settings.md Appendix A`](tdd-settings.md#appendix-a--settings-key
 
 *Purpose: Provide signed, idempotent examples to guide integrations.*
 
-### F.0 Canonical `ApiError.code` values
+### F.0 `ApiError.code` values
 
 | Code                | Description                                       |
 | ------------------- | ------------------------------------------------- |
