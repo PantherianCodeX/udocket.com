@@ -9,6 +9,8 @@
     "mmd:paths": "bash scripts/docs/render_mermaid.sh --paths"
   },
   "devDependencies": {
-    "@mermaid-js/mermaid-cli": "^11.12.0"
+    "@mermaid-js/mermaid-cli": "^11.12.0",
+    "markdownlint-cli2": "^0.14.0",
+    "markdownlint-cli2-config-standard": "^0.0.7"
   }
 }
