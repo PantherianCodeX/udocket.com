@@ -28,6 +28,11 @@ This guide explains how to add and maintain TDD documentation in this repo. The 
 - Keep one decision per ADR; link from TDD or service pages when referenced.
 
 ## Lint and build locally
+- Install Python/Node tooling once:
+  - `pip install -r requirements-docs.txt`
+  - `npm ci`
+  - Vale CLI ships in the devcontainer; when running locally, download v3.7.1 from the official releases if you want parity.
+- Node tooling expects Node.js 22.x (see `.nvmrc` and devcontainer). Use `nvm use` or install the pinned version to avoid CLI mismatches.
 - Lint markdown: `npx markdownlint-cli2 'docs/src/**/*.md'`.
 - Style checks (Vale):
   - From `docs/`: `vale src/`

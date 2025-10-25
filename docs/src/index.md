@@ -7,11 +7,12 @@ can keep the document consistent without guessing which tools to run.
 ## Quick start
 
 ```bash
-# Install the Python utilities (mdformat + helpers)
+# Install the Python utilities (mdformat, mkdocs, etc.)
 pip install -r requirements-docs.txt
 
-# Optionally install markdownlint for richer feedback
-npm install --location=global markdownlint-cli2 markdownlint-cli2-config-standard
+# Install Node-based helpers (mermaid-cli, markdownlint)
+# Requires Node.js 22.x (see .nvmrc)
+npm ci
 
 # Run the full lint suite
 python scripts/docs/lint_docs.py
@@ -58,7 +59,6 @@ Source `.mmd` files live under `docs/src/tdd/appendices/diagrams/`.
 To render them locally (to `docs/build/mermaid/`):
 
 ```bash
-npm install --location=global @mermaid-js/mermaid-cli
 scripts/docs/render_mermaid.sh --all
 ```
 

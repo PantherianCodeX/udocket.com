@@ -7,17 +7,27 @@ on:
 jobs:
   lint-build:
     runs-on: ubuntu-latest
+    env:
+      VALE_VERSION: 3.7.1
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 20 }
+        with:
+          node-version: '22'
+          check-latest: true
       - uses: actions/setup-python@v5
-        with: { python-version: '3.11' }
+        with: { python-version: '3.12' }
       - name: Install tools
         run: |
-          npm i -g @mermaid-js/mermaid-cli markdownlint-cli2
-          pip install mkdocs mkdocs-material vale==3.7.1
+          npm ci
+          pip install -r requirements-docs.txt
           sudo apt-get update && sudo apt-get install -y pandoc
+          curl -fsSL "https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_Linux_64-bit.tar.gz" -o vale.tar.gz
+          tar -xzf vale.tar.gz vale
+          sudo mv vale /usr/local/bin/vale
+          rm -f vale.tar.gz
+      - name: Add local node binaries to PATH
+        run: echo "$(pwd)/node_modules/.bin" >> $GITHUB_PATH
       - name: Markdownlint
         run: npx markdownlint-cli2 'docs/src/**/*.md'
       - name: Vale

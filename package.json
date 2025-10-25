@@ -3,6 +3,10 @@
   "private": true,
   "version": "1.0.0",
   "description": "Doc tooling for uDocket diagrams",
+  "engines": {
+    "node": ">=22.0.0",
+    "npm": ">=10.0.0"
+  },
   "scripts": {
     "mmd:all": "bash scripts/docs/render_mermaid.sh --all --verbose",
     "mmd:changed": "bash scripts/docs/render_mermaid.sh --changed --verbose",
@@ -10,7 +14,6 @@
   },
   "devDependencies": {
     "@mermaid-js/mermaid-cli": "^11.12.0",
-    "markdownlint-cli2": "^0.14.0",
-    "markdownlint-cli2-config-standard": "^0.0.7"
+    "markdownlint-cli2": "^0.14.0"
   }
 }
