@@ -132,6 +132,9 @@ def test_bootstrap_stack_idempotent(monkeypatch: pytest.MonkeyPatch) -> None:
     assert summary_first.superuser_created is True
     assert summary_first.organization_created is True
     assert summary_first.membership_created is True
+    assert summary_first.superuser_updated is False
+    assert summary_first.organization_updated is False
+    assert summary_first.membership_updated is False
     assert summary_first.presets_imported is False
 
     user_model = get_user_model()
@@ -143,7 +146,16 @@ def test_bootstrap_stack_idempotent(monkeypatch: pytest.MonkeyPatch) -> None:
     membership = OrganizationMembership.objects.get(user=user, organization=organization)
     assert membership.role == OrganizationMembership.Role.SUPERUSER
 
-    # Second run should update but not recreate objects.
+    # Apply manual changes that bootstrap should not override.
+    organization.display_name = "Bootstrap Org Updated"
+    organization.save(update_fields=["display_name"])
+    membership.role = OrganizationMembership.Role.ADMIN
+    membership.save(update_fields=["role"])
+    user.email = "bootstrap+custom@example.com"
+    user.set_password("custom-secret")
+    user.save(update_fields=["email", "password"])
+
+    # Second run should skip updates but still succeed.
     config_repeat = BootstrapConfig(
         enabled=True,
         superuser=SuperuserConfig(
@@ -163,12 +175,18 @@ def test_bootstrap_stack_idempotent(monkeypatch: pytest.MonkeyPatch) -> None:
 
     summary_second = bootstrap_stack(config_repeat)
     assert summary_second.superuser_created is False
-    assert summary_second.superuser_updated is True
+    assert summary_second.superuser_updated is False
     assert summary_second.organization_created is False
-    assert summary_second.organization_updated is True
+    assert summary_second.organization_updated is False
+    assert summary_second.membership_created is False
+    assert summary_second.membership_updated is False
 
     organization.refresh_from_db()
     assert organization.display_name == "Bootstrap Org Updated"
 
     user.refresh_from_db()
-    assert user.check_password("new-secret") is True
+    assert user.check_password("custom-secret") is True
+    assert user.email == "bootstrap+custom@example.com"
+
+    membership.refresh_from_db()
+    assert membership.role == OrganizationMembership.Role.ADMIN
