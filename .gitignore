@@ -4,8 +4,9 @@
 /typings/external_stubs/
 /typings/vendor/
 /reports/
-/docs/typing/**_manifest.json
+automation_manifest.json
 /docs/build/
+
 
 # typewiz cache
 .typewiz_cache/
