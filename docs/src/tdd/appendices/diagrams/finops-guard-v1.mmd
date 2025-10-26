@@ -1,0 +1,19 @@
+%% Mermaid flowchart: FinOps deploy guard v1
+%%{init: {"flowchart": {"htmlLabels": false}, "class": {"htmlLabels": false}, "state": {"htmlLabels": false}, "er": {"htmlLabels": false}, "journey": {"htmlLabels": false}, "timeline": {"htmlLabels": false}}}%%
+graph TD
+  A["Collect spend metrics (llm_cost_estimate_total, run_rate_7d)"]
+  B["Project month-end spend = month_to_date + run_rate_7d * remaining_days"]
+  C["Compare against prior month actual + thresholds"]
+  D{"Regression ≥ guard threshold?"}
+  E["Block deploy (deploy-gate:finops)"]
+  F["Page FinOps/Product; require mitigation plan"]
+  G["Allow deploy (guard passes)"]
+  H["Override requested? (llm.finops.override_until)"]
+  I["Validate override approvals + expiry ≤ 72h"]
+
+  A --> B --> C --> D
+  D -->|Yes| E --> F
+  D -->|No| G
+  E --> H
+  H -->|Yes| I --> G
+  H -->|No| F

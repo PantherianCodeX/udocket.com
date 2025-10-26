@@ -1,0 +1,44 @@
+%% Mermaid class diagram: Guardian service core classes v1
+%%{init: {"flowchart": {"htmlLabels": false}, "class": {"htmlLabels": false}, "state": {"htmlLabels": false}, "er": {"htmlLabels": false}, "journey": {"htmlLabels": false}, "timeline": {"htmlLabels": false}}}%%
+classDiagram
+  class GuardianService {
+    +evaluate(request: GuardianRequest)
+    +enqueueReplay(resourceUrn, reason)
+    -detectorPipeline: DetectorPipeline
+    -policyClient: PolicyClient
+    -vaultClient: VaultClient
+  }
+  class GuardianRequest {
+    +artifactId: UUID
+    +contentHash: SHA256
+    +policyContextDigest: SHA256
+    +waiverId: UUID?
+  }
+  class DetectorPipeline {
+    +runStages(content)
+    -schemaStage()
+    -patternStage()
+    -mlStage()
+    -contextStage()
+  }
+  class PolicyClient {
+    +evaluate(residencyInput)
+    +fetchPolicyContext(digest)
+  }
+  class VaultClient {
+    +mask(spans)
+    +persistMetadata(artifactVersionId)
+  }
+  class GuardianJudgmentRecord {
+    +id: UUID
+    +judgment: Judgment
+    +reasonCodes: List
+    +waiverId: UUID?
+  }
+
+  GuardianService --> GuardianRequest : consumes
+  GuardianService --> DetectorPipeline : orchestrates
+  GuardianService --> PolicyClient : queries
+  GuardianService --> VaultClient : applies masking
+  GuardianService --> GuardianJudgmentRecord : persists
+  DetectorPipeline --> GuardianJudgmentRecord : annotates spans

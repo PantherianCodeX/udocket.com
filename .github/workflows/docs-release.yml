@@ -1,0 +1,55 @@
+name: Docs Release
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      VALE_VERSION: 3.7.1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          check-latest: true
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Install tools
+        run: |
+          npm ci
+          pip install -r requirements-docs.txt
+          sudo apt-get update && sudo apt-get install -y pandoc
+          curl -fsSL "https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_Linux_64-bit.tar.gz" -o vale.tar.gz
+          tar -xzf vale.tar.gz vale
+          sudo mv vale /usr/local/bin/vale
+          rm -f vale.tar.gz
+      - name: Add local node binaries to PATH
+        run: echo "$(pwd)/node_modules/.bin" >> $GITHUB_PATH
+      - name: Build site
+        run: mkdocs -f docs/mkdocs.yml build --clean
+      - name: Render Mermaid (all)
+        run: bash scripts/docs/render_mermaid.sh --all --verbose
+      - name: Build PDFs (TDD)
+        run: |
+          mkdir -p docs/build/pdf
+          bash scripts/docs/build_pdf_tdd.sh
+      - name: Checksums & manifest
+        run: bash scripts/docs/hash_and_manifest.sh
+      - name: Create GitHub Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+      - name: Upload PDFs
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            docs/build/pdf/tdd.pdf
+            docs/build/pdf/manifest.json

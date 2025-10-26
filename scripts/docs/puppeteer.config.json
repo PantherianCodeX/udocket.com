@@ -1,0 +1,14 @@
+{
+  "executablePath": "/root/.cache/puppeteer/chrome-headless-shell/linux-141.0.7390.78/chrome-headless-shell-linux64/chrome-headless-shell",
+  "headless": "shell",
+  "args": [
+    "--no-sandbox",
+    "--disable-setuid-sandbox",
+    "--disable-dev-shm-usage",
+    "--disable-gpu",
+    "--disable-software-rasterizer",
+    "--single-process",
+    "--no-zygote",
+    "--allow-file-access-from-files"
+  ]
+}

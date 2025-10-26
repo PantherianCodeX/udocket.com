@@ -1,0 +1,22 @@
+{
+  "recordedAt": "2025-10-05T00:00:00Z",
+  "pyrightStats": {
+    "command": "pyright --stats",
+    "filesAnalyzed": 0,
+    "errorCount": 0,
+    "warningCount": 0
+  },
+  "helpers": [
+    {
+      "name": "bootstrap_env",
+      "version": "0.1.0",
+      "lastRun": null,
+      "status": "pending"
+    }
+  ],
+  "strictModules": [],
+  "notes": [
+    "Populate this manifest via scripts/typing/sync_docs.py",
+    "Update recordedAt and pyrightStats after each bootstrap run"
+  ]
+}

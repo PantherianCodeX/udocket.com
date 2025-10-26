@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://udocket.ca/schemas/locale.schema.json",
+  "title": "LocalePack",
+  "description": "Localization pack returned by LPE for a specific locale.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "locale",
+    "message_format_version",
+    "strings",
+    "formats",
+    "attribution"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string"
+    },
+    "locale": {
+      "type": "string",
+      "pattern": "^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$"
+    },
+    "message_format_version": {
+      "type": "string",
+      "enum": [
+        "mf2"
+      ]
+    },
+    "strings": {
+      "type": "object",
+      "description": "Key/value pairs of localized copy. Values are MessageFormat 2 strings.",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "formats": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "date": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "time": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "number": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "measurement_system": {
+          "type": "string",
+          "enum": [
+            "metric",
+            "imperial"
+          ]
+        }
+      }
+    },
+    "attribution": {
+      "type": "array",
+      "description": "License and source statements required when rendering strings.",
+      "items": {
+        "type": "object",
+        "required": [
+          "source",
+          "license",
+          "terms"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "source": {
+            "type": "string"
+          },
+          "license": {
+            "type": "string"
+          },
+          "terms": {
+            "type": "string"
+          },
+          "url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri"
+          }
+        }
+      }
+    }
+  }
+}
