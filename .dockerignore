@@ -31,6 +31,14 @@ node_modules/
 # Dev-only typing helpers
 typings/
 
+# Local-only tooling & docs
+.devcontainer/
+.github/
+docker-compose*.yml
+docs/
+scripts/
+tests/
+
 # BuildKit/Buildx caches
 .docker/
 
