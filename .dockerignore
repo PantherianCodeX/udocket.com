@@ -28,6 +28,9 @@ __pycache__/
 node_modules/
 .cache/
 
+# Dev-only typing helpers
+typings/
+
 # BuildKit/Buildx caches
 .docker/
 
