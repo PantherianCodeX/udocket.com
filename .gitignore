@@ -1,15 +1,11 @@
 # uDocket
-storage/
-apps/storage/
-typings/external_stubs/
-typings/vendor/
-reports/
-docs/typing/**_manifest.json
-docs/site/
-docs/build/
-docs/src/**/.cache/
-docs/src/**/.pytest_cache/
-docs/typing/automation_manifest.json
+/storage/
+/apps/storage/
+/typings/external_stubs/
+/typings/vendor/
+/reports/
+/docs/typing/**_manifest.json
+/docs/build/
 
 # typewiz cache
 .typewiz_cache/
@@ -173,7 +169,7 @@ __azurite_db_*.json
 .ropeproject
 
 # mkdocs documentation
-/site
+docs/site
 
 # mypy
 .mypy_cache/
