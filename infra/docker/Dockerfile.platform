@@ -52,6 +52,11 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         nodejs \
         pandoc \
       ; \
+    fi;
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    --mount=type=cache,target=/root/.npm,sharing=locked \
+    if [ "$DEV_TOOLS" = "1" ]; then \
       npm install -g "npm@${NPM_VERSION}"; \
       npx --yes "playwright@${PLAYWRIGHT_VERSION}" install-deps; \
       ARCH="$(dpkg --print-architecture)"; \
@@ -68,14 +73,14 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
       curl -fsSL "$VALE_URL" -o /tmp/vale.tar.gz; \
       if [ -n "$VALE_CHECKSUM_URL" ]; then \
         curl -fsSL "$VALE_CHECKSUM_URL" -o /tmp/vale.checksums; \
-        grep "  $VALE_ASSET_NAME" /tmp/vale.checksums | sha256sum -c -; \
+        (cd /tmp && grep "  $VALE_ASSET_NAME" vale.checksums | sha256sum -c -); \
       fi; \
       tar -xzf /tmp/vale.tar.gz -C /usr/local/bin vale; \
       chmod +x /usr/local/bin/vale; \
       rm -f /tmp/vale.tar.gz /tmp/vale.checksums; \
       git lfs install --system; \
       rm -rf /var/lib/apt/lists/*; \
-    fi
+    fi;
 
 FROM toolchain AS runtime-wheels
 
