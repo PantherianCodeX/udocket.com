@@ -1,7 +1,7 @@
 services:
   platform:
-    volumes:
-      - .:/app
+    build:
+      network: host
     environment:
       DJANGO_SETTINGS_MODULE: apps.platform.config.settings.dev
       CELERY_TASK_ALWAYS_EAGER: "0"
@@ -16,8 +16,8 @@ services:
           action: rebuild
 
   platform_worker:
-    volumes:
-      - .:/app
+    build:
+      network: host
     environment:
       DJANGO_SETTINGS_MODULE: apps.platform.config.settings.dev
       CELERY_TASK_ALWAYS_EAGER: "0"
@@ -32,8 +32,8 @@ services:
           action: rebuild
 
   platform_beat:
-    volumes:
-      - .:/app
+    build:
+      network: host
     environment:
       DJANGO_SETTINGS_MODULE: apps.platform.config.settings.dev
       CELERY_TASK_ALWAYS_EAGER: "0"

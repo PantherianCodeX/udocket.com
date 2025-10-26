@@ -7,8 +7,6 @@
   ],
   "service": "platform-dev",
   "runServices": [
-    "postgres",
-    "redis",
     "platform-dev"
   ],
   "shutdownAction": "stopCompose",
@@ -19,7 +17,7 @@
     "DJANGO_SETTINGS_MODULE": "apps.platform.config.settings.dev",
     "ENV_READ_DOTENV": "1"
   },
-  "postCreateCommand": "bash -lc 'set -euo pipefail; pip install --upgrade pip; pip install -r apps/platform/requirements.txt; pip install git+https://github.com/PantherianCodeX/typewiz@main; python scripts/typing/vendor_stubs.py || true'",
+  "postCreateCommand": "bash -lc 'set -euo pipefail; pip install --upgrade pip; pip install -r apps/platform/requirements.txt; pip install -r requirements-docs.txt; npm ci; pip install git+https://github.com/PantherianCodeX/typewiz@main; python scripts/typing/vendor_stubs.py || true'",
   "customizations": {
     "vscode": {
       "extensions": [
@@ -30,6 +28,7 @@
         "ms-azuretools.vscode-containers",
         "ms-azuretools.vscode-docker",
         "ms-python.black-formatter",
+        "charliermarsh.ruff",
         "ms-python.debugpy",
         "ms-python.python",
         "ms-python.vscode-pylance",
@@ -37,7 +36,17 @@
         "ms-vscode-remote.remote-containers",
         "openai.chatgpt",
         "slightc.pip-manager",
-        "ms-python.mypy-type-checker"
+        "ms-python.mypy-type-checker",
+        "yzhang.markdown-all-in-one",
+        "DavidAnson.vscode-markdownlint",
+        "bierner.markdown-preview-github-styles",
+        "tomoki1207.pdf",
+        "ms-vscode.vscode-node-azure-pack",
+        "ms-windows-ai-studio.windows-ai-studio",
+        "ms-kubernetes-tools.vscode-kubernetes-tools",
+        "firefox-devtools.vscode-firefox-debug",
+        "ms-azuretools.vscode-azurevirtualmachines",
+        "Azurite.azurite"
       ],
       "settings": {
         "python.defaultInterpreterPath": "/app/.venv/bin/python"

@@ -1,0 +1,35 @@
+# uDocket
+docs/build/
+docs/site/
+reports/
+
+# Version control
+.git
+.gitignore
+
+# Python environments & caches
+.venv
+.venv/
+.env
+.env.*
+.pytest_cache/
+.mypy_cache/
+.typewiz_cache/
+.pytype/
+.pyre/
+__pycache__/
+
+# Node / tooling caches
+node_modules/
+.cache/
+
+# BuildKit/Buildx caches
+.docker/
+
+# Local storage & emulator data
+storage/
+__blobstorage__/
+__azurite_db_*.json
+
+# IDE state
+.vscode/

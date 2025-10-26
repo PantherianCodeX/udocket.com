@@ -1,14 +1,17 @@
 services:
   platform-dev:
     build:
-      context: ${PWD}
+      context: .
       dockerfile: infra/docker/Dockerfile.platform
+      network: host
+      cache_from:
+        - type=local,src=.docker/buildx-cache/dev
       args:
         DEV_TOOLS: "1"
         # Allow choosing a different base image without editing the Dockerfile
-        PYTHON_BASE: "${PYTHON_BASE:-mcr.microsoft.com/devcontainers/python:3.12}"
+        PYTHON_BASE: "${PYTHON_BASE:-python:3.12-slim-bookworm}"
     env_file:
-      - ${PWD}/.env
+      - ./.env
     environment:
       DJANGO_SETTINGS_MODULE: apps.platform.config.settings.dev
       ENV_READ_DOTENV: "1"
@@ -21,15 +24,16 @@ services:
       - home-cache:/root/.cache
       - home-local-share:/root/.local/share
       - codex-data:/root/.codex
-      - ${PWD}:/app
-      - ${PWD}/storage:/app/storage
-      - ${PWD}/.env:/app/.env:rw
+      - .:/app
+      - ./storage:/app/storage
+      - ./.env:/app/.env:rw
       - /var/run/docker.sock:/var/run/docker.sock
-    depends_on:
-      postgres:
-        condition: service_started
-      redis:
-        condition: service_started
+    security_opt:
+      - seccomp=unconfined
+    cap_add:
+      - SYS_ADMIN
+    shm_size: 1g
+
   # Override service port publishing when running inside the devcontainer
   # Keep internal networking the same; only change host bindings to avoid conflicts
   redis:
