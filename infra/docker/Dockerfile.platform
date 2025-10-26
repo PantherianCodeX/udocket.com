@@ -9,7 +9,7 @@ FROM ${PYTHON_BASE} AS python-base
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive
-
+    
 # Core packages needed for every image
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
@@ -103,10 +103,14 @@ FROM runtime-wheels AS dev-wheels
 ARG DEV_TOOLS
 
 COPY apps/platform/requirements-dev.txt dev.txt
+COPY requirements-docs.txt docs.txt
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     if [ "$DEV_TOOLS" = "1" ]; then \
       pip wheel --wheel-dir /wheels --requirement dev.txt; \
+      if [ -s docs.txt ]; then \
+        pip wheel --wheel-dir /wheels --requirement docs.txt; \
+      fi; \
     fi
 
 FROM toolchain AS python-deps
@@ -120,11 +124,14 @@ COPY --from=dev-wheels /wheels /tmp/wheels
 COPY apps/platform/requirements.txt /tmp/platform-requirements.txt
 COPY apps/platform/requirements-dev.txt /tmp/platform-requirements-dev.txt
 COPY packages/udocket_core/requirements.txt /tmp/udocket-core-requirements.txt
+COPY requirements-docs.txt /tmp/requirements-docs.txt
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --no-index --find-links=/tmp/wheels -r /tmp/platform-requirements.txt \
  && pip install --no-index --find-links=/tmp/wheels -r /tmp/udocket-core-requirements.txt \
  && if [ "$DEV_TOOLS" = "1" ]; then pip install --no-index --find-links=/tmp/wheels -r /tmp/platform-requirements-dev.txt; fi \
+ && if [ "$DEV_TOOLS" = "1" ] && [ -s /tmp/requirements-docs.txt ]; then pip install --no-index --find-links=/tmp/wheels -r /tmp/requirements-docs.txt; fi \
  && rm -f /tmp/platform-requirements.txt /tmp/platform-requirements-dev.txt /tmp/udocket-core-requirements.txt \
+ && rm -f /tmp/requirements-docs.txt \
  && rm -rf /tmp/wheels
 
 FROM python-deps AS app

@@ -17,7 +17,7 @@
     "DJANGO_SETTINGS_MODULE": "apps.platform.config.settings.dev",
     "ENV_READ_DOTENV": "1"
   },
-  "postCreateCommand": "bash -lc 'set -euo pipefail; ./scripts/setup_buildx_cache.sh; pip install --upgrade pip; pip install -r apps/platform/requirements.txt; pip install -r requirements-docs.txt; npm ci; pip install git+https://github.com/PantherianCodeX/typewiz@main; python scripts/typing/vendor_stubs.py || true'",
+  "postCreateCommand": "bash -lc 'set -euo pipefail; ./scripts/setup_buildx_cache.sh; if [ \"${INSTALL_DOCS:-1}\" = \"1\" ]; then pip install -r requirements-docs.txt; fi; npm ci; python scripts/typing/vendor_stubs.py",
   "customizations": {
     "vscode": {
       "extensions": [

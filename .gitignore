@@ -4,6 +4,7 @@
 typings/external_stubs/
 typings/vendor/
 reports/
+docs/typing/automation_manifest.json
 
 # typewiz cache
 .typewiz_cache/
