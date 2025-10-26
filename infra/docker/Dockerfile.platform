@@ -9,7 +9,7 @@ FROM ${PYTHON_BASE} AS python-base
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive
-
+    
 # Core packages needed for every image
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
@@ -26,16 +26,23 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 
 FROM python-base AS toolchain
 ARG DEV_TOOLS
+ARG VALE_VERSION=3.7.1
+ARG PLAYWRIGHT_VERSION=1.46.0
+ARG NPM_VERSION=11.6.2
 
 # Optional developer tooling (docker CLI, browsers, etc.)
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    --mount=type=cache,target=/root/.npm,sharing=locked \
     if [ "$DEV_TOOLS" = "1" ]; then \
       set -eux; \
       install -m 0755 -d /etc/apt/keyrings; \
       curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc; \
       chmod a+r /etc/apt/keyrings/docker.asc; \
       echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(. /etc/os-release && echo $VERSION_CODENAME) stable" > /etc/apt/sources.list.d/docker.list; \
+      curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o /etc/apt/keyrings/githubcli-archive-keyring.gpg; \
+      chmod a+r /etc/apt/keyrings/githubcli-archive-keyring.gpg; \
+      echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list; \
       curl -fsSL https://deb.nodesource.com/setup_22.x -o /tmp/nodesource.sh; \
       bash /tmp/nodesource.sh; \
       rm -f /tmp/nodesource.sh; \
@@ -43,25 +50,41 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
       apt-get install -y --no-install-recommends \
         build-essential gcc g++ pkg-config libpq-dev \
         git-lfs htop iputils-ping jq less lsof nano ripgrep strace tree unzip vim-tiny wget netcat-openbsd \
-        postgresql-client \
+        postgresql-client-15 \
         docker-ce-cli docker-buildx-plugin docker-compose-plugin \
+        gh \
         nodejs \
-        fonts-liberation libasound2 libatk-bridge2.0-0 libatk1.0-0 \
-        libcairo2 libcups2 libdbus-1-3 libexpat1 libfontconfig1 libgbm1 \
-        libglib2.0-0 libgtk-3-0 libnspr4 libnss3 libpango-1.0-0 libpangocairo-1.0-0 \
-        libx11-6 libx11-xcb1 libxcb1 libxcomposite1 libxcursor1 libxdamage1 \
-        libxext6 libxfixes3 libxi6 libxrandr2 libxrender1 libxss1 libxtst6 xdg-utils \
         pandoc \
       ; \
-      npm install -g npm@10.8.1; \
-      VALE_VERSION=3.7.1; \
-      curl -fsSL "https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_Linux_64-bit.tar.gz" -o /tmp/vale.tar.gz; \
+    fi;
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    --mount=type=cache,target=/root/.npm,sharing=locked \
+    if [ "$DEV_TOOLS" = "1" ]; then \
+      npm install -g "npm@${NPM_VERSION}"; \
+      npx --yes "playwright@${PLAYWRIGHT_VERSION}" install-deps; \
+      ARCH="$(dpkg --print-architecture)"; \
+      case "$ARCH" in \
+        amd64) VALE_ASSET_REGEX='Linux_64-bit.*tar\.gz$' ;; \
+        arm64) VALE_ASSET_REGEX='Linux_arm64.*tar\.gz$' ;; \
+        *) echo "Unsupported arch: $ARCH" >&2; exit 1 ;; \
+      esac; \
+      VALE_RELEASE_JSON="$(curl -fsSL https://api.github.com/repos/errata-ai/vale/releases/tags/v${VALE_VERSION})"; \
+      VALE_ASSET_NAME="$(printf '%s\n' "$VALE_RELEASE_JSON" | jq -r --arg re "$VALE_ASSET_REGEX" '.assets[] | select(.name | test($re)) | .name')"; \
+      VALE_URL="$(printf '%s\n' "$VALE_RELEASE_JSON" | jq -r --arg name "$VALE_ASSET_NAME" '.assets[] | select(.name == $name) | .browser_download_url')"; \
+      VALE_CHECKSUM_URL="$(printf '%s\n' "$VALE_RELEASE_JSON" | jq -r '.assets[] | select(.name | test("checksums.txt$")) | .browser_download_url')"; \
+      if [ -z "$VALE_URL" ] || [ -z "$VALE_ASSET_NAME" ]; then echo "Unable to locate Vale asset for $ARCH" >&2; exit 1; fi; \
+      curl -fsSL "$VALE_URL" -o /tmp/vale.tar.gz; \
+      if [ -n "$VALE_CHECKSUM_URL" ]; then \
+        curl -fsSL "$VALE_CHECKSUM_URL" -o /tmp/vale.checksums; \
+        (cd /tmp && grep "  $VALE_ASSET_NAME" vale.checksums | sha256sum -c -); \
+      fi; \
       tar -xzf /tmp/vale.tar.gz -C /usr/local/bin vale; \
       chmod +x /usr/local/bin/vale; \
-      rm -f /tmp/vale.tar.gz; \
+      rm -f /tmp/vale.tar.gz /tmp/vale.checksums; \
       git lfs install --system; \
       rm -rf /var/lib/apt/lists/*; \
-    fi
+    fi;
 
 FROM toolchain AS runtime-wheels
 
@@ -80,10 +103,14 @@ FROM runtime-wheels AS dev-wheels
 ARG DEV_TOOLS
 
 COPY apps/platform/requirements-dev.txt dev.txt
+COPY requirements-docs.txt docs.txt
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     if [ "$DEV_TOOLS" = "1" ]; then \
       pip wheel --wheel-dir /wheels --requirement dev.txt; \
+      if [ -s docs.txt ]; then \
+        pip wheel --wheel-dir /wheels --requirement docs.txt; \
+      fi; \
     fi
 
 FROM toolchain AS python-deps
@@ -97,11 +124,14 @@ COPY --from=dev-wheels /wheels /tmp/wheels
 COPY apps/platform/requirements.txt /tmp/platform-requirements.txt
 COPY apps/platform/requirements-dev.txt /tmp/platform-requirements-dev.txt
 COPY packages/udocket_core/requirements.txt /tmp/udocket-core-requirements.txt
+COPY requirements-docs.txt /tmp/requirements-docs.txt
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --no-index --find-links=/tmp/wheels -r /tmp/platform-requirements.txt \
  && pip install --no-index --find-links=/tmp/wheels -r /tmp/udocket-core-requirements.txt \
  && if [ "$DEV_TOOLS" = "1" ]; then pip install --no-index --find-links=/tmp/wheels -r /tmp/platform-requirements-dev.txt; fi \
+ && if [ "$DEV_TOOLS" = "1" ] && [ -s /tmp/requirements-docs.txt ]; then pip install --no-index --find-links=/tmp/wheels -r /tmp/requirements-docs.txt; fi \
  && rm -f /tmp/platform-requirements.txt /tmp/platform-requirements-dev.txt /tmp/udocket-core-requirements.txt \
+ && rm -f /tmp/requirements-docs.txt \
  && rm -rf /tmp/wheels
 
 FROM python-deps AS app

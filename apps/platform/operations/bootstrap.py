@@ -206,35 +206,11 @@ def _ensure_superuser(config: SuperuserConfig) -> Tuple[User, bool, bool]:
         },
     )
 
-    fields_to_update: list[str] = []
-    if getattr(user, "email", None) != config.email:
-        setattr(user, "email", config.email)
-        fields_to_update.append("email")
-    if not getattr(user, "is_staff", False):
-        setattr(user, "is_staff", True)
-        fields_to_update.append("is_staff")
-    if not getattr(user, "is_superuser", False):
-        setattr(user, "is_superuser", True)
-        fields_to_update.append("is_superuser")
-    if created or config.reset_password:
+    if created:
         user.set_password(config.password)
-        fields_to_update.append("password")
+        cast(Model, user).save(update_fields=["password"])
 
-    updated = False
-    if fields_to_update:
-        # Remove duplicates while preserving order
-        seen: set[str] = set()
-        unique_fields: list[str] = []
-        for field in fields_to_update:
-            if field in seen:
-                continue
-            seen.add(field)
-            unique_fields.append(field)
-        # Help type-checker recognize Django model method availability
-        cast(Model, user).save(update_fields=unique_fields)
-        updated = not created
-
-    return user, created, updated
+    return user, created, False
 
 
 def _ensure_organization(config: OrganizationConfig) -> Tuple[Organization, bool, bool]:
@@ -246,20 +222,7 @@ def _ensure_organization(config: OrganizationConfig) -> Tuple[Organization, bool
         },
     )
 
-    fields_to_update: list[str] = []
-    if config.display_name is not None and organization.display_name != config.display_name:
-        organization.display_name = config.display_name
-        fields_to_update.append("display_name")
-    if config.contact_email is not None and organization.contact_email != config.contact_email:
-        organization.contact_email = config.contact_email
-        fields_to_update.append("contact_email")
-
-    updated = False
-    if fields_to_update:
-        organization.save(update_fields=fields_to_update)
-        updated = not created
-
-    return organization, created, updated
+    return organization, created, False
 
 
 def _ensure_membership(user: User, organization: Organization) -> Tuple[bool, bool]:
@@ -268,12 +231,7 @@ def _ensure_membership(user: User, organization: Organization) -> Tuple[bool, bo
         user=user,
         defaults={"role": OrganizationMembership.Role.SUPERUSER},
     )
-    updated = False
-    if not created and membership.role != str(OrganizationMembership.Role.SUPERUSER):
-        membership.role = OrganizationMembership.Role.SUPERUSER
-        membership.save(update_fields=["role"])
-        updated = True
-    return created, updated
+    return created, False
 
 
 def _load_bootstrap_defaults() -> BootstrapDefaults:

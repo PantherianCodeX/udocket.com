@@ -15,7 +15,9 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r apps/platform/requirements.txt -r apps/platform/requirements-dev.txt
+          pip install -r apps/platform/requirements.txt
+          pip install pyright
+          pip install mypy
       - name: Run migrations
         env:
           DJANGO_SETTINGS_MODULE: apps.platform.config.settings.dev
@@ -57,7 +59,9 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r apps/platform/requirements.txt -r apps/platform/requirements-dev.txt || exit 0
+          pip install -r apps/platform/requirements.txt
+          pip install pyright mypy
+          pip install typewiz || echo "typewiz not on PyPI; ensure it is published or preinstalled"
       - name: Run typewiz audit
         run: |
           mkdir -p reports/typing

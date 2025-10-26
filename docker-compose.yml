@@ -20,9 +20,6 @@ services:
     build:
       context: .
       dockerfile: infra/docker/Dockerfile.platform
-      cache_from:
-        - type=local,src=.docker/buildx-cache/dev
-        - type=local,src=.docker/buildx-cache/platform
     develop: *platform-watch
     restart: unless-stopped
     env_file: .env
@@ -49,10 +46,6 @@ services:
     build:
       context: .
       dockerfile: infra/docker/Dockerfile.platform
-      cache_from:
-        - type=local,src=.docker/buildx-cache/dev
-        - type=local,src=.docker/buildx-cache/platform
-        - type=local,src=.docker/buildx-cache/platform_worker
     develop: *platform-watch
     restart: unless-stopped
     env_file: .env
@@ -81,10 +74,6 @@ services:
     build:
       context: .
       dockerfile: infra/docker/Dockerfile.platform
-      cache_from:
-        - type=local,src=.docker/buildx-cache/dev
-        - type=local,src=.docker/buildx-cache/platform
-        - type=local,src=.docker/buildx-cache/platform_beat
     develop: *platform-watch
     restart: unless-stopped
     env_file: .env
@@ -158,8 +147,6 @@ services:
     build:
       context: .
       dockerfile: infra/docker/Dockerfile.keycloak
-      cache_from:
-        - type=local,src=.docker/buildx-cache/keycloak
     command: start-dev --import-realm --http-port=8085
     env_file: .env
     environment:

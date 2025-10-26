@@ -1,13 +1,30 @@
 services:
   platform:
     build:
+      cache_from:
+        - type=local,src=.docker/buildx-cache/dev
+        - type=local,src=.docker/buildx-cache/platform
       cache_to:
         - type=local,dest=.docker/buildx-cache/platform,mode=max
   platform_worker:
     build:
+      cache_from:
+        - type=local,src=.docker/buildx-cache/dev
+        - type=local,src=.docker/buildx-cache/platform
+        - type=local,src=.docker/buildx-cache/platform_worker
       cache_to:
         - type=local,dest=.docker/buildx-cache/platform_worker,mode=max
   platform_beat:
     build:
+      cache_from:
+        - type=local,src=.docker/buildx-cache/dev
+        - type=local,src=.docker/buildx-cache/platform
+        - type=local,src=.docker/buildx-cache/platform_beat
       cache_to:
         - type=local,dest=.docker/buildx-cache/platform_beat,mode=max
+  keycloak:
+    build:
+      cache_from:
+        - type=local,src=.docker/buildx-cache/keycloak
+      cache_to:
+        - type=local,dest=.docker/buildx-cache/keycloak,mode=max
