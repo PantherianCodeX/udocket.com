@@ -26,10 +26,13 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 
 FROM python-base AS toolchain
 ARG DEV_TOOLS
+ARG VALE_VERSION=3.7.1
+ARG PLAYWRIGHT_VERSION=1.46.0
 
 # Optional developer tooling (docker CLI, browsers, etc.)
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    --mount=type=cache,target=/root/.npm,sharing=locked \
     if [ "$DEV_TOOLS" = "1" ]; then \
       set -eux; \
       install -m 0755 -d /etc/apt/keyrings; \
@@ -43,22 +46,31 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
       apt-get install -y --no-install-recommends \
         build-essential gcc g++ pkg-config libpq-dev \
         git-lfs htop iputils-ping jq less lsof nano ripgrep strace tree unzip vim-tiny wget netcat-openbsd \
-        postgresql-client \
+        postgresql-client-15 \
         docker-ce-cli docker-buildx-plugin docker-compose-plugin \
         nodejs \
-        fonts-liberation libasound2 libatk-bridge2.0-0 libatk1.0-0 \
-        libcairo2 libcups2 libdbus-1-3 libexpat1 libfontconfig1 libgbm1 \
-        libglib2.0-0 libgtk-3-0 libnspr4 libnss3 libpango-1.0-0 libpangocairo-1.0-0 \
-        libx11-6 libx11-xcb1 libxcb1 libxcomposite1 libxcursor1 libxdamage1 \
-        libxext6 libxfixes3 libxi6 libxrandr2 libxrender1 libxss1 libxtst6 xdg-utils \
         pandoc \
       ; \
-      npm install -g npm@10.8.1; \
-      VALE_VERSION=3.7.1; \
-      curl -fsSL "https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_Linux_64-bit.tar.gz" -o /tmp/vale.tar.gz; \
+      npx --yes "playwright@${PLAYWRIGHT_VERSION}" install-deps; \
+      ARCH="$(dpkg --print-architecture)"; \
+      case "$ARCH" in \
+        amd64) VALE_ASSET_REGEX='Linux_64-bit.*tar\.gz$' ;; \
+        arm64) VALE_ASSET_REGEX='Linux_arm64.*tar\.gz$' ;; \
+        *) echo "Unsupported arch: $ARCH" >&2; exit 1 ;; \
+      esac; \
+      VALE_RELEASE_JSON="$(curl -fsSL https://api.github.com/repos/errata-ai/vale/releases/tags/v${VALE_VERSION})"; \
+      VALE_ASSET_NAME="$(printf '%s\n' "$VALE_RELEASE_JSON" | jq -r --arg re "$VALE_ASSET_REGEX" '.assets[] | select(.name | test($re)) | .name')"; \
+      VALE_URL="$(printf '%s\n' "$VALE_RELEASE_JSON" | jq -r --arg name "$VALE_ASSET_NAME" '.assets[] | select(.name == $name) | .browser_download_url')"; \
+      VALE_CHECKSUM_URL="$(printf '%s\n' "$VALE_RELEASE_JSON" | jq -r '.assets[] | select(.name | test(\"checksums.txt$\")) | .browser_download_url')"; \
+      if [ -z "$VALE_URL" ] || [ -z "$VALE_ASSET_NAME" ]; then echo "Unable to locate Vale asset for $ARCH" >&2; exit 1; fi; \
+      curl -fsSL "$VALE_URL" -o /tmp/vale.tar.gz; \
+      if [ -n "$VALE_CHECKSUM_URL" ]; then \
+        curl -fsSL "$VALE_CHECKSUM_URL" -o /tmp/vale.checksums; \
+        grep "  $VALE_ASSET_NAME" /tmp/vale.checksums | sha256sum -c -; \
+      fi; \
       tar -xzf /tmp/vale.tar.gz -C /usr/local/bin vale; \
       chmod +x /usr/local/bin/vale; \
-      rm -f /tmp/vale.tar.gz; \
+      rm -f /tmp/vale.tar.gz /tmp/vale.checksums; \
       git lfs install --system; \
       rm -rf /var/lib/apt/lists/*; \
     fi

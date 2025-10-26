@@ -11,3 +11,7 @@ services:
     build:
       cache_to:
         - type=local,dest=.docker/buildx-cache/platform_beat,mode=max
+  keycloak:
+    build:
+      cache_to:
+        - type=local,dest=.docker/buildx-cache/keycloak,mode=max
