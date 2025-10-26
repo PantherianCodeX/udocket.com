@@ -28,6 +28,7 @@ FROM python-base AS toolchain
 ARG DEV_TOOLS
 ARG VALE_VERSION=3.7.1
 ARG PLAYWRIGHT_VERSION=1.46.0
+ARG NPM_VERSION=11.6.2
 
 # Optional developer tooling (docker CLI, browsers, etc.)
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
@@ -51,6 +52,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         nodejs \
         pandoc \
       ; \
+      npm install -g "npm@${NPM_VERSION}"; \
       npx --yes "playwright@${PLAYWRIGHT_VERSION}" install-deps; \
       ARCH="$(dpkg --print-architecture)"; \
       case "$ARCH" in \
@@ -61,7 +63,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
       VALE_RELEASE_JSON="$(curl -fsSL https://api.github.com/repos/errata-ai/vale/releases/tags/v${VALE_VERSION})"; \
       VALE_ASSET_NAME="$(printf '%s\n' "$VALE_RELEASE_JSON" | jq -r --arg re "$VALE_ASSET_REGEX" '.assets[] | select(.name | test($re)) | .name')"; \
       VALE_URL="$(printf '%s\n' "$VALE_RELEASE_JSON" | jq -r --arg name "$VALE_ASSET_NAME" '.assets[] | select(.name == $name) | .browser_download_url')"; \
-      VALE_CHECKSUM_URL="$(printf '%s\n' "$VALE_RELEASE_JSON" | jq -r '.assets[] | select(.name | test(\"checksums.txt$\")) | .browser_download_url')"; \
+      VALE_CHECKSUM_URL="$(printf '%s\n' "$VALE_RELEASE_JSON" | jq -r '.assets[] | select(.name | test("checksums.txt$")) | .browser_download_url')"; \
       if [ -z "$VALE_URL" ] || [ -z "$VALE_ASSET_NAME" ]; then echo "Unable to locate Vale asset for $ARCH" >&2; exit 1; fi; \
       curl -fsSL "$VALE_URL" -o /tmp/vale.tar.gz; \
       if [ -n "$VALE_CHECKSUM_URL" ]; then \

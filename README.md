@@ -20,14 +20,15 @@ and module discovery (`db/__init__.py`, `config/__init__.py`).
 ### Optional: enable BuildKit cache reuse
 
 - Create a container-based builder once: `docker buildx create --name udocket --driver docker-container --bootstrap --use`.
-- Pre-create cache directories (idempotent; use `sudo` if previous builds created root-owned paths):
+- Pre-create cache directories (idempotent; use `sudo` if previous builds created root-owned paths). The helper also seeds the OCI index so BuildKit skips “index.json not found” warnings:
 
   ```bash
   ./scripts/setup_buildx_cache.sh
   ```
 
 - Cache directories live under `.docker/buildx-cache/` (dev, platform, platform_worker, platform_beat, keycloak). Host and devcontainer builds share them automatically.
-- To write caches after a build, include the override: `docker compose -f docker-compose.yml -f docker-compose.cache.yml build`.
+- To read/write caches, include the override: `docker compose -f docker-compose.yml -f docker-compose.cache.yml build`. Skip it for legacy builds or first-run setups to avoid import warnings.
+- VS Code devcontainer users can opt in by appending `../docker-compose.cache.yml` to the `dockerComposeFile` list in `.devcontainer/devcontainer.json`.
 
 ## Notes
 - Postgres is now the default application database. Per-organization row-level security is enforced via `python manage.py enable_rls`.

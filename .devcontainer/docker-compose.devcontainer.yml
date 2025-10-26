@@ -4,8 +4,7 @@ services:
       context: .
       dockerfile: infra/docker/Dockerfile.platform
       network: host
-      cache_from:
-        - type=local,src=.docker/buildx-cache/dev
+      # Enable BuildKit cache read/write by adding ../docker-compose.cache.yml to dockerComposeFile.
       args:
         DEV_TOOLS: "1"
         # Allow choosing a different base image without editing the Dockerfile
