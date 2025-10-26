@@ -1,0 +1,44 @@
+# Version control
+.git
+.gitignore
+
+# Python environments & caches
+.env
+.env.*
+.pytype/
+.pyre/
+**/.venv/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.typewiz_cache/
+**/__pycache__/
+
+# Node / tooling caches
+node_modules/
+.cache/
+
+# Dev-only typing helpers
+typings/
+
+# Local-only tooling & docs
+.devcontainer/
+.github/
+docker-compose*.yml
+docs/
+docs_old/
+scripts/
+tests/
+reports/
+**/*.md
+__AUTO__
+
+# BuildKit/Buildx caches
+.docker/
+
+# Local storage & emulator data
+storage/
+__blobstorage__/
+__azurite_db_*.json
+
+# IDE state
+.vscode/

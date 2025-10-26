@@ -144,7 +144,9 @@ services:
       - "5433:5432"
 
   keycloak:
-    image: quay.io/keycloak/keycloak:26.4
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.keycloak
     command: start-dev --import-realm --http-port=8085
     env_file: .env
     environment:
@@ -160,8 +162,6 @@ services:
       KC_HOSTNAME_STRICT_HTTPS: "false"
     ports:
       - "8085:8085"
-    volumes:
-      - ./infra/docker/keycloak/udocker-realm.json:/opt/keycloak/data/import/udocker-realm.json:ro
     depends_on:
       postgres-keycloak:
         condition: service_started

@@ -1,0 +1,4 @@
+FROM quay.io/keycloak/keycloak:26.4
+
+# Copy the pre-seeded realm export into the location expected by --import-realm.
+COPY infra/keycloak/udocket-realm.json /opt/keycloak/data/import/udocket-realm.json

@@ -9,6 +9,7 @@ docs/site/
 docs/build/
 docs/src/**/.cache/
 docs/src/**/.pytest_cache/
+docs/typing/automation_manifest.json
 
 # typewiz cache
 .typewiz_cache/
@@ -41,6 +42,7 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
+.docker/
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
