@@ -1,23 +1,12 @@
-# uDocket
-docs/build/
-docs/site/
-reports/
-
 # Version control
 .git
 .gitignore
 
 # Python environments & caches
-.venv
-.venv/
 .env
 .env.*
-.pytest_cache/
-.mypy_cache/
-.typewiz_cache/
 .pytype/
 .pyre/
-__pycache__/
 **/.venv/
 **/.pytest_cache/
 **/.mypy_cache/
@@ -36,8 +25,12 @@ typings/
 .github/
 docker-compose*.yml
 docs/
+docs_old/
 scripts/
 tests/
+reports/
+**/*.md
+__AUTO__
 
 # BuildKit/Buildx caches
 .docker/
