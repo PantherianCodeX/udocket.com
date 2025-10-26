@@ -18,6 +18,11 @@ reports/
 .pytype/
 .pyre/
 __pycache__/
+**/.venv/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.typewiz_cache/
+**/__pycache__/
 
 # Node / tooling caches
 node_modules/
