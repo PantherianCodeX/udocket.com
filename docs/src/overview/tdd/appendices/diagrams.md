@@ -11,8 +11,6 @@ Embedding recipe (owner doc):
 graph TD; A[Users]-->B[Portal]; B-->C[Services];
 ```
 
-![System Context](../../../../build/mermaid/overview/tdd/diagrams/system-context-v1.svg)
-
 Owner vs. consumer usage:
 
 - Owner doc: Mermaid fence for site + PDF fallback SVG as above.

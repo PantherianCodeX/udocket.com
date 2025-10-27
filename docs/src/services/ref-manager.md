@@ -103,7 +103,7 @@ Dedicated SaaS tenants record deployment IDs, residency posture, and compliance 
 
 ### 1.5 Deliverables & rollout sequencing (binding)
 
-**Breadcrumbs:** Implementation `ops/reference/rollout_checklist.md`, Tests `tests/specs/test_reference_rollout.py::test_exit_criteria`, Observability Release dashboard “deploy:reference-adoption”. *Purpose: Outline launch deliverables and rollout gates.* *Contract: RM launches with governance, bundle schema/signing automation, MediaWiki adapter, manual proposal workflow, operational dashboards, and integration tests that publish `courts@0.1.0`.* *State: Rollout checklist artifacts track completion; `/reference/*` shims remain read-only until adoption metrics remain green for 30 days.* *Failure modes & retries: Deploy gate `deploy:reference-adoption` blocks release when stale bundles persist; Appendix R entry [RB-RM-ROLLBACK](runbooks.md#rb-rm-rollback) must execute within SLA.* *Observability: Adoption lag monitors, deploy gate status, and quarterly rollback drills feed release readiness.*
+**Breadcrumbs:** Implementation `ops/reference/rollout_checklist.md`, Tests `tests/specs/test_reference_rollout.py::test_exit_criteria`, Observability Release dashboard “deploy:reference-adoption”. *Purpose: Outline launch deliverables and rollout gates.* *Contract: RM launches with governance, bundle schema/signing automation, MediaWiki adapter, manual proposal workflow, operational dashboards, and integration tests that publish `courts@0.1.0`.* *State: Rollout checklist artifacts track completion; `/reference/*` shims remain read-only until adoption metrics remain green for 30 days.* *Failure modes & retries: Deploy gate `deploy:reference-adoption` blocks release when stale bundles persist; Appendix R entry [RB-RM-ROLLBACK](../ops/runbooks/index.md#rb-rm-rollback) must execute within SLA.* *Observability: Adoption lag monitors, deploy gate status, and quarterly rollback drills feed release readiness.*
 
 Harvesting includes court scraper framework, crosswalk schema, questionnaire/form ingestion, dual-approval enforcement, and synthetic monitors. Deprecation workflows, diff endpoints, locale coverage tooling, and FinOps dashboards operate continuously. Exit criteria require no direct writes outside RM, read-only shims for legacy APIs, adoption lag SLO adherence, golden snapshot validation, and quarterly rollback exercises.
 
@@ -121,7 +121,7 @@ Connectors include:
 - **Court and tribunal websites:** Respectful scraping with robots compliance, per-domain rate limits, randomized user agents, selector health checks, and sanitized HTML parsing into structured metadata.
 - **Bulk file feeds:** SFTP/HTTPS collectors with checksum validation, manifest reconciliation, and quarantine for unsigned payloads.
 
-Connector outages or sustained selector failures trigger Appendix R entry [RB-RM-HARVEST](runbooks.md#rb-rm-harvest) for coordinated remediation with Content Ops and partner contacts.
+Connector outages or sustained selector failures trigger Appendix R entry [RB-RM-HARVEST](../ops/runbooks/index.md#rb-rm-harvest) for coordinated remediation with Content Ops and partner contacts.
 
 - **Government/open-data portals:** CSV/JSON/API feeds with schema version tracking and checksum validation across provincial datasets, justice ministry APIs, and federal open-data hubs.
 - **Vendor feeds & authenticated sources:** Signed downloads or webhook-triggered updates with HMAC verification; API keys rotate via Vault and failures auto-disable connectors.
@@ -153,7 +153,7 @@ ______________________________________________________________________
 
 **Breadcrumbs:** Implementation `packages/udocket_core/reference_manager/review.py`, Tests `tests/reference/test_review_workflow.py::test_dual_control`, Observability Grafana “Reference Manager – Review & Publishing” (metric `reference_manager_pending_reviews`). *Purpose: Define review checkpoints, approvals, and SLAs.* *Contract: Changes traverse `DRAFT → REVIEW → APPROVED → PUBLISHED → DEPRECATED → ARCHIVED`, with dual approval for sensitive updates.* *State: `reference_change_log` records proposer, reviewers, timestamps, diff hashes, citations, and SLA progress.* *Failure modes & retries: SLA breaches trigger `reference_manager_review_sla_violation`; emergency hotfixes require retrospective approval within 48h.* *Observability: Pending review counts, SLA timers, and emergency workflow usage appear on dashboards.*
 
-Dual approval is mandatory for residency/privacy flags, HIPAA/PHIPA toggles, and identifier removals, with distinct roles (Content Ops + Legal Ops). Deprecations record replacement pointers, effective dates, and user guidance. Emergency guardrails require an incident captain, automated tickets, and completion of the Appendix R entry [RB-RM-ROLLBACK](runbooks.md#rb-rm-rollback) checklist within 24h.
+Dual approval is mandatory for residency/privacy flags, HIPAA/PHIPA toggles, and identifier removals, with distinct roles (Content Ops + Legal Ops). Deprecations record replacement pointers, effective dates, and user guidance. Emergency guardrails require an incident captain, automated tickets, and completion of the Appendix R entry [RB-RM-ROLLBACK](../ops/runbooks/index.md#rb-rm-rollback) checklist within 24h.
 
 Governance RACI (binding):
 
@@ -188,15 +188,15 @@ Deliverable definitions reference template UUIDs and locale coverage enforced he
 
 Scraped HTML is sanitized before storage; allowed MIME types enforce TLS-only downloads. License ledger tracks source licenses and downstream attribution requirements; pipelines block bundles missing metadata. Rate limits and access controls guard adapters and APIs; scraping credentials rotate via Vault. Sensitive metadata changes trigger `REFERENCE_SENSITIVE_CHANGE` events. Attribution enforcement requires UI/API clients to display badges via `reference_attribution.render(metadata)`; Guardian rejects artifacts missing required attribution metadata.
 
-License or attribution violations escalate via Appendix R entry [RB-RM-LICENSE](runbooks.md#rb-rm-license) to coordinate remediation, customer communication, and waiver tracking.
+License or attribution violations escalate via Appendix R entry [RB-RM-LICENSE](../ops/runbooks/index.md#rb-rm-license) to coordinate remediation, customer communication, and waiver tracking.
 
 ### 3.6 Testing & safeguards (binding)
 
 **Breadcrumbs:** Implementation `packages/udocket_core/reference_manager/tests.py`, Tests `tests/reference/test_bundle_validation.py::test_validation_suite`, Observability CI job “reference-manager-validate”. *Purpose: Enumerate automated protections for catalog integrity.* *Contract: Golden snapshots, contract tests, semantic guards, and adoption drills run per publish.* *State: Golden fixtures live under `tests/reference/golden/`; validation artifacts stored with bundle registry entries.* *Failure modes & retries: Validation failures halt signing; adoption drills failing re-open incidents until resolved.* *Observability: CI pipeline results, synthetic adoption checks, and rollback exercise reports track readiness.*
 
-Golden snapshots enforce deterministic outputs; scraper contract tests use recorded fixtures. Semantic publish guard blocks breaking changes without replacements. Each publish runs `reference_manager.validate_bundle` to verify schema integrity, license metadata, and diff thresholds, then triggers staging adoption tests verifying LPE compiles and surfaces updates. Appendix R entry [RB-RM-ROLLBACK](runbooks.md#rb-rm-rollback) leverages `ops/reference/rollback_bundle.py` to reverse releases and record `BUNDLE_ROLLBACK_REPORT` artifacts within the 15 minute SLA.
+Golden snapshots enforce deterministic outputs; scraper contract tests use recorded fixtures. Semantic publish guard blocks breaking changes without replacements. Each publish runs `reference_manager.validate_bundle` to verify schema integrity, license metadata, and diff thresholds, then triggers staging adoption tests verifying LPE compiles and surfaces updates. Appendix R entry [RB-RM-ROLLBACK](../ops/runbooks/index.md#rb-rm-rollback) leverages `ops/reference/rollback_bundle.py` to reverse releases and record `BUNDLE_ROLLBACK_REPORT` artifacts within the 15 minute SLA.
 
-Publish guard failures or validation regressions invoke Appendix R entry [RB-RM-PUBLISH](runbooks.md#rb-rm-publish) to triage schema diffs, coordinate hotfixes, and manage stakeholder notifications.
+Publish guard failures or validation regressions invoke Appendix R entry [RB-RM-PUBLISH](../ops/runbooks/index.md#rb-rm-publish) to triage schema diffs, coordinate hotfixes, and manage stakeholder notifications.
 
 ### 3.7 Risks & mitigations (normative)
 
@@ -237,7 +237,7 @@ RM publishes `reference_manager.catalog.published`, `.updated`, and `reference_m
 
 Settings defines region allowlists and activation lints against RM catalogues, rejecting entries outside curated regions or missing DPAs. Guardian applies compiled policies and attribution metadata, while Portal surfaces questionnaires, forms, and localized copy with deterministic UUIDs from RM.
 
-Residency and provider endpoint updates follow Appendix R entry [RB-RM-RESIDENCY](runbooks.md#rb-rm-residency): ingest provider metadata, attach attestation references, publish an updated `provider_endpoints` bundle, and trigger Settings activation replay. Adoption completes only after residency scanners confirm SAN and GeoIP alignment and Guardian acknowledges the refreshed digests; failures raise `reference_manager_provider_endpoint_violation_total` and remain paged until remediation closes.
+Residency and provider endpoint updates follow Appendix R entry [RB-RM-RESIDENCY](../ops/runbooks/index.md#rb-rm-residency): ingest provider metadata, attach attestation references, publish an updated `provider_endpoints` bundle, and trigger Settings activation replay. Adoption completes only after residency scanners confirm SAN and GeoIP alignment and Guardian acknowledges the refreshed digests; failures raise `reference_manager_provider_endpoint_violation_total` and remain paged until remediation closes.
 
 ______________________________________________________________________
 
@@ -257,13 +257,13 @@ Locale coverage heatmap highlights missing translations; machine translation ass
 
 ### 5.3 Rollback, on-call & incident readiness (binding)
 
-**Breadcrumbs:** Implementation `ops/reference/rollback_bundle.py`, Tests `tests/reference/test_rollback.py::test_restores_previous_version`, Observability PagerDuty service “Reference Manager On-Call”. *Purpose: Ensure rollback tooling and incident workflows meet SLAs.* *Contract: On-call follows Appendix R entry [RB-RM-ROLLBACK](runbooks.md#rb-rm-rollback), executes within 15 minutes, and records evidence artifacts.* *State: `BUNDLE_ROLLBACK_REPORT` artifacts capture timestamps, reason, and validation evidence; incident tickets reference Appendix R steps.* *Failure modes & retries: Rollback failures auto-page escalation path; unresolved incidents block further publishes.* *Observability: Incident metrics, rollback execution times, and Appendix R audit logs feed the on-call review cadence.*
+**Breadcrumbs:** Implementation `ops/reference/rollback_bundle.py`, Tests `tests/reference/test_rollback.py::test_restores_previous_version`, Observability PagerDuty service “Reference Manager On-Call”. *Purpose: Ensure rollback tooling and incident workflows meet SLAs.* *Contract: On-call follows Appendix R entry [RB-RM-ROLLBACK](../ops/runbooks/index.md#rb-rm-rollback), executes within 15 minutes, and records evidence artifacts.* *State: `BUNDLE_ROLLBACK_REPORT` artifacts capture timestamps, reason, and validation evidence; incident tickets reference Appendix R steps.* *Failure modes & retries: Rollback failures auto-page escalation path; unresolved incidents block further publishes.* *Observability: Incident metrics, rollback execution times, and Appendix R audit logs feed the on-call review cadence.*
 
 Synthetic adoption tests run in staging after every publish; quarterly drills exercise rollback tooling. Incident retros attach scanner evidence, Settings diffs, and Guardian waiver logs to the decision log (`TDD §15.3`), with follow-up tickets capturing provider engagement or automation gaps.
 
 The EU-REFERENCE synthetic tenant executes `synthetics/reference_eu_residency.yaml` nightly, authenticating against the EU deployment, downloading `/reference/*` shims, and verifying `Sunset`, `Deprecation`, and successor headers alongside residency-constrained storage locations. The monitor raises `reference_eu_residency_violation_total` and pages Content Ops plus Security Engineering when residency assertions fail or bundles fall back to non-EU storage.
 
-On-call responders follow Appendix R entry [RB-RM-ROLLBACK](runbooks.md#rb-rm-rollback) for adoption freezes, Appendix R entry [RB-RM-RESIDENCY](runbooks.md#rb-rm-residency) for residency violations, and Appendix R entry [RB-RM-LICENSE](runbooks.md#rb-rm-license) when license escalations surface during incidents.
+On-call responders follow Appendix R entry [RB-RM-ROLLBACK](../ops/runbooks/index.md#rb-rm-rollback) for adoption freezes, Appendix R entry [RB-RM-RESIDENCY](../ops/runbooks/index.md#rb-rm-residency) for residency violations, and Appendix R entry [RB-RM-LICENSE](../ops/runbooks/index.md#rb-rm-license) when license escalations surface during incidents.
 
 ______________________________________________________________________
 

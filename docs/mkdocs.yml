@@ -41,5 +41,10 @@ nav:
       - LPE: services/lp-engine.md
       - Reference Manager: services/ref-manager.md
   - Ops:
-      - Runbooks: ops/runbooks/
-  - ADR: adr/
+      - Runbooks: ops/runbooks/index.md
+  - ADR:
+      - Overview: adr/README.md
+      - Guardian READY/QUARANTINED: adr/ADR-0001-guardian-ready-quarantine.md
+      - API Versioning & Sunset: adr/ADR-0003-api-versioning-and-sunset.md
+      - Localization & Policy Engine: adr/ADR-0004-localization-and-policy-engine.md
+      - OPA Policy Plane: adr/ADR-0005-opa-policy-plane.md
