@@ -42,13 +42,13 @@ Authoring guidelines:
 
 ## Rendering Mermaid diagrams
 
-Source `.mmd` files live under each owner doc’s local `diagrams/` folder. Cross‑cutting TDD diagrams live under `docs/src/overview/tdd/diagrams/`. To render them locally (to `docs/build/mermaid/`):
+Source `.mmd` files live under each owner doc’s local `diagrams/` folder. Cross‑cutting TDD diagrams live under `docs/src/overview/tdd/diagrams/`. To render them locally (outputs to `docs/src/build/mermaid/`):
 
 ```bash
-scripts/docs/render_mermaid.sh --all
+scripts/docs/render_mermaid.sh
 ```
 
-Rendered SVGs land in `docs/build/mermaid/` (git‑ignored). The CI job `Docs CI` performs the same action so broken diagrams are caught automatically.
+Use `--all` to force a full rebuild. Rendered SVGs land in `docs/src/build/mermaid/` (checked in so MkDocs and PDF builds can read them). The CI job `Docs CI` performs the same action so broken diagrams are caught automatically.
 
 ## VS Code setup
 

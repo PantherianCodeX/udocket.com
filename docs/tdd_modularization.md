@@ -168,7 +168,7 @@ Consumer docs (reuse by reference; no copies):
   * `../../build/mermaid/services/lp-engine/diagrams/policy-context-flow.svg`
   * Source: services/lp-engine.md §X.Y
 
-Path rule: if a source lives at `docs/src/<REL>.mmd`, the built SVG is at `docs/build/mermaid/<REL>.svg`.
+Path rule: if a source lives at `docs/src/<REL>.mmd`, the built SVG is at `docs/src/build/mermaid/<REL>.svg`.
 
 Optional metadata (first lines in `.mmd`):
 
@@ -250,7 +250,7 @@ nav:
   - ADR: adr/
 ```
 
-**Mermaid**: works via `pymdownx.superfences`. Keep `.mmd` sources under each document’s local `diagrams/` (e.g., `overview/tdd/diagrams/`, `services/<svc>/diagrams/`). Embed using fenced code blocks; PDF fallback resolves via `docs/build/mermaid/<REL>.svg`.
+**Mermaid**: works via `pymdownx.superfences`. Keep `.mmd` sources under each document’s local `diagrams/` (e.g., `overview/tdd/diagrams/`, `services/<svc>/diagrams/`). Embed using fenced code blocks; PDF fallback resolves via `docs/src/build/mermaid/<REL>.svg`.
 
 **PDF** options:
 

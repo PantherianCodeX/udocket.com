@@ -23,7 +23,9 @@ This guide explains how to add and maintain TDD documentation in this repo. The 
 
   ![Artifact Overview](../../build/mermaid/overview/tdd/diagrams/artifact-lifecycle-overview-v1.svg)
 
-- Before generating PDFs, render diagrams: `bash scripts/docs/render_mermaid.sh --all`.
+- Rendered SVGs live under `docs/src/build/mermaid/` so MkDocs can serve them alongside the Markdown sources.
+
+- Before generating PDFs, render diagrams: `bash scripts/docs/render_mermaid.sh` (only re-renders `.mmd` files that changed). Use `--all` to force a complete rebuild.
 
 ## Add a runbook
 
@@ -36,9 +38,10 @@ This guide explains how to add and maintain TDD documentation in this repo. The 
 
 ## Lint and build locally
 
-- Install Python/Node tooling once:
+- Install doc tooling once:
   - `pip install -r requirements-docs.txt`
   - `npm ci`
+  - `apt-get install -y chromium` (or `brew install chromium` on macOS) so the Mermaid CLI can launch a headless browser
   - Vale CLI ships in the devcontainer; when running locally, download v3.7.1 from the official releases if you want parity.
 - Node tooling expects Node.js 22.x (see `.nvmrc` and devcontainer). Use `nvm use` or install the pinned version to avoid CLI mismatches.
 - Run the aggregate lint script:

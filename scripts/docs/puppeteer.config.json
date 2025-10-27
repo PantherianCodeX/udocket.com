@@ -1,5 +1,5 @@
 {
-  "executablePath": "/root/.cache/puppeteer/chrome-headless-shell/linux-141.0.7390.78/chrome-headless-shell-linux64/chrome-headless-shell",
+  "executablePath": "/usr/bin/chromium",
   "headless": "shell",
   "args": [
     "--no-sandbox",

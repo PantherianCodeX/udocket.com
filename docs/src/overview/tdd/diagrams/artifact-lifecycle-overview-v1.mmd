@@ -6,10 +6,10 @@ flowchart LR
   classDef decision fill:#fff7ed,stroke:#c2410c,color:#7c2d12,rx:14,ry:14;
 
   STORED(["SA · STORED"]):::state
-  WP_LINK["WP lifecycle<br/>(see detail)"]:::link
-  CD_LINK["CD lifecycle<br/>(see detail)"]:::link
+  WP_LINK["WP lifecycle\n(see detail)"]:::link
+  CD_LINK["CD lifecycle\n(see detail)"]:::link
   RELEASED(["DL · RELEASED"]):::state
-  RETENTION{{Retention / Erasure gate<br/>(policy decision)}}:::decision
+  RETENTION{{Retention & erasure gate}}:::decision
   ARCHIVED(["ARCHIVED"]):::state
   DELETED(["DELETED"]):::state
 

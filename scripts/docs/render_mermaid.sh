@@ -8,7 +8,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")"/../.. && pwd)"
 SRC_ROOT="${MERMAID_SRC_ROOT:-$ROOT/docs/src}"
-OUT_ROOT="${MERMAID_OUT_ROOT:-$ROOT/docs/build/mermaid}"
+OUT_ROOT="${MERMAID_OUT_ROOT:-$ROOT/docs/src/build/mermaid}"
 FORMAT="${MERMAID_FORMAT:-svg}"   # svg|png
 CLI_BIN="${MERMAID_CLI:-}"
 PUPPETEER_CONFIG="${MERMAID_PUPPETEER_CONFIG:-$ROOT/scripts/docs/puppeteer.config.json}"
@@ -21,6 +21,7 @@ usage() {
 Usage: $(basename "$0") [--all] [--changed] [--paths <file1.mmd> [file2.mmd ...]] [--out-dir DIR] [--format svg|png] [--verbose]
 
 Defaults:
+  mode:       changed (use --all to rebuild everything)
   src root:   $SRC_ROOT
   out root:   $OUT_ROOT
   format:     $FORMAT
@@ -29,7 +30,7 @@ EOF
 }
 
 VERBOSE=0
-MODE="all"
+MODE="changed"
 declare -a PATHS
 
 while [[ $# -gt 0 ]]; do

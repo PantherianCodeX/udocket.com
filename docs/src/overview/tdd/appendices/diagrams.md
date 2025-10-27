@@ -33,7 +33,7 @@ Service-owned diagrams (examples)
 
 Notes
 
-- Path rule: `docs/src/<REL>.mmd` renders to `docs/build/mermaid/<REL>.svg`.
+- Path rule: `docs/src/<REL>.mmd` renders to `docs/src/build/mermaid/<REL>.svg`.
 - Optional metadata in `.mmd` (not required):
   - `%% id: <slug>`
   - `%% version: v1`

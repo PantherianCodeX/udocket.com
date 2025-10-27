@@ -5,8 +5,7 @@
 /typings/vendor/
 /reports/
 automation_manifest.json
-/docs/build/
-
+docs/src/build/
 
 # typewiz cache
 .typewiz_cache/
