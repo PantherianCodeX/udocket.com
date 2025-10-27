@@ -164,22 +164,22 @@ ______________________________________________________________________
 ### 4.2 Evaluation pipeline
 
 1. Validate schema and policy context.
-1. Execute policy checks (residency, HIPAA, forbidden patterns, waiver state) via LPE/OPA.
-1. Run content classifiers (Azure Content Safety PHI classifier, in-house transformer, deterministic regex heuristics).
-1. Aggregate results with deterministic decision tree; on PASS/WARN produce banners; on BLOCK escalate reason codes (for example, `POLICY_FORBIDDEN_PATTERN`, `INTEGRITY_HASH_MISMATCH`).
-1. Persist judgment, manifest snapshot, and emit events for workflow, portal, and analytics.
+2. Execute policy checks (residency, HIPAA, forbidden patterns, waiver state) via LPE/OPA.
+3. Run content classifiers (Azure Content Safety PHI classifier, in-house transformer, deterministic regex heuristics).
+4. Aggregate results with deterministic decision tree; on PASS/WARN produce banners; on BLOCK escalate reason codes (for example, `POLICY_FORBIDDEN_PATTERN`, `INTEGRITY_HASH_MISMATCH`).
+5. Persist judgment, manifest snapshot, and emit events for workflow, portal, and analytics.
 
 Guardian enforces parent-child integrity by locking upstream artifacts (`SELECT ... FOR SHARE`) and re-reading manifests before finalizing a decision; if a parent demotes mid-flight the child returns `BLOCK (PARENT_NOT_APPROVED)`. Judgments are idempotent per `{artifact_id, content_sha256}`—replays with the same hash reuse the prior verdict while new hashes create fresh history rows.
 
 #### 4.2.1 Detection tiers (binding)
 
 1. **Tier-0 — schema & field guards:** Validates known slots (`dob`, `mrn`, `ssn`, etc.) and emits `SCHEMA_POLICY_BLOCK` (`INVALID_FIELD_FORMAT`) when data fails canonical formatting.
-1. **Tier-1 — pattern + checksum:** Jurisdiction-specific regex packs and checksum validators (Luhn, Verhoeff, ABA routing, ICD/HCPCS/CPT shape, Rx BIN/PCN length) emit `PATTERN_MATCH` evidence.
-1. **Tier-2 — ML/NLP detectors:** Locale-scoped NER models sourced from the LLM Provider Exchange (LPE) contribute spans with model IDs and confidence; sub-threshold spans log telemetry for drift analysis.
-1. **Tier-3 — contextual verifier:** A constrained LLM re-scores contentious spans (`{"confirm": true|false, "confidence": float}`) and applies reason `CONTEXTUAL_VERIFIER`.
-1. **Normalization & fusion:** Overlapping spans merge deterministically (higher confidence, stricter policy). Provenance retains contributing tiers/detectors.
-1. **Masking & tokenization:** Applies masking profiles to a working copy, references vault namespace, and records whether spans are restorable before judgment.
-1. **Guardian judgment:** Aggregates detections, policy context, provider telemetry, and waiver state to emit PASS/WARN/BLOCK/WAIVED with reason codes such as `HIPAA_REQUIRED`, `PII_DETECTED`, `SPI_DETECTED`, `DLP_VIOLATION`, `CLASSIFIER_LOW_CONFIDENCE`, and `PARENT_NOT_APPROVED`.
+2. **Tier-1 — pattern + checksum:** Jurisdiction-specific regex packs and checksum validators (Luhn, Verhoeff, ABA routing, ICD/HCPCS/CPT shape, Rx BIN/PCN length) emit `PATTERN_MATCH` evidence.
+3. **Tier-2 — ML/NLP detectors:** Locale-scoped NER models sourced from the LLM Provider Exchange (LPE) contribute spans with model IDs and confidence; sub-threshold spans log telemetry for drift analysis.
+4. **Tier-3 — contextual verifier:** A constrained LLM re-scores contentious spans (`{"confirm": true|false, "confidence": float}`) and applies reason `CONTEXTUAL_VERIFIER`.
+5. **Normalization & fusion:** Overlapping spans merge deterministically (higher confidence, stricter policy). Provenance retains contributing tiers/detectors.
+6. **Masking & tokenization:** Applies masking profiles to a working copy, references vault namespace, and records whether spans are restorable before judgment.
+7. **Guardian judgment:** Aggregates detections, policy context, provider telemetry, and waiver state to emit PASS/WARN/BLOCK/WAIVED with reason codes such as `HIPAA_REQUIRED`, `PII_DETECTED`, `SPI_DETECTED`, `DLP_VIOLATION`, `CLASSIFIER_LOW_CONFIDENCE`, and `PARENT_NOT_APPROVED`.
 
 Guardian persists span evidence in `guardian_span_detection` (deterministic UUIDv7 IDs) and summarizes annotations for reviewer consoles; advisory provider hints land in `guardian_provider_flags[]` and may promote WARN (`PROVIDER_CRITICAL_HINT`) without overriding Guardian’s final decision.
 
@@ -360,8 +360,8 @@ ______________________________________________________________________
 - **Signals:** `guardian_judgment_latency_seconds` P95 > SLO, `guardian_submission_timeout_total` increasing, synthetic job failure (`guardian_slo.yaml`).
 - **Triage (≤5 minutes):**
   1. Check `/readyz` and `/synthetic/status`; capture latency panels in Grafana (“Guardian SLO”).
-  1. Confirm queue depth (`guardian_pending_total`, `guardian_pending_oldest_seconds`) and worker health (Celery heartbeat, pod restarts).
-  1. Inspect recent deploys/settings (`guardian.rules.version`, Helm releases) for regressions.
+  2. Confirm queue depth (`guardian_pending_total`, `guardian_pending_oldest_seconds`) and worker health (Celery heartbeat, pod restarts).
+  3. Inspect recent deploys/settings (`guardian.rules.version`, Helm releases) for regressions.
 - **Decision tree:**
   - *Service unhealthy*: place Guardian in manual review mode (pause submissions, notify ops). Operators record `MANUAL_GUARDIAN_JUDGMENT` artifacts while following this checklist.
   - *Compute exhaustion*: scale deployment (`kubectl -n platform scale deploy/guardian --replicas=<n>`), update HPA floor post-incident.
@@ -377,8 +377,8 @@ ______________________________________________________________________
 - **Signals:** Increased `guardian_policy_block_total{reason=...}` (e.g., `POLICY_FORBIDDEN_PATTERN`, `INTEGRITY_HASH_MISMATCH`, `SOURCE_NOT_APPROVED`); drop in `OPERATOR_PREP`/`QUEUED_FOR_REVIEW` backlog throughput.
 - **Triage:**
   1. Filter Guardian dashboard by `reason_codes[]` and `org_id` to locate affected cohorts.
-  1. Sample judgments from `guardian_judgment_history_secure`; confirm `guardian.rules.version` and `settings_snapshot_sha256` alignment.
-  1. For `INTEGRITY_HASH_MISMATCH`, verify upload finalize and recompute hashes; for `SOURCE_NOT_APPROVED`, ensure upstream artifacts cleared.
+  2. Sample judgments from `guardian_judgment_history_secure`; confirm `guardian.rules.version` and `settings_snapshot_sha256` alignment.
+  3. For `INTEGRITY_HASH_MISMATCH`, verify upload finalize and recompute hashes; for `SOURCE_NOT_APPROVED`, ensure upstream artifacts cleared.
 - **Decision:**
   - `POLICY_FORBIDDEN_PATTERN`: engage Product/QA; adjust templates or policies; consider waiver only with dual approval.
   - `SOURCE_NOT_APPROVED`: instruct operators to remediate upstream artifacts or rebind inputs; Guardian enforces parent gating.
@@ -392,8 +392,7 @@ ______________________________________________________________________
 - **Signals:** `guardian_pending_total` trending upward for 3 scrapes, `guardian_pending_oldest_seconds` > `guardian.queue.backlog_alert_minutes * 60`, `guardian_submission_timeout_total` incrementing, `review_queue_oldest_seconds` approaching `reviews.backlog.alert_minutes`.
 - **Triage (≤5 minutes):**
   1. Verify Guardian health endpoints and latency dashboards.
-
-  1. Inspect queue detail:
+  2. Inspect queue detail:
 
      ```sql
      SELECT artifact_id,
@@ -403,19 +402,18 @@ ______________________________________________________________________
             last_heartbeat_at,
             judgment_attempts
        FROM guardian_submission_queue
+     ORDER BY submitted_at
+       LIMIT 50;
      ```
-  ORDER BY submitted_at LIMIT 50;
-  ```
 
   3. Sample worker logs for `FAILED_GUARDIAN_TIMEOUT`; confirm Celery pods healthy.
   4. Review recent `guardian.rules.version` activations and Guardian deploys for regressions.
-  ```
 - **Decision:**
   - *Compute exhaustion*: raise HPA floor, ensure DB connections within pool limits, restart pods after scaling.
   - *Policy/rules regression*: roll back offending ruleset or apply waiver/manual review following RB-GUARD-001.
   - *External dependency degradation*: coordinate with LPE/Settings teams, throttle submissions if upstream latency high.
 - **Post-remediation:**
-  - Confirm `guardian_pending_total` below alert threshold and `guardian_pending_oldest_seconds` \< 120s for two scrapes.
+  - Confirm `guardian_pending_total` below alert threshold and `guardian_pending_oldest_seconds` < 120s for two scrapes.
   - Ensure `guardian_submission_timeout_total` stopped increasing and queued artifacts receive fresh judgments.
   - Document incident with root cause, remediation, SQL excerpt, and follow-up tasks; update HPA/alert thresholds if burst patterns changed.
 

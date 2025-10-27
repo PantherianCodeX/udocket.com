@@ -191,9 +191,9 @@ Settings-driven compiler runs as part of activation; background cron validates d
   - `regions.allowlist.compute|storage|vector[]`, `regions.egress.waiver{id, scope, expires_at}`, `regions.egress.policy`.
 - Activation pipeline sequence:
   1. Dry-run compile for affected scopes; produce structured diff artifacts.
-  1. Validate localization coverage, residency allowlists, waiver metadata, and deterministic digests.
-  1. Flag unsafe changes (loosening residency, missing required locales) requiring dual approval (`org_admin` + Platform `sysadmin`) before publish.
-  1. Emit `lpe.policy_context.updated` events with digests and affected keys.
+  2. Validate localization coverage, residency allowlists, waiver metadata, and deterministic digests.
+  3. Flag unsafe changes (loosening residency, missing required locales) requiring dual approval (`org_admin` + Platform `sysadmin`) before publish.
+  4. Emit `lpe.policy_context.updated` events with digests and affected keys.
 - Validation suite rejects activations when:
   - Localization packs lack required locales or fallback chains.
   - Residency overrides omit waiver references or expired waivers remain attached.
@@ -558,10 +558,10 @@ Triggers: `lpe_compiler_duration_overrun`, `lpe_bundle_signature_error`, change 
 Execution checklist:
 
 1. Freeze compiler pipeline (`lpe.compiler.enabled=false`) and announce in `#ops-announcements`.
-1. Inspect diff artifacts; confirm affected locales/regions and whether unsafe flags were raised.
-1. Promote previous good bundle via `ops/scripts/lpe/promote_bundle.py --bundle <id>` and capture hash evidence.
-1. Re-run regression suite (`make lpe-compiler-regressions`) and snapshot Grafana panels for incident ticket.
-1. Coordinate Settings activation replay once bundle validated; update change ticket with evidence.
+2. Inspect diff artifacts; confirm affected locales/regions and whether unsafe flags were raised.
+3. Promote previous good bundle via `ops/scripts/lpe/promote_bundle.py --bundle <id>` and capture hash evidence.
+4. Re-run regression suite (`make lpe-compiler-regressions`) and snapshot Grafana panels for incident ticket.
+5. Coordinate Settings activation replay once bundle validated; update change ticket with evidence.
 
 Post-remediation:
 
@@ -575,10 +575,10 @@ Post-remediation:
 Response steps:
 
 1. Capture failing discovery IDs and affected services from alert payload.
-1. Roll back via `ops/scripts/lpe/deploy_opa_bundle.py --bundle <last_good>` and flush worker caches (`scripts/opa/flush_cache.py`).
-1. Validate OPA `/status` and `/health` endpoints plus policy unit tests (`pytest tests/opa/test_policy_context.py`).
-1. Notify dependent teams (Settings, Guardian, Reference Manager) and confirm cached digests refresh.
-1. Attach bundle hashes, validation output, and Grafana snapshots to incident ticket.
+2. Roll back via `ops/scripts/lpe/deploy_opa_bundle.py --bundle <last_good>` and flush worker caches (`scripts/opa/flush_cache.py`).
+3. Validate OPA `/status` and `/health` endpoints plus policy unit tests (`pytest tests/opa/test_policy_context.py`).
+4. Notify dependent teams (Settings, Guardian, Reference Manager) and confirm cached digests refresh.
+5. Attach bundle hashes, validation output, and Grafana snapshots to incident ticket.
 
 Follow-up:
 
@@ -592,10 +592,10 @@ Follow-up:
 Checklist:
 
 1. Review waiver ledger for entries expiring within alert window; confirm impacted locales and providers.
-1. Engage Security + Architecture for renewal decision; capture approvals in decision log.
-1. If waiver retired, update Settings allowlists and trigger Appendix R RB-LPE-LOCALE-GAP if localization fallback required.
-1. Run `ops/scripts/lpe/check_waivers.py --verify` to ensure updated posture and attach output to incident ticket.
-1. Communicate outcome to affected product owners and document customer impact, if any.
+2. Engage Security + Architecture for renewal decision; capture approvals in decision log.
+3. If waiver retired, update Settings allowlists and trigger Appendix R RB-LPE-LOCALE-GAP if localization fallback required.
+4. Run `ops/scripts/lpe/check_waivers.py --verify` to ensure updated posture and attach output to incident ticket.
+5. Communicate outcome to affected product owners and document customer impact, if any.
 
 Audit trail:
 
@@ -609,10 +609,10 @@ Audit trail:
 Resolution steps:
 
 1. Identify affected locales and impacted surfaces (portal, Guardian, notifications) from alert payload.
-1. Coordinate with Localization program to deliver missing translations and QA recordings; update Appendix A checklist items.
-1. Validate `ops/scripts/lpe/audit_locales.py` passes for affected locales and attach proof to ticket.
-1. Run synthetic checks (`tests/e2e/test_portal_policy_context.py::test_disclaimer_l10n`) to confirm correct copy rendering.
-1. Update Settings bundles and trigger LPE compiler rebuild; monitor `lpe_lookup_latency_p95_breach` for regression.
+2. Coordinate with Localization program to deliver missing translations and QA recordings; update Appendix A checklist items.
+3. Validate `ops/scripts/lpe/audit_locales.py` passes for affected locales and attach proof to ticket.
+4. Run synthetic checks (`tests/e2e/test_portal_policy_context.py::test_disclaimer_l10n`) to confirm correct copy rendering.
+5. Update Settings bundles and trigger LPE compiler rebuild; monitor `lpe_lookup_latency_p95_breach` for regression.
 
 Post-checks:
 

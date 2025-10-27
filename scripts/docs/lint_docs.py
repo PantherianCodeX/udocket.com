@@ -3,8 +3,7 @@
 
 This script wraps all of the doc hygiene checks the project expects:
 
-* mdformat --check (requires ``pip install -r requirements-docs.txt``)
-* markdownlint-cli2 (optional locally, installed in CI)
+* markdownlint-cli2 (via npx, required)
 * Appendix/settings cross-checks implemented in local helper scripts
 
 The goal is to provide a single entrypoint that developers and CI can call.
@@ -65,27 +64,27 @@ def run_task(task: Task) -> bool:
 
 def build_tasks(targets: list[Path]) -> list[Task]:
     py = sys.executable
-    target_args = []
-    for t in targets:
-        try:
-            target_args.append(str(t.relative_to(ROOT)))
-        except ValueError:
-            target_args.append(str(t))
-    target_label = ", ".join(target_args)
-    mdformat_cmd = [py, "-m", "mdformat", "--wrap", "no", "--check", *target_args]
+    markdownlint_config = str((ROOT / "docs" / ".markdownlint.json").relative_to(ROOT))
+    markdownlint_glob = "docs/src/**/*.md"
     return [
         Task(
             name="build_runbook_catalog.py --check",
             cmd=[py, str(ROOT / "scripts" / "docs" / "build_runbook_catalog.py"), "--check"],
         ),
         Task(
-            name=f"mdformat --check {target_label}",
-            cmd=mdformat_cmd,
-            install_hint="pip install -r requirements-docs.txt",
+            name="markdownlint docs/src",
+            cmd=[
+                "npx",
+                "markdownlint-cli2",
+                "--config",
+                markdownlint_config,
+                markdownlint_glob,
+            ],
+            install_hint="npm ci",
         ),
         Task(
-            name=f"markdownlint-cli2 {target_label}",
-            cmd=["markdownlint-cli2", *target_args],
+            name="markdownlint-cli2 (global)",
+            cmd=["markdownlint-cli2", "--config", markdownlint_config, markdownlint_glob],
             optional=True,
             install_hint="npm install --location=global markdownlint-cli2 markdownlint-cli2-config-standard",
         ),

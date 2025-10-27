@@ -5,6 +5,7 @@ This document defines how automation and contributors should add and operate "ag
 Note: This is the root guide. For area‑specific practices (UI, operations, jobs, artifacts, accounts, authorization, core libs, config, infra, tests), also read the AGENTS.md files colocated in those directories. When working in any area, you must follow the closest AGENTS.md in that subtree.
 
 Quick index of AGENTS guides in this repo:
+
 - apps/platform/AGENTS.md
 - apps/platform/ui/AGENTS.md
 - apps/platform/operations/AGENTS.md
@@ -20,6 +21,7 @@ Quick index of AGENTS guides in this repo:
 - tests/AGENTS.md
 
 ## Overview
+
 - Services:
   - `apps/platform` (Django + Channels + Celery): primary UI, API surface, and background workers.
 - Core agent implementation lives in `packages/udocket_core/agents/transcribe_lib.py` (Azure Speech, Canada regions only).
@@ -35,7 +37,9 @@ Quick index of AGENTS guides in this repo:
 - Database: SQLite by default (or Postgres) with tables `cases`, `jobs`
 
 ## Agent Contract (all agents)
+
 To make agents composable and observable when executed inside Celery workers, follow this contract:
+
 - Implement the `TranscriptionAgent` interface (see `packages/udocket_core/agents/transcribe_lib.py`).
   - Accepts structured config (`TranscriptionConfig`) instead of CLI flags.
   - Read configuration from `.env` where relevant, mirroring `config/settings.py` keys.
@@ -51,6 +55,7 @@ To make agents composable and observable when executed inside Celery workers, fo
 Reference patterns exist in `packages/udocket_core/agents/transcribe_lib.py`.
 
 ## Current Transcription Agent
+
 - Entry: `packages/udocket_core/agents/transcribe_lib.py`
 - Inputs: local file path or HTTPS SAS URL (batch mode), language, diarization flag (batch only)
 - Outputs:
@@ -63,6 +68,7 @@ Reference patterns exist in `packages/udocket_core/agents/transcribe_lib.py`.
 - One-line JSON to stdout on success, e.g.: `{ "status":"ok", "transcript_file":"/app/storage/.../transcript/<job>__transcript.txt", "region":"canadacentral", "language":"en-CA", "attempts":1, "duration_s":732.5 }`
 
 ## Analysis Agents
+
 The repository hosts agents that consume transcripts and emit analysis artifacts. Use the following conventions.
 
 - Common input discovery:
@@ -124,11 +130,13 @@ General guidelines:
 - Dependency flags in presenters/components must describe artifacts (`has_summary`, `has_timeline`, etc.) rather than tools. Avoid introducing aliases that duplicate the same concept under different names.
 
 ## Worker Integration
+
 - Celery tasks in `apps.platform.operations.tasks` orchestrate uploads, call `TranscriptionAgent.transcribe`, and persist telemetry.
 - To integrate new agents, add Celery tasks that wrap your agent implementation and emit job/case websocket updates via `send_job_update`/`send_case_update`.
 - Ensure agents write artifacts under the case path, update ops metadata, and keep runtimes within configured Celery soft/hard timeouts.
 
 ## Configuration & Environment
+
 - Required (see `.env.example`):
   - `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION` (`canadacentral` or `canadaeast`)
   - `LANGUAGE`, `STORAGE_ROOT`, `DATABASE_URL`
@@ -137,18 +145,22 @@ General guidelines:
   - Set `DEBUG=1` to enable SDK-level logs into `ops/` for transcription.
 
 ## Tools (Editors)
+
 - Manual Edit: common tool to edit text artifacts (Markdown/JSON) as a child job action; saving creates a version proposal requiring Reviewer approval.
 - Agent Edit: interactive chat editor (LLM) that modifies the artifact; same approval/versioning semantics as Manual Edit.
 
 ## Intake, Questionnaire, and Interview Guidance
+
 - Intake panel includes a “Generate Questionnaire” tool (LLM panel), using per‑org seed questions and forms; result is Markdown, editable via Manual/Agent Edit, and used during interviews.
 - Interview page is a per‑case hub with live checklist, notes, and call logging; sessions append minimal audit lines.
 
 ## Approvals & Roles
+
 - Reviewer role is part of default seed roles; approvals are configurable per page/tool (required reviewer count, allowed roles) in Org Settings.
   - `BATCH_HASH_REMOTE=1` and `BATCH_HASH_MAX_MB` to record remote SHA-256 and MD5 (if present) when using batch mode.
 
 ## File & Naming Conventions
+
 - Per-case directory: `storage/media/cases/<CASE_ID>/`
   - `audio/<job>__<original>` — upload payloads
   - `transcript/<job>__transcript.txt` — primary transcript
@@ -158,6 +170,7 @@ General guidelines:
 - Audit streams: `ops/ops_<agent>.jsonl`
 
 ## Coding Guidelines
+
 - Language: Python 3.12.
 - Style: type-annotated functions; avoid one-letter names; no inline comments unless essential.
 - Strong typing:
@@ -172,12 +185,15 @@ General guidelines:
 - Version control: keep diffs minimal and focused; avoid unrelated refactors.
 
 ## Local Development
+
 - Start stack: `docker compose up --build`
   - Django platform (primary UI/API): `http://localhost:8000`
 - Create a case via the platform UI and upload audio from the case page.
 - The Celery worker (`platform_worker` service) picks up jobs automatically and writes outputs under the case directory.
 - To exercise the agent manually, open a Django shell and invoke the `TranscriptionAgent`:
+
   ```python
+
   from packages.udocket_core.agents import TranscriptionAgent, TranscriptionConfig
   cfg = TranscriptionConfig.from_env()
   agent = TranscriptionAgent(cfg)
@@ -193,20 +209,23 @@ General guidelines:
   ```
 
 ## Operational Notes
+
 - Diarization is only supported in batch mode. The platform UI enforces this.
 - Region guardrails are enforced by both settings validation and the agent.
 - Duration limits are configurable via env (e.g., `MAX_MINUTES`).
 - All agents should prefer additive file outputs and append-only audit logs.
 
 ## Troubleshooting
+
 - 400 on upload: check `ALLOWED_AUDIO_MIME`.
 - Batch fails quickly: ensure Azure Speech tier Standard (S0) and correct region; Free (F0) is not supported by Batch API.
 - On-demand no speech: verify input is PCM WAV 16 kHz mono (agent auto-converts via ffmpeg when possible).
 - Missing Azure SDKs: ensure `azure-cognitiveservices-speech` and `azure-storage-blob` are installed in the platform runtime.
 
 ## Roadmap Alignment (summaries, timelines, relationships)
+
 - Analyze: produce layered analyses (short, detailed) with links to timeline events and seed timeline/entity extraction.
 - Timelines: merge diarized offsets and transcript segments into normalized events with speakers and labels.
 - Relationships: derive entities and edges with evidence back-pointers to transcript timestamps.
 - All of the above should follow the contract here to ensure the Admin UI and API can surface artifacts consistently as features land.
- - Platform migration to Django/DRF/Channels and end-to-end authorization/IAM integration: see `docs/ROADMAP.md`.
+- Platform migration to Django/DRF/Channels and end-to-end authorization/IAM integration: see `docs/ROADMAP.md`.

@@ -8,7 +8,7 @@ _Note_: Vendored third-party stubs are no longer tracked in git. Run `python scr
 
 Command: `pyright --stats`
 
-```
+```text
 Loading configuration file at /home/user/Code/uDocket/udocket.com/pyrightconfig.json
 No include entries specified; assuming /home/user/Code/uDocket/udocket.com
 Found 1390 source files

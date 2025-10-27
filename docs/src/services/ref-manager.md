@@ -309,10 +309,10 @@ Trigger conditions:
 Execution checklist:
 
 1. Declare incident in `#ref-manager-oncall`, assign commander/scribe, and capture affected bundle IDs.
-1. Halt new publishes (`reference publish --freeze`) and notify integrators.
-1. Execute `reference rollback --bundle <previous_id>`; record CLI output and resulting bundle hash.
-1. Re-run staging adoption suite (`reference adoption verify --bundle <previous_id>`) and confirm downstream acknowledgements.
-1. Document outcome in the incident ticket with links to metrics, adoption diffs, and customer impact summary.
+2. Halt new publishes (`reference publish --freeze`) and notify integrators.
+3. Execute `reference rollback --bundle <previous_id>`; record CLI output and resulting bundle hash.
+4. Re-run staging adoption suite (`reference adoption verify --bundle <previous_id>`) and confirm downstream acknowledgements.
+5. Document outcome in the incident ticket with links to metrics, adoption diffs, and customer impact summary.
 
 Post-rollback validation:
 
@@ -327,10 +327,10 @@ Post-rollback validation:
 Decision tree:
 
 1. Identify failing sources (`reference harvest status --failing`) and confirm alert payload scope.
-1. For selector regressions, pull last-good HTML snapshot, update parser fixtures, and replay ingest in staging.
-1. For licensing or robots.txt changes, coordinate with Legal Ops and update provenance manifests before re-enabling.
-1. For infrastructure outages, engage provider contacts, increase backoff, and stage manual uploads if SLAs demand.
-1. Re-enable connector only after validation passes and ledger entry updated with evidence links.
+2. For selector regressions, pull last-good HTML snapshot, update parser fixtures, and replay ingest in staging.
+3. For licensing or robots.txt changes, coordinate with Legal Ops and update provenance manifests before re-enabling.
+4. For infrastructure outages, engage provider contacts, increase backoff, and stage manual uploads if SLAs demand.
+5. Re-enable connector only after validation passes and ledger entry updated with evidence links.
 
 Communication & evidence:
 
@@ -345,10 +345,10 @@ Communication & evidence:
 Response steps:
 
 1. Collect failing validation artifacts (`reference validate --bundle <id> --export artifacts/guard/<id>`).
-1. Categorize failure: schema incompatibility, missing assets, license metadata, or diff threshold breach.
-1. Assign owners per category (Schema Council, Content Ops, Localization) and capture remediation plan in incident doc.
-1. Apply fixes in staging, rerun validation, and ensure unit/integration suites covering affected domains stay green.
-1. Communicate readiness in `#ref-manager-oncall`, secure approvals, and resume publish pipeline.
+2. Categorize failure: schema incompatibility, missing assets, license metadata, or diff threshold breach.
+3. Assign owners per category (Schema Council, Content Ops, Localization) and capture remediation plan in incident doc.
+4. Apply fixes in staging, rerun validation, and ensure unit/integration suites covering affected domains stay green.
+5. Communicate readiness in `#ref-manager-oncall`, secure approvals, and resume publish pipeline.
 
 Post-resolution:
 
@@ -363,10 +363,10 @@ Post-resolution:
 Remediation workflow:
 
 1. Review violation payload (source, license, impacted assets) and freeze related publishes.
-1. Remove or quarantine offending content from staging/curated schemas; note bundle versions impacted.
-1. Coordinate with Legal Ops for relicensing or replacement assets; track approvals in waiver ledger.
-1. Update attribution metadata, regenerate affected bundles, and validate Guardian/UI surfaces show correct badges.
-1. Close ledger entry with evidence links (tickets, approvals, artifact hashes) and notify stakeholders.
+2. Remove or quarantine offending content from staging/curated schemas; note bundle versions impacted.
+3. Coordinate with Legal Ops for relicensing or replacement assets; track approvals in waiver ledger.
+4. Update attribution metadata, regenerate affected bundles, and validate Guardian/UI surfaces show correct badges.
+5. Close ledger entry with evidence links (tickets, approvals, artifact hashes) and notify stakeholders.
 
 Follow-up:
 
@@ -381,10 +381,10 @@ Follow-up:
 Remediation checklist:
 
 1. Inspect finding details and gather attestation or SAN mismatch evidence.
-1. Engage provider to confirm intended footprint; request updated attestation or schedule decommission.
-1. Update RM catalogue entries (`provider_endpoints[]`), including CIDRs, SAN expectations, and residency notes.
-1. Publish refreshed bundle, rerun Settings activation replay, and verify Guardian acknowledges new digest.
-1. Archive evidence in incident folder and update waiver ledger if temporary exceptions granted.
+2. Engage provider to confirm intended footprint; request updated attestation or schedule decommission.
+3. Update RM catalogue entries (`provider_endpoints[]`), including CIDRs, SAN expectations, and residency notes.
+4. Publish refreshed bundle, rerun Settings activation replay, and verify Guardian acknowledges new digest.
+5. Archive evidence in incident folder and update waiver ledger if temporary exceptions granted.
 
 Post-remediation validation:
 

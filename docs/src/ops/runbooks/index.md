@@ -22,8 +22,8 @@
 - **Signals:** `guardian_judgment_latency_seconds` P95 > SLO, `guardian_submission_timeout_total` increasing, synthetic job failure (`guardian_slo.yaml`).
 - **Triage (≤5 minutes):**
   1. Check `/readyz` and `/synthetic/status`; capture latency panels in Grafana (“Guardian SLO”).
-  1. Confirm queue depth (`guardian_pending_total`, `guardian_pending_oldest_seconds`) and worker health (Celery heartbeat, pod restarts).
-  1. Inspect recent deploys/settings (`guardian.rules.version`, Helm releases) for regressions.
+  2. Confirm queue depth (`guardian_pending_total`, `guardian_pending_oldest_seconds`) and worker health (Celery heartbeat, pod restarts).
+  3. Inspect recent deploys/settings (`guardian.rules.version`, Helm releases) for regressions.
 - **Decision tree:**
   - *Service unhealthy*: place Guardian in manual review mode (pause submissions, notify ops). Operators record `MANUAL_GUARDIAN_JUDGMENT` artifacts while following this checklist.
   - *Compute exhaustion*: scale deployment (`kubectl -n platform scale deploy/guardian --replicas=<n>`), update HPA floor post-incident.
@@ -41,8 +41,8 @@
 - **Signals:** Increased `guardian_policy_block_total{reason=...}` (e.g., `POLICY_FORBIDDEN_PATTERN`, `INTEGRITY_HASH_MISMATCH`, `SOURCE_NOT_APPROVED`); drop in `OPERATOR_PREP`/`QUEUED_FOR_REVIEW` backlog throughput.
 - **Triage:**
   1. Filter Guardian dashboard by `reason_codes[]` and `org_id` to locate affected cohorts.
-  1. Sample judgments from `guardian_judgment_history_secure`; confirm `guardian.rules.version` and `settings_snapshot_sha256` alignment.
-  1. For `INTEGRITY_HASH_MISMATCH`, verify upload finalize and recompute hashes; for `SOURCE_NOT_APPROVED`, ensure upstream artifacts cleared.
+  2. Sample judgments from `guardian_judgment_history_secure`; confirm `guardian.rules.version` and `settings_snapshot_sha256` alignment.
+  3. For `INTEGRITY_HASH_MISMATCH`, verify upload finalize and recompute hashes; for `SOURCE_NOT_APPROVED`, ensure upstream artifacts cleared.
 - **Decision:**
   - `POLICY_FORBIDDEN_PATTERN`: engage Product/QA; adjust templates or policies; consider waiver only with dual approval.
   - `SOURCE_NOT_APPROVED`: instruct operators to remediate upstream artifacts or rebind inputs; Guardian enforces parent gating.
@@ -58,8 +58,7 @@
 - **Signals:** `guardian_pending_total` trending upward for 3 scrapes, `guardian_pending_oldest_seconds` > `guardian.queue.backlog_alert_minutes * 60`, `guardian_submission_timeout_total` incrementing, `review_queue_oldest_seconds` approaching `reviews.backlog.alert_minutes`.
 - **Triage (≤5 minutes):**
   1. Verify Guardian health endpoints and latency dashboards.
-
-  1. Inspect queue detail:
+  2. Inspect queue detail:
 
      ```sql
      SELECT artifact_id,
@@ -69,19 +68,18 @@
             last_heartbeat_at,
             judgment_attempts
        FROM guardian_submission_queue
+     ORDER BY submitted_at
+       LIMIT 50;
      ```
-  ORDER BY submitted_at LIMIT 50;
-  ```
 
   3. Sample worker logs for `FAILED_GUARDIAN_TIMEOUT`; confirm Celery pods healthy.
   4. Review recent `guardian.rules.version` activations and Guardian deploys for regressions.
-  ```
 - **Decision:**
   - *Compute exhaustion*: raise HPA floor, ensure DB connections within pool limits, restart pods after scaling.
   - *Policy/rules regression*: roll back offending ruleset or apply waiver/manual review following RB-GUARD-001.
   - *External dependency degradation*: coordinate with LPE/Settings teams, throttle submissions if upstream latency high.
 - **Post-remediation:**
-  - Confirm `guardian_pending_total` below alert threshold and `guardian_pending_oldest_seconds` \< 120s for two scrapes.
+  - Confirm `guardian_pending_total` below alert threshold and `guardian_pending_oldest_seconds` < 120s for two scrapes.
   - Ensure `guardian_submission_timeout_total` stopped increasing and queued artifacts receive fresh judgments.
   - Document incident with root cause, remediation, SQL excerpt, and follow-up tasks; update HPA/alert thresholds if burst patterns changed.
 
@@ -118,10 +116,10 @@ Triggers: `lpe_compiler_duration_overrun`, `lpe_bundle_signature_error`, change 
 Execution checklist:
 
 1. Freeze compiler pipeline (`lpe.compiler.enabled=false`) and announce in `#ops-announcements`.
-1. Inspect diff artifacts; confirm affected locales/regions and whether unsafe flags were raised.
-1. Promote previous good bundle via `ops/scripts/lpe/promote_bundle.py --bundle <id>` and capture hash evidence.
-1. Re-run regression suite (`make lpe-compiler-regressions`) and snapshot Grafana panels for incident ticket.
-1. Coordinate Settings activation replay once bundle validated; update change ticket with evidence.
+2. Inspect diff artifacts; confirm affected locales/regions and whether unsafe flags were raised.
+3. Promote previous good bundle via `ops/scripts/lpe/promote_bundle.py --bundle <id>` and capture hash evidence.
+4. Re-run regression suite (`make lpe-compiler-regressions`) and snapshot Grafana panels for incident ticket.
+5. Coordinate Settings activation replay once bundle validated; update change ticket with evidence.
 
 Post-remediation:
 
@@ -137,10 +135,10 @@ Post-remediation:
 Response steps:
 
 1. Capture failing discovery IDs and affected services from alert payload.
-1. Roll back via `ops/scripts/lpe/deploy_opa_bundle.py --bundle <last_good>` and flush worker caches (`scripts/opa/flush_cache.py`).
-1. Validate OPA `/status` and `/health` endpoints plus policy unit tests (`pytest tests/opa/test_policy_context.py`).
-1. Notify dependent teams (Settings, Guardian, Reference Manager) and confirm cached digests refresh.
-1. Attach bundle hashes, validation output, and Grafana snapshots to incident ticket.
+2. Roll back via `ops/scripts/lpe/deploy_opa_bundle.py --bundle <last_good>` and flush worker caches (`scripts/opa/flush_cache.py`).
+3. Validate OPA `/status` and `/health` endpoints plus policy unit tests (`pytest tests/opa/test_policy_context.py`).
+4. Notify dependent teams (Settings, Guardian, Reference Manager) and confirm cached digests refresh.
+5. Attach bundle hashes, validation output, and Grafana snapshots to incident ticket.
 
 Follow-up:
 
@@ -156,10 +154,10 @@ Follow-up:
 Checklist:
 
 1. Review waiver ledger for entries expiring within alert window; confirm impacted locales and providers.
-1. Engage Security + Architecture for renewal decision; capture approvals in decision log.
-1. If waiver retired, update Settings allowlists and trigger Appendix R RB-LPE-LOCALE-GAP if localization fallback required.
-1. Run `ops/scripts/lpe/check_waivers.py --verify` to ensure updated posture and attach output to incident ticket.
-1. Communicate outcome to affected product owners and document customer impact, if any.
+2. Engage Security + Architecture for renewal decision; capture approvals in decision log.
+3. If waiver retired, update Settings allowlists and trigger Appendix R RB-LPE-LOCALE-GAP if localization fallback required.
+4. Run `ops/scripts/lpe/check_waivers.py --verify` to ensure updated posture and attach output to incident ticket.
+5. Communicate outcome to affected product owners and document customer impact, if any.
 
 Audit trail:
 
@@ -175,10 +173,10 @@ Audit trail:
 Resolution steps:
 
 1. Identify affected locales and impacted surfaces (portal, Guardian, notifications) from alert payload.
-1. Coordinate with Localization program to deliver missing translations and QA recordings; update Appendix A checklist items.
-1. Validate `ops/scripts/lpe/audit_locales.py` passes for affected locales and attach proof to ticket.
-1. Run synthetic checks (`tests/e2e/test_portal_policy_context.py::test_disclaimer_l10n`) to confirm correct copy rendering.
-1. Update Settings bundles and trigger LPE compiler rebuild; monitor `lpe_lookup_latency_p95_breach` for regression.
+2. Coordinate with Localization program to deliver missing translations and QA recordings; update Appendix A checklist items.
+3. Validate `ops/scripts/lpe/audit_locales.py` passes for affected locales and attach proof to ticket.
+4. Run synthetic checks (`tests/e2e/test_portal_policy_context.py::test_disclaimer_l10n`) to confirm correct copy rendering.
+5. Update Settings bundles and trigger LPE compiler rebuild; monitor `lpe_lookup_latency_p95_breach` for regression.
 
 Post-checks:
 
@@ -216,10 +214,10 @@ Trigger conditions:
 Execution checklist:
 
 1. Declare incident in `#ref-manager-oncall`, assign commander/scribe, and capture affected bundle IDs.
-1. Halt new publishes (`reference publish --freeze`) and notify integrators.
-1. Execute `reference rollback --bundle <previous_id>`; record CLI output and resulting bundle hash.
-1. Re-run staging adoption suite (`reference adoption verify --bundle <previous_id>`) and confirm downstream acknowledgements.
-1. Document outcome in the incident ticket with links to metrics, adoption diffs, and customer impact summary.
+2. Halt new publishes (`reference publish --freeze`) and notify integrators.
+3. Execute `reference rollback --bundle <previous_id>`; record CLI output and resulting bundle hash.
+4. Re-run staging adoption suite (`reference adoption verify --bundle <previous_id>`) and confirm downstream acknowledgements.
+5. Document outcome in the incident ticket with links to metrics, adoption diffs, and customer impact summary.
 
 Post-rollback validation:
 
@@ -236,10 +234,10 @@ Post-rollback validation:
 Decision tree:
 
 1. Identify failing sources (`reference harvest status --failing`) and confirm alert payload scope.
-1. For selector regressions, pull last-good HTML snapshot, update parser fixtures, and replay ingest in staging.
-1. For licensing or robots.txt changes, coordinate with Legal Ops and update provenance manifests before re-enabling.
-1. For infrastructure outages, engage provider contacts, increase backoff, and stage manual uploads if SLAs demand.
-1. Re-enable connector only after validation passes and ledger entry updated with evidence links.
+2. For selector regressions, pull last-good HTML snapshot, update parser fixtures, and replay ingest in staging.
+3. For licensing or robots.txt changes, coordinate with Legal Ops and update provenance manifests before re-enabling.
+4. For infrastructure outages, engage provider contacts, increase backoff, and stage manual uploads if SLAs demand.
+5. Re-enable connector only after validation passes and ledger entry updated with evidence links.
 
 Communication & evidence:
 
@@ -256,10 +254,10 @@ Communication & evidence:
 Response steps:
 
 1. Collect failing validation artifacts (`reference validate --bundle <id> --export artifacts/guard/<id>`).
-1. Categorize failure: schema incompatibility, missing assets, license metadata, or diff threshold breach.
-1. Assign owners per category (Schema Council, Content Ops, Localization) and capture remediation plan in incident doc.
-1. Apply fixes in staging, rerun validation, and ensure unit/integration suites covering affected domains stay green.
-1. Communicate readiness in `#ref-manager-oncall`, secure approvals, and resume publish pipeline.
+2. Categorize failure: schema incompatibility, missing assets, license metadata, or diff threshold breach.
+3. Assign owners per category (Schema Council, Content Ops, Localization) and capture remediation plan in incident doc.
+4. Apply fixes in staging, rerun validation, and ensure unit/integration suites covering affected domains stay green.
+5. Communicate readiness in `#ref-manager-oncall`, secure approvals, and resume publish pipeline.
 
 Post-resolution:
 
@@ -276,10 +274,10 @@ Post-resolution:
 Remediation workflow:
 
 1. Review violation payload (source, license, impacted assets) and freeze related publishes.
-1. Remove or quarantine offending content from staging/curated schemas; note bundle versions impacted.
-1. Coordinate with Legal Ops for relicensing or replacement assets; track approvals in waiver ledger.
-1. Update attribution metadata, regenerate affected bundles, and validate Guardian/UI surfaces show correct badges.
-1. Close ledger entry with evidence links (tickets, approvals, artifact hashes) and notify stakeholders.
+2. Remove or quarantine offending content from staging/curated schemas; note bundle versions impacted.
+3. Coordinate with Legal Ops for relicensing or replacement assets; track approvals in waiver ledger.
+4. Update attribution metadata, regenerate affected bundles, and validate Guardian/UI surfaces show correct badges.
+5. Close ledger entry with evidence links (tickets, approvals, artifact hashes) and notify stakeholders.
 
 Follow-up:
 
@@ -296,10 +294,10 @@ Follow-up:
 Remediation checklist:
 
 1. Inspect finding details and gather attestation or SAN mismatch evidence.
-1. Engage provider to confirm intended footprint; request updated attestation or schedule decommission.
-1. Update RM catalogue entries (`provider_endpoints[]`), including CIDRs, SAN expectations, and residency notes.
-1. Publish refreshed bundle, rerun Settings activation replay, and verify Guardian acknowledges new digest.
-1. Archive evidence in incident folder and update waiver ledger if temporary exceptions granted.
+2. Engage provider to confirm intended footprint; request updated attestation or schedule decommission.
+3. Update RM catalogue entries (`provider_endpoints[]`), including CIDRs, SAN expectations, and residency notes.
+4. Publish refreshed bundle, rerun Settings activation replay, and verify Guardian acknowledges new digest.
+5. Archive evidence in incident folder and update waiver ledger if temporary exceptions granted.
 
 Post-remediation validation:
 
