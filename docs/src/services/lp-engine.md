@@ -1,44 +1,58 @@
-______________________________________________________________________
-
-title: "uDocket — Localization & Policy Engine Technical Design" subtitle: "Localization, Residency, and Policy Enforcement Specification" author:
-
-- uDocket Platform Architecture Team
-- Localization & Policy Program Leads version: 0.1-draft status: implementable classification: Confidential last_updated: 2025-10-23 owners:
-- Platform Architecture
-- Security Engineering
-- Localization & Policy Program approvers:
-- Architecture Steering Committee
-- Security Review Board reviewers:
-- QA Engineering Lead
-- SRE Manager adr_index: docs/adr/README.md related_adrs:
-- ADR-0004-localization-and-policy-engine.md header-includes:
-- '<base href="..">'
-- |
-  <style>
-    table {
-      font-size: 8.5pt;
-    }
-    table td,
-    table th {
-      font-size: inherit;
-      word-break: break-word;
-      overflow-wrap: anywhere;
-    }
-    figure svg text,
-    figure svg tspan {
-      fill: #111 !important;
-    }
-    figure svg text {
-      font-family: "DejaVu Sans", "Trebuchet MS", Arial, sans-serif !important;
-    }
-    figure.full-width-diagram img {
-      width: 100%;
-      height: auto;
-      display: block;
-    }
-  </style>
-- '<header class="page-header">uDocket — Localization & Policy Engine Technical Design <br> Localization, Residency, and Policy Enforcement Specification</header>'
-- '<footer class="page-footer">Confidential · Last updated 2025-10-23 · Page <span class="page-number"></span> of <span class="page-count"></span></footer>'
+---
+title: uDocket — Localization & Policy Engine Technical Design
+subtitle: Localization, Residency, and Policy Enforcement Specification
+author:
+  - uDocket Platform Architecture Team
+  - Localization & Policy Program Leads
+version: 0.1-draft
+status: implementable
+classification: Confidential
+last_updated: 2025-10-23
+owners:
+  - Platform Architecture
+  - Security Engineering
+  - Localization & Policy Program
+approvers:
+  - Architecture Steering Committee
+  - Security Review Board
+reviewers:
+  - QA Engineering Lead
+  - SRE Manager
+adr_index: docs/adr/README.md
+related_adrs:
+  - ADR-0004-localization-and-policy-engine.md
+header-includes:
+  - |
+    <style>
+      table {
+        font-size: 8.5pt;
+      }
+      table td,
+      table th {
+        font-size: inherit;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+      }
+      figure svg text,
+      figure svg tspan {
+        fill: #111 !important;
+      }
+      figure svg text {
+        font-family: "DejaVu Sans", "Trebuchet MS", Arial, sans-serif !important;
+      }
+      figure.full-width-diagram img {
+        width: 100%;
+        height: auto;
+        display: block;
+      }
+    </style>
+  - <header class="page-header">uDocket — Localization & Policy Engine Technical
+    Design <br> Localization, Residency, and Policy Enforcement 
+    Specification</header>
+  - <footer class="page-footer">Confidential · Last updated 2025-10-23 · Page 
+    <span class="page-number"></span> of <span 
+    class="page-count"></span></footer>
+---
 
 ______________________________________________________________________
 

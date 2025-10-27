@@ -1,48 +1,63 @@
+---
+title: uDocket — Guardian Service Specification
+subtitle: Canonical design, policy, and operational reference
+author:
+  - Guardian Service Working Group
+version: 0.1-draft
+status: implementable
+classification: Confidential
+last_updated: 2025-10-23
+owners:
+  - Security Engineering
+  - Platform Architecture
+approvers:
+  - Architecture Steering Committee
+  - Security Review Board
+reviewers:
+  - QA Engineering Lead
+  - SRE Manager
+adr_index: docs/adr/README.md
+related_adrs:
+  - ADR-0001-guardian-ready-quarantine.md
+  - ADR-0003-api-versioning-and-sunset.md
+  - ADR-0004-localization-and-policy-engine.md
+header-includes:
+  - |
+    <style>
+      table {
+        font-size: 8.5pt;
+      }
+      table td,
+      table th {
+        font-size: inherit;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+      }
+      figure svg text,
+      figure svg tspan {
+        fill: #111 !important;
+      }
+      figure svg text {
+        font-family: "DejaVu Sans", "Trebuchet MS", Arial, sans-serif !important;
+      }
+      figure.full-width-diagram img {
+        width: 100%;
+        height: auto;
+        display: block;
+      }
+    </style>
+  - <header class="page-header">uDocket — Guardian Service Specification <br> 
+    Canonical design, policy, and operational reference</header>
+  - <footer class="page-footer">Confidential · Last updated 2025-10-23 · Page 
+    <span class="page-number"></span> of <span 
+    class="page-count"></span></footer>
+---
+
 ______________________________________________________________________
 
-title: "uDocket — Guardian Service Specification" subtitle: "Canonical design, policy, and operational reference" author:
+**Audience:** Guardian engineers, operators, reviewers, policy authors, and dependent service owners.
 
-- Guardian Service Working Group version: 0.1-draft status: implementable classification: Confidential last_updated: 2025-10-23 owners:
-- Security Engineering
-- Platform Architecture approvers:
-- Architecture Steering Committee
-- Security Review Board reviewers:
-- QA Engineering Lead
-- SRE Manager adr_index: docs/adr/README.md related_adrs:
-- ADR-0001-guardian-ready-quarantine.md
-- ADR-0003-api-versioning-and-sunset.md
-- ADR-0004-localization-and-policy-engine.md header-includes:
-- '<base href="..">'
-- |
-  <style>
-    table {
-      font-size: 8.5pt;
-    }
-    table td,
-    table th {
-      font-size: inherit;
-      word-break: break-word;
-      overflow-wrap: anywhere;
-    }
-    figure svg text,
-    figure svg tspan {
-      fill: #111 !important;
-    }
-    figure svg text {
-      font-family: "DejaVu Sans", "Trebuchet MS", Arial, sans-serif !important;
-    }
-    figure.full-width-diagram img {
-      width: 100%;
-      height: auto;
-      display: block;
-    }
-  </style>
-- '<header class="page-header">uDocket — Guardian Service Specification <br> Canonical design, policy, and operational reference</header>'
-- '<footer class="page-footer">Confidential · Last updated 2025-10-23 · Page <span class="page-number"></span> of <span class="page-count"></span></footer>'
-
-______________________________________________________________________
-
-**Audience:** Guardian engineers, operators, reviewers, policy authors, and dependent service owners.\\ **Purpose:** Establish Guardian as a standalone, authoritative specification that consolidates all judgments, policy integration, API, observability, and operational guidance previously dispersed through the TDD.
+**Purpose:** Establish Guardian as a standalone, authoritative specification that consolidates all judgments, policy integration, API, observability, and operational guidance previously dispersed through the TDD.
 
 ______________________________________________________________________
 

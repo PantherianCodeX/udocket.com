@@ -1,49 +1,63 @@
+---
+title: uDocket — Settings Registry Technical Design
+subtitle: Configuration Governance & Activation Specification
+author:
+  - uDocket Platform Architecture Team
+  - Settings Program Leads
+version: 0.1-draft
+status: implementable
+classification: Confidential
+last_updated: 2025-10-23
+owners:
+  - Platform Architecture
+  - Security Engineering
+  - Settings Program
+approvers:
+  - Architecture Steering Committee
+  - Security Review Board
+reviewers:
+  - QA Engineering Lead
+  - SRE Manager
+adr_index: docs/adr/README.md
+related_adrs:
+  - ADR-0003-api-versioning-and-sunset.md
+  - ADR-0004-localization-and-policy-engine.md
+header-includes:
+  - |
+    <style>
+      table {
+        font-size: 8.5pt;
+      }
+      table td,
+      table th {
+        font-size: inherit;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+      }
+      figure svg text,
+      figure svg tspan {
+        fill: #111 !important;
+      }
+      figure svg text {
+        font-family: "DejaVu Sans", "Trebuchet MS", Arial, sans-serif !important;
+      }
+      figure.full-width-diagram img {
+        width: 100%;
+        height: auto;
+        display: block;
+      }
+    </style>
+  - <header class="page-header">uDocket — Settings Registry Technical Design 
+    <br> Configuration Governance & Activation Specification</header>
+  - <footer class="page-footer">Confidential · Last updated 2025-10-23 · Page 
+    <span class="page-number"></span> of <span 
+    class="page-count"></span></footer>
+---
+
 ______________________________________________________________________
 
-title: "uDocket — Settings Registry Technical Design" subtitle: "Configuration Governance & Activation Specification" author:
+**Audience:** Platform engineering, Guardian, Localization & Policy Engine, Reference Manager, SRE, QA, Product Operations\\
 
-- uDocket Platform Architecture Team
-- Settings Program Leads version: 0.1-draft status: implementable classification: Confidential last_updated: 2025-10-23 owners:
-- Platform Architecture
-- Security Engineering
-- Settings Program approvers:
-- Architecture Steering Committee
-- Security Review Board reviewers:
-- QA Engineering Lead
-- SRE Manager adr_index: docs/adr/README.md related_adrs:
-- ADR-0003-api-versioning-and-sunset.md
-- ADR-0004-localization-and-policy-engine.md header-includes:
-- '<base href="..">'
-- |
-  <style>
-    table {
-      font-size: 8.5pt;
-    }
-    table td,
-    table th {
-      font-size: inherit;
-      word-break: break-word;
-      overflow-wrap: anywhere;
-    }
-    figure svg text,
-    figure svg tspan {
-      fill: #111 !important;
-    }
-    figure svg text {
-      font-family: "DejaVu Sans", "Trebuchet MS", Arial, sans-serif !important;
-    }
-    figure.full-width-diagram img {
-      width: 100%;
-      height: auto;
-      display: block;
-    }
-  </style>
-- '<header class="page-header">uDocket — Settings Registry Technical Design <br> Configuration Governance & Activation Specification</header>'
-- '<footer class="page-footer">Confidential · Last updated 2025-10-23 · Page <span class="page-number"></span> of <span class="page-count"></span></footer>'
-
-______________________________________________________________________
-
-**Audience:** Platform engineering, Guardian, Localization & Policy Engine, Reference Manager, SRE, QA, Product Operations\
 **Purpose:** Define Settings Registry (SR) responsibilities, contracts, activation lifecycle, and observability so every service consumes consistent, auditable configuration.
 
 ______________________________________________________________________

@@ -1,50 +1,65 @@
+---
+title: uDocket — Reference Manager Technical Design
+subtitle: Reference Data Ingestion, Editorial Workflow, and Publishing 
+  Specification
+author:
+  - uDocket Platform Architecture Team
+  - Reference Programs Leadership
+version: 0.1-draft
+status: implementable
+classification: Confidential
+last_updated: 2025-10-23
+owners:
+  - Platform Architecture
+  - Security Engineering
+  - Reference Programs
+approvers:
+  - Architecture Steering Committee
+  - Security Review Board
+reviewers:
+  - QA Engineering Lead
+  - SRE Manager
+adr_index: docs/adr/README.md
+related_adrs:
+  - ADR-0004-localization-and-policy-engine.md
+header-includes:
+  - |
+    <style>
+      table {
+        font-size: 8.5pt;
+      }
+      table td,
+      table th {
+        font-size: inherit;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+      }
+      figure svg text,
+      figure svg tspan {
+        fill: #111 !important;
+      }
+      figure svg text {
+        font-family: "DejaVu Sans", "Trebuchet MS", Arial, sans-serif !important;
+      }
+      figure.full-width-diagram img {
+        width: 100%;
+        height: auto;
+        display: block;
+      }
+    </style>
+  - <header class="page-header">uDocket — Reference Manager Technical Design 
+    <br> Reference Data Ingestion, Editorial Workflow, and Publishing 
+    Specification</header>
+  - <footer class="page-footer">Confidential · Last updated 2025-10-23 · Page 
+    <span class="page-number"></span> of <span 
+    class="page-count"></span></footer>
+---
+
 ______________________________________________________________________
 
-title: "uDocket — Reference Manager Technical Design" subtitle: "Reference Data Ingestion, Editorial Workflow, and Publishing Specification" author:
+**Audience:** Reference Programs, Localization & Policy Engine, Settings, Guardian, SRE, QA, Product Operations
 
-- uDocket Platform Architecture Team
-- Reference Programs Leadership version: 0.1-draft status: implementable classification: Confidential last_updated: 2025-10-23 owners:
-- Platform Architecture
-- Security Engineering
-- Reference Programs approvers:
-- Architecture Steering Committee
-- Security Review Board reviewers:
-- QA Engineering Lead
-- SRE Manager adr_index: docs/adr/README.md related_adrs:
-- ADR-0004-localization-and-policy-engine.md header-includes:
-- '<base href="..">'
-- |
-  <style>
-    table {
-      font-size: 8.5pt;
-    }
-    table td,
-    table th {
-      font-size: inherit;
-      word-break: break-word;
-      overflow-wrap: anywhere;
-    }
-    figure svg text,
-    figure svg tspan {
-      fill: #111 !important;
-    }
-    figure svg text {
-      font-family: "DejaVu Sans", "Trebuchet MS", Arial, sans-serif !important;
-    }
-    figure.full-width-diagram img {
-      width: 100%;
-      height: auto;
-      display: block;
-    }
-  </style>
-- '<header class="page-header">uDocket — Reference Manager Technical Design <br> Reference Data Ingestion, Editorial Workflow, and Publishing Specification</header>'
-- '<footer class="page-footer">Confidential · Last updated 2025-10-23 · Page <span class="page-number"></span> of <span class="page-count"></span></footer>'
-
-______________________________________________________________________
-
-**Audience:** Reference Programs, Localization & Policy Engine, Settings, Guardian, SRE, QA, Product Operations\\ **Purpose:** Describe Reference Manager responsibilities, contracts, lifecycle workflows, and observability so downstream services consume consistent regulated data.
-
-______________________________________________________________________
+**Purpose:** Describe Reference Manager responsibilities, contracts, lifecycle workflows, and observability so downstream services consume consistent regulated data.
 
 ## Document controls
 
