@@ -91,7 +91,7 @@ def main() -> int:
             print(f" - {p}")
         strict = os.getenv("STRICT_DOCS", "0").lower() in {"1","true","yes"}
         return 1 if strict else 0
-        print("Docs check passed: diagrams present, appendices and sections referenced are defined.")
+    print("Docs check passed: diagrams present, appendices and sections referenced are defined.")
     return 0
 
 if __name__ == "__main__":
