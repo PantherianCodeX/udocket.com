@@ -2,6 +2,7 @@ site_name: uDocket Documentation
 repo_url: https://github.com/PantherianCodeX/udocket.com
 
 docs_dir: src
+use_directory_urls: false
 
 theme:
   name: material
