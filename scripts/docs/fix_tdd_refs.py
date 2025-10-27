@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Utility to normalize section references in docs-new/TDD.md.
+"""Utility to normalize section references in docs-new/tdd.md.
 
 The current TDD draft still references legacy section numbers from the prior
 outline.  This script replaces those dangling references with their updated
@@ -11,7 +11,7 @@ Usage:
     python scripts/docs/fix_tdd_refs.py
 
 Optional flags:
-    --path PATH     Target file (default: docs-new/TDD.md)
+    --path PATH     Target file (default: docs-new/tdd.md)
     --dry-run       Show the planned edits without writing changes
     --check-only    Exit non-zero if any mapping key is missing
 
@@ -105,8 +105,8 @@ def main() -> None:
     parser.add_argument(
         "--path",
         type=Path,
-        default=Path("docs-new") / "TDD.md",
-        help="Target markdown file (default: docs-new/TDD.md)",
+        default=Path("docs-new") / "tdd.md",
+        help="Target markdown file (default: docs-new/tdd.md)",
     )
     parser.add_argument(
         "--dry-run",

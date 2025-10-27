@@ -1,17 +1,17 @@
 # ADR-0004 — Localization & Policy Engine (LPE) control/data plane split
 
-- **Status:** Accepted  
-- **Date:** 2025-10-12  
-- **Deciders:** Architecture Steering Committee, Security Review Board, Platform AI Lead  
+- **Status:** Accepted
+- **Date:** 2025-10-12
+- **Deciders:** Architecture Steering Committee, Security Review Board, Platform AI Lead
 - **Tags:** localization, policy, residency, bundles, reference-manager
 
 ## Context
 
 The "Reference Engine" mixed multiple concerns:
 
-1. Curating court/jurisdictional datasets, questionnaires, localization strings, and licensing metadata.  
-2. Compiling runtime policy/material for staff UI, workers, and database RLS.  
-3. Serving real-time lookups under tight latency guarantees.
+1. Curating court/jurisdictional datasets, questionnaires, localization strings, and licensing metadata.
+1. Compiling runtime policy/material for staff UI, workers, and database RLS.
+1. Serving real-time lookups under tight latency guarantees.
 
 This coupling made schema changes risky, prevented independent scaling, and offered no clear place to enforce residency or HIPAA toggles. In addition, we need deterministic localization data (CLDR/ICU) and stable policy artifacts to support agents, Guardian, and Settings activations.
 
@@ -28,8 +28,7 @@ Introduce a formal control/data plane split:
 ## Consequences
 
 - RM can evolve schema ingestion/adapters without impacting runtime latency. Editorial teams get richer tooling (diffs, license ledger, rollback).
-- LPE scales independently (compiler workers vs lookup API) and enforces strict SLOs (lookup P95 ≤ 50 ms).  
+- LPE scales independently (compiler workers vs lookup API) and enforces strict SLOs (lookup P95 ≤ 50 ms).
 - Guardian, workers, UI, and database RLS consume the same `PolicyContext`, reducing drift and simplifying audits.
 - Bundled CLDR/ICU data and MessageFormat 2 metadata centralize localization logic; frontend/compose agents no longer hard-code locale rules.
 - Additional operational work: bundle signing/rotation, compiler monitoring, and cache health alerts. The split also mandates migration work for legacy modules (`packages.udocket_core.reference` → `reference_manager`/`lpe`) and temporary compatibility shims.
-

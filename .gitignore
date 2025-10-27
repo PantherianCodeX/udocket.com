@@ -171,6 +171,9 @@ __azurite_db_*.json
 
 # mkdocs documentation
 docs/site
+docs/build
+docs/src/**/.cache/
+docs/src/**/.pytest_cache/
 
 # mypy
 .mypy_cache/

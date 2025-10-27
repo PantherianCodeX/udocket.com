@@ -13,6 +13,6 @@ Canonical mapping between Guardian judgments and artifact statuses/UI labels. Th
   - Typical action: Quarantine; require changes before re‑evaluation.
 
 Provenance
+
 - Code references: packages/udocket_core/artifacts/status.py (status enums) and Guardian outputs.
 - UI: presenters should reflect `has_summary`, `has_timeline`, etc. derived from artifacts, not tools.
-

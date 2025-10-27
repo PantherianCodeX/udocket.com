@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Validate that every settings key documented in Appendix E exists somewhere in the codebase.
 
-Reads `docs/src/tdd/TDD.md`, extracts settings keys from Appendix E, then uses ripgrep to
+Reads `docs/src/overview/tdd.md`, extracts settings keys from Appendix E, then uses ripgrep to
 search for each key outside the document. Prints any keys that are missing so CI can
 fail fast when docs reference non-existent keys.
 
@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-DOC_PATH = ROOT / "docs" / "src" / "tdd" / "TDD.md"
+DOC_PATH = ROOT / "docs" / "src" / "overview" / "tdd.md"
 SKIP_FILE = ROOT / "docs" / "settings_key_skip.txt"
 
 
@@ -43,7 +43,7 @@ def find_missing(keys: list[str], skip: set[str]) -> list[str]:
             [
                 "rg",
                 "--glob",
-                "!docs/src/tdd/TDD.md",
+                "!docs/src/overview/tdd.md",
                 "--glob",
                 "!scripts/docs/check_settings_keys.py",
                 key,

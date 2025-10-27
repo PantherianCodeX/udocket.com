@@ -20,8 +20,11 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+DEFAULT_TARGETS = [Path("docs/src")]
+
 ROOT = Path(__file__).resolve().parents[2]
-DOC = ROOT / "docs" / "src" / "tdd" / "TDD.md"
+DEFAULT_TARGETS = [ROOT / p for p in DEFAULT_TARGETS]
+TDD_DOC = ROOT / "docs" / "src" / "overview" / "tdd.md"
 
 
 @dataclass
@@ -60,21 +63,29 @@ def run_task(task: Task) -> bool:
         return False
 
 
-def build_tasks() -> list[Task]:
+def build_tasks(targets: list[Path]) -> list[Task]:
     py = sys.executable
+    target_args = []
+    for t in targets:
+        try:
+            target_args.append(str(t.relative_to(ROOT)))
+        except ValueError:
+            target_args.append(str(t))
+    target_label = ", ".join(target_args)
+    mdformat_cmd = [py, "-m", "mdformat", "--wrap", "no", "--check", *target_args]
     return [
         Task(
             name="build_runbook_catalog.py --check",
             cmd=[py, str(ROOT / "scripts" / "docs" / "build_runbook_catalog.py"), "--check"],
         ),
         Task(
-            name="mdformat --check docs/src/tdd/TDD.md",
-            cmd=[py, "-m", "mdformat", "--wrap", "no", "--check", str(DOC)],
+            name=f"mdformat --check {target_label}",
+            cmd=mdformat_cmd,
             install_hint="pip install -r requirements-docs.txt",
         ),
         Task(
-            name="markdownlint-cli2 docs/src/tdd/TDD.md",
-            cmd=["markdownlint-cli2", str(DOC)],
+            name=f"markdownlint-cli2 {target_label}",
+            cmd=["markdownlint-cli2", *target_args],
             optional=True,
             install_hint="npm install --location=global markdownlint-cli2 markdownlint-cli2-config-standard",
         ),
@@ -90,13 +101,29 @@ def build_tasks() -> list[Task]:
     ]
 
 
+def resolve_targets(args: list[str]) -> list[Path]:
+    if not args:
+        return DEFAULT_TARGETS
+    resolved: list[Path] = []
+    for raw in args:
+        p = Path(raw)
+        if not p.is_absolute():
+            p = ROOT / p
+        if not p.exists():
+            print(f"Warning: target '{raw}' does not exist; skipping", file=sys.stderr)
+            continue
+        resolved.append(p)
+    return resolved or DEFAULT_TARGETS
+
+
 def main() -> int:
-    if not DOC.exists():
-        print(f"Cannot find documentation file at {DOC}", file=sys.stderr)
+    if not TDD_DOC.exists():
+        print(f"Cannot find documentation file at {TDD_DOC}", file=sys.stderr)
         return 2
 
+    targets = resolve_targets(sys.argv[1:])
     failures = 0
-    for task in build_tasks():
+    for task in build_tasks(targets):
         if not run_task(task):
             failures += 1
     if failures:

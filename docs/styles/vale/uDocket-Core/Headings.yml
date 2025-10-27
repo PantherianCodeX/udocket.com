@@ -3,4 +3,3 @@ message: "Use Sentence case for headings."
 level: warning
 scope: heading
 match: '^[A-Z][a-z0-9].*'
-

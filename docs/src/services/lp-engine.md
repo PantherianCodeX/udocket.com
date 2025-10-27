@@ -1,79 +1,70 @@
----
-title: "uDocket — Localization & Policy Engine Technical Design"
-subtitle: "Localization, Residency, and Policy Enforcement Specification"
-author:
-  - uDocket Platform Architecture Team
-  - Localization & Policy Program Leads
-version: 0.1-draft
-status: implementable
-classification: Confidential
-last_updated: 2025-10-23
-owners:
-  - Platform Architecture
-  - Security Engineering
-  - Localization & Policy Program
-approvers:
-  - Architecture Steering Committee
-  - Security Review Board
-reviewers:
-  - QA Engineering Lead
-  - SRE Manager
-adr_index: docs/adr/README.md
-related_adrs:
-  - ADR-0004-localization-and-policy-engine.md
-header-includes:
-  - '<base href="..">'
-  - |
-    <style>
-      table {
-        font-size: 8.5pt;
-      }
-      table td,
-      table th {
-        font-size: inherit;
-        word-break: break-word;
-        overflow-wrap: anywhere;
-      }
-      figure svg text,
-      figure svg tspan {
-        fill: #111 !important;
-      }
-      figure svg text {
-        font-family: "DejaVu Sans", "Trebuchet MS", Arial, sans-serif !important;
-      }
-      figure.full-width-diagram img {
-        width: 100%;
-        height: auto;
-        display: block;
-      }
-    </style>
-  - '<header class="page-header">uDocket — Localization & Policy Engine Technical Design <br> Localization, Residency, and Policy Enforcement Specification</header>'
-  - '<footer class="page-footer">Confidential · Last updated 2025-10-23 · Page <span class="page-number"></span> of <span class="page-count"></span></footer>'
----
+______________________________________________________________________
+
+title: "uDocket — Localization & Policy Engine Technical Design" subtitle: "Localization, Residency, and Policy Enforcement Specification" author:
+
+- uDocket Platform Architecture Team
+- Localization & Policy Program Leads version: 0.1-draft status: implementable classification: Confidential last_updated: 2025-10-23 owners:
+- Platform Architecture
+- Security Engineering
+- Localization & Policy Program approvers:
+- Architecture Steering Committee
+- Security Review Board reviewers:
+- QA Engineering Lead
+- SRE Manager adr_index: docs/adr/README.md related_adrs:
+- ADR-0004-localization-and-policy-engine.md header-includes:
+- '<base href="..">'
+- |
+  <style>
+    table {
+      font-size: 8.5pt;
+    }
+    table td,
+    table th {
+      font-size: inherit;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+    figure svg text,
+    figure svg tspan {
+      fill: #111 !important;
+    }
+    figure svg text {
+      font-family: "DejaVu Sans", "Trebuchet MS", Arial, sans-serif !important;
+    }
+    figure.full-width-diagram img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+  </style>
+- '<header class="page-header">uDocket — Localization & Policy Engine Technical Design <br> Localization, Residency, and Policy Enforcement Specification</header>'
+- '<footer class="page-footer">Confidential · Last updated 2025-10-23 · Page <span class="page-number"></span> of <span class="page-count"></span></footer>'
+
+______________________________________________________________________
 
 **Audience:** Platform engineering, Reference Manager, Settings, Guardian, SRE, QA, Product Localization\
 **Purpose:** Define Localization & Policy Engine (LPE) behaviour, contracts, and rollout controls so platform services consume consistent localization, residency, and compliance data.
 
----
+______________________________________________________________________
 
 ## Document controls
 
-| Field           | Value |
-| --------------- | ----- |
-| Version         | 0.1-draft |
-| Status          | Implementable (mirrors front matter `status`; KEP lifecycle applies: Provisional → Implementable → Implemented) |
-| Last updated    | 2025-10-23 (source of truth is the front matter `last_updated`) |
-| Primary owners  | Platform Architecture; Security Engineering; Localization & Policy Program |
-| Approvers       | Architecture Steering Committee; Security Review Board |
-| Reviewers       | QA Engineering Lead; SRE Manager |
-| ADR index       | `docs/adr/README.md` (immutable ADRs referenced in front matter `related_adrs`) |
+| Field           | Value                                                                                                                |
+| --------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Version         | 0.1-draft                                                                                                            |
+| Status          | Implementable (mirrors front matter `status`; KEP lifecycle applies: Provisional → Implementable → Implemented)      |
+| Last updated    | 2025-10-23 (source of truth is the front matter `last_updated`)                                                      |
+| Primary owners  | Platform Architecture; Security Engineering; Localization & Policy Program                                           |
+| Approvers       | Architecture Steering Committee; Security Review Board                                                               |
+| Reviewers       | QA Engineering Lead; SRE Manager                                                                                     |
+| ADR index       | `docs/adr/README.md` (immutable ADRs referenced in front matter `related_adrs`)                                      |
 | Migration plan  | Supersede legacy Reference Engine docs once §6.4 cutover completes; `/reference/*` shims remain read-only until then |
-| Docs validation | `python scripts/docs/lint_docs.py` (see `docs/README.md` for tooling) |
-| Link lint       | `python scripts/docs/link_check.py --strict` (CI `docs-link-check` stage blocks unresolved §/App./ADR refs) |
+| Docs validation | `python scripts/docs/lint_docs.py` (see `docs/README.md` for tooling)                                                |
+| Link lint       | `python scripts/docs/link_check.py --strict` (CI `docs-link-check` stage blocks unresolved §/App./ADR refs)          |
 
 Body sections follow the Purpose/Contract/State/Failure/Observability/Breadcrumb scaffold required by `scripts/docs/lint_docs.py --check-template`. Section tags `(binding)` and `(normative)` have the same meaning as the platform TDD.
 
----
+______________________________________________________________________
 
 ## 0) Reading guide
 
@@ -83,7 +74,7 @@ Body sections follow the Purpose/Contract/State/Failure/Observability/Breadcrumb
 - **Maintenance:** Run `python scripts/docs/lint_docs.py` before submitting edits. Schema snippets must match `spec/schemas/*` fixtures and CI lints for localization completeness and policy coverage.
 - **Doc change protocol:** Any PR touching localization packs, residency policies, or policy bundles must include this document in the review summary alongside `ADR-0004` diffs. Architecture/Security reviewers block merges when SDKs, Settings bundles, or policy compilers diverge from these contracts.
 
----
+______________________________________________________________________
 
 ## 1) Service overview
 
@@ -122,14 +113,14 @@ Body sections follow the Purpose/Contract/State/Failure/Observability/Breadcrumb
 
 *Purpose: Enumerate managed data categories and consumers.*
 
-| Domain              | Examples / keys | Primary consumers |
-| ------------------- | ---------------- | ----------------- |
-| Localization packs  | Approval banners, invalidation copy, intake flows, accessibility copy, formatting helpers (date/time, number, currency, measurement units), legal disclaimers keyed by locale | Staff UI, Client Portal, Notifications, Compose/Analyze agents |
-| Residency policies  | Compute/storage/vector region allowlists, waiver metadata, deployment type annotations | Guardian, Workers, Search, storage adapters |
-| Privacy frameworks  | HIPAA/PHIPA/PIPA/GDPR toggles, retention defaults, DSAR requirements, PHI posture | Guardian, Workers, Portal, Settings activation |
-| Court catalogs      | Jurisdiction hierarchies, court names, filing instructions, identifier crosswalks | Web/Portal selection UIs, Compose agents |
-| Masking profiles    | `default`, `hipaa_strict`, `legal_hold` plus column mask instructions | Database RLS enforcement, audit redaction |
-| Logging & observability hints | Never-log keys, sampling budgets, FinOps hints | Observability fabric, FinOps dashboards |
+| Domain                        | Examples / keys                                                                                                                                                               | Primary consumers                                              |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| Localization packs            | Approval banners, invalidation copy, intake flows, accessibility copy, formatting helpers (date/time, number, currency, measurement units), legal disclaimers keyed by locale | Staff UI, Client Portal, Notifications, Compose/Analyze agents |
+| Residency policies            | Compute/storage/vector region allowlists, waiver metadata, deployment type annotations                                                                                        | Guardian, Workers, Search, storage adapters                    |
+| Privacy frameworks            | HIPAA/PHIPA/PIPA/GDPR toggles, retention defaults, DSAR requirements, PHI posture                                                                                             | Guardian, Workers, Portal, Settings activation                 |
+| Court catalogs                | Jurisdiction hierarchies, court names, filing instructions, identifier crosswalks                                                                                             | Web/Portal selection UIs, Compose agents                       |
+| Masking profiles              | `default`, `hipaa_strict`, `legal_hold` plus column mask instructions                                                                                                         | Database RLS enforcement, audit redaction                      |
+| Logging & observability hints | Never-log keys, sampling budgets, FinOps hints                                                                                                                                | Observability fabric, FinOps dashboards                        |
 
 Localization strings store locale, text, fallback locale, source attribution, and licensing; missing locales create editorial follow-up tasks. BCP-47 normalization (`localization.normalize_locale()`) enforces casing and hyphenation; mismatches raise `LOCALIZATION_INVALID_LOCALE` at activation.
 
@@ -156,7 +147,7 @@ Localization strings store locale, text, fallback locale, source attribution, an
 - Synthetic monitors invoke `GET /api/v1/lpe/policy_context` for HIPAA/PHIPA/PIPA cases post-deploy and verify Guardian/Portal behaviour end-to-end.
 - Synthetic tenant “EU-REFERENCE” exercises EU-only paths quarterly to confirm residency posture across Azure endpoints, storage buckets, vector shards, and TSA integrations.
 
----
+______________________________________________________________________
 
 ## 2) Architecture & compiler pipeline
 
@@ -166,11 +157,11 @@ Localization strings store locale, text, fallback locale, source attribution, an
 
 *Purpose: Summarize deployments, scaling, and observability anchors.*
 
-| Component | Runtime | Responsibilities | Scaling & notes | Observability anchors |
-| --------- | ------- | ---------------- | --------------- | --------------------- |
-| LPE API | FastAPI | PolicyContext lookup, localization pack retrieval, court/jurisdiction search | Horizontally replicated Deployment; caches warmed via activation events | `lpe_lookup_latency_seconds`, `lpe_cache_hit_ratio`, `lpe_policy_context_version` |
-| Compiler jobs | Celery/worker cron | Compile policy contexts, localization packs, OPA bundles | Auto-scales on activation queue depth; throttled to deployment window | `lpe_compiler_duration_seconds`, `lpe_policy_block_total` |
-| Bundle signer | Managed HSM clients | Dual-sign Ed25519 + ECDSA bundles, rotate keys | Runs on demand with queue depth alerts | `lpe_bundle_sign_total`, `lpe_bundle_signature_error_total` |
+| Component     | Runtime             | Responsibilities                                                             | Scaling & notes                                                         | Observability anchors                                                             |
+| ------------- | ------------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| LPE API       | FastAPI             | PolicyContext lookup, localization pack retrieval, court/jurisdiction search | Horizontally replicated Deployment; caches warmed via activation events | `lpe_lookup_latency_seconds`, `lpe_cache_hit_ratio`, `lpe_policy_context_version` |
+| Compiler jobs | Celery/worker cron  | Compile policy contexts, localization packs, OPA bundles                     | Auto-scales on activation queue depth; throttled to deployment window   | `lpe_compiler_duration_seconds`, `lpe_policy_block_total`                         |
+| Bundle signer | Managed HSM clients | Dual-sign Ed25519 + ECDSA bundles, rotate keys                               | Runs on demand with queue depth alerts                                  | `lpe_bundle_sign_total`, `lpe_bundle_signature_error_total`                       |
 
 Settings-driven compiler runs as part of activation; background cron validates digests against RM bundles and Settings snapshots to ensure parity.
 
@@ -186,9 +177,9 @@ Settings-driven compiler runs as part of activation; background cron validates d
   - `regions.allowlist.compute|storage|vector[]`, `regions.egress.waiver{id, scope, expires_at}`, `regions.egress.policy`.
 - Activation pipeline sequence:
   1. Dry-run compile for affected scopes; produce structured diff artifacts.
-  2. Validate localization coverage, residency allowlists, waiver metadata, and deterministic digests.
-  3. Flag unsafe changes (loosening residency, missing required locales) requiring dual approval (`org_admin` + Platform `sysadmin`) before publish.
-  4. Emit `lpe.policy_context.updated` events with digests and affected keys.
+  1. Validate localization coverage, residency allowlists, waiver metadata, and deterministic digests.
+  1. Flag unsafe changes (loosening residency, missing required locales) requiring dual approval (`org_admin` + Platform `sysadmin`) before publish.
+  1. Emit `lpe.policy_context.updated` events with digests and affected keys.
 - Validation suite rejects activations when:
   - Localization packs lack required locales or fallback chains.
   - Residency overrides omit waiver references or expired waivers remain attached.
@@ -287,7 +278,7 @@ Residency outcomes derive from LPE `PolicyContext` allowlists while OPA enforces
 - Database guard rails enforce FORCE RLS on relevant tables. `db.set_rls_mask_profile(ctx.masking_profile)` writes `udocket.mask_profile`; helper functions translate the profile into concrete mask rules during activation.
 - CI tests `tests/platform/db/test_mask_profiles.py::test_mask_profile_matches_policy` and `tests/platform/db/test_rls_guard.py::test_guard_blocks_missing_context` ensure profile coverage. Grafana “Postgres RLS & Masking” monitors `rls_context_missing_total` and `mask_profile_mismatch_total`.
 
----
+______________________________________________________________________
 
 ## 3) Integrations & dependencies
 
@@ -301,13 +292,13 @@ Residency outcomes derive from LPE `PolicyContext` allowlists while OPA enforces
 - Bundle downloads require mTLS + HMAC headers. Bundles carry dual signatures: Ed25519 (default) and ECDSA P-256 for FIPS. When `security.tls.fips_mode=true`, clients require both signatures; missing signatures raise `OPA_FIPS_SIGNATURE_MISSING` and block rollout.
 - Decision logs validate against `spec/schemas/opa_decision_log.schema.json`. `reason_code` values map to downstream actions:
 
-| `reason_code`          | `policy_block_code` exposed to callers |
-| ---------------------- | -------------------------------------- |
-| `OK`                   | `null` |
-| `REGION_NOT_ALLOWED`   | `RESIDENCY_POLICY_BLOCK` |
-| `WAIVER_REQUIRED`      | `POLICY_BLOCK` (UI prompts for waiver) |
-| `HIPAA_REQUIRED`       | `HIPAA_REQUIRED` |
-| `ATTACHMENT_FORBIDDEN` | `ATTACHMENT_BLOCK` |
+| `reason_code`          | `policy_block_code` exposed to callers    |
+| ---------------------- | ----------------------------------------- |
+| `OK`                   | `null`                                    |
+| `REGION_NOT_ALLOWED`   | `RESIDENCY_POLICY_BLOCK`                  |
+| `WAIVER_REQUIRED`      | `POLICY_BLOCK` (UI prompts for waiver)    |
+| `HIPAA_REQUIRED`       | `HIPAA_REQUIRED`                          |
+| `ATTACHMENT_FORBIDDEN` | `ATTACHMENT_BLOCK`                        |
 | `OPA_ERROR`            | `POLICY_BLOCK` (with remediation message) |
 
 - Bundles failing signature verification trigger immediate rollback to the previous `bundle_etag`. If no valid bundle exists, clients fail closed and page `opa_bundle_status` alerts. Runbook App.H RB-OPA-ROLLBACK covers recovery steps.
@@ -345,7 +336,7 @@ Residency outcomes derive from LPE `PolicyContext` allowlists while OPA enforces
 - `scripts/dev/run_lpe_hot_reload.py` compiles bundles, pushes to sandbox OPA, and diffs digests without staging deploys. PRs touching policy or locale packs attach manifest snapshots from the harness.
 - Local stack via `docker compose` mirrors production dependencies (`lpe`, `opa`, `settings`, `reference-manager`). Developers run `docker compose up --build lpe` to exercise APIs and `scripts/opa/validate_decision_logs.py` to confirm decision logs.
 
----
+______________________________________________________________________
 
 ## 4) APIs & SDKs
 
@@ -386,7 +377,7 @@ Responses include `policy_context_version`, `settings_snapshot_version`, `genera
 - Compatibility shim in `packages.udocket_core.reference` delegates to RM or LPE modules. Removal occurs after §6.4 cutover when SDKs consume new bundles exclusively.
 - Monitoring tracks shim usage via `lpe_legacy_request_total`; alerts fire when usage remains above 5% of traffic beyond the announced sunset date.
 
----
+______________________________________________________________________
 
 ## 5) Observability & operations
 
@@ -422,7 +413,7 @@ Responses include `policy_context_version`, `settings_snapshot_version`, `genera
 - Residency hints include preferred provider classes; FinOps automation uses hints to budget compute/storage costs per jurisdiction.
 - Localization QA automation tracks translation spend per locale; budgets escalate when weekly sync exceeds forecast.
 
----
+______________________________________________________________________
 
 ## 6) Testing, rollout, and migration
 
@@ -488,7 +479,7 @@ Responses include `policy_context_version`, `settings_snapshot_version`, `genera
 - **Performance regressions on hot paths:** In-process caches with TTLs, async refresh, and P95 alerting; feature flag allows neutral fallback `PolicyContext` while triaging.
 - **Logging leaks of sensitive policy detail:** Never-log enforcement, log redaction filters, audit seals review.
 
----
+______________________________________________________________________
 
 ## 7) Appendices & references
 
@@ -531,16 +522,11 @@ Responses include `policy_context_version`, `settings_snapshot_version`, `genera
 - Schema governance: updates to `policy_context.schema.json` require ADR review, synchronized SDK releases, and regenerated fixtures. Breaking changes adopt semantic versioning and coordinate with `/reference/*` shim sunset plan (§4.3).
 - Audit evidence: Each Settings activation stores `{policy_context_version, digest_sha256, settings_snapshot_version}` under `ops/lpe/activations/<activation_id>.json` to support DSAR replay and residency audits.
 
----
+______________________________________________________________________
 
 ## Appendix R — Runbooks & drills (binding)
 
-**Breadcrumbs:** Implementation `ops/runbooks/lpe/`, Tests `tests/ops/test_runbook_integrity.py::test_lpe_runbook_links`, Observability PagerDuty service “Localization & Policy Engine” with Grafana dashboards “LPE – Enforcement & Residency” and “LPE Compiler”.\\
-*Purpose: Maintain actionable recovery guides for LPE incidents and drills.*\\
-*Contract: Every alert enumerated in §5.2 maps to an RB-LPE identifier here; responders keep procedures evergreen through quarterly tabletop reviews.*\\
-*State: Runbooks live beside automation scripts in `ops/runbooks/lpe/`; this appendix summarizes triggers, decision trees, and evidence requirements.*\\
-*Failure modes & retries: Missing or stale runbooks trigger corrective action items and block deploy sign-off.*\\
-*Observability: Docs lint checks confirm Appendix R coverage; PagerDuty postmortems must reference the executed RB-LPE ID.*
+**Breadcrumbs:** Implementation `ops/runbooks/lpe/`, Tests `tests/ops/test_runbook_integrity.py::test_lpe_runbook_links`, Observability PagerDuty service “Localization & Policy Engine” with Grafana dashboards “LPE – Enforcement & Residency” and “LPE Compiler”.\\ *Purpose: Maintain actionable recovery guides for LPE incidents and drills.*\\ *Contract: Every alert enumerated in §5.2 maps to an RB-LPE identifier here; responders keep procedures evergreen through quarterly tabletop reviews.*\\ *State: Runbooks live beside automation scripts in `ops/runbooks/lpe/`; this appendix summarizes triggers, decision trees, and evidence requirements.*\\ *Failure modes & retries: Missing or stale runbooks trigger corrective action items and block deploy sign-off.*\\ *Observability: Docs lint checks confirm Appendix R coverage; PagerDuty postmortems must reference the executed RB-LPE ID.*
 
 ### R.1 Runbook index (informative)
 
@@ -551,22 +537,17 @@ Responses include `policy_context_version`, `settings_snapshot_version`, `genera
 
 ### R.2 RB-LPE-COMPILER — Compiler diff triage (binding)
 
-**Breadcrumbs:** Implementation `ops/runbooks/lpe/compiler_diff_triage.md`, Automation `ops/scripts/lpe/run_compiler_diff.py`, Tests `tests/ops/test_runbook_integrity.py::test_compiler_diff_runbook`, Observability Grafana “LPE Compiler” (alerts `lpe_compiler_duration_overrun`, `lpe_bundle_signature_error`).\\
-*Purpose: Contain defective compiler outputs and restore last-known-good bundles without service disruption.*\\
-*Contract: Any compiler diff flagged unsafe or breaking must follow this procedure prior to promotion.*\\
-*State: Diff artifacts reside in `ops/lpe/compiler_diffs/<date>/`; rollback bundles stored in `ops/lpe/rollback/<bundle_id>.json`.*\\
-*Failure modes & retries: Skipping regression replays risks reintroducing invalid localization contexts; failing to rollback promptly blocks Settings activations.*\\
-*Observability: Alert clears once safe bundle promoted and diff backlog returns to zero.*
+**Breadcrumbs:** Implementation `ops/runbooks/lpe/compiler_diff_triage.md`, Automation `ops/scripts/lpe/run_compiler_diff.py`, Tests `tests/ops/test_runbook_integrity.py::test_compiler_diff_runbook`, Observability Grafana “LPE Compiler” (alerts `lpe_compiler_duration_overrun`, `lpe_bundle_signature_error`).\\ *Purpose: Contain defective compiler outputs and restore last-known-good bundles without service disruption.*\\ *Contract: Any compiler diff flagged unsafe or breaking must follow this procedure prior to promotion.*\\ *State: Diff artifacts reside in `ops/lpe/compiler_diffs/<date>/`; rollback bundles stored in `ops/lpe/rollback/<bundle_id>.json`.*\\ *Failure modes & retries: Skipping regression replays risks reintroducing invalid localization contexts; failing to rollback promptly blocks Settings activations.*\\ *Observability: Alert clears once safe bundle promoted and diff backlog returns to zero.*
 
 Triggers: `lpe_compiler_duration_overrun`, `lpe_bundle_signature_error`, change tickets tagged `LPE-COMPILER`, manual escalations from QA.
 
 Execution checklist:
 
 1. Freeze compiler pipeline (`lpe.compiler.enabled=false`) and announce in `#ops-announcements`.
-2. Inspect diff artifacts; confirm affected locales/regions and whether unsafe flags were raised.
-3. Promote previous good bundle via `ops/scripts/lpe/promote_bundle.py --bundle <id>` and capture hash evidence.
-4. Re-run regression suite (`make lpe-compiler-regressions`) and snapshot Grafana panels for incident ticket.
-5. Coordinate Settings activation replay once bundle validated; update change ticket with evidence.
+1. Inspect diff artifacts; confirm affected locales/regions and whether unsafe flags were raised.
+1. Promote previous good bundle via `ops/scripts/lpe/promote_bundle.py --bundle <id>` and capture hash evidence.
+1. Re-run regression suite (`make lpe-compiler-regressions`) and snapshot Grafana panels for incident ticket.
+1. Coordinate Settings activation replay once bundle validated; update change ticket with evidence.
 
 Post-remediation:
 
@@ -575,20 +556,15 @@ Post-remediation:
 
 ### R.3 RB-OPA-ROLLBACK — OPA bundle rollback (binding)
 
-**Breadcrumbs:** Implementation `ops/runbooks/lpe/opa_bundle_rollback.md`, Automation `ops/scripts/lpe/deploy_opa_bundle.py`, Tests `tests/ops/test_runbook_integrity.py::test_opa_rollback_runbook`, Observability Grafana “OPA Discovery” (alerts `opa_discovery_stale_total`, `reference_bundle_stale_total`).\\
-*Purpose: Restore healthy Open Policy Agent bundles when discovery or validation failures occur.*\\
-*Contract: Any production rollback must document bundle hashes, discovery health, and post-rollback validation.*\\
-*State: Bundle manifests stored in `ops/lpe/opa_bundles/`; discovery checks recorded in `ops/lpe/discovery_audit.jsonl`.*\\
-*Failure modes & retries: Deploying stale bundles without discovery verification risks policy drift; skipping cache flush leaves workers on outdated decisions.*\\
-*Observability: Alert resolves when discovery latency normalizes and signature validation succeeds twice consecutively.*
+**Breadcrumbs:** Implementation `ops/runbooks/lpe/opa_bundle_rollback.md`, Automation `ops/scripts/lpe/deploy_opa_bundle.py`, Tests `tests/ops/test_runbook_integrity.py::test_opa_rollback_runbook`, Observability Grafana “OPA Discovery” (alerts `opa_discovery_stale_total`, `reference_bundle_stale_total`).\\ *Purpose: Restore healthy Open Policy Agent bundles when discovery or validation failures occur.*\\ *Contract: Any production rollback must document bundle hashes, discovery health, and post-rollback validation.*\\ *State: Bundle manifests stored in `ops/lpe/opa_bundles/`; discovery checks recorded in `ops/lpe/discovery_audit.jsonl`.*\\ *Failure modes & retries: Deploying stale bundles without discovery verification risks policy drift; skipping cache flush leaves workers on outdated decisions.*\\ *Observability: Alert resolves when discovery latency normalizes and signature validation succeeds twice consecutively.*
 
 Response steps:
 
 1. Capture failing discovery IDs and affected services from alert payload.
-2. Roll back via `ops/scripts/lpe/deploy_opa_bundle.py --bundle <last_good>` and flush worker caches (`scripts/opa/flush_cache.py`).
-3. Validate OPA `/status` and `/health` endpoints plus policy unit tests (`pytest tests/opa/test_policy_context.py`).
-4. Notify dependent teams (Settings, Guardian, Reference Manager) and confirm cached digests refresh.
-5. Attach bundle hashes, validation output, and Grafana snapshots to incident ticket.
+1. Roll back via `ops/scripts/lpe/deploy_opa_bundle.py --bundle <last_good>` and flush worker caches (`scripts/opa/flush_cache.py`).
+1. Validate OPA `/status` and `/health` endpoints plus policy unit tests (`pytest tests/opa/test_policy_context.py`).
+1. Notify dependent teams (Settings, Guardian, Reference Manager) and confirm cached digests refresh.
+1. Attach bundle hashes, validation output, and Grafana snapshots to incident ticket.
 
 Follow-up:
 
@@ -597,20 +573,15 @@ Follow-up:
 
 ### R.4 RB-LPE-WAIVER — Waiver expiry response (binding)
 
-**Breadcrumbs:** Implementation `ops/runbooks/lpe/waiver_expiry.md`, Automation `ops/scripts/lpe/check_waivers.py`, Tests `tests/ops/test_runbook_integrity.py::test_waiver_runbook`, Observability Grafana “Residency & Enforcement” (alerts `lpe_policy_block_spike`, `lpe_privacy_framework_enabled_total`).\\
-*Purpose: Maintain compliant waiver coverage and prevent unauthorized cross-jurisdiction traffic.*\\
-*Contract: Expiring waivers must either be renewed with dual approval or decommissioned before expiry.*\\
-*State: Waiver ledger maintained in `ops/lpe/waivers.yaml`; renewal evidence archived under `ops/lpe/waiver_reviews/<date>/`.*\\
-*Failure modes & retries: Letting waivers lapse without containment can block activations or violate residency commitments.*\\
-*Observability: Alert clears once waiver renewal recorded and `lpe_policy_block_total` returns to baseline.*
+**Breadcrumbs:** Implementation `ops/runbooks/lpe/waiver_expiry.md`, Automation `ops/scripts/lpe/check_waivers.py`, Tests `tests/ops/test_runbook_integrity.py::test_waiver_runbook`, Observability Grafana “Residency & Enforcement” (alerts `lpe_policy_block_spike`, `lpe_privacy_framework_enabled_total`).\\ *Purpose: Maintain compliant waiver coverage and prevent unauthorized cross-jurisdiction traffic.*\\ *Contract: Expiring waivers must either be renewed with dual approval or decommissioned before expiry.*\\ *State: Waiver ledger maintained in `ops/lpe/waivers.yaml`; renewal evidence archived under `ops/lpe/waiver_reviews/<date>/`.*\\ *Failure modes & retries: Letting waivers lapse without containment can block activations or violate residency commitments.*\\ *Observability: Alert clears once waiver renewal recorded and `lpe_policy_block_total` returns to baseline.*
 
 Checklist:
 
 1. Review waiver ledger for entries expiring within alert window; confirm impacted locales and providers.
-2. Engage Security + Architecture for renewal decision; capture approvals in decision log.
-3. If waiver retired, update Settings allowlists and trigger Appendix R RB-LPE-LOCALE-GAP if localization fallback required.
-4. Run `ops/scripts/lpe/check_waivers.py --verify` to ensure updated posture and attach output to incident ticket.
-5. Communicate outcome to affected product owners and document customer impact, if any.
+1. Engage Security + Architecture for renewal decision; capture approvals in decision log.
+1. If waiver retired, update Settings allowlists and trigger Appendix R RB-LPE-LOCALE-GAP if localization fallback required.
+1. Run `ops/scripts/lpe/check_waivers.py --verify` to ensure updated posture and attach output to incident ticket.
+1. Communicate outcome to affected product owners and document customer impact, if any.
 
 Audit trail:
 
@@ -619,32 +590,26 @@ Audit trail:
 
 ### R.5 RB-LPE-LOCALE-GAP — Localization coverage gap (binding)
 
-**Breadcrumbs:** Implementation `ops/runbooks/lpe/locale_gap.md`, Automation `ops/scripts/lpe/audit_locales.py`, Tests `tests/ops/test_runbook_integrity.py::test_locale_gap_runbook`, Observability Grafana “Localization QA” (alerts `lpe_locale_gap_total`, `lpe_lookup_latency_p95_breach`).\\
-*Purpose: Restore locale coverage when translations, policy text, or metadata go missing.*\\
-*Contract: New locales must publish translations, disclaimer copy, and QA artefacts before re-enabling bundles.*\\
-*State: Locale inventories in `ops/lpe/locales.csv`; QA recordings referenced in Appendix A.*\\
-*Failure modes & retries: Re-enabling locales without QA sign-off risks incorrect or missing compliance copy.*\\
-*Observability: Alert resolves once locale gap metric returns to zero and QA artefacts uploaded.*
+**Breadcrumbs:** Implementation `ops/runbooks/lpe/locale_gap.md`, Automation `ops/scripts/lpe/audit_locales.py`, Tests `tests/ops/test_runbook_integrity.py::test_locale_gap_runbook`, Observability Grafana “Localization QA” (alerts `lpe_locale_gap_total`, `lpe_lookup_latency_p95_breach`).\\ *Purpose: Restore locale coverage when translations, policy text, or metadata go missing.*\\ *Contract: New locales must publish translations, disclaimer copy, and QA artefacts before re-enabling bundles.*\\ *State: Locale inventories in `ops/lpe/locales.csv`; QA recordings referenced in Appendix A.*\\ *Failure modes & retries: Re-enabling locales without QA sign-off risks incorrect or missing compliance copy.*\\ *Observability: Alert resolves once locale gap metric returns to zero and QA artefacts uploaded.*
 
 Resolution steps:
 
 1. Identify affected locales and impacted surfaces (portal, Guardian, notifications) from alert payload.
-2. Coordinate with Localization program to deliver missing translations and QA recordings; update Appendix A checklist items.
-3. Validate `ops/scripts/lpe/audit_locales.py` passes for affected locales and attach proof to ticket.
-4. Run synthetic checks (`tests/e2e/test_portal_policy_context.py::test_disclaimer_l10n`) to confirm correct copy rendering.
-5. Update Settings bundles and trigger LPE compiler rebuild; monitor `lpe_lookup_latency_p95_breach` for regression.
+1. Coordinate with Localization program to deliver missing translations and QA recordings; update Appendix A checklist items.
+1. Validate `ops/scripts/lpe/audit_locales.py` passes for affected locales and attach proof to ticket.
+1. Run synthetic checks (`tests/e2e/test_portal_policy_context.py::test_disclaimer_l10n`) to confirm correct copy rendering.
+1. Update Settings bundles and trigger LPE compiler rebuild; monitor `lpe_lookup_latency_p95_breach` for regression.
 
 Post-checks:
 
 - Log decision record in App.O with locale IDs, remediation timeline, and QA sign-offs.
 - Schedule follow-up audit within one release cycle to verify coverage remains intact.
 
----
+______________________________________________________________________
 
 ## References
 
-- Residency policy enforcement sequence diagram — `docs/diagrams/residency-policy-enforcement-v1.mmd`.
+- Residency policy enforcement sequence diagram — `services/lp-engine/diagrams/residency-policy-enforcement-v1.mmd`.
 - FIPS tracing for dual-signed policy bundles — App.J in the platform TDD.
 - LPE lifecycle ADR — `docs/adr/ADR-0004-localization-and-policy-engine.md`.
 - Reference migration guide — `https://docs.udocket.io/reference-migration` (legacy API consumers).
-

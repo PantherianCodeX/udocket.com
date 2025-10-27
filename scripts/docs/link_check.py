@@ -7,11 +7,12 @@ from pathlib import Path
 import os
 
 ROOT = Path(__file__).resolve().parents[2]
-DOC = ROOT / "docs" / "src" / "tdd" / "TDD.md"
+DOC = ROOT / "docs" / "src" / "overview" / "tdd.md"
 
 def find_diagram_refs(text: str) -> set[str]:
-    # Diagrams now live under docs/src/tdd/appendices/diagrams/
-    return set(re.findall(r"docs/src/tdd/appendices/diagrams/[\w\-/]+\.mmd", text))
+    # Diagrams live alongside their owning documents (overview/tdd or service/app directories).
+    pattern = r"docs/src/(?:overview/tdd|services/[^/]+|apps/[^/]+)/diagrams/[\w\-/]+\.mmd"
+    return set(re.findall(pattern, text))
 
 def check_diagrams(text: str) -> list[str]:
     problems: list[str] = []
@@ -90,7 +91,7 @@ def main() -> int:
             print(f" - {p}")
         strict = os.getenv("STRICT_DOCS", "0").lower() in {"1","true","yes"}
         return 1 if strict else 0
-    print("Docs check passed: diagrams present, appendices and sections referenced are defined.")
+        print("Docs check passed: diagrams present, appendices and sections referenced are defined.")
     return 0
 
 if __name__ == "__main__":

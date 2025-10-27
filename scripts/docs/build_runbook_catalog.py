@@ -1,4 +1,6 @@
+#!/usr/bin/env python3
 """Generate the consolidated runbook catalog from service design documents."""
+
 from __future__ import annotations
 
 import argparse
@@ -30,9 +32,8 @@ def slugify(text: str) -> str:
 
 
 def iter_source_files() -> Iterable[Path]:
-    """Yield documentation files that may embed runbook sections."""
+    """Yield component documentation files that may contain runbook sections."""
 
-    # Scan service and app docs; TDD stays out to avoid duplicate high-level runbooks
     roots = [SRC_DIR / "services", SRC_DIR / "apps"]
     seen: set[Path] = set()
     for root in roots:
@@ -46,19 +47,22 @@ def iter_source_files() -> Iterable[Path]:
 
 
 def read_doc_label(lines: Sequence[str], path: Path) -> str:
-    """Derive a short label for the originating document."""
+    """Return a short label derived from the document title/front matter."""
 
+    title_pattern = re.compile(r'title:\s*"([^"]+)"')
     for line in lines[:40]:
-        if line.startswith("title:"):
-            raw = line.split(":", 1)[1].strip().strip('"')
-            if "—" in raw:
-                raw = raw.split("—", 1)[1].strip()
-            raw = raw.replace("Technical Design", "").replace("Specification", "")
-            raw = raw.replace("Technical Architecture", "")
-            raw = raw.replace("Overview", "")
-            raw = re.sub(r"\s+", " ", raw).strip(" -–—")
-            if raw:
-                return raw
+        match = title_pattern.search(line)
+        if not match:
+            continue
+        raw = match.group(1)
+        if "—" in raw:
+            raw = raw.split("—", 1)[1].strip()
+        raw = raw.replace("Technical Design", "").replace("Specification", "")
+        raw = raw.replace("Technical Architecture", "").replace("Overview", "")
+        raw = re.sub(r"\s+", " ", raw).strip(" -–—")
+        if raw:
+            return raw
+
     stem = path.stem.replace("tdd-", "").replace("-", " ")
     return stem.title()
 
@@ -75,8 +79,9 @@ def extract_runbook_sections(lines: Sequence[str]) -> list[list[str]]:
             i += 1
             while i < len(lines):
                 next_line = lines[i]
-                if HEADING_RE.match(next_line):
-                    next_level = len(next_line) - len(next_line.lstrip("#"))
+                heading_match = HEADING_RE.match(next_line)
+                if heading_match:
+                    next_level = len(heading_match.group(1))
                     if next_level <= level:
                         break
                 i += 1
@@ -90,6 +95,7 @@ def transform_section(section: list[str], label: str, path: Path) -> tuple[list[
     output: list[str] = []
     headings: list[Heading] = []
     first_heading = True
+
     for line in section:
         heading_match = HEADING_RE.match(line)
         if heading_match:
@@ -100,21 +106,30 @@ def transform_section(section: list[str], label: str, path: Path) -> tuple[list[
                     f"Runbook sections must begin with an H2 heading in {path.name}: '{text}'."
                 )
             first_heading = False
+
             prefixed_text = f"{label} — {text}"
-            rb_match = RB_ID_RE.search(text)
-            if rb_match:
-                anchor = rb_match.group(1).lower()
-                output.append(f"<a id=\"{anchor}\"></a>")
+            anchor = RB_ID_RE.search(text)
+            if anchor:
+                if output and output[-1].strip():
+                    output.append("")
+                output.append(f'<a id="{anchor.group(1).lower()}"></a>')
+            if output and output[-1].strip():
+                output.append("")
             output.append(f"{'#' * level} {prefixed_text}")
             headings.append(Heading(level=level, text=prefixed_text, slug=slugify(prefixed_text)))
         else:
             output.append(line)
+
+    while output and not output[-1].strip():
+        output.pop()
+    output.append("")
     return output, headings
 
 
 def build_catalog() -> tuple[list[str], list[Heading]]:
     catalog_lines: list[str] = []
     toc_headings: list[Heading] = []
+
     for path in iter_source_files():
         lines = path.read_text(encoding="utf-8").splitlines()
         sections = extract_runbook_sections(lines)
@@ -122,16 +137,17 @@ def build_catalog() -> tuple[list[str], list[Heading]]:
             continue
         label = read_doc_label(lines, path)
         for section in sections:
-            if catalog_lines:
-                catalog_lines.append("")
+            if catalog_lines and catalog_lines[-1].strip():
                 catalog_lines.append("")
             transformed, headings = transform_section(section, label, path)
             catalog_lines.extend(transformed)
             toc_headings.extend(headings)
+    while catalog_lines and not catalog_lines[-1].strip():
+        catalog_lines.pop()
     return catalog_lines, toc_headings
 
 
-def render(catalog_lines: list[str], headings: list[Heading]) -> str:
+def render(catalog_lines: list[str]) -> str:
     lines: list[str] = []
     lines.append("# uDocket Runbook Catalog")
     lines.append("")
@@ -142,14 +158,7 @@ def render(catalog_lines: list[str], headings: list[Heading]) -> str:
         lines.append("")
         return "\n".join(lines) + "\n"
 
-    lines.append("## Table of contents")
-    lines.append("")
-    for heading in headings:
-        indent = "  " * max(0, heading.level - 2)
-        lines.append(f"{indent}- [{heading.text}](#{heading.slug})")
-    lines.append("")
     lines.extend(catalog_lines)
-    lines.append("")
     return "\n".join(lines) + "\n"
 
 
@@ -158,8 +167,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--check", action="store_true", help="Verify the catalog is up to date")
     args = parser.parse_args(argv)
 
-    catalog_lines, headings = build_catalog()
-    content = render(catalog_lines, headings)
+    catalog_lines, _ = build_catalog()
+    content = render(catalog_lines)
 
     if args.check:
         if not OUTPUT_FILE.exists():

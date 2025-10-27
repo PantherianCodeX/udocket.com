@@ -1,80 +1,71 @@
----
-title: "uDocket — Settings Registry Technical Design"
-subtitle: "Configuration Governance & Activation Specification"
-author:
-  - uDocket Platform Architecture Team
-  - Settings Program Leads
-version: 0.1-draft
-status: implementable
-classification: Confidential
-last_updated: 2025-10-23
-owners:
-  - Platform Architecture
-  - Security Engineering
-  - Settings Program
-approvers:
-  - Architecture Steering Committee
-  - Security Review Board
-reviewers:
-  - QA Engineering Lead
-  - SRE Manager
-adr_index: docs/adr/README.md
-related_adrs:
-  - ADR-0003-api-versioning-and-sunset.md
-  - ADR-0004-localization-and-policy-engine.md
-header-includes:
-  - '<base href="..">'
-  - |
-    <style>
-      table {
-        font-size: 8.5pt;
-      }
-      table td,
-      table th {
-        font-size: inherit;
-        word-break: break-word;
-        overflow-wrap: anywhere;
-      }
-      figure svg text,
-      figure svg tspan {
-        fill: #111 !important;
-      }
-      figure svg text {
-        font-family: "DejaVu Sans", "Trebuchet MS", Arial, sans-serif !important;
-      }
-      figure.full-width-diagram img {
-        width: 100%;
-        height: auto;
-        display: block;
-      }
-    </style>
-  - '<header class="page-header">uDocket — Settings Registry Technical Design <br> Configuration Governance &amp; Activation Specification</header>'
-  - '<footer class="page-footer">Confidential · Last updated 2025-10-23 · Page <span class="page-number"></span> of <span class="page-count"></span></footer>'
----
+______________________________________________________________________
+
+title: "uDocket — Settings Registry Technical Design" subtitle: "Configuration Governance & Activation Specification" author:
+
+- uDocket Platform Architecture Team
+- Settings Program Leads version: 0.1-draft status: implementable classification: Confidential last_updated: 2025-10-23 owners:
+- Platform Architecture
+- Security Engineering
+- Settings Program approvers:
+- Architecture Steering Committee
+- Security Review Board reviewers:
+- QA Engineering Lead
+- SRE Manager adr_index: docs/adr/README.md related_adrs:
+- ADR-0003-api-versioning-and-sunset.md
+- ADR-0004-localization-and-policy-engine.md header-includes:
+- '<base href="..">'
+- |
+  <style>
+    table {
+      font-size: 8.5pt;
+    }
+    table td,
+    table th {
+      font-size: inherit;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+    figure svg text,
+    figure svg tspan {
+      fill: #111 !important;
+    }
+    figure svg text {
+      font-family: "DejaVu Sans", "Trebuchet MS", Arial, sans-serif !important;
+    }
+    figure.full-width-diagram img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+  </style>
+- '<header class="page-header">uDocket — Settings Registry Technical Design <br> Configuration Governance & Activation Specification</header>'
+- '<footer class="page-footer">Confidential · Last updated 2025-10-23 · Page <span class="page-number"></span> of <span class="page-count"></span></footer>'
+
+______________________________________________________________________
 
 **Audience:** Platform engineering, Guardian, Localization & Policy Engine, Reference Manager, SRE, QA, Product Operations\
 **Purpose:** Define Settings Registry (SR) responsibilities, contracts, activation lifecycle, and observability so every service consumes consistent, auditable configuration.
 
----
+______________________________________________________________________
 
 ## Document controls
 
-| Field           | Value |
-| --------------- | ----- |
-| Version         | 0.1-draft |
-| Status          | Implementable (mirrors front matter `status`; KEP lifecycle applies: Provisional → Implementable → Implemented) |
-| Last updated    | 2025-10-23 (source of truth is the front matter `last_updated`) |
-| Primary owners  | Platform Architecture; Security Engineering; Settings Program |
-| Approvers       | Architecture Steering Committee; Security Review Board |
-| Reviewers       | QA Engineering Lead; SRE Manager |
-| ADR index       | `docs/adr/README.md` (immutable ADRs referenced in front matter `related_adrs`) |
+| Field           | Value                                                                                                                            |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Version         | 0.1-draft                                                                                                                        |
+| Status          | Implementable (mirrors front matter `status`; KEP lifecycle applies: Provisional → Implementable → Implemented)                  |
+| Last updated    | 2025-10-23 (source of truth is the front matter `last_updated`)                                                                  |
+| Primary owners  | Platform Architecture; Security Engineering; Settings Program                                                                    |
+| Approvers       | Architecture Steering Committee; Security Review Board                                                                           |
+| Reviewers       | QA Engineering Lead; SRE Manager                                                                                                 |
+| ADR index       | `docs/adr/README.md` (immutable ADRs referenced in front matter `related_adrs`)                                                  |
 | Migration plan  | Supersede legacy TDD §9 and Appendix E once Architecture/Security approvals record; platform TDD now links here for SR specifics |
-| Docs validation | `python scripts/docs/lint_docs.py` (see `docs/README.md` for tooling) |
-| Link lint       | `python scripts/docs/link_check.py --strict` (CI `docs-link-check` stage blocks unresolved §/App./ADR refs) |
+| Docs validation | `python scripts/docs/lint_docs.py` (see `docs/README.md` for tooling)                                                            |
+| Link lint       | `python scripts/docs/link_check.py --strict` (CI `docs-link-check` stage blocks unresolved §/App./ADR refs)                      |
 
 Body sections follow the Purpose/Contract/State/Failure/Observability/Breadcrumb scaffold enforced by `scripts/docs/lint_docs.py --check-template`. Section tags `(binding)` and `(normative)` align with the platform TDD.
 
----
+______________________________________________________________________
 
 ## 0) Reading guide
 
@@ -84,7 +75,7 @@ Body sections follow the Purpose/Contract/State/Failure/Observability/Breadcrumb
 - **Maintenance:** Run `python scripts/docs/lint_docs.py` before submitting edits. Schema snippets must match `spec/schemas/*` fixtures; CI enforces parity for key catalogs and activation templates.
 - **Doc change protocol:** Any PR modifying SR APIs, activation logic, bundle schemas, or governance gates must update this document and cite relevant ADRs. Architecture/Security reviewers block merges when code, SDKs, or docs diverge.
 
----
+______________________________________________________________________
 
 ## 1) Service overview
 
@@ -124,7 +115,7 @@ Body sections follow the Purpose/Contract/State/Failure/Observability/Breadcrumb
 *Failure modes & retries: Breach of burn rate >1.0 for 60 minutes freezes activations and halts blue/green promotion until mitigated.*\
 *Observability: Synthetic monitors exercise read/activation APIs per deploy; alerts `settings_availability_breach` and `settings_activation_delay` gate releases.*
 
----
+______________________________________________________________________
 
 ## 2) Configuration model
 
@@ -178,7 +169,7 @@ Body sections follow the Purpose/Contract/State/Failure/Observability/Breadcrumb
 - Change detection opens Security tickets (`SEC-RESIDENCY-ENDPOINT`) and requires dual approval for temporary waivers.
 - Closure requires two consecutive compliant scans before incidents resolve; evidence attaches to decision log entries.
 
----
+______________________________________________________________________
 
 ## 3) API surface & clients
 
@@ -224,7 +215,7 @@ Body sections follow the Purpose/Contract/State/Failure/Observability/Breadcrumb
 *Failure modes & retries: Attempts to expose secrets trigger `SECRET_DISCLOSURE_BLOCKED`; audit entries require Security review.*\
 *Observability: Secret access counters segmented by actor role; anomaly detection alerts on spikes.*
 
----
+______________________________________________________________________
 
 ## 4) Activation workflow & governance
 
@@ -285,7 +276,7 @@ Body sections follow the Purpose/Contract/State/Failure/Observability/Breadcrumb
 *Failure modes & retries: Unresolved drift escalates to incident management; activations freeze until resolved.*\
 *Observability: Dashboards aggregate drift severity; alerts integrate with on-call rotations.*
 
----
+______________________________________________________________________
 
 ## 5) Agent & automation configuration
 
@@ -330,7 +321,7 @@ Body sections follow the Purpose/Contract/State/Failure/Observability/Breadcrumb
 *Failure modes & retries: Seeds referencing unknown keys or out-of-range values fail validation; CI blocks merges until corrected.*\
 *Observability: Seed validation reports published in CI; deployment automation logs ingestion status and checksum verification.*
 
----
+______________________________________________________________________
 
 ## 6) Integrations & enforcement points
 
@@ -380,7 +371,7 @@ Body sections follow the Purpose/Contract/State/Failure/Observability/Breadcrumb
 *Failure modes & retries: Failed fetch blocks job start; backlog alerts fire when snapshot retrieval exceeds retry window.*\
 *Observability: Metrics capture job snapshot usage; alerts highlight stale snapshots or fetch failures.*
 
----
+______________________________________________________________________
 
 ## 7) Security, compliance, and incident response
 
@@ -422,7 +413,7 @@ Body sections follow the Purpose/Contract/State/Failure/Observability/Breadcrumb
 *Failure modes & retries: Missing keys or invalid values block activation; forced overrides demand dual approval and audit citations.*\
 *Observability: Compliance metrics track enforcement outcomes; alerts highlight expiring HIPAA bundles or DSAR configuration drift.*
 
----
+______________________________________________________________________
 
 ## Appendix A — Settings key map & traceability index
 
@@ -442,120 +433,120 @@ Body sections follow the Purpose/Contract/State/Failure/Observability/Breadcrumb
 *Failure modes & retries: Divergence between documentation and schema blocks CI; activations referencing undocumented keys are rejected.*\
 *Observability: Validators emit `settings_definition_gap_total`; lint dashboards flag omissions.*
 
-| Key | Scope | Default | Description / Enforcement |
-| --- | ----- | ------- | ------------------------- |
-| `regions.allowlist.compute` | ORG | [na-us-1, na-us-2] | Allowed compute regions; enforced by §3.8. |
-| `regions.allowlist.storage` | ORG | [na-us-1, na-us-2] | Allowed storage regions; enforced by §3.8 and §5.3. |
-| `network.egress.allowed_hosts[]` | SYSTEM\|ORG | [] | Host allowlist rendered to ServiceEntry/AuthorizationPolicy; §3.2.1. |
-| `analyze.model.id` | ORG\|CASE | default profile | LLM model profile for Analyze lanes; see §8 and §6.3. |
-| `analyze.token_ceiling` | ORG\|CASE | 100000 | Max tokens per Analyze job; see §8.3. |
-| `analyze.max_retries` | ORG\|CASE | 2 | Retry budget per lane; see §6.3 QA loops. |
-| `compose.model.id` | ORG\|CASE | default profile | LLM model profile for Compose; see §8 and §6.4. |
-| `compose.token_ceiling` | ORG\|CASE | 100000 | Max tokens per Compose job; §8.3. |
-| `compose.max_retries` | ORG\|CASE | 2 | Retry budget per lane; §6.4. |
-| `compose.policy.forbidden_patterns[]` | ORG | [] | Content forbids; §6.4 QA. |
-| `compose.templates.client.template_id` | ORG | default | DOCX/MD template selection; §6.4. |
-| `compose.templates.lawyer.template_id` | ORG | default | DOCX/MD template selection; §6.4. |
-| `reviews.timeout_hours` | ORG | 72 | Approval escalation threshold (reminders/escalations); §11.2.3. |
-| `reviews.backlog.alert_minutes` | ORG | 30 | Minutes before `QUEUED_FOR_REVIEW` items trigger reviewer escalation banners/alerts; §7.1.3, §11.1. |
-| `sign.trust_roots[]` | SYSTEM\|ORG | [] | Trust roots for signing; §7.2. |
-| `sign.tsa.endpoint` | SYSTEM\|ORG | null | TSA API endpoint; §7.2. |
-| `sign.tsa.max_time_drift_secs` | SYSTEM | 5 | NTP drift tolerance; §7.2, §3.2. |
-| `security.tls.min_version` | SYSTEM | TLSv1.3 | Minimum TLS version for ingress; §3.2. |
-| `security.tls.cipher_profile` | SYSTEM | default | TLS cipher profile for ingress; §3.2. |
-| `security.tls.fips_mode` | SYSTEM | false | Enforce FIPS-approved cipher suites and modules; §3.2, §7.2. |
-| `security.tls.legacy_exceptions[]` | SYSTEM | [] | Temporary TLS 1.2 exceptions (≤30 days, alert at T-7); §3.2, §9.2. |
-| `db.pgbouncer.pool_mode` | SYSTEM | transaction | Allowed PgBouncer pooling mode (`transaction` default, `session` optional); §3.2.1. |
-| `llm.providers[]` | SYSTEM\|ORG | [] | Provider catalog; §8.1. |
-| `llm.models[]` | SYSTEM\|ORG | [] | Model catalog and fallback priorities; §8.1. |
-| `llm.models.version_pin` | SYSTEM\|ORG | provider‑specific | Explicit provider model snapshot/version pin; §8.1/§8.5. |
-| `llm.enforce_model_version` | ORG\|CASE | true | Fail when provider model version drifts from pin; §8.1/§8.5. |
-| `llm.moderation.enabled` | ORG | true | Enable automated input/output moderation; §8.4. |
-| `llm.moderation.provider` | ORG | azure\|openai\|local | Moderation provider selection; §8.4. |
-| `llm.moderation.enforcement` | SYSTEM\|ORG | block | Enforcement mode: `block` (default) or `warn`; §8.4. |
-| `llm.moderation.thresholds.toxicity` | ORG | 0.5 | Classification threshold; §8.4. |
-| `llm.moderation.thresholds.self_harm` | ORG | 0.5 | Classification threshold; §8.4. |
-| `llm.moderation.thresholds.sexual_content` | ORG | 0.5 | Classification threshold; §8.4. |
-| `llm.moderation.thresholds.pii_reintroduction` | ORG | 0.5 | Classification threshold; §8.4. |
-| `llm.byo.allowed` | ORG\|CASE | false | Permit bring-your-own model endpoints; §8.1.3. |
-| `llm.byo.evaluation_suite_id` | ORG | default | Evaluation suite applied to BYO providers; §8.1.3. |
-| `llm.byo.vpc_endpoints[]` | ORG | [] | Allowed BYO endpoint hostnames (reconciled with mesh policies); §8.1.3. |
-| `agents.langgraph.runner` | SYSTEM\|ORG | langgraph | Graph runner selection (`langgraph` or `linear`); §6.7.2. |
-| `agents.langgraph.fallback_mode` | SYSTEM | false | Force manual drafting fallback; §6.7.2, App.D RB-LLM-003. |
-| `speech.providers[]` | SYSTEM\|ORG | [] | Speech provider catalog (health, residency, parity evidence); §6.2.1. |
-| `speech.jobs[]` | SYSTEM\|ORG | [] | Transcription job profiles and fallback chains; §6.2.1. |
-| `speech.allow_preprocessing` | ORG\|CASE | false | Permit loudness normalization/compression before transcription; §6.2.3. |
-| `speech.require_locale_match` | ORG\|CASE | true | Fail fast when provider lacks requested locale; §6.2.3. |
-| `speech.detect_language.enabled` | ORG\|CASE | false | Enable automatic source-language detection; §6.2.4. |
-| `speech.multilingual_segments.enabled` | ORG\|CASE | false | Emit language-tagged segments for code-switched audio; §6.2.4. |
-| `speech.translation.enabled` | ORG\|CASE | false | Allow generation of translated transcripts; §6.2.4. |
-| `speech.translation.targets_default[]` | ORG | [] | Default target locales for translation requests; §6.2.4. |
-| `speech.translation.provider` | ORG\|CASE | null | Translation provider identifier; §6.2.4. |
-| `speech.translation.glossary_set` | ORG\|CASE | null | Reference Manager glossary bundle for translations; §6.2.4. |
-| `speech.translation.max_parallel_targets` | ORG\|CASE | 3 | Parallel translation limit per job; §6.2.4. |
-| `speech.translation.allow_unverified_pairs` | ORG\|CASE | false | Permit translation pairs not in the verified registry (waiver required); §6.2.3, §6.2.4. |
-| `speech.translation.language_pair_overrides[]` | ORG\|CASE | [] | Disable or remap specific source→target pairs for contractual/compliance reasons; §6.2.3, §6.2.4. |
-| `chat.staff.enabled` | ORG\|CASE | false | Enable staff Copilot assistant; §11.11. |
-| `chat.staff.rate_limit.rpm` | ORG\|CASE | 30 | Staff assistant requests per minute; §11.11. |
-| `chat.staff.token_cap_daily` | ORG\|CASE | 20000 | Staff assistant daily token budget; §11.11. |
-| `chat.client.enabled` | ORG\|CASE | false | Enable portal chat assistant; §11.11. |
-| `chat.client.rate_limit.rpm` | ORG\|CASE | 10 | Client assistant requests per minute; §11.11. |
-| `chat.client.token_cap_daily` | ORG\|CASE | 10000 | Client assistant daily token budget; §11.11. |
-| `chat.session.max_active_per_user` | ORG\|CASE | 2 | Concurrent chat sessions allowed per user; §11.11. |
-| `chat.auto_disable_on_abuse` | ORG\|CASE | true | Auto-disable assistants on policy violations; §11.11. |
-| `chat.provider.profile` | ORG\|CASE | null | LLM profile assignment for assistants; §8.1.4, §11.11. |
-| `portal.chat.hipaa_allowed` | ORG | false | Permit client chat when HIPAA mode active; §11.11. |
-| `portal.chat.export.enabled` | ORG\|CASE | false | Allow client chat transcript exports; §11.11. |
-| `notifications.in_app.rate_limit_per_minute` | ORG | 60 | In-app notification dispatch rate; §11.9. |
-| `notifications.in_app.daily_cap` | ORG | 500 | In-app notification max per day; §11.9. |
-| `llm.finops.monthly_cap_usd` | ORG | 0 (disabled) | Monthly LLM spend cap; §8.3, §13.4. |
-| `jobs.watchdog.no_progress_minutes` | SYSTEM\|ORG | 5 | Minutes without heartbeat before watchdog warns; §10.2, §12.1, Appendix R entry [RB-JOB-WATCHDOG](runbooks.md#rb-job-watchdog). |
-| `jobs.watchdog.timeout_minutes` | SYSTEM\|ORG | 15 | Minutes without heartbeat before watchdog fails the job; §10.2, §12.1, Appendix R entry [RB-JOB-WATCHDOG](runbooks.md#rb-job-watchdog). |
-| `uploads.scan.engine` | SYSTEM | clamav | Malware engine used in the upload scan pipeline; §6.2, §12.1. |
-| `uploads.scan.yara_ruleset_version` | SYSTEM | latest | Version tag for YARA rules synced from Security; §6.2. |
-| `uploads.scan.timeout_seconds` | SYSTEM\|ORG | 120 | Max scan duration before treating file as suspicious and quarantining; §6.2, Appendix R entry [RB-UPLOAD-SCAN](runbooks.md#rb-upload-scan). |
-| `uploads.scan.override_hashes[]` | SYSTEM\|ORG | [] | Temporary allowlist for known-clean artifacts while rules are tuned (dual approval, time-boxed); Appendix R entry [RB-UPLOAD-SCAN](runbooks.md#rb-upload-scan). |
-| `uploads.enabled` | SYSTEM\|ORG | true | Toggle to accept new uploads; disabled during major scanner outages; Appendix R entry [RB-UPLOAD-SCAN](runbooks.md#rb-upload-scan). |
-| `api.idempotency.ttl_hours` | SYSTEM | 24 | TTL for idempotency; §10.3. |
-| `api.rate_limits.web.rpm_per_org` | SYSTEM\|ORG | 600 (guardrail 10-2000; activation validator enforces range) | Org RPM; §10.5. |
-| `api.rate_limits.web.rpm_per_ip` | SYSTEM\|ORG | 300 (guardrail 10-2000) | IP RPM; §10.5. |
-| `portal.download.rate_limits.user_rpm` | ORG | 60 (guardrail 10-2000) | Portal download/user; §10.5. |
-| `portal.download.rate_limits.org_rpm` | ORG | 200 (guardrail 10-2000) | Portal download/org; §10.5. |
-| `security.org_switch.step_up_required` | SYSTEM | true | Enforce step-up on privilege increase; §4.3. |
-| `security.disclosure.contact` | SYSTEM | null | Security.txt contact; §14.9. |
-| `security.disclosure.encryption_key_url` | SYSTEM | null | PGP key URL; §14.9. |
-| `security.pentest.cadence` | SYSTEM | annual | Pentest schedule; §14.9. |
-| `security.mfa.webauthn_required_roles` | ORG | [] | Roles requiring WebAuthn step-up (HIPAA mode); §2.2, §4.3. |
-| `security.session.device_bind.ip_prefix_len_v4` | ORG | 24 | IPv4 prefix length for device binding; §4.3 (soft/hard modes). |
-| `security.session.device_bind.ip_prefix_len_v6` | ORG | 48 | IPv6 prefix length for device binding; §4.3 (soft/hard modes). |
-| `security.session.device_bind.mode` | ORG | "soft" | Device fingerprint reaction (`soft` or `hard`); §4.3. |
-| `udlock.max_session_hold_seconds` | SYSTEM | 300 | Advisory lock hold time; App.D RB-LOCK-006. |
-| `udlock.heartbeat.interval_seconds` | SYSTEM | 5 | Heartbeat period; App.D RB-LOCK-006. |
-| `compliance.erasure_mode` | ORG | off | Hard-purge toggle for DSAR mode; §14.2.1. |
-| `compliance.subject_hkdf_salt` | SYSTEM | managed secret | HKDF salt for DSAR subject hashing; §14.2.1. |
-| `privacy.legal.matrix_version` | SYSTEM | semver | Data residency/legal matrix version; App.C. |
-| `privacy.hipaa.enabled` | ORG | false | HIPAA override mode toggle; §2.2, §14.2, App.C. |
-| `privacy.hipaa.bundle_version` | SYSTEM | semver | HIPAA policy bundle version pin; §2.2, App.C. |
-| `privacy.hipaa.phi_detection.strict_mode` | ORG\|CASE | true | Enforce layered PHI detection (waiver required to relax); §2.2. |
-| `privacy.hipaa.phi_detection.rescan_hours` | ORG | 24 | Interval for scheduled PHI re-scan jobs; §2.2. |
-| `i18n.supported_locales[]` | ORG | [] | Supported locales (BCP-47 codes) surfaced in UI toggles; must include at least one locale; §11.3. |
-| `identity.org.primary_idp` | ORG | keycloak | Primary IdP assignment (`keycloak` or `external:<id>`); §4.1. |
-| `storage.bucket_versioning_required` | SYSTEM | true | Bucket versioning must be enabled; §5.3, §12.1. |
-| `storage.remote_hash.enabled` | ORG\|CASE | false | Record remote hashes for batch inputs; §5.3. |
-| `storage.remote_hash.max_mb` | ORG\|CASE | 50 | Max remote bytes to hash; §5.3. |
-| `settings.activation.require_dual_approval` | SYSTEM | true | Dual approval for unsafe changes; §9.3. |
-| `logging.redaction.enabled` | SYSTEM | true | Redact PII in logs; §12.1. |
-| `logging.access.roles[]` | SYSTEM | [] | Role mapping for log query privileges (`observability.reader\|engineer\|auditor`); §12.1.2. |
-| `logging.cost.daily_budget_mb_per_service` | SYSTEM\|ORG | 500 | Daily log volume budget per service; §12.1.6. |
-| `logging.cost.alert_threshold_pct` | SYSTEM\|ORG | 80 | Alert threshold as % of daily log budget; §12.1.6. |
-| `logging.level.default` | SYSTEM | "INFO" | Default production log level; §12.1.6. |
-| `logging.level.overrides[]` | ORG | [] | Per-service log level overrides; §12.1.6. |
-| `portal.logging.enabled` | ORG | true | Enable client telemetry capture; §12.1.5. |
-| `evidence_store.redacted_excerpts.enabled` | ORG | true | Allow storage of prompt/response excerpts; HIPAA enable guard forces false and triggers purge; §2.2, §8.2. |
-| `logging.immutable_sink.enabled` | SYSTEM | true (prod) | Mirror structured logs to immutable storage alongside the audit sink; validators block `false` in production and mark overrides unsafe (§9.11, §12.1). |
-| `llm.finops.guard.threshold_pct` | SYSTEM\|ORG | 10 | MoM regression ceiling for deploy gate; §8.7, §13.5. |
-| `llm.finops.guard.trailing7d_pct` | SYSTEM\|ORG | 25 | Trailing 7-day burn ceiling (% of monthly cap) for deploy gate; §8.7, §13.5. |
-| `llm.finops.override_until` | SYSTEM | null | Optional timestamp (max +72h) to temporarily relax FinOps guard (dual approval required); §8.7. |
+| Key                                             | Scope       | Default                                                      | Description / Enforcement                                                                                                                                       |
+| ----------------------------------------------- | ----------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `regions.allowlist.compute`                     | ORG         | \[na-us-1, na-us-2\]                                         | Allowed compute regions; enforced by §3.8.                                                                                                                      |
+| `regions.allowlist.storage`                     | ORG         | \[na-us-1, na-us-2\]                                         | Allowed storage regions; enforced by §3.8 and §5.3.                                                                                                             |
+| `network.egress.allowed_hosts[]`                | SYSTEM\|ORG | \[\]                                                         | Host allowlist rendered to ServiceEntry/AuthorizationPolicy; §3.2.1.                                                                                            |
+| `analyze.model.id`                              | ORG\|CASE   | default profile                                              | LLM model profile for Analyze lanes; see §8 and §6.3.                                                                                                           |
+| `analyze.token_ceiling`                         | ORG\|CASE   | 100000                                                       | Max tokens per Analyze job; see §8.3.                                                                                                                           |
+| `analyze.max_retries`                           | ORG\|CASE   | 2                                                            | Retry budget per lane; see §6.3 QA loops.                                                                                                                       |
+| `compose.model.id`                              | ORG\|CASE   | default profile                                              | LLM model profile for Compose; see §8 and §6.4.                                                                                                                 |
+| `compose.token_ceiling`                         | ORG\|CASE   | 100000                                                       | Max tokens per Compose job; §8.3.                                                                                                                               |
+| `compose.max_retries`                           | ORG\|CASE   | 2                                                            | Retry budget per lane; §6.4.                                                                                                                                    |
+| `compose.policy.forbidden_patterns[]`           | ORG         | \[\]                                                         | Content forbids; §6.4 QA.                                                                                                                                       |
+| `compose.templates.client.template_id`          | ORG         | default                                                      | DOCX/MD template selection; §6.4.                                                                                                                               |
+| `compose.templates.lawyer.template_id`          | ORG         | default                                                      | DOCX/MD template selection; §6.4.                                                                                                                               |
+| `reviews.timeout_hours`                         | ORG         | 72                                                           | Approval escalation threshold (reminders/escalations); §11.2.3.                                                                                                 |
+| `reviews.backlog.alert_minutes`                 | ORG         | 30                                                           | Minutes before `QUEUED_FOR_REVIEW` items trigger reviewer escalation banners/alerts; §7.1.3, §11.1.                                                             |
+| `sign.trust_roots[]`                            | SYSTEM\|ORG | \[\]                                                         | Trust roots for signing; §7.2.                                                                                                                                  |
+| `sign.tsa.endpoint`                             | SYSTEM\|ORG | null                                                         | TSA API endpoint; §7.2.                                                                                                                                         |
+| `sign.tsa.max_time_drift_secs`                  | SYSTEM      | 5                                                            | NTP drift tolerance; §7.2, §3.2.                                                                                                                                |
+| `security.tls.min_version`                      | SYSTEM      | TLSv1.3                                                      | Minimum TLS version for ingress; §3.2.                                                                                                                          |
+| `security.tls.cipher_profile`                   | SYSTEM      | default                                                      | TLS cipher profile for ingress; §3.2.                                                                                                                           |
+| `security.tls.fips_mode`                        | SYSTEM      | false                                                        | Enforce FIPS-approved cipher suites and modules; §3.2, §7.2.                                                                                                    |
+| `security.tls.legacy_exceptions[]`              | SYSTEM      | \[\]                                                         | Temporary TLS 1.2 exceptions (≤30 days, alert at T-7); §3.2, §9.2.                                                                                              |
+| `db.pgbouncer.pool_mode`                        | SYSTEM      | transaction                                                  | Allowed PgBouncer pooling mode (`transaction` default, `session` optional); §3.2.1.                                                                             |
+| `llm.providers[]`                               | SYSTEM\|ORG | \[\]                                                         | Provider catalog; §8.1.                                                                                                                                         |
+| `llm.models[]`                                  | SYSTEM\|ORG | \[\]                                                         | Model catalog and fallback priorities; §8.1.                                                                                                                    |
+| `llm.models.version_pin`                        | SYSTEM\|ORG | provider‑specific                                            | Explicit provider model snapshot/version pin; §8.1/§8.5.                                                                                                        |
+| `llm.enforce_model_version`                     | ORG\|CASE   | true                                                         | Fail when provider model version drifts from pin; §8.1/§8.5.                                                                                                    |
+| `llm.moderation.enabled`                        | ORG         | true                                                         | Enable automated input/output moderation; §8.4.                                                                                                                 |
+| `llm.moderation.provider`                       | ORG         | azure\|openai\|local                                         | Moderation provider selection; §8.4.                                                                                                                            |
+| `llm.moderation.enforcement`                    | SYSTEM\|ORG | block                                                        | Enforcement mode: `block` (default) or `warn`; §8.4.                                                                                                            |
+| `llm.moderation.thresholds.toxicity`            | ORG         | 0.5                                                          | Classification threshold; §8.4.                                                                                                                                 |
+| `llm.moderation.thresholds.self_harm`           | ORG         | 0.5                                                          | Classification threshold; §8.4.                                                                                                                                 |
+| `llm.moderation.thresholds.sexual_content`      | ORG         | 0.5                                                          | Classification threshold; §8.4.                                                                                                                                 |
+| `llm.moderation.thresholds.pii_reintroduction`  | ORG         | 0.5                                                          | Classification threshold; §8.4.                                                                                                                                 |
+| `llm.byo.allowed`                               | ORG\|CASE   | false                                                        | Permit bring-your-own model endpoints; §8.1.3.                                                                                                                  |
+| `llm.byo.evaluation_suite_id`                   | ORG         | default                                                      | Evaluation suite applied to BYO providers; §8.1.3.                                                                                                              |
+| `llm.byo.vpc_endpoints[]`                       | ORG         | \[\]                                                         | Allowed BYO endpoint hostnames (reconciled with mesh policies); §8.1.3.                                                                                         |
+| `agents.langgraph.runner`                       | SYSTEM\|ORG | langgraph                                                    | Graph runner selection (`langgraph` or `linear`); §6.7.2.                                                                                                       |
+| `agents.langgraph.fallback_mode`                | SYSTEM      | false                                                        | Force manual drafting fallback; §6.7.2, App.D RB-LLM-003.                                                                                                       |
+| `speech.providers[]`                            | SYSTEM\|ORG | \[\]                                                         | Speech provider catalog (health, residency, parity evidence); §6.2.1.                                                                                           |
+| `speech.jobs[]`                                 | SYSTEM\|ORG | \[\]                                                         | Transcription job profiles and fallback chains; §6.2.1.                                                                                                         |
+| `speech.allow_preprocessing`                    | ORG\|CASE   | false                                                        | Permit loudness normalization/compression before transcription; §6.2.3.                                                                                         |
+| `speech.require_locale_match`                   | ORG\|CASE   | true                                                         | Fail fast when provider lacks requested locale; §6.2.3.                                                                                                         |
+| `speech.detect_language.enabled`                | ORG\|CASE   | false                                                        | Enable automatic source-language detection; §6.2.4.                                                                                                             |
+| `speech.multilingual_segments.enabled`          | ORG\|CASE   | false                                                        | Emit language-tagged segments for code-switched audio; §6.2.4.                                                                                                  |
+| `speech.translation.enabled`                    | ORG\|CASE   | false                                                        | Allow generation of translated transcripts; §6.2.4.                                                                                                             |
+| `speech.translation.targets_default[]`          | ORG         | \[\]                                                         | Default target locales for translation requests; §6.2.4.                                                                                                        |
+| `speech.translation.provider`                   | ORG\|CASE   | null                                                         | Translation provider identifier; §6.2.4.                                                                                                                        |
+| `speech.translation.glossary_set`               | ORG\|CASE   | null                                                         | Reference Manager glossary bundle for translations; §6.2.4.                                                                                                     |
+| `speech.translation.max_parallel_targets`       | ORG\|CASE   | 3                                                            | Parallel translation limit per job; §6.2.4.                                                                                                                     |
+| `speech.translation.allow_unverified_pairs`     | ORG\|CASE   | false                                                        | Permit translation pairs not in the verified registry (waiver required); §6.2.3, §6.2.4.                                                                        |
+| `speech.translation.language_pair_overrides[]`  | ORG\|CASE   | \[\]                                                         | Disable or remap specific source→target pairs for contractual/compliance reasons; §6.2.3, §6.2.4.                                                               |
+| `chat.staff.enabled`                            | ORG\|CASE   | false                                                        | Enable staff Copilot assistant; §11.11.                                                                                                                         |
+| `chat.staff.rate_limit.rpm`                     | ORG\|CASE   | 30                                                           | Staff assistant requests per minute; §11.11.                                                                                                                    |
+| `chat.staff.token_cap_daily`                    | ORG\|CASE   | 20000                                                        | Staff assistant daily token budget; §11.11.                                                                                                                     |
+| `chat.client.enabled`                           | ORG\|CASE   | false                                                        | Enable portal chat assistant; §11.11.                                                                                                                           |
+| `chat.client.rate_limit.rpm`                    | ORG\|CASE   | 10                                                           | Client assistant requests per minute; §11.11.                                                                                                                   |
+| `chat.client.token_cap_daily`                   | ORG\|CASE   | 10000                                                        | Client assistant daily token budget; §11.11.                                                                                                                    |
+| `chat.session.max_active_per_user`              | ORG\|CASE   | 2                                                            | Concurrent chat sessions allowed per user; §11.11.                                                                                                              |
+| `chat.auto_disable_on_abuse`                    | ORG\|CASE   | true                                                         | Auto-disable assistants on policy violations; §11.11.                                                                                                           |
+| `chat.provider.profile`                         | ORG\|CASE   | null                                                         | LLM profile assignment for assistants; §8.1.4, §11.11.                                                                                                          |
+| `portal.chat.hipaa_allowed`                     | ORG         | false                                                        | Permit client chat when HIPAA mode active; §11.11.                                                                                                              |
+| `portal.chat.export.enabled`                    | ORG\|CASE   | false                                                        | Allow client chat transcript exports; §11.11.                                                                                                                   |
+| `notifications.in_app.rate_limit_per_minute`    | ORG         | 60                                                           | In-app notification dispatch rate; §11.9.                                                                                                                       |
+| `notifications.in_app.daily_cap`                | ORG         | 500                                                          | In-app notification max per day; §11.9.                                                                                                                         |
+| `llm.finops.monthly_cap_usd`                    | ORG         | 0 (disabled)                                                 | Monthly LLM spend cap; §8.3, §13.4.                                                                                                                             |
+| `jobs.watchdog.no_progress_minutes`             | SYSTEM\|ORG | 5                                                            | Minutes without heartbeat before watchdog warns; §10.2, §12.1, Appendix R entry [RB-JOB-WATCHDOG](runbooks.md#rb-job-watchdog).                                 |
+| `jobs.watchdog.timeout_minutes`                 | SYSTEM\|ORG | 15                                                           | Minutes without heartbeat before watchdog fails the job; §10.2, §12.1, Appendix R entry [RB-JOB-WATCHDOG](runbooks.md#rb-job-watchdog).                         |
+| `uploads.scan.engine`                           | SYSTEM      | clamav                                                       | Malware engine used in the upload scan pipeline; §6.2, §12.1.                                                                                                   |
+| `uploads.scan.yara_ruleset_version`             | SYSTEM      | latest                                                       | Version tag for YARA rules synced from Security; §6.2.                                                                                                          |
+| `uploads.scan.timeout_seconds`                  | SYSTEM\|ORG | 120                                                          | Max scan duration before treating file as suspicious and quarantining; §6.2, Appendix R entry [RB-UPLOAD-SCAN](runbooks.md#rb-upload-scan).                     |
+| `uploads.scan.override_hashes[]`                | SYSTEM\|ORG | \[\]                                                         | Temporary allowlist for known-clean artifacts while rules are tuned (dual approval, time-boxed); Appendix R entry [RB-UPLOAD-SCAN](runbooks.md#rb-upload-scan). |
+| `uploads.enabled`                               | SYSTEM\|ORG | true                                                         | Toggle to accept new uploads; disabled during major scanner outages; Appendix R entry [RB-UPLOAD-SCAN](runbooks.md#rb-upload-scan).                             |
+| `api.idempotency.ttl_hours`                     | SYSTEM      | 24                                                           | TTL for idempotency; §10.3.                                                                                                                                     |
+| `api.rate_limits.web.rpm_per_org`               | SYSTEM\|ORG | 600 (guardrail 10-2000; activation validator enforces range) | Org RPM; §10.5.                                                                                                                                                 |
+| `api.rate_limits.web.rpm_per_ip`                | SYSTEM\|ORG | 300 (guardrail 10-2000)                                      | IP RPM; §10.5.                                                                                                                                                  |
+| `portal.download.rate_limits.user_rpm`          | ORG         | 60 (guardrail 10-2000)                                       | Portal download/user; §10.5.                                                                                                                                    |
+| `portal.download.rate_limits.org_rpm`           | ORG         | 200 (guardrail 10-2000)                                      | Portal download/org; §10.5.                                                                                                                                     |
+| `security.org_switch.step_up_required`          | SYSTEM      | true                                                         | Enforce step-up on privilege increase; §4.3.                                                                                                                    |
+| `security.disclosure.contact`                   | SYSTEM      | null                                                         | Security.txt contact; §14.9.                                                                                                                                    |
+| `security.disclosure.encryption_key_url`        | SYSTEM      | null                                                         | PGP key URL; §14.9.                                                                                                                                             |
+| `security.pentest.cadence`                      | SYSTEM      | annual                                                       | Pentest schedule; §14.9.                                                                                                                                        |
+| `security.mfa.webauthn_required_roles`          | ORG         | \[\]                                                         | Roles requiring WebAuthn step-up (HIPAA mode); §2.2, §4.3.                                                                                                      |
+| `security.session.device_bind.ip_prefix_len_v4` | ORG         | 24                                                           | IPv4 prefix length for device binding; §4.3 (soft/hard modes).                                                                                                  |
+| `security.session.device_bind.ip_prefix_len_v6` | ORG         | 48                                                           | IPv6 prefix length for device binding; §4.3 (soft/hard modes).                                                                                                  |
+| `security.session.device_bind.mode`             | ORG         | "soft"                                                       | Device fingerprint reaction (`soft` or `hard`); §4.3.                                                                                                           |
+| `udlock.max_session_hold_seconds`               | SYSTEM      | 300                                                          | Advisory lock hold time; App.D RB-LOCK-006.                                                                                                                     |
+| `udlock.heartbeat.interval_seconds`             | SYSTEM      | 5                                                            | Heartbeat period; App.D RB-LOCK-006.                                                                                                                            |
+| `compliance.erasure_mode`                       | ORG         | off                                                          | Hard-purge toggle for DSAR mode; §14.2.1.                                                                                                                       |
+| `compliance.subject_hkdf_salt`                  | SYSTEM      | managed secret                                               | HKDF salt for DSAR subject hashing; §14.2.1.                                                                                                                    |
+| `privacy.legal.matrix_version`                  | SYSTEM      | semver                                                       | Data residency/legal matrix version; App.C.                                                                                                                     |
+| `privacy.hipaa.enabled`                         | ORG         | false                                                        | HIPAA override mode toggle; §2.2, §14.2, App.C.                                                                                                                 |
+| `privacy.hipaa.bundle_version`                  | SYSTEM      | semver                                                       | HIPAA policy bundle version pin; §2.2, App.C.                                                                                                                   |
+| `privacy.hipaa.phi_detection.strict_mode`       | ORG\|CASE   | true                                                         | Enforce layered PHI detection (waiver required to relax); §2.2.                                                                                                 |
+| `privacy.hipaa.phi_detection.rescan_hours`      | ORG         | 24                                                           | Interval for scheduled PHI re-scan jobs; §2.2.                                                                                                                  |
+| `i18n.supported_locales[]`                      | ORG         | \[\]                                                         | Supported locales (BCP-47 codes) surfaced in UI toggles; must include at least one locale; §11.3.                                                               |
+| `identity.org.primary_idp`                      | ORG         | keycloak                                                     | Primary IdP assignment (`keycloak` or `external:<id>`); §4.1.                                                                                                   |
+| `storage.bucket_versioning_required`            | SYSTEM      | true                                                         | Bucket versioning must be enabled; §5.3, §12.1.                                                                                                                 |
+| `storage.remote_hash.enabled`                   | ORG\|CASE   | false                                                        | Record remote hashes for batch inputs; §5.3.                                                                                                                    |
+| `storage.remote_hash.max_mb`                    | ORG\|CASE   | 50                                                           | Max remote bytes to hash; §5.3.                                                                                                                                 |
+| `settings.activation.require_dual_approval`     | SYSTEM      | true                                                         | Dual approval for unsafe changes; §9.3.                                                                                                                         |
+| `logging.redaction.enabled`                     | SYSTEM      | true                                                         | Redact PII in logs; §12.1.                                                                                                                                      |
+| `logging.access.roles[]`                        | SYSTEM      | \[\]                                                         | Role mapping for log query privileges (`observability.reader\|engineer\|auditor`); §12.1.2.                                                                     |
+| `logging.cost.daily_budget_mb_per_service`      | SYSTEM\|ORG | 500                                                          | Daily log volume budget per service; §12.1.6.                                                                                                                   |
+| `logging.cost.alert_threshold_pct`              | SYSTEM\|ORG | 80                                                           | Alert threshold as % of daily log budget; §12.1.6.                                                                                                              |
+| `logging.level.default`                         | SYSTEM      | "INFO"                                                       | Default production log level; §12.1.6.                                                                                                                          |
+| `logging.level.overrides[]`                     | ORG         | \[\]                                                         | Per-service log level overrides; §12.1.6.                                                                                                                       |
+| `portal.logging.enabled`                        | ORG         | true                                                         | Enable client telemetry capture; §12.1.5.                                                                                                                       |
+| `evidence_store.redacted_excerpts.enabled`      | ORG         | true                                                         | Allow storage of prompt/response excerpts; HIPAA enable guard forces false and triggers purge; §2.2, §8.2.                                                      |
+| `logging.immutable_sink.enabled`                | SYSTEM      | true (prod)                                                  | Mirror structured logs to immutable storage alongside the audit sink; validators block `false` in production and mark overrides unsafe (§9.11, §12.1).          |
+| `llm.finops.guard.threshold_pct`                | SYSTEM\|ORG | 10                                                           | MoM regression ceiling for deploy gate; §8.7, §13.5.                                                                                                            |
+| `llm.finops.guard.trailing7d_pct`               | SYSTEM\|ORG | 25                                                           | Trailing 7-day burn ceiling (% of monthly cap) for deploy gate; §8.7, §13.5.                                                                                    |
+| `llm.finops.override_until`                     | SYSTEM      | null                                                         | Optional timestamp (max +72h) to temporarily relax FinOps guard (dual approval required); §8.7.                                                                 |
 
 ### A.2 Traceability map (normative)
 
@@ -601,10 +592,10 @@ Body sections follow the Purpose/Contract/State/Failure/Observability/Breadcrumb
 Checklist items:
 
 1. Link to change ticket, ADR (if applicable), and decision log entry.
-2. Attach validator results (`unsafe_reasons[]`, residency, safety, cost) and diff preview hashes.
-3. Confirm dual approval requirements (Security + Architecture) met for protected scopes.
-4. Record rollout plan, blast radius, and rollback window; attach staging dry-run evidence.
-5. Store bundle, activation JSON, and diff artifacts under `ops/settings/<date>/`.
+1. Attach validator results (`unsafe_reasons[]`, residency, safety, cost) and diff preview hashes.
+1. Confirm dual approval requirements (Security + Architecture) met for protected scopes.
+1. Record rollout plan, blast radius, and rollback window; attach staging dry-run evidence.
+1. Store bundle, activation JSON, and diff artifacts under `ops/settings/<date>/`.
 
 ### A.5 Change log handoff (informative)
 
@@ -614,7 +605,6 @@ Checklist items:
 *State: Change log maintained alongside this document (`ops/settings/change_log.md`) and mirrored into App.O decision log.*\
 *Failure modes & retries: Missing change log entry triggers release checklist failure; remediate by adding the entry with backdated evidence.*\
 *Observability: Weekly docs lint verifies latest activations appear in the log.*
-
 
 ## Appendix B — Metrics & alerts
 
@@ -627,48 +617,44 @@ Checklist items:
 
 ### B.1 Service health (binding)
 
-| Metric / Alert | Description | Owner |
-| -------------- | ----------- | ----- |
-| `settings_request_total{result}` | Request volume by outcome (`success`, `error`, `unauthorized`, `denied`) | SRE |
-| `settings_latency_seconds{route}` | Histogram + SLO burn tracking for read/write endpoints | SRE |
-| `settings_cache_hit_ratio` | Redis/local cache hit percentage; alert when \< 0.9 | Platform Architecture |
-| `settings_cache_invalidation_lag_seconds` | Duration from activation publish to cache flush across nodes | SRE |
-| `settings_snapshot_issued_total{scope}` | Snapshots delivered to workers, portal, Guardian, LPE | Platform Architecture |
-| `settings_snapshot_drift_total{detector}` | Drift findings comparing embedded snapshot hashes vs effective values | SRE |
+| Metric / Alert                              | Description                                                                     | Owner                 |
+| ------------------------------------------- | ------------------------------------------------------------------------------- | --------------------- |
+| `settings_request_total{result}`            | Request volume by outcome (`success`, `error`, `unauthorized`, `denied`)        | SRE                   |
+| `settings_latency_seconds{route}`           | Histogram + SLO burn tracking for read/write endpoints                          | SRE                   |
+| `settings_cache_hit_ratio`                  | Redis/local cache hit percentage; alert when \< 0.9                             | Platform Architecture |
+| `settings_cache_invalidation_lag_seconds`   | Duration from activation publish to cache flush across nodes                    | SRE                   |
+| `settings_snapshot_issued_total{scope}`     | Snapshots delivered to workers, portal, Guardian, LPE                           | Platform Architecture |
+| `settings_snapshot_drift_total{detector}`   | Drift findings comparing embedded snapshot hashes vs effective values           | SRE                   |
 | `settings_enforcement_lookup_total{status}` | Enforcement touchpoints (required/optional/missing) used by downstream services | Platform Architecture |
 
 ### B.2 Governance & security (binding)
 
-| Metric / Alert | Description | Owner |
-| -------------- | ----------- | ----- |
-| `settings_activation_total{result}` | Activation outcomes (`success`, `unsafe`, `rollback`) powering release gates | Settings Program |
-| `settings_activation_duration_seconds` | Activation execution latency (start→publish) by bundle type | Settings Program |
-| `settings_validation_failure_total{reason}` | Validator failures grouped by guardrail (`residency`, `safety`, `finops`, `schema`) | Settings Program |
-| `settings_dual_approval_total{bundle}` | Dual-approval events by protected bundle category | Security Engineering |
-| `settings_waiver_active_total{expiry_window}` | Active waiver counts bucketed by days to expiry | Security Engineering |
-| `settings_auth_failure_total{stage}` | Failed HMAC signature or token authentication attempts against the Settings API | Platform Architecture |
-| `settings_secret_read_total{role}` | Secret/config read requests segmented by authorized role | Security Engineering |
-| `settings_audit_event_total{kind}` | Structured audit entries emitted (activation, waiver, rollback, drift) | Security Engineering |
-| `settings_compliance_violation_total{category}` | Compliance guard hits (HIPAA, DSAR, residency) that block activations | Security Engineering |
-| `settings_integration_sync_total{target}` | Sync runs to Guardian, LPE, Reference Manager, portal, and worker manifests | Platform Architecture |
-| `settings_incident_open_total{severity}` | Open incidents tied to Settings alerts/procedures | SRE |
+| Metric / Alert                                  | Description                                                                         | Owner                 |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------- | --------------------- |
+| `settings_activation_total{result}`             | Activation outcomes (`success`, `unsafe`, `rollback`) powering release gates        | Settings Program      |
+| `settings_activation_duration_seconds`          | Activation execution latency (start→publish) by bundle type                         | Settings Program      |
+| `settings_validation_failure_total{reason}`     | Validator failures grouped by guardrail (`residency`, `safety`, `finops`, `schema`) | Settings Program      |
+| `settings_dual_approval_total{bundle}`          | Dual-approval events by protected bundle category                                   | Security Engineering  |
+| `settings_waiver_active_total{expiry_window}`   | Active waiver counts bucketed by days to expiry                                     | Security Engineering  |
+| `settings_auth_failure_total{stage}`            | Failed HMAC signature or token authentication attempts against the Settings API     | Platform Architecture |
+| `settings_secret_read_total{role}`              | Secret/config read requests segmented by authorized role                            | Security Engineering  |
+| `settings_audit_event_total{kind}`              | Structured audit entries emitted (activation, waiver, rollback, drift)              | Security Engineering  |
+| `settings_compliance_violation_total{category}` | Compliance guard hits (HIPAA, DSAR, residency) that block activations               | Security Engineering  |
+| `settings_integration_sync_total{target}`       | Sync runs to Guardian, LPE, Reference Manager, portal, and worker manifests         | Platform Architecture |
+| `settings_incident_open_total{severity}`        | Open incidents tied to Settings alerts/procedures                                   | SRE                   |
 
 Alert hooks include `settings_availability_breach`, `settings_activation_delay`, `settings_governance_override_total`, `settings_auth_failure_spike`, and `settings_secret_access_anomaly`; each alert links to Appendix R procedures.
 
-
 ## Appendix C — Seed bundle inventory
 
-| Bundle | Location | Purpose | Validation |
-| ------ | -------- | ------- | ---------- |
-| `bootstrap_defaults.json` | `config/` | System defaults for general operation | `ops/scripts/bootstrap_platform.py` + schema validators |
-| `guardian_defaults.json` | `config/` | Guardian-specific knobs consumed via SR | Guardian integration tests |
-| `analyze_defaults.json` | `config/` | Analyze agent pipeline defaults | Agent contract tests |
-| `llm_assignments.json` | `config/` | LLM profile assignments | `tests/platform/settings/test_llm_profiles.py` |
-| `llm_providers.json` | `config/` | Provider catalog entries | `tests/platform/settings/test_llm_profiles.py` |
-| `agents.pipeline/*.json` | `config/agents.pipeline/` | LangGraph pipeline manifests and rollouts | `tests/platform/settings/test_pipeline_bundle.py` |
-
-
-
+| Bundle                    | Location                  | Purpose                                   | Validation                                              |
+| ------------------------- | ------------------------- | ----------------------------------------- | ------------------------------------------------------- |
+| `bootstrap_defaults.json` | `config/`                 | System defaults for general operation     | `ops/scripts/bootstrap_platform.py` + schema validators |
+| `guardian_defaults.json`  | `config/`                 | Guardian-specific knobs consumed via SR   | Guardian integration tests                              |
+| `analyze_defaults.json`   | `config/`                 | Analyze agent pipeline defaults           | Agent contract tests                                    |
+| `llm_assignments.json`    | `config/`                 | LLM profile assignments                   | `tests/platform/settings/test_llm_profiles.py`          |
+| `llm_providers.json`      | `config/`                 | Provider catalog entries                  | `tests/platform/settings/test_llm_profiles.py`          |
+| `agents.pipeline/*.json`  | `config/agents.pipeline/` | LangGraph pipeline manifests and rollouts | `tests/platform/settings/test_pipeline_bundle.py`       |
 
 ## Appendix R — Runbooks & drills
 
@@ -710,10 +696,10 @@ Triggers: `settings_governance_override_total`, change tickets tagged `GOV-TOGGL
 Execution checklist:
 
 1. Announce maintenance window with activation/rollback times in `#ops-announcements`.
-2. Validate staging dry-run (matching bundle hash) and attach diff evidence to change ticket.
-3. Execute activation via CLI/UI, capturing activation ID and `unsafe_reasons[]` result (expected empty).
-4. Run targeted smoke tests (API read/write, portal toggle, worker snapshot) tied to the toggle.
-5. Update change ticket and decision log with activation ID, evidence, and rollback window.
+1. Validate staging dry-run (matching bundle hash) and attach diff evidence to change ticket.
+1. Execute activation via CLI/UI, capturing activation ID and `unsafe_reasons[]` result (expected empty).
+1. Run targeted smoke tests (API read/write, portal toggle, worker snapshot) tied to the toggle.
+1. Update change ticket and decision log with activation ID, evidence, and rollback window.
 
 Rollback steps:
 
@@ -739,8 +725,8 @@ Evidence requirements:
 Triage checklist:
 
 1. Query `residency_endpoint_findings` for `state='open'`; review evidence attachments.
-2. Inspect Istio AuthorizationPolicy revisions to ensure offending hosts remain blocked.
-3. Identify impacted providers/orgs via activation diff linked in alert payload.
+1. Inspect Istio AuthorizationPolicy revisions to ensure offending hosts remain blocked.
+1. Identify impacted providers/orgs via activation diff linked in alert payload.
 
 Decision tree:
 
@@ -767,10 +753,10 @@ Post-remediation:
 Steps:
 
 1. Confirm org allowlists (`regions.allowlist.compute/storage/vector`).
-2. Validate provider endpoints and DNS; compare to RM catalogue snapshots.
-3. If cross-region access required, capture dual approval, set `cross_region_waiver=true`, and document expiry.
-4. Re-run activation or job; confirm Guardian manifests reference waiver ID.
-5. Audit waiver usage daily until expiry or remediation.
+1. Validate provider endpoints and DNS; compare to RM catalogue snapshots.
+1. If cross-region access required, capture dual approval, set `cross_region_waiver=true`, and document expiry.
+1. Re-run activation or job; confirm Guardian manifests reference waiver ID.
+1. Audit waiver usage daily until expiry or remediation.
 
 ### R.5 RB-LOCK-006 — Activation lock stale detection & remediation (binding)
 
@@ -784,10 +770,10 @@ Steps:
 Checklist:
 
 1. Inspect lock registry via `scripts/settings/show_activation_locks.py` filtered by environment.
-2. Verify holder liveness (`SELECT ... FROM pg_stat_activity`) to differentiate idle vs active transactions.
-3. If holder dead or idle-in-transaction, coordinate worker/web restart or issue `SELECT pg_terminate_backend(...)` per policy.
-4. After release, rerun activation pipeline smoke tests; capture evidence in incident log.
-5. File follow-up if lock reappears within 24h (root cause investigation, automation fix).
+1. Verify holder liveness (`SELECT ... FROM pg_stat_activity`) to differentiate idle vs active transactions.
+1. If holder dead or idle-in-transaction, coordinate worker/web restart or issue `SELECT pg_terminate_backend(...)` per policy.
+1. After release, rerun activation pipeline smoke tests; capture evidence in incident log.
+1. File follow-up if lock reappears within 24h (root cause investigation, automation fix).
 
 ### R.6 RB-LLM-003 — Provider degradation / circuit breaker (binding)
 
@@ -801,10 +787,10 @@ Checklist:
 Response steps:
 
 1. Confirm affected models via dashboard filters (`llm_circuit_state{model}`) and review recent error/latency metrics.
-2. Validate fallback outcomes in logs (`PRIMARY_DEGRADED`, `FALLBACK_USED`) and ensure FinOps guardrails intact.
-3. Keep circuits OPEN until three consecutive successful half-open probes; adjust fallback priorities if secondary models degrade.
-4. Notify vendor/support with incident details when degradation persists >15 minutes; record ticket IDs in incident log.
-5. After recovery, document budget impact and corrective actions; update preventive tasks (synthetic prompts, timeout tuning).
+1. Validate fallback outcomes in logs (`PRIMARY_DEGRADED`, `FALLBACK_USED`) and ensure FinOps guardrails intact.
+1. Keep circuits OPEN until three consecutive successful half-open probes; adjust fallback priorities if secondary models degrade.
+1. Notify vendor/support with incident details when degradation persists >15 minutes; record ticket IDs in incident log.
+1. After recovery, document budget impact and corrective actions; update preventive tasks (synthetic prompts, timeout tuning).
 
 ### R.7 RB-JOB-WATCHDOG — Job stall watchdog (binding)
 
@@ -818,10 +804,10 @@ Response steps:
 Triage & remediation:
 
 1. Identify affected job IDs from alert payload; confirm `job_progress_heartbeat` age and last known task lane.
-2. Inspect worker logs for stalled tasks, resource exhaustion, or upstream dependency failures; capture excerpts in incident notes.
-3. If work-in-progress artifacts exist, trigger checkpoint validation (`ops/jobs/verify_checkpoint.py`) before retrying.
-4. Attempt safe resume via `jobs resume --job <id>` when the worker is healthy; otherwise cancel and requeue after addressing root cause.
-5. Close alert once heartbeats refresh (< 2 × `jobs.watchdog.heartbeat_interval`) and audit trail updated with remediation steps.
+1. Inspect worker logs for stalled tasks, resource exhaustion, or upstream dependency failures; capture excerpts in incident notes.
+1. If work-in-progress artifacts exist, trigger checkpoint validation (`ops/jobs/verify_checkpoint.py`) before retrying.
+1. Attempt safe resume via `jobs resume --job <id>` when the worker is healthy; otherwise cancel and requeue after addressing root cause.
+1. Close alert once heartbeats refresh (\< 2 × `jobs.watchdog.heartbeat_interval`) and audit trail updated with remediation steps.
 
 Post-incident follow-up:
 
@@ -840,10 +826,10 @@ Post-incident follow-up:
 Response sequence:
 
 1. Confirm scope of degradation (engine errors vs. queue backlog) using dashboard drill-downs and `upload_scan_audit` sampling.
-2. Freeze new intake by toggling `uploads.enabled=false` in Settings; announce customer impact and expected review window.
-3. Validate scanner health: check ClamAV/YARA signature freshness, sandbox resource utilization, and recent deployment changes.
-4. For malware detections, coordinate with Security to analyze samples; maintain quarantine until signatures updated and retest passes.
-5. Once scanners stable, re-enable uploads, replay quarantined items through the pipeline, and attach evidence (dashboards, signature reports) to the incident record.
+1. Freeze new intake by toggling `uploads.enabled=false` in Settings; announce customer impact and expected review window.
+1. Validate scanner health: check ClamAV/YARA signature freshness, sandbox resource utilization, and recent deployment changes.
+1. For malware detections, coordinate with Security to analyze samples; maintain quarantine until signatures updated and retest passes.
+1. Once scanners stable, re-enable uploads, replay quarantined items through the pipeline, and attach evidence (dashboards, signature reports) to the incident record.
 
 Follow-up:
 
