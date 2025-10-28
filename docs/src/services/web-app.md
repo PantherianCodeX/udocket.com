@@ -91,7 +91,7 @@ ______________________________________________________________________
 - **Structure:** Sections follow the standard 0–10 service template. Responsibilities (§2) map to the major UI pillars; APIs (§3) reference capability discovery, SSE topics, and secure download flows; state, failure, observability, and compliance requirements are consolidated in §§4–7.
 - **Maintenance:** Run `python scripts/docs/lint_docs.py docs/src/services/web-app.md docs/src/overview/tdd.md docs/tdd_modularization.md` before submitting UI changes. Accessibility or localization updates must retain Appendix references and regenerate Vale/axe snapshots where noted.
 - **Change protocol:** UX-affecting PRs update this spec and cite ADR-0003 when API contracts change. Security posture updates (headers, invalidation flows, break-glass) require Security + Architecture approval.
-- **References:** TDD §11 summary, Guardian spec §5, Notifications spec §2.6, Settings Registry §5 (UI policy keys), Ops runbooks RB-PORTAL-INVALIDATION and RB-JOB-WATCHDOG.
+- **References:** TDD §11 summary, Guardian spec §5, Notifications spec §2.6, Settings Registry §5 (UI policy keys), Ops runbooks `RB-PORTAL-INVALIDATION` and `RB-JOB-WATCHDOG`.
 - **Contacts:** Platform Engineering (frontend owners), Product Management (experience roadmap), Accessibility guild, `#web-app` Slack channel, on-call rotation `webapp-oncall@`.
 
 ______________________________________________________________________
@@ -115,7 +115,7 @@ ______________________________________________________________________
 **Purpose:** Provide case-centered tooling for operators and reviewers with deterministic status reporting. **|**
 **Contract:** Case workspace renders artifact timelines, job state, approvals, Guardian outcomes, and analytics without exposing masked data. SSE/Channels feeds must stay case-scoped and honor RLS. **|**
 **State:** Case dashboards pull from `case_secure`, `artifact_secure`, job manifests, Guardian verdicts, and FinOps metrics. **|**
-**Failure modes & handling:** SSE disconnects fall back to polling with visible banners; missing Guardian verdicts lock approval actions pending remediation per RB-JOB-WATCHDOG. **|**
+**Failure modes & handling:** SSE disconnects fall back to polling with visible banners; missing Guardian verdicts lock approval actions pending remediation per `RB-JOB-WATCHDOG`. **|**
 **Observability:** Metric panels `operator_break_glass_requested_total`, `review_queue_backlog_total`, `job_watchdog_warning_total`; synthetic monitors validate SSE and approval flows. **|**
 **Breadcrumbs:** Operator view `apps/platform/ui/views/operator_workspace.py`, approval components `packages/udocket_ui/approvals/*`, SSE publisher `apps/platform/events/jobs.py`, tests `tests/platform/ui/test_operator_workspace.py`, `tests/platform/ui/test_review_approvals.py`, `tests/e2e/test_job_status_widget.py`. **|**
 **References:** Notifications spec §2.6 (in-app alerts), Guardian spec §5 (verdict integration).
@@ -149,7 +149,7 @@ ______________________________________________________________________
 **Purpose:** Meet WCAG 2.2 AA requirements and deliver localized experiences across staff and portal surfaces. **|**
 **Contract:** UI components honor semantic markup, keyboard navigation, focus management, and contrast budgets; localization keys originate from LP Engine bundles and pseudolocale checks block regressions. **|**
 **State:** Localization assets live in Settings (`i18n.*`) and LP Engine bundles; accessibility evidence stored in Ops appendices. **|**
-**Failure modes & handling:** Missing translations or accessibility regressions trigger runbook RB-LPE-LOCALE-GAP and block releases until evidence restored. **|**
+**Failure modes & handling:** Missing translations or accessibility regressions trigger runbook `RB-LPE-LOCALE-GAP` and block releases until evidence restored. **|**
 **Observability:** Nightly axe snapshots, Playwright RTL runs, localization audit scripts (`ops/scripts/lpe/audit_locales.py`). **|**
 **Breadcrumbs:** Component library `packages/udocket_ui/`, localization pipeline `packages/udocket_core/lpe/*`, tests `tests/e2e/test_accessibility.py`. **|**
 **References:** LP Engine spec §2, Ops runbook index (LPE locale gap).
@@ -202,7 +202,7 @@ ______________________________________________________________________
 - SSE events inform collaborators of edit lifecycle stages, and Notifications service issues actionable toasts/email when reviewer attention is required.
 - Database partial unique index (`approve_once_per_user ON artifact_review ...`) enforces distinct approvers; UI surfaces inline conflicts when reviewers attempt duplicate approvals.
 - Manual edits collect operator change summaries and diff previews; agent edits store prompts, models, moderation outcomes, and diff fingerprints so reviewers can audit provenance.
-- Guardian moderation integrates with the edit UI so policy-blocked runs render banners alongside remediation guidance and links to RB-JOB-WATCHDOG when manual intervention required.
+- Guardian moderation integrates with the edit UI so policy-blocked runs render banners alongside remediation guidance and links to `RB-JOB-WATCHDOG` when manual intervention required.
 
 ### 2.8 Document assembly pipeline (binding)
 
@@ -257,7 +257,7 @@ ______________________________________________________________________
 **Failure modes & handling:** RLS drift or stale manifests block releases until Settings rollback; token corruption triggers revocation and regeneration. **|**
 **Observability:** Metrics `portal_link_invalidated_total`, audit streams (`EDIT_EVENT`, `DOWNLOAD_TOKEN_*`), ops logs per case. **|**
 **Breadcrumbs:** Secure view migrations `db/migrations/security/*.sql`, messaging models `apps/platform/portal/messaging.py`, token store `apps/platform/notifications/download_tokens.py`, edit manifests `apps/platform/ui/views/edit_flow.py`. **|**
-**References:** Notifications spec §4, Guardian spec §4, Settings Registry §5.2. **|**
+**References:** Notifications spec §4, Guardian spec §4, Settings Registry §5.2.
 
 - Secure views (`case_secure`, `artifact_secure`, `delivery_receipt_secure`, `message_thread_secure`) provide masked data to the UI; base tables remain inaccessible to the application role.
 - Messaging and edit manifests capture provenance and feed Guardian/QA automation; artifacts link to versions and approvals for deterministic swap logic.
@@ -274,14 +274,14 @@ ______________________________________________________________________
 **State:** Job status, portal tokens, edit manifests, assistant manifests, accessibility evidence. **|**
 **Failure modes & handling:** SSE fallback, portal invalidation, policy blocks, moderation abuse, accessibility regression. **|**
 **Observability:** Metrics `sse_connection_drop_total`, `portal_412_precondition_total`, `edit_policy_block_total`, `chat_policy_block_total`; audit events `PORTAL_DOWNLOAD_PRECONDITION`, `EDIT_POLICY_BLOCK`, `CHAT_POLICY_BLOCK`. **|**
-**Breadcrumbs:** Runbooks RB-JOB-WATCHDOG, RB-PORTAL-INVALIDATION, RB-CHAT-ABUSE, RB-LPE-LOCALE-GAP. **|**
-**References:** Notifications spec, Guardian spec, Settings spec. **|**
+**Breadcrumbs:** Runbooks `RB-JOB-WATCHDOG`, `RB-PORTAL-INVALIDATION`, `RB-CHAT-ABUSE`, `RB-LPE-LOCALE-GAP`. **|**
+**References:** Notifications spec, Guardian spec, Settings spec.
 
 - **SSE disconnects:** UI shows offline banner, retries with exponential backoff; after repeated failure, fall back to polling and log `UI_SSE_FALLBACK`.
 - **Portal invalidation:** Tokens revoked, requests return 403 with audit `PORTAL_DOWNLOAD_PRECONDITION`; UI presents denial banners and links to support.
 - **Edit policy violations:** Agent edits blocked with `EDIT_POLICY_BLOCK`, Guardian quarantine triggered; reviewers notified via Notifications service.
 - **Chat abuse:** Moderation triggers `CHAT_POLICY_BLOCK`; assistants disabled until Security resolves; incidents documented in App.O.
-- **Accessibility regressions:** CI/VALE failures block releases; runbook RB-LPE-LOCALE-GAP executed to restore coverage.
+- **Accessibility regressions:** CI/VALE failures block releases; runbook `RB-LPE-LOCALE-GAP` executed to restore coverage.
 
 ______________________________________________________________________
 
@@ -293,7 +293,7 @@ ______________________________________________________________________
 **Failure modes & handling:** Missing metrics or failing synthetic checks page SRE and block releases until remediation. **|**
 **Observability:** Dashboards “Operator Workspace”, “Portal Integrity”, “Notifications Delivery”, “Assistant Usage”, “Accessibility & Localization”; metrics `review_queue_backlog_total`, `portal_link_invalidated_total`, `chat_sessions_total{audience}`, etc.; logs `UI_EVENT`, `PORTAL_EVENT`, `CHAT_SESSION`, `EDIT_EVENT`. **|**
 **Breadcrumbs:** Dashboard configs `infra/observability/dashboards/*.json`, synthetic scripts `synthetics/*.yaml`, logging adapters `packages/udocket_core/logging/*`. **|**
-**References:** Notifications spec §6, LLM Registry spec §6, Settings spec §6. **|**
+**References:** Notifications spec §6, LLM Registry spec §6, Settings spec §6.
 
 - Dashboards: “Operator Workspace”, “Portal Integrity”, “Notifications Delivery”, “Assistant Usage”, “Accessibility & Localization”.
 - Metrics: `review_queue_backlog_total`, `job_watchdog_warning_total`, `portal_link_invalidated_total`, `portal_phishing_report_total`, `inapp_notification_sent_total`, `chat_sessions_total{audience}`, `chat_policy_block_total`.
@@ -310,7 +310,7 @@ ______________________________________________________________________
 **Failure modes & handling:** Header drift fails CI; phishing surges trigger incident templates; unauthorized access attempts blocked and logged. **|**
 **Observability:** Metrics `portal_412_precondition_total`, `portal_phishing_report_total`, audit events `PORTAL_DOWNLOAD_PRECONDITION`, `TOKEN_REVEAL_REQUEST`, `CHAT_POLICY_BLOCK`. **|**
 **Breadcrumbs:** Middleware `apps/platform/ui/security/csp.py`, download guard `apps/platform/portal/downloads.py`, phishing logger `apps/platform/notifications/phishing.py`, break-glass schema `spec/schemas/break_glass_event.schema.json`. **|**
-**References:** Notifications spec §7, Settings spec §7, Guardian spec §7. **|**
+**References:** Notifications spec §7, Settings spec §7, Guardian spec §7.
 
 - Enforce HSTS (min 1 year), CSP nonces, frameguard `DENY`, referrer policy `strict-origin-when-cross-origin`, permissions policy disabling camera/mic by default.
 - Portal downloads require signed tokens and `If-Match` headers; replays denied even if token valid but entitlement revoked.
@@ -331,7 +331,7 @@ ______________________________________________________________________
 **Failure modes & handling:** Stale playbooks, missed drills, or expired freezes block deployments until remediation and evidence capture. **|**
 **Observability:** Docs lint (`build_runbook_catalog.py --check`), dashboards “Portal Integrity”/“Operator Workspace”, alert `portal_link_invalidated_total`. **|**
 **Breadcrumbs:** Runbook index `docs/src/ops/runbooks/index.md`, drill scripts `ops/scripts/webapp/schedule_drills.py`, governance policies App.N. **|**
-**References:** §5 Failure modes, §6 Observability, §7 Security & compliance. **|**
+**References:** §5 Failure modes, §6 Observability, §7 Security & compliance.
 
 ### 8.1 Operational posture (binding)
 
@@ -341,7 +341,7 @@ ______________________________________________________________________
 **Failure modes & handling:** Unstaffed shifts or ignored freezes escalate to Product & Security; deployments halted until posture restored. **|**
 **Observability:** PagerDuty metrics, freeze dashboards, alert `webapp_oncall_gap_total`. **|**
 **References:** Notifications spec §7, Settings spec §7. **|**
-**Breadcrumbs:** Roster files, freeze calendars, App.O decision logs. **|**
+**Breadcrumbs:** Roster files, freeze calendars, App.O decision logs.
 
 ### 8.2 Incident triggers (binding)
 
@@ -350,13 +350,13 @@ ______________________________________________________________________
 **State:** Incident records `ops/webapp/incidents/<date>.jsonl` capture alert, context, and applied runbook. **|**
 **Failure modes & handling:** Missing annotations or muted alerts require corrective PRs and governance follow-up. **|**
 **Observability:** Dashboards “Operator Workspace”, “Portal Integrity”, Alertmanager routes. **|**
-**References:** RB-JOB-WATCHDOG, RB-PORTAL-INVALIDATION, RB-CHAT-ABUSE. **|**
-**Breadcrumbs:** Alert rule files, PagerDuty services, SIEM dashboards. **|**
+**References:** `RB-JOB-WATCHDOG`, `RB-PORTAL-INVALIDATION`, `RB-CHAT-ABUSE`. **|**
+**Breadcrumbs:** Alert rule files, PagerDuty services, SIEM dashboards.
 
-- `portal_link_invalidated_total` spikes or `portal_download_precondition_total` errors invoke RB-PORTAL-INVALIDATION.
-- `sse_connection_drop_total` sustained > threshold drives SSE recovery drills via RB-JOB-WATCHDOG.
-- `chat_policy_block_total` / `chat_abuse_alert_total` escalate to RB-CHAT-ABUSE.
-- Accessibility monitors (axe regression jobs) failing in CI pause releases and trigger RB-LPE-LOCALE-GAP before resuming deployments.
+- `portal_link_invalidated_total` spikes or `portal_download_precondition_total` errors invoke `RB-PORTAL-INVALIDATION`.
+- `sse_connection_drop_total` sustained > threshold drives SSE recovery drills via `RB-JOB-WATCHDOG`.
+- `chat_policy_block_total` / `chat_abuse_alert_total` escalate to `RB-CHAT-ABUSE`.
+- Accessibility monitors (axe regression jobs) failing in CI pause releases and trigger `RB-LPE-LOCALE-GAP` before resuming deployments.
 
 ### 8.3 Runbooks & drills (binding)
 
@@ -365,36 +365,52 @@ ______________________________________________________________________
 **State:** Runbooks `ops/runbooks/webapp/*.md`, evidence `ops/webapp/drills/<date>/`. **|**
 **Failure modes & handling:** Missing drill evidence or outdated steps block release approval until updated. **|**
 **Observability:** Docs lint, drill scheduler reports, governance dashboards. **|**
-**References:** RB-JOB-WATCHDOG, RB-PORTAL-INVALIDATION, RB-LPE-LOCALE-GAP, RB-NOTIFY-\*, RB-CHAT-ABUSE. **|**
-**Breadcrumbs:** Runbook catalog, drill scheduler, governance policy App.N. **|**
+**References:** `RB-JOB-WATCHDOG`, `RB-PORTAL-INVALIDATION`, `RB-LPE-LOCALE-GAP`, `RB-NOTIFY-*`, `RB-CHAT-ABUSE`. **|**
+**Breadcrumbs:** Runbook catalog, drill scheduler, governance policy App.N.
+
+#### 8.3.1 Runbook index (informative)
 
 | Runbook code | Scenario | Notes |
 | ------------ | -------- | ----- |
-| RB-JOB-WATCHDOG | SSE/worker watchdog remediation | Coordinated with worker cluster for stalled jobs |
-| RB-PORTAL-INVALIDATION | Token revocation / portal link cleanup | Revokes signed URLs, notifies clients, captures evidence |
-| RB-LPE-LOCALE-GAP | Localization/accessibility gap | Coordinates with LP Engine for missing locales |
-| RB-NOTIFY-\* | Delivery incidents | Aligns portal alerts with outbound notifications |
-| RB-CHAT-ABUSE | Assistant abuse or moderation escalation | Disables assistants, gathers evidence for Security |
+| `RB-JOB-WATCHDOG` | SSE/worker watchdog remediation | Coordinates with worker cluster for stalled jobs |
+| `RB-PORTAL-INVALIDATION` | Token revocation / portal link cleanup | Revokes signed URLs, notifies clients, captures evidence |
+| `RB-LPE-LOCALE-GAP` | Localization/accessibility gap | Partners with LP Engine for missing locales or accessibility gaps |
+| `RB-NOTIFY-*` | Delivery incidents | Aligns portal alerts with outbound notifications |
+| `RB-CHAT-ABUSE` | Assistant abuse or moderation escalation | Disables assistants, gathers evidence for Security |
+
+#### 8.3.2 Primary runbooks (binding)
+
+- `RB-JOB-WATCHDOG` — Restores SSE sessions, resumes watchdog automation, and coordinates backlog remediation.
+- `RB-PORTAL-INVALIDATION` — Revokes signed URLs, reissues secure links, and documents evidence for auditors.
+- `RB-LPE-LOCALE-GAP` — Triages localization/accessibility deficits with LP Engine and revalidates fallback artifacts.
+- `RB-NOTIFY-*` — Synchronizes portal state with outbound notifications when delivery issues surface.
+- `RB-CHAT-ABUSE` — Freezes assistants, escalates to Guardian, and captures moderation evidence.
+
+#### 8.3.3 Drill cadence & evidence (binding)
+
+- Quarterly drills exercise SSE resiliency, portal abuse response, accessibility audits, and assistant abuse scenarios with evidence in `ops/webapp/drills/<date>/`.
+- Drill scheduler `ops/scripts/webapp/schedule_drills.py` tracks cadence and ownership; missed drills block release approvals until evidence uploaded.
+- Docs lint, governance dashboards, and App.N reviews verify runbook freshness before production changes.
 
 ### 8.4 Migrations & backfills (normative)
 
 **Purpose:** Govern CDN cache pushes, static asset migrations, and portal data backfills. **|**
 **Contract:** UI asset migrations require change tickets, blue/green verification, and rollback plans; backfills of portal metadata run in read-only preview before publishing. **|**
 **State:** Migration scripts `ops/scripts/webapp/deploy_assets.py`, cache manifests `ops/webapp/cdn_manifest.json`, backfill logs `ops/webapp/backfill/<date>/`. **|**
-**Failure modes & handling:** Failed migrations revert to prior asset version; incomplete backfills trigger RB-PORTAL-INVALIDATION to prevent stale downloads. **|**
+**Failure modes & handling:** Failed migrations revert to prior asset version; incomplete backfills trigger `RB-PORTAL-INVALIDATION` to prevent stale downloads. **|**
 **Observability:** Metrics `webapp_asset_publish_total`, `webapp_backfill_success_total`. **|**
 **References:** Settings spec §5, Notifications spec §4. **|**
-**Breadcrumbs:** Asset deployment scripts, CDN manifests, backfill tooling. **|**
+**Breadcrumbs:** Asset deployment scripts, CDN manifests, backfill tooling.
 
 ### 8.5 Operational workflows (normative)
 
 **Purpose:** Document recurring tasks for portal/workspace hygiene. **|**
 **Contract:** Teams review portal invalidations daily, reconcile signed download tokens, audit assistant manifests, and validate accessibility snapshots. **|**
 **State:** Token reconciliation reports `ops/webapp/token_audit/<date>.csv`, accessibility evidence `ops/webapp/accessibility/<run_id>/`, assistant manifest reviews `ops/webapp/chat_manifest_checks.md`. **|**
-**Failure modes & handling:** Missing audits trigger RB-PORTAL-INVALIDATION or RB-CHAT-ABUSE follow-up; unresolved accessibility gaps block release. **|**
+**Failure modes & handling:** Missing audits trigger `RB-PORTAL-INVALIDATION` or `RB-CHAT-ABUSE` follow-up; unresolved accessibility gaps block release. **|**
 **Observability:** Metrics `download_token_validation_total{outcome}`, `chat_sessions_total{audience}`, accessibility CI dashboards. **|**
 **References:** §4 State management, §7 Security & compliance. **|**
-**Breadcrumbs:** Token audit scripts `ops/scripts/webapp/audit_tokens.py`, accessibility CI configs, assistant manifest validators. **|**
+**Breadcrumbs:** Token audit scripts `ops/scripts/webapp/audit_tokens.py`, accessibility CI configs, assistant manifest validators.
 
 - Daily token audits reconcile download tokens with Guardian artefact states and revoke stale entries.
 - Weekly assistant manifest reviews ensure disclaimers and policy contexts match Settings snapshots.
@@ -410,7 +426,7 @@ ______________________________________________________________________
 **Failure modes & handling:** Dependency outages or schema drift trigger runbooks and coordinated rollbacks with owning teams. **|**
 **Observability:** Cross-service dashboards, SSE monitors, audit logs, synthetic checks. **|**
 **Breadcrumbs:** Linked service specifications below. **|**
-**References:** Notifications, Guardian, LLM Registry, LP Engine, Settings Registry, Digital Signer, Worker Cluster specs. **|**
+**References:** Notifications, Guardian, LLM Registry, LP Engine, Settings Registry, Digital Signer, Worker Cluster specs.
 
 | Dependency | Responsibility | Notes |
 | ---------- | -------------- | ----- |
@@ -433,7 +449,7 @@ ______________________________________________________________________
 **Failure modes & handling:** Broken links detected via `scripts/docs/link_check.py`. **|**
 **Observability:** Docs CI link checker. **|**
 **Breadcrumbs:** Documentation index `docs/mkdocs.yml`. **|**
-**References:** Listed below. **|**
+**References:** Listed below.
 
 - TDD overview summary — `../overview/tdd.md §11`.
 - Notifications service specification — `../services/notifications.md`.

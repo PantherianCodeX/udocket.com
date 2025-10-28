@@ -91,7 +91,7 @@ ______________________________________________________________________
 - **Structure:** Sections follow the standard 0–10 service template; appendices referenced here live in the ops runbook catalog and Settings registry key maps.
 - **Maintenance:** Run `python scripts/docs/lint_docs.py` and `python scripts/docs/link_check.py --strict` before proposing signer changes. Signing policy or PKI updates require ADR references in the PR.
 - **Change protocol:** Modifying signature policies, TSA/OCSP profiles, or trust-root rotations demands dual approval (Security + Architecture) and an update to this spec plus the relevant runbooks.
-- **References:** TDD §7.2 (summary), ADR-0001, ADR-0003, ADR-0004, Ops runbooks RB-SIGN-\*.
+- **References:** TDD §7.2 (summary), ADR-0001, ADR-0003, ADR-0004, Ops runbooks `RB-SIGN-*`.
 - **Contacts:** Security Engineering (service owner), Platform Architecture (co-owner), on-call list `signer-oncall@`.
 
 ______________________________________________________________________
@@ -141,7 +141,7 @@ ______________________________________________________________________
 **Purpose:** Bind deliverable definitions to signing and acknowledgement behaviour. **|**
 **Contract:** Settings `sign.signature_policies[]` define reusable policies with fields `{platform_signature, client_signature, tsa_profile_id, ocsp_profile_id, fips_required, ack_template_id?}`. Deliverables reference `signature_policy_id`; switching policies emits `SIGNATURE_POLICY_CHANGE` events and regenerates signed copies. **|**
 **State:** Policies reside in Settings bundles and are denormalized into manifests; client attestations create `CLIENT_SIGNATURE_CERT` or `CLIENT_ATTESTATION` records linked to deliverables. **|**
-**Failure modes & handling:** Missing attestations, expired SLAs, or policy downgrades block release and route through RB-SIGN-ACK (§8.1). **|**
+**Failure modes & handling:** Missing attestations, expired SLAs, or policy downgrades block release and route through `RB-SIGN-ACK` (§8.1). **|**
 **Observability:** Metrics `signature_policy_violation_total`, `client_ack_pending_total`, dashboards “Deliverable Signatures” and “Portal Acknowledgements”; SSE events `deliverable.client_ack_required`. **|**
 **References:** §4.2 Certificate storage, §5.3 Policy mismatch failure mode, Guardian spec §5.2. **|**
 **Breadcrumbs:** Policy resolver `apps/platform/operations/signer_policy.py`, portal workflow `apps/platform/portal/acknowledgement.py`, tests `tests/platform/operations/test_signature_policy.py::test_client_ack_enforced`.
@@ -160,7 +160,7 @@ ______________________________________________________________________
 **Purpose:** Anchor signatures to certified cryptographic domains. **|**
 **Contract:** Document Signer operates with Azure Key Vault Managed HSM (FIPS 140-3). Trust roots include an offline RSA-4096 root (`uDocket-root`), online ECDSA P-384 intermediate (`uDocket-deliverable`), and per-tenant leaf certificates; rotations require dual approval and automated validation. **|**
 **State:** Certificates + key identifiers persist in Settings (`sign.trust_roots[]`, `sign.hsm.key_id`), manifest metadata, and audit artifacts `SIGN_TRUST_ROOTS@<version>`. **|**
-**Failure modes & handling:** Attestation failure, expired CMVP certificate, or key drift halts signing, triggers RB-SIGN-TRUSTROTATE, and pages Security. **|**
+**Failure modes & handling:** Attestation failure, expired CMVP certificate, or key drift halts signing, triggers `RB-SIGN-TRUSTROTATE`, and pages Security. **|**
 **Observability:** Metrics `sign_hsm_attestation_status`, `sign_trust_root_version`, CI job `ci-fips-scan`, and runbook evidence stored under `ops/security/key_rotation/`. **|**
 **References:** §7 Security & compliance, §8 Operational notes, ADR-0003. **|**
 **Breadcrumbs:** HSM integration `apps/platform/operations/signer_hsm.py`, trust-root rotation script `ops/scripts/security/rotate_signing_keys.py`, tests `tests/platform/operations/test_signer_modes.py::test_pkcs7_and_cades`.
@@ -226,7 +226,7 @@ curl -X POST https://platform.local/api/v1/sign \
 **State:** Attestations stored with signature manifest references; portal prevents download until acknowledgment completes where required. **|**
 **Failure modes & handling:** SLA breaches mark deliverables `PENDING_CLIENT_ACK` with warning; Guardian auto-quarantines after deadline. **|**
 **Observability:** Metrics `client_ack_pending_total`, `client_ack_timeout_total`, audit event `CLIENT_ACKNOWLEDGEMENT_RECORDED`. **|**
-**References:** §2.2 Signature policies, Ops runbook RB-SIGN-ACK. **|**
+**References:** §2.2 Signature policies, Ops runbook `RB-SIGN-ACK`. **|**
 **Breadcrumbs:** Portal controller `apps/platform/portal/acknowledgement.py`, tests `tests/platform/portal/test_client_ack.py`.
 
 ______________________________________________________________________
@@ -271,7 +271,7 @@ ______________________________________________________________________
 **Purpose:** Contain revocation-check outages without jeopardizing compliance. **|**
 **Contract:** Soft-fail window (default 30 minutes) allows downloads while responders recover; beyond that deliverables quarantine and portal links revoke until verification succeeds. **|**
 **State:** Soft-fail incidents recorded in `ops/security/incidents/`, deliverables flagged `SIGN_REVOKE_STATUS_UNKNOWN`. **|**
-**Handling:** Follow RB-SIGN-TSA—invalidate cache, switch to secondary responder, coordinate with vendor, and re-run verification before restoration. **|**
+**Handling:** Follow `RB-SIGN-TSA`—invalidate cache, switch to secondary responder, coordinate with vendor, and re-run verification before restoration. **|**
 **Observability:** Alerts `ocsp_unreachable_total`, `tsa_drift_seconds`, `sign_soft_fail_active_total`; dashboards highlight responder status. **|**
 **Breadcrumbs:** Runbook `ops/runbooks/signer/tsa_ocsp_outage.md`, automation `ops/scripts/security/failover_tsa.py`.
 
@@ -280,7 +280,7 @@ ______________________________________________________________________
 **Purpose:** Ensure cryptographic compliance before accepting traffic. **|**
 **Contract:** Service aborts on failed attestation (`EXIT_FIPS_ATTESTATION_FAILED`); no signatures issued until `fips_healthcheck.verify()` passes. **|**
 **State:** Failure evidence stored under `ops/security/fips/attestation_failures/`; incidents logged with waiver references if temporary downgrade approved. **|**
-**Handling:** Execute RB-SIGN-FIPS—verify module certificate, reseed HSM/DRBG, rotate modules if required, and document remediation. **|**
+**Handling:** Execute `RB-SIGN-FIPS`—verify module certificate, reseed HSM/DRBG, rotate modules if required, and document remediation. **|**
 **Observability:** Metrics `crypto_fips_selftest_fail_total`, `crypto_fips_module_cert_id`, alerts `fips_attestation_failure_total`. **|**
 **Breadcrumbs:** Security guard `packages/udocket_core/security/fips_guard.py`, tests `tests/security/test_fips_guard.py`.
 
@@ -289,7 +289,7 @@ ______________________________________________________________________
 **Purpose:** Prevent release when policies or acknowledgements fall out of alignment. **|**
 **Contract:** Deliverables remain blocked if signature policy conflicts with org trust mode or client acknowledgement window expires. **|**
 **State:** Portal stores SLA timestamps; Guardian queue marks deliverables with `SIGNATURE_POLICY_MISMATCH` or `CLIENT_ACK_OVERDUE`. **|**
-**Handling:** Follow RB-SIGN-ACK—update policy, regenerate signed deliverables, or secure client countersignature before reopening portal access. **|**
+**Handling:** Follow `RB-SIGN-ACK`—update policy, regenerate signed deliverables, or secure client countersignature before reopening portal access. **|**
 **Observability:** Metrics `signature_policy_violation_total`, `client_ack_timeout_total`; SSE events notify staff of overdue acknowledgements. **|**
 **Breadcrumbs:** Portal workflow `apps/platform/portal/client_ack.py`, Guardian integration `apps/platform/operations/guardian_signer_bridge.py`.
 
@@ -333,7 +333,7 @@ ______________________________________________________________________
 **Failure modes & handling:** Stale playbooks, missing rotation artifacts, or failed release gates block deployment until remediation and evidence capture. **|**
 **Observability:** Docs lint (`build_runbook_catalog.py --check`), PagerDuty analytics, dashboards “Signer & TSA” / “Deliverable Signatures”, alert `signer_release_gate_blocked_total`. **|**
 **Breadcrumbs:** Runbooks `ops/runbooks/signer/`, automation `ops/scripts/security/rotate_signing_keys.py`, release tooling `ops/scripts/deploy/signing_release_gate.py`, drill tracker `ops/change/signer_rotations.ics`. **|**
-**References:** §5 Failure modes, §6 Observability, §7 Security & compliance, Ops runbooks RB-SIGN-\*. **|**
+**References:** §5 Failure modes, §6 Observability, §7 Security & compliance, Ops runbooks `RB-SIGN-*`.
 
 ### 8.1 Operational posture (binding)
 
@@ -342,8 +342,8 @@ ______________________________________________________________________
 **State:** Rosters `ops/security/signer_roster.yaml`, freeze calendar `ops/security/key_rotation/freeze_windows.ics`, attestation reports `ops/security/fips_attestation/<date>.json`. **|**
 **Failure modes & handling:** Missing evidence or unstaffed rotations trigger incident review; signing remains paused until posture restored. **|**
 **Observability:** PagerDuty response metrics, dashboards “Signer & TSA”, alert `signer_operator_coverage_gap_total`. **|**
-**References:** §7 Security & compliance, RB-SIGN-FIPS. **|**
-**Breadcrumbs:** Roster files, freeze calendar, App.O decision logs. **|**
+**References:** §7 Security & compliance, `RB-SIGN-FIPS`. **|**
+**Breadcrumbs:** Roster files, freeze calendar, App.O decision logs.
 
 - Startup attestation validates CMVP certificate IDs (`security.crypto.expected_cert_id`), DRBG source, and HSM availability before pods accept work; failures abort boot.
 - FIPS-required tenants pin signer pods to dedicated node pools and verify hardware AES, DRBG, and HSM slots via readiness probes.
@@ -353,42 +353,59 @@ ______________________________________________________________________
 ### 8.2 Incident triggers (binding)
 
 **Purpose:** Map alerts and dashboards to signer playbooks so responders act immediately. **|**
-**Contract:** Alert definitions (`infra/monitoring/signer-prometheus-rules.yaml`) embed RB-SIGN-\* identifiers; on-call documents evidence before clearing incidents. **|**
+**Contract:** Alert definitions (`infra/monitoring/signer-prometheus-rules.yaml`) embed `RB-SIGN-*` identifiers; on-call documents evidence before clearing incidents. **|**
 **State:** Alert payloads record activation IDs, key versions, and waiver references under `ops/security/incidents/signer_<date>.jsonl`. **|**
 **Failure modes & handling:** Missing annotations or misrouted alerts require follow-up tasks and lint updates. **|**
 **Observability:** Grafana “Signer & TSA”, PagerDuty routing, synthetic TSA/OCSP checks. **|**
-**References:** §5 Failure modes, §6 Observability, RB-SIGN-TSA. **|**
-**Breadcrumbs:** Alert rule files, PagerDuty service configs, runbook catalog. **|**
+**References:** §5 Failure modes, §6 Observability, `RB-SIGN-TSA`. **|**
+**Breadcrumbs:** Alert rule files, PagerDuty service configs, runbook catalog.
 
-- `signer_tsa_error_total` / `signer_ocsp_unknown_total` → RB-SIGN-TSA for TSA/OCSP outage response.
-- `signer_hsm_attestation_status{status="failed"}` → RB-SIGN-FIPS before restoring queue processing.
-- `signer_waiver_active_total` / `signer_release_gate_blocked_total` → review waivers via RB-SIGN-ACK or RB-SIGN-TRUSTROTATE and update App.O.
+- `signer_tsa_error_total` / `signer_ocsp_unknown_total` → `RB-SIGN-TSA` for TSA/OCSP outage response.
+- `signer_hsm_attestation_status{status="failed"}` → `RB-SIGN-FIPS` before restoring queue processing.
+- `signer_waiver_active_total` / `signer_release_gate_blocked_total` → review waivers via `RB-SIGN-ACK` or `RB-SIGN-TRUSTROTATE` and update App.O.
 - `signer_queue_depth_high` and latency SLO breaches trigger backlog remediation via RB-SIGN-PIPELINE and scaling playbooks.
 
 ### 8.3 Runbooks & drills (binding)
 
 **Purpose:** Maintain executable runbooks and drill cadence for key signing scenarios. **|**
-**Contract:** Alerts map to RB-SIGN-\* playbooks; quarterly drills rehearse trust-root renewal, TSA failover, FIPS recovery, and client acknowledgement remediation. **|**
+**Contract:** Alerts map to `RB-SIGN-*` playbooks; quarterly drills rehearse trust-root renewal, TSA failover, FIPS recovery, and client acknowledgement remediation. **|**
 **State:** Runbooks `ops/runbooks/signer/`, drill evidence `ops/security/key_rotation/<timestamp>/`, tabletop notes `ops/change/signer_rotations.ics`. **|**
 **Failure modes & handling:** Stale runbooks or missing drill evidence block release sign-off until refreshed. **|**
 **Observability:** Docs lint, PagerDuty analytics, Ops governance dashboards. **|**
-**References:** RB-SIGN-TSA, RB-SIGN-FIPS, RB-SIGN-ACK, RB-SIGN-TRUSTROTATE. **|**
-**Breadcrumbs:** Runbook files, rotation scripts, drill tracker. **|**
+**References:** `RB-SIGN-TSA`, `RB-SIGN-FIPS`, `RB-SIGN-ACK`, `RB-SIGN-TRUSTROTATE`. **|**
+**Breadcrumbs:** Runbook files, rotation scripts, drill tracker.
 
-- RB-SIGN-TSA — TSA/OCSP outage response.
-- RB-SIGN-FIPS — FIPS attestation recovery.
-- RB-SIGN-ACK — Client acknowledgement remediation.
-- RB-SIGN-TRUSTROTATE — Trust-root / certificate rotation checklist.
+#### 8.3.1 Runbook index (informative)
+
+| Runbook code | Scenario | Notes |
+| ------------ | -------- | ----- |
+| `RB-SIGN-TSA` | TSA/OCSP outage response | Rotates TSA credentials, fails over to backup TSA, captures evidence |
+| `RB-SIGN-FIPS` | FIPS attestation recovery | Validates CMVP IDs, reinstates HSM slots, restores queue processing |
+| `RB-SIGN-ACK` | Client acknowledgement remediation | Reconciles acknowledgements, notifies stakeholders, updates App.O |
+| `RB-SIGN-TRUSTROTATE` | Trust-root / certificate rotation | Executes dual-publish rotation, records evidence, updates manifests |
+
+#### 8.3.2 Primary runbooks (binding)
+
+- `RB-SIGN-TSA` — TSA/OCSP outage response with rollback steps for deliverable signing.
+- `RB-SIGN-FIPS` — FIPS attestation recovery including startup attestations and hardware validation.
+- `RB-SIGN-ACK` — Client acknowledgement remediation, backlog clearing, and waiver coordination.
+- `RB-SIGN-TRUSTROTATE` — Trust-root / certificate rotation checklist covering dual publish and smoke tests.
+
+#### 8.3.3 Drill cadence & evidence (binding)
+
+- Quarterly drills cover trust-root renewal, TSA failover, FIPS recovery, and acknowledgement remediation; evidence lands in `ops/security/key_rotation/<timestamp>/`.
+- Drill scheduler `ops/change/signer_rotations.ics` tracks cadence and ownership; missed drills block release sign-off until completed.
+- Docs lint and Ops governance dashboards verify evidence uploads and runbook freshness before closing audits.
 
 ### 8.4 Migrations & backfills (normative)
 
 **Purpose:** Govern trust-root rotations, HSM migrations, and manifest replays. **|**
 **Contract:** Rotations follow dual publish (current/next) with ≤24 h overlap; manifest replays verify signatures after migrations before reopening queues. **|**
 **State:** Rotation scripts `ops/scripts/security/rotate_signing_keys.py`, evidence directories `ops/security/key_rotation/<timestamp>/`, replay outputs `ops/signing/replay/<date>/`. **|**
-**Failure modes & handling:** Rotation failures revert to prior key version and execute RB-SIGN-TRUSTROTATE; failed replays quarantine affected deliverables until resolved. **|**
+**Failure modes & handling:** Rotation failures revert to prior key version and execute `RB-SIGN-TRUSTROTATE`; failed replays quarantine affected deliverables until resolved. **|**
 **Observability:** Metrics `sign_trust_root_version`, replay divergence counters, CI job `ci-fips-scan`. **|**
-**References:** §4 State management, RB-SIGN-TRUSTROTATE. **|**
-**Breadcrumbs:** Rotation scripts, replay tooling, evidence archives. **|**
+**References:** §4 State management, `RB-SIGN-TRUSTROTATE`. **|**
+**Breadcrumbs:** Rotation scripts, replay tooling, evidence archives.
 
 - Pre-rotation checklist ensures HSM slot capacity, certificate bundles, and change approval before promoting new keys.
 - Post-rotation smoke tests re-sign representative artifacts and validate OCSP/TSA status before releasing queue holds.
@@ -399,10 +416,10 @@ ______________________________________________________________________
 **Purpose:** Document recurring signing tasks and release gating requirements. **|**
 **Contract:** Releases require green TSA/OCSP dashboards, no outstanding waivers without expiry/mitigation, and signer backlog SLO compliance; acknowledgment workflows must close before client delivery. **|**
 **State:** Release checklist `ops/releases/signing_release_checklist.md`, waiver logs in App.O, acknowledgement jobs `ops/signing/acknowledgement_checks.py`. **|**
-**Failure modes & handling:** Missing checklist evidence or overdue waivers halt deployment until mitigated; acknowledgement backlog triggers RB-SIGN-ACK. **|**
+**Failure modes & handling:** Missing checklist evidence or overdue waivers halt deployment until mitigated; acknowledgement backlog triggers `RB-SIGN-ACK`. **|**
 **Observability:** Deployment guard `scripts/ci/check_signer_release.py`, metrics `signer_release_gate_blocked_total`, `signer_ack_pending_total`. **|**
 **References:** §7 Security & compliance, Notifications spec §7, Guardian spec §5. **|**
-**Breadcrumbs:** Release tooling, waiver logs, acknowledgement workflows. **|**
+**Breadcrumbs:** Release tooling, waiver logs, acknowledgement workflows.
 
 - Release gate automation validates TSA/OCSP dashboards, signer queue depth, and waiver status before allowing cutover.
 - Daily jobs reconcile client acknowledgement SLAs and notify Portal when outstanding signatures remain.
