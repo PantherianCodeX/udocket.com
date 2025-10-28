@@ -122,43 +122,59 @@
 - Reconcile manual artifacts via replay once automation recovers; annotate incidents with residual risk assessments.
 - Update waiver manifests and close-out tasks before declaring the incident resolved.
 
-## Lp Engine — Appendix R — Runbooks & drills (binding)
+## Lp Engine — 8.3 Runbooks & drills (binding)
 
-**Breadcrumbs:** Implementation `ops/runbooks/lpe/`, Tests `tests/ops/test_runbook_integrity.py::test_lpe_runbook_links`, Observability PagerDuty service “Localization & Policy Engine” with Grafana dashboards “LPE – Enforcement & Residency” and “LPE Compiler”.\\ *Purpose: Maintain actionable recovery guides for LPE incidents and drills.*\\ *Contract: Every alert enumerated in §5.2 maps to an RB-LPE identifier here; responders keep procedures evergreen through quarterly tabletop reviews.*\\ *State: Runbooks live beside automation scripts in `ops/runbooks/lpe/`; this appendix summarizes triggers, decision trees, and evidence requirements.*\\ *Failure modes & retries: Missing or stale runbooks trigger corrective action items and block deploy sign-off.*\\ *Observability: Docs lint checks confirm Appendix R coverage; PagerDuty postmortems must reference the executed RB-LPE ID.*
+**Purpose:** Maintain authoritative recovery guides and drill expectations. **|**
+**Contract:** Alerts in §8.2 map to RB-LPE identifiers; responders update the runbook index after each incident or quarterly tabletop. **|**
+**State:** Runbooks live in `ops/runbooks/lpe/` with automation scripts under `ops/scripts/lpe/`; incident evidence attaches to App.O decision logs. **|**
+**Failure modes & handling:** Missing or stale steps block deploy sign-off until the runbook is refreshed. **|**
+**Observability:** Docs lint validates references; quarterly drill calendar tracks execution. **|**
+**References:** §5 Failure modes, §8.1 Operational posture, §6 Observability. **|**
+**Breadcrumbs:** Runbooks `ops/runbooks/lpe/*.md`, automation `ops/scripts/lpe/*.py`, tests `tests/ops/test_runbook_integrity.py`.
 
-### Lp Engine — R.1 Runbook index (informative)
+### Lp Engine — 8.3.1 Runbook index (informative)
 
-- RB-LPE-COMPILER — Compiler diff escalation and rollback workflow.
-- RB-OPA-ROLLBACK — OPA bundle rollback and policy cache validation.
-- RB-LPE-WAIVER — Waiver expiry, renewal, and containment response.
-- RB-LPE-LOCALE-GAP — Missing localization coverage remediation.
+- RB-LPE-COMPILER — Compiler regression / adoption freeze.
+- RB-LPE-OPA-ROLLBACK — OPA bundle rollback & discovery remediation.
+- RB-LPE-WAIVER — Waiver expiry response.
+- RB-LPE-LOCALE-GAP — Localization coverage gap.
 
 <a id="rb-lpe-compiler"></a>
 
-### Lp Engine — R.2 RB-LPE-COMPILER — Compiler diff triage (binding)
+### Lp Engine — 8.3.2 RB-LPE-COMPILER — Compiler regression & adoption freeze (binding)
 
-**Breadcrumbs:** Implementation `ops/runbooks/lpe/compiler_diff_triage.md`, Automation `ops/scripts/lpe/run_compiler_diff.py`, Tests `tests/ops/test_runbook_integrity.py::test_compiler_diff_runbook`, Observability Grafana “LPE Compiler” (alerts `lpe_compiler_duration_overrun`, `lpe_bundle_signature_error`).\\ *Purpose: Contain defective compiler outputs and restore last-known-good bundles without service disruption.*\\ *Contract: Any compiler diff flagged unsafe or breaking must follow this procedure prior to promotion.*\\ *State: Diff artifacts reside in `ops/lpe/compiler_diffs/<date>/`; rollback bundles stored in `ops/lpe/rollback/<bundle_id>.json`.*\\ *Failure modes & retries: Skipping regression replays risks reintroducing invalid localization contexts; failing to rollback promptly blocks Settings activations.*\\ *Observability: Alert clears once safe bundle promoted and diff backlog returns to zero.*
+**Purpose:** Restore compiler health when diff guards or adoption lags fail. **|**
+**Contract:** Pause new publishes, roll back to last-good bundle, capture diff artefacts, and verify adoption across Guardian/Settings/Portal before resuming. **|**
+**State:** Evidence stored in `ops/lpe/incidents/<date>/compiler/` with bundle hashes and diff exports. **|**
+**Failure modes & handling:** Diff classification bugs, expired waivers, adoption lag; follow checklist to freeze, roll back, validate, and document. **|**
+**Observability:** Alerts `lpe_compiler_duration_overrun`, `reference_bundle_stale_total`, `lpe_policy_block_total`. **|**
+**Breadcrumbs:** Runbook `ops/runbooks/lpe/compiler.md`, automation `ops/scripts/lpe/deploy_bundle.py`, tests `tests/specs/test_lpe_compiler.py`.
 
-Triggers: `lpe_compiler_duration_overrun`, `lpe_bundle_signature_error`, change tickets tagged `LPE-COMPILER`, manual escalations from QA.
+Triggers: alerts `lpe_compiler_duration_overrun`, `lpe_bundle_signature_error`, change tickets tagged `LPE-COMPILER`, manual escalations from QA.
 
 Execution checklist:
 
 1. Freeze compiler pipeline (`lpe.compiler.enabled=false`) and announce in `#ops-announcements`.
-2. Inspect diff artifacts; confirm affected locales/regions and whether unsafe flags were raised.
+2. Inspect diff artefacts; confirm affected locales/regions and whether unsafe flags were raised.
 3. Promote previous good bundle via `ops/scripts/lpe/promote_bundle.py --bundle <id>` and capture hash evidence.
-4. Re-run regression suite (`make lpe-compiler-regressions`) and snapshot Grafana panels for incident ticket.
-5. Coordinate Settings activation replay once bundle validated; update change ticket with evidence.
+4. Re-run regression suite (`make lpe-compiler-regressions`) and snapshot Grafana panels for the incident ticket.
+5. Coordinate Settings activation replay once bundle validated; update change ticket with evidence and adoption metrics.
 
 Post-remediation:
 
 - Resume compiler pipeline and monitor `lpe_compiler_duration_seconds` for two cycles.
-- File corrective tasks (root cause, automation gaps) and attach diff artefacts to App.O decision log.
+- File corrective tasks (root cause, automation gaps) and attach diff artefacts to the App.O decision log.
 
-<a id="rb-opa-rollback"></a>
+<a id="rb-lpe-opa-rollback"></a>
 
-### Lp Engine — R.3 RB-OPA-ROLLBACK — OPA bundle rollback (binding)
+### Lp Engine — 8.3.3 RB-LPE-OPA-ROLLBACK — OPA bundle rollback (binding)
 
-**Breadcrumbs:** Implementation `ops/runbooks/lpe/opa_bundle_rollback.md`, Automation `ops/scripts/lpe/deploy_opa_bundle.py`, Tests `tests/ops/test_runbook_integrity.py::test_opa_rollback_runbook`, Observability Grafana “OPA Discovery” (alerts `opa_discovery_stale_total`, `reference_bundle_stale_total`).\\ *Purpose: Restore healthy Open Policy Agent bundles when discovery or validation failures occur.*\\ *Contract: Any production rollback must document bundle hashes, discovery health, and post-rollback validation.*\\ *State: Bundle manifests stored in `ops/lpe/opa_bundles/`; discovery checks recorded in `ops/lpe/discovery_audit.jsonl`.*\\ *Failure modes & retries: Deploying stale bundles without discovery verification risks policy drift; skipping cache flush leaves workers on outdated decisions.*\\ *Observability: Alert resolves when discovery latency normalizes and signature validation succeeds twice consecutively.*
+**Purpose:** Recover from discovery or signature failures without policy gaps. **|**
+**Contract:** Roll back to last-good bundle, flush caches, validate OPA `/status`, and gather evidence before returning traffic. **|**
+**State:** Bundle manifests under `ops/lpe/opa_bundles/`; discovery audits in `ops/lpe/discovery_audit.jsonl`. **|**
+**Failure modes & handling:** Missing signatures, discovery latency, cache poisoning; follow automated scripts to redeploy and verify. **|**
+**Observability:** Alerts `lpe_bundle_signature_error`, `opa_discovery_stale_total`. **|**
+**Breadcrumbs:** Runbook `ops/runbooks/lpe/opa_bundle_rollback.md`, automation `ops/scripts/lpe/deploy_opa_bundle.py`, `scripts/opa/flush_cache.py`.
 
 Response steps:
 
@@ -166,7 +182,7 @@ Response steps:
 2. Roll back via `ops/scripts/lpe/deploy_opa_bundle.py --bundle <last_good>` and flush worker caches (`scripts/opa/flush_cache.py`).
 3. Validate OPA `/status` and `/health` endpoints plus policy unit tests (`pytest tests/opa/test_policy_context.py`).
 4. Notify dependent teams (Settings, Guardian, Reference Manager) and confirm cached digests refresh.
-5. Attach bundle hashes, validation output, and Grafana snapshots to incident ticket.
+5. Attach bundle hashes, validation output, and Grafana snapshots to the incident ticket.
 
 Follow-up:
 
@@ -175,43 +191,51 @@ Follow-up:
 
 <a id="rb-lpe-waiver"></a>
 
-### Lp Engine — R.4 RB-LPE-WAIVER — Waiver expiry response (binding)
+### Lp Engine — 8.3.4 RB-LPE-WAIVER — Waiver expiry response (binding)
 
-**Breadcrumbs:** Implementation `ops/runbooks/lpe/waiver_expiry.md`, Automation `ops/scripts/lpe/check_waivers.py`, Tests `tests/ops/test_runbook_integrity.py::test_waiver_runbook`, Observability Grafana “Residency & Enforcement” (alerts `lpe_policy_block_spike`, `lpe_privacy_framework_enabled_total`).\\ *Purpose: Maintain compliant waiver coverage and prevent unauthorized cross-jurisdiction traffic.*\\ *Contract: Expiring waivers must either be renewed with dual approval or decommissioned before expiry.*\\ *State: Waiver ledger maintained in `ops/lpe/waivers.yaml`; renewal evidence archived under `ops/lpe/waiver_reviews/<date>/`.*\\ *Failure modes & retries: Letting waivers lapse without containment can block activations or violate residency commitments.*\\ *Observability: Alert clears once waiver renewal recorded and `lpe_policy_block_total` returns to baseline.*
+**Purpose:** Maintain compliant residency posture when waivers expire. **|**
+**Contract:** Renew with dual approvals or decommission before expiry; update Settings allowlists and run verification scripts. **|**
+**State:** Waiver ledger `ops/lpe/waivers.yaml`, renewal artefacts `ops/lpe/waiver_reviews/<date>/`. **|**
+**Failure modes & handling:** Expired waivers, missing approvals; escalate to Security + Architecture and document outcomes. **|**
+**Observability:** Alerts `lpe_policy_block_spike`, `waiver_expiring_total`. **|**
+**Breadcrumbs:** Runbook `ops/runbooks/lpe/waiver_expiry.md`, automation `ops/scripts/lpe/check_waivers.py`.
 
 Checklist:
 
-1. Review waiver ledger for entries expiring within alert window; confirm impacted locales and providers.
-2. Engage Security + Architecture for renewal decision; capture approvals in decision log.
-3. If waiver retired, update Settings allowlists and trigger Appendix R RB-LPE-LOCALE-GAP if localization fallback required.
-4. Run `ops/scripts/lpe/check_waivers.py --verify` to ensure updated posture and attach output to incident ticket.
+1. Review waiver ledger for entries expiring within the alert window; confirm impacted locales and providers.
+2. Engage Security + Architecture for renewal decision; capture approvals in the decision log.
+3. If waiver retired, update Settings allowlists and trigger §8.3.5 RB-LPE-LOCALE-GAP if localization fallback required.
+4. Run `ops/scripts/lpe/check_waivers.py --verify` to ensure updated posture and attach output to the incident ticket.
 5. Communicate outcome to affected product owners and document customer impact, if any.
 
 Audit trail:
 
-- Store approvals, renewal artefacts, and communication templates alongside incident log.
+- Store approvals, renewal artefacts, and communication templates alongside the incident log.
 - Schedule follow-up review to validate long-term remediation (automation fix, localization updates).
 
 <a id="rb-lpe-locale-gap"></a>
 
-### Lp Engine — R.5 RB-LPE-LOCALE-GAP — Localization coverage gap (binding)
+### Lp Engine — 8.3.5 RB-LPE-LOCALE-GAP — Localization coverage gap (binding)
 
-**Breadcrumbs:** Implementation `ops/runbooks/lpe/locale_gap.md`, Automation `ops/scripts/lpe/audit_locales.py`, Tests `tests/ops/test_runbook_integrity.py::test_locale_gap_runbook`, Observability Grafana “Localization QA” (alerts `lpe_locale_gap_total`, `lpe_lookup_latency_p95_breach`).\\ *Purpose: Restore locale coverage when translations, policy text, or metadata go missing.*\\ *Contract: New locales must publish translations, disclaimer copy, and QA artefacts before re-enabling bundles.*\\ *State: Locale inventories in `ops/lpe/locales.csv`; QA recordings referenced in Appendix A.*\\ *Failure modes & retries: Re-enabling locales without QA sign-off risks incorrect or missing compliance copy.*\\ *Observability: Alert resolves once locale gap metric returns to zero and QA artefacts uploaded.*
+**Purpose:** Restore localization completeness when translations or QA artefacts regress. **|**
+**Contract:** Deliver missing translations, QA recordings, and screenshots before re-enabling locales; Settings activation stays frozen until artefacts pass review. **|**
+**State:** Locale inventories `ops/lpe/locales.csv`, QA artefacts in `ops/localization/*`. **|**
+**Failure modes & handling:** Missing pseudolocale output, accessibility evidence, or localization tests; follow runbook to gather artefacts and rerun checks. **|**
+**Observability:** Alerts `lpe_localization_gap_total`, pseudolocale CI, Playwright RTL snapshots. **|**
+**Breadcrumbs:** Runbook `ops/runbooks/lpe/locale_gap.md`, automation `ops/scripts/lpe/audit_locales.py`, tests `tests/e2e/test_portal_policy_context.py`.
 
 Resolution steps:
 
 1. Identify affected locales and impacted surfaces (portal, Guardian, notifications) from alert payload.
-2. Coordinate with Localization program to deliver missing translations and QA recordings; update Appendix A checklist items.
-3. Validate `ops/scripts/lpe/audit_locales.py` passes for affected locales and attach proof to ticket.
+2. Coordinate with Localization program to deliver missing translations and QA recordings; update Appendix A checklist items.
+3. Validate `ops/scripts/lpe/audit_locales.py` passes for affected locales and attach proof to the incident ticket.
 4. Run synthetic checks (`tests/e2e/test_portal_policy_context.py::test_disclaimer_l10n`) to confirm correct copy rendering.
-5. Update Settings bundles and trigger LPE compiler rebuild; monitor `lpe_lookup_latency_p95_breach` for regression.
+5. Update Settings bundles and trigger an LPE compiler rebuild; monitor `lpe_lookup_latency_p95_breach` for regression.
 
 Post-checks:
 
 - Log decision record in App.O with locale IDs, remediation timeline, and QA sign-offs.
 - Schedule follow-up audit within one release cycle to verify coverage remains intact.
-
-______________________________________________________________________
 
 ## Ref Manager — 8.3 Runbooks & drills (binding)
 

@@ -254,7 +254,7 @@ ______________________________________________________________________
 
 - SOC 2 / ISO controls: change management, incident response, and logging mapped to specific sections (`§12`, `§12`, [`../services/settings-registry.md Appendix A`](../services/settings.md#appendix-a-settings-key-map-traceability-index)); mappings extend to PCI DSS logging, FedRAMP Moderate, and audit retention requirements surfaced in Appendix K.
 
-- Privacy frameworks in scope: GDPR/UK GDPR, CCPA/CPRA, HIPAA (US/BAA-backed workloads), PHIPA, PIPEDA, APP (Australia), LGPD (Brazil), and CPPA (Canada). Reference Manager curates policy catalogues (`../services/reference-manager.md §1.2`); Localization & Policy Engine (LPE) compiles them for enforcement (see `../services/lpe.md §1.3`).
+- Privacy frameworks in scope: GDPR/UK GDPR, CCPA/CPRA, HIPAA (US/BAA-backed workloads), PHIPA, PIPEDA, APP (Australia), LGPD (Brazil), and CPPA (Canada). Reference Manager curates policy catalogues (`../services/reference-manager.md §1.2`); Localization & Policy Engine (LPE) compiles them for enforcement (see `../services/lp-engine.md §2.1`).
 
 - Sensitive Personal Information (SPI): covers CPRA “sensitive personal information”, GDPR Article 9 special categories, and analogous provincial/federal classifications (for example: biometric identifiers, precise geolocation, racial or ethnic origin, religious beliefs, sexual orientation, union membership, genetic data, immigration status, and government identifiers). SPI inherits the platform’s high-security baseline (encryption, residency controls, reviewer accountability). Guardian enforces SPI gating, detection, and waiver flows; see `../services/guardian.md` for enforcement mechanics.
 
@@ -277,7 +277,7 @@ ______________________________________________________________________
 
 - Guardian-driven enforcement runs entirely within the service; see `../services/guardian.md` for service-level procedures.
 
-- Baseline enforcement: Reference Manager maintains jurisdiction-specific minimum controls for PII, SPI, and PHI (residency, retention, disclosure logging) as captured in `../services/reference-manager.md §1.4`. `PolicyContext` propagation and runtime policy evaluation live in `../services/lpe.md`; Settings and Guardian rely on those compiled controls when validating or judging artifacts.
+- Baseline enforcement: Reference Manager maintains jurisdiction-specific minimum controls for PII, SPI, and PHI (residency, retention, disclosure logging) as captured in `../services/reference-manager.md §1.4`. `PolicyContext` propagation and runtime policy evaluation live in `../services/lp-engine.md`; Settings and Guardian rely on those compiled controls when validating or judging artifacts.
 
 - Legal hold and destruction policies align with jurisdictional obligations captured in Appendix C.
 
@@ -289,7 +289,7 @@ ______________________________________________________________________
 
 - Guardian judgments ≤ 5 minutes P95; Compose jobs complete ≤ 45 minutes P95 under nominal load.
 - Service availability: web/channels 99.5%, Guardian 99.9%, Settings API 99.9% (due to policy enforcement criticality).
-- LPE availability, compiler latency targets, and deployment windows are defined in `../services/lpe.md §1.5`; burn-rate policies there govern bundle activations and OPA discovery pushes.
+- LPE availability, compiler latency targets, and deployment windows are defined in `../services/lp-engine.md §1`; burn-rate policies there govern bundle activations and OPA discovery pushes.
 - Latency targets: SSE job progress updates P95 \< 2s (P99 \< 5s); artifact download start \< 500 ms for approved documents.
 - Error budgets tie directly to deploy gates (`§10.8`)—breaches block releases until burn rate stabilizes.
 
@@ -482,7 +482,6 @@ metadata:
 | LLM Registry                       | FastAPI                                     | Provider catalog, health probes, token accounting, fallback logic                                                | Low QPS; run ≥2 replicas                                                                  | `llm_provider_health`, `llm_circuit_state`                                                                    |
 | Settings Service                   | FastAPI                                     | Hierarchical settings APIs, bundle activation, diff previews                                                     | Autoscale on QPS; Redis pub/sub for cache invalidation                                    | `settings_activation_total`, `settings_cache_hit_ratio`                                                       |
 | Localization & Policy Engine (LPE) | FastAPI + worker cron + compiler jobs       | Localization (locale/i18n packs), policy contexts (privacy/residency), court catalogs                            | Compiler pods scale on activation; lookup API horizontally replicated                     | `lpe_lookup_latency_seconds`, `lpe_policy_context_version`, `lpe_cache_hit_ratio`                             |
-| Policy Agent (OPA)                 | Open Policy Agent (sidecar or centralized)  | Evaluates signed policy bundles for residency, HIPAA, egress, attachment rules; emits decision logs              | Colocates sidecar per service for low latency; central cluster fans out discovery bundles | `opa_decision_latency_seconds`, `opa_bundle_status`, `opa_denied_total`                                       |
 | Reference Manager                  | FastAPI + Celery ingest workers + review UI | Source connectors (Wikipedia, court sites, vendor feeds), catalog lifecycle, questionnaires/forms administration | Ingest workers autoscale on harvest queues; reviewer workload tracked via task backlog    | `reference_manager_ingest_duration_seconds`, `reference_manager_pending_reviews`, `reference_catalog_version` |
 | Notification Service               | Celery beat + worker                        | Outbox delivery (email/SMS/in-app), receipt tracking                                                             | Scales with delivery volume; provider specific adapters                                   | `delivery_success_ratio`, `delivery_retry_total`                                                              |
 | Storage adapters                   | Sidecar / init jobs                         | Object storage integrity checks, audio normalization caching                                                     | Scoped per namespace                                                                      | `storage_hash_mismatch_total`, `object_store_latency_seconds`                                                 |
@@ -503,7 +502,7 @@ metadata:
 
 *Purpose: Point to the dedicated LPE specification that governs localization, residency, and policy enforcement.*
 
-The full service charter, compiler pipeline, PolicyContext contract, integrations, APIs, observability, and rollout plan now live in `../services/lpe.md`. Refer to that document for normative requirements, examples, testing matrices, and migration milestones. This platform TDD cites LPE outputs (PolicyContext digests, localization packs, waiver metadata) where needed but does not duplicate their definitions.
+The full service charter, compiler pipeline, PolicyContext contract, integrations, APIs, observability, and rollout plan now live in `../services/lp-engine.md`. Refer to that document for normative requirements, examples, testing matrices, and migration milestones. This platform TDD cites LPE outputs (PolicyContext digests, localization packs, waiver metadata) where needed but does not duplicate their definitions.
 
 ### 3.5 Reference Manager (catalog ingestion & lifecycle)
 
@@ -541,7 +540,7 @@ All normative requirements for Reference Manager—including connectors, governa
 
 - **Notification channels:** Email/SMS providers configured per organization; webhook adapters log request/response pairs with PII masking.
 
-- **Localization & Policy Engine (LPE):** Runtime resolver for localization and policy bundles; refer to `../services/lpe.md` for compilation, adoption, and API contracts.
+- **Localization & Policy Engine (LPE):** Runtime resolver for localization and policy bundles; refer to `../services/lp-engine.md` for compilation, adoption, and API contracts.
 
 - **Reference Manager sources:** Managed per `../services/reference-manager.md §2.1`, which documents approved connectors, throttles, and evidence capture requirements.
 
@@ -565,7 +564,6 @@ ______________________________________________________________________
 - Drift detection: nightly job resolves each configured host, validates SAN entries against `network.egress.allowed_hosts`, compares resulting CIDRs to the allowlist, and pages when drift is detected. The job also verifies that provider metadata still advertises the approved residency posture.
 - Telemetry: `residency_block_total` increments on blocks; audit records include `RESIDENCY_POLICY_BLOCK` reason and settings snapshot hash; dashboards highlight block rates per org/region.
 - Expansion posture: RM catalogs enumerate global regions (NA/EU/APAC). New jurisdictions enable by adding allowlist entries plus waiver or DPA references; App.O ledger tracks approvals. Synthetic tenant “EU-REFERENCE” exercises EU-only paths quarterly to confirm Azure EU endpoints, storage buckets, vector shards, and TSA integrations honor EU residency before production onboarding.
-- Waiver enforcement: active waivers embed `waiver_id`/expiry into `PolicyContext`; Guardian and workers relay this to OPA and stamp manifests with `cross_region=true` plus reason `RESIDENCY_WAIVER_USED`. Absent or expired waivers force `POLICY_BLOCK` responses so operators remediate before promotion.
 
 <figure class="full-width-diagram">
   <img class="diagram" src="../build/mermaid/services/lp-engine/diagrams/residency-policy-enforcement-v1.png" alt="Residency policy enforcement sequence">
@@ -636,7 +634,7 @@ ______________________________________________________________________
 
 *Purpose: Define the identity backbone and token contract consumed by all services.*
 
-- Realm `uDocket` with clients `staff-ui`, `client-portal`, `service-api`, `guardian`, `signer`, `settings`, `notifications`, `llm-registry`, `reference-manager`, `lpe` (former `reference` client retained temporarily as read-only shim until the migration window in `../services/lpe.md §6.3`).
+- Realm `uDocket` with clients `staff-ui`, `client-portal`, `service-api`, `guardian`, `signer`, `settings`, `notifications`, `llm-registry`, `reference-manager`, `lpe` (former `reference` client retained temporarily as read-only shim until the migration window in `../services/lp-engine.md §8.4`).
 - Roles split into realm (`sysadmin`, `auditor`) and organization scope (`org_admin`, `org_manager`, `org_operator`, `org_reviewer`, `org_external_counsel`, `org_client`).
 - Tokens include `org_ids[]`, `active_org_id`, `active_org_roles[]`, optional `org_directory[]`. Middleware rejects any request where `active_org_id ∉ org_ids[]`.
 - Access tokens ≤15 minutes, refresh tokens 12h (staff) / 2h (portal); offline tokens disabled unless security approves exceptions. Step-up MFA signaled via OIDC `acr` claim for sensitive endpoints.
@@ -690,7 +688,7 @@ ______________________________________________________________________
 
 *Purpose: Map PolicyContext masking profiles onto database enforcement artifacts.*
 
-- Masking profiles in `PolicyContext` (see `../services/lpe.md §2.6`) compile into `field_mask_rule` rows that parameterize the SQL policies below. Activation fails if any required profile lacks entries for `CASE`, `ARTIFACT`, `QA_LOG`, `GUARDIAN_JUDGMENT`, or `DELIVERY_RECEIPT`.
+- Masking profiles in `PolicyContext` (see `../services/lp-engine.md §2.1`) compile into `field_mask_rule` rows that parameterize the SQL policies below. Activation fails if any required profile lacks entries for `CASE`, `ARTIFACT`, `QA_LOG`, `GUARDIAN_JUDGMENT`, or `DELIVERY_RECEIPT`.
 
 - Normative enforcement DDL (excerpt; see Appendix J for full catalog):
 
@@ -1941,7 +1939,6 @@ ______________________________________________________________________
 - Module attestation: on startup every service invokes the shared `fips_healthcheck.verify()` routine, which validates (1) OpenSSL/BoringCrypto initialized with FIPS provider enabled, (2) module self-test pass/fail from the vendor API, (3) reported CMVP certificate ID matches `security.crypto.expected_cert_id`, and (4) entropy sources map to approved DRBGs (HSM RNG, `/dev/random` in FIPS mode, or cloud KMS FIPS endpoints). Failures abort boot (`EXIT_FIPS_ATTESTATION_FAILED`) and trigger `udocket_fips_startup_failure_total{service}` alerts.
 - Permissible cryptographic modules: OpenSSL 3.x FIPS provider (`openssl-fipsmodule`), AWS CloudHSM, Azure Managed HSM (FIPS 140-3), Google Cloud KMS FIPS endpoints, and BoringCrypto builds compiled in validated FIPS mode. Any alternative module requires Security review and a documented CMVP certificate before enablement.
 - Algorithm enforcement: cryptographic helpers (`packages.udocket_core.crypto.*`) expose only FIPS-approved primitives while FIPS mode is effective. Attempts to use non-approved algorithms raise `FipsAlgorithmError`. Static analysis (`scripts/security/fips_cipher_lint.py`) and CI job `ci-fips-scan` block merges introducing disallowed primitives (`md5`, `chacha20`, `rsa1024`, etc.).
-- Bundle signature enforcement: when `security.crypto.fips_mode|required`, services consuming OPA bundles invoke `opa_verify_dual_signature()` which asserts `ecdsa_p256` signatures in addition to Ed25519. Missing or invalid ECDSA signatures raise `FipsBundleSignatureError` and block activation; CI job `ci-opa-bundle-signatures` verifies both signatures exist in artifacts published under `ops/lpe/bundles/*.tar.gz`. Metric `opa_bundle_fips_signature_missing_total` backs Grafana alert “OPA Bundle FIPS Coverage”.
 - DRBG & key generation: key material, nonces, and random tokens originate from FIPS-validated sources—HSM-backed RNG for keys, OpenSSL DRBG with approved seed sources for software operations, and `azure.keyvault.keys` FIPS endpoints for managed keys. Services record `fips_drbg_source` inside manifests/auxiliary records and export `crypto_drbg_health_seconds` gauges.
 - Runtime monitoring: metrics (`crypto_fips_mode{service}`, `crypto_fips_module_cert_id{service}`, `crypto_fips_selftest_fail_total`, `crypto_fips_drbg_reseed_total`) feed the central dashboard. Guardian refuses to approve artifacts whose manifests lack `fips_mode=true` when the owning org or deliverable policy specifies FIPS enforcement.
 - Audit logging: every signing, hashing, HMAC, or envelope-encryption event appends `{fips_mode, fips_module_cert_id, fips_validation_level, fips_drbg_source}` to the ops JSON/JSONL entry plus the case-level auxiliary record. Appendix D schemas and App.F examples reflect the new fields; Settings activation runs `scripts/security/validate_fips_tagging.py` to enforce parity.
@@ -2540,7 +2537,7 @@ Payloads (illustrative)
 
 *Purpose: Defer to the dedicated LPE API specification.*
 
-See `../services/lpe.md §4` for endpoint definitions, SDK responsibilities, legacy shim guidance, and error models. This section intentionally references that document to avoid divergence.
+See `../services/lp-engine.md §4` for endpoint definitions, SDK responsibilities, legacy shim guidance, and error models. This section intentionally references that document to avoid divergence.
 
 ### 10.12 Assistant capability & settings APIs
 
@@ -2667,7 +2664,7 @@ ______________________________________________________________________
 *Purpose: Enforce explicit checks on every fetch to avoid stale or unauthorized content.*
 
 - Preconditions: `status='APPROVED'`, case/org membership, and fresh signed URL or token.
-- Conditional requests: clients **MUST** send `If-Match` with the last seen strong ETag (surfaced inline on the portal artifact detail panel as “Integrity tag,” localized via strings provided by LPE per `../services/lpe.md §3.4`, and embedded in the download button tooltip); mismatches or missing headers yield `412 PRECONDITION_FAILED` with guidance (`portal.download.error.etag_mismatch`) to refresh metadata before retrying.
+- Conditional requests: clients **MUST** send `If-Match` with the last seen strong ETag (surfaced inline on the portal artifact detail panel as “Integrity tag,” localized via strings provided by LPE per `../services/lp-engine.md §3.1`, and embedded in the download button tooltip); mismatches or missing headers yield `412 PRECONDITION_FAILED` with guidance (`portal.download.error.etag_mismatch`) to refresh metadata before retrying.
 - Rate limits: per‑user/org caps; anomalies invalidate links and prompt step-up MFA when configured.
 
 #### 11.2.3 Approval exception handling (binding)
@@ -2690,7 +2687,7 @@ ______________________________________________________________________
 - Automated validation: CI pipelines run Storybook/axe-core scans (`npm run test:axe`), `pa11y-ci` against review environments, and Lighthouse accessibility budgets (≥ 95). Failures block merges; waivers require `A11Y_EXCEPTION` artifacts with VP Product + Accessibility Lead approval and expiry ≤ 30 days. ESLint (jsx-a11y), TypeScript lint rules, and Playwright a11y assertions enforce guardrails locally.
 - Manual audits: pre-release sign-off exercises assistive tech pairings (NVDA/Firefox, JAWS/Edge, VoiceOver/Safari + iOS, TalkBack/Android), keyboard-only flows, high-contrast themes, reduced-motion and zoom at ≥ 200 %. Findings feed the `ACCESSIBILITY_AUDIT` artifact (severity, WCAG criterion, reproduction steps, remediation owner/SLA) and block GA cutover until addressed or formally waived.
 - Document & template accessibility: Compose/Analyze templates must satisfy PDF/UA, tagged headings, logical reading order, table summaries, alternative text, and annotation markers for notes. Template metadata captures `{a11y_validation_status, validated_at, validator_tool, reviewer}`; Guardian rejects deliverables lacking `a11y_validation_status=pass`. Short/long summaries and timelines include structured captions for figures and transcript references for screen-reader context.
-- Localization governance, QA automation, pseudolocale enforcement, and release evidence now live in `../services/lpe.md §2.4` and Appendix A. This platform TDD references those controls only via the shared localization keys surfaced in UI/portal flows.
+- Localization governance, QA automation, pseudolocale enforcement, and release evidence now live in `../services/lp-engine.md §2.4` and Appendix A. This platform TDD references those controls only via the shared localization keys surfaced in UI/portal flows.
 - Merge-stop checklist: reviewers block merges when (1) keyboard traps or focus misorder occur, (2) pointer-only interactions omit alternative input, (3) focus indicators fall below WCAG contrast/size requirements, (4) error messages fail to raise an `aria-live` announcement, (5) loading states lack accessible names, or (6) automated tooling reports unresolved Level A/AA issues.
 
 #### 11.3.1 Accessibility governance & remediation (binding)
@@ -2704,7 +2701,7 @@ ______________________________________________________________________
 - Metrics & reporting: dashboards expose `a11y_open_defects_total{severity}`, `a11y_sla_breached_total`, `a11y_ci_violation_total`, `a11y_manual_issues_per_release`, and `a11y_portal_score`. Quarterly reviews present progress to Architecture Steering and Org Compliance; annual external audits produce `ACCESSIBILITY_ATTESTATION` artifacts.
 - Test coverage: regression pack includes axe snapshots for shared components, Playwright keyboard navigation tests, focus-visible screenshots, and contract tests verifying notification banners announce via `aria-live`. Assistive-technology scripts run nightly in staging; artifacts include recordings, logs, and validation results.
 - Waivers: `A11Y_EXCEPTION` artifacts require justification, mitigations, alternate accessible path, expiry ≤ 30 days, and dual approval (Accessibility Lead + Org CISO when regulated data present). Guardian denies `CLEARED_FOR_USE` status for deliverables covered by active waivers unless a conformant alternative is documented.
-- Third-party evaluation: embedded widgets/document viewers must ship vendor WCAG 2.2 AA attestations and pass our automated suite before onboarding. Reference Manager tracks vendor statements; enforcement rules for localization/policy adoption reside in `../services/lpe.md`.
+- Third-party evaluation: embedded widgets/document viewers must ship vendor WCAG 2.2 AA attestations and pass our automated suite before onboarding. Reference Manager tracks vendor statements; enforcement rules for localization/policy adoption reside in `../services/lp-engine.md`.
 - Continuous improvement: annual independent WCAG audit drives roadmap backlog; outcomes logged in Architecture Steering minutes with remediation checkpoints.
 
 ### 11.4 Real-time collaboration (SSE + Channels policies)
@@ -2916,7 +2913,7 @@ ______________________________________________________________________
 
 - Forbidden fields (binding): log scrubber removes `Authorization`, `Cookie`, `Set-Cookie`, `X-Request-Signature`, `X-Signature-Key-Id`, raw signed URLs, and any header matching `*-Token` before serialization. CI test `tests/logging/test_redaction.py::test_forbidden_headers_masked` asserts the mask list, and runtime metrics `logging_redaction_dropped_total` surface any attempt to log a banned key.
 
-- Metrics: queue depth, job durations, review-service latency/throughput (`guardian_judgment_latency_seconds`, `guardian_cleared_ratio`, `guardian_pending_total`, `guardian_pending_oldest_seconds`, `guardian_submission_timeout_total`), Signer verify latency (including `sign_verify_status_total`, `ocsp_latency_seconds`, `ocsp_staple_age_seconds`, `tsa_latency_seconds`, `tsa_time_drift_seconds`), LLM health/circuit state, delivery rates, integrity incidents (`integrity_scan_queue_depth`, `integrity_quarantine_total`), review queue health (`review_queue_backlog_total`, `review_queue_oldest_seconds`), false-positive sampling (`guardian_quarantine_false_positive_total`), job lifecycle signals (`job_stalled_total`, `job_watchdog_warning_total`, `job_watchdog_timeout_total`, `job_cancellation_total`), watchdog runner health (`watchdog_runner_lag_seconds`, `watchdog_runner_missed_total`), upload scanning (`upload_scan_duration_seconds`, `upload_scan_infected_total`, `upload_scan_error_total`), Reference Manager dashboards per `../services/reference-manager.md §5.1`, SSE reconnect rate, `artifacts_cleared_total`, `artifacts_approved_total`, `time_to_approval_seconds`. LPE runtime metrics live in `../services/lpe.md §5`. All Prometheus metrics use seconds for duration histograms and `_total` counters for events; legacy `*_ms` signals are deprecated and scheduled for removal in v7 GA (§12.6).
+- Metrics: queue depth, job durations, review-service latency/throughput (`guardian_judgment_latency_seconds`, `guardian_cleared_ratio`, `guardian_pending_total`, `guardian_pending_oldest_seconds`, `guardian_submission_timeout_total`), Signer verify latency (including `sign_verify_status_total`, `ocsp_latency_seconds`, `ocsp_staple_age_seconds`, `tsa_latency_seconds`, `tsa_time_drift_seconds`), LLM health/circuit state, delivery rates, integrity incidents (`integrity_scan_queue_depth`, `integrity_quarantine_total`), review queue health (`review_queue_backlog_total`, `review_queue_oldest_seconds`), false-positive sampling (`guardian_quarantine_false_positive_total`), job lifecycle signals (`job_stalled_total`, `job_watchdog_warning_total`, `job_watchdog_timeout_total`, `job_cancellation_total`), watchdog runner health (`watchdog_runner_lag_seconds`, `watchdog_runner_missed_total`), upload scanning (`upload_scan_duration_seconds`, `upload_scan_infected_total`, `upload_scan_error_total`), Reference Manager dashboards per `../services/reference-manager.md §5.1`, SSE reconnect rate, `artifacts_cleared_total`, `artifacts_approved_total`, `time_to_approval_seconds`. LPE runtime metrics live in `../services/lp-engine.md §5`. All Prometheus metrics use seconds for duration histograms and `_total` counters for events; legacy `*_ms` signals are deprecated and scheduled for removal in v7 GA (§12.6).
 
 - FinOps metrics: `llm_cost_estimate_total{org, case, job, model}`, `finops_cost_per_case_usd{org, case}`, `finops_cost_per_org_usd{org, month}`, `delivery_events_total{org, channel, status}`, `finops_mom_regression_flag{org}`.
 
@@ -3047,7 +3044,6 @@ ______________________________________________________________________
 - Autoscaling policies: HPAs for web/channels (CPU + request latency), workers (queue depth), Guardian, Compose, and Signer tiers (p95 latency). Each deployment keeps `minReplicas=2`, `maxReplicas=10`, and targets 70 % CPU unless a service-specific metric overrides it (for example, review-service latency-based scaling). Compose lanes scale independently from Guardian so summarization surges never starve policy enforcement; KEDA bindings monitor queue depth per lane to add burst capacity without violating residency budgets.
 - Capacity reviews quarterly: evaluate job volume, LLM spend, storage growth. Provide forecasts to FinOps (link to §12.9).
 - Performance budgets tracked via dashboards: upload finalize ≤ 5s, SSE lag P95 \< 2s (P99 \< 5s), LLM lane runtime budgets (5-15 minutes per lane depending on complexity).
-- Stress tests run pre-release using synthetic workloads (k6 + Locust) that exercise Guardian, LPE/OPA evaluation, and RLS-heavy API paths; results captured in `../ops/runbooks/index.md` for regression comparison and must meet App.L baselines before shipping.
 - Benchmark snapshots in App.L capture the latest measured baselines feeding these budgets; deviations trigger escalation before release.
 
 #### 12.5.1 Failure taxonomy & resilience (binding)
@@ -3100,7 +3096,7 @@ ______________________________________________________________________
 - Guardian SLO & Throughput (SRE): judgment latency P50/P95/P99, error rate, queue depth/backlog age (`guardian_pending_total`, `guardian_pending_oldest_seconds`), submission timeout rate (`guardian_submission_timeout_total`), false-positive ratio (`guardian_quarantine_false_positive_total / guardian_judgment_total`), synthetic success, SLO burn rate.
 - Queues & KEDA (SRE): Celery queue depth per lane, replicas, scaling events, DLQ intake and drain, job cancellation spikes (`job_cancellation_total`), watchdog escalations (`job_watchdog_timeout_total`), and review backlog ageing (`review_queue_backlog_total`, `review_queue_oldest_seconds`).
 - LLM Cost & Circuit (Platform): tokens in/out, estimated spend vs cap, circuit state per model/provider, fallback reason codes.
-- Localization & Policy Engine (Platform/SRE): dashboards and alerting requirements defined in `../services/lpe.md §5` (lookup latency, cache health, compiler cadence, adoption safety signals).
+- Localization & Policy Engine (Platform/SRE): dashboards and alerting requirements defined in `../services/lp-engine.md §5` (lookup latency, cache health, compiler cadence, adoption safety signals).
 - Reference Manager – Ingestion & Quality (Content Ops/Legal Ops): dashboards and alert thresholds live in `../services/reference-manager.md §5.1` (harvest throughput, freshness, selector health, coverage).
 - Reference Manager – Review & Publishing (Content Ops/Legal Ops): see `../services/reference-manager.md §5.1` for backlog, adoption, publish latency, and resource coverage monitors.
 - Audit Seal & WORM (SecEng): seal cadence, seal errors, WORM lag, verification status.
@@ -3233,7 +3229,6 @@ ______________________________________________________________________
 - Deterministic IDs: same anchors yield the same UUIDv5-derived reference; changed spans produce new IDs while preserving prior fingerprints in manifests.
 - Policy block: simulate region disallowance → `POLICY_BLOCK` in ContextBuilder; token ceilings truncate prompts within bounds.
 - SDK/OpenAPI alignment: `scripts/sdk/check_openapi_alignment.py` verifies generated client types remain in lock-step with OpenAPI bundles (Guardian, Settings, Jobs, Agents). The check fails when SDK model diffs do not accompany OpenAPI changes, preventing stale DX artifacts.
-- Local policy hot-reload: developers use `scripts/dev/run_lpe_hot_reload.py` to compile LPE bundles, push them to a sandbox OPA, and diff `PolicyContext` digests without staging deploys. The harness emits manifest snapshots that must be attached to PRs touching policy or locale packs.
 
 ### 13.5 Deployment gates (FinOps, error budgets, security scans)
 
@@ -3747,7 +3742,7 @@ Retention schedule (baseline; orgs may set stricter)
 - QA logs: retained for life of case; hidden from portal; included in WORM audit scope.
 - Entitlement snapshots and audit events: life of case + 2 years; WORM copies per audit policy.
 - Legal hold: any hold on the case supersedes retention timers; destruction jobs must check hold state and emit `DESTRUCTION_CERT` artifacts upon completion.
-- PolicyContext retention metadata and override governance are defined in `../services/lpe.md §2.3` and Appendix C; this appendix references those digests only when mapping artifact classes to residency and retention groups.
+- PolicyContext retention metadata and override governance are defined in `../services/lp-engine.md §2.3` and Appendix C; this appendix references those digests only when mapping artifact classes to residency and retention groups.
 
 HIPAA override mode
 
