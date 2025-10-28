@@ -56,54 +56,6 @@ header-includes:
 
 ______________________________________________________________________
 
-## 5) Failure modes (binding)
-
-**Purpose:** Capture the primary ways SR can degrade and the responses required to keep configuration trustworthy. **|**
-**Contract:** SR must fail closed on unsafe activations, drift, or residency violations; manual overrides require documented waivers and adherence to §8.3 Runbooks & drills. **|**
-**State:** Incidents log in `ops/guardian/incidents/` (shared format), `settings_drift_finding`, and `settings_activation` status fields. **|**
-**Failure modes & handling:** Validator failures, snapshot mismatches, and residency drift each trigger dedicated runbooks detailed below. **|**
-**Observability:** Alerts on `settings_activation_unsafe_total`, `settings_snapshot_mismatch_total`, and `settings_residency_violation_total` page on-call responders. **|**
-**References:** §4 State management, §6 Observability, §8.3.2 RB-GOV-008 / §8.3.3–§8.3.4 RB-RES-* / §8.3.5 RB-LOCK-006. **|**
-**Breadcrumbs:** Incident automation `ops/scripts/guardian/*.py` (shared framework), drift detector `apps/platform/settings/telemetry.py`, residency validators `apps/platform/settings/validators/residency.py`.
-
-### 5.1 Activation validator failure (binding)
-
-**Purpose:** Address situations where validators block an activation. **|**
-**Contract:** Unsafe activations remain `READY_FOR_REVIEW` with `unsafe_reasons[]`; teams must remediate data or apply approved waivers before reenabling. **|**
-**State:** Unsafe details recorded in `settings_activation_validation`; approvers annotate mitigation steps. **|**
-**Failure modes & handling:** Runbook RB-GOV-008 outlines rollback, manual review, and dual approval flow; automation freezes subsequent activations until the incident closes. **|**
-**Observability:** Alerts `settings_activation_unsafe_total` and SLO burn-rate alarms escalate to Architecture/Security. **|**
-**References:** §4.1 Activation pipeline, §4.3 Dual approval, §8.3.2 RB-GOV-008. **|**
-**Breadcrumbs:** Validation services `apps/platform/settings/services/validation.py`, tests `tests/platform/settings/test_activation_flow.py::test_pipeline_rejects_invalid`.
-
-### 5.2 Snapshot mismatch & drift (binding)
-
-**Purpose:** Respond to mismatched digests or drift between stored snapshots and effective configuration. **|**
-**Contract:** Consumers halt mutating operations when `settings_snapshot_mismatch_total` > 0 and fetch fresh snapshots; SR reconciles drift before resuming activations. **|**
-**State:** Drift findings persist in `settings_drift_finding` with remediation tickets and timestamps. **|**
-**Failure modes & handling:** RB-RES-ENDPOINT and RB-JOB-WATCHDOG guide reconciliation; SR may replay last known good bundle or regenerate snapshots. **|**
-**Observability:** “Settings Drift” dashboard, alerts `settings_snapshot_mismatch_total`, and synthetic fetches confirm when drift resolves. **|**
-**References:** §2.3 Snapshot contract, §6 Observability, §8.3.3 RB-RES-ENDPOINT / §8.3.7 RB-JOB-WATCHDOG. **|**
-**Breadcrumbs:** Telemetry module `apps/platform/settings/telemetry.py`, tests `tests/platform/settings/test_drift.py`.
-
-### 5.3 Residency enforcement incident (binding)
-
-**Purpose:** Outline remediation when residency controls fail or new endpoints appear. **|**
-**Contract:** Activations must block until Reference Manager catalogs align; waivers require Security + Architecture approval with manifest stamping. **|**
-**State:** Residency findings recorded in `settings_residency_profile` and incident logs; waivers tracked with expiry. **|**
-**Failure modes & handling:** RB-RES-BLOCK and RB-RES-ENDPOINT guide containment, catalog sync, and waiver approval; Guardian cross-checks waivers before judgments resume. **|**
-**Observability:** Alerts `settings_residency_violation_total`, audit events `RESIDENCY_ENDPOINT_NEW`, and Security tickets `SEC-RESIDENCY-ENDPOINT` drive follow-up. **|**
-**References:** §2.4 Residency & egress, §7 Security & compliance, §8.3.3–§8.3.4 RB-RES-* runbooks. **|**
-**Breadcrumbs:** Validators `apps/platform/settings/validators/residency.py`, tests `tests/platform/settings/test_residency_validators.py`.
-
-______________________________________________________________________
-
-**Audience:** Platform engineering, Guardian, Localization & Policy Engine, Reference Manager, SRE, QA, Product Operations\ **|**
-
-**Purpose:** Define Settings Registry (SR) responsibilities, contracts, activation lifecycle, and observability so every service consumes consistent, auditable configuration.
-
-______________________________________________________________________
-
 ## Document controls
 
 | Field           | Value                                                                                                                            |
@@ -123,7 +75,7 @@ Body sections follow the Purpose/Contract/State/Failure/Observability/Breadcrumb
 
 ______________________________________________________________________
 
-## 0) Reading guide
+## Reading guide
 
 - **Scope:** Service charter, hierarchical model, API/SDK contracts, activation workflow, governance controls, integrations, telemetry, and key catalog for the Settings Registry.
 - **Structure:** Numbered sections limited to three levels of depth; appendices surface detailed key maps, metrics, and seed bundle references.
@@ -421,6 +373,46 @@ ______________________________________________________________________
 **Breadcrumbs:** Cache manager `apps/platform/settings/cache.py`, tests `tests/platform/settings/test_invalidation.py`.
 
 ______________________________________________________________________
+
+## 5) Failure modes (binding)
+
+**Purpose:** Capture the primary ways SR can degrade and the responses required to keep configuration trustworthy. **|**
+**Contract:** SR must fail closed on unsafe activations, drift, or residency violations; manual overrides require documented waivers and adherence to §8.3 Runbooks & drills. **|**
+**State:** Incidents log in `ops/guardian/incidents/` (shared format), `settings_drift_finding`, and `settings_activation` status fields. **|**
+**Failure modes & handling:** Validator failures, snapshot mismatches, and residency drift each trigger dedicated runbooks detailed below. **|**
+**Observability:** Alerts on `settings_activation_unsafe_total`, `settings_snapshot_mismatch_total`, and `settings_residency_violation_total` page on-call responders. **|**
+**References:** §4 State management, §6 Observability, §8.3.2 RB-GOV-008 / §8.3.3–§8.3.4 RB-RES-* / §8.3.5 RB-LOCK-006. **|**
+**Breadcrumbs:** Incident automation `ops/scripts/guardian/*.py` (shared framework), drift detector `apps/platform/settings/telemetry.py`, residency validators `apps/platform/settings/validators/residency.py`.
+
+### 5.1 Activation validator failure (binding)
+
+**Purpose:** Address situations where validators block an activation. **|**
+**Contract:** Unsafe activations remain `READY_FOR_REVIEW` with `unsafe_reasons[]`; teams must remediate data or apply approved waivers before reenabling. **|**
+**State:** Unsafe details recorded in `settings_activation_validation`; approvers annotate mitigation steps. **|**
+**Failure modes & handling:** Runbook RB-GOV-008 outlines rollback, manual review, and dual approval flow; automation freezes subsequent activations until the incident closes. **|**
+**Observability:** Alerts `settings_activation_unsafe_total` and SLO burn-rate alarms escalate to Architecture/Security. **|**
+**References:** §4.1 Activation pipeline, §4.3 Dual approval, §8.3.2 RB-GOV-008. **|**
+**Breadcrumbs:** Validation services `apps/platform/settings/services/validation.py`, tests `tests/platform/settings/test_activation_flow.py::test_pipeline_rejects_invalid`.
+
+### 5.2 Snapshot mismatch & drift (binding)
+
+**Purpose:** Respond to mismatched digests or drift between stored snapshots and effective configuration. **|**
+**Contract:** Consumers halt mutating operations when `settings_snapshot_mismatch_total` > 0 and fetch fresh snapshots; SR reconciles drift before resuming activations. **|**
+**State:** Drift findings persist in `settings_drift_finding` with remediation tickets and timestamps. **|**
+**Failure modes & handling:** RB-RES-ENDPOINT and RB-JOB-WATCHDOG guide reconciliation; SR may replay last known good bundle or regenerate snapshots. **|**
+**Observability:** “Settings Drift” dashboard, alerts `settings_snapshot_mismatch_total`, and synthetic fetches confirm when drift resolves. **|**
+**References:** §2.3 Snapshot contract, §6 Observability, §8.3.3 RB-RES-ENDPOINT / §8.3.7 RB-JOB-WATCHDOG. **|**
+**Breadcrumbs:** Telemetry module `apps/platform/settings/telemetry.py`, tests `tests/platform/settings/test_drift.py`.
+
+### 5.3 Residency enforcement incident (binding)
+
+**Purpose:** Outline remediation when residency controls fail or new endpoints appear. **|**
+**Contract:** Activations must block until Reference Manager catalogs align; waivers require Security + Architecture approval with manifest stamping. **|**
+**State:** Residency findings recorded in `settings_residency_profile` and incident logs; waivers tracked with expiry. **|**
+**Failure modes & handling:** RB-RES-BLOCK and RB-RES-ENDPOINT guide containment, catalog sync, and waiver approval; Guardian cross-checks waivers before judgments resume. **|**
+**Observability:** Alerts `settings_residency_violation_total`, audit events `RESIDENCY_ENDPOINT_NEW`, and Security tickets `SEC-RESIDENCY-ENDPOINT` drive follow-up. **|**
+**References:** §2.4 Residency & egress, §7 Security & compliance, §8.3.3–§8.3.4 RB-RES-* runbooks. **|**
+**Breadcrumbs:** Validators `apps/platform/settings/validators/residency.py`, tests `tests/platform/settings/test_residency_validators.py`.
 
 ______________________________________________________________________
 

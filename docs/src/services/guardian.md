@@ -55,7 +55,7 @@ header-includes:
 
 ______________________________________________________________________
 
-## 0) Reading guide
+## Reading guide
 
 Use this guide before changing Guardian policy, queue semantics, or downstream workflows.
 

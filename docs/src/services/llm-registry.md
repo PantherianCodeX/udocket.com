@@ -53,7 +53,7 @@ header-includes:
 
 ______________________________________________________________________
 
-## 0) Reading guide
+## Reading guide
 
 - **Scope:** LLM provider catalog, selection orchestration, residency safeguards, moderation, reproducibility, and FinOps controls governing Analyze/Compose lanes and other agent workloads.
 - **Structure:** Follows the standard 0–10 template; subsections are marked (binding/normative/informative) per policy vocabulary. Appendices live in ops runbooks for golden sets and moderation configs.

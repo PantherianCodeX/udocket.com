@@ -54,7 +54,7 @@ header-includes:
 
 ______________________________________________________________________
 
-## 0) Reading guide
+## Reading guide
 
 - **Scope:** Document Signer service responsible for platform signatures, client attestation workflows, TSA/OCSP validation, trust-root management, and FIPS enforcement.
 - **Structure:** Sections follow the standard 0–10 service template; appendices referenced here live in the ops runbook catalog and Settings registry key maps.

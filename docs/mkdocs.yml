@@ -53,6 +53,7 @@ nav:
       - Settings Registry: services/settings.md
       - LPE: services/lp-engine.md
       - Reference Manager: services/ref-manager.md
+      - LLM Registry: services/llm-registry.md
   - Ops:
       - Runbooks: ops/runbooks/index.md
   - ADR:

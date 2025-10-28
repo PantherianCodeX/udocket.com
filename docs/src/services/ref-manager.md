@@ -52,10 +52,6 @@ header-includes:
 
 ______________________________________________________________________
 
-**Audience:** Reference Programs, Localization & Policy Engine, Settings, Guardian, Compose/Analyze, SRE, QA.
-
-**Purpose:** Describe Reference Manager responsibilities, contracts, lifecycle workflows, and observability so downstream services consume consistent, licensed, and auditable reference data.
-
 ## Document controls
 
 | Field           | Value                                                                                                                                         |
@@ -75,7 +71,7 @@ Body sections follow the Purpose/Contract/State/Failure/Observability/References
 
 ______________________________________________________________________
 
-## 0) Reading guide
+## Reading guide
 
 - **Scope:** Service charter, source ingestion, editorial workflows, publishing, integrations, and observability for Reference Manager.
 - **Structure:** Sections are limited to three levels of depth; cross-cutting diagrams live in the platform TDD appendices (App.A state flows, App.G ERD).

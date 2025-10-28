@@ -2,7 +2,7 @@
 
 This checklist ensures each service document follows the standardized structure from `docs/tdd_modularization.md`. Copy this file when authoring a new service spec and replace the placeholder text. Remove the guidance notes before publishing.
 
-## 0) Reading Guide
+## Reading Guide
 
 Use this section to orient readers before they dive into the specification. It should be bespoke to the service—no copy/paste boilerplate and no preamble block. Summarize how to consume the doc, who owns it, required prerequisites, and where to go for adjacent material. Mix short paragraphs and bullets as needed.
 

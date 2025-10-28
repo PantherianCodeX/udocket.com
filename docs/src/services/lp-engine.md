@@ -56,12 +56,6 @@ header-includes:
 
 ______________________________________________________________________
 
-**Audience:** Platform engineering, Localization & Policy program, Reference Manager, Settings, Guardian, SRE, QA, Product Localization.
-
-**Purpose:** Define Localization & Policy Engine (LPE) behaviour, contracts, observability, and runbooks so downstream services consume consistent localization, residency, and compliance data.
-
-______________________________________________________________________
-
 ## Document controls
 
 | Field           | Value                                                                                                                |
@@ -81,7 +75,7 @@ Body sections follow the Purpose/Contract/State/Failure/Observability/Breadcrumb
 
 ______________________________________________________________________
 
-## 0) Reading guide
+## Reading guide
 
 - **Scope:** Service charter, compiler/runtime internals, API contracts, observability, OPA bundle management, rollout controls, and runbooks for LPE.
 - **Structure:** Sections follow the standard 0–10 outline; §8 contains the operational posture, alert triggers, runbook summaries, migrations, and workflows that previously lived in Appendix R.
