@@ -803,7 +803,7 @@ jobs:
 * [x] Reference Manager: moved & filled, summary.
 * [x] Notifications: moved & filled, summary.
 * [x] Web App: moved & filled, summary.
-* [ ] Worker Cluster: moved & filled, summary.
+* [x] Worker Cluster: moved & filled, summary.
 * [ ] LangGraph Agents: moved and filled; summary in TDD.
 * [ ] Each new doc has the **Purpose/Contract/State/Failure/Observability** structure clearly in place.
 * [ ] Main `overview/tdd.md` now only has high-level descriptions + links.

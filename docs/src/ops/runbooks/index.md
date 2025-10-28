@@ -602,3 +602,11 @@ Response sequence:
 - Evidence: stored under `ops/webapp/drills/<date>/` with participants, remediation tasks, and dashboards snapshots.
 
 ______________________________________________________________________
+
+## Worker Cluster — 8) Operations & runbooks
+
+- Primary runbooks: RB-JOB-WATCHDOG (job watchdog/remediation), RB-LOCK-006 (advisory locks), RB-NOTIFY-* (delivery queues), RB-UPLOAD-SCAN (scanning), RB-CASE-IMPORT (legacy import).
+- Drill cadence: quarterly watchdog stall simulation, queue backlog remediation, provider failover tabletop, backfill replay exercise.
+- Evidence stored in `ops/workers/drills/<date>/` with participants, remediation tasks, and dashboards.
+
+______________________________________________________________________
