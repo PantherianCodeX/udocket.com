@@ -23,11 +23,19 @@ markdown_extensions:
           class: mermaid
           format: pymdownx.superfences.fence_div_format
   - pymdownx.tabbed
+  - attr_list
 
 plugins:
   - search
   - tags
   - redirects
+  - auto-image-scale:
+      scale_attr: "data-scale"
+      class_map:
+        img--half: 0.5
+      strict_missing: false
+      default_scale: 0.5
+
 extra_css:
   - assets/stylesheets/diagrams.css
 
@@ -36,32 +44,32 @@ extra_javascript:
   - js/mermaid-init.js
 
 nav:
-  - Overview: index.md
-  - TDD:
-      - Overview: overview/tdd/index.md
-      - Technical Design (High-Level): overview/tdd.md
-      - Appendices:
-          - Glossary: overview/tdd/appendices/glossary.md
-          - Status Mapping: overview/tdd/appendices/status-mapping.md
-          - Diagrams: overview/tdd/appendices/diagrams.md
-  - PRD:
-      - Overview: overview/prd/index.md
-      - Product Requirements: overview/prd.md
-  - Services:
-      - Web App: services/web-app.md
-      - Worker Cluster: services/worker-cluster.md
-      - Guardian: services/guardian.md
-      - Digital Signer: services/digital-signer.md
-      - Settings Registry: services/settings.md
-      - LPE: services/lp-engine.md
-      - Reference Manager: services/ref-manager.md
-      - LLM Registry: services/llm-registry.md
-      - Notifications: services/notifications.md
-  - Ops:
-      - Runbooks: ops/runbooks/index.md
-  - ADR:
-      - Overview: adr/README.md
-      - Guardian READY/QUARANTINED: adr/ADR-0001-guardian-ready-quarantine.md
-      - API Versioning & Sunset: adr/ADR-0003-api-versioning-and-sunset.md
-      - Localization & Policy Engine: adr/ADR-0004-localization-and-policy-engine.md
-      - OPA Policy Plane: adr/ADR-0005-opa-policy-plane.md
+- Overview: index.md
+- TDD:
+  - Overview: overview/tdd/index.md
+  - Technical Design (High-Level): overview/tdd.md
+  - Appendices:
+    - Glossary: overview/tdd/appendices/glossary.md
+    - Status Mapping: overview/tdd/appendices/status-mapping.md
+    - Diagrams: overview/tdd/appendices/diagrams.md
+- PRD:
+  - Overview: overview/prd/index.md
+  - Product Requirements: overview/prd.md
+- Services:
+  - Web App: services/web-app.md
+  - Worker Cluster: services/worker-cluster.md
+  - Guardian: services/guardian.md
+  - Digital Signer: services/digital-signer.md
+  - Settings Registry: services/settings.md
+  - LPE: services/lp-engine.md
+  - Reference Manager: services/ref-manager.md
+  - LLM Registry: services/llm-registry.md
+  - Notifications: services/notifications.md
+- Ops:
+  - Runbooks: ops/runbooks/index.md
+- ADR:
+  - Overview: adr/README.md
+  - Guardian READY/QUARANTINED: adr/ADR-0001-guardian-ready-quarantine.md
+  - API Versioning & Sunset: adr/ADR-0003-api-versioning-and-sunset.md
+  - Localization & Policy Engine: adr/ADR-0004-localization-and-policy-engine.md
+  - OPA Policy Plane: adr/ADR-0005-opa-policy-plane.md

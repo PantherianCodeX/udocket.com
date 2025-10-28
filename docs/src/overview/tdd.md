@@ -335,7 +335,7 @@ ______________________________________________________________________
 5. Portal invalidation notifies clients of the new deliverable and blocks any revoked link; downstream analytics and audit trails attach Guardian judgment IDs, manifests, and settings hashes (§11.2.1, App.A.2).
 
 <figure class="full-width-diagram">
-  <img class="diagram" src="../build/mermaid/services/guardian/diagrams/upload-guardian-approve-v1.png" alt="Upload → Guardian → Approve happy path">
+  <img class="diagram" src="../build/mermaid/services/guardian/diagrams/upload-guardian-approve-v1.svg" alt="Upload → Guardian → Approve happy path">
   <figcaption style="font-size: 0.9em; color: #555;">Upload → Guardian → Approve happy path</figcaption>
 </figure>
 
@@ -350,7 +350,7 @@ ______________________________________________________________________
 - Visual: see `App.A` for the full context diagram and sequence overlays.
 
 <figure class="full-width-diagram">
-  <img class="diagram" src="../build/mermaid/overview/tdd/diagrams/system-context-v1.png" alt="System context overview">
+  <img class="diagram" src="../build/mermaid/overview/tdd/diagrams/system-context-v1.svg" alt="System context overview">
   <figcaption style="font-size: 0.9em; color: #555;">System context overview</figcaption>
 </figure>
 
@@ -571,7 +571,7 @@ ______________________________________________________________________
 - Expansion posture: RM catalogs enumerate global regions (NA/EU/APAC). New jurisdictions enable by adding allowlist entries plus waiver or DPA references; App.O ledger tracks approvals. Synthetic tenant “EU-REFERENCE” exercises EU-only paths quarterly to confirm Azure EU endpoints, storage buckets, vector shards, and TSA integrations honor EU residency before production onboarding.
 
 <figure class="full-width-diagram">
-  <img class="diagram" src="../build/mermaid/services/lp-engine/diagrams/residency-policy-enforcement-v1.png" alt="Residency policy enforcement sequence">
+  <img class="diagram" src="../build/mermaid/services/lp-engine/diagrams/residency-policy-enforcement-v1.svg" alt="Residency policy enforcement sequence">
   <figcaption style="font-size: 0.9em; color: #555;">Residency policy enforcement sequence</figcaption>
 </figure>
 
@@ -1052,15 +1052,15 @@ SELECT id, org_id, case_id, type, status, content_sha256,
 
 <div style="display: flex; flex-wrap: wrap; gap: 1.5rem; margin: 1.25rem 0;">
   <figure style="flex: 1 1 18rem; text-align: center; margin: 0;">
-    <img class="diagram" src="../build/mermaid/overview/tdd/diagrams/artifact-lifecycle-overview-v1.png" alt="Artifact lifecycle overview">
+    <img class="diagram" src="../build/mermaid/overview/tdd/diagrams/artifact-lifecycle-overview-v1.svg" alt="Artifact lifecycle overview">
     <figcaption style="font-size: 0.9em; color: #555; margin-top: 0.5rem;">Overview — SA ➜ WP ➜ CD ➜ DL.RELEASED ➜ Retention gate</figcaption>
   </figure>
   <figure style="flex: 1 1 18rem; text-align: center; margin: 0;">
-    <img class="diagram" src="../build/mermaid/overview/tdd/diagrams/artifact-wp-lifecycle-v1.png" alt="Work Product lifecycle">
+    <img class="diagram" src="../build/mermaid/overview/tdd/diagrams/artifact-wp-lifecycle-v1.svg" alt="Work Product lifecycle">
     <figcaption style="font-size: 0.9em; color: #555; margin-top: 0.5rem;">Work Product — Guardian gating to <code>CLEARED_FOR_USE</code></figcaption>
   </figure>
   <figure style="flex: 1 1 18rem; text-align: center; margin: 0;">
-    <img class="diagram" src="../build/mermaid/overview/tdd/diagrams/artifact-cd-lifecycle-v1.png" alt="Candidate Deliverable lifecycle">
+    <img class="diagram" src="../build/mermaid/overview/tdd/diagrams/artifact-cd-lifecycle-v1.svg" alt="Candidate Deliverable lifecycle">
     <figcaption style="font-size: 0.9em; color: #555; margin-top: 0.5rem;">Candidate Deliverable — operator and reviewer rail to release</figcaption>
   </figure>
 </div>
@@ -1150,7 +1150,7 @@ When a **CD** is **QUEUED_FOR_REVIEW**, reviewers must pick exactly one outcome:
 “OTHER” selections require `*_other_text` payloads and feed a weekly clustering job (`ops/reference/suggest_reason_enum.py`). The job publishes candidate enum additions to Reference Manager; accepted values propagate through the LPE bundle workflow. Operations uphold an SLO to triage new candidates within 14 calendar days and either promote or close them (with rationale) within 30 days, with status tracked in the Reference Manager queue dashboard. When a candidate is promoted, Guardian ships the new enum in the next release, bumps the SSE/event schema version noted in §10.3, and publishes an upgrade notice so API consumers can deploy the updated enum set before enforcement.
 
 <figure class="full-width-diagram">
-  <img class="diagram" src="../build/mermaid/services/guardian/diagrams/approvals-edit-flows-v1.png" alt="Manual and agent edit approval flows">
+  <img class="diagram" data-scale="0.4" src="../build/mermaid/services/guardian/diagrams/approvals-edit-flows-v1.svg" alt="Manual and agent edit approval flows">
   <figcaption style="font-size: 0.9em; color: #555;">Manual and agent edit approval flows</figcaption>
 </figure>
 
@@ -1490,12 +1490,12 @@ Example
 - Audit & telemetry: each run logs structured metadata (duration, attempts, cost envelope) and writes SSE updates; metrics exported for `job_duration_seconds`, `agent_retry_total`, etc.
 
 <figure class="full-width-diagram">
-  <img class="diagram" src="../build/mermaid/overview/tdd/diagrams/analyze-compose-v1.png" alt="Analyze and Compose pipeline overview">
+  <img class="diagram" src="../build/mermaid/overview/tdd/diagrams/analyze-compose-v1.svg" alt="Analyze and Compose pipeline overview">
   <figcaption style="font-size: 0.9em; color: #555;">Analyze and Compose pipeline overview</figcaption>
 </figure>
 
 <figure class="full-width-diagram">
-  <img class="diagram" src="../build/mermaid/overview/tdd/diagrams/agent-orchestration-classes-v1.png" alt="Agent orchestration classes">
+  <img class="diagram" src="../build/mermaid/overview/tdd/diagrams/agent-orchestration-classes-v1.svg" alt="Agent orchestration classes">
   <figcaption style="font-size: 0.9em; color: #555;">Agent orchestration classes</figcaption>
 </figure>
 
@@ -1729,7 +1729,7 @@ Example
 - Appendix D documents artifact schemas keyed by `deliverable_id`; [`../services/settings-registry.md Appendix A`](../services/settings.md#appendix-a-settings-key-map-traceability-index) cross-references catalog entries with settings/tests/runbooks so auditors can trace coverage for any newly activated deliverable.
 
 <figure class="full-width-diagram">
-  <img class="diagram" src="../build/mermaid/overview/tdd/diagrams/data-lineage-v1.png" alt="Artifact data lineage">
+  <img class="diagram" src="../build/mermaid/overview/tdd/diagrams/data-lineage-v1.svg" alt="Artifact data lineage">
   <figcaption style="font-size: 0.9em; color: #555;">Artifact data lineage</figcaption>
 </figure>
 
@@ -2527,7 +2527,7 @@ ______________________________________________________________________
 - Diagram: see `overview/tdd/diagrams/dr-region-failover-v1.mmd` for the runbook flow.
 
 <figure class="full-width-diagram">
-  <img class="diagram" src="../build/mermaid/overview/tdd/diagrams/dr-region-failover-v1.png" alt="Region failover runbook">
+  <img class="diagram" src="../build/mermaid/overview/tdd/diagrams/dr-region-failover-v1.svg" alt="Region failover runbook">
   <figcaption style="font-size: 0.9em; color: #555;">Region failover runbook</figcaption>
 </figure>
 
@@ -2555,7 +2555,7 @@ ______________________________________________________________________
   - `CONCURRENCY` (OCC/locks): short jittered retries; escalate after N attempts; ensure OCC versions in APIs.
 
 <figure class="full-width-diagram">
-  <img class="diagram" src="../build/mermaid/overview/tdd/diagrams/error-flows-v1.png" alt="Error handling taxonomy">
+  <img class="diagram" src="../build/mermaid/overview/tdd/diagrams/error-flows-v1.svg" alt="Error handling taxonomy">
   <figcaption style="font-size: 0.9em; color: #555;">Error handling taxonomy</figcaption>
 </figure>
 
@@ -2803,7 +2803,7 @@ ______________________________________________________________________
 - Diagram: DSAR/erasure hard-purge flow lives in `overview/tdd/diagrams/dsar-erasure-v1.mmd`.
 
 <figure class="full-width-diagram">
-  <img class="diagram" src="../build/mermaid/overview/tdd/diagrams/dsar-erasure-v1.png" alt="DSAR hard-purge workflow">
+  <img class="diagram" src="../build/mermaid/overview/tdd/diagrams/dsar-erasure-v1.svg" alt="DSAR hard-purge workflow">
   <figcaption style="font-size: 0.9em; color: #555;">DSAR hard-purge workflow</figcaption>
 </figure>
 
@@ -3754,7 +3754,7 @@ ______________________________________________________________________
 
 *Purpose: Capture database structure evolution and reference diagrams.*
 
-- **ERD:** `docs/erd/uDocket-erd-v1.png` exported from Draw.io source with entity descriptions matching §5.1.
+- **ERD:** `docs/erd/uDocket-erd-v1.svg` exported from Draw.io source with entity descriptions matching §5.1.
 - **Migration ledger:** Table summarizing major migrations (ID, date, purpose, impacted tables). Highlights backward-compatibility considerations and deployment notes.
 - **Schema policies:** Links to lint rules ensuring ORM uses secure views, triggers enforcing immutability, and migration templates for advisory locks or partitioning.
 - **Tooling:** Instructions for generating ERD updates and running schema diff checks prior to migration PR merge.
