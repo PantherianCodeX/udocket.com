@@ -594,3 +594,11 @@ Response sequence:
 3. Validate scanner health: check signature freshness, sandbox resource utilization, and recent deployment changes.
 4. For malware detections, coordinate with Security to analyze samples; maintain quarantine until signatures updated and retest passes.
 5. Once scanners stable, re-enable uploads, replay quarantined items through the pipeline, and attach evidence to the incident record.
+
+## Web App — 8) Operations & runbooks
+
+- Runbooks: RB-JOB-WATCHDOG (job tiles), RB-PORTAL-INVALIDATION (token revocation), RB-LPE-LOCALE-GAP (localization), RB-NOTIFY-* (alerts), RB-CHAT-ABUSE (assistant incident).
+- Drill cadence: quarterly SSE resilience tabletop, accessibility regression audit, portal abuse simulation, assistant abuse scenario.
+- Evidence: stored under `ops/webapp/drills/<date>/` with participants, remediation tasks, and dashboards snapshots.
+
+______________________________________________________________________
