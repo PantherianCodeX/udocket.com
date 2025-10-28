@@ -225,11 +225,23 @@ ______________________________________________________________________
 
 ## Ref Manager — Appendix R — Runbooks & drills
 
-**Breadcrumbs:** Implementation guides under `ops/reference/runbooks/`, Tests `tests/reference/test_runbooks.py::test_catalog_alignment`, Observability PagerDuty service “Reference Manager On-Call”.\\ *Purpose: Centralize operational procedures for Reference Manager incidents and drills.*\\ *Contract: Alerts enumerated in §5 point to these runbooks; responders keep the procedures current through quarterly tabletop reviews.*\\ *State: Source of truth lives in the ops repository and is mirrored here for quick reference.*\\ *Failure modes & retries: Missing or stale entries trigger post-incident corrective actions and block publish approvals.*\\ *Observability: Docs lint (`docs_runbook_missing_total`) and incident reviews track coverage and freshness.*
+**Purpose:** Centralize operational playbooks tied to Reference Manager alerts.\
+**Contract:** Alerts enumerated in Appendix B map to these runbooks; responders keep procedures current through quarterly tabletop reviews and post-incident updates.\
+**State:** Runbooks live alongside automation scripts in `ops/reference/runbooks/`; this appendix summarizes triggers, critical steps, and closure criteria.\
+**Failure modes & handling:** Missing or stale runbooks trigger corrective actions and block deploy sign-off.\
+**Observability:** OnCall analytics track time-to-ack/resolve for RM incidents; drills recorded in App.O decision logs.\
+**References:** §5 Failure modes, §8 Operational notes, Appendix B metrics.\
+**Breadcrumbs:** Runbooks `ops/reference/runbooks/`, tests `tests/reference/test_rollback.py`, OnCall config `infra/monitoring/reference_manager-prometheus-rules.yaml`.
 
 ### Ref Manager — R.1 Runbook index (informative)
 
-**Breadcrumbs:** Implementation `ops/reference/runbooks/index.md`, Tests `tests/reference/test_runbooks.py::test_index_complete`, Observability Docs lint metric `docs_runbook_missing_total`.\\ *Purpose: Provide a fast lookup table from alerts and incidents to runbook identifiers.*\\ *Contract: Each Reference Manager alert references an ID listed here before shipping.*\\ *State: Maintained alongside monitoring configuration and mirrored in this appendix.*\\ *Failure modes & retries: Lint failures require index updates before merge.*\\ *Observability: Weekly docs lint verifies parity with PagerDuty and alertmanager routing.*
+**Purpose:** Provide a quick map from alert codes to runbook IDs.\
+**Contract:** Every RM alert references one of these IDs; new alerts require index updates before merge.\
+**State:** Index maintained in `ops/reference/runbooks/index.md` and mirrored here.\
+**Failure modes & handling:** Lint script fails when the index misses an alert; add the entry prior to merging.\
+**Observability:** Weekly docs lint verifies the index matches OnCall configuration.\
+**References:** Appendix B alerts.\
+**Breadcrumbs:** Runbook index `ops/reference/runbooks/index.md`, tests `tests/reference/test_runbook_index.py`.
 
 - RB-RM-ROLLBACK — Reference bundle rollback & adoption freeze
 - RB-RM-HARVEST — Source harvest incident triage
@@ -241,126 +253,122 @@ ______________________________________________________________________
 
 ### Ref Manager — R.2 RB-RM-ROLLBACK — Reference bundle rollback & adoption freeze (binding)
 
-**Breadcrumbs:** Implementation `ops/reference/rollback_bundle.py`, Tests `tests/reference/test_rollback.py::test_restores_previous_version`, Observability PagerDuty service “Reference Manager On-Call” (alert `reference_manager_adoption_lag_sla`).\\ *Purpose: Restore a stable bundle when adoption freezes or downstream services reject a release.*\\ *Contract: Rollbacks execute within 15 minutes, capture evidence, and keep downstream caches synchronized.*\\ *State: `BUNDLE_ROLLBACK_REPORT` artifacts store execution logs, adoption status, and validation evidence.*\\ *Failure modes & retries: Partial rollbacks or missing adoption validation trigger escalation to Architecture and freeze further publishes.*\\ *Observability: Alert resolves when adoption lag returns to budget and downstream acknowledgements report the restored bundle hash.*
-
-Trigger conditions:
-
-- `reference_manager_adoption_lag_sla` alert firing for >10 minutes.
-- Downstream compile failures (LPE, Settings, Guardian) referencing the latest bundle hash.
-- Manual escalation tagged `RM-ROLLBACK` in incident management.
+**Purpose:** Restore catalog stability when published bundles must be reverted.\
+**Contract:** Rollback executes within 15 minutes of decision, captures evidence, and freezes dependent publishes until adoption latency returns to baseline.\
+**State:** Automation uses `ops/reference/rollback_bundle.py`; evidence stored under `ops/reference/incidents/<date>/rollback`.\
+**Failure modes & handling:** Missing rollback evidence or lingered adoption lag triggers escalation to Architecture.\
+**Observability:** Alert `reference_bundle_adoption_total{status="stale"}` clears when all services acknowledge the rollback.\
+**References:** §5.5 Adoption lag, §4.2 Bundle registry.\
+**Breadcrumbs:** Runbook `ops/reference/runbooks/rollback.md`, tests `tests/reference/test_rollback.py`.
 
 Execution checklist:
 
-1. Declare incident in `#ref-manager-oncall`, assign commander/scribe, and capture affected bundle IDs.
-2. Halt new publishes (`reference publish --freeze`) and notify integrators.
-3. Execute `reference rollback --bundle <previous_id>`; record CLI output and resulting bundle hash.
-4. Re-run staging adoption suite (`reference adoption verify --bundle <previous_id>`) and confirm downstream acknowledgements.
-5. Document outcome in the incident ticket with links to metrics, adoption diffs, and customer impact summary.
-
-Post-rollback validation:
-
-- Confirm `reference_manager_bundle_adoption_seconds` returns below SLA.
-- Ensure Settings activation replay completes (`settings.activation.last_success` timestamp updated).
-- Schedule root-cause review within 48 hours; capture corrective actions before unfreezing publishes.
+1. Pause new publishes and announce freeze in `#ref-manager-oncall`.
+2. Run `reference rollback --bundle <previous_id>` capturing activation ID and diff artifacts.
+3. Trigger adoption verification for LPE, Settings, Guardian, Compose/Analyze, Portal.
+4. Update change ticket and App.O decision log with rollback details, evidence links, and remediation tasks.
+5. Resume publishes only after adoption lag returns below SLA and follow-up actions assigned.
 
 <a id="rb-rm-harvest"></a>
 
 ### Ref Manager — R.3 RB-RM-HARVEST — Source harvest incident triage (binding)
 
-**Breadcrumbs:** Implementation `ops/reference/runbooks/harvest_incident.md`, Tests `tests/reference/test_harvest_incident.py::test_selector_decision_tree`, Observability Grafana “Reference Manager – Ingestion & Quality” (alert `reference_manager_harvest_total`).\\ *Purpose: Restore healthy harvesting when connectors fail or data drift threatens bundle freshness.*\\ *Contract: Incidents remain active until the affected connectors produce clean ingests and evidence is archived.*\\ *State: Harvest incident ledger `reference_harvest_incident` stores status, root cause, and remediation steps.*\\ *Failure modes & retries: Re-enabling connectors without sanitizing payloads or validating licensing risks corrupt bundles; escalate if two retry cycles fail.*\\ *Observability: Alert clears after successful ingest and selector health checks remain green for two intervals.*
+**Purpose:** Mitigate source outages or connector failures.\
+**Contract:** Incident remains open until harvest resumes, manual uploads address backlog, and validation confirms no data loss.\
+**State:** Incident record tracks source metadata, outage start, workaround steps, and licensing considerations.\
+**Failure modes & handling:** Ignoring prolonged harvest outages risks stale catalog data; escalate to Program Leads and Legal Ops when SLAs breach.\
+**Observability:** Alert `reference_manager_harvest_error_total` and stale-source monitors signal recovery.\
+**References:** §2.2 Source acquisition, §5.1 Harvest outage.\
+**Breadcrumbs:** Runbook `ops/reference/runbooks/harvest_incident.md`, connectors `packages/udocket_core/reference_manager/connectors.py`.
 
-Decision tree:
+Response checklist:
 
-1. Identify failing sources (`reference harvest status --failing`) and confirm alert payload scope.
-2. For selector regressions, pull last-good HTML snapshot, update parser fixtures, and replay ingest in staging.
-3. For licensing or robots.txt changes, coordinate with Legal Ops and update provenance manifests before re-enabling.
-4. For infrastructure outages, engage provider contacts, increase backoff, and stage manual uploads if SLAs demand.
-5. Re-enable connector only after validation passes and ledger entry updated with evidence links.
-
-Communication & evidence:
-
-- Update incident ledger with timestamps, owner, and validation artifacts (`ops/reference/harvest/<date>/`).
-- Notify downstream services if freshness gap exceeds 24 hours or impacts regulatory filings.
-- Document preventive tasks (selector monitoring, provider engagement) before closing incident.
+1. Review failing connector logs, capture last successful snapshot, and assess licensing implications.
+2. Engage source owner (court/government contact) and record ETA; initiate manual upload if available.
+3. Queue interim communications to stakeholders when outage exceeds SLA.
+4. Resume scheduled harvest, validate ETL outputs, and confirm review queue impact.
+5. Close incident with root cause, remediation summary, and preventive actions.
 
 <a id="rb-rm-publish"></a>
 
 ### Ref Manager — R.4 RB-RM-PUBLISH — Publish guard failure response (binding)
 
-**Breadcrumbs:** Implementation `ops/reference/runbooks/publish_guard.md`, Tests `tests/reference/test_publish_guard.py::test_block_on_breaking_change`, Observability CI job “reference-manager-validate” and alert `reference_manager_publish_guard_failure`.\\ *Purpose: Triage schema or validation failures that block publish pipelines.*\\ *Contract: Guard failures remain blocking until validation diffs resolved, schema updates approved, and integration tests rerun.*\\ *State: Validation artifacts persist alongside bundle drafts in `reference_bundle_registry` with diff snapshots.*\\ *Failure modes & retries: Ignoring guard signals risks pushing inconsistent bundles; escalate to Architecture if fix exceeds 12 hours.*\\ *Observability: Alert clears when validation suite passes and guard pipeline returns green.*
+**Purpose:** Triage schema or validation failures that block publish pipelines.\
+**Contract:** Guard failures remain blocking until diffs resolve, schema updates approve, and integration tests rerun.\
+**State:** Validation artifacts persist alongside bundle drafts in `reference_bundle_registry`; tickets track remediation.\
+**Failure modes & handling:** Ignoring guard signals risks inconsistent bundles; escalate to Architecture if fix exceeds 12 hours.\
+**Observability:** Alert `reference_manager_publish_guard_failure` clears when validation suite passes.\
+**References:** §5.2 Publish guard failure, §2.9 Testing.\
+**Breadcrumbs:** Runbook `ops/reference/runbooks/publish_guard.md`, tests `tests/reference/test_publish_guard.py`.
 
-Response steps:
+Execution checklist:
 
-1. Collect failing validation artifacts (`reference validate --bundle <id> --export artifacts/guard/<id>`).
-2. Categorize failure: schema incompatibility, missing assets, license metadata, or diff threshold breach.
-3. Assign owners per category (Schema Council, Content Ops, Localization) and capture remediation plan in incident doc.
-4. Apply fixes in staging, rerun validation, and ensure unit/integration suites covering affected domains stay green.
-5. Communicate readiness in `#ref-manager-oncall`, secure approvals, and resume publish pipeline.
-
-Post-resolution:
-
-- Attach diff snapshots, approvals, and validation logs to incident ticket.
-- Update risk register if failure exposed undocumented dependency or schema gap.
-- Trigger follow-up tabletop if guard was bypassed or detection lagged.
+1. Export failing validation artifacts (`reference validate --bundle <id> --export artifacts/guard/<id>`).
+2. Categorize failure (schema, missing assets, license metadata, diff threshold) and assign owners.
+3. Apply fixes in staging, rerun validation and unit/integration suites.
+4. Secure approvals, document evidence, and resume publish pipeline.
+5. Post-resolution, attach diff snapshots and validation logs to incident ticket and update risk register if needed.
 
 <a id="rb-rm-license"></a>
 
 ### Ref Manager — R.5 RB-RM-LICENSE — License violation remediation (binding)
 
-**Breadcrumbs:** Implementation `ops/reference/runbooks/license_violation.md`, Tests `tests/reference/test_license_ledger.py::test_violation_alert`, Observability Grafana “Reference Manager – Compliance” (alert `reference_manager_license_violation_total`).\\ *Purpose: Resolve licensing or attribution violations before they propagate to customers.*\\ *Contract: Violations remain open until offending content removed or relicensed, and attribution updates verified downstream.*\\ *State: License ledger entries store violation metadata, remediation steps, and waiver approvals.*\\ *Failure modes & retries: Publishing without resolving violations risks contractual breaches; escalate to Legal Ops immediately.*\\ *Observability: Alert clears when ledger marks violation mitigated and attribution scanners pass.*
+**Purpose:** Resolve licensing or attribution violations before they propagate.\
+**Contract:** Violations remain open until offending content removed or relicensed, attribution updates verified downstream, and Legal Ops approvals documented.\
+**State:** License ledger entries store violation metadata, remediation steps, and waiver approvals.\
+**Failure modes & handling:** Publishing without remediation risks contractual breaches; escalate to Legal Ops immediately.\
+**Observability:** Alert `reference_manager_license_violation_total` clears when ledger marks violation mitigated and attribution scanners pass.\
+**References:** §2.8 Security & licensing, §5.3 Licensing incidents.\
+**Breadcrumbs:** Runbook `ops/reference/runbooks/license_violation.md`, tests `tests/reference/test_license_ledger.py`.
 
-Remediation workflow:
+Remediation checklist:
 
-1. Review violation payload (source, license, impacted assets) and freeze related publishes.
-2. Remove or quarantine offending content from staging/curated schemas; note bundle versions impacted.
-3. Coordinate with Legal Ops for relicensing or replacement assets; track approvals in waiver ledger.
-4. Update attribution metadata, regenerate affected bundles, and validate Guardian/UI surfaces show correct badges.
-5. Close ledger entry with evidence links (tickets, approvals, artifact hashes) and notify stakeholders.
-
-Follow-up:
-
-- Audit other domains for similar exposure; document preventive tasks.
-- Update intake checklists to capture new licensing conditions if applicable.
-- Record customer communications in incident ticket and App.O decision log.
+1. Review violation payload, freeze related publishes, and notify Legal Ops.
+2. Remove or quarantine offending content from staging/curated schemas; note impacted bundle versions.
+3. Coordinate relicensing or replacements; capture approvals in waiver ledger.
+4. Regenerate bundles, validate Guardian/UI attribution, and resume adoption.
+5. Close ledger entry with evidence links and communicate resolution to stakeholders.
 
 <a id="rb-rm-residency"></a>
 
 ### Ref Manager — R.6 RB-RM-RESIDENCY — Residency endpoint alignment (binding)
 
-**Breadcrumbs:** Implementation `ops/reference/runbooks/residency_alignment.md`, Tests `tests/reference/test_provider_endpoints.py::test_alignment_runbook`, Observability Grafana “Residency & Endpoint Posture” (alert `reference_manager_provider_endpoint_violation_total`).\\ *Purpose: Restore residency compliance when provider endpoint catalogues drift from approved footprints.*\\ *Contract: Findings stay open until catalogues updated, Settings activations rerun, and residency scanners confirm remediation.*\\ *State: Findings tracked in `reference_provider_endpoint_finding` with attestation references and waiver metadata.*\\ *Failure modes & retries: Allowing stale endpoints risks policy violations; escalate to Security Engineering if remediation exceeds SLA.*\\ *Observability: Alert resolves after two clean scans and Settings activation diff reports match updated catalogue.*
+**Purpose:** Restore residency compliance when provider endpoint catalogues drift.\
+**Contract:** Findings stay open until catalogues update, Settings activations rerun, and residency scanners confirm remediation.\
+**State:** Findings tracked in `reference_provider_endpoint_finding` with attestation evidence and waiver metadata.\
+**Failure modes & handling:** Allowing stale endpoints risks policy violations; escalate to Security Engineering if remediation exceeds SLA.\
+**Observability:** Alert `reference_manager_provider_endpoint_violation_total` resolves after two clean scans and Settings activation diff reports match updated catalogue.\
+**References:** §4.4 Residency catalogue, §5.4 Residency incidents.\
+**Breadcrumbs:** Runbook `ops/reference/runbooks/residency_alignment.md`, tests `tests/reference/test_provider_endpoints.py`.
 
 Remediation checklist:
 
-1. Inspect finding details and gather attestation or SAN mismatch evidence.
-2. Engage provider to confirm intended footprint; request updated attestation or schedule decommission.
-3. Update RM catalogue entries (`provider_endpoints[]`), including CIDRs, SAN expectations, and residency notes.
-4. Publish refreshed bundle, rerun Settings activation replay, and verify Guardian acknowledges new digest.
-5. Archive evidence in incident folder and update waiver ledger if temporary exceptions granted.
+1. Inspect finding details, gather attestation or SAN mismatch evidence, and engage provider contacts.
+2. Update RM catalogue entries (`provider_endpoints[]`), including CIDRs, SAN expectations, and residency notes.
+3. Publish refreshed bundle, replay Settings activation, and verify Guardian acknowledges new digest.
+4. Archive evidence in incident folder and update waiver ledger for temporary exceptions.
+5. Confirm residency monitors pass twice consecutively before closing the incident.
 
-Post-remediation validation:
-
-- Confirm `reference_manager_provider_endpoint_violation_total` returns to zero.
-- Ensure residency synthetic monitors (EU-REFERENCE, CA-REFERENCE) pass twice consecutively.
-- Document lessons learned and automation improvements (scanner coverage, provider notifications).
+______________________________________________________________________
 
 ## Settings — Appendix R — Runbooks & drills
 
-**Purpose:** Centralize operational playbooks tied to SR alerts.\
-**Contract:** Alerts enumerated in Appendix B link to these runbooks; responders keep procedures current with quarterly tabletop reviews.\
-**State:** Runbooks live alongside automation scripts in `ops/runbooks/settings/`; this appendix summarizes trigger conditions and critical steps.\
-**Failure modes & handling:** Missing or stale runbooks trigger post-incident corrective actions and block deploy sign-off.\
-**Observability:** OnCall analytics track time-to-ack/resolve for Settings incidents; drills recorded in App.O decision logs.\
-**References:** §5 Failure modes, §8 Operational notes, Appendix B metrics.\
+**Purpose:** Centralize operational playbooks tied to SR alerts. **|**
+**Contract:** Alerts enumerated in Appendix B link to these runbooks; responders keep procedures current with quarterly tabletop reviews. **|**
+**State:** Runbooks live alongside automation scripts in `ops/runbooks/settings/`; this appendix summarizes trigger conditions and critical steps. **|**
+**Failure modes & handling:** Missing or stale runbooks trigger post-incident corrective actions and block deploy sign-off. **|**
+**Observability:** OnCall analytics track time-to-ack/resolve for Settings incidents; drills recorded in App.O decision logs. **|**
+**References:** §5 Failure modes, §8 Operational notes, Appendix B metrics. **|**
 **Breadcrumbs:** Runbooks `ops/runbooks/settings/`, tests `tests/platform/settings/test_rollback.py` and peers, OnCall configuration `infra/monitoring/settings-prometheus-rules.yaml`.
 
 ### Settings — R.1 Runbook index (informative)
 
-**Purpose:** Provide a quick map from alert codes to runbook IDs.\
-**Contract:** Every Settings alert references one of these IDs; new alerts require index updates.\
-**State:** Index maintained in version control and mirrored here.\
-**Failure modes & handling:** Lint script fails when the index misses an alert; add the entry before merging.\
-**Observability:** Weekly docs lint verifies the index matches OnCall configuration.\
-**References:** Appendix B alerts, Appendix R entries below.\
+**Purpose:** Provide a quick map from alert codes to runbook IDs. **|**
+**Contract:** Every Settings alert references one of these IDs; new alerts require index updates. **|**
+**State:** Index maintained in version control and mirrored here. **|**
+**Failure modes & handling:** Lint script fails when the index misses an alert; add the entry before merging. **|**
+**Observability:** Weekly docs lint verifies the index matches OnCall configuration. **|**
+**References:** Appendix B alerts, Appendix R entries below. **|**
 **Breadcrumbs:** Runbook index `ops/runbooks/settings/index.md`, tests `tests/platform/settings/test_runbook_index.py`.
 
 - RB-GOV-008 — Settings governance toggle / rollback
@@ -375,12 +383,12 @@ Post-remediation validation:
 
 ### Settings — R.2 RB-GOV-008 — Settings governance toggle / rollback (binding)
 
-**Purpose:** Safely activate or revert high-sensitivity governance toggles (waivers, residency overrides, cross-org pilots).\
-**Contract:** Any activation flagged `unsafe` or touching governance scopes must follow this sequence before promotion.\
-**State:** Runbook automation uses `ops/runbooks/settings_rollback.py`; evidence stores under `ops/settings/<date>/`.\
-**Failure modes & handling:** Missing approvals or failed smoke tests require immediate rollback via `settings rollback --bundle <previous_id>`.\
-**Observability:** Alert clears once activation completes with both approvals and validation metrics green.\
-**References:** §4 State management, §5.1 Activation failure.\
+**Purpose:** Safely activate or revert high-sensitivity governance toggles (waivers, residency overrides, cross-org pilots). **|**
+**Contract:** Any activation flagged `unsafe` or touching governance scopes must follow this sequence before promotion. **|**
+**State:** Runbook automation uses `ops/runbooks/settings_rollback.py`; evidence stores under `ops/settings/<date>/`. **|**
+**Failure modes & handling:** Missing approvals or failed smoke tests require immediate rollback via `settings rollback --bundle <previous_id>`. **|**
+**Observability:** Alert clears once activation completes with both approvals and validation metrics green. **|**
+**References:** §4 State management, §5.1 Activation failure. **|**
 **Breadcrumbs:** Runbook `ops/runbooks/settings/governance_toggle.md`, tests `tests/platform/settings/test_rollback.py`, dashboard “Settings Governance”.
 
 Triggers: `settings_governance_override_total`, change tickets tagged `GOV-TOGGLE`, or manual escalation from Security/Architecture.
@@ -388,10 +396,10 @@ Triggers: `settings_governance_override_total`, change tickets tagged `GOV-TOGGL
 Execution checklist:
 
 1. Announce maintenance window with activation/rollback times in `#ops-announcements`.
-1. Validate staging dry-run (matching bundle hash) and attach diff evidence to change ticket.
-1. Execute activation via CLI/UI, capturing activation ID and `unsafe_reasons[]` result (expected empty).
-1. Run targeted smoke tests (API read/write, portal toggle, worker snapshot) tied to the toggle.
-1. Update change ticket and decision log with activation ID, evidence, and rollback window.
+2. Validate staging dry-run (matching bundle hash) and attach diff evidence to change ticket.
+3. Execute activation via CLI/UI, capturing activation ID and `unsafe_reasons[]` result (expected empty).
+4. Run targeted smoke tests (API read/write, portal toggle, worker snapshot) tied to the toggle.
+5. Update change ticket and decision log with activation ID, evidence, and rollback window.
 
 Rollback steps:
 
@@ -409,18 +417,18 @@ Evidence requirements:
 
 ### Settings — R.3 RB-RES-ENDPOINT — Residency endpoint drift remediation (binding)
 
-**Breadcrumbs:** Implementation `ops/runbooks/settings/residency_endpoint_drift.md`, Tests `tests/platform/settings/test_residency_triage.py::test_endpoint_drift_runbook`, Observability Grafana “Residency & Endpoint Posture” dashboard (alert `alert_residency_endpoint_drift`).\
-*Purpose: Restore compliant residency posture when outbound endpoints drift or new hosts appear.*\
-*Contract: Findings remain `open` until catalogue updates or waivers recorded per this runbook.*\
-*State: Findings persist in `residency_endpoint_findings`; evidence stored in `ops/residency/endpoint_scan.jsonl`.*\
-*Failure modes & retries: Waivers lacking dual approval or catalogue gaps keep the finding open and block affected activations.*\
+**Breadcrumbs:** Implementation `ops/runbooks/settings/residency_endpoint_drift.md`, Tests `tests/platform/settings/test_residency_triage.py::test_endpoint_drift_runbook`, Observability Grafana “Residency & Endpoint Posture” dashboard (alert `alert_residency_endpoint_drift`). **|**
+*Purpose: Restore compliant residency posture when outbound endpoints drift or new hosts appear.* **|**
+*Contract: Findings remain `open` until catalogue updates or waivers recorded per this runbook.* **|**
+*State: Findings persist in `residency_endpoint_findings`; evidence stored in `ops/residency/endpoint_scan.jsonl`.* **|**
+*Failure modes & retries: Waivers lacking dual approval or catalogue gaps keep the finding open and block affected activations.* **|**
 *Observability: Alert auto-resolves after two clean scans and updated catalogue hashes.*
 
 Triage checklist:
 
 1. Query `residency_endpoint_findings` for `state='open'`; review evidence attachments.
-1. Inspect Istio AuthorizationPolicy revisions to ensure offending hosts remain blocked.
-1. Identify impacted providers/orgs via activation diff linked in alert payload.
+2. Inspect Istio AuthorizationPolicy revisions to ensure offending hosts remain blocked.
+3. Identify impacted providers/orgs via activation diff linked in alert payload.
 
 Decision tree:
 
@@ -439,77 +447,77 @@ Post-remediation:
 
 ### Settings — R.4 RB-RES-BLOCK — Residency waiver / block handling (binding)
 
-**Breadcrumbs:** Implementation `ops/runbooks/settings/residency_block.md`, Tests `tests/platform/settings/test_residency_validators.py::test_block_requires_waiver`, Observability Grafana “Residency Compliance” dashboard (alert `alert_residency_policy_block`).\
-*Purpose: Resolve residency policy blocks triggered during activations or runtime checks.*\
-*Contract: Blocks clear only after org allowlists align with RM catalogue or waivers recorded with expiry.*\
-*State: Policy blocks logged as `RESIDENCY_POLICY_BLOCK`; waiver metadata stored in `settings_waiver`.*\
-*Failure modes & retries: Waivers without expiry or missing approvals invalidate activation attempts.*\
+**Breadcrumbs:** Implementation `ops/runbooks/settings/residency_block.md`, Tests `tests/platform/settings/test_residency_validators.py::test_block_requires_waiver`, Observability Grafana “Residency Compliance” dashboard (alert `alert_residency_policy_block`). **|**
+*Purpose: Resolve residency policy blocks triggered during activations or runtime checks.* **|**
+*Contract: Blocks clear only after org allowlists align with RM catalogue or waivers recorded with expiry.* **|**
+*State: Policy blocks logged as `RESIDENCY_POLICY_BLOCK`; waiver metadata stored in `settings_waiver`.* **|**
+*Failure modes & retries: Waivers without expiry or missing approvals invalidate activation attempts.* **|**
 *Observability: Alert returns to green once block count drops to zero.*
 
 Steps:
 
 1. Confirm org allowlists (`regions.allowlist.compute/storage/vector`).
-1. Validate provider endpoints and DNS; compare to RM catalogue snapshots.
-1. If cross-region access required, capture dual approval, set `cross_region_waiver=true`, and document expiry.
-1. Re-run activation or job; confirm Guardian manifests reference waiver ID.
-1. Audit waiver usage daily until expiry or remediation.
+2. Validate provider endpoints and DNS; compare to RM catalogue snapshots.
+3. If cross-region access required, capture dual approval, set `cross_region_waiver=true`, and document expiry.
+4. Re-run activation or job; confirm Guardian manifests reference waiver ID.
+5. Audit waiver usage daily until expiry or remediation.
 
 <a id="rb-lock-006"></a>
 
 ### Settings — R.5 RB-LOCK-006 — Activation lock stale detection & remediation (binding)
 
-**Breadcrumbs:** Implementation `ops/runbooks/settings/activation_lock.md`, Tests `tests/platform/settings/test_locks.py::test_lock_scope`, Observability Grafana “Settings Lock” panel (alert `settings_activation_lock_wait_seconds`).\
-*Purpose: Detect and remediate stuck activation locks without risking concurrent edits.*\
-*Contract: Lock holders must release within configured `udlock.max_session_hold_seconds`; stale locks trigger this runbook.*\
-*State: Lock registry tracked in `settings_activation_lock`; helper scripts expose current holders.*\
-*Failure modes & retries: Forcing unlock without verifying holder state risks split-brain activations; follow decision tree below.*\
+**Breadcrumbs:** Implementation `ops/runbooks/settings/activation_lock.md`, Tests `tests/platform/settings/test_locks.py::test_lock_scope`, Observability Grafana “Settings Lock” panel (alert `settings_activation_lock_wait_seconds`). **|**
+*Purpose: Detect and remediate stuck activation locks without risking concurrent edits.* **|**
+*Contract: Lock holders must release within configured `udlock.max_session_hold_seconds`; stale locks trigger this runbook.* **|**
+*State: Lock registry tracked in `settings_activation_lock`; helper scripts expose current holders.* **|**
+*Failure modes & retries: Forcing unlock without verifying holder state risks split-brain activations; follow decision tree below.* **|**
 *Observability: Alert clears when lock age returns under threshold and registry shows no stale entries.*
 
 Checklist:
 
 1. Inspect lock registry via `scripts/settings/show_activation_locks.py` filtered by environment.
-1. Verify holder liveness (`SELECT ... FROM pg_stat_activity`) to differentiate idle vs active transactions.
-1. If holder dead or idle-in-transaction, coordinate worker/web restart or issue `SELECT pg_terminate_backend(...)` per policy.
-1. After release, rerun activation pipeline smoke tests; capture evidence in incident log.
-1. File follow-up if lock reappears within 24h (root cause investigation, automation fix).
+2. Verify holder liveness (`SELECT ... FROM pg_stat_activity`) to differentiate idle vs active transactions.
+3. If holder dead or idle-in-transaction, coordinate worker/web restart or issue `SELECT pg_terminate_backend(...)` per policy.
+4. After release, rerun activation pipeline smoke tests; capture evidence in incident log.
+5. File follow-up if lock reappears within 24h (root cause investigation, automation fix).
 
 <a id="rb-llm-003"></a>
 
 ### Settings — R.6 RB-LLM-003 — Provider degradation / circuit breaker (binding)
 
-**Breadcrumbs:** Implementation `ops/runbooks/settings/provider_circuit_breaker.md`, Tests `tests/platform/settings/test_llm_circuit.py::test_half_open_probe`, Observability Grafana “FinOps – LLM Cost & Circuit” dashboard (alert `alert_llm_circuit_open`).\
-*Purpose: Handle degraded LLM providers to protect cost and SLA budgets.*\
-*Contract: OPEN circuits remain until provider health verifies; half-open probes follow cadence defined here.*\
-*State: Circuit state stored in `settings_llm_circuit`; fallback chains defined in Settings bundles.*\
-*Failure modes & retries: Prematurely closing circuits or leaving fallback unmonitored risks runaway spend and job failures.*\
+**Breadcrumbs:** Implementation `ops/runbooks/settings/provider_circuit_breaker.md`, Tests `tests/platform/settings/test_llm_circuit.py::test_half_open_probe`, Observability Grafana “FinOps – LLM Cost & Circuit” dashboard (alert `alert_llm_circuit_open`). **|**
+*Purpose: Handle degraded LLM providers to protect cost and SLA budgets.* **|**
+*Contract: OPEN circuits remain until provider health verifies; half-open probes follow cadence defined here.* **|**
+*State: Circuit state stored in `settings_llm_circuit`; fallback chains defined in Settings bundles.* **|**
+*Failure modes & retries: Prematurely closing circuits or leaving fallback unmonitored risks runaway spend and job failures.* **|**
 *Observability: Alert resolves when circuit state returns to CLOSED for affected models and cost deltas stabilize.*
 
 Response steps:
 
 1. Confirm affected models via dashboard filters (`llm_circuit_state{model}`) and review recent error/latency metrics.
-1. Validate fallback outcomes in logs (`PRIMARY_DEGRADED`, `FALLBACK_USED`) and ensure FinOps guardrails intact.
-1. Keep circuits OPEN until three consecutive successful half-open probes; adjust fallback priorities if secondary models degrade.
-1. Notify vendor/support with incident details when degradation persists >15 minutes; record ticket IDs in incident log.
-1. After recovery, document budget impact and corrective actions; update preventive tasks (synthetic prompts, timeout tuning).
+2. Validate fallback outcomes in logs (`PRIMARY_DEGRADED`, `FALLBACK_USED`) and ensure FinOps guardrails intact.
+3. Keep circuits OPEN until three consecutive successful half-open probes; adjust fallback priorities if secondary models degrade.
+4. Notify vendor/support with incident details when degradation persists >15 minutes; record ticket IDs in incident log.
+5. After recovery, document budget impact and corrective actions; update preventive tasks (synthetic prompts, timeout tuning).
 
 <a id="rb-job-watchdog"></a>
 
 ### Settings — R.7 RB-JOB-WATCHDOG — Job stall watchdog (binding)
 
-**Breadcrumbs:** Implementation `ops/runbooks/platform/job_watchdog.md`, Tests `tests/platform/watchdog/test_job_timeout.py::test_timeout_escalation`, Observability Grafana “Watchdog Runner” dashboard (alerts `job_watchdog_warning_total`, `job_watchdog_timeout_total`).\
-*Purpose: Restore stuck jobs and protect downstream SLAs when heartbeats lapse.*\
-*Contract: Watchdog alerts trigger within `jobs.watchdog.no_progress_minutes` / `jobs.watchdog.timeout_minutes`; responders must either resume progress or terminate safely.*\
-*State: Heartbeats stored in `job_progress_heartbeat`; remediation evidence captured in incident ticket (`ops/watchdog/<date>/`).*\
-*Failure modes & retries: Premature termination can lose customer work; skipping checkpoint verification risks replaying corrupted artifacts.*\
+**Breadcrumbs:** Implementation `ops/runbooks/platform/job_watchdog.md`, Tests `tests/platform/watchdog/test_job_timeout.py::test_timeout_escalation`, Observability Grafana “Watchdog Runner” dashboard (alerts `job_watchdog_warning_total`, `job_watchdog_timeout_total`). **|**
+*Purpose: Restore stuck jobs and protect downstream SLAs when heartbeats lapse.* **|**
+*Contract: Watchdog alerts trigger within `jobs.watchdog.no_progress_minutes` / `jobs.watchdog.timeout_minutes`; responders must either resume progress or terminate safely.* **|**
+*State: Heartbeats stored in `job_progress_heartbeat`; remediation evidence captured in incident ticket (`ops/watchdog/<date>/`).* **|**
+*Failure modes & retries: Premature termination can lose customer work; skipping checkpoint verification risks replaying corrupted artifacts.* **|**
 *Observability: Alert clears after watchdog completes remediation and fresh heartbeats resume for affected jobs.*
 
 Triage & remediation:
 
 1. Identify affected job IDs from alert payload; confirm `job_progress_heartbeat` age and last known task lane.
-1. Inspect worker logs for stalled tasks, resource exhaustion, or upstream dependency failures; capture excerpts in incident notes.
-1. If work-in-progress artifacts exist, trigger checkpoint validation (`ops/jobs/verify_checkpoint.py`) before retrying.
-1. Attempt safe resume via `jobs resume --job <id>` when the worker is healthy; otherwise cancel and requeue after addressing root cause.
-1. Close alert once heartbeats refresh (\< 2 × `jobs.watchdog.heartbeat_interval`) and audit trail updated with remediation steps.
+2. Inspect worker logs for stalled tasks, resource exhaustion, or upstream dependency failures; capture excerpts in incident notes.
+3. If work-in-progress artifacts exist, trigger checkpoint validation (`ops/jobs/verify_checkpoint.py`) before retrying.
+4. Attempt safe resume via `jobs resume --job <id>` when the worker is healthy; otherwise cancel and requeue after addressing root cause.
+5. Close alert once heartbeats refresh (\< 2 × `jobs.watchdog.heartbeat_interval`) and audit trail updated with remediation steps.
 
 Post-incident follow-up:
 
@@ -520,20 +528,20 @@ Post-incident follow-up:
 
 ### Settings — R.8 RB-UPLOAD-SCAN — Upload scanning outage response (binding)
 
-**Breadcrumbs:** Implementation `ops/runbooks/security/upload_scan.md`, Tests `tests/security/test_upload_scan_guard.py::test_quarantine_on_failure`, Observability Grafana “Security — Upload Scanning” dashboard (alerts `upload_scan_error_total`, `upload_scan_queue_depth`).\
-*Purpose: Maintain quarantine-first posture when malware scanning or format validation degrades.*\
-*Contract: New uploads remain blocked (`uploads.enabled=false`) until scanners return to green and evidence recorded per this runbook.*\
-*State: Scan attempts logged in `upload_scan_audit`; quarantined objects isolated under `storage/quarantine/<job_id>/`.*\
-*Failure modes & retries: Re-enabling uploads without updated signatures risks releasing infected files; overriding quarantine without approvals violates security policy.*\
+**Breadcrumbs:** Implementation `ops/runbooks/security/upload_scan.md`, Tests `tests/security/test_upload_scan_guard.py::test_quarantine_on_failure`, Observability Grafana “Security — Upload Scanning” dashboard (alerts `upload_scan_error_total`, `upload_scan_queue_depth`). **|**
+*Purpose: Maintain quarantine-first posture when malware scanning or format validation degrades.* **|**
+*Contract: New uploads remain blocked (`uploads.enabled=false`) until scanners return to green and evidence recorded per this runbook.* **|**
+*State: Scan attempts logged in `upload_scan_audit`; quarantined objects isolated under `storage/quarantine/<job_id>/`.* **|**
+*Failure modes & retries: Re-enabling uploads without updated signatures risks releasing infected files; overriding quarantine without approvals violates security policy.* **|**
 *Observability: Alert clears after two consecutive clean scan batches and queue depth normalizes below baseline.*
 
 Response sequence:
 
 1. Confirm scope of degradation (engine errors vs. queue backlog) using dashboard drill-downs and `upload_scan_audit` sampling.
-1. Freeze new intake by toggling `uploads.enabled=false` in Settings; announce customer impact and expected review window.
-1. Validate scanner health: check ClamAV/YARA signature freshness, sandbox resource utilization, and recent deployment changes.
-1. For malware detections, coordinate with Security to analyze samples; maintain quarantine until signatures updated and retest passes.
-1. Once scanners stable, re-enable uploads, replay quarantined items through the pipeline, and attach evidence (dashboards, signature reports) to the incident record.
+2. Freeze new intake by toggling `uploads.enabled=false` in Settings; announce customer impact and expected review window.
+3. Validate scanner health: check ClamAV/YARA signature freshness, sandbox resource utilization, and recent deployment changes.
+4. For malware detections, coordinate with Security to analyze samples; maintain quarantine until signatures updated and retest passes.
+5. Once scanners stable, re-enable uploads, replay quarantined items through the pipeline, and attach evidence (dashboards, signature reports) to the incident record.
 
 Follow-up:
 
