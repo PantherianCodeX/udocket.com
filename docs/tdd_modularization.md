@@ -798,7 +798,7 @@ jobs:
 * [x] Guardian: content moved, sections filled, TDD summary added.
 * [x] Digital Signer: content moved, sections filled, TDD summary added.
 * [x] Settings Registry: moved & filled, summary.
-* [ ] LLM Registry: moved & filled, summary.
+* [x] LLM Registry: moved & filled, summary.
 * [x] LPE: remaining content moved if any; summary.
 * [x] Reference Manager: moved & filled, summary.
 * [ ] Notifications: moved & filled, summary.

@@ -137,6 +137,18 @@
 - Reconcile manual artifacts via replay once automation recovers; annotate incidents with residual risk assessments.
 - Update waiver manifests and close-out tasks before declaring the incident resolved.
 
+## Llm Registry — 8.1 Runbooks & drills (binding)
+
+**Purpose:** Ensure on-call teams can remediate provider, safety, and cost incidents quickly. **|**
+**Contract:** Alerts map to RB-LLM-003 (provider degradation), RB-LLM-JB (jailbreak/malicious output), RB-LLM-FINOPS (budget hold), RB-LLM-REPLAY (divergence). Runbook catalog must remain in sync with alert routing. **|**
+**State:** Runbooks live in `ops/runbooks/llm/`, drill calendar `ops/change/llm_rotations.ics` tracks quarterly exercises. **|**
+**Observability:** Docs CI validates runbook references; PagerDuty analytics monitor response metrics. **|**
+**Breadcrumbs:** `ops/runbooks/index.md`, automation scripts `ops/scripts/llm/*.py`.
+
+- Quarterly drills cover provider failover, moderation outage, FinOps budget breach, and replay divergence scenarios.
+- Change calendar entries document golden-set updates and safety harness tuning; approvals captured in App.O decision logs.
+- On-call rotation shared by Platform Architecture and Applied AI Programs; runbooks specify escalation matrix.
+
 ## Lp Engine — 8.3 Runbooks & drills (binding)
 
 **Purpose:** Maintain authoritative recovery guides and drill expectations. **|**
