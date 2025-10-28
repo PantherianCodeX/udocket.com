@@ -23,7 +23,7 @@ This guide explains how to add and maintain TDD documentation in this repo. The 
 
   ![Artifact Overview](../../build/mermaid/overview/tdd/diagrams/artifact-lifecycle-overview-v1.svg)
 
-- Rendered SVGs live under `docs/src/build/mermaid/` so MkDocs can serve them alongside the Markdown sources.
+- Rendered SVGs live under `docs/src/build/mermaid/` so MkDocs can serve them alongside the Markdown sources. Use `/build/mermaid/...` in image links so paths remain correct regardless of page depth.
 
 - Before generating PDFs, render diagrams: `bash scripts/docs/render_mermaid.sh` (only re-renders `.mmd` files that changed). Use `--all` to force a complete rebuild.
 

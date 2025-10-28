@@ -9,7 +9,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")"/../.. && pwd)"
 SRC_ROOT="${MERMAID_SRC_ROOT:-$ROOT/docs/src}"
 OUT_ROOT="${MERMAID_OUT_ROOT:-$ROOT/docs/src/build/mermaid}"
-FORMAT="${MERMAID_FORMAT:-svg}"   # svg|png
+FORMAT="${MERMAID_FORMAT:-png}"   # svg|png
 CLI_BIN="${MERMAID_CLI:-}"
 PUPPETEER_CONFIG="${MERMAID_PUPPETEER_CONFIG:-$ROOT/scripts/docs/puppeteer.config.json}"
 CONFIG="${MERMAID_CONFIG:-$ROOT/scripts/docs/mermaid.config.json}"

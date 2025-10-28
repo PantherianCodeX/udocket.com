@@ -48,7 +48,7 @@ Source `.mmd` files live under each owner doc’s local `diagrams/` folder. Cros
 scripts/docs/render_mermaid.sh
 ```
 
-Use `--all` to force a full rebuild. Rendered SVGs land in `docs/src/build/mermaid/` (checked in so MkDocs and PDF builds can read them). The CI job `Docs CI` performs the same action so broken diagrams are caught automatically.
+Use `--all` to force a full rebuild. Rendered SVGs land in `docs/src/build/mermaid/` (checked in so MkDocs and PDF builds can read them). Reference them in Markdown/HTML using `/build/mermaid/...` so paths remain correct when the site is published. The CI job `Docs CI` performs the same action so broken diagrams are caught automatically.
 
 ## VS Code setup
 

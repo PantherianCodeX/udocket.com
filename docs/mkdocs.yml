@@ -28,6 +28,8 @@ plugins:
   - search
   - tags
   - redirects
+extra_css:
+  - assets/stylesheets/diagrams.css
 
 extra_javascript:
   - https://unpkg.com/mermaid@10/dist/mermaid.min.js
