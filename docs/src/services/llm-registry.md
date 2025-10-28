@@ -53,6 +53,19 @@ header-includes:
 
 ______________________________________________________________________
 
+## Document controls
+
+| Field          | Value                                                                                      |
+| -------------- | ------------------------------------------------------------------------------------------ |
+| Version        | 0.1-draft                                                                                  |
+| Status         | Implementable                                                                              |
+| Last updated   | 2025-10-23                                                                                 |
+| Primary owners | Platform Architecture; Security Engineering; Applied AI Programs                           |
+| Approvers      | Architecture Steering Committee; Security Review Board                                     |
+| Reviewers      | QA Engineering Lead; FinOps Manager                                                        |
+
+______________________________________________________________________
+
 ## Reading guide
 
 - **Scope:** LLM provider catalog, selection orchestration, residency safeguards, moderation, reproducibility, and FinOps controls governing Analyze/Compose lanes and other agent workloads.

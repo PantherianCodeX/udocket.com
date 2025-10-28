@@ -48,15 +48,14 @@ nav:
       - Overview: overview/prd/index.md
       - Product Requirements: overview/prd.md
   - Services:
-      - Web App: apps/web-app.md
-      - Worker Cluster: apps/worker-cluster.md
+      - Web App: services/web-app.md
+      - Worker Cluster: services/worker-cluster.md
       - Guardian: services/guardian.md
       - Digital Signer: services/digital-signer.md
       - Settings Registry: services/settings.md
       - LPE: services/lp-engine.md
       - Reference Manager: services/ref-manager.md
       - LLM Registry: services/llm-registry.md
-      - Web App: services/web-app.md
       - Notifications: services/notifications.md
   - Ops:
       - Runbooks: ops/runbooks/index.md

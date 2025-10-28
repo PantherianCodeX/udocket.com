@@ -54,7 +54,20 @@ header-includes:
 
 ______________________________________________________________________
 
-## 0) Reading guide
+## Document controls
+
+| Field          | Value                                                                                                   |
+| -------------- | ------------------------------------------------------------------------------------------------------- |
+| Version        | 0.1-draft                                                                                               |
+| Status         | Implementable                                                                                           |
+| Last updated   | 2025-10-23                                                                                              |
+| Primary owners | Platform Engineering; Product Management                                                                |
+| Approvers      | Architecture Steering Committee; Security Review Board                                                  |
+| Reviewers      | Accessibility Program Lead; Operations Engineering                                                      |
+
+______________________________________________________________________
+
+## Reading guide
 
 - **Scope:** Describes the staff-facing workspace, reviewer consoles, and the client portal. Covers accessibility, collaboration, security posture, manual/agent edit tooling, conversational assistants, and document assembly flows.
 - **Structure:** Sections follow the standard 0–10 service template. Responsibilities (§2) map to the major UI pillars; APIs (§3) reference capability discovery, SSE topics, and secure download flows; state, failure, observability, and compliance requirements are consolidated in §§4–7.

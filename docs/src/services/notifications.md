@@ -53,7 +53,20 @@ header-includes:
 
 ______________________________________________________________________
 
-## 0) Reading guide
+## Document controls
+
+| Field          | Value                                                                                  |
+| -------------- | -------------------------------------------------------------------------------------- |
+| Version        | 0.1-draft                                                                              |
+| Status         | Implementable                                                                          |
+| Last updated   | 2025-10-23                                                                             |
+| Primary owners | Platform Engineering; Operations Engineering                                           |
+| Approvers      | Architecture Steering Committee; Security Review Board                                 |
+| Reviewers      | Compliance Lead; SRE Manager                                                           |
+
+______________________________________________________________________
+
+## Reading guide
 
 - **Scope:** Governs outbound communications (email, SMS, phone-adjacent alerts, secure download tokens) and in-app notifications emitted by the uDocket platform. Covers outbox/state machines, provider adapters, webhook ingestion, receipts, audit posture, digest generation, and rate limiting. Portal banners and SSE fan-out ride on the same orchestration, so UI sections reference this specification for delivery guarantees.
 - **Structure:** Sections follow the 0–10 template. Responsibilities (§2) enumerate channels and compliance requirements; APIs (§3) describe outbound queues and webhook callbacks; State management (§4) documents schema, RLS, and secure-view contracts; Failure/Observability (§5–§6) map to alerting; Security & Compliance (§7) captures DMARC/SMS obligations; Operations (§8) links to runbooks/digests; Dependencies, references close the doc.
