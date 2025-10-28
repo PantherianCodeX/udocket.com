@@ -96,16 +96,22 @@ def transform_section(section: list[str], label: str, path: Path) -> tuple[list[
     headings: list[Heading] = []
     first_heading = True
 
+    level_adjust = 0
     for line in section:
         heading_match = HEADING_RE.match(line)
         if heading_match:
             level = len(heading_match.group(1))
             text = heading_match.group(2).strip()
-            if first_heading and level != 2:
+            if first_heading and level < 2:
                 raise ValueError(
-                    f"Runbook sections must begin with an H2 heading in {path.name}: '{text}'."
+                    f"Runbook sections must begin with an H2 or deeper heading in {path.name}: '{text}'."
                 )
-            first_heading = False
+            if first_heading:
+                if level > 2:
+                    level_adjust = level - 2
+                first_heading = False
+
+            normalized_level = max(2, level - level_adjust)
 
             prefixed_text = f"{label} — {text}"
             anchor = RB_ID_RE.search(text)
@@ -115,8 +121,10 @@ def transform_section(section: list[str], label: str, path: Path) -> tuple[list[
                 output.append(f'<a id="{anchor.group(1).lower()}"></a>')
             if output and output[-1].strip():
                 output.append("")
-            output.append(f"{'#' * level} {prefixed_text}")
-            headings.append(Heading(level=level, text=prefixed_text, slug=slugify(prefixed_text)))
+            output.append(f"{'#' * normalized_level} {prefixed_text}")
+            headings.append(
+                Heading(level=normalized_level, text=prefixed_text, slug=slugify(prefixed_text))
+            )
         else:
             output.append(line)
 

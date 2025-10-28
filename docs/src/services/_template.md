@@ -93,13 +93,75 @@ Use this section to orient readers before they dive into the specification. It s
 
 ## 8) Operational Notes
 
-**Purpose:** Summarize deployments, maintenance windows, and runbooks. **|**
-**Contract:** Capture SLAs, rollout gates, and release cadence. **|**
-**State:** Note infrastructure manifests and environment differences. **|**
-**Failure modes & handling:** Document deployment rollback and incident processes. **|**
-**Observability:** Release dashboards, deployment checks, synthetic monitors. **|**
-**Breadcrumbs:** Helm charts, Terraform modules, runbooks. **|**
-**References:** Ops appendices or deployment ADRs.
+**Purpose:** Summarize deployments, maintenance windows, readiness posture, and day-2 workflows that keep the service healthy. **|**
+**Contract:** Capture SLAs, rollout gates, and operational ownership, including how alerts map to playbooks. **|**
+**State:** Note infrastructure manifests, automation scripts, runbook repositories, and evidence storage. **|**
+**Failure modes & handling:** Document rollback paths, drill cadence, and how gaps in operational readiness are remediated. **|**
+**Observability:** Release dashboards, deployment checks, synthetic monitors, and runbook execution tracking. **|**
+**Breadcrumbs:** Helm charts, Terraform modules, runbooks, incident templates. **|**
+**References:** Ops appendices, deployment ADRs, alert catalogs.
+
+### 8.1 Operational posture
+
+**Purpose:** Describe on-call coverage, staffing, maintenance windows, and readiness assumptions. **|**
+**Contract:** Define required rotations, required skill sets, and rota expectations (follow-the-sun, pager response times). **|**
+**State:** Note rosters, calendars, and tooling that track staffing availability. **|**
+**Failure modes & handling:** Explain how gaps in coverage or readiness are detected and escalated. **|**
+**Observability:** Link to dashboards auditing staffing health, paging latency, or readiness checklists. **|**
+**Breadcrumbs:** Staffing docs, rota configs, escalation policies. **|**
+**References:** Incident management playbooks, HR/ops policies.
+
+### 8.2 Incident triggers
+
+**Purpose:** Enumerate the alerts, dashboards, or metrics that declare an incident for this service. **|**
+**Contract:** Map each trigger to severity, owning team, and required first actions. **|**
+**State:** Capture alert definitions, SLO budgets, and suppression rules. **|**
+**Failure modes & handling:** Highlight gaps (false positives/negatives) and how they are reviewed. **|**
+**Observability:** Tie triggers to monitoring stacks and weekly/monthly incident reviews. **|**
+**Breadcrumbs:** Alert definitions, PagerDuty services, Grafana dashboards. **|**
+**References:** Runbook sections, observability standards.
+
+### 8.3 Runbooks & drills
+
+**Purpose:** Document operational playbooks responders execute during incidents or exercises. **|**
+**Contract:** Link production alerts to runbook identifiers, outline execution cadence, and name the maintaining team. **|**
+**State:** Summarize where runbooks live (repo paths, automation scripts) and what evidence they produce. **|**
+**Failure modes & handling:** Explain how missing, stale, or skipped runbooks are surfaced and remediated. **|**
+**Observability:** Note tooling that tracks drill frequency, runbook completion, and incident follow-up. **|**
+**Breadcrumbs:** Runbook files, automation scripts, incident templates. **|**
+**References:** Alert catalogs, governance docs referencing the runbooks.
+
+#### 8.3.1 Runbook index
+
+> Provide a quick map from alert codes/signals to runbook identifiers.
+
+#### 8.3.2 Primary runbooks
+
+> Document the key runbooks (rollback, incident triage, hotfix, etc.) with summary tables or links.
+
+#### 8.3.3 Drill cadence & evidence
+
+> Capture expectations for tabletop exercises, on-call readiness checks, and evidence storage.
+
+### 8.4 Migrations & backfills
+
+**Purpose:** Capture schema/data migrations, backfills, and replay tooling required to maintain the service. **|**
+**Contract:** Define approvals, sequencing, and rollback expectations for each migration class. **|**
+**State:** Note migration scripts, versioning metadata, and audit artifacts. **|**
+**Failure modes & handling:** Describe how failed migrations are detected, rolled back, or re-run safely. **|**
+**Observability:** Include dashboards or alerts monitoring migration progress. **|**
+**Breadcrumbs:** Migration scripts, replay jobs, change-management templates. **|**
+**References:** ADRs or ops docs governing migrations.
+
+### 8.5 Operational workflows
+
+**Purpose:** Describe recurring operational tasks (manual review, quarterly audits, data purges). **|**
+**Contract:** Define who executes each workflow, prerequisites, and escalation thresholds. **|**
+**State:** Point to checklists, run sheets, or automation supporting the workflow. **|**
+**Failure modes & handling:** Explain how skipped or incomplete workflows are detected and corrected. **|**
+**Observability:** Track workflow health via dashboards, audit logs, or retrospectives. **|**
+**Breadcrumbs:** Workflow documentation, automation scripts, staffing rosters. **|**
+**References:** Incident management playbooks, staffing guides.
 
 ## 9) Dependencies
 
@@ -113,10 +175,4 @@ Use this section to orient readers before they dive into the specification. It s
 
 ## 10) References
 
-**Purpose:** Point readers to supplemental material. **|**
-**Contract:** Ensure references stay current and authoritative. **|**
-**State:** Maintain links to diagrams, ADRs, glossaries. **|**
-**Failure modes & handling:** State how outdated references are surfaced. **|**
-**Observability:** Mention review cadence or linting support. **|**
-**Breadcrumbs:** None (or list meta scripts). **|**
-**References:** Optional closing links (ADR index, glossary, appendices).
+> Point readers to supplemental material. Optional closing links (ADR index, glossary, appendices).

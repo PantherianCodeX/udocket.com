@@ -59,11 +59,11 @@ ______________________________________________________________________
 ## 5) Failure modes (binding)
 
 **Purpose:** Capture the primary ways SR can degrade and the responses required to keep configuration trustworthy. **|**
-**Contract:** SR must fail closed on unsafe activations, drift, or residency violations; manual overrides require documented waivers and adherence to Appendix R runbooks. **|**
+**Contract:** SR must fail closed on unsafe activations, drift, or residency violations; manual overrides require documented waivers and adherence to §8.3 Runbooks & drills. **|**
 **State:** Incidents log in `ops/guardian/incidents/` (shared format), `settings_drift_finding`, and `settings_activation` status fields. **|**
 **Failure modes & handling:** Validator failures, snapshot mismatches, and residency drift each trigger dedicated runbooks detailed below. **|**
 **Observability:** Alerts on `settings_activation_unsafe_total`, `settings_snapshot_mismatch_total`, and `settings_residency_violation_total` page on-call responders. **|**
-**References:** §4 State management, §6 Observability, Appendix R RB-GOV-008/RB-RES-*/RB-LOCK-006. **|**
+**References:** §4 State management, §6 Observability, §8.3.2 RB-GOV-008 / §8.3.3–§8.3.4 RB-RES-* / §8.3.5 RB-LOCK-006. **|**
 **Breadcrumbs:** Incident automation `ops/scripts/guardian/*.py` (shared framework), drift detector `apps/platform/settings/telemetry.py`, residency validators `apps/platform/settings/validators/residency.py`.
 
 ### 5.1 Activation validator failure (binding)
@@ -73,7 +73,7 @@ ______________________________________________________________________
 **State:** Unsafe details recorded in `settings_activation_validation`; approvers annotate mitigation steps. **|**
 **Failure modes & handling:** Runbook RB-GOV-008 outlines rollback, manual review, and dual approval flow; automation freezes subsequent activations until the incident closes. **|**
 **Observability:** Alerts `settings_activation_unsafe_total` and SLO burn-rate alarms escalate to Architecture/Security. **|**
-**References:** §4.1 Activation pipeline, §4.3 Dual approval, Appendix R RB-GOV-008. **|**
+**References:** §4.1 Activation pipeline, §4.3 Dual approval, §8.3.2 RB-GOV-008. **|**
 **Breadcrumbs:** Validation services `apps/platform/settings/services/validation.py`, tests `tests/platform/settings/test_activation_flow.py::test_pipeline_rejects_invalid`.
 
 ### 5.2 Snapshot mismatch & drift (binding)
@@ -83,7 +83,7 @@ ______________________________________________________________________
 **State:** Drift findings persist in `settings_drift_finding` with remediation tickets and timestamps. **|**
 **Failure modes & handling:** RB-RES-ENDPOINT and RB-JOB-WATCHDOG guide reconciliation; SR may replay last known good bundle or regenerate snapshots. **|**
 **Observability:** “Settings Drift” dashboard, alerts `settings_snapshot_mismatch_total`, and synthetic fetches confirm when drift resolves. **|**
-**References:** §2.3 Snapshot contract, §6 Observability, Appendix R RB-RES-ENDPOINT/RB-JOB-WATCHDOG. **|**
+**References:** §2.3 Snapshot contract, §6 Observability, §8.3.3 RB-RES-ENDPOINT / §8.3.7 RB-JOB-WATCHDOG. **|**
 **Breadcrumbs:** Telemetry module `apps/platform/settings/telemetry.py`, tests `tests/platform/settings/test_drift.py`.
 
 ### 5.3 Residency enforcement incident (binding)
@@ -93,7 +93,7 @@ ______________________________________________________________________
 **State:** Residency findings recorded in `settings_residency_profile` and incident logs; waivers tracked with expiry. **|**
 **Failure modes & handling:** RB-RES-BLOCK and RB-RES-ENDPOINT guide containment, catalog sync, and waiver approval; Guardian cross-checks waivers before judgments resume. **|**
 **Observability:** Alerts `settings_residency_violation_total`, audit events `RESIDENCY_ENDPOINT_NEW`, and Security tickets `SEC-RESIDENCY-ENDPOINT` drive follow-up. **|**
-**References:** §2.4 Residency & egress, §7 Security & compliance, Appendix R RB-RES-* runbooks. **|**
+**References:** §2.4 Residency & egress, §7 Security & compliance, §8.3.3–§8.3.4 RB-RES-* runbooks. **|**
 **Breadcrumbs:** Validators `apps/platform/settings/validators/residency.py`, tests `tests/platform/settings/test_residency_validators.py`.
 
 ______________________________________________________________________
@@ -181,9 +181,9 @@ ______________________________________________________________________
 **Purpose:** Capture SR’s reliability targets and deployment guardrails. **|**
 **Contract:** Maintain 99.9 % availability, read p95 latency ≤ 120 ms, activation completion p95 ≤ 2 minutes, and cache invalidation propagation ≤ 60 seconds; exceeding burn-rate thresholds freezes activations. **|**
 **State:** Error budget tracking persists in `sre_error_budget` with monthly burn-rate snapshots; release gates consult these metrics. **|**
-**Failure modes & handling:** Burn rate > 1.0 for 60 minutes halts blue/green promotion; SLO breaches invoke RB-GOV-008 (Appendix R). **|**
+**Failure modes & handling:** Burn rate > 1.0 for 60 minutes halts blue/green promotion; SLO breaches invoke RB-GOV-008 (§8.3). **|**
 **Observability:** Synthetic monitors exercise read and activation APIs per deploy; alerts `settings_availability_breach` and `settings_activation_delay` gate releases. **|**
-**References:** §6 Observability, Appendix B, Appendix R. **|**
+**References:** §6 Observability, Appendix B, §8.3. **|**
 **Breadcrumbs:** Helm chart `infra/kubernetes/settings/`, SLO tests `tests/synthetics/test_settings_slo.py`, Grafana “Settings Registry – SLO”.
 
 ______________________________________________________________________
@@ -246,7 +246,7 @@ ______________________________________________________________________
 **State:** Residency metadata persists in `settings_residency_profile` cross-linked to RM bundles and waiver records. **|**
 **Failure modes & handling:** Missing catalog entries raise `RESIDENCY_ENDPOINT_NEW`; activations stay blocked until RM ingestion completes or waiver approved. **|**
 **Observability:** Audit events `RESIDENCY_ENDPOINT_NEW`, metric `settings_residency_violation_total`, and nightly drift scans enforce compliance. **|**
-**References:** §7 Security & compliance, Appendix R RB-RES-* runbooks. **|**
+**References:** §7 Security & compliance, §8.3.3–§8.3.4 RB-RES-* runbooks. **|**
 **Breadcrumbs:** Validators `apps/platform/settings/validators/residency.py`, tests `tests/platform/settings/test_residency_validators.py`.
 
 - Change detection opens Security tickets (`SEC-RESIDENCY-ENDPOINT`) and requires dual approval for temporary waivers.
@@ -342,7 +342,7 @@ ______________________________________________________________________
 **State:** Key metadata stores in `settings_hmac_key`; rotations link to activation records and audit trails. **|**
 **Failure modes & handling:** Signature mismatches return `401`; clients refresh keys or resync clocks before retrying. **|**
 **Observability:** “Settings Auth” dashboard segments `settings_auth_failure_total` by reason (signature_mismatch, expired_timestamp, disabled_key); audit events capture actor and bundle IDs. **|**
-**References:** §7 Security & compliance, Appendix R runbooks. **|**
+**References:** §7 Security & compliance, §8.3 Runbooks & drills. **|**
 **Breadcrumbs:** Security helpers `apps/platform/settings/security.py`, tests `tests/platform/settings/test_auth.py`.
 
 ### 3.4 Privacy & redaction (normative)
@@ -364,7 +364,7 @@ ______________________________________________________________________
 **State:** Activation records, stage history, diff artifacts, and lock metadata reside in Postgres (`setting_activation`, `setting_activation_stage`, `settings_activation_lock`) with companion artifacts under `storage/media/settings/`. **|**
 **Failure modes & handling:** Validator failures, lock contention, or stale caches halt activations until remediation (see §§4.2–4.5 and §5). **|**
 **Observability:** “Settings Activation”, “Settings Diff”, “Settings Lock”, and “Settings Cache” dashboards track duration, unsafe counts, contention, and invalidation lag. **|**
-**References:** §2 Responsibilities, §3 API contract, §5 Failure modes, Appendix R runbooks. **|**
+**References:** §2 Responsibilities, §3 API contract, §5 Failure modes, §8.3 Runbooks & drills. **|**
 **Breadcrumbs:** Activation services `apps/platform/settings/services/`, diff renderer `apps/platform/settings/services/diff.py`, lock manager `apps/platform/settings/services/locks.py`.
 
 ### 4.1 Activation pipeline (binding)
@@ -374,7 +374,7 @@ ______________________________________________________________________
 **State:** Pipeline stages record in `setting_activation_stage`; lock state maintained per org/bundle. **|**
 **Failure modes & handling:** Validator failures mark activations unsafe; operators remediate and resubmit. Rollback replays previous bundles with preserved audit metadata. **|**
 **Observability:** “Settings Activation” dashboard tracks `settings_activation_duration_seconds`, unsafe counts, and rollback frequency; traces link to change tickets. **|**
-**References:** §5 Failure modes, Appendix R RB-GOV-008. **|**
+**References:** §5 Failure modes, §8.3.2 RB-GOV-008. **|**
 **Breadcrumbs:** Activation service `apps/platform/settings/services/activation.py`, tests `tests/platform/settings/test_activation_flow.py`.
 
 - Diff previews produce human-readable and machine JSON artifacts for reviewers.
@@ -387,7 +387,7 @@ ______________________________________________________________________
 **State:** Diff artifacts persist in `settings_activation_diff` with SHA-256 digests and reviewer annotations. **|**
 **Failure modes & handling:** Missing diff or compilation errors block approval; remediate data and rerun pipeline. **|**
 **Observability:** “Settings Diff” panel charts `settings_diff_generated_total` by bundle type; alerts fire when diff generation fails repeatedly. **|**
-**References:** Appendix A traceability map, Appendix R RB-GOV-008. **|**
+**References:** Appendix A traceability map, §8.3.2 RB-GOV-008. **|**
 **Breadcrumbs:** Diff renderer `apps/platform/settings/services/diff.py`, tests `tests/platform/settings/test_diff_preview.py`.
 
 ### 4.3 Dual approval & waiver workflow (binding)
@@ -397,7 +397,7 @@ ______________________________________________________________________
 **State:** Approval records persist in `settings_activation_approval`; waivers track in `settings_waiver` referencing App.O decision log entries. **|**
 **Failure modes & handling:** Missing approvals keep activations pending; expired waivers trigger alerts and block reactivation until renewed. **|**
 **Observability:** “Settings Governance” dashboard charts `settings_dual_approval_total`, waiver counts, and decision latency; audit events `SETTINGS_CHANGE_REQUESTED` and `SETTINGS_WAIVER_APPLIED` broadcast outcomes. **|**
-**References:** §7 Security & compliance, Appendix R RB-GOV-008. **|**
+**References:** §7 Security & compliance, §8.3.2 RB-GOV-008. **|**
 **Breadcrumbs:** Governance service `apps/platform/settings/services/approvals.py`, tests `tests/platform/settings/test_governance.py`.
 
 ### 4.4 Locking & concurrency control (normative)
@@ -407,7 +407,7 @@ ______________________________________________________________________
 **State:** Lock metadata lives in `settings_activation_lock` with timestamps and holder IDs. **|**
 **Failure modes & handling:** Lock timeouts surface `ACTIVATION_CONFLICT`; clients retry after backoff once lock releases. **|**
 **Observability:** “Settings Lock” panel highlights `settings_activation_lock_wait_seconds`; alerts trigger when waits exceed 30 seconds. **|**
-**References:** §5 Failure modes, Appendix R RB-LOCK-006. **|**
+**References:** §5 Failure modes, §8.3.5 RB-LOCK-006. **|**
 **Breadcrumbs:** Lock utilities `apps/platform/settings/services/locks.py`, tests `tests/platform/settings/test_locks.py`.
 
 ### 4.5 Caching & invalidation (normative)
@@ -431,7 +431,7 @@ ______________________________________________________________________
 **State:** Metrics publish via Prometheus (`settings_*` series), logs/audits persist in Postgres and `storage/media/settings/`, and synthetic jobs emit structured artifacts in `ops/synthetics/`. **|**
 **Failure modes & handling:** Breaches escalate through Section 5 runbooks (RB-GOV-008, RB-RES-*, RB-LOCK-006) before activations resume. **|**
 **Observability:** Grafana dashboards “Settings Registry – SLO”, “Settings Cache”, “Settings Drift”, and “Settings Governance” visualize health; Alertmanager routes incidents to Settings on-call. **|**
-**References:** §1 Purpose, §4 State management, §5 Failure modes, Appendix B metrics, Appendix R runbooks. **|**
+**References:** §1 Purpose, §4 State management, §5 Failure modes, Appendix B metrics, §8.3 Runbooks & drills. **|**
 **Breadcrumbs:** Dashboards `infra/grafana/settings_*.json`, synthetic config `ops/synthetics/settings_slo.yaml`, telemetry module `apps/platform/settings/telemetry.py`.
 
 ### 6.1 Metrics
@@ -449,7 +449,7 @@ ______________________________________________________________________
 **Purpose:** Describe the audit footprint that supports incident response and compliance. **|**
 **Contract:** Activation history, diff artifacts, approvals, waivers, and drift findings must be append-only with immutable digests; redaction policies govern secret output. **|**
 **State:** Logs persist in `setting_activation`, `setting_activation_diff`, `settings_activation_approval`, `settings_drift_finding`, and case-scoped ops directories under `storage/media/settings/`. **|**
-**Failure modes & handling:** Missing artifacts or retention gaps trigger compliance incidents; responders follow Appendix R RB-GOV-008 and RB-LOCK-006. **|**
+**Failure modes & handling:** Missing artifacts or retention gaps trigger compliance incidents; responders follow §8.3.2 RB-GOV-008 and RB-LOCK-006. **|**
 **Observability:** Audit pipeline metrics, partition age checks, and log retention alerts verify coverage. **|**
 **References:** §4 State management, §7 Security & compliance, Appendix A traceability. **|**
 **Breadcrumbs:** Logging config `infra/logging/settings.json`, rotation script `ops/db/rotate_partitions.py`, tests `tests/platform/settings/test_audit_trail.py`.
@@ -461,7 +461,7 @@ ______________________________________________________________________
 **State:** Synthetic definitions live in `ops/synthetics/settings_slo.yaml`; results archive to incident dashboards and CI logs. **|**
 **Failure modes & handling:** Failures escalate via RB-GOV-008; subsequent activations freeze until synthetic success. **|**
 **Observability:** Grafana panels and PagerDuty integrations track synthetic success rates and latency. **|**
-**References:** §4 Activation pipeline, §5 Failure modes, Appendix R RB-GOV-008. **|**
+**References:** §4 Activation pipeline, §5 Failure modes, §8.3.2 RB-GOV-008. **|**
 **Breadcrumbs:** Synthetic scripts `ops/synthetics/`, tests `tests/synthetics/test_settings_slo.py`.
 
 ### 6.4 Drift detection (binding)
@@ -469,7 +469,7 @@ ______________________________________________________________________
 **Purpose:** Detect mismatches between stored snapshots and effective configuration. **|**
 **Contract:** Drift detectors compare snapshot digests, schema versions, and residency profiles on a schedule; any mismatch raises incidents and freezes activations. **|**
 **State:** Findings persist in `settings_drift_finding` with remediation steps and linked tickets. **|**
-**Failure modes & handling:** Unresolved drift escalates to Security and Appendix R RB-RES-ENDPOINT; SR may regenerate snapshots or rollback bundles. **|**
+**Failure modes & handling:** Unresolved drift escalates to Security and §8.3.3 RB-RES-ENDPOINT; SR may regenerate snapshots or rollback bundles. **|**
 **Observability:** “Settings Drift” dashboard charts `settings_snapshot_drift_total` and severity; alerts integrate with on-call rotations. **|**
 **References:** §2.3 Snapshot contract, §5.2 Snapshot mismatch. **|**
 **Breadcrumbs:** Drift detector `apps/platform/settings/telemetry.py`, tests `tests/platform/settings/test_drift.py`.
@@ -481,9 +481,9 @@ ______________________________________________________________________
 **Purpose:** Capture SR’s security posture, residency guarantees, and regulatory obligations. **|**
 **Contract:** SR enforces RLS, secret redaction, residency controls, dual approval, and tamper-evident logs; waivers and manual overrides require documented approval with expiry. **|**
 **State:** Security policies live in IAM roles, RLS definitions, HSM-managed signing keys, and audit tables described below. **|**
-**Failure modes & handling:** Auth violations, residency breaches, or secret exposure escalate through Appendix R runbooks and Security incident workflows. **|**
+**Failure modes & handling:** Auth violations, residency breaches, or secret exposure escalate through §8.3 Runbooks & drills and Security incident workflows. **|**
 **Observability:** Dashboards “Settings Auth”, “Settings Governance”, and “Residency Compliance” plus audit alerts surface violations. **|**
-**References:** §2.4 Residency, §3.3 Authentication, §5 Failure modes, Appendix R RB-RES-*/RB-GOV-008. **|**
+**References:** §2.4 Residency, §3.3 Authentication, §5 Failure modes, §8.3.3–§8.3.4 RB-RES-*/RB-GOV-008. **|**
 **Breadcrumbs:** IAM policies `infra/iam/settings/`, RLS definitions `apps/platform/settings/models.py`, security tests `tests/platform/settings/test_security.py`.
 
 ### 7.1 Access control & RLS (binding)
@@ -511,11 +511,11 @@ ______________________________________________________________________
 ### 7.3 Incident response & rollback (binding)
 
 **Purpose:** Provide repeatable rollback and incident handling procedures. **|**
-**Contract:** Unsafe activations or drift incidents freeze new activations, replay last known good bundles, notify stakeholders, and document remediation per Appendix R RB-GOV-008. **|**
+**Contract:** Unsafe activations or drift incidents freeze new activations, replay last known good bundles, notify stakeholders, and document remediation per §8.3.2 RB-GOV-008. **|**
 **State:** Automation stores rollback checkpoints and evidence attachments alongside incident tickets. **|**
 **Failure modes & handling:** Rollback failures escalate to the incident commander; automation retries with exponential backoff before manual intervention. **|**
 **Observability:** “Settings Incidents” panel tracks `settings_incident_open_total`; postmortems reference activation IDs and audit digests. **|**
-**References:** §5 Failure modes, Appendix R RB-GOV-008/RB-LOCK-006. **|**
+**References:** §5 Failure modes, §8.3.2 RB-GOV-008/RB-LOCK-006. **|**
 **Breadcrumbs:** Runbook scripts `ops/runbooks/settings_rollback.py`, tests `tests/platform/settings/test_rollback.py`.
 
 ### 7.4 Compliance & privacy obligations (normative)
@@ -523,9 +523,9 @@ ______________________________________________________________________
 **Purpose:** Capture DSAR, retention, HIPAA, and disclosure requirements enforced by SR. **|**
 **Contract:** Keys such as `compliance.erasure_mode`, `compliance.subject_hkdf_salt`, `privacy.hipaa.*`, and `privacy.legal.matrix_version` must exist and pass validators before activation; overrides require dual approval with legal citations. **|**
 **State:** Compliance profile metadata lives in `settings_compliance_profile` and links to Reference Manager legal matrices. **|**
-**Failure modes & handling:** Missing keys or invalid values block activation; forced overrides demand dual approval and Appendix R documentation. **|**
+**Failure modes & handling:** Missing keys or invalid values block activation; forced overrides demand dual approval and §8.3 documentation. **|**
 **Observability:** “Settings Compliance” dashboard monitors `settings_compliance_violation_total`; alerts highlight expiring HIPAA bundles or DSAR configuration drift. **|**
-**References:** §2 Responsibilities, §5.3 Residency incidents, Appendix R RB-RES-BLOCK. **|**
+**References:** §2 Responsibilities, §5.3 Residency incidents, §8.3.4 RB-RES-BLOCK. **|**
 **Breadcrumbs:** Compliance enforcement `apps/platform/settings/compliance.py`, tests `tests/platform/settings/test_compliance.py`.
 
 ______________________________________________________________________
@@ -534,40 +534,247 @@ ______________________________________________________________________
 
 **Purpose:** Capture day-to-day operational practices, release mechanics, and tooling used to keep SR healthy. **|**
 **Contract:** Teams must follow documented change control, runbook execution, and release cadence; deviations require incident documentation and retro actions. **|**
-**State:** Operational metadata lives in runbooks under `ops/runbooks/guardian` (shared format), `ops/runbooks/settings/`, deployment scripts, and incident retros in `ops/guardian/incidents/` (shared template). **|**
-**Failure modes & handling:** Skipping change control or drift from operational guides increases audit risk; Appendix R enforces quarterly reviews and drill cadence. **|**
+**State:** Operational metadata lives in runbooks under `ops/runbooks/settings/`, deployment scripts, and incident retros in shared `ops/guardian/incidents/` templates. **|**
+**Failure modes & handling:** Skipping change control or drifting from operational guides increases audit risk; §8.3 runbooks codify the required responses. **|**
 **Observability:** Deployment dashboards, runbook completion checklists, and CI jobs surface operational hygiene. **|**
-**References:** §4 State management, §5 Failure modes, Appendix R RB-* entries. **|**
+**References:** §4 State management, §5 Failure modes, §8.3 Runbooks & drills, Appendix B alerts. **|**
 **Breadcrumbs:** Deployment scripts `ops/scripts/settings_deploy.py`, CI workflows `.github/workflows/docs-ci.yml`, runbooks `ops/runbooks/settings/`.
 
-### 8.1 Deployment & release cadence (binding)
+### 8.1 Operational posture (binding)
 
-**Purpose:** Describe how SR code and configuration rollouts occur. **|**
+**Purpose:** Outline staffing, freeze windows, and readiness expectations that keep SR governable. **|**
+**Contract:** Settings on-call (shared with Guardian and LPE) staffs PagerDuty “Settings SLO”, honors blue/green deployment freezes, and executes RB-GOV-008/RB-RES-* before resuming automation after incidents. **|**
+**State:** Roster lives in `ops/guardian/roster.yaml` (annotated with SR owners); freeze calendars and change tickets track release windows. **|**
+**Failure modes & handling:** Missing coverage or ignored freezes trigger management review and corrective actions. **|**
+**Observability:** PagerDuty response metrics, deployment dashboards, and freeze indicators highlight posture drift. **|**
+**References:** §6 Observability, §8.3 Runbooks & drills, §8.5.1 Release cadence & change control. **|**
+**Breadcrumbs:** Roster `ops/guardian/roster.yaml`, freeze calendar `ops/settings/freeze_windows.yaml`, workflow `.github/workflows/settings-deploy.yml`.
+
+- Blue/green deploys require active change tickets and explicit freeze acknowledgements; freezes lift only after post-deploy SLO burn remains < 0.5 for two hours.
+- Duty officers escalate to Architecture and Security when governance toggles or residency incidents occur; contact paths live in the roster file.
+- Quarterly readiness reviews sample incident evidence to confirm runbook adherence and staffing coverage.
+
+### 8.2 Incident triggers (binding)
+
+**Purpose:** Map SR alerts to the playbooks responders execute so incidents open with the right context. **|**
+**Contract:** Alert definitions in `infra/monitoring/settings-prometheus-rules.yaml` each specify the RB-* identifier to run; Responders capture evidence before clearing the alert. **|**
+**State:** Alert payloads include runbook IDs and change-ticket links; incidents log under `ops/settings/incidents/<date>.jsonl`. **|**
+**Failure modes & handling:** Misconfigured alert → runbook mapping or suppressed notifications require Ops sign-off and follow-up tasks. **|**
+**Observability:** Grafana dashboards, Alertmanager routing, and post-incident reviews track trigger efficacy. **|**
+**References:** §5 Failure modes, §8.3 Runbooks & drills, Appendix B metrics. **|**
+**Breadcrumbs:** Alert configuration `infra/monitoring/settings-prometheus-rules.yaml`, PagerDuty “Settings SLO”, incident templates `ops/settings/incident_template.md`.
+
+- `settings_availability_breach` and `settings_activation_delay` route to RB-GOV-008 and RB-LOCK-006 to stabilize the service before re-opening automation.
+- `settings_governance_override_total` invokes RB-GOV-008 to review waivers and governance toggles.
+- `settings_residency_violation_total` and `settings_secret_access_anomaly` escalate via RB-RES-ENDPOINT/RB-RES-BLOCK and RB-UPLOAD-SCAN respectively.
+- `settings_llm_circuit_open` and `settings_job_watchdog_timeout_total` invoke RB-LLM-003 and RB-JOB-WATCHDOG to preserve cost and SLA budgets.
+
+### 8.3 Runbooks & drills (binding)
+
+**Purpose:** Maintain authoritative SR recovery guides, drills, and manual procedures executed during incidents. **|**
+**Contract:** Alerts enumerated in §8.2 and Appendix B map to RB-* identifiers documented here; responders update these runbooks after every incident or drill. **|**
+**State:** Procedures live alongside automation scripts in `ops/runbooks/settings/`, with evidence logged under `ops/settings/<date>/` for each activation or remediation. **|**
+**Failure modes & handling:** Missing or stale steps block deployment sign-off; responders raise follow-up tasks to refresh runbooks before closing incidents. **|**
+**Observability:** Post-incident retros, quarterly tabletop exercises, and docs lint verify runbook coverage. **|**
+**References:** §5 Failure modes, §8.1 Operational posture, Appendix B metrics, ADR-0004. **|**
+**Breadcrumbs:** Runbooks `ops/runbooks/settings/*.md`, automation scripts under `ops/scripts/settings/`, tests `tests/platform/settings/test_runbook_integrity.py`.
+
+#### 8.3.1 Runbook index (informative)
+
+**Purpose:** Provide a quick lookup of SR runbooks and drill identifiers. **|**
+**Contract:** Every Settings alert references one of these IDs; new alerts require index updates. **|**
+**State:** Index maintained in version control and mirrored here. **|**
+**Failure modes & handling:** Lint script fails when the index misses an alert; update the entry before merging. **|**
+**Observability:** Weekly docs lint verifies the index matches Alertmanager routes. **|**
+**References:** §8.2 Incident triggers, §8.3.2–§8.3.8. **|**
+**Breadcrumbs:** Runbook index `ops/runbooks/settings/index.md`, tests `tests/platform/settings/test_runbook_index.py`.
+
+- RB-GOV-008 — Settings governance toggle / rollback
+- RB-RES-ENDPOINT — Residency endpoint drift remediation
+- RB-RES-BLOCK — Residency waiver / block handling
+- RB-LOCK-006 — Activation lock stale detection & remediation
+- RB-LLM-003 — Provider degradation / circuit breaker
+- RB-JOB-WATCHDOG — Job stall watchdog
+- RB-UPLOAD-SCAN — Upload scanning outage response
+
+#### 8.3.2 RB-GOV-008 — Settings governance toggle / rollback (binding)
+
+**Purpose:** Safely activate or revert high-sensitivity governance toggles (waivers, residency overrides, cross-org pilots). **|**
+**Contract:** Any activation flagged `unsafe` or touching governance scopes must follow this sequence before promotion. **|**
+**State:** Runbook automation uses `ops/runbooks/settings_rollback.py`; evidence stores under `ops/settings/<date>/`. **|**
+**Failure modes & handling:** Missing approvals or failed smoke tests require immediate rollback via `settings rollback --bundle <previous_id>`. **|**
+**Observability:** Alert clears once activation completes with both approvals and validation metrics green. **|**
+**References:** §4 State management, §5.1 Activation validator failure, §8.3.1 Runbook index. **|**
+**Breadcrumbs:** Runbook `ops/runbooks/settings/governance_toggle.md`, tests `tests/platform/settings/test_rollback.py`, dashboard “Settings Governance”.
+
+- Triggers: `settings_governance_override_total`, change tickets tagged `GOV-TOGGLE`, or manual escalation from Security/Architecture.
+- Execution checklist:
+  1. Announce maintenance window with activation/rollback times in `#ops-announcements`.
+  2. Validate staging dry-run (matching bundle hash) and attach diff evidence to the change ticket.
+  3. Execute activation via CLI/UI, capturing activation ID and `unsafe_reasons[]` result (expected empty).
+  4. Run targeted smoke tests (API read/write, portal toggle, worker snapshot) tied to the toggle.
+  5. Update change ticket and decision log with activation ID, evidence, and rollback window.
+- Rollback steps: reapply prior bundle via `settings rollback --bundle <previous_id>`, verify `settings.changed` emission, rerun smoke tests, and communicate rollback rationale.
+- Evidence requirements: store activation/rollback JSON artifacts under `ops/settings/<date>/`, append decision log entries with activation IDs, and attach customer/support comms templates.
+
+#### 8.3.3 RB-RES-ENDPOINT — Residency endpoint drift remediation (binding)
+
+**Purpose:** Restore compliant residency posture when outbound endpoints drift or new hosts appear. **|**
+**Contract:** Findings remain open until catalogue updates land or waivers capture dual approval and expiry. **|**
+**State:** Findings persist in `residency_endpoint_findings`; evidence stored in `ops/residency/endpoint_scan.jsonl`. **|**
+**Failure modes & handling:** Waivers lacking dual approval or missing catalogue updates keep the incident open and block affected activations. **|**
+**Observability:** Alert `alert_residency_endpoint_drift` and dashboard “Residency & Endpoint Posture” track drift; auto-resolves after two clean scans and updated catalogue hashes. **|**
+**References:** §5.3 Residency enforcement incident, §8.3.1 Runbook index, ADR-0004. **|**
+**Breadcrumbs:** Runbook `ops/runbooks/settings/residency_endpoint_drift.md`, tests `tests/platform/settings/test_residency_triage.py::test_endpoint_drift_runbook`, Grafana dashboard “Residency & Endpoint Posture”.
+
+Triage checklist:
+
+1. Query `residency_endpoint_findings` for `state='open'`; review evidence attachments.
+2. Inspect Istio AuthorizationPolicy revisions to ensure offending hosts remain blocked.
+3. Identify impacted providers/orgs via activation diff linked in alert payload.
+
+Decision tree:
+
+- **Provider expansion** — Engage Reference Manager to ingest metadata, rerun `residency_endpoint_scan --host <fqdn>`, and promote Settings activation once SAN + GeoIP verified.
+- **Configuration drift** — Update Settings bundle with corrected allowlist entries; require Security + Architecture approval before clearing the finding.
+- **False positive** — Document justification, capture scan logs, and close after two consecutive clean scans.
+
+Evidence: Attach updated catalogue hashes, scan output, and change ticket references to the incident log.
+
+#### 8.3.4 RB-RES-BLOCK — Residency waiver / block handling (binding)
+
+**Purpose:** Resolve residency policy blocks triggered during activations or runtime checks. **|**
+**Contract:** Blocks clear only after org allowlists align with Reference Manager catalogues or waivers recorded with expiry and dual approval. **|**
+**State:** Policy blocks logged as `RESIDENCY_POLICY_BLOCK`; waiver metadata stored in `settings_waiver`. **|**
+**Failure modes & handling:** Waivers without expiry or missing approvals invalidate activation attempts; responders must remediate before promoting changes. **|**
+**Observability:** Alert `alert_residency_policy_block` and dashboard “Residency Compliance” show resolution status. **|**
+**References:** §5.3 Residency enforcement incident, §8.3.1 Runbook index. **|**
+**Breadcrumbs:** Runbook `ops/runbooks/settings/residency_block.md`, tests `tests/platform/settings/test_residency_validators.py::test_block_requires_waiver`.
+
+Steps:
+
+1. Confirm org allowlists (`regions.allowlist.compute/storage/vector`).
+2. Validate provider endpoints and DNS against RM catalogue snapshots.
+3. If cross-region access required, capture dual approval, set `cross_region_waiver=true`, and document expiry.
+4. Re-run activation or job; confirm Guardian manifests reference waiver ID.
+5. Audit waiver usage daily until expiry or remediation.
+
+#### 8.3.5 RB-LOCK-006 — Activation lock stale detection & remediation (binding)
+
+**Purpose:** Detect and remediate stuck activation locks without risking concurrent edits. **|**
+**Contract:** Lock holders must release within `udlock.max_session_hold_seconds`; stale locks trigger this runbook. **|**
+**State:** Lock registry tracked in `settings_activation_lock`; helper scripts expose current holders. **|**
+**Failure modes & handling:** Forcing unlock without verifying holder state risks split-brain activations; follow the decision tree below. **|**
+**Observability:** Alert `settings_activation_lock_wait_seconds` and dashboard “Settings Lock” confirm resolution. **|**
+**References:** §4.3 Activation locks, §5.1 Activation validator failure, §8.3.1 Runbook index. **|**
+**Breadcrumbs:** Runbook `ops/runbooks/settings/activation_lock.md`, tests `tests/platform/settings/test_locks.py::test_lock_scope`, script `scripts/settings/show_activation_locks.py`.
+
+Checklist:
+
+1. Inspect lock registry via `scripts/settings/show_activation_locks.py` filtered by environment.
+2. Verify holder liveness (`SELECT ... FROM pg_stat_activity`) to differentiate idle vs active transactions.
+3. If holder dead or idle-in-transaction, coordinate worker/web restart or issue `SELECT pg_terminate_backend(...)` per policy.
+4. After release, rerun activation pipeline smoke tests; capture evidence in incident log.
+5. File follow-up if lock reappears within 24h (root cause investigation, automation fix).
+
+#### 8.3.6 RB-LLM-003 — Provider degradation / circuit breaker (binding)
+
+**Purpose:** Handle degraded LLM providers to protect cost and SLA budgets. **|**
+**Contract:** OPEN circuits remain until provider health verifies; half-open probes follow the cadence defined here. **|**
+**State:** Circuit state stored in `settings_llm_circuit`; fallback chains defined in Settings bundles. **|**
+**Failure modes & handling:** Prematurely closing circuits or leaving fallback unmonitored risks runaway spend and job failures. **|**
+**Observability:** Alert `alert_llm_circuit_open` and dashboard “FinOps – LLM Cost & Circuit” show circuit posture. **|**
+**References:** §2.7 Provider governance, §5.2 Detector regression, §8.3.1 Runbook index. **|**
+**Breadcrumbs:** Runbook `ops/runbooks/settings/provider_circuit_breaker.md`, tests `tests/platform/settings/test_llm_circuit.py::test_half_open_probe`, dashboard “FinOps – LLM Cost & Circuit”.
+
+Response steps:
+
+1. Confirm affected models via dashboard filters (`llm_circuit_state{model}`) and review recent error/latency metrics.
+2. Validate fallback outcomes in logs (`PRIMARY_DEGRADED`, `FALLBACK_USED`) and ensure FinOps guardrails intact.
+3. Keep circuits OPEN until three consecutive successful half-open probes; adjust fallback priorities if secondary models degrade.
+4. Notify vendor/support with incident details when degradation persists > 15 minutes; record ticket IDs in incident log.
+5. After recovery, document budget impact and corrective actions; update preventive tasks (synthetic prompts, timeout tuning).
+
+#### 8.3.7 RB-JOB-WATCHDOG — Job stall watchdog (binding)
+
+**Purpose:** Restore stuck jobs and protect downstream SLAs when heartbeats lapse. **|**
+**Contract:** Watchdog alerts trigger within `jobs.watchdog.no_progress_minutes` / `jobs.watchdog.timeout_minutes`; responders must either resume progress or terminate safely. **|**
+**State:** Heartbeats stored in `job_progress_heartbeat`; remediation evidence captured in incident tickets (`ops/watchdog/<date>/`). **|**
+**Failure modes & handling:** Premature termination can lose customer work; skipping checkpoint verification risks replaying corrupted artifacts. **|**
+**Observability:** Alerts `job_watchdog_warning_total` and `job_watchdog_timeout_total` plus “Watchdog Runner” dashboards confirm recovery. **|**
+**References:** §5.1 Activation validator failure, §8.3.1 Runbook index, Appendix B metrics. **|**
+**Breadcrumbs:** Runbook `ops/runbooks/platform/job_watchdog.md`, tests `tests/platform/watchdog/test_job_timeout.py::test_timeout_escalation`.
+
+Triage & remediation:
+
+1. Identify affected job IDs from alert payload; confirm `job_progress_heartbeat` age and last known task lane.
+2. Inspect worker logs for stalled tasks, resource exhaustion, or upstream dependency failures; capture excerpts in incident notes.
+3. If work-in-progress artifacts exist, trigger checkpoint validation (`ops/jobs/verify_checkpoint.py`) before retrying.
+4. Attempt safe resume via `jobs resume --job <id>` when the worker is healthy; otherwise cancel and requeue after addressing root cause.
+5. Close alert once heartbeats refresh (< 2 × `jobs.watchdog.heartbeat_interval`) and audit trail updated.
+
+Post-incident follow-up: file preventive tasks for repeated stalls and review `jobs.watchdog.*` thresholds for workload fit.
+
+#### 8.3.8 RB-UPLOAD-SCAN — Upload scanning outage response (binding)
+
+**Purpose:** Maintain quarantine-first posture when malware scanning or format validation degrades. **|**
+**Contract:** New uploads remain blocked (`uploads.enabled=false`) until scanners return to green and evidence recorded per this runbook. **|**
+**State:** Scan attempts logged in `upload_scan_audit`; quarantined objects isolated under `storage/quarantine/<job_id>/`. **|**
+**Failure modes & handling:** Re-enabling uploads without updated signatures risks releasing infected files; overriding quarantine without approvals violates security policy. **|**
+**Observability:** Alerts `upload_scan_error_total` and `upload_scan_queue_depth` alongside “Security — Upload Scanning” dashboard indicate recovery. **|**
+**References:** §2.8 Security enforcement, §5.3 Residency enforcement incident, §8.3.1 Runbook index. **|**
+**Breadcrumbs:** Runbook `ops/runbooks/security/upload_scan.md`, tests `tests/security/test_upload_scan_guard.py::test_quarantine_on_failure`, dashboard “Security — Upload Scanning”.
+
+Response sequence:
+
+1. Confirm scope of degradation (engine errors vs queue backlog) using dashboard drill-downs and `upload_scan_audit` sampling.
+2. Freeze new intake by toggling `uploads.enabled=false` in Settings; announce customer impact and expected review window.
+3. Validate scanner health: check signature freshness, sandbox resource utilization, and recent deployment changes.
+4. For malware detections, coordinate with Security to analyze samples; maintain quarantine until signatures updated and retest passes.
+5. Once scanners stable, re-enable uploads, replay quarantined items through the pipeline, and attach evidence to the incident record.
+
+### 8.4 Migrations & backfills (binding)
+
+**Purpose:** Capture schema, bundle, and catalog migrations required to keep SR state aligned. **|**
+**Contract:** Migration scripts run with dry-run evidence, tagged change tickets, and rollback checkpoints; any partial completion requires incident response. **|**
+**State:** Migration manifests live in `ops/settings/migrations/`, `settings_activation` history logs bundle hashes, and reference catalog digests live in `reference_catalog_snapshot`. **|**
+**Failure modes & handling:** Partial migrations risk drift; responders must execute RB-LOCK-006 or RB-RES-* before re-opening activations. **|**
+**Observability:** Dashboards “Settings Deployment” and “Residency Compliance” plus CI migration smoke tests confirm success. **|**
+**References:** §4 State management, §5 Failure modes, ADR-0004, §8.3 Runbooks & drills. **|**
+**Breadcrumbs:** Migration scripts `ops/scripts/settings/migrate.py`, backfill tooling `ops/scripts/settings/replay_snapshot.py`, change-control template `ops/settings/migrations/README.md`.
+
+- Run `ops/scripts/settings/migrate.py --dry-run` before production execution; attach output to the change ticket.
+- Capture bundle digests before/after migration; verify consumers emit `settings.changed` events.
+- Roll back via `settings rollback --bundle <id>` if post-migration smoke tests fail; document residual drift and remediation tasks.
+
+### 8.5 Operational workflows (normative)
+
+**Purpose:** Describe recurring operational tasks that preserve SR readiness outside of incidents. **|**
+**Contract:** Each workflow enumerated here has an owner, cadence, and evidence requirement; skipped cadences block deploy approvals until remediated. **|**
+**State:** Checklists and automations live in `ops/guardian/checklists/` and docs lint scripts; outputs append to `ops/settings/workflow_log.jsonl`. **|**
+**Failure modes & handling:** Missed cadences surface in quarterly audits; owners must backfill evidence and update processes. **|**
+**Observability:** Staffing dashboards, workflow logs, and CI history provide signals. **|**
+**References:** §8.3 Runbooks & drills, §6 Observability, Appendix B metrics. **|**
+**Breadcrumbs:** Workflow docs `ops/settings/workflows/*.md`, automation scripts `scripts/docs/*.py`, staffing roster `ops/guardian/roster.yaml`.
+
+#### 8.5.1 Release cadence & change control (binding)
+
+**Purpose:** Document how SR code and configuration rollouts occur. **|**
 **Contract:** Code deploys follow blue/green strategy with activation freeze windows; configuration changes require change ticket linkage and dual approval before hitting production. **|**
 **State:** Deployment metadata recorded in GitHub Actions artifacts and `settings_activation` history (`change_ticket`, `release_channel`). **|**
 **Failure modes & handling:** Failed deploys auto-roll back to previous release; configuration freezes remain active until SLOs stabilize. **|**
 **Observability:** Release dashboards show deployment status, activation backlog, and freeze indicators. **|**
-**References:** §4 Activation pipeline, Appendix R RB-GOV-008. **|**
+**References:** §4 Activation pipeline, §8.1 Operational posture, §8.3.2 RB-GOV-008. **|**
 **Breadcrumbs:** Deployment script `ops/scripts/settings_deploy.py`, tests `tests/platform/settings/test_release_workflow.py`.
 
-### 8.2 On-call & staffing (binding)
-
-**Purpose:** Outline operational ownership and escalation paths. **|**
-**Contract:** Settings on-call rotation (shared with Guardian/LPE) monitors dashboards from §6 and executes RB-GOV-008, RB-RES-*, RB-LOCK-006 during incidents; escalation path includes Architecture and Security duty officers. **|**
-**State:** Roster stored in `ops/guardian/roster.yaml` (shared) with SR-specific contacts annotated. **|**
-**Failure modes & handling:** Missing coverage triggers management review; incident retros include staffing analysis. **|**
-**Observability:** PagerDuty “Settings SLO” service tracks alert volume and response times. **|**
-**References:** §6 Observability, Appendix R runbooks. **|**
-**Breadcrumbs:** Roster `ops/guardian/roster.yaml`, PagerDuty configuration, tests `tests/ops/test_runbook_integrity.py`.
-
-### 8.3 Tooling & automation (normative)
+#### 8.5.2 Tooling & automation checks (normative)
 
 **Purpose:** Summarize supporting tooling that keeps SR governance consistent. **|**
-**Contract:** Teams must run `python scripts/docs/lint_docs.py`, `python scripts/docs/build_runbook_catalog.py`, `python scripts/docs/check_settings_keys.py`, and `scripts/sdk/check_openapi_alignment.py` before merging changes touching SR. **|**
-**State:** CI workflows enforce linting, seed bundle validation, and OpenAPI drift detection; runbook catalog renders Appendix R index. **|**
-**Failure modes & handling:** Failing automation blocks merges; overrides require Architecture approval with follow-up tasks to restore automation. **|**
+**Contract:** Teams run `python scripts/docs/lint_docs.py`, `python scripts/docs/build_runbook_catalog.py`, `python scripts/docs/check_settings_keys.py`, and `scripts/sdk/check_openapi_alignment.py` before merging SR changes. **|**
+**State:** CI workflows enforce linting, seed bundle validation, and OpenAPI drift detection; runbook catalog renders the runbook index. **|**
+**Failure modes & handling:** Failing automation blocks merges; overrides require Architecture approval with follow-up tasks. **|**
 **Observability:** CI dashboards display job history; governance board reviews automation health monthly. **|**
-**References:** §2 Responsibilities, Appendix C seed inventory. **|**
+**References:** §2 Responsibilities, Appendix C seed inventory, §8.3 Runbooks & drills. **|**
 **Breadcrumbs:** Scripts under `scripts/docs/`, CI definitions `.github/workflows/docs-ci.yml`.
 
 ______________________________________________________________________
@@ -577,7 +784,7 @@ ______________________________________________________________________
 **Purpose:** Map SR’s upstream and downstream relationships so teams understand how configuration changes cascade. **|**
 **Contract:** SR depends on Guardian, LPE, Reference Manager, Portal, and Worker pipelines consuming snapshots, respecting invalidations, and surfacing digests in their own telemetry. **|**
 **State:** Integration metadata resides in `settings_enforcement_point`, `settings_integration_status`, `settings_portal_profile`, and job manifests with snapshot digests. **|**
-**Failure modes & handling:** Missed invalidations or integration drift trigger Section 5 runbooks (RB-RES-*, RB-JOB-WATCHDOG) and Appendix R RB-GOV-008 coordination. **|**
+**Failure modes & handling:** Missed invalidations or integration drift trigger Section 5 runbooks (RB-RES-*, RB-JOB-WATCHDOG) and §8.3.2 RB-GOV-008 coordination. **|**
 **Observability:** Dashboards “Settings Enforcement”, “Settings Integration”, “Portal Settings”, and “Worker Settings” expose adoption health; alerts highlight stale snapshots or misaligned bundles. **|**
 **References:** §2 Responsibilities, §3 API contract, §6 Observability, Appendix B metrics. **|**
 **Breadcrumbs:** Integration services `apps/platform/settings/services/`, worker tasks `apps/platform/operations/tasks.py`, tests `tests/platform/settings/test_enforcement_points.py`, `tests/platform/settings/test_lpe_guardian_bridge.py`.
@@ -604,7 +811,7 @@ ______________________________________________________________________
 **State:** Integration metadata persists in `settings_integration_status` referencing RM bundle IDs and LPE compile versions. **|**
 **Failure modes & handling:** Missing RM bundles or failed LPE compiles flag activations unsafe; teams remediate before approval proceeds. **|**
 **Observability:** “Settings Integration” dashboard captures sync success, waiver usage, and compile durations; alerts open Security tickets when residency endpoints change. **|**
-**References:** §2.4 Residency, §5.3 Residency incidents, Appendix R RB-RES-ENDPOINT. **|**
+**References:** §2.4 Residency, §5.3 Residency incidents, §8.3.3 RB-RES-ENDPOINT. **|**
 **Breadcrumbs:** Integration service `apps/platform/settings/services/integration.py`, tests `tests/platform/settings/test_lpe_guardian_bridge.py`.
 
 - Residency endpoint changes open Security tickets; waivers demand dual approval and manifest stamping until replacement endpoints validated.
@@ -636,18 +843,10 @@ ______________________________________________________________________
 
 ## 10) References (informative)
 
-**Purpose:** Provide quick access to the primary documents, ADRs, diagrams, and scripts supporting SR. **|**
-**Contract:** Update this list whenever dependencies change; missing references cause docs lint failures. **|**
-**State:** References point to immutable ADRs, diagrams, runbooks, and tooling maintained elsewhere in the repo. **|**
-**Failure modes & handling:** Broken references must be resolved before merging; `scripts/docs/lint_docs.py` enforces completeness. **|**
-**Observability:** Docs CI job highlights missing or stale references. **|**
-**Breadcrumbs:** `scripts/docs/lint_docs.py`, `scripts/docs/build_runbook_catalog.py`, MkDocs navigation `docs/mkdocs.yml`.
-
-- ADRs: ADR-0003 API Versioning & Sunset, ADR-0004 Localization & Policy Engine, ADR-0005 OPA Policy Plane. **|**
-- TDD: TDD §5 Security Architecture, TDD §7 Settings Governance, TDD Appendix H Operational Guides. **|**
-- Runbooks: Appendix R RB-GOV-008, RB-RES-ENDPOINT, RB-RES-BLOCK, RB-JOB-WATCHDOG, RB-LOCK-006. **|**
-- Diagrams: `docs/src/services/settings/diagrams/*.mmd`, `docs/src/overview/tdd/diagrams/data-lineage-v1.mmd`. **|**
-- Scripts & tooling: `scripts/docs/check_settings_keys.py`, `scripts/sdk/check_openapi_alignment.py`, `ops/scripts/settings_deploy.py`. **|**
+- ADRs: ADR-0003 API Versioning & Sunset, ADR-0004 Localization & Policy Engine, ADR-0005 OPA Policy Plane. - TDD: TDD §5 Security Architecture, TDD §7 Settings Governance, TDD Appendix H Operational Guides.
+- Runbooks: §8.3.2 RB-GOV-008, RB-RES-ENDPOINT, RB-RES-BLOCK, RB-JOB-WATCHDOG, RB-LOCK-006.
+- Diagrams: `docs/src/services/settings/diagrams/*.mmd`, `docs/src/overview/tdd/diagrams/data-lineage-v1.mmd`.
+- Scripts & tooling: `scripts/docs/check_settings_keys.py`, `scripts/sdk/check_openapi_alignment.py`, `ops/scripts/settings_deploy.py`.
 - Metrics dashboards: `infra/grafana/settings_slo.json`, `infra/grafana/settings_drift.json`, `infra/grafana/settings_enforcement.json`.
 
 ______________________________________________________________________
@@ -739,13 +938,13 @@ ______________________________________________________________________
 | `notifications.in_app.rate_limit_per_minute`    | ORG         | 60                                                           | In-app notification dispatch rate; §11.9.                                                                                                                                    |
 | `notifications.in_app.daily_cap`                | ORG         | 500                                                          | In-app notification max per day; §11.9.                                                                                                                                      |
 | `llm.finops.monthly_cap_usd`                    | ORG         | 0 (disabled)                                                 | Monthly LLM spend cap; §8.3, §13.4.                                                                                                                                          |
-| `jobs.watchdog.no_progress_minutes`             | SYSTEM\|ORG | 5                                                            | Minutes without heartbeat before watchdog warns; §10.2, §12.1, Appendix R entry [RB-JOB-WATCHDOG](../ops/runbooks/index.md#rb-job-watchdog).                                 |
-| `jobs.watchdog.timeout_minutes`                 | SYSTEM\|ORG | 15                                                           | Minutes without heartbeat before watchdog fails the job; §10.2, §12.1, Appendix R entry [RB-JOB-WATCHDOG](../ops/runbooks/index.md#rb-job-watchdog).                         |
+| `jobs.watchdog.no_progress_minutes`             | SYSTEM\|ORG | 5                                                            | Minutes without heartbeat before watchdog warns; §10.2, §12.1, §8.3 entry [RB-JOB-WATCHDOG](../ops/runbooks/index.md#rb-job-watchdog).                                 |
+| `jobs.watchdog.timeout_minutes`                 | SYSTEM\|ORG | 15                                                           | Minutes without heartbeat before watchdog fails the job; §10.2, §12.1, §8.3 entry [RB-JOB-WATCHDOG](../ops/runbooks/index.md#rb-job-watchdog).                         |
 | `uploads.scan.engine`                           | SYSTEM      | clamav                                                       | Malware engine used in the upload scan pipeline; §6.2, §12.1.                                                                                                                |
 | `uploads.scan.yara_ruleset_version`             | SYSTEM      | latest                                                       | Version tag for YARA rules synced from Security; §6.2.                                                                                                                       |
-| `uploads.scan.timeout_seconds`                  | SYSTEM\|ORG | 120                                                          | Max scan duration before treating file as suspicious and quarantining; §6.2, Appendix R entry [RB-UPLOAD-SCAN](../ops/runbooks/index.md#rb-upload-scan).                     |
-| `uploads.scan.override_hashes[]`                | SYSTEM\|ORG | \[\]                                                         | Temporary allowlist for known-clean artifacts while rules are tuned (dual approval, time-boxed); Appendix R entry [RB-UPLOAD-SCAN](../ops/runbooks/index.md#rb-upload-scan). |
-| `uploads.enabled`                               | SYSTEM\|ORG | true                                                         | Toggle to accept new uploads; disabled during major scanner outages; Appendix R entry [RB-UPLOAD-SCAN](../ops/runbooks/index.md#rb-upload-scan).                             |
+| `uploads.scan.timeout_seconds`                  | SYSTEM\|ORG | 120                                                          | Max scan duration before treating file as suspicious and quarantining; §6.2, §8.3 entry [RB-UPLOAD-SCAN](../ops/runbooks/index.md#rb-upload-scan).                     |
+| `uploads.scan.override_hashes[]`                | SYSTEM\|ORG | \[\]                                                         | Temporary allowlist for known-clean artifacts while rules are tuned (dual approval, time-boxed); §8.3 entry [RB-UPLOAD-SCAN](../ops/runbooks/index.md#rb-upload-scan). |
+| `uploads.enabled`                               | SYSTEM\|ORG | true                                                         | Toggle to accept new uploads; disabled during major scanner outages; §8.3 entry [RB-UPLOAD-SCAN](../ops/runbooks/index.md#rb-upload-scan).                             |
 | `api.idempotency.ttl_hours`                     | SYSTEM      | 24                                                           | TTL for idempotency; §10.3.                                                                                                                                                  |
 | `api.rate_limits.web.rpm_per_org`               | SYSTEM\|ORG | 600 (guardrail 10-2000; activation validator enforces range) | Org RPM; §10.5.                                                                                                                                                              |
 | `api.rate_limits.web.rpm_per_ip`                | SYSTEM\|ORG | 300 (guardrail 10-2000)                                      | IP RPM; §10.5.                                                                                                                                                               |
@@ -803,7 +1002,7 @@ ______________________________________________________________________
 - Storage & integrity → `storage.*`, `logging.*` (TDD §5, §12).
 - Portal & client UX → `portal.*`, `i18n.*`, `chat.*`, `security.*` (TDD §11).
 - APIs & rate limits → `api.*`, `uploads.*`, `notifications.*` (TDD §10, §11.9).
-- Operations & governance → `udlock.*`, `privacy.*`, `security.pentest.*`, `logging.*` (Appendix R procedures, TDD §12, §14).
+- Operations & governance → `udlock.*`, `privacy.*`, `security.pentest.*`, `logging.*` (§8.3 procedures, TDD §12, §14).
 
 ### A.3 Linting & parity gates (binding)
 
@@ -819,7 +1018,7 @@ ______________________________________________________________________
 - APIs & rate limits → `api.*`, `portal.download.*`; OpenAPI spectral rules enforce header/limit parity.
 - FinOps → `llm.finops.*`; drift detection jobs surface monthly spend anomalies.
 - Security & compliance → `security.*`, `logging.redaction.*`, `compliance.*`; test suites enforce RLS/masking.
-- Ops & locks → `udlock.*`; advisory lock registry and Appendix R entries confirm enforcement.
+- Ops & locks → `udlock.*`; advisory lock registry and §8.3 entries confirm enforcement.
 
 ### A.4 Activation checklist (binding)
 
@@ -828,7 +1027,7 @@ ______________________________________________________________________
 **State:** Activation metadata resides in `settings_activation`, approvals in `settings_activation_approval`, waivers in `settings_waiver` with App.O decision log links. **|**
 **Failure modes & handling:** Missing checklist items mark the activation `unsafe`; promotion halts until evidence supplied. **|**
 **Observability:** Governance dashboard highlights incomplete activations; alert `settings_governance_override_total` pages owners. **|**
-**References:** §4 State management, §5 Failure modes, Appendix R RB-GOV-008. **|**
+**References:** §4 State management, §5 Failure modes, §8.3.2 RB-GOV-008. **|**
 **Breadcrumbs:** Activation service `apps/platform/settings/services/activation.py`, tests `tests/platform/settings/test_activation_flow.py`.
 
 Checklist items:
@@ -887,7 +1086,7 @@ Checklist items:
 | `settings_integration_sync_total{target}`       | Sync runs to Guardian, LPE, Reference Manager, portal, and worker manifests         | Platform Architecture |
 | `settings_incident_open_total{severity}`        | Open incidents tied to Settings alerts/procedures                                   | SRE                   |
 
-Alert hooks include `settings_availability_breach`, `settings_activation_delay`, `settings_governance_override_total`, `settings_auth_failure_spike`, and `settings_secret_access_anomaly`; each alert links to Appendix R procedures.
+Alert hooks include `settings_availability_breach`, `settings_activation_delay`, `settings_governance_override_total`, `settings_auth_failure_spike`, and `settings_secret_access_anomaly`; each alert links to §8.3 procedures.
 
 ## Appendix C — Seed bundle inventory
 
@@ -907,186 +1106,3 @@ Alert hooks include `settings_availability_breach`, `settings_activation_delay`,
 | `llm_assignments.json`    | `config/`                 | LLM profile assignments                   | `tests/platform/settings/test_llm_profiles.py`          |
 | `llm_providers.json`      | `config/`                 | Provider catalog entries                  | `tests/platform/settings/test_llm_profiles.py`          |
 | `agents.pipeline/*.json`  | `config/agents.pipeline/` | LangGraph pipeline manifests and rollouts | `tests/platform/settings/test_pipeline_bundle.py`       |
-
-## Appendix R — Runbooks & drills
-
-**Purpose:** Centralize operational playbooks tied to SR alerts. **|**
-**Contract:** Alerts enumerated in Appendix B link to these runbooks; responders keep procedures current with quarterly tabletop reviews. **|**
-**State:** Runbooks live alongside automation scripts in `ops/runbooks/settings/`; this appendix summarizes trigger conditions and critical steps. **|**
-**Failure modes & handling:** Missing or stale runbooks trigger post-incident corrective actions and block deploy sign-off. **|**
-**Observability:** OnCall analytics track time-to-ack/resolve for Settings incidents; drills recorded in App.O decision logs. **|**
-**References:** §5 Failure modes, §8 Operational notes, Appendix B metrics. **|**
-**Breadcrumbs:** Runbooks `ops/runbooks/settings/`, tests `tests/platform/settings/test_rollback.py` and peers, OnCall configuration `infra/monitoring/settings-prometheus-rules.yaml`.
-
-### R.1 Runbook index (informative)
-
-**Purpose:** Provide a quick map from alert codes to runbook IDs. **|**
-**Contract:** Every Settings alert references one of these IDs; new alerts require index updates. **|**
-**State:** Index maintained in version control and mirrored here. **|**
-**Failure modes & handling:** Lint script fails when the index misses an alert; add the entry before merging. **|**
-**Observability:** Weekly docs lint verifies the index matches OnCall configuration. **|**
-**References:** Appendix B alerts, Appendix R entries below. **|**
-**Breadcrumbs:** Runbook index `ops/runbooks/settings/index.md`, tests `tests/platform/settings/test_runbook_index.py`.
-
-- RB-GOV-008 — Settings governance toggle / rollback
-- RB-RES-ENDPOINT — Residency endpoint drift remediation
-- RB-RES-BLOCK — Residency waiver / block handling
-- RB-LOCK-006 — Activation lock stale detection & remediation
-- RB-LLM-003 — Provider degradation / circuit breaker
-- RB-JOB-WATCHDOG — Job stall watchdog
-- RB-UPLOAD-SCAN — Upload scanning outage response
-
-### R.2 RB-GOV-008 — Settings governance toggle / rollback (binding)
-
-**Purpose:** Safely activate or revert high-sensitivity governance toggles (waivers, residency overrides, cross-org pilots). **|**
-**Contract:** Any activation flagged `unsafe` or touching governance scopes must follow this sequence before promotion. **|**
-**State:** Runbook automation uses `ops/runbooks/settings_rollback.py`; evidence stores under `ops/settings/<date>/`. **|**
-**Failure modes & handling:** Missing approvals or failed smoke tests require immediate rollback via `settings rollback --bundle <previous_id>`. **|**
-**Observability:** Alert clears once activation completes with both approvals and validation metrics green. **|**
-**References:** §4 State management, §5.1 Activation failure. **|**
-**Breadcrumbs:** Runbook `ops/runbooks/settings/governance_toggle.md`, tests `tests/platform/settings/test_rollback.py`, dashboard “Settings Governance”.
-
-Triggers: `settings_governance_override_total`, change tickets tagged `GOV-TOGGLE`, or manual escalation from Security/Architecture.
-
-Execution checklist:
-
-1. Announce maintenance window with activation/rollback times in `#ops-announcements`.
-2. Validate staging dry-run (matching bundle hash) and attach diff evidence to change ticket.
-3. Execute activation via CLI/UI, capturing activation ID and `unsafe_reasons[]` result (expected empty).
-4. Run targeted smoke tests (API read/write, portal toggle, worker snapshot) tied to the toggle.
-5. Update change ticket and decision log with activation ID, evidence, and rollback window.
-
-Rollback steps:
-
-- Reapply prior bundle via `settings rollback --bundle <previous_id>` if smoke tests or monitors fail.
-- Confirm `settings.changed` event emission and run smoke tests to verify reversion.
-- Communicate rollback rationale to stakeholders and attach evidence to App.O.
-
-Evidence requirements:
-
-- Store activation/rollback JSON artifacts under `ops/settings/<date>/`.
-- Append decision log entry referencing ADR/change ticket, activation ID, and outcome.
-- Attach customer/support comms templates used (see `docs/runbooks/settings/templates/governance_toggle_announce.md`).
-
-### R.3 RB-RES-ENDPOINT — Residency endpoint drift remediation (binding)
-
-**Breadcrumbs:** Implementation `ops/runbooks/settings/residency_endpoint_drift.md`, Tests `tests/platform/settings/test_residency_triage.py::test_endpoint_drift_runbook`, Observability Grafana “Residency & Endpoint Posture” dashboard (alert `alert_residency_endpoint_drift`). **|**
-*Purpose: Restore compliant residency posture when outbound endpoints drift or new hosts appear.* **|**
-*Contract: Findings remain `open` until catalogue updates or waivers recorded per this runbook.* **|**
-*State: Findings persist in `residency_endpoint_findings`; evidence stored in `ops/residency/endpoint_scan.jsonl`.* **|**
-*Failure modes & retries: Waivers lacking dual approval or catalogue gaps keep the finding open and block affected activations.* **|**
-*Observability: Alert auto-resolves after two clean scans and updated catalogue hashes.*
-
-Triage checklist:
-
-1. Query `residency_endpoint_findings` for `state='open'`; review evidence attachments.
-2. Inspect Istio AuthorizationPolicy revisions to ensure offending hosts remain blocked.
-3. Identify impacted providers/orgs via activation diff linked in alert payload.
-
-Decision tree:
-
-- **Provider expansion** — Engage Reference Manager to ingest metadata, rerun `residency_endpoint_scan --host <fqdn>`, and promote Settings activation once SAN + GeoIP verified.
-- **DNS drift/misconfig** — Flush DNS caches (`scripts/residency/flush_dns_cache.py`), roll egress gateway if stale endpoints persist.
-- **Waiver path** — Seek dual approval (Security + Architecture), set temporary waiver in Settings, ensure Guardian manifests log `RESIDENCY_WAIVER_USED`.
-- **False positive** — Annotate finding, keep block in place, downgrade alert severity after evidence review.
-
-Post-remediation:
-
-- Verify finding transitions to `mitigated` within two scans.
-- Close incident with root cause, evidence links, and preventive actions (provider engagement, automation gap).
-- Record outcome in decision log and App.O waiver ledger if applicable.
-
-### R.4 RB-RES-BLOCK — Residency waiver / block handling (binding)
-
-**Breadcrumbs:** Implementation `ops/runbooks/settings/residency_block.md`, Tests `tests/platform/settings/test_residency_validators.py::test_block_requires_waiver`, Observability Grafana “Residency Compliance” dashboard (alert `alert_residency_policy_block`). **|**
-*Purpose: Resolve residency policy blocks triggered during activations or runtime checks.* **|**
-*Contract: Blocks clear only after org allowlists align with RM catalogue or waivers recorded with expiry.* **|**
-*State: Policy blocks logged as `RESIDENCY_POLICY_BLOCK`; waiver metadata stored in `settings_waiver`.* **|**
-*Failure modes & retries: Waivers without expiry or missing approvals invalidate activation attempts.* **|**
-*Observability: Alert returns to green once block count drops to zero.*
-
-Steps:
-
-1. Confirm org allowlists (`regions.allowlist.compute/storage/vector`).
-2. Validate provider endpoints and DNS; compare to RM catalogue snapshots.
-3. If cross-region access required, capture dual approval, set `cross_region_waiver=true`, and document expiry.
-4. Re-run activation or job; confirm Guardian manifests reference waiver ID.
-5. Audit waiver usage daily until expiry or remediation.
-
-### R.5 RB-LOCK-006 — Activation lock stale detection & remediation (binding)
-
-**Breadcrumbs:** Implementation `ops/runbooks/settings/activation_lock.md`, Tests `tests/platform/settings/test_locks.py::test_lock_scope`, Observability Grafana “Settings Lock” panel (alert `settings_activation_lock_wait_seconds`). **|**
-*Purpose: Detect and remediate stuck activation locks without risking concurrent edits.* **|**
-*Contract: Lock holders must release within configured `udlock.max_session_hold_seconds`; stale locks trigger this runbook.* **|**
-*State: Lock registry tracked in `settings_activation_lock`; helper scripts expose current holders.* **|**
-*Failure modes & retries: Forcing unlock without verifying holder state risks split-brain activations; follow decision tree below.* **|**
-*Observability: Alert clears when lock age returns under threshold and registry shows no stale entries.*
-
-Checklist:
-
-1. Inspect lock registry via `scripts/settings/show_activation_locks.py` filtered by environment.
-2. Verify holder liveness (`SELECT ... FROM pg_stat_activity`) to differentiate idle vs active transactions.
-3. If holder dead or idle-in-transaction, coordinate worker/web restart or issue `SELECT pg_terminate_backend(...)` per policy.
-4. After release, rerun activation pipeline smoke tests; capture evidence in incident log.
-5. File follow-up if lock reappears within 24h (root cause investigation, automation fix).
-
-### R.6 RB-LLM-003 — Provider degradation / circuit breaker (binding)
-
-**Breadcrumbs:** Implementation `ops/runbooks/settings/provider_circuit_breaker.md`, Tests `tests/platform/settings/test_llm_circuit.py::test_half_open_probe`, Observability Grafana “FinOps – LLM Cost & Circuit” dashboard (alert `alert_llm_circuit_open`). **|**
-*Purpose: Handle degraded LLM providers to protect cost and SLA budgets.* **|**
-*Contract: OPEN circuits remain until provider health verifies; half-open probes follow cadence defined here.* **|**
-*State: Circuit state stored in `settings_llm_circuit`; fallback chains defined in Settings bundles.* **|**
-*Failure modes & retries: Prematurely closing circuits or leaving fallback unmonitored risks runaway spend and job failures.* **|**
-*Observability: Alert resolves when circuit state returns to CLOSED for affected models and cost deltas stabilize.*
-
-Response steps:
-
-1. Confirm affected models via dashboard filters (`llm_circuit_state{model}`) and review recent error/latency metrics.
-2. Validate fallback outcomes in logs (`PRIMARY_DEGRADED`, `FALLBACK_USED`) and ensure FinOps guardrails intact.
-3. Keep circuits OPEN until three consecutive successful half-open probes; adjust fallback priorities if secondary models degrade.
-4. Notify vendor/support with incident details when degradation persists >15 minutes; record ticket IDs in incident log.
-5. After recovery, document budget impact and corrective actions; update preventive tasks (synthetic prompts, timeout tuning).
-
-### R.7 RB-JOB-WATCHDOG — Job stall watchdog (binding)
-
-**Breadcrumbs:** Implementation `ops/runbooks/platform/job_watchdog.md`, Tests `tests/platform/watchdog/test_job_timeout.py::test_timeout_escalation`, Observability Grafana “Watchdog Runner” dashboard (alerts `job_watchdog_warning_total`, `job_watchdog_timeout_total`). **|**
-*Purpose: Restore stuck jobs and protect downstream SLAs when heartbeats lapse.* **|**
-*Contract: Watchdog alerts trigger within `jobs.watchdog.no_progress_minutes` / `jobs.watchdog.timeout_minutes`; responders must either resume progress or terminate safely.* **|**
-*State: Heartbeats stored in `job_progress_heartbeat`; remediation evidence captured in incident ticket (`ops/watchdog/<date>/`).* **|**
-*Failure modes & retries: Premature termination can lose customer work; skipping checkpoint verification risks replaying corrupted artifacts.* **|**
-*Observability: Alert clears after watchdog completes remediation and fresh heartbeats resume for affected jobs.*
-
-Triage & remediation:
-
-1. Identify affected job IDs from alert payload; confirm `job_progress_heartbeat` age and last known task lane.
-2. Inspect worker logs for stalled tasks, resource exhaustion, or upstream dependency failures; capture excerpts in incident notes.
-3. If work-in-progress artifacts exist, trigger checkpoint validation (`ops/jobs/verify_checkpoint.py`) before retrying.
-4. Attempt safe resume via `jobs resume --job <id>` when the worker is healthy; otherwise cancel and requeue after addressing root cause.
-5. Close alert once heartbeats refresh (\< 2 × `jobs.watchdog.heartbeat_interval`) and audit trail updated with remediation steps.
-
-Post-incident follow-up:
-
-- File preventive tasks when repeated stalls originate from the same provider lane or dependency.
-- Review Settings defaults (`jobs.watchdog.*`) to confirm thresholds remain appropriate for the workload mix.
-
-### R.8 RB-UPLOAD-SCAN — Upload scanning outage response (binding)
-
-**Breadcrumbs:** Implementation `ops/runbooks/security/upload_scan.md`, Tests `tests/security/test_upload_scan_guard.py::test_quarantine_on_failure`, Observability Grafana “Security — Upload Scanning” dashboard (alerts `upload_scan_error_total`, `upload_scan_queue_depth`). **|**
-*Purpose: Maintain quarantine-first posture when malware scanning or format validation degrades.* **|**
-*Contract: New uploads remain blocked (`uploads.enabled=false`) until scanners return to green and evidence recorded per this runbook.* **|**
-*State: Scan attempts logged in `upload_scan_audit`; quarantined objects isolated under `storage/quarantine/<job_id>/`.* **|**
-*Failure modes & retries: Re-enabling uploads without updated signatures risks releasing infected files; overriding quarantine without approvals violates security policy.* **|**
-*Observability: Alert clears after two consecutive clean scan batches and queue depth normalizes below baseline.*
-
-Response sequence:
-
-1. Confirm scope of degradation (engine errors vs. queue backlog) using dashboard drill-downs and `upload_scan_audit` sampling.
-2. Freeze new intake by toggling `uploads.enabled=false` in Settings; announce customer impact and expected review window.
-3. Validate scanner health: check ClamAV/YARA signature freshness, sandbox resource utilization, and recent deployment changes.
-4. For malware detections, coordinate with Security to analyze samples; maintain quarantine until signatures updated and retest passes.
-5. Once scanners stable, re-enable uploads, replay quarantined items through the pipeline, and attach evidence (dashboards, signature reports) to the incident record.
-
-Follow-up:
-
-- File change tasks for signature automation gaps or scaling adjustments discovered during the incident.
-- Update customer/regulator communications templates with incident summary and remediation timeline.

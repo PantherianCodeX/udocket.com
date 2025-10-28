@@ -23,7 +23,7 @@ This plan lays out a phased approach to refactor the uDocket documentation. We w
 
 ### 1. Set Up Version Control Context
 
-* Create a new docs refactor branch, e.g. `docs/refactor-tdd-modularization`, to isolate these changes.
+* Create a new docs refactor branch, e.g. `docs/stack`, to isolate these changes.
 * Take snapshots of current key docs (`overview/tdd.md`, any existing `services/*.md` or `apps/*.md`) for reference. This will help verify that content isn’t lost during moves.
 
 ### 2. Define New Directory Structure
@@ -104,6 +104,7 @@ Each service, app, or agent document will follow a shared, **standardized set of
 #### Phase 0 enforcement checklist
 
 * Retrofit all existing service specs (`services/guardian.md`, `services/settings.md`, `services/lp-engine.md`, `services/ref-manager.md`, etc.) so their H2 hierarchy matches the canonical numbering (`0) Reading guide` … `10) References`) and every major section opens with the standardized preamble block (Purpose, Contract, State, Failure, Observability, References, Breadcrumbs).
+* Normalize `## 8) Operational notes` to include the standard subsections (`### 8.1 Operational posture`, `### 8.2 Incident triggers`, `### 8.3 Runbooks & drills` with nested index/primary/cadence, `### 8.4 Migrations & backfills`, `### 8.5 Operational workflows`). Relocate legacy “Appendix R” content into those subsections and call out intentional omissions in-line when a subsection does not apply.
 * Capture any missing sections, absent breadcrumbs, or deviations in a shared Phase 0 worksheet so we can resolve gaps before Phase 1 migrations.
 * Treat Guardian as the first remediation target, then sweep remaining service specs once its structure is compliant.
 
@@ -114,16 +115,16 @@ To ensure every service and app document covers all required information consist
 These **top-level sections** make every document familiar and navigable. Within each H2 section, teams can use **H3 (`###`) and H4 (`####`) as needed** to break down complex content (e.g., separate internal/external APIs).
 
 ```markdown
-* ## 1) Purpose: The role of the service/app in the platform. Why it exists and what high-level function it provides.
-* ## 2) Responsibilities: Lay out the scope of responsibility this component has.
-* ## 3) API Contract: Describe inputs and outputs (REST, events, files, etc.). Subdivide by public/internal APIs if needed: ### 3.1 External Interfaces: Include endpoint tables, events, etc.; ### 3.2 Internal APIs: Detail intra-service APIs, gRPC, queues, etc.
-* ## 4) State Management: Persistent storage, configuration, cache/state rules. Details on data the service maintains, important in-memory state, caches, and how data consistency is handled. Also includes status and state transitions. Subdivide as needed (e.g., ### 4.1 Datastore Schema; ### 4.2 Runtime Configuration).
-* ## 5) Failure Modes: How the service fails and recovers – error conditions, retry logic, what happens if dependencies are down, any circuit breaker or failover behavior. (Think in terms of both systemic failures and domain-specific failure cases.)
-* ## 6) Observability: What telemetry the service provides – health checks, metrics, logs, traces. Include key metrics (SLIs) it tracks (e.g. request throughput, error rates) and how one can detect if the service is unhealthy or encountering issues.
-* ## 7) Security and Compliance: Any key auth, data classification, encryption, regulatory rules, privacy laws, PII, SPI, PHI.
-* ## 8) Operational Notes: Runbooks, migrations, key operational workflows.
-* ## 9) Dependencies: Link to other services this interacts with (e.g., “depends on LLM Registry for model availability”).
-* ## 10) References: Links to ADRs, glossaries, diagrams, etc.
+* `## 1) Purpose`: The role of the service/app in the platform. Why it exists and what high-level function it provides.
+* `## 2) Responsibilities`: Lay out the scope of responsibility this component has.
+* `## 3) API Contract`: Describe inputs and outputs (REST, events, files, etc.). Subdivide by public/internal APIs if needed: `### 3.1 External Interfaces`: Include endpoint tables, events, etc.; `### 3.2 Internal APIs`: Detail intra-service APIs, gRPC, queues, etc.
+* `## 4) State Management`: Persistent storage, configuration, cache/state rules. Details on data the service maintains, important in-memory state, caches, and how data consistency is handled. Also includes status and state transitions. Subdivide as needed (e.g., ### 4.1 Datastore Schema; ### 4.2 Runtime Configuration).
+* `## 5) Failure Modes`: How the service fails and recovers – error conditions, retry logic, what happens if dependencies are down, any circuit breaker or failover behavior. (Think in terms of both systemic failures and domain-specific failure cases.)
+* `## 6) Observability`: What telemetry the service provides – health checks, metrics, logs, traces. Include key metrics (SLIs) it tracks (e.g. request throughput, error rates) and how one can detect if the service is unhealthy or encountering issues.
+* `## 7) Security and Compliance`: Any key auth, data classification, encryption, regulatory rules, privacy laws, PII, SPI, PHI.
+* `## 8) Operational Notes`: Cover deployments plus standardized subsections `### 8.1 Operational posture`, `### 8.2 Incident triggers`, `### 8.3 Runbooks & drills` (with nested index/primary/cadence), `### 8.4 Migrations & backfills`, `### 8.5 Operational workflows`—omit subsections only when they truly do not apply and call that out explicitly.
+* `## 9) Dependencies`: Link to other services this interacts with (e.g., “depends on LLM Registry for model availability”).
+* `## 10) References`: Links to ADRs, glossaries, diagrams, etc.
 ```
 
 * Each H2 section may have nested H3/H4 as needed. Every major section (all H2s and most H3s) should open with the standardized preamble block (Purpose, Contract, State, Failure, Observability, References, Breadcrumbs) **except** `0) Reading guide`, which stays free-form orientation text.
@@ -780,7 +781,7 @@ jobs:
 
 ### Project Setup
 
-* [ ] Branch `docs/refactor-tdd-modularization` created.
+* [x] Branch `docs/stack` created.
 * [x] New `docs/src/overview/tdd/` directory structure in place (with `overview/tdd.md`, appendices, diagrams).
 * [x] MkDocs nav updated for new structure.
 * [x] Standard section template prepared for service/app docs.
