@@ -5,7 +5,7 @@
 ## Digital Signer — 8.3 Runbooks & drills (binding)
 
 **Purpose:** Maintain executable runbooks and drill cadence for key signing scenarios. **|**
-**Contract:** Alerts map to RB-SIGN-* playbooks; quarterly drills rehearse trust-root renewal, TSA failover, FIPS recovery, and client acknowledgement remediation. **|**
+**Contract:** Alerts map to RB-SIGN-\* playbooks; quarterly drills rehearse trust-root renewal, TSA failover, FIPS recovery, and client acknowledgement remediation. **|**
 **State:** Runbooks `ops/runbooks/signer/`, drill evidence `ops/security/key_rotation/<timestamp>/`, tabletop notes `ops/change/signer_rotations.ics`. **|**
 **Failure modes & handling:** Stale runbooks or missing drill evidence block release sign-off until refreshed. **|**
 **Observability:** Docs lint, PagerDuty analytics, Ops governance dashboards. **|**
@@ -259,13 +259,13 @@ Post-checks:
 **State:** Roster `ops/notifications/roster.yaml`, freeze calendar `ops/notifications/freeze_windows.ics`, provider credential inventory `ops/notifications/provider_credentials.md`. **|**
 **Failure modes & handling:** Staffing gaps or ignored freezes trigger management review; deployments pause until coverage restored. **|**
 **Observability:** PagerDuty analytics, delivery dashboards, alert `notifications_oncall_gap_total`. **|**
-**References:** Notifications spec §7, RB-NOTIFY-*. **|**
+**References:** Notifications spec §7, RB-NOTIFY-\*. **|**
 **Breadcrumbs:** Roster docs, freeze calendars, App.O escalation notes. **|**
 
 ### Notifications — 8.2 Incident triggers (binding)
 
 **Purpose:** Map alerts and dashboards to notification runbooks so responders act immediately. **|**
-**Contract:** Alert rules (`infra/monitoring/notifications-prometheus-rules.yaml`) embed RB-NOTIFY-* identifiers; evidence logged before closing incidents. **|**
+**Contract:** Alert rules (`infra/monitoring/notifications-prometheus-rules.yaml`) embed RB-NOTIFY-\* identifiers; evidence logged before closing incidents. **|**
 **State:** Incident records `ops/notifications/incidents/<date>.jsonl` capture provider, channel, and alert metadata. **|**
 **Failure modes & handling:** Missing annotations or muted routes require corrective PRs and Ops governance follow-up. **|**
 **Observability:** Dashboards “Notifications Delivery”, “SMS Compliance”, Alertmanager routes. **|**
@@ -280,7 +280,7 @@ Post-checks:
 ### Notifications — 8.3 Runbooks & drills (binding)
 
 **Purpose:** Keep playbooks executable and drills current for core notification scenarios. **|**
-**Contract:** Alerts map to RB-NOTIFY-* runbooks; quarterly drills rehearse provider failover, webhook compromise, STOP/HELP compliance surges, and download-token abuse investigations. **|**
+**Contract:** Alerts map to RB-NOTIFY-\* runbooks; quarterly drills rehearse provider failover, webhook compromise, STOP/HELP compliance surges, and download-token abuse investigations. **|**
 **State:** Runbooks `ops/runbooks/notifications/*.md`, drill evidence `ops/notifications/drills/<date>/summary.md`. **|**
 **Failure modes & handling:** Missing drill evidence or outdated steps block change approval until updated. **|**
 **Observability:** Docs lint, Ops governance dashboards, drill scheduler reports. **|**

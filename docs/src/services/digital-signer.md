@@ -333,7 +333,7 @@ ______________________________________________________________________
 **Failure modes & handling:** Stale playbooks, missing rotation artifacts, or failed release gates block deployment until remediation and evidence capture. **|**
 **Observability:** Docs lint (`build_runbook_catalog.py --check`), PagerDuty analytics, dashboards “Signer & TSA” / “Deliverable Signatures”, alert `signer_release_gate_blocked_total`. **|**
 **Breadcrumbs:** Runbooks `ops/runbooks/signer/`, automation `ops/scripts/security/rotate_signing_keys.py`, release tooling `ops/scripts/deploy/signing_release_gate.py`, drill tracker `ops/change/signer_rotations.ics`. **|**
-**References:** §5 Failure modes, §6 Observability, §7 Security & compliance, Ops runbooks RB-SIGN-*. **|**
+**References:** §5 Failure modes, §6 Observability, §7 Security & compliance, Ops runbooks RB-SIGN-\*. **|**
 
 ### 8.1 Operational posture (binding)
 
@@ -353,7 +353,7 @@ ______________________________________________________________________
 ### 8.2 Incident triggers (binding)
 
 **Purpose:** Map alerts and dashboards to signer playbooks so responders act immediately. **|**
-**Contract:** Alert definitions (`infra/monitoring/signer-prometheus-rules.yaml`) embed RB-SIGN-* identifiers; on-call documents evidence before clearing incidents. **|**
+**Contract:** Alert definitions (`infra/monitoring/signer-prometheus-rules.yaml`) embed RB-SIGN-\* identifiers; on-call documents evidence before clearing incidents. **|**
 **State:** Alert payloads record activation IDs, key versions, and waiver references under `ops/security/incidents/signer_<date>.jsonl`. **|**
 **Failure modes & handling:** Missing annotations or misrouted alerts require follow-up tasks and lint updates. **|**
 **Observability:** Grafana “Signer & TSA”, PagerDuty routing, synthetic TSA/OCSP checks. **|**
@@ -368,7 +368,7 @@ ______________________________________________________________________
 ### 8.3 Runbooks & drills (binding)
 
 **Purpose:** Maintain executable runbooks and drill cadence for key signing scenarios. **|**
-**Contract:** Alerts map to RB-SIGN-* playbooks; quarterly drills rehearse trust-root renewal, TSA failover, FIPS recovery, and client acknowledgement remediation. **|**
+**Contract:** Alerts map to RB-SIGN-\* playbooks; quarterly drills rehearse trust-root renewal, TSA failover, FIPS recovery, and client acknowledgement remediation. **|**
 **State:** Runbooks `ops/runbooks/signer/`, drill evidence `ops/security/key_rotation/<timestamp>/`, tabletop notes `ops/change/signer_rotations.ics`. **|**
 **Failure modes & handling:** Stale runbooks or missing drill evidence block release sign-off until refreshed. **|**
 **Observability:** Docs lint, PagerDuty analytics, Ops governance dashboards. **|**
