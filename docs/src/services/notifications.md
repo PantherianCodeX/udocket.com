@@ -55,14 +55,32 @@ ______________________________________________________________________
 
 ## Document controls
 
-| Field          | Value                                                                                  |
-| -------------- | -------------------------------------------------------------------------------------- |
-| Version        | 0.1-draft                                                                              |
-| Status         | Implementable                                                                          |
-| Last updated   | 2025-10-23                                                                             |
-| Primary owners | Platform Engineering; Operations Engineering                                           |
-| Approvers      | Architecture Steering Committee; Security Review Board                                 |
-| Reviewers      | Compliance Lead; SRE Manager                                                           |
+| Field          | Value |
+| -------------- | ----- |
+| Version        | 0.1-draft |
+| Status         | Implementable |
+| Last updated   | 2025-10-28 |
+| Primary owners | Platform Engineering; Operations Engineering |
+| Approvers      | Architecture Steering Committee; Security Review Board |
+| Reviewers      | Compliance Lead; SRE Manager |
+| Approved by    | |
+| Approved date  | |
+
+**Status:** KEP: Provisional → Implementable → Implemented
+
+**Section Requirements (binding):**
+    - Preamble: Purpose/Contract/State/Failure/Observability/References/Breadcrumbs (`scripts/docs/lint_docs.py --check-template`)
+    - Section tags: `(binding)`, `(normative)` or `(informative)`
+    - Links resolve: §/App./ADR (`docs-link-check`)
+    - Document validation: `python scripts/docs/lint_docs.py` (see `docs/README.md` for tooling)
+    - Settings keys: Document/code are in-sync
+    - All requirements are CI gated
+
+**Section tags:**
+    - `(binding)` denotes requirements that block launch until implemented and tested.
+    - `(normative)` captures default behaviors that may evolve via waivers or roadmap.
+    - `(informative)` provides background or examples.
+    - When a subsection omits a tag it is treated as informative by default—add the explicit tag when the content carries binding or normative weight.
 
 ______________________________________________________________________
 
@@ -85,7 +103,7 @@ ______________________________________________________________________
 **Failure modes & handling:** Provider outages, webhook signature drift, STOP/HELP compliance events, or token misuse trigger runbooks (§5, §8) and fan-out warnings. **|**
 **Observability:** Grafana dashboards “Notifications Delivery” (`delivery_success_ratio`, `delivery_retry_total`), “In-App Notifications” (`inapp_notification_sent_total`, `inapp_notification_click_total`), “Download Tokens” (`download_token_validation_total`). Alert catalog tags RB-NOTIFY-* entries. **|**
 **References:** §2 Responsibilities, §4 State management, §5 Failure modes, §7 Security & compliance, Ops runbooks RB-NOTIFY-OUTAGE/RB-NOTIFY-WEBHOOK/RB-NOTIFY-SMS. **|**
-**Breadcrumbs:** (Pending migration) implementation modules `apps/platform/notifications/outbox.py`, worker adapters `apps/platform/notifications/providers/*.py`, webhook handlers `apps/platform/notifications/webhooks.py`, tests `tests/platform/notifications/test_outbox.py`, `tests/platform/notifications/test_webhooks.py`, dashboards `infra/observability/dashboards/notifications_delivery.json`.
+**Breadcrumbs:** Implementation `apps/platform/notifications/outbox.py`, provider adapters `apps/platform/notifications/providers/*.py`, webhook handlers `apps/platform/notifications/webhooks.py`, SSE publisher `apps/platform/events/notifications.py`, dashboards `infra/observability/dashboards/notifications_delivery.json`, tests `tests/platform/notifications/test_outbox.py`, `tests/platform/notifications/test_webhooks.py`.
 
 ______________________________________________________________________
 

@@ -7,7 +7,7 @@ author:
 version: 0.1-draft
 status: implementable
 classification: Confidential
-last_updated: 2025-10-23
+last_updated: 2025-10-28
 owners:
   - Platform Architecture
   - Security Engineering
@@ -54,20 +54,32 @@ ______________________________________________________________________
 
 ## Document controls
 
-| Field           | Value                                                                                                                                         |
-| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| Version         | 0.1-draft                                                                                                                                     |
-| Status          | Implementable (mirrors front matter `status`; KEP lifecycle applies: Provisional → Implementable → Implemented)                               |
-| Last updated    | 2025-10-23 (source of truth is the front matter `last_updated`)                                                                               |
-| Primary owners  | Platform Architecture; Security Engineering; Reference Programs                                                                               |
-| Approvers       | Architecture Steering Committee; Security Review Board                                                                                        |
-| Reviewers       | QA Engineering Lead; SRE Manager                                                                                                              |
-| ADR index       | `docs/adr/README.md` (immutable ADRs referenced in front matter `related_adrs`)                                                               |
-| Migration plan  | Replaces legacy Reference Engine coverage in the platform TDD; `/reference/*` shims remain read-only until all clients complete the migration |
-| Docs validation | `python scripts/docs/lint_docs.py` (see `docs/README.md` for tooling)                                                                         |
-| Link lint       | `python scripts/docs/link_check.py --strict` (CI `docs-link-check` stage blocks unresolved §/App./ADR refs)                                   |
+| Field          | Value |
+| -------------- | ----- |
+| Version        | 0.1-draft |
+| Status         | Implementable |
+| Last updated   | 2025-10-28 |
+| Primary owners | Platform Architecture; Security Engineering; Reference Programs |
+| Approvers      | Architecture Steering Committee; Security Review Board |
+| Reviewers      | QA Engineering Lead; SRE Manager |
+| Approved by    | |
+| Approved date  | |
 
-Body sections follow the Purpose/Contract/State/Failure/Observability/References/Breadcrumbs scaffold enforced by `scripts/docs/lint_docs.py --check-template`. Section tags `(binding)` and `(normative)` align with the platform TDD.
+**Status:** KEP: Provisional → Implementable → Implemented
+
+**Section Requirements (binding):**
+    - Preamble: Purpose/Contract/State/Failure/Observability/References/Breadcrumbs (`scripts/docs/lint_docs.py --check-template`)
+    - Section tags: `(binding)`, `(normative)` or `(informative)`
+    - Links resolve: §/App./ADR (`docs-link-check`)
+    - Document validation: `python scripts/docs/lint_docs.py` (see `docs/README.md` for tooling)
+    - Settings keys: Document/code are in-sync
+    - All requirements are CI gated
+
+**Section tags:**
+    - `(binding)` denotes requirements that block launch until implemented and tested.
+    - `(normative)` captures default behaviors that may evolve via waivers or roadmap.
+    - `(informative)` provides background or examples.
+    - When a subsection omits a tag it is treated as informative by default—add the explicit tag when the content carries binding or normative weight.
 
 ______________________________________________________________________
 

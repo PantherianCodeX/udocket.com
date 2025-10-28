@@ -2,6 +2,37 @@
 
 This checklist ensures each service document follows the standardized structure from `docs/tdd_modularization.md`. Copy this file when authoring a new service spec and replace the placeholder text. Remove the guidance notes before publishing.
 
+## Document controls
+
+| Field          | Value |
+| -------------- | ----- |
+| Version        | 0.1-draft |
+| Status         | Implementable |
+| Last updated   | 1970-01-01 |
+| Primary owners | Platform Architecture; Security Engineering; Applied AI Programs |
+| Approvers      | Architecture Steering Committee; Security Review Board |
+| Reviewers      | QA Engineering Lead; FinOps Manager |
+| Approved by    | |
+| Approved date  | |
+
+**Status:** KEP: Provisional → Implementable → Implemented
+
+**Section Requirements (binding):**
+    - Preamble: Purpose/Contract/State/Failure/Observability/References/Breadcrumbs (`scripts/docs/lint_docs.py --check-template`)
+    - Section tags: `(binding)`, `(normative)` or `(informative)`
+    - Links resolve: §/App./ADR (`docs-link-check`)
+    - Document validation: `python scripts/docs/lint_docs.py` (see `docs/README.md` for tooling)
+    - Settings keys: Document/code are in-sync
+    - All requirements are CI gated
+
+**Section tags:**
+    - `(binding)` denotes requirements that block launch until implemented and tested.
+    - `(normative)` captures default behaviors that may evolve via waivers or roadmap.
+    - `(informative)` provides background or examples.
+    - When a subsection omits a tag it is treated as informative by default—add the explicit tag when the content carries binding or normative weight.
+
+______________________________________________________________________
+
 ## Reading Guide
 
 Use this section to orient readers before they dive into the specification. It should be bespoke to the service—no copy/paste boilerplate and no preamble block. Summarize how to consume the doc, who owns it, required prerequisites, and where to go for adjacent material. Mix short paragraphs and bullets as needed.

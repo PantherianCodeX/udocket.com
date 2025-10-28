@@ -55,6 +55,37 @@ header-includes:
 
 ______________________________________________________________________
 
+## Document controls
+
+| Field          | Value |
+| -------------- | ----- |
+| Version        | 0.1-draft |
+| Status         | Implementable |
+| Last updated   | 2025-10-28 |
+| Primary owners | Security Engineering; Platform Architecture |
+| Approvers      | Architecture Steering Committee; Security Review Board |
+| Reviewers      | QA Engineering Lead; SRE Manager |
+| Approved by    | |
+| Approved date  | |
+
+**Status:** KEP: Provisional → Implementable → Implemented
+
+**Section Requirements (binding):**
+    - Preamble: Purpose/Contract/State/Failure/Observability/References/Breadcrumbs (`scripts/docs/lint_docs.py --check-template`)
+    - Section tags: `(binding)`, `(normative)` or `(informative)`
+    - Links resolve: §/App./ADR (`docs-link-check`)
+    - Document validation: `python scripts/docs/lint_docs.py` (see `docs/README.md` for tooling)
+    - Settings keys: Document/code are in-sync
+    - All requirements are CI gated
+
+**Section tags:**
+    - `(binding)` denotes requirements that block launch until implemented and tested.
+    - `(normative)` captures default behaviors that may evolve via waivers or roadmap.
+    - `(informative)` provides background or examples.
+    - When a subsection omits a tag it is treated as informative by default—add the explicit tag when the content carries binding or normative weight.
+
+______________________________________________________________________
+
 ## Reading guide
 
 Use this guide before changing Guardian policy, queue semantics, or downstream workflows.
@@ -65,23 +96,6 @@ Use this guide before changing Guardian policy, queue semantics, or downstream w
 - **Change protocol:** Include a summary of Guardian impact in PR descriptions and link reviewers to the affected sections (`§2`, `§3`, `§4`, etc.).
 - **References:** TDD §7 (Guardian), ADR-0001, ADR-0003, ADR-0004.
 - **Contacts:** Owners Security Engineering + Platform Architecture; operational mailing list `guardian-oncall@`.
-
-______________________________________________________________________
-
-## Document controls
-
-| Field           | Value                                                                                                                                                                                                        |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Version         | 0.1-draft                                                                                                                                                                                                    |
-| Status          | Implementable                                                                                                                                                                                                |
-| Last updated    | 2025-10-23                                                                                                                                                                                                   |
-| Primary owners  | Security Engineering; Platform Architecture                                                                                                                                                                  |
-| Approvers       | Architecture Steering Committee; Security Review Board                                                                                                                                                       |
-| Reviewers       | QA Engineering Lead; SRE Manager                                                                                                                                                                             |
-| ADR index       | `docs/adr/README.md`                                                                                                                                                                                         |
-| Migration plan  | Establishes this specification as the authoritative Guardian reference, absorbing the former TDD Guardian sections and Appendix H operational guides; platform TDD now links here for service-level details. |
-| Docs validation | `python scripts/docs/lint_docs.py`                                                                                                                                                                           |
-| Link lint       | `python scripts/docs/link_check.py --strict`                                                                                                                                                                 |
 
 ______________________________________________________________________
 

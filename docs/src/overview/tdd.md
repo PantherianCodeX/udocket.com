@@ -69,29 +69,34 @@ header-includes:
 
 ______________________________________________________________________
 
-**Audience:** Engineering, Security, QA, Ops, Product\
-**Purpose:** Target outline for the next major TDD revision. Optimized for fast LLM parsing (stable identifiers, shallow nesting) and for human navigation during reviews.
-
-______________________________________________________________________
-
 ## Document controls
 
-| Field           | Value                                                                                                           |
-| --------------- | --------------------------------------------------------------------------------------------------------------- |
-| Version         | 0.1-draft                                                                                                       |
-| Status          | Implementable (mirrors front matter `status`; KEP lifecycle applies: Provisional → Implementable → Implemented) |
-| Last updated    | 2025-10-19 (source of truth is the front matter `last_updated`)                                                 |
-| Primary owners  | Platform Architecture, Security Engineering                                                                     |
-| Approvers       | Architecture Steering Committee; Security Review Board                                                          |
-| Reviewers       | QA Engineering Lead; SRE Manager                                                                                |
-| ADR index       | `docs/adr/README.md` (immutable ADRs referenced in front matter `related_adrs`)                                 |
-| Migration plan  | Supersede prior TDD versions once Architecture/Security approvals are recorded (parity verified 2025-10-19)     |
-| Docs validation | `python scripts/docs/lint_docs.py` (see `docs/README.md` for tooling)                                           |
-| Link lint       | `python scripts/docs/link_check.py --strict` (CI `docs-link-check` stage blocks unresolved §/App./ADR refs)     |
+| Field          | Value |
+| -------------- | ----- |
+| Version        | 0.1-draft |
+| Status         | Implementable |
+| Last updated   | 2025-10-28 |
+| Primary owners | Platform Architecture, Security Engineering |
+| Approvers      | Architecture Steering Committee; Security Review Board |
+| Reviewers      | QA Engineering Lead; SRE Manager |
+| Approved by    | |
+| Approved date  | |
 
-Body sections reference appendices instead of duplicating diagrams or schemas—App.A (state diagrams) and App.G (ERD) are authoritative. Link lint already fails missing references; this edition documents that control explicitly. `python scripts/docs/lint_docs.py --check-template` now enforces the Purpose/Contract/State/Failure/Observability/Breadcrumb scaffold for every normative or binding subsection.
+**Status:** KEP: Provisional → Implementable → Implemented
 
-**Section tags:** `(binding)` denotes requirements that block launch until implemented and tested; `(normative)` captures default behaviors that may evolve via waivers or roadmap; `(informative)` provides background or examples. When a subsection omits a tag it is treated as informative by default—add the explicit tag when the content carries binding or normative weight.
+**Section Requirements (binding):**
+    - Preamble: Purpose/Contract/State/Failure/Observability/References/Breadcrumbs (`scripts/docs/lint_docs.py --check-template`)
+    - Section tags: `(binding)`, `(normative)` or `(informative)`
+    - Links resolve: §/App./ADR (`docs-link-check`)
+    - Document validation: `python scripts/docs/lint_docs.py` (see `docs/README.md` for tooling)
+    - Settings keys: Document/code are in-sync
+    - All requirements are CI gated
+
+**Section tags:**
+    - `(binding)` denotes requirements that block launch until implemented and tested.
+    - `(normative)` captures default behaviors that may evolve via waivers or roadmap.
+    - `(informative)` provides background or examples.
+    - When a subsection omits a tag it is treated as informative by default—add the explicit tag when the content carries binding or normative weight.
 
 ## Canonical vocabulary (binding)
 
