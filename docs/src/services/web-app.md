@@ -101,7 +101,7 @@ ______________________________________________________________________
 **Purpose:** Deliver compliant, accessible, real-time experiences for staff and clients to review, approve, and receive platform artifacts. **|**
 **Contract:** The web app must respect policy masks, Guardian verdicts, residency controls, and rate limits while providing deterministic state transitions and audit trails. **|**
 **State:** UI derives state from case-scoped timelines, artifact manifests, Guardian history, outbox receipts, and Settings-driven feature toggles. **|**
-**Failure modes & handling:** SSE disconnects, stale tokens, portal invalidations, or edit workflow violations surface actionable messaging, link to runbooks, and avoid silent failure. **|**
+**Failures & handling:** SSE disconnects, stale tokens, portal invalidations, or edit workflow violations surface actionable messaging, link to runbooks, and avoid silent failure. **|**
 **Observability:** Grafana dashboards (“Operator Workspace”, “Portal Integrity”, “Notifications Delivery”, “Assistant Usage”) plus synthetic monitors and axe snapshots track health. **|**
 **Breadcrumbs:** Frontend views `apps/platform/ui/views/*.py`, portal controllers `apps/platform/portal/*.py`, component library `packages/udocket_ui/*`, integration tests `tests/platform/ui/*.py`, Playwright suites `tests/e2e/ui/*.py`. **|**
 **References:** §2 Responsibilities, §4 State management, §5 Failure modes, §7 Security & compliance.
@@ -115,7 +115,7 @@ ______________________________________________________________________
 **Purpose:** Provide case-centered tooling for operators and reviewers with deterministic status reporting. **|**
 **Contract:** Case workspace renders artifact timelines, job state, approvals, Guardian outcomes, and analytics without exposing masked data. SSE/Channels feeds must stay case-scoped and honor RLS. **|**
 **State:** Case dashboards pull from `case_secure`, `artifact_secure`, job manifests, Guardian verdicts, and FinOps metrics. **|**
-**Failure modes & handling:** SSE disconnects fall back to polling with visible banners; missing Guardian verdicts lock approval actions pending remediation per `RB-JOB-WATCHDOG`. **|**
+**Failures & handling:** SSE disconnects fall back to polling with visible banners; missing Guardian verdicts lock approval actions pending remediation per `RB-JOB-WATCHDOG`. **|**
 **Observability:** Metric panels `operator_break_glass_requested_total`, `review_queue_backlog_total`, `job_watchdog_warning_total`; synthetic monitors validate SSE and approval flows. **|**
 **Breadcrumbs:** Operator view `apps/platform/ui/views/operator_workspace.py`, approval components `packages/udocket_ui/approvals/*`, SSE publisher `apps/platform/events/jobs.py`, tests `tests/platform/ui/test_operator_workspace.py`, `tests/platform/ui/test_review_approvals.py`, `tests/e2e/test_job_status_widget.py`. **|**
 **References:** Notifications spec §2.6 (in-app alerts), Guardian spec §5 (verdict integration).
@@ -131,7 +131,7 @@ ______________________________________________________________________
 **Purpose:** Deliver masked, policy-compliant artifacts and messaging to clients with audit-friendly controls. **|**
 **Contract:** Portal enforces org membership, masking, entitlement scopes, and download token validation; invalidations reflect instantly via SSE. **|**
 **State:** Portal views consume `artifact_secure`, `delivery_receipt_secure`, entitlements, Guardian history, and notification digests. **|**
-**Failure modes & handling:** Invalid or expired tokens return 403/410 with denial banners; policy violations trigger quarantine messaging and block downloads. **|**
+**Failures & handling:** Invalid or expired tokens return 403/410 with denial banners; policy violations trigger quarantine messaging and block downloads. **|**
 **Observability:** Grafana “Portal Integrity” (`portal_link_invalidated_total`), “Abuse Signals” (`PORTAL_PHISHING_REPORT`), synthetic download tests. **|**
 **Breadcrumbs:** Portal controllers `apps/platform/portal/*.py`, download guard `apps/platform/portal/downloads.py`, tests `tests/platform/portal/test_portal_invalidation.py`, notifications spec §2.4. **|**
 **References:** Notifications spec (download tokens), Settings Registry §5.2 (portal toggles).
@@ -149,7 +149,7 @@ ______________________________________________________________________
 **Purpose:** Meet WCAG 2.2 AA requirements and deliver localized experiences across staff and portal surfaces. **|**
 **Contract:** UI components honor semantic markup, keyboard navigation, focus management, and contrast budgets; localization keys originate from LP Engine bundles and pseudolocale checks block regressions. **|**
 **State:** Localization assets live in Settings (`i18n.*`) and LP Engine bundles; accessibility evidence stored in Ops appendices. **|**
-**Failure modes & handling:** Missing translations or accessibility regressions trigger runbook `RB-LPE-LOCALE-GAP` and block releases until evidence restored. **|**
+**Failures & handling:** Missing translations or accessibility regressions trigger runbook `RB-LPE-LOCALE-GAP` and block releases until evidence restored. **|**
 **Observability:** Nightly axe snapshots, Playwright RTL runs, localization audit scripts (`ops/scripts/lpe/audit_locales.py`). **|**
 **Breadcrumbs:** Component library `packages/udocket_ui/`, localization pipeline `packages/udocket_core/lpe/*`, tests `tests/e2e/test_accessibility.py`. **|**
 **References:** LP Engine spec §2, Ops runbook index (LPE locale gap).
@@ -164,7 +164,7 @@ ______________________________________________________________________
 **Purpose:** Enable shared editing, presence indicators, and live updates without cross-case leakage. **|**
 **Contract:** SSE and Channels sessions bind to case/org scopes, enforce SameSite cookies, and respect rate limits; optimistic updates reconcile with server events safely. **|**
 **State:** Presence metadata stored in Redis; session context derived from case membership and settings toggles. **|**
-**Failure modes & handling:** Connection drops raise UI banners and trigger exponential backoff; session mismatches force re-auth. **|**
+**Failures & handling:** Connection drops raise UI banners and trigger exponential backoff; session mismatches force re-auth. **|**
 **Observability:** Metrics `sse_connection_drop_total`, synthetic monitors for SSE schema version drift, audit `CHANNEL_SESSION_STARTED/ENDED`. **|**
 **Breadcrumbs:** Channels configuration `apps/platform/ui/channels.py`, presence service `apps/platform/ui/presence.py`, SSE publishers `apps/platform/events/*.py`, tests `tests/e2e/test_collaboration.py`, `tests/platform/ui/test_presence_indicator.py`. **|**
 **References:** Notifications spec §2.6 (in-app notifications), Guardian spec (quarantine broadcasts).
@@ -174,7 +174,7 @@ ______________________________________________________________________
 **Purpose:** Enforce secure defaults for headers, anti-phishing, download guards, and MFA/step-up workflows. **|**
 **Contract:** Web and portal responses include CSP, HSTS, frameguard, referrer, and permissions policy headers; anti-phishing tooling logs and escalates suspicious activity. **|**
 **State:** Header templates, download guard policies, phishing audit logs. **|**
-**Failure modes & handling:** Header regressions fail CI; phishing detections raise alerts and prompt incident templates. **|**
+**Failures & handling:** Header regressions fail CI; phishing detections raise alerts and prompt incident templates. **|**
 **Observability:** Grafana “Frontend CSP”, `portal_412_precondition_total`, audit `PORTAL_DOWNLOAD_PRECONDITION`. **|**
 **Breadcrumbs:** Security middleware `apps/platform/ui/security/csp.py`, download guard `apps/platform/portal/downloads.py`, phishing logger `apps/platform/notifications/phishing.py`, tests `tests/ui/test_csp_nonced.py`, `tests/platform/notifications/test_phishing_workflow.py`. **|**
 **References:** Notifications spec (download tokens), Settings Registry (MFA/step-up toggles).
@@ -184,7 +184,7 @@ ______________________________________________________________________
 **Purpose:** Offer case-scoped, RLS-enforced messaging with Guardian oversight. **|**
 **Contract:** Messaging threads store artifacts (`ATTACHMENT_*`), enforce opt-in rate limits, and rely on signed URLs from the notifications service. **|**
 **State:** Tables `message_thread`, `message`, `message_attachment`, `message_read_receipt`; attachments reference artifact IDs. **|**
-**Failure modes & handling:** Abuse detection triggers alerts and throttles; retention aligns with case lifecycle. **|**
+**Failures & handling:** Abuse detection triggers alerts and throttles; retention aligns with case lifecycle. **|**
 **Observability:** Metrics `message_delivery_total`, anomaly detectors on abuse signals, SSE updates for read receipts. **|**
 **Breadcrumbs:** Messaging controllers `apps/platform/portal/messaging.py`, notifications spec §2.6, tests `tests/platform/portal/test_secure_messaging.py`. **|**
 **References:** Notifications spec (tokens & in-app alerts), Guardian spec §5.
@@ -194,7 +194,7 @@ ______________________________________________________________________
 **Purpose:** Manage dual approval, provenance, and moderation for manual and AI-assisted edits. **|**
 **Contract:** Manual edits produce child artifacts linked to parents; agent edits capture prompts, model settings, and moderation results. Dual approval enforces distinct reviewers via OCC and unique indices. **|**
 **State:** Edit manifests track `{edit_type, editor_id, diff_fingerprint_sha256, model_id?, prompt_id?, moderation_outcome}` with logs in `ops/<job_id>__edit_log.jsonl`. **|**
-**Failure modes & handling:** Policy violations (`EDIT_POLICY_BLOCK`) quarantine artifacts; repeated rejects page engineering. **|**
+**Failures & handling:** Policy violations (`EDIT_POLICY_BLOCK`) quarantine artifacts; repeated rejects page engineering. **|**
 **Observability:** Metrics `edit_sessions_total{type}`, `edit_policy_block_total`, SSE events `edit.started|edit.updated|edit.ready_for_review`. **|**
 **Breadcrumbs:** Edit controllers `apps/platform/ui/views/edit_flow.py`, LangGraph edit lanes `packages/udocket_core/agents/edit/*`, tests `tests/platform/ui/test_edit_workflow.py`. **|**
 **References:** Guardian spec §5, LLM registry spec §2.3 (safety harness).
@@ -209,7 +209,7 @@ ______________________________________________________________________
 **Purpose:** Convert Compose outputs into deliverable-ready documents with signing prerequisites. **|**
 **Contract:** Pipeline renders DOCX/PDF artifacts, lints placeholders, computes hashes, and enforces exclusive approvals; integrates with Digital Signer before portal release. **|**
 **State:** `ASSEMBLED_DOC_*` artifacts progress `PROCESSING → PENDING_JUDGMENT → OPERATOR_PREP → APPROVAL_REQUESTED → QUEUED_FOR_REVIEW → APPROVED`; manifests capture template version and hash. **|**
-**Failure modes & handling:** Lint errors surface warnings; pipeline halts until resolved; signing blockers escalate per Signer spec. **|**
+**Failures & handling:** Lint errors surface warnings; pipeline halts until resolved; signing blockers escalate per Signer spec. **|**
 **Observability:** Metrics `document_assembly_duration_seconds`, `document_assembly_error_total`; logs include lint warnings. **|**
 **Breadcrumbs:** Assembly job `apps/platform/operations/task_modules/compose.py::assemble_documents`, signer spec §2, tests `tests/platform/operations/test_document_assembly.py`. **|**
 **References:** Compose agent spec (future), Digital Signer spec §2.1.
@@ -219,7 +219,7 @@ ______________________________________________________________________
 **Purpose:** Deliver scoped AI assistants for staff and clients with auditability and policy enforcement. **|**
 **Contract:** Assistants run LangGraph pipelines with retrieval restricted to authorized artifacts; sessions log manifests, Guardian verdicts, and moderation outcomes. Client assistant includes informational disclaimers. **|**
 **State:** Chat sessions stored under `storage/media/cases/<case>/ops/<session_id>__chat_{audience}.jsonl`; manifests record `{model_id, prompt_version, retrieval_sources[], token_usage, latency_ms}`. **|**
-**Failure modes & handling:** Policy violations (`CHAT_POLICY_BLOCK`, `CHAT_GUARDIAN_QUARANTINED`) disable access pending review; rate-limit exhaustion surfaces UI banners. **|**
+**Failures & handling:** Policy violations (`CHAT_POLICY_BLOCK`, `CHAT_GUARDIAN_QUARANTINED`) disable access pending review; rate-limit exhaustion surfaces UI banners. **|**
 **Observability:** Metrics `chat_sessions_total{audience}`, `chat_token_usage_total`, `chat_rate_limit_block_total`, dashboards “Assistant Usage” and “Assistant API”. **|**
 **Breadcrumbs:** Assistant orchestrator `apps/platform/ui/assistants.py`, LangGraph pipelines `packages/udocket_core/agents/assistants/*`, tests `tests/e2e/test_chat_assistant.py`, API spec `ops/openapi/chat_assistants.yaml`. **|**
 **References:** TDD §10.12 (capability APIs), LLM registry spec §2.3 (moderation), Notifications spec §2.6 (alerting).
@@ -238,7 +238,7 @@ ______________________________________________________________________
 **Purpose:** Outline the interfaces powering the web app and portal experiences. **|**
 **Contract:** REST endpoints require OAuth scopes (`org_operator`, `org_client`), enforce optimistic concurrency, and honor RLS context. SSE/Channels topics remain case/org scoped and versioned. **|**
 **State:** APIs interact with views `*_secure`, outbox/download token tables, messaging threads, edit manifests, and chat session evidence. **|**
-**Failure modes & handling:** Missing tokens, stale ETags, or scope violations return typed errors (`401`, `403`, `409`) with audit trails. **|**
+**Failures & handling:** Missing tokens, stale ETags, or scope violations return typed errors (`401`, `403`, `409`) with audit trails. **|**
 **Observability:** API metrics `portal_request_total`, `review_action_total`, `chat_assistant_metadata_requests_total`; SSE schema changes trigger synthetic monitors. **|**
 **Breadcrumbs:** REST controllers `apps/platform/api/*.py`, SSE publishers `apps/platform/events/*.py`, OpenAPI specs `ops/openapi/uDocket-platform.openapi.yaml`, `ops/openapi/chat_assistants.yaml`. **|**
 **References:** Notifications spec (download/token APIs), Guardian spec (approval endpoints), ADR-0003 (versioning policy).
@@ -254,7 +254,7 @@ ______________________________________________________________________
 **Purpose:** Explain persistent stores and configuration artifacts backing the UI. **|**
 **Contract:** Secure views, manifests, and token stores must enforce RLS, masking, and reproducibility; Settings snapshots remain authoritative. **|**
 **State:** `case_secure`, `artifact_secure`, `delivery_receipt_secure`, messaging tables, edit manifests, download tokens, chat envelopes, localization bundles. **|**
-**Failure modes & handling:** RLS drift or stale manifests block releases until Settings rollback; token corruption triggers revocation and regeneration. **|**
+**Failures & handling:** RLS drift or stale manifests block releases until Settings rollback; token corruption triggers revocation and regeneration. **|**
 **Observability:** Metrics `portal_link_invalidated_total`, audit streams (`EDIT_EVENT`, `DOWNLOAD_TOKEN_*`), ops logs per case. **|**
 **Breadcrumbs:** Secure view migrations `db/migrations/security/*.sql`, messaging models `apps/platform/portal/messaging.py`, token store `apps/platform/notifications/download_tokens.py`, edit manifests `apps/platform/ui/views/edit_flow.py`. **|**
 **References:** Notifications spec §4, Guardian spec §4, Settings Registry §5.2.
@@ -272,7 +272,7 @@ ______________________________________________________________________
 **Purpose:** Highlight primary failure scenarios and expected remediation paths. **|**
 **Contract:** UI must fail closed, surface actionable messaging, and avoid silent data exposure. **|**
 **State:** Job status, portal tokens, edit manifests, assistant manifests, accessibility evidence. **|**
-**Failure modes & handling:** SSE fallback, portal invalidation, policy blocks, moderation abuse, accessibility regression. **|**
+**Failures & handling:** SSE fallback, portal invalidation, policy blocks, moderation abuse, accessibility regression. **|**
 **Observability:** Metrics `sse_connection_drop_total`, `portal_412_precondition_total`, `edit_policy_block_total`, `chat_policy_block_total`; audit events `PORTAL_DOWNLOAD_PRECONDITION`, `EDIT_POLICY_BLOCK`, `CHAT_POLICY_BLOCK`. **|**
 **Breadcrumbs:** Runbooks `RB-JOB-WATCHDOG`, `RB-PORTAL-INVALIDATION`, `RB-CHAT-ABUSE`, `RB-LPE-LOCALE-GAP`. **|**
 **References:** Notifications spec, Guardian spec, Settings spec.
@@ -290,7 +290,7 @@ ______________________________________________________________________
 **Purpose:** Ensure the UI has adequate telemetry for health, performance, and policy compliance. **|**
 **Contract:** Maintain dashboards, emit structured events, and run synthetics covering core journeys. **|**
 **State:** Grafana dashboards, Prometheus metrics, structured logs, synthetic job artifacts. **|**
-**Failure modes & handling:** Missing metrics or failing synthetic checks page SRE and block releases until remediation. **|**
+**Failures & handling:** Missing metrics or failing synthetic checks page SRE and block releases until remediation. **|**
 **Observability:** Dashboards “Operator Workspace”, “Portal Integrity”, “Notifications Delivery”, “Assistant Usage”, “Accessibility & Localization”; metrics `review_queue_backlog_total`, `portal_link_invalidated_total`, `chat_sessions_total{audience}`, etc.; logs `UI_EVENT`, `PORTAL_EVENT`, `CHAT_SESSION`, `EDIT_EVENT`. **|**
 **Breadcrumbs:** Dashboard configs `infra/observability/dashboards/*.json`, synthetic scripts `synthetics/*.yaml`, logging adapters `packages/udocket_core/logging/*`. **|**
 **References:** Notifications spec §6, LLM Registry spec §6, Settings spec §6.
@@ -307,7 +307,7 @@ ______________________________________________________________________
 **Purpose:** Capture authentication, masking, and policy obligations for the web surfaces. **|**
 **Contract:** Enforce hardened headers, signed download tokens, step-up MFA, masking, and audit trails; break-glass requires dual approval. **|**
 **State:** CSP configs, download token records, phishing logs, break-glass artifacts, assistant manifests. **|**
-**Failure modes & handling:** Header drift fails CI; phishing surges trigger incident templates; unauthorized access attempts blocked and logged. **|**
+**Failures & handling:** Header drift fails CI; phishing surges trigger incident templates; unauthorized access attempts blocked and logged. **|**
 **Observability:** Metrics `portal_412_precondition_total`, `portal_phishing_report_total`, audit events `PORTAL_DOWNLOAD_PRECONDITION`, `TOKEN_REVEAL_REQUEST`, `CHAT_POLICY_BLOCK`. **|**
 **Breadcrumbs:** Middleware `apps/platform/ui/security/csp.py`, download guard `apps/platform/portal/downloads.py`, phishing logger `apps/platform/notifications/phishing.py`, break-glass schema `spec/schemas/break_glass_event.schema.json`. **|**
 **References:** Notifications spec §7, Settings spec §7, Guardian spec §7.
@@ -328,7 +328,7 @@ ______________________________________________________________________
 **Purpose:** Keep the staff workspace and client portal operationally ready while satisfying security and compliance controls. **|**
 **Contract:** Runbooks, drills, and release workflows must stay current; UI surfaces pause when alert gates or evidence requirements fail. **|**
 **State:** Runbooks in `ops/runbooks/webapp/` and `ops/runbooks/notifications/`, drill evidence `ops/webapp/drills/<date>/`, freeze calendars `ops/webapp/freeze_windows.ics`. **|**
-**Failure modes & handling:** Stale playbooks, missed drills, or expired freezes block deployments until remediation and evidence capture. **|**
+**Failures & handling:** Stale playbooks, missed drills, or expired freezes block deployments until remediation and evidence capture. **|**
 **Observability:** Docs lint (`build_runbook_catalog.py --check`), dashboards “Portal Integrity”/“Operator Workspace”, alert `portal_link_invalidated_total`. **|**
 **Breadcrumbs:** Runbook index `docs/src/ops/runbooks/index.md`, drill scripts `ops/scripts/webapp/schedule_drills.py`, governance policies App.N. **|**
 **References:** §5 Failure modes, §6 Observability, §7 Security & compliance.
@@ -338,7 +338,7 @@ ______________________________________________________________________
 **Purpose:** Document on-call coverage, freeze windows, and readiness assumptions for the web application. **|**
 **Contract:** Platform Engineering owns PagerDuty “WebApp SLO”, enforces release freezes during major UI migrations, and keeps portal/privacy SMEs on-call for high-severity incidents. **|**
 **State:** Roster `ops/webapp/roster.yaml`, freeze calendar `ops/webapp/freeze_windows.ics`, contact matrix in App.N. **|**
-**Failure modes & handling:** Unstaffed shifts or ignored freezes escalate to Product & Security; deployments halted until posture restored. **|**
+**Failures & handling:** Unstaffed shifts or ignored freezes escalate to Product & Security; deployments halted until posture restored. **|**
 **Observability:** PagerDuty metrics, freeze dashboards, alert `webapp_oncall_gap_total`. **|**
 **References:** Notifications spec §7, Settings spec §7. **|**
 **Breadcrumbs:** Roster files, freeze calendars, App.O decision logs.
@@ -348,7 +348,7 @@ ______________________________________________________________________
 **Purpose:** Tie UI alerts to playbooks so responders execute consistent recovery steps. **|**
 **Contract:** Alert rules (`infra/monitoring/webapp-prometheus-rules.yaml`) annotate RB-\* identifiers; incidents log evidence before closure. **|**
 **State:** Incident records `ops/webapp/incidents/<date>.jsonl` capture alert, context, and applied runbook. **|**
-**Failure modes & handling:** Missing annotations or muted alerts require corrective PRs and governance follow-up. **|**
+**Failures & handling:** Missing annotations or muted alerts require corrective PRs and governance follow-up. **|**
 **Observability:** Dashboards “Operator Workspace”, “Portal Integrity”, Alertmanager routes. **|**
 **References:** `RB-JOB-WATCHDOG`, `RB-PORTAL-INVALIDATION`, `RB-CHAT-ABUSE`. **|**
 **Breadcrumbs:** Alert rule files, PagerDuty services, SIEM dashboards.
@@ -363,7 +363,7 @@ ______________________________________________________________________
 **Purpose:** Keep UI runbooks executable and drills on cadence. **|**
 **Contract:** Alerts map to RB-\* playbooks; quarterly exercises cover SSE resiliency, portal abuse investigation, accessibility audits, and assistant abuse response. **|**
 **State:** Runbooks `ops/runbooks/webapp/*.md`, evidence `ops/webapp/drills/<date>/`. **|**
-**Failure modes & handling:** Missing drill evidence or outdated steps block release approval until updated. **|**
+**Failures & handling:** Missing drill evidence or outdated steps block release approval until updated. **|**
 **Observability:** Docs lint, drill scheduler reports, governance dashboards. **|**
 **References:** `RB-JOB-WATCHDOG`, `RB-PORTAL-INVALIDATION`, `RB-LPE-LOCALE-GAP`, `RB-NOTIFY-*`, `RB-CHAT-ABUSE`. **|**
 **Breadcrumbs:** Runbook catalog, drill scheduler, governance policy App.N.
@@ -397,7 +397,7 @@ ______________________________________________________________________
 **Purpose:** Govern CDN cache pushes, static asset migrations, and portal data backfills. **|**
 **Contract:** UI asset migrations require change tickets, blue/green verification, and rollback plans; backfills of portal metadata run in read-only preview before publishing. **|**
 **State:** Migration scripts `ops/scripts/webapp/deploy_assets.py`, cache manifests `ops/webapp/cdn_manifest.json`, backfill logs `ops/webapp/backfill/<date>/`. **|**
-**Failure modes & handling:** Failed migrations revert to prior asset version; incomplete backfills trigger `RB-PORTAL-INVALIDATION` to prevent stale downloads. **|**
+**Failures & handling:** Failed migrations revert to prior asset version; incomplete backfills trigger `RB-PORTAL-INVALIDATION` to prevent stale downloads. **|**
 **Observability:** Metrics `webapp_asset_publish_total`, `webapp_backfill_success_total`. **|**
 **References:** Settings spec §5, Notifications spec §4. **|**
 **Breadcrumbs:** Asset deployment scripts, CDN manifests, backfill tooling.
@@ -407,7 +407,7 @@ ______________________________________________________________________
 **Purpose:** Document recurring tasks for portal/workspace hygiene. **|**
 **Contract:** Teams review portal invalidations daily, reconcile signed download tokens, audit assistant manifests, and validate accessibility snapshots. **|**
 **State:** Token reconciliation reports `ops/webapp/token_audit/<date>.csv`, accessibility evidence `ops/webapp/accessibility/<run_id>/`, assistant manifest reviews `ops/webapp/chat_manifest_checks.md`. **|**
-**Failure modes & handling:** Missing audits trigger `RB-PORTAL-INVALIDATION` or `RB-CHAT-ABUSE` follow-up; unresolved accessibility gaps block release. **|**
+**Failures & handling:** Missing audits trigger `RB-PORTAL-INVALIDATION` or `RB-CHAT-ABUSE` follow-up; unresolved accessibility gaps block release. **|**
 **Observability:** Metrics `download_token_validation_total{outcome}`, `chat_sessions_total{audience}`, accessibility CI dashboards. **|**
 **References:** §4 State management, §7 Security & compliance. **|**
 **Breadcrumbs:** Token audit scripts `ops/scripts/webapp/audit_tokens.py`, accessibility CI configs, assistant manifest validators.
@@ -423,7 +423,7 @@ ______________________________________________________________________
 **Purpose:** Identify upstream and downstream integrations supporting the web application. **|**
 **Contract:** Dependencies maintain their published contracts; the web app consumes their APIs within documented bounds. **|**
 **State:** Notifications queues, Guardian verdict streams, LLM profiles, localization bundles, Settings toggles. **|**
-**Failure modes & handling:** Dependency outages or schema drift trigger runbooks and coordinated rollbacks with owning teams. **|**
+**Failures & handling:** Dependency outages or schema drift trigger runbooks and coordinated rollbacks with owning teams. **|**
 **Observability:** Cross-service dashboards, SSE monitors, audit logs, synthetic checks. **|**
 **Breadcrumbs:** Linked service specifications below. **|**
 **References:** Notifications, Guardian, LLM Registry, LP Engine, Settings Registry, Digital Signer, Worker Cluster specs.
@@ -446,7 +446,7 @@ ______________________________________________________________________
 **Purpose:** Provide quick access to supporting specifications and appendices. **|**
 **Contract:** References remain current; update when related documents move or rename. **|**
 **State:** Linked specs and runbooks in the documentation corpus. **|**
-**Failure modes & handling:** Broken links detected via `scripts/docs/link_check.py`. **|**
+**Failures & handling:** Broken links detected via `scripts/docs/link_check.py`. **|**
 **Observability:** Docs CI link checker. **|**
 **Breadcrumbs:** Documentation index `docs/mkdocs.yml`. **|**
 **References:** Listed below.

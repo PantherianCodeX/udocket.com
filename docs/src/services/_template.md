@@ -49,7 +49,7 @@ Use this section to orient readers before they dive into the specification. It s
 **Purpose:** State the service’s mission and success criteria. **|**
 **Contract:** Define scope boundaries and invariants the service guarantees. **|**
 **State:** Summarize the lifecycle of key objects/configs the service owns. **|**
-**Failure modes & handling:** Call out high-level risks to the mission. **|**
+**Failures & handling:** Call out high-level risks to the mission. **|**
 **Observability:** Metrics/logs/SLO dashboards tied to the charter. **|**
 **Breadcrumbs:** Source files, tests, dashboards maintaining the charter. **|**
 **References:** Cross-reference supporting specs or ADRs.
@@ -59,7 +59,7 @@ Use this section to orient readers before they dive into the specification. It s
 **Purpose:** Enumerate functional responsibilities and non-goals. **|**
 **Contract:** Spell out mandatory behaviours, idempotency, regulatory duties. **|**
 **State:** Describe ownership of state transitions or data stewardship. **|**
-**Failure modes & handling:** Identify responsibility gaps and escalation paths. **|**
+**Failures & handling:** Identify responsibility gaps and escalation paths. **|**
 **Observability:** Checks proving each responsibility works. **|**
 **Breadcrumbs:** Implementation/tests supporting each responsibility. **|**
 **References:** Service/TDD sections that expand on responsibilities.
@@ -69,7 +69,7 @@ Use this section to orient readers before they dive into the specification. It s
 **Purpose:** Document public and internal interfaces. **|**
 **Contract:** Define required inputs/outputs, authentication, and versioning. **|**
 **State:** Highlight persisted payloads, schemas, queues, or files produced. **|**
-**Failure modes & handling:** Enumerate error codes, retries, and backoffs. **|**
+**Failures & handling:** Enumerate error codes, retries, and backoffs. **|**
 **Observability:** Metrics/logs/traces covering API health. **|**
 **Breadcrumbs:** Controller handlers, schema definitions, integration tests. **|**
 **References:** Link to schema fixtures or appendices.
@@ -87,7 +87,7 @@ Use this section to orient readers before they dive into the specification. It s
 **Purpose:** Explain storage and configuration strategy. **|**
 **Contract:** Define persistence guarantees, migration expectations, and retention. **|**
 **State:** Describe schemas, caches, and configuration sources. **|**
-**Failure modes & handling:** Cover corruption, drift, and reconciliation flows. **|**
+**Failures & handling:** Cover corruption, drift, and reconciliation flows. **|**
 **Observability:** Metrics for storage health, cache hit rates, or config parity. **|**
 **Breadcrumbs:** ORM models, migrations, infrastructure manifests. **|**
 **References:** TDD appendices or diagrams related to state.
@@ -97,7 +97,7 @@ Use this section to orient readers before they dive into the specification. It s
 **Purpose:** Provide the resilience profile and default mitigations. **|**
 **Contract:** Identify what must fail closed vs. degraded. **|**
 **State:** Note circuit breakers, queues, or compensating transactions. **|**
-**Failure modes & handling:** Enumerate incidents, fallback procedures, and manual runbooks. **|**
+**Failures & handling:** Enumerate incidents, fallback procedures, and manual runbooks. **|**
 **Observability:** Alerts, dashboards, and SLOs tied to failure handling. **|**
 **Breadcrumbs:** Runbooks, incident retros, chaos tests. **|**
 **References:** Link to ops docs or ADRs describing failure strategy.
@@ -107,7 +107,7 @@ Use this section to orient readers before they dive into the specification. It s
 **Purpose:** Show how to detect and diagnose issues. **|**
 **Contract:** List mandatory telemetry and alerting coverage. **|**
 **State:** Capture dashboards, log pipelines, or tracing spans. **|**
-**Failure modes & handling:** Note alert fatigue risks or blind spots. **|**
+**Failures & handling:** Note alert fatigue risks or blind spots. **|**
 **Observability:** Detail metrics/logs/traces plus owners. **|**
 **Breadcrumbs:** Monitoring configs, dashboards, alert definitions. **|**
 **References:** Observability standards or shared appendices.
@@ -117,7 +117,7 @@ Use this section to orient readers before they dive into the specification. It s
 **Purpose:** Capture authZ/authN, data handling classes, and regulatory duties. **|**
 **Contract:** Define encryption rules, residency bounds, and audit requirements. **|**
 **State:** Describe secrets, key rotation, and data classifications. **|**
-**Failure modes & handling:** Explain how breaches or policy drifts are detected and resolved. **|**
+**Failures & handling:** Explain how breaches or policy drifts are detected and resolved. **|**
 **Observability:** Security alerts, audit trails, compliance evidence. **|**
 **Breadcrumbs:** IAM configs, policy bundles, compliance tests. **|**
 **References:** Link to residency or policy appendices/ADRs.
@@ -127,7 +127,7 @@ Use this section to orient readers before they dive into the specification. It s
 **Purpose:** Summarize deployments, maintenance windows, readiness posture, and day-2 workflows that keep the service healthy. **|**
 **Contract:** Capture SLAs, rollout gates, and operational ownership, including how alerts map to playbooks. **|**
 **State:** Note infrastructure manifests, automation scripts, runbook repositories, and evidence storage. **|**
-**Failure modes & handling:** Document rollback paths, drill cadence, and how gaps in operational readiness are remediated. **|**
+**Failures & handling:** Document rollback paths, drill cadence, and how gaps in operational readiness are remediated. **|**
 **Observability:** Release dashboards, deployment checks, synthetic monitors, and runbook execution tracking. **|**
 **Breadcrumbs:** Helm charts, Terraform modules, runbooks, incident templates. **|**
 **References:** Ops appendices, deployment ADRs, alert catalogs.
@@ -137,7 +137,7 @@ Use this section to orient readers before they dive into the specification. It s
 **Purpose:** Describe on-call coverage, staffing, maintenance windows, and readiness assumptions. **|**
 **Contract:** Define required rotations, required skill sets, and rota expectations (follow-the-sun, pager response times). **|**
 **State:** Note rosters, calendars, and tooling that track staffing availability. **|**
-**Failure modes & handling:** Explain how gaps in coverage or readiness are detected and escalated. **|**
+**Failures & handling:** Explain how gaps in coverage or readiness are detected and escalated. **|**
 **Observability:** Link to dashboards auditing staffing health, paging latency, or readiness checklists. **|**
 **Breadcrumbs:** Staffing docs, rota configs, escalation policies. **|**
 **References:** Incident management playbooks, HR/ops policies.
@@ -147,7 +147,7 @@ Use this section to orient readers before they dive into the specification. It s
 **Purpose:** Enumerate the alerts, dashboards, or metrics that declare an incident for this service. **|**
 **Contract:** Map each trigger to severity, owning team, and required first actions. **|**
 **State:** Capture alert definitions, SLO budgets, and suppression rules. **|**
-**Failure modes & handling:** Highlight gaps (false positives/negatives) and how they are reviewed. **|**
+**Failures & handling:** Highlight gaps (false positives/negatives) and how they are reviewed. **|**
 **Observability:** Tie triggers to monitoring stacks and weekly/monthly incident reviews. **|**
 **Breadcrumbs:** Alert definitions, PagerDuty services, Grafana dashboards. **|**
 **References:** Runbook sections, observability standards.
@@ -157,7 +157,7 @@ Use this section to orient readers before they dive into the specification. It s
 **Purpose:** Document operational playbooks responders execute during incidents or exercises. **|**
 **Contract:** Link production alerts to runbook identifiers, outline execution cadence, and name the maintaining team. **|**
 **State:** Summarize where runbooks live (repo paths, automation scripts) and what evidence they produce. **|**
-**Failure modes & handling:** Explain how missing, stale, or skipped runbooks are surfaced and remediated. **|**
+**Failures & handling:** Explain how missing, stale, or skipped runbooks are surfaced and remediated. **|**
 **Observability:** Note tooling that tracks drill frequency, runbook completion, and incident follow-up. **|**
 **Breadcrumbs:** Runbook files, automation scripts, incident templates. **|**
 **References:** Alert catalogs, governance docs referencing the runbooks.
@@ -179,7 +179,7 @@ Use this section to orient readers before they dive into the specification. It s
 **Purpose:** Capture schema/data migrations, backfills, and replay tooling required to maintain the service. **|**
 **Contract:** Define approvals, sequencing, and rollback expectations for each migration class. **|**
 **State:** Note migration scripts, versioning metadata, and audit artifacts. **|**
-**Failure modes & handling:** Describe how failed migrations are detected, rolled back, or re-run safely. **|**
+**Failures & handling:** Describe how failed migrations are detected, rolled back, or re-run safely. **|**
 **Observability:** Include dashboards or alerts monitoring migration progress. **|**
 **Breadcrumbs:** Migration scripts, replay jobs, change-management templates. **|**
 **References:** ADRs or ops docs governing migrations.
@@ -189,7 +189,7 @@ Use this section to orient readers before they dive into the specification. It s
 **Purpose:** Describe recurring operational tasks (manual review, quarterly audits, data purges). **|**
 **Contract:** Define who executes each workflow, prerequisites, and escalation thresholds. **|**
 **State:** Point to checklists, run sheets, or automation supporting the workflow. **|**
-**Failure modes & handling:** Explain how skipped or incomplete workflows are detected and corrected. **|**
+**Failures & handling:** Explain how skipped or incomplete workflows are detected and corrected. **|**
 **Observability:** Track workflow health via dashboards, audit logs, or retrospectives. **|**
 **Breadcrumbs:** Workflow documentation, automation scripts, staffing rosters. **|**
 **References:** Incident management playbooks, staffing guides.
@@ -199,7 +199,7 @@ Use this section to orient readers before they dive into the specification. It s
 **Purpose:** List upstream/downstream systems and their contracts. **|**
 **Contract:** Describe expectations on dependency behaviour and change management. **|**
 **State:** Identify shared schemas/events and their owners. **|**
-**Failure modes & handling:** Explain cascading failure protections. **|**
+**Failures & handling:** Explain cascading failure protections. **|**
 **Observability:** Dependency health checks and joint dashboards. **|**
 **Breadcrumbs:** Integration specs, dependency docs. **|**
 **References:** Link to other service docs or appendices.
