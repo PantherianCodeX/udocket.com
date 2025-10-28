@@ -325,17 +325,80 @@ ______________________________________________________________________
 
 ## 8) Operations & runbooks
 
-**Purpose:** Keep operational playbooks current and drills executed on schedule. **|**
-**Contract:** RB-\* references must align with alert catalog, and evidence must be archived for audits. **|**
-**State:** Runbook catalog entries, drill schedules, evidence directories under `ops/webapp`. **|**
-**Failure modes & handling:** Stale runbooks or missed drills triggered by docs lint/governance tasks; remediation logged in Ops tracker. **|**
-**Observability:** Docs lint (`build_runbook_catalog.py --check`), governance dashboards, audit logs for drills. **|**
-**Breadcrumbs:** Runbook index `docs/src/ops/runbooks/index.md`, drill scripts `ops/scripts/notifications/schedule_drills.py`, governance policies App.N. **|**
-**References:** RB-JOB-WATCHDOG, RB-PORTAL-INVALIDATION, RB-LPE-LOCALE-GAP, RB-NOTIFY-\*, RB-CHAT-ABUSE. **|**
+**Purpose:** Keep the staff workspace and client portal operationally ready while satisfying security and compliance controls. **|**
+**Contract:** Runbooks, drills, and release workflows must stay current; UI surfaces pause when alert gates or evidence requirements fail. **|**
+**State:** Runbooks in `ops/runbooks/webapp/` and `ops/runbooks/notifications/`, drill evidence `ops/webapp/drills/<date>/`, freeze calendars `ops/webapp/freeze_windows.ics`. **|**
+**Failure modes & handling:** Stale playbooks, missed drills, or expired freezes block deployments until remediation and evidence capture. **|**
+**Observability:** Docs lint (`build_runbook_catalog.py --check`), dashboards “Portal Integrity”/“Operator Workspace”, alert `portal_link_invalidated_total`. **|**
+**Breadcrumbs:** Runbook index `docs/src/ops/runbooks/index.md`, drill scripts `ops/scripts/webapp/schedule_drills.py`, governance policies App.N. **|**
+**References:** §5 Failure modes, §6 Observability, §7 Security & compliance. **|**
 
-- Runbooks: RB-JOB-WATCHDOG (job tiles), RB-PORTAL-INVALIDATION (token revocation), RB-LPE-LOCALE-GAP (localization), RB-NOTIFY-\* (alerts), RB-CHAT-ABUSE (assistant incident).
-- Drill cadence: quarterly SSE resilience tabletop, accessibility regression audit, portal abuse simulation, assistant abuse scenario.
-- Evidence: stored under `ops/webapp/drills/<date>/` with participants, remediation tasks, and dashboards snapshots.
+### 8.1 Operational posture (binding)
+
+**Purpose:** Document on-call coverage, freeze windows, and readiness assumptions for the web application. **|**
+**Contract:** Platform Engineering owns PagerDuty “WebApp SLO”, enforces release freezes during major UI migrations, and keeps portal/privacy SMEs on-call for high-severity incidents. **|**
+**State:** Roster `ops/webapp/roster.yaml`, freeze calendar `ops/webapp/freeze_windows.ics`, contact matrix in App.N. **|**
+**Failure modes & handling:** Unstaffed shifts or ignored freezes escalate to Product & Security; deployments halted until posture restored. **|**
+**Observability:** PagerDuty metrics, freeze dashboards, alert `webapp_oncall_gap_total`. **|**
+**References:** Notifications spec §7, Settings spec §7. **|**
+**Breadcrumbs:** Roster files, freeze calendars, App.O decision logs. **|**
+
+### 8.2 Incident triggers (binding)
+
+**Purpose:** Tie UI alerts to playbooks so responders execute consistent recovery steps. **|**
+**Contract:** Alert rules (`infra/monitoring/webapp-prometheus-rules.yaml`) annotate RB-\* identifiers; incidents log evidence before closure. **|**
+**State:** Incident records `ops/webapp/incidents/<date>.jsonl` capture alert, context, and applied runbook. **|**
+**Failure modes & handling:** Missing annotations or muted alerts require corrective PRs and governance follow-up. **|**
+**Observability:** Dashboards “Operator Workspace”, “Portal Integrity”, Alertmanager routes. **|**
+**References:** RB-JOB-WATCHDOG, RB-PORTAL-INVALIDATION, RB-CHAT-ABUSE. **|**
+**Breadcrumbs:** Alert rule files, PagerDuty services, SIEM dashboards. **|**
+
+- `portal_link_invalidated_total` spikes or `portal_download_precondition_total` errors invoke RB-PORTAL-INVALIDATION.
+- `sse_connection_drop_total` sustained > threshold drives SSE recovery drills via RB-JOB-WATCHDOG.
+- `chat_policy_block_total` / `chat_abuse_alert_total` escalate to RB-CHAT-ABUSE.
+- Accessibility monitors (axe regression jobs) failing in CI pause releases and trigger RB-LPE-LOCALE-GAP before resuming deployments.
+
+### 8.3 Runbooks & drills (binding)
+
+**Purpose:** Keep UI runbooks executable and drills on cadence. **|**
+**Contract:** Alerts map to RB-\* playbooks; quarterly exercises cover SSE resiliency, portal abuse investigation, accessibility audits, and assistant abuse response. **|**
+**State:** Runbooks `ops/runbooks/webapp/*.md`, evidence `ops/webapp/drills/<date>/`. **|**
+**Failure modes & handling:** Missing drill evidence or outdated steps block release approval until updated. **|**
+**Observability:** Docs lint, drill scheduler reports, governance dashboards. **|**
+**References:** RB-JOB-WATCHDOG, RB-PORTAL-INVALIDATION, RB-LPE-LOCALE-GAP, RB-NOTIFY-\*, RB-CHAT-ABUSE. **|**
+**Breadcrumbs:** Runbook catalog, drill scheduler, governance policy App.N. **|**
+
+| Runbook code | Scenario | Notes |
+| ------------ | -------- | ----- |
+| RB-JOB-WATCHDOG | SSE/worker watchdog remediation | Coordinated with worker cluster for stalled jobs |
+| RB-PORTAL-INVALIDATION | Token revocation / portal link cleanup | Revokes signed URLs, notifies clients, captures evidence |
+| RB-LPE-LOCALE-GAP | Localization/accessibility gap | Coordinates with LP Engine for missing locales |
+| RB-NOTIFY-\* | Delivery incidents | Aligns portal alerts with outbound notifications |
+| RB-CHAT-ABUSE | Assistant abuse or moderation escalation | Disables assistants, gathers evidence for Security |
+
+### 8.4 Migrations & backfills (normative)
+
+**Purpose:** Govern CDN cache pushes, static asset migrations, and portal data backfills. **|**
+**Contract:** UI asset migrations require change tickets, blue/green verification, and rollback plans; backfills of portal metadata run in read-only preview before publishing. **|**
+**State:** Migration scripts `ops/scripts/webapp/deploy_assets.py`, cache manifests `ops/webapp/cdn_manifest.json`, backfill logs `ops/webapp/backfill/<date>/`. **|**
+**Failure modes & handling:** Failed migrations revert to prior asset version; incomplete backfills trigger RB-PORTAL-INVALIDATION to prevent stale downloads. **|**
+**Observability:** Metrics `webapp_asset_publish_total`, `webapp_backfill_success_total`. **|**
+**References:** Settings spec §5, Notifications spec §4. **|**
+**Breadcrumbs:** Asset deployment scripts, CDN manifests, backfill tooling. **|**
+
+### 8.5 Operational workflows (normative)
+
+**Purpose:** Document recurring tasks for portal/workspace hygiene. **|**
+**Contract:** Teams review portal invalidations daily, reconcile signed download tokens, audit assistant manifests, and validate accessibility snapshots. **|**
+**State:** Token reconciliation reports `ops/webapp/token_audit/<date>.csv`, accessibility evidence `ops/webapp/accessibility/<run_id>/`, assistant manifest reviews `ops/webapp/chat_manifest_checks.md`. **|**
+**Failure modes & handling:** Missing audits trigger RB-PORTAL-INVALIDATION or RB-CHAT-ABUSE follow-up; unresolved accessibility gaps block release. **|**
+**Observability:** Metrics `download_token_validation_total{outcome}`, `chat_sessions_total{audience}`, accessibility CI dashboards. **|**
+**References:** §4 State management, §7 Security & compliance. **|**
+**Breadcrumbs:** Token audit scripts `ops/scripts/webapp/audit_tokens.py`, accessibility CI configs, assistant manifest validators. **|**
+
+- Daily token audits reconcile download tokens with Guardian artefact states and revoke stale entries.
+- Weekly assistant manifest reviews ensure disclaimers and policy contexts match Settings snapshots.
+- Accessibility jobs (axe/playwright) capture evidence for auditors; failures raise App.O tasks and hold releases.
 
 ______________________________________________________________________
 

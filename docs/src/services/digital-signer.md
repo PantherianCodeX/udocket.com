@@ -327,30 +327,86 @@ ______________________________________________________________________
 
 ## 8) Operational notes
 
-### 8.1 Runbooks, rotations, and drills (binding)
+**Purpose:** Keep signing operations, drills, and release gates aligned with policy and security expectations. **|**
+**Contract:** On-call rotations, runbooks, and release evidence must stay current; signing halts when FIPS, TSA/OCSP, or waiver gates fail until remediation completes. **|**
+**State:** Runbooks under `ops/runbooks/signer/`, key-rotation evidence in `ops/security/key_rotation/`, release checklists `ops/releases/signing_release_checklist.md`, waiver records in App.O. **|**
+**Failure modes & handling:** Stale playbooks, missing rotation artifacts, or failed release gates block deployment until remediation and evidence capture. **|**
+**Observability:** Docs lint (`build_runbook_catalog.py --check`), PagerDuty analytics, dashboards “Signer & TSA” / “Deliverable Signatures”, alert `signer_release_gate_blocked_total`. **|**
+**Breadcrumbs:** Runbooks `ops/runbooks/signer/`, automation `ops/scripts/security/rotate_signing_keys.py`, release tooling `ops/scripts/deploy/signing_release_gate.py`, drill tracker `ops/change/signer_rotations.ics`. **|**
+**References:** §5 Failure modes, §6 Observability, §7 Security & compliance, Ops runbooks RB-SIGN-*. **|**
 
-**Purpose:** Ensure on-call teams can remediate signing incidents quickly. **|**
-**Contract:** Operational playbooks map alerts to RB-SIGN-\* runbooks; quarterly rotations rehearse trust-root renewal, TSA failover, and FIPS recovery. **|**
-**State:** Runbooks live in `ops/runbooks/signer/`; key rotation artifacts archived in `ops/security/key_rotation/`. **|**
-**Failure modes & handling:** Stale runbooks block release sign-off; missing rotation evidence triggers audit findings. **|**
-**Observability:** Docs lint checks references; PagerDuty analytics monitor response time. **|**
-**References:** §5 Failure modes, §6 Observability. **|**
-**Breadcrumbs:** Runbooks `ops/runbooks/signer/`, automation `ops/scripts/security/rotate_signing_keys.py`, drill tracker `ops/change/signer_rotations.ics`.
+### 8.1 Operational posture (binding)
 
-- RB-SIGN-TSA: TSA/OCSP outage response.
-- RB-SIGN-FIPS: FIPS attestation recovery.
-- RB-SIGN-ACK: Client acknowledgement remediation.
-- RB-SIGN-TRUSTROTATE: Trust-root / certificate rotation checklist.
+**Purpose:** Capture staffing, freeze windows, and attestation requirements that keep signing services ready. **|**
+**Contract:** Security Engineering and Platform Architecture share PagerDuty “Signer SLO”, maintain FIPS-certified operators on-call, enforce change freezes during rotations, and document startup attestation evidence. **|**
+**State:** Rosters `ops/security/signer_roster.yaml`, freeze calendar `ops/security/key_rotation/freeze_windows.ics`, attestation reports `ops/security/fips_attestation/<date>.json`. **|**
+**Failure modes & handling:** Missing evidence or unstaffed rotations trigger incident review; signing remains paused until posture restored. **|**
+**Observability:** PagerDuty response metrics, dashboards “Signer & TSA”, alert `signer_operator_coverage_gap_total`. **|**
+**References:** §7 Security & compliance, RB-SIGN-FIPS. **|**
+**Breadcrumbs:** Roster files, freeze calendar, App.O decision logs. **|**
 
-### 8.2 Release gating & waivers (normative)
+- Startup attestation validates CMVP certificate IDs (`security.crypto.expected_cert_id`), DRBG source, and HSM availability before pods accept work; failures abort boot.
+- FIPS-required tenants pin signer pods to dedicated node pools and verify hardware AES, DRBG, and HSM slots via readiness probes.
+- Cross-region waivers require ≤7 day expiry with dual approval; Guardian blocks deliverables while waivers remain active.
+- Mutating APIs require mTLS, HMAC headers, and `Idempotency-Key`; clients maintain ≤120 s clock skew and reuse idempotency tokens for retries.
 
-**Purpose:** Outline release prerequisites tied to signing. **|**
-**Contract:** Releases require green TSA/OCSP dashboards, no active signing waivers without documented expiry/mitigation, and verified signer backlog SLAs. **|**
-**State:** Release checklist `ops/releases/signing_release_checklist.md` records sign-off; App.O logs waiver status and mitigation plans. **|**
-**Failure modes & handling:** Failure to satisfy gates halts deployment per Release Manager policy; mitigation tasks opened in App.O for follow-up. **|**
-**Observability:** Deployment guard `scripts/ci/check_signer_release.py`, alert `signer_release_gate_blocked_total`. **|**
-**References:** §7 Security & compliance, §6 Observability. **|**
-**Breadcrumbs:** Release tooling `ops/scripts/deploy/signing_release_gate.py`, checklists `ops/releases/signing_release_checklist.md`.
+### 8.2 Incident triggers (binding)
+
+**Purpose:** Map alerts and dashboards to signer playbooks so responders act immediately. **|**
+**Contract:** Alert definitions (`infra/monitoring/signer-prometheus-rules.yaml`) embed RB-SIGN-* identifiers; on-call documents evidence before clearing incidents. **|**
+**State:** Alert payloads record activation IDs, key versions, and waiver references under `ops/security/incidents/signer_<date>.jsonl`. **|**
+**Failure modes & handling:** Missing annotations or misrouted alerts require follow-up tasks and lint updates. **|**
+**Observability:** Grafana “Signer & TSA”, PagerDuty routing, synthetic TSA/OCSP checks. **|**
+**References:** §5 Failure modes, §6 Observability, RB-SIGN-TSA. **|**
+**Breadcrumbs:** Alert rule files, PagerDuty service configs, runbook catalog. **|**
+
+- `signer_tsa_error_total` / `signer_ocsp_unknown_total` → RB-SIGN-TSA for TSA/OCSP outage response.
+- `signer_hsm_attestation_status{status="failed"}` → RB-SIGN-FIPS before restoring queue processing.
+- `signer_waiver_active_total` / `signer_release_gate_blocked_total` → review waivers via RB-SIGN-ACK or RB-SIGN-TRUSTROTATE and update App.O.
+- `signer_queue_depth_high` and latency SLO breaches trigger backlog remediation via RB-SIGN-PIPELINE and scaling playbooks.
+
+### 8.3 Runbooks & drills (binding)
+
+**Purpose:** Maintain executable runbooks and drill cadence for key signing scenarios. **|**
+**Contract:** Alerts map to RB-SIGN-* playbooks; quarterly drills rehearse trust-root renewal, TSA failover, FIPS recovery, and client acknowledgement remediation. **|**
+**State:** Runbooks `ops/runbooks/signer/`, drill evidence `ops/security/key_rotation/<timestamp>/`, tabletop notes `ops/change/signer_rotations.ics`. **|**
+**Failure modes & handling:** Stale runbooks or missing drill evidence block release sign-off until refreshed. **|**
+**Observability:** Docs lint, PagerDuty analytics, Ops governance dashboards. **|**
+**References:** RB-SIGN-TSA, RB-SIGN-FIPS, RB-SIGN-ACK, RB-SIGN-TRUSTROTATE. **|**
+**Breadcrumbs:** Runbook files, rotation scripts, drill tracker. **|**
+
+- RB-SIGN-TSA — TSA/OCSP outage response.
+- RB-SIGN-FIPS — FIPS attestation recovery.
+- RB-SIGN-ACK — Client acknowledgement remediation.
+- RB-SIGN-TRUSTROTATE — Trust-root / certificate rotation checklist.
+
+### 8.4 Migrations & backfills (normative)
+
+**Purpose:** Govern trust-root rotations, HSM migrations, and manifest replays. **|**
+**Contract:** Rotations follow dual publish (current/next) with ≤24 h overlap; manifest replays verify signatures after migrations before reopening queues. **|**
+**State:** Rotation scripts `ops/scripts/security/rotate_signing_keys.py`, evidence directories `ops/security/key_rotation/<timestamp>/`, replay outputs `ops/signing/replay/<date>/`. **|**
+**Failure modes & handling:** Rotation failures revert to prior key version and execute RB-SIGN-TRUSTROTATE; failed replays quarantine affected deliverables until resolved. **|**
+**Observability:** Metrics `sign_trust_root_version`, replay divergence counters, CI job `ci-fips-scan`. **|**
+**References:** §4 State management, RB-SIGN-TRUSTROTATE. **|**
+**Breadcrumbs:** Rotation scripts, replay tooling, evidence archives. **|**
+
+- Pre-rotation checklist ensures HSM slot capacity, certificate bundles, and change approval before promoting new keys.
+- Post-rotation smoke tests re-sign representative artifacts and validate OCSP/TSA status before releasing queue holds.
+- Replay tooling supports manifest regeneration when signature policies or templates change, preserving audit trails.
+
+### 8.5 Operational workflows (normative)
+
+**Purpose:** Document recurring signing tasks and release gating requirements. **|**
+**Contract:** Releases require green TSA/OCSP dashboards, no outstanding waivers without expiry/mitigation, and signer backlog SLO compliance; acknowledgment workflows must close before client delivery. **|**
+**State:** Release checklist `ops/releases/signing_release_checklist.md`, waiver logs in App.O, acknowledgement jobs `ops/signing/acknowledgement_checks.py`. **|**
+**Failure modes & handling:** Missing checklist evidence or overdue waivers halt deployment until mitigated; acknowledgement backlog triggers RB-SIGN-ACK. **|**
+**Observability:** Deployment guard `scripts/ci/check_signer_release.py`, metrics `signer_release_gate_blocked_total`, `signer_ack_pending_total`. **|**
+**References:** §7 Security & compliance, Notifications spec §7, Guardian spec §5. **|**
+**Breadcrumbs:** Release tooling, waiver logs, acknowledgement workflows. **|**
+
+- Release gate automation validates TSA/OCSP dashboards, signer queue depth, and waiver status before allowing cutover.
+- Daily jobs reconcile client acknowledgement SLAs and notify Portal when outstanding signatures remain.
+- Waiver reviews document mitigation and expiry in App.O; automation blocks new jobs when waivers lapse without renewal.
 
 ______________________________________________________________________
 

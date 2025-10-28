@@ -354,15 +354,48 @@ ______________________________________________________________________
 
 ## 8) Operations & runbooks
 
-**Purpose:** Maintain operational readiness and evidence for audits. **|**
-**Contract:** Runbooks must stay aligned with alert catalog; quarterly drills validate provider failover, webhook compromise response, STOP/HELP surge handling, and download token abuse detection. **|**
-**State:** Runbooks listed under RB-NOTIFY-\* in `docs/src/ops/runbooks/index.md`; drill evidence stored in `ops/notifications/drills/<date>/`. **|**
-**Failure modes & handling:** Missing runbook references or overdue drills flagged by docs lint and Ops governance. **|**
-**Observability:** Docs lint ensures runbook catalog fresh; dashboards track drill cadence. **|**
-**Breadcrumbs:** Runbook catalog `docs/src/ops/runbooks/index.md`, drill scheduler `ops/scripts/notifications/schedule_drills.py`, incident templates `ops/runbooks/templates/notifications/*.md`. **|**
-**References:** Alert catalogue, Ops governance policy App.N.
+**Purpose:** Maintain resilient notification delivery, provider readiness, and compliance evidence. **|**
+**Contract:** On-call rotations, runbooks, drills, and release workflows must remain current; notification channels pause when health or compliance gates fail until remediation completes. **|**
+**State:** Runbooks under `ops/runbooks/notifications/`, drill evidence `ops/notifications/drills/<date>/`, DMARC onboarding reports `ops/notifications/dmarc/`, STOP/HELP audit logs in App.O. **|**
+**Failure modes & handling:** Stale playbooks, missed drills, or expired DMARC/SPF attestations trigger incidents and block change approvals. **|**
+**Observability:** Docs lint (`build_runbook_catalog.py --check`), dashboards “Notifications Delivery” / “In-App Notifications”, alert `alert_notifications_delivery_health`. **|**
+**Breadcrumbs:** Runbook catalog `docs/src/ops/runbooks/index.md`, drill scheduler `ops/scripts/notifications/schedule_drills.py`, provider automation `ops/scripts/notifications/*.py`. **|**
+**References:** §5 Failure modes, §6 Observability, §7 Security & compliance, Ops governance policy App.N. **|**
 
-### 8.3 Runbook index (informative)
+### 8.1 Operational posture (binding)
+
+**Purpose:** Capture on-call coverage, freeze windows, and readiness expectations. **|**
+**Contract:** Platform Engineering (queue health) and Operations Engineering (provider integrations) share PagerDuty “Notifications SLO”, staff a 24/7 rotation, and honor change freezes during major provider cutovers. **|**
+**State:** Roster `ops/notifications/roster.yaml`, freeze calendar `ops/notifications/freeze_windows.ics`, provider credential inventory `ops/notifications/provider_credentials.md`. **|**
+**Failure modes & handling:** Staffing gaps or ignored freezes trigger management review; deployments pause until coverage restored. **|**
+**Observability:** PagerDuty analytics, delivery dashboards, alert `notifications_oncall_gap_total`. **|**
+**References:** Notifications spec §7, RB-NOTIFY-*. **|**
+**Breadcrumbs:** Roster docs, freeze calendars, App.O escalation notes. **|**
+
+### 8.2 Incident triggers (binding)
+
+**Purpose:** Map alerts and dashboards to notification runbooks so responders act immediately. **|**
+**Contract:** Alert rules (`infra/monitoring/notifications-prometheus-rules.yaml`) embed RB-NOTIFY-* identifiers; evidence logged before closing incidents. **|**
+**State:** Incident records `ops/notifications/incidents/<date>.jsonl` capture provider, channel, and alert metadata. **|**
+**Failure modes & handling:** Missing annotations or muted routes require corrective PRs and Ops governance follow-up. **|**
+**Observability:** Dashboards “Notifications Delivery”, “SMS Compliance”, Alertmanager routes. **|**
+**References:** §5 Failure modes, RB-NOTIFY-OUTAGE, RB-NOTIFY-WEBHOOK, RB-NOTIFY-SMS, RB-NOTIFY-TOKEN. **|**
+**Breadcrumbs:** Alert rule files, PagerDuty services, SIEM integrations. **|**
+
+- `alert_notifications_delivery_health` detects provider degradation and opens RB-NOTIFY-OUTAGE.
+- `alert_notifications_sms_compliance` / `notifications_sms_stop_spike_total` drive RB-NOTIFY-SMS for STOP/HELP surges and regulatory response.
+- `notifications_token_abuse_total` escalates access breaches via RB-NOTIFY-TOKEN.
+- `notifications_webhook_signature_fail_total` triggers RB-NOTIFY-WEBHOOK for signature rotation and backlog replay.
+
+### 8.3 Runbooks & drills (binding)
+
+**Purpose:** Keep playbooks executable and drills current for core notification scenarios. **|**
+**Contract:** Alerts map to RB-NOTIFY-* runbooks; quarterly drills rehearse provider failover, webhook compromise, STOP/HELP compliance surges, and download-token abuse investigations. **|**
+**State:** Runbooks `ops/runbooks/notifications/*.md`, drill evidence `ops/notifications/drills/<date>/summary.md`. **|**
+**Failure modes & handling:** Missing drill evidence or outdated steps block change approval until updated. **|**
+**Observability:** Docs lint, Ops governance dashboards, drill scheduler reports. **|**
+**References:** RB-NOTIFY-OUTAGE, RB-NOTIFY-WEBHOOK, RB-NOTIFY-SMS, RB-NOTIFY-TOKEN. **|**
+**Breadcrumbs:** Runbook catalog, drill scheduler, Slack `#ops-notifications`. **|**
 
 | Runbook code      | Scenario                                   | Notes |
 | ----------------- | ------------------------------------------ | ----- |
@@ -371,11 +404,29 @@ ______________________________________________________________________
 | RB-NOTIFY-SMS     | STOP/HELP surge & regulatory response      | Compliance scripts, opt-in reinstatement |
 | RB-NOTIFY-TOKEN   | Download token abuse or leak               | Token rotation, artifact quarantine |
 
-### 8.4 Drill cadence & evidence (normative)
+### 8.4 Migrations & backfills (normative)
 
-- Quarterly tabletop covering provider failover, webhook compromise, STOP/HELP compliance surge, and download token abuse.
-- Evidence stored in `ops/notifications/drills/<iso_week>/summary.md` with timestamps, participants, remediation tasks.
-- Ops governance job verifies last drill ≤ 90 days; failures escalate to Operations leadership.
+**Purpose:** Govern provider onboarding, template migrations, and DLQ replays. **|**
+**Contract:** Provider credential rotations and template migrations require change tickets, dry-run evidence, and rollback plans; DLQ replays run in preview before promotion. **|**
+**State:** Migration scripts `ops/scripts/notifications/onboard_provider.py`, template bundles `config/notifications/templates/*.json`, DLQ replay logs `ops/notifications/dlq_replay/<date>/`. **|**
+**Failure modes & handling:** Failed migrations revert to previous provider/template and open RB-NOTIFY-OUTAGE; replay failures quarantine payloads until corrected. **|**
+**Observability:** Metrics `notifications_migration_success_total`, `notifications_dlq_replay_total`, App.O change tickets. **|**
+**References:** Settings spec §5, Notifications spec §4. **|**
+**Breadcrumbs:** Migration scripts, template bundles, DLQ tooling. **|**
+
+### 8.5 Operational workflows (normative)
+
+**Purpose:** Document recurring tasks that sustain notification compliance and quality. **|**
+**Contract:** Teams review DMARC/SPF attestations quarterly, refresh STOP/HELP evidence, generate weekly residency digests, and audit digest accuracy before distribution. **|**
+**State:** DMARC reports `ops/notifications/dmarc/<quarter>/`, residency digests `ops/residency/digest_<iso_week>.json`, STOP/HELP audit logs `ops/notifications/sms_opt_out.csv`. **|**
+**Failure modes & handling:** Expired DMARC alignment or missing digests trigger RB-NOTIFY-SMS and governance follow-up; digest discrepancies open App.O remediation tasks. **|**
+**Observability:** Metrics `notifications_digest_generated_total`, `notifications_dmca_alignment_total`, STOP/HELP dashboards in SIEM. **|**
+**References:** §7 Security & compliance, §4 State management. **|**
+**Breadcrumbs:** Digest generator `apps/platform/operations/task_modules/notifications.py::generate_digest`, compliance scripts `ops/scripts/notifications/audit_opt_out.py`. **|**
+
+- Weekly residency digests aggregate waivers, remediation SLAs, and provider drift; evidence archived alongside digests.
+- STOP/HELP audit jobs reconcile opt-out state with provider receipts to enforce compliance.
+- DMARC/SPF attestations renewed before enabling custom sender domains; automation blocks production traffic when alignment lapses.
 
 ______________________________________________________________________
 
