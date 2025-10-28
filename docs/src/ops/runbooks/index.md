@@ -4,9 +4,23 @@
 
 ## Guardian — Appendix R — Runbooks & drills (binding)
 
-**Breadcrumbs:** Implementation `ops/runbooks/guardian/`, Tests `tests/ops/test_runbook_integrity.py::test_guardian_runbooks`, Observability PagerDuty service “Guardian SLO” with Grafana dashboard “Guardian SLO”.\\ *Purpose: Maintain actionable Guardian recovery guides and manual review playbooks.*\\ *Contract: Alerts enumerated in §7 map to RB-GUARD identifiers here; responders update these procedures after every incident or drill.*\\ *State: Procedures live beside automation scripts in `ops/runbooks/guardian/`; this appendix summarizes triggers, decision trees, and evidence requirements.*\\ *Failure modes & retries: Missing or stale procedures trigger corrective actions and block deploy sign-off.*\\ *Observability: Incident retros attach the executed RB-GUARD identifier and confirm Appendix R coverage during quarterly reviews.*
+**Purpose:** Maintain authoritative Guardian recovery guides, drills, and manual review procedures that responders execute during incidents.\
+**Contract:** Alerts enumerated in §§5–8 map to RB-GUARD identifiers documented here; responders must update these runbooks after every incident or drill.\
+**State:** Procedures live alongside automation scripts in `ops/runbooks/guardian/`, with this appendix summarizing triggers, decision trees, and evidence requirements.\
+**Failure modes & handling:** Missing or stale steps block deployment sign-off; responders raise follow-up tasks to refresh the runbooks before closing incidents.\
+**Observability:** Post-incident retros attach the executed RB-GUARD identifier and confirm coverage during quarterly reviews; docs CI checks that referenced runbook files exist.\
+**References:** §5 Failure modes, §8 Operational notes, ADR-0001, ops README.\
+**Breadcrumbs:** Runbooks `ops/runbooks/guardian/*.md`, Automation `ops/scripts/guardian/`, Tests `tests/ops/test_runbook_integrity.py::test_guardian_runbooks`, PagerDuty service “Guardian SLO”, Grafana dashboard “Guardian SLO”.
 
 ### Guardian — R.1 Response index (informative)
+
+**Purpose:** Provide a quick lookup of Guardian runbooks and drill identifiers.\
+**Contract:** Keep the list synchronized with Appendix R entries; add new RB-GUARD codes as they are introduced.\
+**State:** Index mirrors runbook filenames under `ops/runbooks/guardian/`.\
+**Failure modes & handling:** Missing entries confuse responders; update this index during runbook reviews.\
+**Observability:** Docs lint validates referenced sections; quarterly runbook audits review this list.\
+**References:** Appendix R entries R.2–R.5, §8 Operational notes.\
+**Breadcrumbs:** Runbooks `ops/runbooks/guardian/*.md`, automation scripts `ops/scripts/guardian/`.
 
 - RB-GUARD-001 — Guardian SLO breach stabilization.
 - RB-GUARD-QUAR — Quarantine spike investigation.
@@ -17,7 +31,13 @@
 
 ### Guardian — R.2 RB-GUARD-001 — Guardian SLO breach (binding)
 
-**Breadcrumbs:** Implementation `ops/runbooks/guardian/slo_breach.md`, Automation `ops/scripts/guardian/scale_guardian.py`, Tests `tests/ops/test_runbook_integrity.py::test_guardian_slo_runbook`, Observability Grafana dashboard “Guardian SLO” (alerts `guardian_judgment_latency_seconds`, `guardian_submission_timeout_total`).\\ *Purpose: Restore Guardian availability and route artifacts through manual review when automated judgments breach SLO.*\\ *Contract: Any breach of the availability or latency SLO uses this sequence before re-enabling automated progression.*\\ *State: Manual review ledger entries persist under `ops/guardian/manual_review/<date>.jsonl`.*\\ *Failure modes & retries: Skipping manual review tracking risks losing audit history and invalidating waivers.*\\ *Observability: Alert clears after two healthy scrapes and manual review backlog drains.*
+**Purpose:** Restore Guardian availability and route artifacts through manual review when automated judgments breach the SLO.\
+**Contract:** Any availability or latency breach must execute this sequence before re-enabling automated progression; manual review requires ledger capture.\
+**State:** Manual review ledger entries persist under `ops/guardian/manual_review/<date>.jsonl`, alongside incident records in `ops/guardian/incidents/`.\
+**Failure modes & handling:** Skipping ledger updates or failing to scale evaluators risks lost audit history and ongoing SLO breaches.\
+**Observability:** Alerts `guardian_judgment_latency_seconds`, `guardian_submission_timeout_total`, and synthetic job results confirm recovery once they return to baseline.\
+**References:** §5.1 Submission backlog, §8 Operational posture, Appendix R index.\
+**Breadcrumbs:** Runbook `ops/runbooks/guardian/slo_breach.md`, automation `ops/scripts/guardian/scale_guardian.py`, tests `tests/ops/test_runbook_integrity.py::test_guardian_slo_runbook`, Grafana dashboard “Guardian SLO”.
 
 - **Signals:** `guardian_judgment_latency_seconds` P95 > SLO, `guardian_submission_timeout_total` increasing, synthetic job failure (`guardian_slo.yaml`).
 - **Triage (≤5 minutes):**
@@ -36,7 +56,13 @@
 
 ### Guardian — R.3 RB-GUARD-QUAR — Quarantine spike investigation (binding)
 
-**Breadcrumbs:** Implementation `ops/runbooks/guardian/quarantine_spike.md`, Automation `ops/scripts/guardian/replay_quarantine.py`, Tests `tests/ops/test_runbook_integrity.py::test_guardian_quarantine_runbook`, Observability Grafana dashboard “Guardian Enforcement” (alert `alert_guardian_quarantine_spike`).\\ *Purpose: Diagnose QUARANTINED spikes without bypassing policy controls.*\\ *Contract: Any surge in quarantine outcomes requires this investigation before promoting new releases or waivers.*\\ *State: Findings logged under `ops/guardian/quarantine/<incident_id>.md` with root-cause summary and evidence attachments.*\\ *Failure modes & retries: Missing waiver documentation or misaligned settings snapshots risk repeat incidents.*\\ *Observability: Alert resolves when `guardian_cleared_ratio` recovers and reason-code distribution returns to baseline.*
+**Purpose:** Diagnose spikes in QUARANTINED outcomes while preserving policy integrity.\
+**Contract:** Any surge in quarantine outcomes uses this investigation before promoting new releases or issuing waivers.\
+**State:** Findings are logged under `ops/guardian/quarantine/<incident_id>.md` with root cause summaries and evidence attachments.\
+**Failure modes & handling:** Missing waiver documentation or mismatched settings snapshots lead to repeated incidents; responders must reconcile digests before closing.\
+**Observability:** Alerts `alert_guardian_quarantine_spike`, dashboards “Guardian Enforcement”, and metrics `guardian_cleared_ratio` track resolution.\
+**References:** §5.2 Detector regression, §4.2 Policy context, Appendix R index.\
+**Breadcrumbs:** Runbook `ops/runbooks/guardian/quarantine_spike.md`, automation `ops/scripts/guardian/replay_quarantine.py`, tests `tests/ops/test_runbook_integrity.py::test_guardian_quarantine_runbook`.
 
 - **Signals:** Increased `guardian_policy_block_total{reason=...}` (e.g., `POLICY_FORBIDDEN_PATTERN`, `INTEGRITY_HASH_MISMATCH`, `SOURCE_NOT_APPROVED`); drop in `OPERATOR_PREP`/`QUEUED_FOR_REVIEW` backlog throughput.
 - **Triage:**
@@ -53,7 +79,13 @@
 
 ### Guardian — R.4 RB-GUARD-QUEUE — Submission backlog watchdog (binding)
 
-**Breadcrumbs:** Implementation `ops/runbooks/guardian/submission_backlog.md`, Automation `ops/scripts/guardian/queue_drain.py`, Tests `tests/ops/test_runbook_integrity.py::test_guardian_queue_runbook`, Observability Grafana dashboard “Guardian Queue Health” (alert `alert_guardian_queue_stale`).\\ *Purpose: Restore submission throughput before `PENDING_JUDGMENT` artifacts stall.*\\ *Contract: Any backlog alert follows this playbook before artifacts are promoted or waived.*\\ *State: Queue samples exported to `ops/guardian/queue_samples/<timestamp>.csv` for audit.*\\ *Failure modes & retries: Failing to drain backlog before resuming automation risks out-of-order judgments.*\\ *Observability: Alert resolves when backlog age drops below threshold and throughput returns to baseline.*
+**Purpose:** Restore submission throughput before `PENDING_JUDGMENT` artifacts stall.\
+**Contract:** Every backlog alert executes this playbook prior to promoting or waiving artifacts; order-of-operations keeps judgments deterministic.\
+**State:** Queue samples export to `ops/guardian/queue_samples/<timestamp>.csv` for audit alongside incident notes.\
+**Failure modes & handling:** Failing to drain backlog before resuming automation risks out-of-order judgments; responders must follow the replay steps here.\
+**Observability:** Alert `alert_guardian_queue_stale`, dashboard “Guardian Queue Health”, and metrics `guardian_pending_total` show recovery when backlogs clear.\
+**References:** §5.1 Submission backlog, §4.3 Queue state, Appendix R index.\
+**Breadcrumbs:** Runbook `ops/runbooks/guardian/submission_backlog.md`, automation `ops/scripts/guardian/queue_drain.py`, tests `tests/ops/test_runbook_integrity.py::test_guardian_queue_runbook`.
 
 - **Signals:** `guardian_pending_total` trending upward for 3 scrapes, `guardian_pending_oldest_seconds` > `guardian.queue.backlog_alert_minutes * 60`, `guardian_submission_timeout_total` incrementing, `review_queue_oldest_seconds` approaching `reviews.backlog.alert_minutes`.
 - **Triage (≤5 minutes):**
@@ -87,7 +119,13 @@
 
 ### Guardian — R.5 RB-GUARD-MANUAL — Manual review reconciliation (informative)
 
-**Breadcrumbs:** Implementation `ops/runbooks/guardian/manual_review.md`, Automation `ops/scripts/guardian/reconcile_manual.py`, Tests `tests/ops/test_runbook_integrity.py::test_guardian_manual_runbook`, Observability Grafana dashboard “Guardian Manual Review” (panels `guardian_manual_pending_total`, `guardian_manual_age_seconds`).\\ *Purpose: Ensure manual decisions stay auditable and rejoin automated flow once Guardian recovers.*\\ *Contract: Manual review ledger updates must precede replay jobs so judgment history remains complete.*\\ *State: Ledger updates stored alongside incident tickets within `ops/guardian/manual_review/<date>.jsonl`.*\\ *Failure modes & retries: Omitting ledger updates or skipping reconciliation replays invalidates artifact provenance.*\\ *Observability: Manual review metrics return to baseline before incident closure.*
+**Purpose:** Ensure manual decisions stay auditable and rejoin automated flow once Guardian recovers.\
+**Contract:** Ledger updates must precede replay jobs so judgment history remains complete; reconciliation is mandatory before closing incidents.\
+**State:** Ledger updates live under `ops/guardian/manual_review/<date>.jsonl` with links to incident tickets.\
+**Failure modes & handling:** Omitting ledger entries or skipping reconciliation invalidates artifact provenance; responders repeat the runbook until metrics normalize.\
+**Observability:** Dashboard “Guardian Manual Review” panels (`guardian_manual_pending_total`, `guardian_manual_age_seconds`) and ledger diffs confirm recovery.\
+**References:** §5.3 Dependency outage, §8.3 Manual review mode, Appendix R index.\
+**Breadcrumbs:** Runbook `ops/runbooks/guardian/manual_review.md`, automation `ops/scripts/guardian/reconcile_manual.py`, tests `tests/ops/test_runbook_integrity.py::test_guardian_manual_runbook`.
 
 - Operators record manual decisions with manifest annotations while Guardian automation is paused.
 - Reconciliation job replays queued artifacts once health recovers; incident owners capture waiver IDs, policy bundle hashes, and remediation tasks in the postmortem per RB-GUARD-001 follow-up checklist.

@@ -117,6 +117,14 @@ ______________________________________________________________________
 
 ### 2.1 Canonical judgments
 
+**Purpose:** Define the standardized Guardian outcomes that downstream services must honor.\
+**Contract:** PASS/WARN/BLOCK/WAIVED semantics and default actions remain stable; new outcomes require TDD + doc updates.\
+**State:** Judgment enums live in `packages/udocket_core/guardian/judgment.py` and database lookup tables.\
+**Failure modes & handling:** Deviations lead to status mismatches caught by §5 failure procedures.\
+**Observability:** Metrics `guardian_cleared_ratio`, audit logs, and SSE streams track verdict distribution.\
+**References:** §2.2 Status mapping, Appendix R runbooks, TDD §7.3.\
+**Breadcrumbs:** Enum definitions `packages/udocket_core/guardian/judgment.py`, tests `tests/platform/guardian/test_judgment_enums.py`.
+
 | Judgment | Description                                          | Default actions                                               |
 | -------- | ---------------------------------------------------- | ------------------------------------------------------------- |
 | PASS     | Requirements satisfied; artifact is safe to proceed. | Unlocks WP → `CLEARED_FOR_USE`, CD → `OPERATOR_PREP`.         |
@@ -126,7 +134,13 @@ ______________________________________________________________________
 
 ### 2.2 Status mapping
 
-*Purpose: Provide deterministic mapping from Guardian judgments to artifact statuses.*\\ *Contract: Tables below are the single source of truth; dependent services MUST reference them instead of duplicating logic.*
+**Purpose:** Provide deterministic mapping from Guardian judgments to downstream artifact statuses.\
+**Contract:** Tables below are the single source of truth; dependent services must reference them instead of duplicating logic.\
+**State:** Status transitions implement in workflow services and tests alongside this table.\
+**Failure modes & handling:** Diverging mappings trigger review workflow incidents and Appendix R RB-GUARD-QUEUE follow-ups.\
+**Observability:** Workflow metrics (status transition counters) and audit logs highlight mismatches.\
+**References:** TDD Appendix H, §3.4 Review integration, Appendix R.\
+**Breadcrumbs:** Workflow code `apps/platform/workflows/status_transitions.py`, tests `tests/platform/workflows/test_status_transitions.py`.
 
 | Artifact class        | Prior status       | Guardian outcome | Next status       | Notes                             |
 | --------------------- | ------------------ | ---------------- | ----------------- | --------------------------------- |
@@ -148,6 +162,14 @@ Guardian respects downstream approval invariants (ExclusiveSwap) and ensures del
 
 ### 2.3 Waiver & quarantine policies
 
+**Purpose:** Explain how waivers and quarantines operate so reviewers and automation enforce the correct controls.\
+**Contract:** Waivers require dual approval and manifest stamping; quarantines propagate to dependent artifacts until Guardian clears them.\
+**State:** Waiver records live in `guardian_waiver`, manifests record `guardian.manifest.waiver_id`, and quarantine metadata persists in judgment history.\
+**Failure modes & handling:** Improperly documented waivers or missing quarantine logs trigger compliance incidents and Appendix R RB-GUARD-QUAR actions.\
+**Observability:** Metrics `guardian_waiver_total`, `guardian_quarantine_false_positive_total`, and audit logs track usage.\
+**References:** §5 Failure modes, Appendix R runbooks, TDD Appendix H.\
+**Breadcrumbs:** Waiver workflow `apps/platform/workflows/waiver.py`, tests `tests/platform/guardian/test_waiver_policies.py`, audit schema `packages/udocket_core/guardian/store.py`.
+
 - Waivers require dual approval (Security + Architecture) and manifest stamping (`guardian.manifest.waiver_id`).
 - Quarantined artifacts block dependent artifacts (for example, timeline events referencing a quarantined transcript).
 - HIPAA/SPI triggers escalate to Security and enable enhanced review requirements (`spi_review_required=true`).
@@ -167,6 +189,14 @@ ______________________________________________________________________
 
 ### 3.1 External interfaces (binding)
 
+**Purpose:** Enumerate publicly callable Guardian endpoints and streams so integrators respect contract guarantees.\
+**Contract:** Paths, verbs, auth requirements, and payload schemas are stable; breaking changes require versioned routes and updated references.\
+**State:** Endpoints expose persisted judgments, policy metadata, and health status drawn from Postgres and OPA caches.\
+**Failure modes & handling:** Invalid auth, stale manifests, or dependency failures return explicit error codes and drive §5 incident responses.\
+**Observability:** API metrics (`guardian_api_requests_total`, `guardian_api_latency_seconds`) and access logs feed dashboards; link check scripts validate documentation references.\
+**References:** §4 State management, Appendix C payload schema, Appendix R runbooks.\
+**Breadcrumbs:** FastAPI routes `packages/udocket_core/guardian/api.py`, Gateway config `apps/platform/urls.py`, Schema fixtures `packages/udocket_core/guardian/contracts/`.
+
 | Endpoint / Stream                  | Purpose                                    | Contract notes                                                                                                  |
 | ---------------------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
 | `GET /readyz`                      | Liveness/readiness                         | No auth required inside cluster; used by HPA and incident playbooks.                                            |
@@ -182,6 +212,14 @@ ______________________________________________________________________
 
 ### 3.2 Submission interfaces (binding)
 
+**Purpose:** Document the queue-based submission paths Guardian consumes so workers implement idempotent, auditable interactions.\
+**Contract:** Submissions must include artifact IDs, hashes, and policy context digests; Guardian enforces idempotency keys and signature checks.\
+**State:** Queue messages serialize payloads mirrored in `guardian_submission_audit`; offsets align with Postgres state for reconciliation.\
+**Failure modes & handling:** Timeouts, schema violations, or auth failures emit explicit error codes and escalate via §5.1 backlog procedures.\
+**Observability:** Metrics (`guardian_enqueue_conflict_total`, `guardian_submission_timeout_total`) and queue depth dashboards track health; audit logs note producer IDs.\
+**References:** §4 State management, §5.1 Submission backlog, Appendix R RB-GUARD-QUEUE.\
+**Breadcrumbs:** Worker client `apps/platform/operations/guardian.py`, queue adapters `packages/udocket_core/guardian/queue.py`, tests `tests/platform/guardian/test_guardian_queue.py`.
+
 - Internal workers call `apps/platform/operations/guardian.py::enqueue_with_idempotency` with `artifact_id`, `artifact_class`, `payload_sha256`, `policy_context`, and `source_artifacts[]`.
 - Idempotency key: `sha256(case_id + artifact_id + payload_sha256 + policy_context_hash)`; collisions return the prior judgment and increment `guardian_enqueue_conflict_total`.
 - Queue timeout: 300 seconds (`guardian.queue.submission_timeout_seconds`). Workers emit `GUARDIAN_SUBMISSION_TIMEOUT` when exceeded and retry per Celery policy; sustained failures trigger §5.1 backlog mitigation.
@@ -189,6 +227,14 @@ ______________________________________________________________________
 - Replay tooling (`POST /guardian/judgments:enqueue`) shares the same queue path to guarantee identical side effects and audit history.
 
 ### 3.3 Evaluation pipeline (normative)
+
+**Purpose:** Detail the evaluation stages Guardian executes for every submission so teams understand timing, determinism, and evidence capture.\
+**Contract:** Steps run in order with deterministic rules; altering the pipeline requires updating this section and notifying downstream consumers.\
+**State:** Intermediate artifacts include policy context digests, classifier outputs, masking profiles, and final judgments persisted to Postgres and ops logs.\
+**Failure modes & handling:** Schema errors, detector drift, or policy mismatches raise specific reason codes and fall back to §5 incident responses.\
+**Observability:** Metrics (`guardian_judgment_latency_seconds`, detector-specific counters), SSE events, and audit logs confirm each stage executed.\
+**References:** §4 State management, Appendix C detection payload schema, Appendix R RB-GUARD-QUAR.\
+**Breadcrumbs:** Pipeline implementation `packages/udocket_core/guardian/pipeline.py`, detector integrations `packages/udocket_core/guardian/detectors/`, tests `tests/platform/guardian/test_pipeline.py`.
 
 1. Validate schema and policy context, rejecting malformed payloads with `SCHEMA_POLICY_BLOCK`.
 2. Execute residency, HIPAA, forbidden-pattern, and waiver checks against LPE/OPA bundles.
@@ -200,6 +246,14 @@ Guardian enforces parent-child integrity by locking upstream artifacts (`SELECT 
 
 #### 3.3.1 Detection tiers (binding)
 
+**Purpose:** Define the layered detection strategy Guardian applies so detector owners understand responsibilities and provenance.\
+**Contract:** Each tier must run in order and produce evidence with deterministic identifiers; disabling a tier requires Architecture + Security approval.\
+**State:** Detector outputs include span IDs, confidence, and provenance metadata persisted in `guardian_span_detection` and audit logs.\
+**Failure modes & handling:** Detector regression or drift triggers §5.2 responses and Appendix R RB-GUARD-QUAR actions.\
+**Observability:** Detector-specific metrics (`guardian_detector_tier_latency_seconds`, `guardian_detector_errors_total`) and sampling pipelines monitor health.\
+**References:** Appendix C payload schema, §5.2 Detector regression, Appendix R RB-GUARD-QUAR.\
+**Breadcrumbs:** Detector implementations `packages/udocket_core/guardian/detectors/`, telemetry exporters `packages/udocket_core/guardian/metrics.py`, tests `tests/platform/guardian/test_detectors.py`.
+
 1. **Tier-0 — schema & field guards:** Validates known slots (`dob`, `mrn`, `ssn`, etc.) and emits `SCHEMA_POLICY_BLOCK` (`INVALID_FIELD_FORMAT`) when data fails canonical formatting.
 2. **Tier-1 — pattern + checksum:** Jurisdiction-specific regex packs and checksum validators (Luhn, Verhoeff, ABA routing, ICD/HCPCS/CPT shape, Rx BIN/PCN length) emit `PATTERN_MATCH` evidence.
 3. **Tier-2 — ML/NLP detectors:** Locale-scoped NER models sourced from LPE contribute spans with model IDs and confidence; sub-threshold spans log telemetry for drift analysis.
@@ -210,6 +264,14 @@ Guardian enforces parent-child integrity by locking upstream artifacts (`SELECT 
 
 ### 3.4 Review integration & audit writes (binding)
 
+**Purpose:** Explain how Guardian records reviewer actions and surfaces judgments to dependent services to maintain audit integrity.\
+**Contract:** All review actions must flow through documented endpoints; Guardian persists immutable history and enforces version checks before accepting changes.\
+**State:** Decisions write to `guardian_judgment_history`, SSE streams, and case ops logs with deterministic IDs.\
+**Failure modes & handling:** Version mismatches, duplicate actions, or SSE delivery failures raise explicit errors and prompt Appendix R remediation.\
+**Observability:** Metrics (`guardian_review_action_total`), audit streams, and SSE subscriber health dashboards monitor review flow.\
+**References:** §4 State management, Appendix R RB-GUARD-MANUAL, Appendix C payload schema.\
+**Breadcrumbs:** Review API `packages/udocket_core/guardian/review.py`, workflow integration `apps/platform/workflows/guardian.py`, tests `tests/platform/guardian/test_review_actions.py`.
+
 - Reviewer actions (`approve`, `changes`, `quarantine`, `waive`) route through Guardian endpoints (`/guardian/quarantine`, `/guardian/review-actions`, `/guardian/judgments:enqueue`) so the service remains the canonical history authority.
 - Guardian writes every decision to `guardian_judgment_history` with deterministic UUIDv7 IDs, preserving prior verdicts even when artifacts re-enter `PENDING_JUDGMENT`. Replays with matching `{artifact_id, content_sha256}` reuse the latest record; new hashes create append-only entries.
 - Manual and automated decisions both emit SSE/audit events (`GUARDIAN.JUDGMENT.*`) containing the identifiers workflow services use for manifests, approval UIs, and downstream response guides.
@@ -217,6 +279,14 @@ Guardian enforces parent-child integrity by locking upstream artifacts (`SELECT 
 - Read-only helpers (`GET /api/v1/guardian/<id>`, `GET /api/v1/guardian?artifact_id=`) are guarded by RLS so analytics surfaces rely on the secured projections instead of direct table access.
 
 ### 3.5 Detection & masking payloads (binding)
+
+**Purpose:** Document the structure and provenance requirements for detection and masking payloads Guardian produces and consumes.\
+**Contract:** Clients must honor deterministic UUIDv7 span IDs, include policy context digests, and persist masking metadata exactly as defined; schema changes require Appendix C updates.\
+**State:** Payloads live in `guardian_span_detection`, case ops logs, and SSE/audit events with references to masking profiles and vault namespaces.\
+**Failure modes & handling:** Missing digests, mismatched spans, or vault namespace errors raise `SCHEMA_POLICY_BLOCK` or `POLICY_FORBIDDEN_PATTERN` codes and escalate per §5.2.\
+**Observability:** Schema validation metrics, audit logs, and masking success counters track payload health.\
+**References:** Appendix C detection payload schema, §4 State management, Appendix R RB-GUARD-QUAR.\
+**Breadcrumbs:** Schema definitions `packages/udocket_core/guardian/contracts/payloads.py`, masking helpers `packages/udocket_core/guardian/masking.py`, tests `tests/platform/guardian/test_detection_payloads.py`.
 
 - Guardian records span-level evidence and masking metadata using deterministic UUIDv7 identifiers so reruns reconcile reliably.
 - Payloads always link to `policy_context_digest`, masking profiles, and vault namespaces so Compose/Signer can restore spans when policy allows (`POST /vault/detokenize`).
@@ -237,6 +307,14 @@ ______________________________________________________________________
 
 ### 4.1 Persistence model
 
+**Purpose:** Describe how Guardian structures its databases and logs so data remains auditable and partitioned by org.\
+**Contract:** Partitioning, RLS policies, and secure projections must remain enabled; direct access to base tables is reserved for Guardian service accounts.\
+**State:** Postgres partitions, RLS policies, submission audit tables, and case-level logs mirror judgments and submissions.\
+**Failure modes & handling:** Partition rotation failures or RLS misconfigurations trigger §5 responses and require immediate remediation via `ops/db/rotate_partitions.py`.\
+**Observability:** Database health dashboards (`guardian_db_partition_age`, `guardian_rls_denied_total`) and CI migrations checks confirm schema compliance.\
+**References:** §5 Failure modes, Appendix R RB-GUARD-QUEUE, ADR-0001.\
+**Breadcrumbs:** Schema migrations `packages/udocket_core/guardian/migrations/`, partition job `ops/db/rotate_partitions.py`, RLS definitions `packages/udocket_core/guardian/store.py`.
+
 - `guardian_judgment_history` partitions monthly on `decided_at`; rotation job `ops/db/rotate_partitions.py` creates future partitions and seals retired ones.
 - Row-level security policy `guardian_history_vis` enforces org isolation. Application roles read from secure projections (`guardian_judgment_history_secure`, `guardian_judgment`) while service accounts maintain base-table permissions.
 - Span evidence resides in `guardian_span_detection` with deterministic UUIDv7 identifiers tied to manifest digests and masking profiles.
@@ -244,6 +322,14 @@ ______________________________________________________________________
 - Human-readable logs mirror structured entries under `storage/media/cases/<case>/ops/guardian/<job_id>__guardian.log` for audit parity.
 
 ### 4.2 Policy context & configuration
+
+**Purpose:** Capture how Guardian consumes configuration and policy data so evaluations remain deterministic and compliant.\
+**Contract:** Guardian only honors settings delivered via Settings/LPE digests; manual toggles or partial updates are disallowed. Changes must update this section and the associated appendices.\
+**State:** Configuration values populate PolicyContext inputs, Settings snapshots, and Guardian defaults bundles.\
+**Failure modes & handling:** Digest mismatches, missing keys, or waived residency/HIPAA settings trigger §5.2 responses and Appendix R follow-up.\
+**Observability:** Metrics `guardian_policy_bundle_version`, config hash comparisons, and Settings activation logs verify parity.\
+**References:** §3 API contract, §5 Failure modes, Appendix R RB-GUARD-QUAR, ADR-0004.\
+**Breadcrumbs:** Config loader `packages/udocket_core/guardian/config.py`, Settings schema `packages/udocket_core/settings/guardian.py`, tests `tests/platform/guardian/test_policy_context.py`.
 
 - `PolicyContext` inputs describe residency, HIPAA, SPI, waiver flags, allowed regions (`regions.allowlist.compute|storage|vector`), retention policies, and forbidden pattern catalogs; Guardian rejects submissions when digests diverge from Settings/LPE snapshots.
 - Configuration keys sourced from Settings include:
@@ -262,12 +348,28 @@ ______________________________________________________________________
 
 ### 4.3 Queue and cache state
 
+**Purpose:** Outline how Guardian tracks message queues and cached policy bundles to ensure evaluators process submissions in order with the correct rules.\
+**Contract:** Queue offsets must reconcile with submission audit tables; policy caches must match the active digest before evaluations proceed.\
+**State:** Kafka/Azure Service Bus topics, materialized views, and OPA cache metadata record queue progress and bundle versions.\
+**Failure modes & handling:** Offset gaps, replay loops, or stale policy caches trigger §5.1/§5.3 mitigations and Appendix R RB-GUARD-QUEUE procedures.\
+**Observability:** Metrics (`guardian_pending_total`, `guardian_submission_queue_lag_seconds`, `guardian_policy_cache_age_seconds`) and reconciliation scripts monitor state.\
+**References:** §3.2 Submission interfaces, §5 Failure modes, Appendix R RB-GUARD-QUEUE.\
+**Breadcrumbs:** Queue admin tools `ops/scripts/guardian/queue_reconcile.py`, Kafka topics `infra/kafka/guardian.yml`, OPA cache config `infra/kubernetes/guardian/opa-config.yaml`.
+
 - Production uses Kafka for `guardian_submission_queue`; regulated tenants use Azure Service Bus with matching semantics. Producers include artifact workers and replay tooling; consumers are Guardian evaluators.
 - Queue offsets and digests mirror `guardian_submission_audit`; reconciliation compares Kafka offsets with audit rows to detect dropped or duplicated messages.
 - Materialized views expose live queue depth/age to Grafana (`guardian_pending_total`, `guardian_pending_oldest_seconds`).
 - Cached policy bundles live in OPA sidecars; Guardian tracks the active digest (`guardian.rules.version`) and refresh timestamps to ensure evaluators use the expected rule set.
 
 ### 4.4 Artifacts, logs, and retention
+
+**Purpose:** Explain Guardian’s artifact footprint on disk and retention policies so audits and incident reviews can trace decisions.\
+**Contract:** Ops directories, JSON metadata, and retention windows must match policy requirements; deleting or truncating logs requires compliance approval.\
+**State:** Case-scoped files, retention schedules, and OPA decision logs replicate Guardian history outside the database.\
+**Failure modes & handling:** Missing logs or retention gaps trigger compliance incidents and Appendix R RB-GUARD-MANUAL follow-ups.\
+**Observability:** Retention jobs and checksum monitors report status to dashboards and CI scripts.\
+**References:** §5 Failure modes, Appendix R runbooks, Appendix C payload schema.\
+**Breadcrumbs:** File layout `storage/media/cases/<case>/ops/guardian/`, retention scripts `ops/scripts/guardian/purge_old_logs.py`, compliance monitors `infra/compliance/guardian-retention.yaml`.
 
 - Case-scoped ops directories persist JSON metadata and audit JSONL (`storage/media/cases/<case>/ops/guardian/`), following the deterministic naming convention `<job_id>__guardian_log.json`.
 - Retention: Guardian keeps span evidence, manifests, and audit logs ≥ 365 days to satisfy HIPAA/PHIPA obligations; manual review records persist until incident closure sign-off.
@@ -287,17 +389,41 @@ ______________________________________________________________________
 
 ### 5.1 Submission backlog or queue saturation
 
+**Purpose:** Describe how Guardian responds when submission pipelines lag so artifacts do not bypass safety checks.\
+**Contract:** Guardian holds artifacts in `PENDING_JUDGMENT` until backlog clears; manual review requires RB-GUARD-001 escalation with dual approval.\
+**State:** Queue depth metrics, submission timeout counters, and audit logs (`guardian_submission_audit`) capture backlog state.\
+**Failure modes & handling:** Triggered by queue age thresholds or timeout growth; responders follow Appendix R RB-GUARD-QUEUE.\
+**Observability:** Metrics `guardian_pending_total`, `guardian_pending_oldest_seconds`, and alerts `alert_guardian_queue_stale` monitor this failure.\
+**References:** §3.2 Submission interfaces, §4.3 Queue state, Appendix R RB-GUARD-QUEUE.\
+**Breadcrumbs:** Queue reconciliation script `ops/scripts/guardian/queue_reconcile.py`, incident template `ops/guardian/incidents/backlog.json`, tests `tests/platform/guardian/test_backlog_handling.py`.
+
 - Trigger: `guardian_pending_oldest_seconds` exceeds `guardian.queue.backlog_alert_minutes` or `guardian_submission_timeout_total` trends upward.
 - Response: Follow Appendix R entry RB-GUARD-QUEUE—throttle enqueue rates, scale evaluator pods, verify Kafka/Service Bus health, and replay stuck messages via `POST /guardian/judgments:enqueue`.
 - Guarantee: Artifacts remain `PENDING_JUDGMENT` until backlog clears; manual review is disallowed unless RB-GUARD-001 escalates and dual approval authorizes manual mode.
 
 ### 5.2 Detector regression or policy drift
 
+**Purpose:** Outline mitigation steps when detection accuracy or policy bundles regress so Guardian never approves risky artifacts.\
+**Contract:** Bundle rollbacks and detector adjustments require Architecture + Security approval; affected artifacts stay quarantined until diagnostics finish.\
+**State:** Detector metrics, policy bundle digests, and quarantine manifests record the regression context.\
+**Failure modes & handling:** Triggered by WARN/BLOCK reason spikes, synthetic failures, or false-positive quotas; responders execute Appendix R RB-GUARD-QUAR and RB-GUARD-001.\
+**Observability:** Metrics `guardian_policy_block_total`, `guardian_quarantine_false_positive_total`, synthetic job outputs, and detector telemetry dashboards.\
+**References:** §3.3 Detection pipeline, Appendix C payload schema, Appendix R RB-GUARD-QUAR.\
+**Breadcrumbs:** Detector configs `packages/udocket_core/guardian/detectors/`, bundle manifests `packages/udocket_core/lpe/bundles/`, incident template `ops/guardian/incidents/detector_regression.json`.
+
 - Trigger: Spike in WARN/BLOCK reason codes (`PROVIDER_CRITICAL_HINT`, `CLASSIFIER_LOW_CONFIDENCE`), synthetic job failures, or `guardian_quarantine_false_positive_total` > 5 %.
 - Response: Appendix R entry RB-GUARD-QUAR and RB-GUARD-001—freeze bundle activations, roll back `guardian.rules.version` if needed, and coordinate with LPE/Settings to validate PolicyContext digests.
 - Guarantee: Deliverables stay quarantined until detectors are revalidated; waivers require manifest stamping and Security/Architecture approval.
 
 ### 5.3 Dependency outage or configuration mismatch
+
+**Purpose:** Define how Guardian fails closed when upstream systems or configuration digests become unavailable or inconsistent.\
+**Contract:** Guardian blocks artifacts with explicit `BLOCK (DEPENDENCY_UNAVAILABLE)` reason codes until dependencies recover; manual review requires ledger capture and reconciliation.\
+**State:** Dependency health indicators, settings snapshot hashes, and incident logs in `ops/guardian/incidents/` track the outage.\
+**Failure modes & handling:** Triggered by OPA signature failures, Settings hash mismatches, or upstream outages; responders invoke Appendix R RB-GUARD-001 and RB-GUARD-MANUAL as needed.\
+**Observability:** Synthetic probes, dependency SLIs, and configuration drift detectors highlight the issue.\
+**References:** §3 API contract, §4 State management, Appendix R RB-GUARD-001/RB-GUARD-MANUAL.\
+**Breadcrumbs:** Dependency monitors `infra/monitoring/dependencies.yaml`, manual ledger `ops/guardian/manual_review/`, tests `tests/platform/guardian/test_dependency_outage.py`.
 
 - Trigger: OPA sidecar signature verification failure, Settings snapshot hash mismatch, or upstream service outage (LPE, Settings, Reference Manager).
 - Response: Appendix R entry RB-GUARD-001—shift to manual review mode only if on-call declares it, capture manifests under `ops/guardian/manual_review/<date>.jsonl`, and reconcile once dependencies recover.
@@ -317,6 +443,14 @@ ______________________________________________________________________
 
 ### 6.1 Metrics
 
+**Purpose:** List the key quantitative signals that demonstrate Guardian health and SLO compliance.\
+**Contract:** These metrics must remain instrumented and alerted; removing or renaming them requires Observability sign-off and doc updates.\
+**State:** Metrics publish via Prometheus scraping Guardian pods and queue consumers.\
+**Failure modes & handling:** Threshold breaches map to §5 failure scenarios and corresponding runbooks.\
+**Observability:** Grafana dashboards “Guardian SLO” and alertmanager routes consume these metrics.\
+**References:** §5 Failure modes, Appendix R runbooks, infra monitoring configs.\
+**Breadcrumbs:** Metric definitions `packages/udocket_core/guardian/metrics.py`, Prometheus rules `infra/monitoring/guardian-prometheus-rules.yaml`.
+
 | Metric                                                       | Description                                                                         |
 | ------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
 | `guardian_judgment_latency_seconds`                          | Distribution of evaluation latency; SLO ≤ 5 minutes P95.                            |
@@ -332,6 +466,14 @@ ______________________________________________________________________
 
 ### 6.2 Logs & audits
 
+**Purpose:** Summarize Guardian’s structured logging and audit footprint so compliance teams can trace every decision.\
+**Contract:** Audit streams must remain append-only with RLS safeguards; application code interacts only through secure projections.\
+**State:** JSONL files, Postgres partitions, and immutable storage capture judgments, policy digests, and manual actions.\
+**Failure modes & handling:** Missing partitions, RLS bypass attempts, or log retention breaches trigger §5.3 responses and compliance escalations.\
+**Observability:** Partition rotation jobs, checksum verifiers, and log pipeline alerts monitor audit health.\
+**References:** §4 State management, Appendix R RB-GUARD-MANUAL, ADR-0001.\
+**Breadcrumbs:** Audit schema `packages/udocket_core/guardian/store.py`, log pipeline `infra/logging/guardian.json`, rotation script `ops/db/rotate_partitions.py`.
+
 - Append-only JSONL audit stream with `guardian_judgment`, `policy_context_digest`, `settings_snapshot_sha256`, waiver IDs, reason codes, and classifier evidence hashes.
 - Storage layout:
   - Base table `guardian_judgment_history` partitions monthly on `decided_at`; rotation job `ops/db/rotate_partitions.py` creates partitions one month ahead and seals retired ones.
@@ -343,6 +485,14 @@ ______________________________________________________________________
 - Decision logs from OPA streamed to immutable storage (≥365 days retention).
 
 ### 6.3 Synthetic monitoring
+
+**Purpose:** Describe automated probes that continuously exercise Guardian to detect regressions before customers do.\
+**Contract:** Synthetic jobs must run on schedule, cover HIPAA/SPI/residency scenarios, and gate releases when failing.\
+**State:** Synthetic definitions live in `ops/synthetics/guardian_slo.yaml` with results logged to incident dashboards.\
+**Failure modes & handling:** Failures escalate via Appendix R RB-GUARD-001 and may freeze bundle activations.\
+**Observability:** Grafana panels, PagerDuty incidents, and synthetic job logs track outcomes.\
+**References:** §5 Failure modes, §8 Operational notes, Appendix R RB-GUARD-001.\
+**Breadcrumbs:** Synthetic config `ops/synthetics/guardian_slo.yaml`, CI hooks `scripts/docs/lint_docs.py` (synthetic link check), tests `tests/synthetics/test_guardian_slo.py`.
 
 - Synthetic job `guardian_slo.yaml` submits representative workloads (500 concurrent submissions, 5k/day) and records judgment/queue timing; success requires P95 latency ≤ configured SLO and zero submission timeouts.
 - Synthetic GET requests verify `/readyz` and `/synthetic/status` per environment after deployments; failures open PagerDuty incidents tagged `GUARDIAN_SLO`.
@@ -384,17 +534,41 @@ ______________________________________________________________________
 
 ### 8.1 Operational posture
 
+**Purpose:** Outline day-to-day guardrails that keep Guardian healthy outside of incidents.\
+**Contract:** On-call rotations monitor SLO dashboards and maintain readiness to execute Appendix R procedures; ownership alternates between Security Engineering and Platform Operations.\
+**State:** Rotation calendars and health check configurations live in `ops/guardian/roster.yaml` and Grafana dashboards.\
+**Failure modes & handling:** Deviations feed §5 failure responses and Appendix R runbooks; failure to staff rotations blocks deploy approvals.\
+**Observability:** Dashboards “Guardian SLO” and “Guardian Manual Review” plus alertmanager routes provide posture visibility.\
+**References:** §6 Observability, Appendix R RB-GUARD-QUEUE/QUAR.\
+**Breadcrumbs:** Roster `ops/guardian/roster.yaml`, HPA configs `infra/kubernetes/guardian/`, alert configs `infra/monitoring/guardian-alerts.yaml`.
+
 - Guardian on-call rotations monitor `guardian_judgment_latency_seconds`, `guardian_pending_total`, and `guardian_policy_block_total` to confirm the 99.9% availability / ≤ 5 minute P95 latency commitments.
 - Queue submission health depends on Celery worker heartbeats and Settings/LPE dependencies; Appendix R entry RB-GUARD-QUEUE describes how to remediate backlog growth while preserving auditability.
 - Quarantine volume and waiver approvals follow Appendix R entry RB-GUARD-QUAR, keeping manifests and waiver artifacts in lockstep with Security/Architecture approvals.
 
 ### 8.2 Incident triggers
 
+**Purpose:** Enumerate the alerts that escalate Guardian incidents and map directly to runbook entries.\
+**Contract:** Each trigger routes to PagerDuty with the corresponding RB-GUARD identifier; responders must execute the linked runbook before mitigation counts as complete.\
+**State:** Alert definitions live in `infra/monitoring/guardian-alerts.yaml`, and incidents log to `ops/guardian/incidents/*.jsonl`.\
+**Failure modes & handling:** Alerts align with §5 failure scenarios; misconfigured thresholds require Ops approval to adjust.\
+**Observability:** Alertmanager, Grafana annotations, and incident dashboards track trigger history.\
+**References:** §5 Failure modes, Appendix R RB-GUARD-001/QUEUE/QUAR.\
+**Breadcrumbs:** Monitoring configs `infra/monitoring/guardian-alerts.yaml`, PagerDuty service “Guardian SLO”, incident logs `ops/guardian/incidents/`.
+
 - `alert_guardian_queue_stale` (Grafana) fires when backlog age exceeds `guardian.queue.backlog_alert_minutes`; responders follow Appendix R entry RB-GUARD-QUEUE.
 - `guardian_policy_block_total` spikes or synthetic job failures (`guardian_slo.yaml`) escalate via Appendix R entries RB-GUARD-001 and RB-GUARD-QUAR, depending on whether latency or policy regression drives the alert.
 - `PHI_DETECTION_DRIFT` incidents originate from classifier sampling (§6.3); Appendix R entry RB-GUARD-QUAR covers containment and follow-up requirements.
 
 ### 8.3 Manual review mode
+
+**Purpose:** Describe how Guardian transitions into and out of manual review when automation is degraded.\
+**Contract:** Manual mode activates only with Security + Architecture approval, logs every decision as `MANUAL_GUARDIAN_JUDGMENT`, and requires full reconciliation before closing the incident.\
+**State:** Manual decisions persist in `ops/guardian/manual_review/<date>.jsonl` with cross-links to incident tickets and waiver manifests.\
+**Failure modes & handling:** Missing ledger entries or skipped reconciliation jobs break provenance; Appendix R RB-GUARD-MANUAL mandates the recovery steps.\
+**Observability:** Dashboard “Guardian Manual Review” tracks manual backlog and age; incident retros review ledger completeness.\
+**References:** Appendix R RB-GUARD-MANUAL, §4 State management, §5 Failure modes.\
+**Breadcrumbs:** Manual review ledger `ops/guardian/manual_review/`, reconciliation script `ops/scripts/guardian/reconcile_manual.py`, tests `tests/ops/test_runbook_integrity.py::test_guardian_manual_runbook`.
 
 - When Guardian automation is paused, operations invoke Appendix R entry RB-GUARD-001 to route artifacts through manual review queues and capture `MANUAL_GUARDIAN_JUDGMENT` records.
 - Reconciliation jobs replay queued artifacts once health recovers; responders document the waiver/incident outcomes according to Appendix R entry RB-GUARD-001 post-remediation notes.
@@ -442,6 +616,14 @@ ______________________________________________________________________
 
 ## Appendix A — Reference artifacts (informative)
 
+**Purpose:** Catalog diagrams, manifests, and example payloads that illustrate Guardian workflows referenced in the main sections.\
+**Contract:** Files listed here remain the canonical artifacts; updates must keep paths stable and refresh references in §§2–4.\
+**State:** Artifacts live under `docs/src/services/guardian/diagrams/` and `docs/examples/lineage/` with deterministic filenames matching the associated job IDs.\
+**Failure modes & handling:** Missing or stale artifacts cause docs lint/link check failures; update the assets or adjust references before merging.\
+**Observability:** Docs CI verifies diagram availability via `scripts/docs/render_mermaid.sh` and link checks.\
+**References:** §2 Responsibilities, §3 API contract, Appendix C payload schema.\
+**Breadcrumbs:** Diagram sources `docs/src/services/guardian/diagrams/`, example manifests `docs/examples/lineage/`, render script `scripts/docs/render_mermaid.sh`.
+
 - **Diagrams:**
 - `services/guardian/diagrams/upload-guardian-approve-v1.mmd` (sequence of upload → Guardian → approval).
 - `services/lp-engine/diagrams/residency-policy-enforcement-v1.mmd` (policy propagation and Guardian enforcement).
@@ -456,9 +638,23 @@ ______________________________________________________________________
 
 ## Appendix R — Runbooks & drills (binding)
 
-**Breadcrumbs:** Implementation `ops/runbooks/guardian/`, Tests `tests/ops/test_runbook_integrity.py::test_guardian_runbooks`, Observability PagerDuty service “Guardian SLO” with Grafana dashboard “Guardian SLO”.\\ *Purpose: Maintain actionable Guardian recovery guides and manual review playbooks.*\\ *Contract: Alerts enumerated in §7 map to RB-GUARD identifiers here; responders update these procedures after every incident or drill.*\\ *State: Procedures live beside automation scripts in `ops/runbooks/guardian/`; this appendix summarizes triggers, decision trees, and evidence requirements.*\\ *Failure modes & retries: Missing or stale procedures trigger corrective actions and block deploy sign-off.*\\ *Observability: Incident retros attach the executed RB-GUARD identifier and confirm Appendix R coverage during quarterly reviews.*
+**Purpose:** Maintain authoritative Guardian recovery guides, drills, and manual review procedures that responders execute during incidents.\
+**Contract:** Alerts enumerated in §§5–8 map to RB-GUARD identifiers documented here; responders must update these runbooks after every incident or drill.\
+**State:** Procedures live alongside automation scripts in `ops/runbooks/guardian/`, with this appendix summarizing triggers, decision trees, and evidence requirements.\
+**Failure modes & handling:** Missing or stale steps block deployment sign-off; responders raise follow-up tasks to refresh the runbooks before closing incidents.\
+**Observability:** Post-incident retros attach the executed RB-GUARD identifier and confirm coverage during quarterly reviews; docs CI checks that referenced runbook files exist.\
+**References:** §5 Failure modes, §8 Operational notes, ADR-0001, ops README.\
+**Breadcrumbs:** Runbooks `ops/runbooks/guardian/*.md`, Automation `ops/scripts/guardian/`, Tests `tests/ops/test_runbook_integrity.py::test_guardian_runbooks`, PagerDuty service “Guardian SLO”, Grafana dashboard “Guardian SLO”.
 
 ### R.1 Response index (informative)
+
+**Purpose:** Provide a quick lookup of Guardian runbooks and drill identifiers.\
+**Contract:** Keep the list synchronized with Appendix R entries; add new RB-GUARD codes as they are introduced.\
+**State:** Index mirrors runbook filenames under `ops/runbooks/guardian/`.\
+**Failure modes & handling:** Missing entries confuse responders; update this index during runbook reviews.\
+**Observability:** Docs lint validates referenced sections; quarterly runbook audits review this list.\
+**References:** Appendix R entries R.2–R.5, §8 Operational notes.\
+**Breadcrumbs:** Runbooks `ops/runbooks/guardian/*.md`, automation scripts `ops/scripts/guardian/`.
 
 - RB-GUARD-001 — Guardian SLO breach stabilization.
 - RB-GUARD-QUAR — Quarantine spike investigation.
@@ -467,7 +663,13 @@ ______________________________________________________________________
 
 ### R.2 RB-GUARD-001 — Guardian SLO breach (binding)
 
-**Breadcrumbs:** Implementation `ops/runbooks/guardian/slo_breach.md`, Automation `ops/scripts/guardian/scale_guardian.py`, Tests `tests/ops/test_runbook_integrity.py::test_guardian_slo_runbook`, Observability Grafana dashboard “Guardian SLO” (alerts `guardian_judgment_latency_seconds`, `guardian_submission_timeout_total`).\\ *Purpose: Restore Guardian availability and route artifacts through manual review when automated judgments breach SLO.*\\ *Contract: Any breach of the availability or latency SLO uses this sequence before re-enabling automated progression.*\\ *State: Manual review ledger entries persist under `ops/guardian/manual_review/<date>.jsonl`.*\\ *Failure modes & retries: Skipping manual review tracking risks losing audit history and invalidating waivers.*\\ *Observability: Alert clears after two healthy scrapes and manual review backlog drains.*
+**Purpose:** Restore Guardian availability and route artifacts through manual review when automated judgments breach the SLO.\
+**Contract:** Any availability or latency breach must execute this sequence before re-enabling automated progression; manual review requires ledger capture.\
+**State:** Manual review ledger entries persist under `ops/guardian/manual_review/<date>.jsonl`, alongside incident records in `ops/guardian/incidents/`.\
+**Failure modes & handling:** Skipping ledger updates or failing to scale evaluators risks lost audit history and ongoing SLO breaches.\
+**Observability:** Alerts `guardian_judgment_latency_seconds`, `guardian_submission_timeout_total`, and synthetic job results confirm recovery once they return to baseline.\
+**References:** §5.1 Submission backlog, §8 Operational posture, Appendix R index.\
+**Breadcrumbs:** Runbook `ops/runbooks/guardian/slo_breach.md`, automation `ops/scripts/guardian/scale_guardian.py`, tests `tests/ops/test_runbook_integrity.py::test_guardian_slo_runbook`, Grafana dashboard “Guardian SLO”.
 
 - **Signals:** `guardian_judgment_latency_seconds` P95 > SLO, `guardian_submission_timeout_total` increasing, synthetic job failure (`guardian_slo.yaml`).
 - **Triage (≤5 minutes):**
@@ -484,7 +686,13 @@ ______________________________________________________________________
 
 ### R.3 RB-GUARD-QUAR — Quarantine spike investigation (binding)
 
-**Breadcrumbs:** Implementation `ops/runbooks/guardian/quarantine_spike.md`, Automation `ops/scripts/guardian/replay_quarantine.py`, Tests `tests/ops/test_runbook_integrity.py::test_guardian_quarantine_runbook`, Observability Grafana dashboard “Guardian Enforcement” (alert `alert_guardian_quarantine_spike`).\\ *Purpose: Diagnose QUARANTINED spikes without bypassing policy controls.*\\ *Contract: Any surge in quarantine outcomes requires this investigation before promoting new releases or waivers.*\\ *State: Findings logged under `ops/guardian/quarantine/<incident_id>.md` with root-cause summary and evidence attachments.*\\ *Failure modes & retries: Missing waiver documentation or misaligned settings snapshots risk repeat incidents.*\\ *Observability: Alert resolves when `guardian_cleared_ratio` recovers and reason-code distribution returns to baseline.*
+**Purpose:** Diagnose spikes in QUARANTINED outcomes while preserving policy integrity.\
+**Contract:** Any surge in quarantine outcomes uses this investigation before promoting new releases or issuing waivers.\
+**State:** Findings are logged under `ops/guardian/quarantine/<incident_id>.md` with root cause summaries and evidence attachments.\
+**Failure modes & handling:** Missing waiver documentation or mismatched settings snapshots lead to repeated incidents; responders must reconcile digests before closing.\
+**Observability:** Alerts `alert_guardian_quarantine_spike`, dashboards “Guardian Enforcement”, and metrics `guardian_cleared_ratio` track resolution.\
+**References:** §5.2 Detector regression, §4.2 Policy context, Appendix R index.\
+**Breadcrumbs:** Runbook `ops/runbooks/guardian/quarantine_spike.md`, automation `ops/scripts/guardian/replay_quarantine.py`, tests `tests/ops/test_runbook_integrity.py::test_guardian_quarantine_runbook`.
 
 - **Signals:** Increased `guardian_policy_block_total{reason=...}` (e.g., `POLICY_FORBIDDEN_PATTERN`, `INTEGRITY_HASH_MISMATCH`, `SOURCE_NOT_APPROVED`); drop in `OPERATOR_PREP`/`QUEUED_FOR_REVIEW` backlog throughput.
 - **Triage:**
@@ -499,7 +707,13 @@ ______________________________________________________________________
 
 ### R.4 RB-GUARD-QUEUE — Submission backlog watchdog (binding)
 
-**Breadcrumbs:** Implementation `ops/runbooks/guardian/submission_backlog.md`, Automation `ops/scripts/guardian/queue_drain.py`, Tests `tests/ops/test_runbook_integrity.py::test_guardian_queue_runbook`, Observability Grafana dashboard “Guardian Queue Health” (alert `alert_guardian_queue_stale`).\\ *Purpose: Restore submission throughput before `PENDING_JUDGMENT` artifacts stall.*\\ *Contract: Any backlog alert follows this playbook before artifacts are promoted or waived.*\\ *State: Queue samples exported to `ops/guardian/queue_samples/<timestamp>.csv` for audit.*\\ *Failure modes & retries: Failing to drain backlog before resuming automation risks out-of-order judgments.*\\ *Observability: Alert resolves when backlog age drops below threshold and throughput returns to baseline.*
+**Purpose:** Restore submission throughput before `PENDING_JUDGMENT` artifacts stall.\
+**Contract:** Every backlog alert executes this playbook prior to promoting or waiving artifacts; order-of-operations keeps judgments deterministic.\
+**State:** Queue samples export to `ops/guardian/queue_samples/<timestamp>.csv` for audit alongside incident notes.\
+**Failure modes & handling:** Failing to drain backlog before resuming automation risks out-of-order judgments; responders must follow the replay steps here.\
+**Observability:** Alert `alert_guardian_queue_stale`, dashboard “Guardian Queue Health”, and metrics `guardian_pending_total` show recovery when backlogs clear.\
+**References:** §5.1 Submission backlog, §4.3 Queue state, Appendix R index.\
+**Breadcrumbs:** Runbook `ops/runbooks/guardian/submission_backlog.md`, automation `ops/scripts/guardian/queue_drain.py`, tests `tests/ops/test_runbook_integrity.py::test_guardian_queue_runbook`.
 
 - **Signals:** `guardian_pending_total` trending upward for 3 scrapes, `guardian_pending_oldest_seconds` > `guardian.queue.backlog_alert_minutes * 60`, `guardian_submission_timeout_total` incrementing, `review_queue_oldest_seconds` approaching `reviews.backlog.alert_minutes`.
 - **Triage (≤5 minutes):**
@@ -531,7 +745,13 @@ ______________________________________________________________________
 
 ### R.5 RB-GUARD-MANUAL — Manual review reconciliation (informative)
 
-**Breadcrumbs:** Implementation `ops/runbooks/guardian/manual_review.md`, Automation `ops/scripts/guardian/reconcile_manual.py`, Tests `tests/ops/test_runbook_integrity.py::test_guardian_manual_runbook`, Observability Grafana dashboard “Guardian Manual Review” (panels `guardian_manual_pending_total`, `guardian_manual_age_seconds`).\\ *Purpose: Ensure manual decisions stay auditable and rejoin automated flow once Guardian recovers.*\\ *Contract: Manual review ledger updates must precede replay jobs so judgment history remains complete.*\\ *State: Ledger updates stored alongside incident tickets within `ops/guardian/manual_review/<date>.jsonl`.*\\ *Failure modes & retries: Omitting ledger updates or skipping reconciliation replays invalidates artifact provenance.*\\ *Observability: Manual review metrics return to baseline before incident closure.*
+**Purpose:** Ensure manual decisions stay auditable and rejoin automated flow once Guardian recovers.\
+**Contract:** Ledger updates must precede replay jobs so judgment history remains complete; reconciliation is mandatory before closing incidents.\
+**State:** Ledger updates live under `ops/guardian/manual_review/<date>.jsonl` with links to incident tickets.\
+**Failure modes & handling:** Omitting ledger entries or skipping reconciliation invalidates artifact provenance; responders repeat the runbook until metrics normalize.\
+**Observability:** Dashboard “Guardian Manual Review” panels (`guardian_manual_pending_total`, `guardian_manual_age_seconds`) and ledger diffs confirm recovery.\
+**References:** §5.3 Dependency outage, §8.3 Manual review mode, Appendix R index.\
+**Breadcrumbs:** Runbook `ops/runbooks/guardian/manual_review.md`, automation `ops/scripts/guardian/reconcile_manual.py`, tests `tests/ops/test_runbook_integrity.py::test_guardian_manual_runbook`.
 
 - Operators record manual decisions with manifest annotations while Guardian automation is paused.
 - Reconciliation job replays queued artifacts once health recovers; incident owners capture waiver IDs, policy bundle hashes, and remediation tasks in the postmortem per RB-GUARD-001 follow-up checklist.
@@ -540,9 +760,23 @@ ______________________________________________________________________
 
 ## Appendix C — Detection payload schema (binding)
 
-*Purpose: Provide the canonical span-level schema and examples referenced in §4.4.*
+**Purpose:** Provide the canonical span-level schema and examples referenced in §4.4 and Appendix R runbooks.\
+**Contract:** Clients and downstream services must adhere to this schema; changes require version bumps and coordinated rollouts.\
+**State:** Schema definitions live in `packages/udocket_core/guardian/contracts/payloads.py` and JSON examples under `docs/examples/lineage/`.\
+**Failure modes & handling:** Schema drift or missing fields cause `SCHEMA_POLICY_BLOCK` errors and escalate via §5.2.\
+**Observability:** Schema validation metrics and docs lint ensure examples stay current.\
+**References:** §3.5 Detection & masking payloads, §4 State management, Appendix R RB-GUARD-QUAR.\
+**Breadcrumbs:** Contracts module `packages/udocket_core/guardian/contracts/payloads.py`, fixtures `tests/platform/guardian/test_detection_payloads.py`.
 
 ### C.1 Field definitions
+
+**Purpose:** Document each detection payload field Guardian produces and consumes.\
+**Contract:** Field names, types, and semantics are stable across releases; new fields must be optional and documented.\
+**State:** Stored alongside span evidence and manifests in Postgres.\
+**Failure modes & handling:** Missing required fields trigger `SCHEMA_POLICY_BLOCK`.\
+**Observability:** Validation metrics and audit logs capture schema issues.\
+**References:** §3.5 Detection & masking payloads, LPE bundles, Appendix R RB-GUARD-QUAR.\
+**Breadcrumbs:** Schema source `packages/udocket_core/guardian/contracts/payloads.py`, tests `tests/platform/guardian/test_detection_payloads.py`.
 
 | Field                   | Type    | Required    | Description                                                                                |
 | ----------------------- | ------- | ----------- | ------------------------------------------------------------------------------------------ |
@@ -559,6 +793,14 @@ ______________________________________________________________________
 | `restorable`            | Boolean | Conditional | Indicates whether detokenization is allowed under policy/waiver.                           |
 
 ### C.2 Reference JSON payload
+
+**Purpose:** Provide a concrete example of the detection payload schema for tooling and documentation tests.\
+**Contract:** Example must remain in sync with `packages/udocket_core/guardian/contracts/payloads.py`; update both together.\
+**State:** Example mirrors fixtures used in unit tests and docs CI.\
+**Failure modes & handling:** Divergence between example and schema causes docs lint failures; update promptly.\
+**Observability:** Docs CI and schema validation tests ensure the example parses.\
+**References:** §3.5 Detection & masking payloads, Appendix R RB-GUARD-QUAR.\
+**Breadcrumbs:** Fixture `tests/platform/guardian/test_detection_payloads.py::EXPECTED_PAYLOAD`, docs example `docs/examples/lineage/guardian_payload.json`.
 
 ```json
 {
