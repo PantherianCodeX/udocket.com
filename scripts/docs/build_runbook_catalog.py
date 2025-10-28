@@ -40,6 +40,8 @@ def iter_source_files() -> Iterable[Path]:
         if not root.exists():
             continue
         for path in sorted(root.glob("*.md")):
+            if path.name.startswith("_template"):
+                continue
             if path in seen:
                 continue
             seen.add(path)

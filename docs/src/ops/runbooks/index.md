@@ -2,32 +2,10 @@
 
 <!-- AUTO-GENERATED: Run `python scripts/docs/build_runbook_catalog.py` to refresh. -->
 
-## _Template — 8.3 Runbooks & drills
-
-**Purpose:** Document operational playbooks responders execute during incidents or exercises. **|**
-**Contract:** Link production alerts to runbook identifiers, outline execution cadence, and name the maintaining team. **|**
-**State:** Summarize where runbooks live (repo paths, automation scripts) and what evidence they produce. **|**
-**Failure modes & handling:** Explain how missing, stale, or skipped runbooks are surfaced and remediated. **|**
-**Observability:** Note tooling that tracks drill frequency, runbook completion, and incident follow-up. **|**
-**Breadcrumbs:** Runbook files, automation scripts, incident templates. **|**
-**References:** Alert catalogs, governance docs referencing the runbooks.
-
-### _Template — 8.3.1 Runbook index
-
-> Provide a quick map from alert codes/signals to runbook identifiers.
-
-### _Template — 8.3.2 Primary runbooks
-
-> Document the key runbooks (rollback, incident triage, hotfix, etc.) with summary tables or links.
-
-### _Template — 8.3.3 Drill cadence & evidence
-
-> Capture expectations for tabletop exercises, on-call readiness checks, and evidence storage.
-
 ## Digital Signer — 8.1 Runbooks, rotations, and drills (binding)
 
 **Purpose:** Ensure on-call teams can remediate signing incidents quickly. **|**
-**Contract:** Operational playbooks map alerts to RB-SIGN-* runbooks; quarterly rotations rehearse trust-root renewal, TSA failover, and FIPS recovery. **|**
+**Contract:** Operational playbooks map alerts to RB-SIGN-\* runbooks; quarterly rotations rehearse trust-root renewal, TSA failover, and FIPS recovery. **|**
 **State:** Runbooks live in `ops/runbooks/signer/`; key rotation artifacts archived in `ops/security/key_rotation/`. **|**
 **Failure modes & handling:** Stale runbooks block release sign-off; missing rotation evidence triggers audit findings. **|**
 **Observability:** Docs lint checks references; PagerDuty analytics monitor response time. **|**
@@ -268,7 +246,7 @@ Post-checks:
 
 **Purpose:** Maintain operational readiness and evidence for audits. **|**
 **Contract:** Runbooks must stay aligned with alert catalog; quarterly drills validate provider failover, webhook compromise response, STOP/HELP surge handling, and download token abuse detection. **|**
-**State:** Runbooks listed under RB-NOTIFY-* in `docs/src/ops/runbooks/index.md`; drill evidence stored in `ops/notifications/drills/<date>/`. **|**
+**State:** Runbooks listed under RB-NOTIFY-\* in `docs/src/ops/runbooks/index.md`; drill evidence stored in `ops/notifications/drills/<date>/`. **|**
 **Failure modes & handling:** Missing runbook references or overdue drills flagged by docs lint and Ops governance. **|**
 **Observability:** Docs lint ensures runbook catalog fresh; dashboards track drill cadence. **|**
 **Breadcrumbs:** Runbook catalog `docs/src/ops/runbooks/index.md`, drill scheduler `ops/scripts/notifications/schedule_drills.py`, incident templates `ops/runbooks/templates/notifications/*.md`. **|**
@@ -420,7 +398,7 @@ Remediation checklist:
 ## Settings — 8.3 Runbooks & drills (binding)
 
 **Purpose:** Maintain authoritative SR recovery guides, drills, and manual procedures executed during incidents. **|**
-**Contract:** Alerts enumerated in §8.2 and Appendix B map to RB-* identifiers documented here; responders update these runbooks after every incident or drill. **|**
+**Contract:** Alerts enumerated in §8.2 and Appendix B map to RB-\* identifiers documented here; responders update these runbooks after every incident or drill. **|**
 **State:** Procedures live alongside automation scripts in `ops/runbooks/settings/`, with evidence logged under `ops/settings/<date>/` for each activation or remediation. **|**
 **Failure modes & handling:** Missing or stale steps block deployment sign-off; responders raise follow-up tasks to refresh runbooks before closing incidents. **|**
 **Observability:** Post-incident retros, quarterly tabletop exercises, and docs lint verify runbook coverage. **|**
@@ -613,7 +591,7 @@ ______________________________________________________________________
 
 ## Worker Cluster — 8) Operations & runbooks
 
-- Primary runbooks: RB-JOB-WATCHDOG (job watchdog/remediation), RB-LOCK-006 (advisory locks), RB-NOTIFY-* (delivery queues), RB-UPLOAD-SCAN (scanning), RB-CASE-IMPORT (legacy import).
+- Primary runbooks: RB-JOB-WATCHDOG (job watchdog/remediation), RB-LOCK-006 (advisory locks), RB-NOTIFY-\* (delivery queues), RB-UPLOAD-SCAN (scanning), RB-CASE-IMPORT (legacy import).
 - Drill cadence: quarterly watchdog stall simulation, queue backlog remediation, provider failover tabletop, backfill replay exercise.
 - Evidence stored in `ops/workers/drills/<date>/` with participants, remediation tasks, and dashboards.
 
