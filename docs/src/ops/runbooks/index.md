@@ -4,22 +4,22 @@
 
 ## Guardian — Appendix R — Runbooks & drills (binding)
 
-**Purpose:** Maintain authoritative Guardian recovery guides, drills, and manual review procedures that responders execute during incidents.\
-**Contract:** Alerts enumerated in §§5–8 map to RB-GUARD identifiers documented here; responders must update these runbooks after every incident or drill.\
-**State:** Procedures live alongside automation scripts in `ops/runbooks/guardian/`, with this appendix summarizing triggers, decision trees, and evidence requirements.\
-**Failure modes & handling:** Missing or stale steps block deployment sign-off; responders raise follow-up tasks to refresh the runbooks before closing incidents.\
-**Observability:** Post-incident retros attach the executed RB-GUARD identifier and confirm coverage during quarterly reviews; docs CI checks that referenced runbook files exist.\
-**References:** §5 Failure modes, §8 Operational notes, ADR-0001, ops README.\
+**Purpose:** Maintain authoritative Guardian recovery guides, drills, and manual review procedures that responders execute during incidents. **|**
+**Contract:** Alerts enumerated in §§5–8 map to RB-GUARD identifiers documented here; responders must update these runbooks after every incident or drill. **|**
+**State:** Procedures live alongside automation scripts in `ops/runbooks/guardian/`, with this appendix summarizing triggers, decision trees, and evidence requirements. **|**
+**Failure modes & handling:** Missing or stale steps block deployment sign-off; responders raise follow-up tasks to refresh the runbooks before closing incidents. **|**
+**Observability:** Post-incident retros attach the executed RB-GUARD identifier and confirm coverage during quarterly reviews; docs CI checks that referenced runbook files exist. **|**
+**References:** §5 Failure modes, §8 Operational notes, ADR-0001, ops README. **|**
 **Breadcrumbs:** Runbooks `ops/runbooks/guardian/*.md`, Automation `ops/scripts/guardian/`, Tests `tests/ops/test_runbook_integrity.py::test_guardian_runbooks`, PagerDuty service “Guardian SLO”, Grafana dashboard “Guardian SLO”.
 
 ### Guardian — R.1 Response index (informative)
 
-**Purpose:** Provide a quick lookup of Guardian runbooks and drill identifiers.\
-**Contract:** Keep the list synchronized with Appendix R entries; add new RB-GUARD codes as they are introduced.\
-**State:** Index mirrors runbook filenames under `ops/runbooks/guardian/`.\
-**Failure modes & handling:** Missing entries confuse responders; update this index during runbook reviews.\
-**Observability:** Docs lint validates referenced sections; quarterly runbook audits review this list.\
-**References:** Appendix R entries R.2–R.5, §8 Operational notes.\
+**Purpose:** Provide a quick lookup of Guardian runbooks and drill identifiers. **|**
+**Contract:** Keep the list synchronized with Appendix R entries; add new RB-GUARD codes as they are introduced. **|**
+**State:** Index mirrors runbook filenames under `ops/runbooks/guardian/`. **|**
+**Failure modes & handling:** Missing entries confuse responders; update this index during runbook reviews. **|**
+**Observability:** Docs lint validates referenced sections; quarterly runbook audits review this list. **|**
+**References:** Appendix R entries R.2–R.5, §8 Operational notes. **|**
 **Breadcrumbs:** Runbooks `ops/runbooks/guardian/*.md`, automation scripts `ops/scripts/guardian/`.
 
 - RB-GUARD-001 — Guardian SLO breach stabilization.
@@ -31,12 +31,12 @@
 
 ### Guardian — R.2 RB-GUARD-001 — Guardian SLO breach (binding)
 
-**Purpose:** Restore Guardian availability and route artifacts through manual review when automated judgments breach the SLO.\
-**Contract:** Any availability or latency breach must execute this sequence before re-enabling automated progression; manual review requires ledger capture.\
-**State:** Manual review ledger entries persist under `ops/guardian/manual_review/<date>.jsonl`, alongside incident records in `ops/guardian/incidents/`.\
-**Failure modes & handling:** Skipping ledger updates or failing to scale evaluators risks lost audit history and ongoing SLO breaches.\
-**Observability:** Alerts `guardian_judgment_latency_seconds`, `guardian_submission_timeout_total`, and synthetic job results confirm recovery once they return to baseline.\
-**References:** §5.1 Submission backlog, §8 Operational posture, Appendix R index.\
+**Purpose:** Restore Guardian availability and route artifacts through manual review when automated judgments breach the SLO. **|**
+**Contract:** Any availability or latency breach must execute this sequence before re-enabling automated progression; manual review requires ledger capture. **|**
+**State:** Manual review ledger entries persist under `ops/guardian/manual_review/<date>.jsonl`, alongside incident records in `ops/guardian/incidents/`. **|**
+**Failure modes & handling:** Skipping ledger updates or failing to scale evaluators risks lost audit history and ongoing SLO breaches. **|**
+**Observability:** Alerts `guardian_judgment_latency_seconds`, `guardian_submission_timeout_total`, and synthetic job results confirm recovery once they return to baseline. **|**
+**References:** §5.1 Submission backlog, §8 Operational posture, Appendix R index. **|**
 **Breadcrumbs:** Runbook `ops/runbooks/guardian/slo_breach.md`, automation `ops/scripts/guardian/scale_guardian.py`, tests `tests/ops/test_runbook_integrity.py::test_guardian_slo_runbook`, Grafana dashboard “Guardian SLO”.
 
 - **Signals:** `guardian_judgment_latency_seconds` P95 > SLO, `guardian_submission_timeout_total` increasing, synthetic job failure (`guardian_slo.yaml`).
@@ -56,12 +56,12 @@
 
 ### Guardian — R.3 RB-GUARD-QUAR — Quarantine spike investigation (binding)
 
-**Purpose:** Diagnose spikes in QUARANTINED outcomes while preserving policy integrity.\
-**Contract:** Any surge in quarantine outcomes uses this investigation before promoting new releases or issuing waivers.\
-**State:** Findings are logged under `ops/guardian/quarantine/<incident_id>.md` with root cause summaries and evidence attachments.\
-**Failure modes & handling:** Missing waiver documentation or mismatched settings snapshots lead to repeated incidents; responders must reconcile digests before closing.\
-**Observability:** Alerts `alert_guardian_quarantine_spike`, dashboards “Guardian Enforcement”, and metrics `guardian_cleared_ratio` track resolution.\
-**References:** §5.2 Detector regression, §4.2 Policy context, Appendix R index.\
+**Purpose:** Diagnose spikes in QUARANTINED outcomes while preserving policy integrity. **|**
+**Contract:** Any surge in quarantine outcomes uses this investigation before promoting new releases or issuing waivers. **|**
+**State:** Findings are logged under `ops/guardian/quarantine/<incident_id>.md` with root cause summaries and evidence attachments. **|**
+**Failure modes & handling:** Missing waiver documentation or mismatched settings snapshots lead to repeated incidents; responders must reconcile digests before closing. **|**
+**Observability:** Alerts `alert_guardian_quarantine_spike`, dashboards “Guardian Enforcement”, and metrics `guardian_cleared_ratio` track resolution. **|**
+**References:** §5.2 Detector regression, §4.2 Policy context, Appendix R index. **|**
 **Breadcrumbs:** Runbook `ops/runbooks/guardian/quarantine_spike.md`, automation `ops/scripts/guardian/replay_quarantine.py`, tests `tests/ops/test_runbook_integrity.py::test_guardian_quarantine_runbook`.
 
 - **Signals:** Increased `guardian_policy_block_total{reason=...}` (e.g., `POLICY_FORBIDDEN_PATTERN`, `INTEGRITY_HASH_MISMATCH`, `SOURCE_NOT_APPROVED`); drop in `OPERATOR_PREP`/`QUEUED_FOR_REVIEW` backlog throughput.
@@ -79,12 +79,12 @@
 
 ### Guardian — R.4 RB-GUARD-QUEUE — Submission backlog watchdog (binding)
 
-**Purpose:** Restore submission throughput before `PENDING_JUDGMENT` artifacts stall.\
-**Contract:** Every backlog alert executes this playbook prior to promoting or waiving artifacts; order-of-operations keeps judgments deterministic.\
-**State:** Queue samples export to `ops/guardian/queue_samples/<timestamp>.csv` for audit alongside incident notes.\
-**Failure modes & handling:** Failing to drain backlog before resuming automation risks out-of-order judgments; responders must follow the replay steps here.\
-**Observability:** Alert `alert_guardian_queue_stale`, dashboard “Guardian Queue Health”, and metrics `guardian_pending_total` show recovery when backlogs clear.\
-**References:** §5.1 Submission backlog, §4.3 Queue state, Appendix R index.\
+**Purpose:** Restore submission throughput before `PENDING_JUDGMENT` artifacts stall. **|**
+**Contract:** Every backlog alert executes this playbook prior to promoting or waiving artifacts; order-of-operations keeps judgments deterministic. **|**
+**State:** Queue samples export to `ops/guardian/queue_samples/<timestamp>.csv` for audit alongside incident notes. **|**
+**Failure modes & handling:** Failing to drain backlog before resuming automation risks out-of-order judgments; responders must follow the replay steps here. **|**
+**Observability:** Alert `alert_guardian_queue_stale`, dashboard “Guardian Queue Health”, and metrics `guardian_pending_total` show recovery when backlogs clear. **|**
+**References:** §5.1 Submission backlog, §4.3 Queue state, Appendix R index. **|**
 **Breadcrumbs:** Runbook `ops/runbooks/guardian/submission_backlog.md`, automation `ops/scripts/guardian/queue_drain.py`, tests `tests/ops/test_runbook_integrity.py::test_guardian_queue_runbook`.
 
 - **Signals:** `guardian_pending_total` trending upward for 3 scrapes, `guardian_pending_oldest_seconds` > `guardian.queue.backlog_alert_minutes * 60`, `guardian_submission_timeout_total` incrementing, `review_queue_oldest_seconds` approaching `reviews.backlog.alert_minutes`.
@@ -119,12 +119,12 @@
 
 ### Guardian — R.5 RB-GUARD-MANUAL — Manual review reconciliation (informative)
 
-**Purpose:** Ensure manual decisions stay auditable and rejoin automated flow once Guardian recovers.\
-**Contract:** Ledger updates must precede replay jobs so judgment history remains complete; reconciliation is mandatory before closing incidents.\
-**State:** Ledger updates live under `ops/guardian/manual_review/<date>.jsonl` with links to incident tickets.\
-**Failure modes & handling:** Omitting ledger entries or skipping reconciliation invalidates artifact provenance; responders repeat the runbook until metrics normalize.\
-**Observability:** Dashboard “Guardian Manual Review” panels (`guardian_manual_pending_total`, `guardian_manual_age_seconds`) and ledger diffs confirm recovery.\
-**References:** §5.3 Dependency outage, §8.3 Manual review mode, Appendix R index.\
+**Purpose:** Ensure manual decisions stay auditable and rejoin automated flow once Guardian recovers. **|**
+**Contract:** Ledger updates must precede replay jobs so judgment history remains complete; reconciliation is mandatory before closing incidents. **|**
+**State:** Ledger updates live under `ops/guardian/manual_review/<date>.jsonl` with links to incident tickets. **|**
+**Failure modes & handling:** Omitting ledger entries or skipping reconciliation invalidates artifact provenance; responders repeat the runbook until metrics normalize. **|**
+**Observability:** Dashboard “Guardian Manual Review” panels (`guardian_manual_pending_total`, `guardian_manual_age_seconds`) and ledger diffs confirm recovery. **|**
+**References:** §5.3 Dependency outage, §8.3 Manual review mode, Appendix R index. **|**
 **Breadcrumbs:** Runbook `ops/runbooks/guardian/manual_review.md`, automation `ops/scripts/guardian/reconcile_manual.py`, tests `tests/ops/test_runbook_integrity.py::test_guardian_manual_runbook`.
 
 - Operators record manual decisions with manifest annotations while Guardian automation is paused.
@@ -345,21 +345,23 @@ Post-remediation validation:
 
 ## Settings — Appendix R — Runbooks & drills
 
-**Breadcrumbs:** Implementation runbooks under `ops/runbooks/settings/`, Tests `tests/platform/settings/test_rollback.py::test_replay_last_good` and peers listed per runbook, Observability Grafana OnCall incidents tagged `settings`.\
-*Purpose: Centralize operational playbooks tied to Settings Registry alerts.*\
-*Contract: Alerts enumerated in Appendix B must link to these runbooks; responders keep procedures current with quarterly tabletop reviews.*\
-*State: Runbooks live alongside automation scripts in the ops repository; this appendix summarizes trigger conditions and critical steps.*\
-*Failure modes & retries: Missing or stale runbooks trigger post-incident corrective actions and block deploy sign-off.*\
-*Observability: OnCall analytics track time-to-ack/resolve for Settings incidents; drills recorded in App.O decision log.*
+**Purpose:** Centralize operational playbooks tied to SR alerts.\
+**Contract:** Alerts enumerated in Appendix B link to these runbooks; responders keep procedures current with quarterly tabletop reviews.\
+**State:** Runbooks live alongside automation scripts in `ops/runbooks/settings/`; this appendix summarizes trigger conditions and critical steps.\
+**Failure modes & handling:** Missing or stale runbooks trigger post-incident corrective actions and block deploy sign-off.\
+**Observability:** OnCall analytics track time-to-ack/resolve for Settings incidents; drills recorded in App.O decision logs.\
+**References:** §5 Failure modes, §8 Operational notes, Appendix B metrics.\
+**Breadcrumbs:** Runbooks `ops/runbooks/settings/`, tests `tests/platform/settings/test_rollback.py` and peers, OnCall configuration `infra/monitoring/settings-prometheus-rules.yaml`.
 
 ### Settings — R.1 Runbook index (informative)
 
-**Breadcrumbs:** Implementation `ops/runbooks/settings/index.md`, Tests `tests/platform/settings/test_runbook_index.py::test_entries_present`, Observability Docs lint metric `docs_runbook_missing_total`.\
-*Purpose: Provide a quick map from alert codes to runbook IDs.*\
-*Contract: Every Settings alert references one of these IDs; new alerts require index updates.*\
-*State: Index maintained in version control and mirrored here.*\
-*Failure modes & retries: Lint script fails when index missing an alert; add entry before merging.*\
-*Observability: Weekly docs lint verifies the index matches OnCall configuration.*
+**Purpose:** Provide a quick map from alert codes to runbook IDs.\
+**Contract:** Every Settings alert references one of these IDs; new alerts require index updates.\
+**State:** Index maintained in version control and mirrored here.\
+**Failure modes & handling:** Lint script fails when the index misses an alert; add the entry before merging.\
+**Observability:** Weekly docs lint verifies the index matches OnCall configuration.\
+**References:** Appendix B alerts, Appendix R entries below.\
+**Breadcrumbs:** Runbook index `ops/runbooks/settings/index.md`, tests `tests/platform/settings/test_runbook_index.py`.
 
 - RB-GOV-008 — Settings governance toggle / rollback
 - RB-RES-ENDPOINT — Residency endpoint drift remediation
@@ -373,12 +375,13 @@ Post-remediation validation:
 
 ### Settings — R.2 RB-GOV-008 — Settings governance toggle / rollback (binding)
 
-**Breadcrumbs:** Implementation `ops/runbooks/settings/governance_toggle.md`, Tests `tests/platform/settings/test_rollback.py::test_replay_last_good`, Observability Grafana “Settings Governance” dashboard (alert `settings_governance_override_total`).\
-*Purpose: Safely activate or revert high-sensitivity governance toggles (waivers, residency overrides, cross-org pilots).*\
-*Contract: Any activation flagged `unsafe` or touching governance scopes must follow this sequence before promotion.*\
-*State: Runbook automation uses `ops/runbooks/settings_rollback.py`; evidence stored under `ops/settings/<date>/`.*\
-*Failure modes & retries: Missing approvals or failed smoke tests require immediate rollback via `settings rollback --bundle <previous_id>`.*\
-*Observability: Alert clears once activation completes with both approvals and validation metrics green.*
+**Purpose:** Safely activate or revert high-sensitivity governance toggles (waivers, residency overrides, cross-org pilots).\
+**Contract:** Any activation flagged `unsafe` or touching governance scopes must follow this sequence before promotion.\
+**State:** Runbook automation uses `ops/runbooks/settings_rollback.py`; evidence stores under `ops/settings/<date>/`.\
+**Failure modes & handling:** Missing approvals or failed smoke tests require immediate rollback via `settings rollback --bundle <previous_id>`.\
+**Observability:** Alert clears once activation completes with both approvals and validation metrics green.\
+**References:** §4 State management, §5.1 Activation failure.\
+**Breadcrumbs:** Runbook `ops/runbooks/settings/governance_toggle.md`, tests `tests/platform/settings/test_rollback.py`, dashboard “Settings Governance”.
 
 Triggers: `settings_governance_override_total`, change tickets tagged `GOV-TOGGLE`, or manual escalation from Security/Architecture.
 
