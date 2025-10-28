@@ -47,7 +47,7 @@ This guide explains how to add and maintain TDD documentation in this repo. The 
 - Run the aggregate lint script:
   - `python scripts/docs/lint_docs.py` (lints entire `docs/src/`)
   - Optional: pass one or more targets, e.g. `python scripts/docs/lint_docs.py docs/src/services/settings.md docs/src/overview/tdd.md`
-- Validate service specs against the template: `python scripts/docs/check_service_structure.py docs/src/services`
+- Validate service specs against the template: `python scripts/docs/check_structure.py docs/src/services`
 - Lint markdown: `npx markdownlint-cli2 'docs/src/**/*.md'`.
 - Style checks (Vale):
   - From `docs/`: `vale src/`

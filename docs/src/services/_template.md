@@ -1,17 +1,71 @@
-# Service Specification Template
+---
+title: Service Specification Template
+subtitle: Structural reference for uDocket.com service documents
+authors:
+  - <Primary authors>
+version: <0.1-draft>
+status: <Provisional/Implementable/Implemented>
+classification: <Confidential>
+last_updated: <1970-01-01>
+owners:
+  - <Teams accountable for day-to-day ownership>
+reviewers:
+  - <Roles or committees that sign off on changes>
+approvers:
+  - <Stakeholders providing technical/operational review>
+approved by: 
+approved date: 
+header-includes:
+  - |
+    <style>
+      table {
+        font-size: 8.5pt;
+      }
+      table td,
+      table th {
+        font-size: inherit;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+      }
+      figure svg text,
+      figure svg tspan {
+        fill: #111 !important;
+      }
+      figure svg text {
+        font-family: "DejaVu Sans", "Trebuchet MS", Arial, sans-serif !important;
+      }
+      figure.full-width-diagram img {
+        width: 100%;
+        height: auto;
+        display: block;
+      }
+    </style>
+  - <header class="page-header">uDocket — Guardian Service Specification <br> 
+    Canonical design, policy, and operational reference</header>
+  - <footer class="page-footer">Confidential · Last updated 2025-10-23 · Page 
+    <span class="page-number"></span> of <span 
+    class="page-count"></span></footer>
+---
 
-This checklist ensures each service document follows the standardized structure from `docs/tdd_modularization.md`. Copy this file when authoring a new service spec and replace the placeholder text. Remove the guidance notes before publishing.
+______________________________________________________________________
+
+> This checklist ensures each service document follows the standardized structure. Copy this file when authoring a new service spec and replace the placeholder text. Remove the guidance notes before publishing.
 
 ## Document controls
 
+**<< AUTOMATED AREA >>** - Updates automatically on pre-commit hook.
+*Do not edit the values here. Make all updates in the frontmatter above.*
+
 | Field          | Value |
 | -------------- | ----- |
-| Version        | 0.1-draft |
-| Status         | Implementable |
-| Last updated   | 1970-01-01 |
-| Primary owners | Platform Architecture; Security Engineering; Applied AI Programs |
-| Approvers      | Architecture Steering Committee; Security Review Board |
-| Reviewers      | QA Engineering Lead; FinOps Manager |
+| Authors        | <Primary authors> |
+| Version        | <0.1-draft> |
+| Status         | <Provisional/Implementable/Implemented> |
+| Classificatoin | <Confidential> |
+| Last updated   | <1970-01-01> |
+| Owners         | <Teams accountable for day-to-day ownership> |
+| Reviewers      | <Stakeholders providing technical/operational review> |
+| Approvers      | <Roles or committees that sign off on changes> |
 | Approved by    | |
 | Approved date  | |
 
@@ -167,6 +221,14 @@ Use this section to orient readers before they dive into the specification. It s
 > Provide a quick map from alert codes/signals to runbook identifiers.
 
 #### 8.3.2 Primary runbooks
+
+**Purpose:** Document operational playbooks responders execute during incidents or exercises. **|**
+**Contract:** Link production alerts to runbook identifiers, outline execution cadence, and name the maintaining team. **|**
+**State:** Summarize where runbooks live (repo paths, automation scripts) and what evidence they produce. **|**
+**Failures & handling:** Explain how missing, stale, or skipped runbooks are surfaced and remediated. **|**
+**Observability:** Note tooling that tracks drill frequency, runbook completion, and incident follow-up. **|**
+**Breadcrumbs:** Runbook files, automation scripts, incident templates. **|**
+**References:** Alert catalogs, governance docs referencing the runbooks.
 
 > Document the key runbooks (rollback, incident triage, hotfix, etc.) with summary tables or links.
 

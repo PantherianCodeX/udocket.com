@@ -58,14 +58,16 @@ ______________________________________________________________________
 
 | Field          | Value |
 | -------------- | ----- |
-| Version        | 0.1-draft |
-| Status         | Implementable |
-| Last updated   | 2025-10-28 |
-| Primary owners | Platform Engineering; Product Management |
-| Approvers      | Architecture Steering Committee; Security Review Board |
-| Reviewers      | Accessibility Program Lead; Operations Engineering |
-| Approved by    | |
-| Approved date  | |
+| Authors | Application Experience Working Group |
+| Version | 0.1-draft |
+| Status | implementable |
+| Classification | Confidential |
+| Last updated | 2025-10-23 |
+| Owners | Platform Engineering; Product Management |
+| Reviewers | Accessibility Program Lead; Operations Engineering |
+| Approvers | Architecture Steering Committee; Security Review Board |
+| Approved by |  |
+| Approved date |  |
 
 **Status:** KEP: Provisional → Implementable → Implemented
 
@@ -109,6 +111,14 @@ ______________________________________________________________________
 ______________________________________________________________________
 
 ## 2) Responsibilities
+
+**Purpose:** Enumerate functional responsibilities and non-goals. **|**
+**Contract:** Spell out mandatory behaviours, idempotency, regulatory duties. **|**
+**State:** Describe ownership of state transitions or data stewardship. **|**
+**Failures & handling:** Identify responsibility gaps and escalation paths. **|**
+**Observability:** Checks proving each responsibility works. **|**
+**Breadcrumbs:** Implementation/tests supporting each responsibility. **|**
+**References:** Service/TDD sections that expand on responsibilities.
 
 ### 2.1 Staff operator workspace & approvals (binding)
 
@@ -243,9 +253,13 @@ ______________________________________________________________________
 **Breadcrumbs:** REST controllers `apps/platform/api/*.py`, SSE publishers `apps/platform/events/*.py`, OpenAPI specs `ops/openapi/uDocket-platform.openapi.yaml`, `ops/openapi/chat_assistants.yaml`. **|**
 **References:** Notifications spec (download/token APIs), Guardian spec (approval endpoints), ADR-0003 (versioning policy).
 
-- Portal downloads require signed tokens from Notifications service; headers `If-Match` and download guard enforce conditional requests.
-- Chat capability endpoints (`/api/v1/chat/assistants`) expose assistant metadata, rate limits, and disclaimers with ETag support.
-- SSE topics: `case.{id}.timeline`, `case.{id}.edits`, `portal.link_invalidated`, `notifications.case.{id}`, `chat.assistant.updated`.
+### 3.1 External Interfaces
+
+Portal downloads exchange signed tokens issued by the Notifications service; `If-Match` and download guard logic enforce conditional requests and provenance hashes. Chat capability endpoints (`/api/v1/chat/assistants`) publish assistant metadata, rate limits, disclaimers, and availability windows with ETag support. Real-time updates stream via SSE and Channels namespaces (`case.{id}.timeline`, `case.{id}.edits`, `notifications.case.{id}`, `chat.assistant.updated`, `portals.{case_id}`) scoped to the caller’s organisation and case.
+
+### 3.2 Internal Interfaces
+
+The UI coordinates with internal controllers for portal messaging, edit manifests, and assistant orchestration. SSE publishers in `apps/platform/events/*.py` broadcast state transitions to the front-end, while background jobs in the worker cluster hydrate downloads, regenerate manifests, and backfill presence events. Layout builders in `apps/platform/ui/views/*.py` assemble React component payloads from secure views (`*_secure`) governed by the Settings registry.
 
 ______________________________________________________________________
 
@@ -340,8 +354,8 @@ ______________________________________________________________________
 **State:** Roster `ops/webapp/roster.yaml`, freeze calendar `ops/webapp/freeze_windows.ics`, contact matrix in App.N. **|**
 **Failures & handling:** Unstaffed shifts or ignored freezes escalate to Product & Security; deployments halted until posture restored. **|**
 **Observability:** PagerDuty metrics, freeze dashboards, alert `webapp_oncall_gap_total`. **|**
-**References:** Notifications spec §7, Settings spec §7. **|**
-**Breadcrumbs:** Roster files, freeze calendars, App.O decision logs.
+**Breadcrumbs:** Roster files, freeze calendars, App.O decision logs. **|**
+**References:** Notifications spec §7, Settings spec §7. *
 
 ### 8.2 Incident triggers (binding)
 
@@ -350,8 +364,8 @@ ______________________________________________________________________
 **State:** Incident records `ops/webapp/incidents/<date>.jsonl` capture alert, context, and applied runbook. **|**
 **Failures & handling:** Missing annotations or muted alerts require corrective PRs and governance follow-up. **|**
 **Observability:** Dashboards “Operator Workspace”, “Portal Integrity”, Alertmanager routes. **|**
-**References:** `RB-JOB-WATCHDOG`, `RB-PORTAL-INVALIDATION`, `RB-CHAT-ABUSE`. **|**
-**Breadcrumbs:** Alert rule files, PagerDuty services, SIEM dashboards.
+**Breadcrumbs:** Alert rule files, PagerDuty services, SIEM dashboards. **|**
+**References:** `RB-JOB-WATCHDOG`, `RB-PORTAL-INVALIDATION`, `RB-CHAT-ABUSE`. *
 
 - `portal_link_invalidated_total` spikes or `portal_download_precondition_total` errors invoke `RB-PORTAL-INVALIDATION`.
 - `sse_connection_drop_total` sustained > threshold drives SSE recovery drills via `RB-JOB-WATCHDOG`.
@@ -365,8 +379,8 @@ ______________________________________________________________________
 **State:** Runbooks `ops/runbooks/webapp/*.md`, evidence `ops/webapp/drills/<date>/`. **|**
 **Failures & handling:** Missing drill evidence or outdated steps block release approval until updated. **|**
 **Observability:** Docs lint, drill scheduler reports, governance dashboards. **|**
-**References:** `RB-JOB-WATCHDOG`, `RB-PORTAL-INVALIDATION`, `RB-LPE-LOCALE-GAP`, `RB-NOTIFY-*`, `RB-CHAT-ABUSE`. **|**
-**Breadcrumbs:** Runbook catalog, drill scheduler, governance policy App.N.
+**Breadcrumbs:** Runbook catalog, drill scheduler, governance policy App.N. **|**
+**References:** `RB-JOB-WATCHDOG`, `RB-PORTAL-INVALIDATION`, `RB-LPE-LOCALE-GAP`, `RB-NOTIFY-*`, `RB-CHAT-ABUSE`. *
 
 #### 8.3.1 Runbook index (informative)
 
@@ -379,6 +393,14 @@ ______________________________________________________________________
 | `RB-CHAT-ABUSE` | Assistant abuse or moderation escalation | Disables assistants, gathers evidence for Security |
 
 #### 8.3.2 Primary runbooks (binding)
+
+**Purpose:** Document operational playbooks responders execute during incidents or exercises. **|**
+**Contract:** Link production alerts to runbook identifiers, outline execution cadence, and name the maintaining team. **|**
+**State:** Summarize where runbooks live (repo paths, automation scripts) and what evidence they produce. **|**
+**Failures & handling:** Explain how missing, stale, or skipped runbooks are surfaced and remediated. **|**
+**Observability:** Note tooling that tracks drill frequency, runbook completion, and incident follow-up. **|**
+**Breadcrumbs:** Runbook files, automation scripts, incident templates. **|**
+**References:** Alert catalogs, governance docs referencing the runbooks.
 
 - `RB-JOB-WATCHDOG` — Restores SSE sessions, resumes watchdog automation, and coordinates backlog remediation.
 - `RB-PORTAL-INVALIDATION` — Revokes signed URLs, reissues secure links, and documents evidence for auditors.
@@ -399,8 +421,8 @@ ______________________________________________________________________
 **State:** Migration scripts `ops/scripts/webapp/deploy_assets.py`, cache manifests `ops/webapp/cdn_manifest.json`, backfill logs `ops/webapp/backfill/<date>/`. **|**
 **Failures & handling:** Failed migrations revert to prior asset version; incomplete backfills trigger `RB-PORTAL-INVALIDATION` to prevent stale downloads. **|**
 **Observability:** Metrics `webapp_asset_publish_total`, `webapp_backfill_success_total`. **|**
-**References:** Settings spec §5, Notifications spec §4. **|**
-**Breadcrumbs:** Asset deployment scripts, CDN manifests, backfill tooling.
+**Breadcrumbs:** Asset deployment scripts, CDN manifests, backfill tooling. **|**
+**References:** Settings spec §5, Notifications spec §4. *
 
 ### 8.5 Operational workflows (normative)
 
@@ -409,8 +431,8 @@ ______________________________________________________________________
 **State:** Token reconciliation reports `ops/webapp/token_audit/<date>.csv`, accessibility evidence `ops/webapp/accessibility/<run_id>/`, assistant manifest reviews `ops/webapp/chat_manifest_checks.md`. **|**
 **Failures & handling:** Missing audits trigger `RB-PORTAL-INVALIDATION` or `RB-CHAT-ABUSE` follow-up; unresolved accessibility gaps block release. **|**
 **Observability:** Metrics `download_token_validation_total{outcome}`, `chat_sessions_total{audience}`, accessibility CI dashboards. **|**
-**References:** §4 State management, §7 Security & compliance. **|**
-**Breadcrumbs:** Token audit scripts `ops/scripts/webapp/audit_tokens.py`, accessibility CI configs, assistant manifest validators.
+**Breadcrumbs:** Token audit scripts `ops/scripts/webapp/audit_tokens.py`, accessibility CI configs, assistant manifest validators. **|**
+**References:** §4 State management, §7 Security & compliance. *
 
 - Daily token audits reconcile download tokens with Guardian artefact states and revoke stale entries.
 - Weekly assistant manifest reviews ensure disclaimers and policy contexts match Settings snapshots.
@@ -442,14 +464,6 @@ ______________________________________________________________________
 ______________________________________________________________________
 
 ## 10) References
-
-**Purpose:** Provide quick access to supporting specifications and appendices. **|**
-**Contract:** References remain current; update when related documents move or rename. **|**
-**State:** Linked specs and runbooks in the documentation corpus. **|**
-**Failures & handling:** Broken links detected via `scripts/docs/link_check.py`. **|**
-**Observability:** Docs CI link checker. **|**
-**Breadcrumbs:** Documentation index `docs/mkdocs.yml`. **|**
-**References:** Listed below.
 
 - TDD overview summary — `../overview/tdd.md §11`.
 - Notifications service specification — `../services/notifications.md`.

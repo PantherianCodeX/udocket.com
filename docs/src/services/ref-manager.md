@@ -56,14 +56,16 @@ ______________________________________________________________________
 
 | Field          | Value |
 | -------------- | ----- |
-| Version        | 0.1-draft |
-| Status         | Implementable |
-| Last updated   | 2025-10-28 |
-| Primary owners | Platform Architecture; Security Engineering; Reference Programs |
-| Approvers      | Architecture Steering Committee; Security Review Board |
-| Reviewers      | QA Engineering Lead; SRE Manager |
-| Approved by    | |
-| Approved date  | |
+| Authors | uDocket Platform Architecture Team; Reference Programs Leadership |
+| Version | 0.1-draft |
+| Status | implementable |
+| Classification | Confidential |
+| Last updated | 2025-10-28 |
+| Owners | Platform Architecture; Security Engineering; Reference Programs |
+| Reviewers | QA Engineering Lead; SRE Manager |
+| Approvers | Architecture Steering Committee; Security Review Board |
+| Approved by |  |
+| Approved date |  |
 
 **Status:** KEP: Provisional → Implementable → Implemented
 
@@ -100,8 +102,8 @@ ______________________________________________________________________
 **State:** Curated data resides in Postgres across raw, staging, curated, and published schemas; signed bundles live in object storage with manifests; adoption telemetry tracks service acknowledgements. **|**
 **Failures & handling:** Validation guard failures or adoption lag freeze new publishes and trigger runbooks until bundles validate or roll back. **|**
 **Observability:** Dashboards “Reference Manager – Availability”, “Harvest”, “Publish”, and “Adoption” monitor request volume, error rates, and adoption lag; events feed SIEM and audit sinks. **|**
-**References:** TDD §6 Reference Data, ADR-0004, §8.3.2–§8.3.6 RB-RM-\* runbooks. **|**
-**Breadcrumbs:** Service entry `packages/udocket_core/reference_manager/service.py`, tests `tests/reference/test_charter.py`, telemetry `packages/udocket_core/reference_manager/telemetry.py`.
+**Breadcrumbs:** Service entry `packages/udocket_core/reference_manager/service.py`, tests `tests/reference/test_charter.py`, telemetry `packages/udocket_core/reference_manager/telemetry.py`. **|**
+**References:** TDD §6 Reference Data, ADR-0004, §8.3.2–§8.3.6 RB-RM-\* runbooks. *
 
 - RM governs acquisition, normalization, review, publishing, and downstream adoption tracking.
 - RM publishes signed bundles and manifests; enforcement lives in Settings, Guardian, and downstream applications.
@@ -110,6 +112,14 @@ ______________________________________________________________________
 ______________________________________________________________________
 
 ## 2) Responsibilities
+
+**Purpose:** Enumerate functional responsibilities and non-goals. **|**
+**Contract:** Spell out mandatory behaviours, idempotency, regulatory duties. **|**
+**State:** Describe ownership of state transitions or data stewardship. **|**
+**Failures & handling:** Identify responsibility gaps and escalation paths. **|**
+**Observability:** Checks proving each responsibility works. **|**
+**Breadcrumbs:** Implementation/tests supporting each responsibility. **|**
+**References:** Service/TDD sections that expand on responsibilities.
 
 ### 2.1 Charter & scope (binding)
 
@@ -234,29 +244,21 @@ ______________________________________________________________________
 
 ## 3) API contract
 
-### 3.1 REST & automation surfaces (binding)
+**Purpose:** Document public and internal interfaces. **|**
+**Contract:** Define required inputs/outputs, authentication, and versioning. **|**
+**State:** Highlight persisted payloads, schemas, queues, or files produced. **|**
+**Failures & handling:** Enumerate error codes, retries, and backoffs. **|**
+**Observability:** Metrics/logs/traces covering API health. **|**
+**Breadcrumbs:** Controller handlers, schema definitions, integration tests. **|**
+**References:** Link to schema fixtures or appendices.
 
-**Purpose:** Document APIs and automation surfaces exposing RM data. **|**
-**Contract:** REST, GraphQL, CLI, and SSE interfaces enforce scopes, MFA for high-risk actions, and signed bundle delivery. **|**
-**State:** API gateway routes under `/api/v1/reference_manager`; CLI commands leverage the same endpoints; SSE feeds stream review and publish events with bundle metadata. **|**
-**Failures & handling:** Auth failures emit audit events and throttle abusive clients; sustained failures alert on-call via `reference_manager_api_error_total`. **|**
-**Observability:** “Reference Manager – API Health” monitors `reference_manager_api_latency_seconds`, error rates, and SSE delivery counts. **|**
-**References:** §3.2 Events, §4.2 Bundle registry. **|**
-**Breadcrumbs:** API handlers `packages/udocket_core/reference_manager/api.py`, tests `tests/reference/test_api_surface.py`.
+### 3.1 REST & automation surfaces (binding)
 
 - REST endpoints: `/reference_manager/bundles`, `/catalog/<domain>`, `/templates`, `/questionnaires`, `/forms`.
 - GraphQL queries support filtering, diff history, and search.
 - CLI workflows (`reference bundle validate/publish/diff`) integrate with automation pipelines.
 
 ### 3.2 Events & downstream adoption (binding)
-
-**Purpose:** Describe event payloads and adoption tracking. **|**
-**Contract:** Publishes emit `reference_manager.bundle.ready` and `reference_manager.bundle.published`; downstream services acknowledge by recording bundle version/digest within SLA. **|**
-**State:** `reference_bundle_adoption` stores `{service, bundle_id, status, acknowledged_at, digest}`; replay queue re-emits events until acknowledgement. **|**
-**Failures & handling:** Missing acknowledgements trigger adoption lag incidents; RM replays events and coordinates with service owners. **|**
-**Observability:** “Reference Manager – Adoption” dashboard tracks `reference_bundle_adoption_total` and lag histograms; alerts fire when SLA breached. **|**
-**References:** §5.5 Adoption lag, §8.3.2 RB-RM-ROLLBACK. **|**
-**Breadcrumbs:** Event definitions `packages/udocket_core/reference_manager/events.py`, tests `tests/reference/test_events.py`.
 
 - Adoption statuses: `pending`, `in_progress`, `acknowledged`, `stale`.
 - Adoption reports join LPE compile results, Settings activation diffs, and Guardian acknowledgements.
@@ -274,6 +276,14 @@ ______________________________________________________________________
 ______________________________________________________________________
 
 ## 4) State management
+
+**Purpose:** Explain storage and configuration strategy. **|**
+**Contract:** Define persistence guarantees, migration expectations, and retention. **|**
+**State:** Describe schemas, caches, and configuration sources. **|**
+**Failures & handling:** Cover corruption, drift, and reconciliation flows. **|**
+**Observability:** Metrics for storage health, cache hit rates, or config parity. **|**
+**Breadcrumbs:** ORM models, migrations, infrastructure manifests. **|**
+**References:** TDD appendices or diagrams related to state.
 
 ### 4.1 Pipelines & scheduling (normative)
 
@@ -334,8 +344,8 @@ ______________________________________________________________________
 **State:** Incidents tracked in `ops/reference/incidents/` with linkage to bundle IDs, runbook execution logs, and remediation tickets. **|**
 **Failures & handling:** Sections below detail the primary scenarios; responders follow the matching RB-RM runbooks. **|**
 **Observability:** Alerts from harvest, validation, adoption, compliance, and residency dashboards route to on-call with severity mappings. **|**
-**References:** §8.3.2–§8.3.6 RB-RM-\* entries, §6 Observability, §8 Operational notes. **|**
-**Breadcrumbs:** Incident automation `ops/reference/*.py`, runbooks `ops/reference/runbooks/`.
+**Breadcrumbs:** Incident automation `ops/reference/*.py`, runbooks `ops/reference/runbooks/`. **|**
+**References:** §8.3.2–§8.3.6 RB-RM-\* entries, §6 Observability, §8 Operational notes. *
 
 ### 5.1 Harvest or source outage (binding)
 
@@ -396,8 +406,8 @@ ______________________________________________________________________
 **State:** Metrics emit via OpenTelemetry; logs stream to immutable sinks; synthetic jobs exercise publish/adoption flows; audit trails persist in JSONL files. **|**
 **Failures & handling:** Missing metrics or stale thresholds block release checklists and trigger on-call follow-ups. **|**
 **Observability:** Dashboards for Availability, Harvest, Review, Publish, Adoption, Compliance, and Residency monitor SLOs; Alertmanager routes incidents to RM on-call. **|**
-**References:** §5 Failure modes, Appendix B metrics, §8.3 Runbooks & drills. **|**
-**Breadcrumbs:** Telemetry module `packages/udocket_core/reference_manager/telemetry.py`, dashboards `infra/grafana/reference_manager_*.json`.
+**Breadcrumbs:** Telemetry module `packages/udocket_core/reference_manager/telemetry.py`, dashboards `infra/grafana/reference_manager_*.json`. **|**
+**References:** §5 Failure modes, Appendix B metrics, §8.3 Runbooks & drills. *
 
 ### 6.1 Metrics
 
@@ -448,8 +458,8 @@ ______________________________________________________________________
 **State:** Access policies define roles and RLS rules; sanitation policies stored alongside connectors; license ledger tracks obligations; audit sinks capture sensitive changes. **|**
 **Failures & handling:** Security or licensing violations trigger RB-RM-LICENSE or RB-RM-RESIDENCY; remediations recorded with legal approvals. **|**
 **Observability:** Compliance dashboards track license violations, sensitive change audits, and residency drift; SIEM correlates audit events. **|**
-**References:** §2.8 Security, §5.3 Licensing incidents, §8.3.5 RB-RM-LICENSE / §8.3.6 RB-RM-RESIDENCY. **|**
-**Breadcrumbs:** Security module `packages/udocket_core/reference_manager/security.py`, IAM config `infra/iam/reference_manager/`, tests `tests/reference/test_license_ledger.py`.
+**Breadcrumbs:** Security module `packages/udocket_core/reference_manager/security.py`, IAM config `infra/iam/reference_manager/`, tests `tests/reference/test_license_ledger.py`. **|**
+**References:** §2.8 Security, §5.3 Licensing incidents, §8.3.5 RB-RM-LICENSE / §8.3.6 RB-RM-RESIDENCY. *
 
 - Sanitization strips risky markup and enforces TLS-only downloads.
 - Vault rotates connector credentials; accesses logged and audited.
@@ -464,8 +474,8 @@ ______________________________________________________________________
 **State:** Operational metadata lives in `ops/reference/runbooks/`, deployment scripts, and App.O decision logs. **|**
 **Failures & handling:** Skipping change control or letting runbooks drift increases audit risk; leadership reviews incidents for corrective actions. **|**
 **Observability:** Deployment dashboards, runbook completion records, and CI jobs surface operational hygiene. **|**
-**References:** §4 State management, §5 Failure modes, §8.3 Runbooks & drills, Appendix B metrics. **|**
-**Breadcrumbs:** Deployment scripts `ops/reference/deploy.py`, CI workflows `.github/workflows/reference-manager.yml`, runbooks `ops/reference/runbooks/`.
+**Breadcrumbs:** Deployment scripts `ops/reference/deploy.py`, CI workflows `.github/workflows/reference-manager.yml`, runbooks `ops/reference/runbooks/`. **|**
+**References:** §4 State management, §5 Failure modes, §8.3 Runbooks & drills, Appendix B metrics. *
 
 ### 8.1 Operational posture (binding)
 
@@ -474,8 +484,8 @@ ______________________________________________________________________
 **State:** Roster recorded in `ops/reference/oncall.yaml`; editorial assignments tracked in UI audit tables. **|**
 **Failures & handling:** Missing rota coverage or unattended editorial queues trigger management review and follow-up actions. **|**
 **Observability:** Dashboards “Reference Manager – Incidents” and “Editorial Queue Health” plus PagerDuty metrics spotlight posture drift. **|**
-**References:** §6 Observability, §8.3 Runbooks & drills, §8.5 Operational workflows. **|**
-**Breadcrumbs:** On-call roster `ops/reference/oncall.yaml`, editorial UI `apps/platform/reference_manager/ui`, incident template `ops/reference/incident_template.md`.
+**Breadcrumbs:** On-call roster `ops/reference/oncall.yaml`, editorial UI `apps/platform/reference_manager/ui`, incident template `ops/reference/incident_template.md`. **|**
+**References:** §6 Observability, §8.3 Runbooks & drills, §8.5 Operational workflows. *
 
 - Editorial shifts overlap by at least one hour to prevent queue gaps; staffing reviews confirm coverage quarterly.
 - Duty officers escalate to Architecture, Legal Ops, or Program Leads within 15 minutes of Severity 1 incidents.
@@ -488,8 +498,8 @@ ______________________________________________________________________
 **State:** Alert payloads include runbook IDs, connector identifiers, and change-ticket references; incidents log under `ops/reference/incidents/<date>.jsonl`. **|**
 **Failures & handling:** Misaligned alert→runbook mapping or suppressed routes require Ops sign-off and a backlog item to restore coverage. **|**
 **Observability:** Grafana dashboards, Alertmanager routes, and post-incident reviews monitor trigger fidelity. **|**
-**References:** §5 Failure modes, §8.3 Runbooks & drills, Appendix B metrics. **|**
-**Breadcrumbs:** Alert rules `infra/monitoring/reference_manager-prometheus-rules.yaml`, PagerDuty “Reference Manager”, incident logs `ops/reference/incidents/`.
+**Breadcrumbs:** Alert rules `infra/monitoring/reference_manager-prometheus-rules.yaml`, PagerDuty “Reference Manager”, incident logs `ops/reference/incidents/`. **|**
+**References:** §5 Failure modes, §8.3 Runbooks & drills, Appendix B metrics. *
 
 - `reference_bundle_adoption_total{status="stale"}` and `reference_manager_adoption_lag_seconds` invoke RB-RM-ROLLBACK.
 - `reference_manager_harvest_error_total` and connector synthetic failures trigger RB-RM-HARVEST.
@@ -504,18 +514,10 @@ ______________________________________________________________________
 **State:** Procedures live in `ops/reference/runbooks/`, with evidence logged under `ops/reference/incidents/<date>/`. **|**
 **Failures & handling:** Missing or stale steps block deploy sign-off until the runbook is refreshed. **|**
 **Observability:** Post-incident retros, docs lint, and runbook catalog builds verify coverage. **|**
-**References:** §5 Failure modes, §8.1 Operational posture, Appendix B metrics. **|**
-**Breadcrumbs:** Runbooks `ops/reference/runbooks/*.md`, automation `ops/reference/*.py`, tests `tests/reference/test_runbook_integrity.py`.
+**Breadcrumbs:** Runbooks `ops/reference/runbooks/*.md`, automation `ops/reference/*.py`, tests `tests/reference/test_runbook_integrity.py`. **|**
+**References:** §5 Failure modes, §8.1 Operational posture, Appendix B metrics. *
 
 #### 8.3.1 Runbook index (informative)
-
-**Purpose:** Provide a quick map from RM alerts to runbook identifiers. **|**
-**Contract:** Every RM alert references one of these IDs; new alerts require index updates before merge. **|**
-**State:** Index maintained in `ops/reference/runbooks/index.md` and mirrored here. **|**
-**Failures & handling:** Docs lint fails when the index misses an alert. **|**
-**Observability:** Weekly lint ensures index matches Alertmanager routes. **|**
-**References:** §8.2 Incident triggers, §8.3.2–§8.3.6. **|**
-**Breadcrumbs:** Runbook index `ops/reference/runbooks/index.md`, tests `tests/reference/test_runbook_index.py`.
 
 - RB-RM-ROLLBACK — Reference bundle rollback & adoption freeze
 - RB-RM-HARVEST — Source harvest incident triage
@@ -530,8 +532,8 @@ ______________________________________________________________________
 **State:** Automation uses `ops/reference/rollback_bundle.py`; evidence stored under `ops/reference/incidents/<date>/rollback`. **|**
 **Failures & handling:** Missing rollback evidence or lingering adoption lag triggers escalation to Architecture. **|**
 **Observability:** Alert `reference_bundle_adoption_total{status="stale"}` clears when all services acknowledge the rollback. **|**
-**References:** §4.2 Bundle registry, §5.5 Adoption lag, §8.3.1 Runbook index. **|**
-**Breadcrumbs:** Runbook `ops/reference/runbooks/rollback.md`, tests `tests/reference/test_rollback.py`.
+**Breadcrumbs:** Runbook `ops/reference/runbooks/rollback.md`, tests `tests/reference/test_rollback.py`. **|**
+**References:** §4.2 Bundle registry, §5.5 Adoption lag, §8.3.1 Runbook index. *
 
 Execution checklist:
 
@@ -542,14 +544,6 @@ Execution checklist:
 5. Resume publishes only after adoption lag returns below SLA and follow-up actions assigned.
 
 #### 8.3.3 RB-RM-HARVEST — Source harvest incident triage (binding)
-
-**Purpose:** Mitigate source outages or connector failures before catalog staleness accumulates. **|**
-**Contract:** Incidents remain open until harvest resumes, manual uploads address backlog, and validation confirms no data loss. **|**
-**State:** Incident records track source metadata, outage start, workaround steps, and licensing considerations. **|**
-**Failures & handling:** Ignoring prolonged harvest outages risks stale catalog data; escalate to Program Leads and Legal Ops when SLAs breach. **|**
-**Observability:** Alert `reference_manager_harvest_error_total` and stale-source monitors signal recovery. **|**
-**References:** §2.2 Source acquisition, §5.1 Harvest outage, §8.3.1 Runbook index. **|**
-**Breadcrumbs:** Runbook `ops/reference/runbooks/harvest_incident.md`, connectors `packages/udocket_core/reference_manager/connectors.py`.
 
 Response checklist:
 
@@ -620,8 +614,8 @@ Remediation checklist:
 **State:** Migration manifests stored in `ops/reference/migrations/`; adoption tables track bundle versions per consumer. **|**
 **Failures & handling:** Partial migrations risk drift or duplicate publishes; responders must freeze adoption and rollback bundles until resolved. **|**
 **Observability:** Dashboards “Reference Manager – Adoption” and CI migration smoke tests confirm health. **|**
-**References:** §4.5 Rollout sequencing, §5 Failure modes, §8.3 Runbooks & drills. **|**
-**Breadcrumbs:** Migration scripts `ops/reference/migrate.py`, adoption replay `ops/reference/replay_adoption.py`, change-control template `ops/reference/migrations/README.md`.
+**Breadcrumbs:** Migration scripts `ops/reference/migrate.py`, adoption replay `ops/reference/replay_adoption.py`, change-control template `ops/reference/migrations/README.md`. **|**
+**References:** §4.5 Rollout sequencing, §5 Failure modes, §8.3 Runbooks & drills. *
 
 - Run migrations in staging with `--dry-run` and attach artifacts to the change ticket before production execution.
 - Capture bundle digests before/after migration; verify Settings and Guardian adoption reports reconcile.
@@ -634,8 +628,8 @@ Remediation checklist:
 **State:** Checklists and automations live in `ops/reference/workflows/`; outputs append to `ops/reference/workflow_log.jsonl`. **|**
 **Failures & handling:** Missed cadences surface in quarterly audits; owners must backfill evidence and update training materials. **|**
 **Observability:** Workflow logs, editorial queue dashboards, and CI history provide signals. **|**
-**References:** §8.1 Operational posture, §8.3 Runbooks & drills. **|**
-**Breadcrumbs:** Workflow docs `ops/reference/workflows/*.md`, automation scripts `ops/reference/*.py`.
+**Breadcrumbs:** Workflow docs `ops/reference/workflows/*.md`, automation scripts `ops/reference/*.py`. **|**
+**References:** §8.1 Operational posture, §8.3 Runbooks & drills. *
 
 #### 8.5.1 Release cadence & change control (binding)
 
@@ -676,8 +670,8 @@ ______________________________________________________________________
 **State:** Dependency metadata lives in connector configs, adoption tables, and alignment manifests. **|**
 **Failures & handling:** Source outages, adoption lag, or alignment violations trigger runbooks outlined in §5 and §8.3. **|**
 **Observability:** Dashboards “Reference Manager – Adoption”, “Downstream Alignment”, and “Residency & Endpoint Posture” highlight dependency health. **|**
-**References:** §2 Responsibilities, §3 API contract, §4 State management. **|**
-**Breadcrumbs:** Integration code `packages/udocket_core/reference_manager/integration.py`, adoption tables `reference_bundle_adoption`.
+**Breadcrumbs:** Integration code `packages/udocket_core/reference_manager/integration.py`, adoption tables `reference_bundle_adoption`. **|**
+**References:** §2 Responsibilities, §3 API contract, §4 State management. *
 
 - Upstream: official court/government portals, licensing agreements, provider attestations.
 - Downstream: LPE compiles bundles into policy/localization; Settings activates residency/waiver metadata; Guardian enforces waivers/residency; Compose/Analyze fetch templates; Portal displays localized assets.

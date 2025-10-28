@@ -60,14 +60,16 @@ ______________________________________________________________________
 
 | Field          | Value |
 | -------------- | ----- |
-| Version        | 0.1-draft |
-| Status         | Implementable |
-| Last updated   | 2025-10-28 |
-| Primary owners | Platform Architecture; Security Engineering; Localization & Policy Program |
-| Approvers      | Architecture Steering Committee; Security Review Board |
-| Reviewers      | QA Engineering Lead; SRE Manager |
-| Approved by    | |
-| Approved date  | |
+| Authors | uDocket Platform Architecture Team; Localization & Policy Program Leads |
+| Version | 0.1-draft |
+| Status | implementable |
+| Classification | Confidential |
+| Last updated | 2025-10-23 |
+| Owners | Platform Architecture; Security Engineering; Localization & Policy Program |
+| Reviewers | QA Engineering Lead; SRE Manager |
+| Approvers | Architecture Steering Committee; Security Review Board |
+| Approved by |  |
+| Approved date |  |
 
 **Status:** KEP: Provisional → Implementable → Implemented
 
@@ -104,8 +106,8 @@ ______________________________________________________________________
 **State:** Compiled artifacts persist in Postgres `compiled_*` schemas and signed bundles in object storage; Settings snapshots embed digests and version IDs. **|**
 **Failures & handling:** Compiler regressions, residency drift, or OPA discovery failures freeze bundle promotion until runbooks in §8.3 restore safe posture. **|**
 **Observability:** “LPE – Enforcement & Residency”, “LPE Compiler”, and “Localization QA” dashboards track latency, adoption, and localization completeness; OPA discovery emits decision logs with guaranteed schema. **|**
-**References:** §2 Responsibilities, §4 State management, §8 Operational notes, ADR-0004. **|**
-**Breadcrumbs:** Service entry `packages/udocket_core/lpe/service.py`, compiler pipeline `packages/udocket_core/lpe/compiler.py`, tests `tests/specs/test_policy_context_contract.py`, observability config `infra/observability/dashboards/lpe.json`.
+**Breadcrumbs:** Service entry `packages/udocket_core/lpe/service.py`, compiler pipeline `packages/udocket_core/lpe/compiler.py`, tests `tests/specs/test_policy_context_contract.py`, observability config `infra/observability/dashboards/lpe.json`. **|**
+**References:** §2 Responsibilities, §4 State management, §8 Operational notes, ADR-0004. *
 
 - Runtime availability target: 99.9 % with a 43 minute monthly error budget; compiler jobs P95 ≤ 6 minutes. Burn-rate breaches freeze new bundle activations and OPA discovery pushes until stabilization.
 - Policy artifacts remain hash-stable for identical inputs; `/reference/*` shims stay read-only with RFC 8594 `Sunset`/`Deprecation` headers until §8.4 migration completes.
@@ -120,6 +122,14 @@ ______________________________________________________________________
 ______________________________________________________________________
 
 ## 2) Responsibilities
+
+**Purpose:** Enumerate functional responsibilities and non-goals. **|**
+**Contract:** Spell out mandatory behaviours, idempotency, regulatory duties. **|**
+**State:** Describe ownership of state transitions or data stewardship. **|**
+**Failures & handling:** Identify responsibility gaps and escalation paths. **|**
+**Observability:** Checks proving each responsibility works. **|**
+**Breadcrumbs:** Implementation/tests supporting each responsibility. **|**
+**References:** Service/TDD sections that expand on responsibilities.
 
 ### 2.1 Policy & residency enforcement (binding)
 
@@ -289,14 +299,15 @@ ______________________________________________________________________
 
 ## 3) API contract
 
-### 3.1 External interfaces (binding)
+**Purpose:** Document public and internal interfaces. **|**
+**Contract:** Define required inputs/outputs, authentication, and versioning. **|**
+**State:** Highlight persisted payloads, schemas, queues, or files produced. **|**
+**Failures & handling:** Enumerate error codes, retries, and backoffs. **|**
+**Observability:** Metrics/logs/traces covering API health. **|**
+**Breadcrumbs:** Controller handlers, schema definitions, integration tests. **|**
+**References:** Link to schema fixtures or appendices.
 
-**Purpose:** Document public LPE APIs exposed to other services. **|**
-**Contract:** REST routes remain versioned under `/api/v1/lpe/*`; breaking changes require ADR updates and new versioned paths. `/reference/*` shims proxy to these endpoints but stay read-only until §8.4 migration completes. **|**
-**State:** Endpoints: `GET /api/v1/lpe/policy_context?org_id&case_id?&privacy_flags?&locale?`, `GET /api/v1/lpe/courts?jurisdiction=&q=`, `GET /api/v1/lpe/locales/{locale}`. Responses return digests, `policy_context_version`, `settings_snapshot_version`, and `generated_at`. **|**
-**Failures & handling:** `POLICY_CONTEXT_NOT_FOUND`, `LOCALE_NOT_AVAILABLE`, `JURISDICTION_NOT_SUPPORTED`, `WAIVER_REQUIRED`, `VALIDATION_ERROR` envelopes map to §5 procedures. **|**
-**Observability:** API metrics `lpe_lookup_latency_seconds`, cache headers (`Cache-Control: private, max-age=300`, `ETag: <digest>`), and access logs with tracer IDs. **|**
-**Breadcrumbs:** `apps/platform/lpe/api.py`, OpenAPI bundle `spec/openapi/lpe.yaml`, tests `tests/api/test_lpe_policy_context.py::test_etag_contract`.
+### 3.1 External interfaces (binding)
 
 - Runtime helpers supply immutable `PolicyContext` payloads carrying `generated_at`, `policy_context_version`, `settings_snapshot_version`, digests, residency allowlists, masking profiles, disclaimer keys, retention defaults, and logging directives.
 - Enforcement consumers: Guardian, workers, Portal bootstrap, Compose/Analyze, Notifications, Search/Vector, and Signer manifests read contexts to enforce PHI posture, disclaimers, DSAR retention, and region placement.
@@ -308,13 +319,6 @@ ______________________________________________________________________
 - Discovery hints: responses include `Link: <https://docs.udocket.io/reference-migration>; rel="successor-version"` while legacy shims operate.
 
 ### 3.2 Internal interfaces & events (normative)
-
-**Purpose:** Capture internal contracts that couple LPE to OPA, RM, and Settings. **|**
-**Contract:** OPA discovery polls signed bundles at `/{env}/lpe/opa/bundles/<channel>.tar.gz`; bundles embed manifest digests, residency hints, and TTLs. LPE publishes `lpe.policy_context.updated` and `lpe.localization.updated` events after successful compiles. **|**
-**State:** Bundles stored in object storage with dual signatures; manifest metadata recorded in `compiled_policy_bundle` and `ops/lpe/opa_bundles/`. Settings activation diff artefacts persist under `ops/lpe/activations/<id>/`. **|**
-**Failures & handling:** Manifest mismatch or discovery latency triggers `lpe_bundle_signature_error_total` or `opa_discovery_stale_total`, engaging §5.1 RB-LPE-OPA-ROLLBACK. **|**
-**Observability:** OPA `/status` checks, `opa_bundle_status`, and decision logs matched against schema `tests/opa/test_policy_context.py`. **|**
-**Breadcrumbs:** OPA tooling `ops/scripts/lpe/deploy_opa_bundle.py`, `scripts/opa/flush_cache.py`, tests `tests/ops/test_opa_discovery.py`.
 
 - Discovery endpoint `/api/v1/lpe/opa/discovery` serves signed manifests with bundle URIs per region, SHA-256 digests, rollout windows, and rollback pointers; clients poll every 60 seconds with `If-None-Match` and fail closed when manifests stale.
 - Bundles require mTLS + HMAC headers and carry dual signatures (Ed25519 + ECDSA P-256 for FIPS). When `security.crypto.fips_mode|required`, clients invoke `opa_verify_dual_signature()`; missing ECDSA signatures raise `FipsBundleSignatureError` and block activation.
@@ -366,6 +370,14 @@ ______________________________________________________________________
 ______________________________________________________________________
 
 ## 4) State management
+
+**Purpose:** Explain storage and configuration strategy. **|**
+**Contract:** Define persistence guarantees, migration expectations, and retention. **|**
+**State:** Describe schemas, caches, and configuration sources. **|**
+**Failures & handling:** Cover corruption, drift, and reconciliation flows. **|**
+**Observability:** Metrics for storage health, cache hit rates, or config parity. **|**
+**Breadcrumbs:** ORM models, migrations, infrastructure manifests. **|**
+**References:** TDD appendices or diagrams related to state.
 
 ### 4.1 Runtime topology (normative)
 
@@ -436,6 +448,14 @@ ______________________________________________________________________
 
 ## 5) Failure modes
 
+**Purpose:** Provide the resilience profile and default mitigations. **|**
+**Contract:** Identify what must fail closed vs. degraded. **|**
+**State:** Note circuit breakers, queues, or compensating transactions. **|**
+**Failures & handling:** Enumerate incidents, fallback procedures, and manual runbooks. **|**
+**Observability:** Alerts, dashboards, and SLOs tied to failure handling. **|**
+**Breadcrumbs:** Runbooks, incident retros, chaos tests. **|**
+**References:** Link to ops docs or ADRs describing failure strategy.
+
 ### 5.1 Policy context drift & OPA discovery regression (binding)
 
 **Purpose:** Contain compiler and OPA bundle failures. **|**
@@ -472,7 +492,8 @@ ______________________________________________________________________
 **State:** Grafana dashboards (“LPE – Enforcement & Residency”, “LPE Compiler”, “Localization QA”, “FinOps – LPE”, “SDK Health”) alongside PagerDuty service “Localization & Policy Engine”. Decision logs stored ≥365 days. **|**
 **Failures & handling:** Missing metrics or runbook linkage trigger docs lint failures; SLO burn-rate alerts feed §8.2 triggers. **|**
 **Observability:** Metrics `lpe_lookup_latency_seconds`, `lpe_policy_context_version`, `lpe_cache_hit_ratio`, `lpe_compiler_duration_seconds`, `lpe_policy_block_total`, `lpe_bundle_signature_error_total`, `opa_bundle_status`, `lpe_privacy_framework_enabled_total`, `lpe_compiler_resource_seconds`, `lpe_sdk_cache_error_total`. **|**
-**Breadcrumbs:** Observability config `infra/observability/dashboards/lpe.json`, FinOps workbook `ops/finops/lpe_cost_model.xlsx`, tests `tests/observability/test_lpe_metrics.py`, `tests/finops/test_lpe_budget.py`.
+**Breadcrumbs:** Observability config `infra/observability/dashboards/lpe.json`, FinOps workbook `ops/finops/lpe_cost_model.xlsx`, tests `tests/observability/test_lpe_metrics.py`, `tests/finops/test_lpe_budget.py`. **|**
+**References:** Observability standards or shared appendices.
 
 - Cost posture: FinOps alerts trigger when rolling 7-day spend exceeds 80 % of monthly budget; localization QA tracks translation spend per locale.
 - Synthetic monitors run after each deploy against HIPAA/PHIPA/PIPA contexts; failures block rollout.
@@ -489,7 +510,8 @@ ______________________________________________________________________
 **State:** Threat models stored under `ops/security/threat_models/lpe/*.md`; waiver ledger `ops/lpe/waivers.yaml`; compliance artefacts (DPIA/RoPA) tracked in `ops/compliance/`. **|**
 **Failures & handling:** Missing threat model updates, expired waivers, or unverified retention overrides block deploy approvals and trigger §5.3 runbooks. **|**
 **Observability:** Security dashboards (“Residency & Enforcement”), alerts `lpe_policy_block_total`, `lpe_privacy_framework_enabled_total`, and compliance checklists in App.O. **|**
-**Breadcrumbs:** `packages/udocket_core/lpe/security.py`, compliance scripts `ops/scripts/lpe/audit_compliance.py`, tests `tests/compliance/test_lpe_retention.py`.
+**Breadcrumbs:** `packages/udocket_core/lpe/security.py`, compliance scripts `ops/scripts/lpe/audit_compliance.py`, tests `tests/compliance/test_lpe_retention.py`. **|**
+**References:** Link to residency or policy appendices/ADRs.
 
 - Never-log enforcement: Logging middleware strips PII/PHI; sampling budgets follow TDD §12.1.6 dynamic controls.
 - Key management: HSM-backed signing keys rotate per policy; evidence stored with bundle manifest records.
@@ -504,6 +526,14 @@ ______________________________________________________________________
 
 ## 8) Operational notes (binding)
 
+**Purpose:** Summarize deployments, maintenance windows, readiness posture, and day-2 workflows that keep the service healthy. **|**
+**Contract:** Capture SLAs, rollout gates, and operational ownership, including how alerts map to playbooks. **|**
+**State:** Note infrastructure manifests, automation scripts, runbook repositories, and evidence storage. **|**
+**Failures & handling:** Document rollback paths, drill cadence, and how gaps in operational readiness are remediated. **|**
+**Observability:** Release dashboards, deployment checks, synthetic monitors, and runbook execution tracking. **|**
+**Breadcrumbs:** Helm charts, Terraform modules, runbooks, incident templates. **|**
+**References:** Ops appendices, deployment ADRs, alert catalogs.
+
 ### 8.1 Operational posture
 
 **Purpose:** Document staffing, maintenance windows, and readiness expectations. **|**
@@ -511,7 +541,8 @@ ______________________________________________________________________
 **State:** Roster `ops/reference/oncall.yaml`, change calendar `ops/change/lpe_cutover.ics`, localization sync notes in `ops/localization/sync_logs/`. **|**
 **Failures & handling:** Missing rota coverage or ignored deployment freezes trigger management review and follow-up tasks. **|**
 **Observability:** PagerDuty response metrics, deployment dashboards, and freeze indicators. **|**
-**Breadcrumbs:** Roster `ops/reference/oncall.yaml`, deployment scripts `ops/reference/deploy.py`, App.O readiness reviews.
+**Breadcrumbs:** Roster `ops/reference/oncall.yaml`, deployment scripts `ops/reference/deploy.py`, App.O readiness reviews. **|**
+**References:** Incident management playbooks, HR/ops policies.
 
 - Editorial shifts overlap to keep localization queue staffed; quarterly readiness reviews audit roster coverage and runbook adherence.
 - Synthetic tenant “EU-REFERENCE” runs weekly to confirm residency baseline across Azure endpoints and TSA integrations.
@@ -523,7 +554,8 @@ ______________________________________________________________________
 **State:** Incident logs stored under `ops/lpe/incidents/<date>.jsonl` with referenced bundle hashes, diff artefacts, and screenshots. **|**
 **Failures & handling:** Misaligned alert→runbook mapping or suppressed routes require Ops sign-off and backlog work before release. **|**
 **Observability:** Grafana dashboards, Alertmanager routing, PagerDuty service “Localization & Policy Engine”, and post-incident reviews. **|**
-**Breadcrumbs:** Alert rules `infra/monitoring/lpe-prometheus-rules.yaml`, incident template `ops/lpe/incident_template.md`.
+**Breadcrumbs:** Alert rules `infra/monitoring/lpe-prometheus-rules.yaml`, incident template `ops/lpe/incident_template.md`. **|**
+**References:** Runbook sections, observability standards.
 
 - `lpe_lookup_latency_p95_breach` → RB-LPE-COMPILER.
 - `lpe_compiler_duration_overrun` → RB-LPE-COMPILER.
@@ -539,8 +571,8 @@ ______________________________________________________________________
 **State:** Runbooks live in `ops/runbooks/lpe/` with automation scripts under `ops/scripts/lpe/`; incident evidence attaches to App.O decision logs. **|**
 **Failures & handling:** Missing or stale steps block deploy sign-off until the runbook is refreshed. **|**
 **Observability:** Docs lint validates references; quarterly drill calendar tracks execution. **|**
-**References:** §5 Failure modes, §8.1 Operational posture, §6 Observability. **|**
-**Breadcrumbs:** Runbooks `ops/runbooks/lpe/*.md`, automation `ops/scripts/lpe/*.py`, tests `tests/ops/test_runbook_integrity.py`.
+**Breadcrumbs:** Runbooks `ops/runbooks/lpe/*.md`, automation `ops/scripts/lpe/*.py`, tests `tests/ops/test_runbook_integrity.py`. **|**
+**References:** §5 Failure modes, §8.1 Operational posture, §6 Observability. *
 
 #### 8.3.1 Runbook index (informative)
 
@@ -556,7 +588,8 @@ ______________________________________________________________________
 **State:** Evidence stored in `ops/lpe/incidents/<date>/compiler/` with bundle hashes and diff exports. **|**
 **Failures & handling:** Diff classification bugs, expired waivers, adoption lag; follow checklist to freeze, roll back, validate, and document. **|**
 **Observability:** Alerts `lpe_compiler_duration_overrun`, `reference_bundle_stale_total`, `lpe_policy_block_total`. **|**
-**Breadcrumbs:** Runbook `ops/runbooks/lpe/compiler.md`, automation `ops/scripts/lpe/deploy_bundle.py`, tests `tests/specs/test_lpe_compiler.py`.
+**Breadcrumbs:** Runbook `ops/runbooks/lpe/compiler.md`, automation `ops/scripts/lpe/deploy_bundle.py`, tests `tests/specs/test_lpe_compiler.py`. **|**
+**References:** Alert catalogs, governance docs referencing the runbooks.
 
 Triggers: alerts `lpe_compiler_duration_overrun`, `lpe_bundle_signature_error`, change tickets tagged `LPE-COMPILER`, manual escalations from QA.
 
@@ -574,13 +607,6 @@ Post-remediation:
 - File corrective tasks (root cause, automation gaps) and attach diff artefacts to the App.O decision log.
 
 #### 8.3.3 RB-LPE-OPA-ROLLBACK — OPA bundle rollback (binding)
-
-**Purpose:** Recover from discovery or signature failures without policy gaps. **|**
-**Contract:** Roll back to last-good bundle, flush caches, validate OPA `/status`, and gather evidence before returning traffic. **|**
-**State:** Bundle manifests under `ops/lpe/opa_bundles/`; discovery audits in `ops/lpe/discovery_audit.jsonl`. **|**
-**Failures & handling:** Missing signatures, discovery latency, cache poisoning; follow automated scripts to redeploy and verify. **|**
-**Observability:** Alerts `lpe_bundle_signature_error`, `opa_discovery_stale_total`. **|**
-**Breadcrumbs:** Runbook `ops/runbooks/lpe/opa_bundle_rollback.md`, automation `ops/scripts/lpe/deploy_opa_bundle.py`, `scripts/opa/flush_cache.py`.
 
 Response steps:
 
@@ -646,7 +672,8 @@ Post-checks:
 **State:** Migration manifests `ops/lpe/migrations/`, replay tooling `ops/scripts/lpe/replay_adoption.py`, shim telemetry `lpe_legacy_request_total`. **|**
 **Failures & handling:** Partial migrations, adoption drift, or residual shim traffic; escalate via RB-LPE-COMPILER and record remediation tasks in App.O. **|**
 **Observability:** Dashboards “Reference Adoption”, `lpe_legacy_request_total`, and reports from `scripts/reference/report_shim_usage.py`. **|**
-**Breadcrumbs:** Migration README `ops/lpe/migrations/README.md`, change calendar `ops/change/lpe_cutover.ics`, shim implementation `packages/udocket_core/reference/__init__.py`.
+**Breadcrumbs:** Migration README `ops/lpe/migrations/README.md`, change calendar `ops/change/lpe_cutover.ics`, shim implementation `packages/udocket_core/reference/__init__.py`. **|**
+**References:** ADRs or ops docs governing migrations.
 
 - Cutover timeline (target starting Mon 2025-10-20 America/Vancouver):
   - **Weeks 1–2:** ADR + doc updates, schema/compiler scaffolding, seed jurisdiction data, `PolicyContext` draft, Threat Model v1.
@@ -662,6 +689,14 @@ Post-checks:
   - BCDR drill + DSAR replay evidence recorded under `ops/lpe/cutover_checklist.md`.
 
 ### 8.5 Operational workflows (normative)
+
+**Purpose:** Describe recurring operational tasks (manual review, quarterly audits, data purges). **|**
+**Contract:** Define who executes each workflow, prerequisites, and escalation thresholds. **|**
+**State:** Point to checklists, run sheets, or automation supporting the workflow. **|**
+**Failures & handling:** Explain how skipped or incomplete workflows are detected and corrected. **|**
+**Observability:** Track workflow health via dashboards, audit logs, or retrospectives. **|**
+**Breadcrumbs:** Workflow documentation, automation scripts, staffing rosters. **|**
+**References:** Incident management playbooks, staffing guides.
 
 #### 8.5.1 Localization release checklist
 
@@ -704,7 +739,8 @@ ______________________________________________________________________
 **State:** Adoption tables `reference_bundle_adoption`, SDK telemetry, and integration harness tests prove alignment. **|**
 **Failures & handling:** Source outages, adoption lag, or misaligned digests trigger §5 runbooks and freeze releases. **|**
 **Observability:** Dashboards “Reference Manager – Adoption”, “Guardian Residency Enforcement”, `lpe_legacy_request_total`, and synthetic monitors. **|**
-**Breadcrumbs:** Integration code `packages/udocket_core/reference_manager/integration.py`, Settings activation pipeline `apps/platform/settings/service.py`, Guardian integration `packages/udocket_core/guardian/api.py`.
+**Breadcrumbs:** Integration code `packages/udocket_core/reference_manager/integration.py`, Settings activation pipeline `apps/platform/settings/service.py`, Guardian integration `packages/udocket_core/guardian/api.py`. **|**
+**References:** Link to other service docs or appendices.
 
 - Upstream: Reference Manager (catalogs, localization, licensing), Settings (activation payloads), OPA discovery infrastructure, HSM signing services.
 - Downstream: Guardian/portal/workers/Compose rely on PolicyContext digests; Observability consumes logging directives; FinOps uses cost hints.

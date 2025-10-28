@@ -127,7 +127,7 @@ These **top-level sections** make every document familiar and navigable. Within 
 * `## 10) References`: Links to ADRs, glossaries, diagrams, etc.
 ```
 
-* Each H2 section may have nested H3/H4 as needed. Every major section (all H2s and most H3s) should open with the standardized preamble block (Purpose, Contract, State, Failures & handling, Observability, References, Breadcrumbs) **except** `0) Reading guide`, which stays free-form orientation text. Use `python scripts/docs/check_service_structure.py docs/src/services` to confirm compliance before submitting PRs.
+* Each H2 section may have nested H3/H4 as needed. Every major section (all H2s and most H3s) should open with the standardized preamble block (Purpose, Contract, State, Failures & handling, Observability, References, Breadcrumbs) **except** `0) Reading guide`, which stays free-form orientation text. Use `python scripts/docs/check_structure.py docs/src/services` to confirm compliance before submitting PRs.
 
 #### Standardized section preamble
 

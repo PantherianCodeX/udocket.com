@@ -97,6 +97,7 @@ def transform_section(section: list[str], label: str, path: Path) -> tuple[list[
     output: list[str] = []
     headings: list[Heading] = []
     first_heading = True
+    pending_blank_after_heading = False
 
     level_adjust = 0
     for line in section:
@@ -124,10 +125,15 @@ def transform_section(section: list[str], label: str, path: Path) -> tuple[list[
             if output and output[-1].strip():
                 output.append("")
             output.append(f"{'#' * normalized_level} {prefixed_text}")
+            pending_blank_after_heading = True
             headings.append(
                 Heading(level=normalized_level, text=prefixed_text, slug=slugify(prefixed_text))
             )
         else:
+            if pending_blank_after_heading:
+                if line.strip():
+                    output.append("")
+                pending_blank_after_heading = False
             output.append(line)
 
     while output and not output[-1].strip():

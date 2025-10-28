@@ -57,14 +57,16 @@ ______________________________________________________________________
 
 | Field          | Value |
 | -------------- | ----- |
-| Version        | 0.1-draft |
-| Status         | Implementable |
-| Last updated   | 2025-10-28 |
-| Primary owners | Platform Engineering; Operations Engineering |
-| Approvers      | Architecture Steering Committee; Security Review Board |
-| Reviewers      | Compliance Lead; SRE Manager |
-| Approved by    | |
-| Approved date  | |
+| Authors | Communications & Outbound Delivery Working Group |
+| Version | 0.1-draft |
+| Status | implementable |
+| Classification | Confidential |
+| Last updated | 2025-10-23 |
+| Owners | Platform Engineering; Operations Engineering |
+| Reviewers | Compliance Lead; SRE Manager |
+| Approvers | Architecture Steering Committee; Security Review Board |
+| Approved by |  |
+| Approved date |  |
 
 **Status:** KEP: Provisional → Implementable → Implemented
 
@@ -102,12 +104,20 @@ ______________________________________________________________________
 **State:** Owns `outbox_delivery`, `delivery_receipt`, `download_token`, in-app notification queues, digest artifacts, and channel templates. Workers and webhooks mutate state under OCC to prevent duplicates. **|**
 **Failures & handling:** Provider outages, webhook signature drift, STOP/HELP compliance events, or token misuse trigger runbooks (§5, §8) and fan-out warnings. **|**
 **Observability:** Grafana dashboards “Notifications Delivery” (`delivery_success_ratio`, `delivery_retry_total`), “In-App Notifications” (`inapp_notification_sent_total`, `inapp_notification_click_total`), “Download Tokens” (`download_token_validation_total`). Alert catalog tags `RB-NOTIFY-*` entries. **|**
-**References:** §2 Responsibilities, §4 State management, §5 Failure modes, §7 Security & compliance, Ops runbooks `RB-NOTIFY-OUTAGE`/`RB-NOTIFY-WEBHOOK`/`RB-NOTIFY-SMS`. **|**
-**Breadcrumbs:** Implementation `apps/platform/notifications/outbox.py`, provider adapters `apps/platform/notifications/providers/*.py`, webhook handlers `apps/platform/notifications/webhooks.py`, SSE publisher `apps/platform/events/notifications.py`, dashboards `infra/observability/dashboards/notifications_delivery.json`, tests `tests/platform/notifications/test_outbox.py`, `tests/platform/notifications/test_webhooks.py`.
+**Breadcrumbs:** Implementation `apps/platform/notifications/outbox.py`, provider adapters `apps/platform/notifications/providers/*.py`, webhook handlers `apps/platform/notifications/webhooks.py`, SSE publisher `apps/platform/events/notifications.py`, dashboards `infra/observability/dashboards/notifications_delivery.json`, tests `tests/platform/notifications/test_outbox.py`, `tests/platform/notifications/test_webhooks.py`. **|**
+**References:** §2 Responsibilities, §4 State management, §5 Failure modes, §7 Security & compliance, Ops runbooks `RB-NOTIFY-OUTAGE`/`RB-NOTIFY-WEBHOOK`/`RB-NOTIFY-SMS`. *
 
 ______________________________________________________________________
 
 ## 2) Responsibilities
+
+**Purpose:** Enumerate functional responsibilities and non-goals. **|**
+**Contract:** Spell out mandatory behaviours, idempotency, regulatory duties. **|**
+**State:** Describe ownership of state transitions or data stewardship. **|**
+**Failures & handling:** Identify responsibility gaps and escalation paths. **|**
+**Observability:** Checks proving each responsibility works. **|**
+**Breadcrumbs:** Implementation/tests supporting each responsibility. **|**
+**References:** Service/TDD sections that expand on responsibilities.
 
 ### 2.1 Outbox orchestration & delivery pipeline (binding)
 
@@ -297,6 +307,14 @@ ______________________________________________________________________
 
 ## 5) Failure modes
 
+**Purpose:** Provide the resilience profile and default mitigations. **|**
+**Contract:** Identify what must fail closed vs. degraded. **|**
+**State:** Note circuit breakers, queues, or compensating transactions. **|**
+**Failures & handling:** Enumerate incidents, fallback procedures, and manual runbooks. **|**
+**Observability:** Alerts, dashboards, and SLOs tied to failure handling. **|**
+**Breadcrumbs:** Runbooks, incident retros, chaos tests. **|**
+**References:** Link to ops docs or ADRs describing failure strategy.
+
 ### 5.1 Provider outage or degradation (binding)
 
 - Circuit breaker opens when provider health crosses thresholds; outbox stays in `PENDING` and SLA timer starts. Alerts `alert_notifications_delivery_health` page on-call; `RB-NOTIFY-OUTAGE` orchestrates failover or hold.
@@ -322,6 +340,14 @@ ______________________________________________________________________
 
 ## 6) Observability
 
+**Purpose:** Show how to detect and diagnose issues. **|**
+**Contract:** List mandatory telemetry and alerting coverage. **|**
+**State:** Capture dashboards, log pipelines, or tracing spans. **|**
+**Failures & handling:** Note alert fatigue risks or blind spots. **|**
+**Observability:** Detail metrics/logs/traces plus owners. **|**
+**Breadcrumbs:** Monitoring configs, dashboards, alert definitions. **|**
+**References:** Observability standards or shared appendices.
+
 - Metrics:
   - Delivery: `delivery_success_ratio`, `delivery_retry_total`, `notifications_provider_status_total`, `notifications_webhook_total{status}`, `notifications_receipt_latency_seconds`.
   - In-app: `inapp_notification_sent_total`, `inapp_notification_click_total`, `sse_connection_drop_total`.
@@ -335,6 +361,14 @@ ______________________________________________________________________
 ______________________________________________________________________
 
 ## 7) Security & compliance
+
+**Purpose:** Capture authZ/authN, data handling classes, and regulatory duties. **|**
+**Contract:** Define encryption rules, residency bounds, and audit requirements. **|**
+**State:** Describe secrets, key rotation, and data classifications. **|**
+**Failures & handling:** Explain how breaches or policy drifts are detected and resolved. **|**
+**Observability:** Security alerts, audit trails, compliance evidence. **|**
+**Breadcrumbs:** IAM configs, policy bundles, compliance tests. **|**
+**References:** Link to residency or policy appendices/ADRs.
 
 - Authentication:
   - Internal APIs require OAuth2 scopes `notifications.outbox.write`, `notifications.outbox.read`.
@@ -369,8 +403,8 @@ ______________________________________________________________________
 **State:** Roster `ops/notifications/roster.yaml`, freeze calendar `ops/notifications/freeze_windows.ics`, provider credential inventory `ops/notifications/provider_credentials.md`. **|**
 **Failures & handling:** Staffing gaps or ignored freezes trigger management review; deployments pause until coverage restored. **|**
 **Observability:** PagerDuty analytics, delivery dashboards, alert `notifications_oncall_gap_total`. **|**
-**References:** Notifications spec §7, `RB-NOTIFY-*`. **|**
-**Breadcrumbs:** Roster docs, freeze calendars, App.O escalation notes.
+**Breadcrumbs:** Roster docs, freeze calendars, App.O escalation notes. **|**
+**References:** Notifications spec §7, `RB-NOTIFY-*`. *
 
 ### 8.2 Incident triggers (binding)
 
@@ -379,8 +413,8 @@ ______________________________________________________________________
 **State:** Incident records `ops/notifications/incidents/<date>.jsonl` capture provider, channel, and alert metadata. **|**
 **Failures & handling:** Missing annotations or muted routes require corrective PRs and Ops governance follow-up. **|**
 **Observability:** Dashboards “Notifications Delivery”, “SMS Compliance”, Alertmanager routes. **|**
-**References:** §5 Failure modes, `RB-NOTIFY-OUTAGE`, `RB-NOTIFY-WEBHOOK`, `RB-NOTIFY-SMS`, `RB-NOTIFY-TOKEN`. **|**
-**Breadcrumbs:** Alert rule files, PagerDuty services, SIEM integrations.
+**Breadcrumbs:** Alert rule files, PagerDuty services, SIEM integrations. **|**
+**References:** §5 Failure modes, `RB-NOTIFY-OUTAGE`, `RB-NOTIFY-WEBHOOK`, `RB-NOTIFY-SMS`, `RB-NOTIFY-TOKEN`. *
 
 - `alert_notifications_delivery_health` detects provider degradation and opens `RB-NOTIFY-OUTAGE`.
 - `alert_notifications_sms_compliance` / `notifications_sms_stop_spike_total` drive `RB-NOTIFY-SMS` for STOP/HELP surges and regulatory response.
@@ -394,8 +428,8 @@ ______________________________________________________________________
 **State:** Runbooks `ops/runbooks/notifications/*.md`, drill evidence `ops/notifications/drills/<date>/summary.md`. **|**
 **Failures & handling:** Missing drill evidence or outdated steps block change approval until updated. **|**
 **Observability:** Docs lint, Ops governance dashboards, drill scheduler reports. **|**
-**References:** `RB-NOTIFY-OUTAGE`, `RB-NOTIFY-WEBHOOK`, `RB-NOTIFY-SMS`, `RB-NOTIFY-TOKEN`. **|**
-**Breadcrumbs:** Runbook catalog, drill scheduler, Slack `#ops-notifications`.
+**Breadcrumbs:** Runbook catalog, drill scheduler, Slack `#ops-notifications`. **|**
+**References:** `RB-NOTIFY-OUTAGE`, `RB-NOTIFY-WEBHOOK`, `RB-NOTIFY-SMS`, `RB-NOTIFY-TOKEN`. *
 
 #### 8.3.1 Runbook index (informative)
 
@@ -407,6 +441,14 @@ ______________________________________________________________________
 | `RB-NOTIFY-TOKEN` | Download token abuse or leak | Token rotation, artifact quarantine |
 
 #### 8.3.2 Primary runbooks (binding)
+
+**Purpose:** Document operational playbooks responders execute during incidents or exercises. **|**
+**Contract:** Link production alerts to runbook identifiers, outline execution cadence, and name the maintaining team. **|**
+**State:** Summarize where runbooks live (repo paths, automation scripts) and what evidence they produce. **|**
+**Failures & handling:** Explain how missing, stale, or skipped runbooks are surfaced and remediated. **|**
+**Observability:** Note tooling that tracks drill frequency, runbook completion, and incident follow-up. **|**
+**Breadcrumbs:** Runbook files, automation scripts, incident templates. **|**
+**References:** Alert catalogs, governance docs referencing the runbooks.
 
 - `RB-NOTIFY-OUTAGE` — Executes provider failover, backlog drainage, and SLA communications.
 - `RB-NOTIFY-WEBHOOK` — Rotates webhook secrets, replays payloads, and coordinates SIEM review.
@@ -426,8 +468,8 @@ ______________________________________________________________________
 **State:** Migration scripts `ops/scripts/notifications/onboard_provider.py`, template bundles `config/notifications/templates/*.json`, DLQ replay logs `ops/notifications/dlq_replay/<date>/`. **|**
 **Failures & handling:** Failed migrations revert to previous provider/template and open `RB-NOTIFY-OUTAGE`; replay failures quarantine payloads until corrected. **|**
 **Observability:** Metrics `notifications_migration_success_total`, `notifications_dlq_replay_total`, App.O change tickets. **|**
-**References:** Settings spec §5, Notifications spec §4. **|**
-**Breadcrumbs:** Migration scripts, template bundles, DLQ tooling.
+**Breadcrumbs:** Migration scripts, template bundles, DLQ tooling. **|**
+**References:** Settings spec §5, Notifications spec §4. *
 
 ### 8.5 Operational workflows (normative)
 
@@ -436,8 +478,8 @@ ______________________________________________________________________
 **State:** DMARC reports `ops/notifications/dmarc/<quarter>/`, residency digests `ops/residency/digest_<iso_week>.json`, STOP/HELP audit logs `ops/notifications/sms_opt_out.csv`. **|**
 **Failures & handling:** Expired DMARC alignment or missing digests trigger `RB-NOTIFY-SMS` and governance follow-up; digest discrepancies open App.O remediation tasks. **|**
 **Observability:** Metrics `notifications_digest_generated_total`, `notifications_dmca_alignment_total`, STOP/HELP dashboards in SIEM. **|**
-**References:** §7 Security & compliance, §4 State management. **|**
-**Breadcrumbs:** Digest generator `apps/platform/operations/task_modules/notifications.py::generate_digest`, compliance scripts `ops/scripts/notifications/audit_opt_out.py`.
+**Breadcrumbs:** Digest generator `apps/platform/operations/task_modules/notifications.py::generate_digest`, compliance scripts `ops/scripts/notifications/audit_opt_out.py`. **|**
+**References:** §7 Security & compliance, §4 State management. *
 
 - Weekly residency digests aggregate waivers, remediation SLAs, and provider drift; evidence archived alongside digests.
 - STOP/HELP audit jobs reconcile opt-out state with provider receipts to enforce compliance.
@@ -446,6 +488,14 @@ ______________________________________________________________________
 ______________________________________________________________________
 
 ## 9) Dependencies
+
+**Purpose:** List upstream/downstream systems and their contracts. **|**
+**Contract:** Describe expectations on dependency behaviour and change management. **|**
+**State:** Identify shared schemas/events and their owners. **|**
+**Failures & handling:** Explain cascading failure protections. **|**
+**Observability:** Dependency health checks and joint dashboards. **|**
+**Breadcrumbs:** Integration specs, dependency docs. **|**
+**References:** Link to other service docs or appendices.
 
 | Dependency             | Interface / artifact                                                                   | Responsibilities                                                                                      | Notes                                                                 |
 | ---------------------- | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
