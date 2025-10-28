@@ -597,7 +597,15 @@ Response sequence:
 
 ## Web App — 8) Operations & runbooks
 
-- Runbooks: RB-JOB-WATCHDOG (job tiles), RB-PORTAL-INVALIDATION (token revocation), RB-LPE-LOCALE-GAP (localization), RB-NOTIFY-* (alerts), RB-CHAT-ABUSE (assistant incident).
+**Purpose:** Keep operational playbooks current and drills executed on schedule. **|**
+**Contract:** RB-\* references must align with alert catalog, and evidence must be archived for audits. **|**
+**State:** Runbook catalog entries, drill schedules, evidence directories under `ops/webapp`. **|**
+**Failure modes & handling:** Stale runbooks or missed drills triggered by docs lint/governance tasks; remediation logged in Ops tracker. **|**
+**Observability:** Docs lint (`build_runbook_catalog.py --check`), governance dashboards, audit logs for drills. **|**
+**Breadcrumbs:** Runbook index `docs/src/ops/runbooks/index.md`, drill scripts `ops/scripts/notifications/schedule_drills.py`, governance policies App.N. **|**
+**References:** RB-JOB-WATCHDOG, RB-PORTAL-INVALIDATION, RB-LPE-LOCALE-GAP, RB-NOTIFY-\*, RB-CHAT-ABUSE. **|**
+
+- Runbooks: RB-JOB-WATCHDOG (job tiles), RB-PORTAL-INVALIDATION (token revocation), RB-LPE-LOCALE-GAP (localization), RB-NOTIFY-\* (alerts), RB-CHAT-ABUSE (assistant incident).
 - Drill cadence: quarterly SSE resilience tabletop, accessibility regression audit, portal abuse simulation, assistant abuse scenario.
 - Evidence: stored under `ops/webapp/drills/<date>/` with participants, remediation tasks, and dashboards snapshots.
 

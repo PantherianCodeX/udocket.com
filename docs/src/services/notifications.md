@@ -90,7 +90,7 @@ ______________________________________________________________________
 - **Structure:** Sections follow the 0–10 template. Responsibilities (§2) enumerate channels and compliance requirements; APIs (§3) describe outbound queues and webhook callbacks; State management (§4) documents schema, RLS, and secure-view contracts; Failure/Observability (§5–§6) map to alerting; Security & Compliance (§7) captures DMARC/SMS obligations; Operations (§8) links to runbooks/digests; Dependencies, references close the doc.
 - **Maintenance:** Run `python scripts/docs/lint_docs.py docs/src/services/notifications.md docs/src/overview/tdd.md docs/tdd_modularization.md` before submitting changes. Updates that alter schema, queue semantics, or provider adapters also require `build_runbook_catalog.py --check` to pass. Notify Platform + Ops architecture lists on PRs.
 - **Change protocol:** Any PR affecting `outbox_delivery`/`delivery_receipt` schema, webhook signatures, download token format, or notification templates must reference this spec and ADR-0003. Provider onboarding/offboarding, DMARC policy changes, or SMS compliance updates demand Security + Architecture approval and runbook refreshes per §8.
-- **References:** TDD §11 summary, Settings Registry §5 (keys under `notifications.*`), Guardian §5 (quarantine notifications), LP Engine §7 (localization bundles), Ops runbook catalog (RB-NOTIFY-*), policy references in ADR-0003/0004.
+- **References:** TDD §11 summary, Settings Registry §5 (keys under `notifications.*`), Guardian §5 (quarantine notifications), LP Engine §7 (localization bundles), Ops runbook catalog (RB-NOTIFY-\*), policy references in ADR-0003/0004.
 - **Contacts:** Platform Engineering (service ownership), Operations Engineering (runbooks/delivery providers), on-call `notify-oncall@`, escalation `#ops-notifications`.
 
 ______________________________________________________________________
@@ -101,7 +101,7 @@ ______________________________________________________________________
 **Contract:** Notifications guarantees idempotent sends, signed download tokens, provider receipt correlation, and organizational rate limits. Deliveries either succeed with recorded receipts or fail closed with actionable audit reasons. **|**
 **State:** Owns `outbox_delivery`, `delivery_receipt`, `download_token`, in-app notification queues, digest artifacts, and channel templates. Workers and webhooks mutate state under OCC to prevent duplicates. **|**
 **Failure modes & handling:** Provider outages, webhook signature drift, STOP/HELP compliance events, or token misuse trigger runbooks (§5, §8) and fan-out warnings. **|**
-**Observability:** Grafana dashboards “Notifications Delivery” (`delivery_success_ratio`, `delivery_retry_total`), “In-App Notifications” (`inapp_notification_sent_total`, `inapp_notification_click_total`), “Download Tokens” (`download_token_validation_total`). Alert catalog tags RB-NOTIFY-* entries. **|**
+**Observability:** Grafana dashboards “Notifications Delivery” (`delivery_success_ratio`, `delivery_retry_total`), “In-App Notifications” (`inapp_notification_sent_total`, `inapp_notification_click_total`), “Download Tokens” (`download_token_validation_total`). Alert catalog tags RB-NOTIFY-\* entries. **|**
 **References:** §2 Responsibilities, §4 State management, §5 Failure modes, §7 Security & compliance, Ops runbooks RB-NOTIFY-OUTAGE/RB-NOTIFY-WEBHOOK/RB-NOTIFY-SMS. **|**
 **Breadcrumbs:** Implementation `apps/platform/notifications/outbox.py`, provider adapters `apps/platform/notifications/providers/*.py`, webhook handlers `apps/platform/notifications/webhooks.py`, SSE publisher `apps/platform/events/notifications.py`, dashboards `infra/observability/dashboards/notifications_delivery.json`, tests `tests/platform/notifications/test_outbox.py`, `tests/platform/notifications/test_webhooks.py`.
 
@@ -330,7 +330,7 @@ ______________________________________________________________________
 - Logs: structured events `NOTIFY_SEND_*`, `NOTIFY_WEBHOOK_*`, `DOWNLOAD_TOKEN_*`; correlation IDs align outbox, receipt, artifact, case.
 - Traces: span `notifications.send` wraps provider API calls with tags `{provider, channel, attempt}`; webhook ingestion spans annotate signature status.
 - Dashboards: `infra/observability/dashboards/notifications_delivery.json`, `notifications_inapp.json`, `download_tokens.json`.
-- Alert catalogue entries map to RB-NOTIFY-* runbooks; docs CI ensures runbook references rely on catalog.
+- Alert catalogue entries map to RB-NOTIFY-\* runbooks; docs CI ensures runbook references rely on catalog.
 
 ______________________________________________________________________
 
@@ -356,7 +356,7 @@ ______________________________________________________________________
 
 **Purpose:** Maintain operational readiness and evidence for audits. **|**
 **Contract:** Runbooks must stay aligned with alert catalog; quarterly drills validate provider failover, webhook compromise response, STOP/HELP surge handling, and download token abuse detection. **|**
-**State:** Runbooks listed under RB-NOTIFY-* in `docs/src/ops/runbooks/index.md`; drill evidence stored in `ops/notifications/drills/<date>/`. **|**
+**State:** Runbooks listed under RB-NOTIFY-\* in `docs/src/ops/runbooks/index.md`; drill evidence stored in `ops/notifications/drills/<date>/`. **|**
 **Failure modes & handling:** Missing runbook references or overdue drills flagged by docs lint and Ops governance. **|**
 **Observability:** Docs lint ensures runbook catalog fresh; dashboards track drill cadence. **|**
 **Breadcrumbs:** Runbook catalog `docs/src/ops/runbooks/index.md`, drill scheduler `ops/scripts/notifications/schedule_drills.py`, incident templates `ops/runbooks/templates/notifications/*.md`. **|**
@@ -397,6 +397,6 @@ ______________________________________________________________________
 - TDD overview summary — `../overview/tdd.md §11` (Notifications bullet list).
 - Settings Registry specification — `../services/settings.md §5.2` (notifications keys).
 - Localization & Policy Engine — `../services/lp-engine.md §2.1` (locale bundles for notifications).
-- Ops runbook catalog — `../ops/runbooks/index.md` (RB-NOTIFY-* entries).
+- Ops runbook catalog — `../ops/runbooks/index.md` (RB-NOTIFY-\* entries).
 - ADR-0003 — API versioning & sunset policy for notification endpoints.
 - ADR-0004 — Localization & Policy Engine governance for templates.

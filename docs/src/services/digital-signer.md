@@ -91,7 +91,7 @@ ______________________________________________________________________
 - **Structure:** Sections follow the standard 0–10 service template; appendices referenced here live in the ops runbook catalog and Settings registry key maps.
 - **Maintenance:** Run `python scripts/docs/lint_docs.py` and `python scripts/docs/link_check.py --strict` before proposing signer changes. Signing policy or PKI updates require ADR references in the PR.
 - **Change protocol:** Modifying signature policies, TSA/OCSP profiles, or trust-root rotations demands dual approval (Security + Architecture) and an update to this spec plus the relevant runbooks.
-- **References:** TDD §7.2 (summary), ADR-0001, ADR-0003, ADR-0004, Ops runbooks RB-SIGN-*.
+- **References:** TDD §7.2 (summary), ADR-0001, ADR-0003, ADR-0004, Ops runbooks RB-SIGN-\*.
 - **Contacts:** Security Engineering (service owner), Platform Architecture (co-owner), on-call list `signer-oncall@`.
 
 ______________________________________________________________________
@@ -330,7 +330,7 @@ ______________________________________________________________________
 ### 8.1 Runbooks, rotations, and drills (binding)
 
 **Purpose:** Ensure on-call teams can remediate signing incidents quickly. **|**
-**Contract:** Operational playbooks map alerts to RB-SIGN-* runbooks; quarterly rotations rehearse trust-root renewal, TSA failover, and FIPS recovery. **|**
+**Contract:** Operational playbooks map alerts to RB-SIGN-\* runbooks; quarterly rotations rehearse trust-root renewal, TSA failover, and FIPS recovery. **|**
 **State:** Runbooks live in `ops/runbooks/signer/`; key rotation artifacts archived in `ops/security/key_rotation/`. **|**
 **Failure modes & handling:** Stale runbooks block release sign-off; missing rotation evidence triggers audit findings. **|**
 **Observability:** Docs lint checks references; PagerDuty analytics monitor response time. **|**

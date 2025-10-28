@@ -329,10 +329,10 @@ ______________________________________________________________________
 **References:** §5.2, §5.4.1, §7.1, §10.3, App.A.2.
 
 1. Upload lands in staging (`POST /uploads`), persists the SA (`status='STORED'`) and emits the initial `job.accepted` event (§10.3, App.A.1).
-1. Workers derive WP/CD artifacts, run transforms, and park them in `PROCESSING → PENDING_JUDGMENT` while Guardian evaluates (§5.2.2, §7.1). Outcome mapping is canonical in §5.2.3.
-1. Guardian PASS/WARN unlocks operator access (`CLEARED_FOR_USE` / `OPERATOR_PREP`); operators or automation advance to review entry (`APPROVAL_REQUESTED → QUEUED_FOR_REVIEW`) (§5.2.4–§5.2.5).
-1. Reviewers invoke the Reviews API which applies the ExclusiveSwap invariant from §5.4.1, atomically approving the CD and promoting the new DL (`RELEASED`) while revoking prior deliverables (§10.3.2).
-1. Portal invalidation notifies clients of the new deliverable and blocks any revoked link; downstream analytics and audit trails attach Guardian judgment IDs, manifests, and settings hashes (§11.2.1, App.A.2).
+2. Workers derive WP/CD artifacts, run transforms, and park them in `PROCESSING → PENDING_JUDGMENT` while Guardian evaluates (§5.2.2, §7.1). Outcome mapping is canonical in §5.2.3.
+3. Guardian PASS/WARN unlocks operator access (`CLEARED_FOR_USE` / `OPERATOR_PREP`); operators or automation advance to review entry (`APPROVAL_REQUESTED → QUEUED_FOR_REVIEW`) (§5.2.4–§5.2.5).
+4. Reviewers invoke the Reviews API which applies the ExclusiveSwap invariant from §5.4.1, atomically approving the CD and promoting the new DL (`RELEASED`) while revoking prior deliverables (§10.3.2).
+5. Portal invalidation notifies clients of the new deliverable and blocks any revoked link; downstream analytics and audit trails attach Guardian judgment IDs, manifests, and settings hashes (§11.2.1, App.A.2).
 
 <figure class="full-width-diagram">
   <img class="diagram" src="../build/mermaid/services/guardian/diagrams/upload-guardian-approve-v1.png" alt="Upload → Guardian → Approve happy path">
@@ -864,7 +864,7 @@ ALTER TABLE delivery_receipt        FORCE ROW LEVEL SECURITY;
 - Masked secure views (`case_secure`, `artifact_secure`, `qa_log_secure`, etc.) are the only read surfaces granted to the application role. Sysadmin remains the sole bypass for investigations, and break-glass events are dual-approved and watermarked.
 - Audit trail essentials: `audit_event` logs every significant read/write; `entitlement_snapshot` records token issuance with device fingerprints; `guardian_span_detection` stores PHI/PII evidence under RLS.
 - Break-glass usage logs justification, duration, reviewer acknowledgement, and triggers watchdogs that terminate sessions on expiry. Post-event review queues ensure accountability.
-- Structured logs (case/job correlated) and anomaly detectors watch for unusual read patterns or mass token reveals; alerts map to Guardian Appendix B runbooks (`RB-GUARD-*`) and RB-MASK (`../ops/runbooks/index.md`).
+- Structured logs (case/job correlated) and anomaly detectors watch for unusual read patterns or mass token reveals; alerts map to Guardian Appendix B runbooks (RB-GUARD-\*) and RB-MASK (`../ops/runbooks/index.md`).
 
 #### 4.5.1 Transformation modes & operator view (binding)
 

@@ -100,7 +100,7 @@ ______________________________________________________________________
 **State:** Curated data resides in Postgres across raw, staging, curated, and published schemas; signed bundles live in object storage with manifests; adoption telemetry tracks service acknowledgements. **|**
 **Failure modes & handling:** Validation guard failures or adoption lag freeze new publishes and trigger runbooks until bundles validate or roll back. **|**
 **Observability:** Dashboards “Reference Manager – Availability”, “Harvest”, “Publish”, and “Adoption” monitor request volume, error rates, and adoption lag; events feed SIEM and audit sinks. **|**
-**References:** TDD §6 Reference Data, ADR-0004, §8.3.2–§8.3.6 RB-RM-* runbooks. **|**
+**References:** TDD §6 Reference Data, ADR-0004, §8.3.2–§8.3.6 RB-RM-\* runbooks. **|**
 **Breadcrumbs:** Service entry `packages/udocket_core/reference_manager/service.py`, tests `tests/reference/test_charter.py`, telemetry `packages/udocket_core/reference_manager/telemetry.py`.
 
 - RM governs acquisition, normalization, review, publishing, and downstream adoption tracking.
@@ -334,7 +334,7 @@ ______________________________________________________________________
 **State:** Incidents tracked in `ops/reference/incidents/` with linkage to bundle IDs, runbook execution logs, and remediation tickets. **|**
 **Failure modes & handling:** Sections below detail the primary scenarios; responders follow the matching RB-RM runbooks. **|**
 **Observability:** Alerts from harvest, validation, adoption, compliance, and residency dashboards route to on-call with severity mappings. **|**
-**References:** §8.3.2–§8.3.6 RB-RM-* entries, §6 Observability, §8 Operational notes. **|**
+**References:** §8.3.2–§8.3.6 RB-RM-\* entries, §6 Observability, §8 Operational notes. **|**
 **Breadcrumbs:** Incident automation `ops/reference/*.py`, runbooks `ops/reference/runbooks/`.
 
 ### 5.1 Harvest or source outage (binding)
@@ -470,7 +470,7 @@ ______________________________________________________________________
 ### 8.1 Operational posture (binding)
 
 **Purpose:** Define staffing, editorial coverage, and escalation paths across time zones. **|**
-**Contract:** RM maintains a 24/5 on-call rotation with escalation to Program Leads; incidents execute RB-RM-* runbooks with evidence stored in App.O. **|**
+**Contract:** RM maintains a 24/5 on-call rotation with escalation to Program Leads; incidents execute RB-RM-\* runbooks with evidence stored in App.O. **|**
 **State:** Roster recorded in `ops/reference/oncall.yaml`; editorial assignments tracked in UI audit tables. **|**
 **Failure modes & handling:** Missing rota coverage or unattended editorial queues trigger management review and follow-up actions. **|**
 **Observability:** Dashboards “Reference Manager – Incidents” and “Editorial Queue Health” plus PagerDuty metrics spotlight posture drift. **|**

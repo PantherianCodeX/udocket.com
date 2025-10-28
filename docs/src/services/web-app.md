@@ -117,13 +117,14 @@ ______________________________________________________________________
 **State:** Case dashboards pull from `case_secure`, `artifact_secure`, job manifests, Guardian verdicts, and FinOps metrics. **|**
 **Failure modes & handling:** SSE disconnects fall back to polling with visible banners; missing Guardian verdicts lock approval actions pending remediation per RB-JOB-WATCHDOG. **|**
 **Observability:** Metric panels `operator_break_glass_requested_total`, `review_queue_backlog_total`, `job_watchdog_warning_total`; synthetic monitors validate SSE and approval flows. **|**
-**Breadcrumbs:** Operator view `apps/platform/ui/views/operator_workspace.py`, approval components `packages/udocket_ui/approvals/*`, tests `tests/platform/ui/test_operator_workspace.py`, `tests/platform/ui/test_review_approvals.py`. **|**
+**Breadcrumbs:** Operator view `apps/platform/ui/views/operator_workspace.py`, approval components `packages/udocket_ui/approvals/*`, SSE publisher `apps/platform/events/jobs.py`, tests `tests/platform/ui/test_operator_workspace.py`, `tests/platform/ui/test_review_approvals.py`, `tests/e2e/test_job_status_widget.py`. **|**
 **References:** Notifications spec §2.6 (in-app alerts), Guardian spec §5 (verdict integration).
 
 - Approvals panel enforces multi-step review with optimistic concurrency; UI surfaces reviewer counts, Guardian reason codes, backlog age warnings, and links to runbooks.
 - Job tiles display watchdog warnings with tooltips summarizing latest heartbeat, lane, and remediation guidance.
 - Analytics widgets expose LLM spend, artifact coverage, and QA issues, sourcing data from audit logs and FinOps metrics.
 - Live status widget follows the accessible SSE pattern in App.U.5: `aria-live="polite"`, deterministic status badges (`data-status` mapped to design tokens), token-bound credentials, and retry backoff through shared `useConnectivity`.
+- SSE stream delivers `job.accepted`, `job.running`, `job.update`, `job.blocked`, `job.completed`, `job.failed`, and `job.canceled` events; each payload carries `schema_version`, `emitted_at`, Guardian verdict snapshots, and `provider_progress` so operators can reconcile status without polling.
 
 ### 2.2 Client portal (binding)
 
@@ -138,6 +139,10 @@ ______________________________________________________________________
 - Staff-triggered invalidations emit SSE `portal.link_invalidated`, revoke tokens, and present denial banners.
 - Phishing reports log audit `PORTAL_PHISHING_REPORT` and feed abuse dashboards.
 - Portal messaging integrates secure threads (§2.6) and applies retention aligned with case lifecycle.
+- Threads are restricted to case participants; RLS policies ensure staff cannot view client-only conversations from other cases.
+- Attachments are uploaded as `ATTACHMENT_RAW`/`ATTACHMENT_TEXT` artifacts, run through Guardian/Notifications review, and inherit download-token enforcement when exposed in the portal.
+- Download guard (`apps/platform/portal/downloads.py::enforce_if_match`) verifies `If-Match` headers, signed token hash, artifact status, and residency metadata before streaming; replays or revoked links return `403` with audit `PORTAL_DOWNLOAD_PRECONDITION`.
+- All portal queries rely on secure views (`artifact_secure`, `delivery_receipt_secure`) so masked fields never bypass Guardian policies.
 
 ### 2.3 Accessibility & localization (binding)
 
@@ -151,6 +156,8 @@ ______________________________________________________________________
 
 - Pseudolocale builds run pre-merge; Vale lint enforces accessibility wording.
 - `aria-live`, focus trapping, and keyboard outreach patterns follow App.U guidelines; components failing contrast budgets require design review.
+- Nightly axe/Playwright suites capture snapshots for core flows (staff approvals, portal delivery, chat assistant); regressions block deploy until evidence restored in ops appendices.
+- Localization activation refuses enabling a locale unless LP Engine bundles include translations and QA recordings with sign-off artifacts attached.
 
 ### 2.4 Real-time collaboration & presence (binding)
 
@@ -159,7 +166,7 @@ ______________________________________________________________________
 **State:** Presence metadata stored in Redis; session context derived from case membership and settings toggles. **|**
 **Failure modes & handling:** Connection drops raise UI banners and trigger exponential backoff; session mismatches force re-auth. **|**
 **Observability:** Metrics `sse_connection_drop_total`, synthetic monitors for SSE schema version drift, audit `CHANNEL_SESSION_STARTED/ENDED`. **|**
-**Breadcrumbs:** Channels configuration `apps/platform/ui/channels.py`, SSE publisher `apps/platform/events/*.py`, tests `tests/e2e/test_collaboration.py`. **|**
+**Breadcrumbs:** Channels configuration `apps/platform/ui/channels.py`, presence service `apps/platform/ui/presence.py`, SSE publishers `apps/platform/events/*.py`, tests `tests/e2e/test_collaboration.py`, `tests/platform/ui/test_presence_indicator.py`. **|**
 **References:** Notifications spec §2.6 (in-app notifications), Guardian spec (quarantine broadcasts).
 
 ### 2.5 Security posture & hardening (binding)
@@ -192,6 +199,11 @@ ______________________________________________________________________
 **Breadcrumbs:** Edit controllers `apps/platform/ui/views/edit_flow.py`, LangGraph edit lanes `packages/udocket_core/agents/edit/*`, tests `tests/platform/ui/test_edit_workflow.py`. **|**
 **References:** Guardian spec §5, LLM registry spec §2.3 (safety harness).
 
+- SSE events inform collaborators of edit lifecycle stages, and Notifications service issues actionable toasts/email when reviewer attention is required.
+- Database partial unique index (`approve_once_per_user ON artifact_review ...`) enforces distinct approvers; UI surfaces inline conflicts when reviewers attempt duplicate approvals.
+- Manual edits collect operator change summaries and diff previews; agent edits store prompts, models, moderation outcomes, and diff fingerprints so reviewers can audit provenance.
+- Guardian moderation integrates with the edit UI so policy-blocked runs render banners alongside remediation guidance and links to RB-JOB-WATCHDOG when manual intervention required.
+
 ### 2.8 Document assembly pipeline (binding)
 
 **Purpose:** Convert Compose outputs into deliverable-ready documents with signing prerequisites. **|**
@@ -216,6 +228,8 @@ ______________________________________________________________________
 - Client portal guide constrains retrieval to approved deliverables and knowledge flagged `portal_visible=true`; policy violations return localized disclaimers.
 - Rate limits derive from Settings `chat.staff.*` / `chat.client.*`; concurrency caps enforce `chat.session.max_active_per_user`.
 - Moderation filters run pre-/post-call; Guardian escalations disable assistants automatically when severity ≥ high.
+- Assistant manifests include `disclaimer_version`, `policy_context_digest`, and `guardian_session_verdict_id` so auditors can reconcile UI prompts and moderation outcomes with the stored evidence.
+- UI surfaces rate-limit banners (`chat.sessions.limit`) and localized policy blocks when assistants decline to answer.
 
 ______________________________________________________________________
 
@@ -237,6 +251,14 @@ ______________________________________________________________________
 
 ## 4) State management
 
+**Purpose:** Explain persistent stores and configuration artifacts backing the UI. **|**
+**Contract:** Secure views, manifests, and token stores must enforce RLS, masking, and reproducibility; Settings snapshots remain authoritative. **|**
+**State:** `case_secure`, `artifact_secure`, `delivery_receipt_secure`, messaging tables, edit manifests, download tokens, chat envelopes, localization bundles. **|**
+**Failure modes & handling:** RLS drift or stale manifests block releases until Settings rollback; token corruption triggers revocation and regeneration. **|**
+**Observability:** Metrics `portal_link_invalidated_total`, audit streams (`EDIT_EVENT`, `DOWNLOAD_TOKEN_*`), ops logs per case. **|**
+**Breadcrumbs:** Secure view migrations `db/migrations/security/*.sql`, messaging models `apps/platform/portal/messaging.py`, token store `apps/platform/notifications/download_tokens.py`, edit manifests `apps/platform/ui/views/edit_flow.py`. **|**
+**References:** Notifications spec §4, Guardian spec §4, Settings Registry §5.2. **|**
+
 - Secure views (`case_secure`, `artifact_secure`, `delivery_receipt_secure`, `message_thread_secure`) provide masked data to the UI; base tables remain inaccessible to the application role.
 - Messaging and edit manifests capture provenance and feed Guardian/QA automation; artifacts link to versions and approvals for deterministic swap logic.
 - Download tokens persist hashes, issuer, expiry, and redemption metadata; single-use enforcement lives in Notifications service.
@@ -246,6 +268,14 @@ ______________________________________________________________________
 ______________________________________________________________________
 
 ## 5) Failure modes
+
+**Purpose:** Highlight primary failure scenarios and expected remediation paths. **|**
+**Contract:** UI must fail closed, surface actionable messaging, and avoid silent data exposure. **|**
+**State:** Job status, portal tokens, edit manifests, assistant manifests, accessibility evidence. **|**
+**Failure modes & handling:** SSE fallback, portal invalidation, policy blocks, moderation abuse, accessibility regression. **|**
+**Observability:** Metrics `sse_connection_drop_total`, `portal_412_precondition_total`, `edit_policy_block_total`, `chat_policy_block_total`; audit events `PORTAL_DOWNLOAD_PRECONDITION`, `EDIT_POLICY_BLOCK`, `CHAT_POLICY_BLOCK`. **|**
+**Breadcrumbs:** Runbooks RB-JOB-WATCHDOG, RB-PORTAL-INVALIDATION, RB-CHAT-ABUSE, RB-LPE-LOCALE-GAP. **|**
+**References:** Notifications spec, Guardian spec, Settings spec. **|**
 
 - **SSE disconnects:** UI shows offline banner, retries with exponential backoff; after repeated failure, fall back to polling and log `UI_SSE_FALLBACK`.
 - **Portal invalidation:** Tokens revoked, requests return 403 with audit `PORTAL_DOWNLOAD_PRECONDITION`; UI presents denial banners and links to support.
@@ -257,6 +287,14 @@ ______________________________________________________________________
 
 ## 6) Observability
 
+**Purpose:** Ensure the UI has adequate telemetry for health, performance, and policy compliance. **|**
+**Contract:** Maintain dashboards, emit structured events, and run synthetics covering core journeys. **|**
+**State:** Grafana dashboards, Prometheus metrics, structured logs, synthetic job artifacts. **|**
+**Failure modes & handling:** Missing metrics or failing synthetic checks page SRE and block releases until remediation. **|**
+**Observability:** Dashboards “Operator Workspace”, “Portal Integrity”, “Notifications Delivery”, “Assistant Usage”, “Accessibility & Localization”; metrics `review_queue_backlog_total`, `portal_link_invalidated_total`, `chat_sessions_total{audience}`, etc.; logs `UI_EVENT`, `PORTAL_EVENT`, `CHAT_SESSION`, `EDIT_EVENT`. **|**
+**Breadcrumbs:** Dashboard configs `infra/observability/dashboards/*.json`, synthetic scripts `synthetics/*.yaml`, logging adapters `packages/udocket_core/logging/*`. **|**
+**References:** Notifications spec §6, LLM Registry spec §6, Settings spec §6. **|**
+
 - Dashboards: “Operator Workspace”, “Portal Integrity”, “Notifications Delivery”, “Assistant Usage”, “Accessibility & Localization”.
 - Metrics: `review_queue_backlog_total`, `job_watchdog_warning_total`, `portal_link_invalidated_total`, `portal_phishing_report_total`, `inapp_notification_sent_total`, `chat_sessions_total{audience}`, `chat_policy_block_total`.
 - Synthetic monitors: SSE schema validation, portal download smoke tests, chat latency & policy checks, axe accessibility scans.
@@ -266,18 +304,36 @@ ______________________________________________________________________
 
 ## 7) Security & compliance
 
+**Purpose:** Capture authentication, masking, and policy obligations for the web surfaces. **|**
+**Contract:** Enforce hardened headers, signed download tokens, step-up MFA, masking, and audit trails; break-glass requires dual approval. **|**
+**State:** CSP configs, download token records, phishing logs, break-glass artifacts, assistant manifests. **|**
+**Failure modes & handling:** Header drift fails CI; phishing surges trigger incident templates; unauthorized access attempts blocked and logged. **|**
+**Observability:** Metrics `portal_412_precondition_total`, `portal_phishing_report_total`, audit events `PORTAL_DOWNLOAD_PRECONDITION`, `TOKEN_REVEAL_REQUEST`, `CHAT_POLICY_BLOCK`. **|**
+**Breadcrumbs:** Middleware `apps/platform/ui/security/csp.py`, download guard `apps/platform/portal/downloads.py`, phishing logger `apps/platform/notifications/phishing.py`, break-glass schema `spec/schemas/break_glass_event.schema.json`. **|**
+**References:** Notifications spec §7, Settings spec §7, Guardian spec §7. **|**
+
 - Enforce HSTS (min 1 year), CSP nonces, frameguard `DENY`, referrer policy `strict-origin-when-cross-origin`, permissions policy disabling camera/mic by default.
 - Portal downloads require signed tokens and `If-Match` headers; replays denied even if token valid but entitlement revoked.
 - Break-glass flows demand step-up MFA (WebAuthn) on activation and closure; events logged per `spec/schemas/break_glass_event.schema.json`.
 - Manual/agent edits require audit provenance, dual approval for high-risk artifacts, and Guardian oversight.
 - Conversational assistants require localized disclaimers, HIPAA gating, and moderation verdict logging.
 - Accessibility and localization compliance captured in ops appendices for regulators; DSAR/erasure requests propagate to portal artifacts and chat transcripts.
+- Middleware rejects spoofed headers (`X-Org-ID`, `X-Active-Roles`) and requires HMAC signatures for internal RPCs in addition to mTLS; authentication context derived exclusively from OIDC tokens.
+- Phishing report workflow sanitizes URLs, rate-limits reporters, and routes incidents to Security with pre-filled App.O templates.
 
 ______________________________________________________________________
 
 ## 8) Operations & runbooks
 
-- Runbooks: RB-JOB-WATCHDOG (job tiles), RB-PORTAL-INVALIDATION (token revocation), RB-LPE-LOCALE-GAP (localization), RB-NOTIFY-* (alerts), RB-CHAT-ABUSE (assistant incident).
+**Purpose:** Keep operational playbooks current and drills executed on schedule. **|**
+**Contract:** RB-\* references must align with alert catalog, and evidence must be archived for audits. **|**
+**State:** Runbook catalog entries, drill schedules, evidence directories under `ops/webapp`. **|**
+**Failure modes & handling:** Stale runbooks or missed drills triggered by docs lint/governance tasks; remediation logged in Ops tracker. **|**
+**Observability:** Docs lint (`build_runbook_catalog.py --check`), governance dashboards, audit logs for drills. **|**
+**Breadcrumbs:** Runbook index `docs/src/ops/runbooks/index.md`, drill scripts `ops/scripts/notifications/schedule_drills.py`, governance policies App.N. **|**
+**References:** RB-JOB-WATCHDOG, RB-PORTAL-INVALIDATION, RB-LPE-LOCALE-GAP, RB-NOTIFY-\*, RB-CHAT-ABUSE. **|**
+
+- Runbooks: RB-JOB-WATCHDOG (job tiles), RB-PORTAL-INVALIDATION (token revocation), RB-LPE-LOCALE-GAP (localization), RB-NOTIFY-\* (alerts), RB-CHAT-ABUSE (assistant incident).
 - Drill cadence: quarterly SSE resilience tabletop, accessibility regression audit, portal abuse simulation, assistant abuse scenario.
 - Evidence: stored under `ops/webapp/drills/<date>/` with participants, remediation tasks, and dashboards snapshots.
 
@@ -285,20 +341,36 @@ ______________________________________________________________________
 
 ## 9) Dependencies
 
-| Dependency                | Responsibility                                                                | Notes                                                                           |
-| ------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| Notifications service     | In-app alerts, download tokens, escalation digests                            | See `../services/notifications.md`; SSE topics share infrastructure             |
-| Guardian                  | Verdicts, quarantine enforcement, edit/assistant moderation                   | Guardian judgments gate approvals and portal delivery                           |
-| LLM Registry              | Moderation & safety harness for agent edits and assistants                     | Settings keys `chat.*`, moderation controls                                     |
-| LP Engine                 | Localization bundles, policy context for residency and masking                | Fallback logic for missing locales                                             |
-| Settings Registry         | UI toggles, rate limits, step-up policies, chat enablement                     | Activation enforces governance and diff artifacts                               |
-| Digital Signer            | Signed deliverables and manifest metadata for portal downloads                 | Document assembly pipeline produces signer inputs                               |
-| Worker cluster (Celery)   | Document assembly, assistant orchestration, SSE backfills                      | Dedicated queues for UI-related background tasks                                |
-| Ops runbook catalog       | Incident and drill references                                                  | Docs lint ensures RB-* entries stay current                                     |
+**Purpose:** Identify upstream and downstream integrations supporting the web application. **|**
+**Contract:** Dependencies maintain their published contracts; the web app consumes their APIs within documented bounds. **|**
+**State:** Notifications queues, Guardian verdict streams, LLM profiles, localization bundles, Settings toggles. **|**
+**Failure modes & handling:** Dependency outages or schema drift trigger runbooks and coordinated rollbacks with owning teams. **|**
+**Observability:** Cross-service dashboards, SSE monitors, audit logs, synthetic checks. **|**
+**Breadcrumbs:** Linked service specifications below. **|**
+**References:** Notifications, Guardian, LLM Registry, LP Engine, Settings Registry, Digital Signer, Worker Cluster specs. **|**
+
+| Dependency | Responsibility | Notes |
+| ---------- | -------------- | ----- |
+| Notifications service | In-app alerts, download tokens, escalation digests | See `../services/notifications.md`; SSE topics share infrastructure |
+| Guardian | Verdicts, quarantine enforcement, edit/assistant moderation | Guardian judgments gate approvals and portal delivery |
+| LLM Registry | Moderation & safety harness for agent edits and assistants | Settings keys `chat.*`, moderation controls |
+| LP Engine | Localization bundles, policy context for residency and masking | Fallback logic for missing locales |
+| Settings Registry | UI toggles, rate limits, step-up policies, chat enablement | Activation enforces governance and diff artifacts |
+| Digital Signer | Signed deliverables and manifest metadata for portal downloads | Document assembly pipeline produces signer inputs |
+| Worker cluster (Celery) | Document assembly, assistant orchestration, SSE backfills | Dedicated queues for UI-related background tasks |
+| Ops runbook catalog | Incident and drill references | Docs lint ensures RB-\* entries stay current |
 
 ______________________________________________________________________
 
 ## 10) References
+
+**Purpose:** Provide quick access to supporting specifications and appendices. **|**
+**Contract:** References remain current; update when related documents move or rename. **|**
+**State:** Linked specs and runbooks in the documentation corpus. **|**
+**Failure modes & handling:** Broken links detected via `scripts/docs/link_check.py`. **|**
+**Observability:** Docs CI link checker. **|**
+**Breadcrumbs:** Documentation index `docs/mkdocs.yml`. **|**
+**References:** Listed below. **|**
 
 - TDD overview summary — `../overview/tdd.md §11`.
 - Notifications service specification — `../services/notifications.md`.

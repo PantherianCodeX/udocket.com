@@ -234,7 +234,7 @@ ______________________________________________________________________
 
 ## 8) Operations & runbooks
 
-- Primary runbooks: RB-JOB-WATCHDOG (job watchdog/remediation), RB-LOCK-006 (advisory locks), RB-NOTIFY-* (delivery queues), RB-UPLOAD-SCAN (scanning), RB-CASE-IMPORT (legacy import).
+- Primary runbooks: RB-JOB-WATCHDOG (job watchdog/remediation), RB-LOCK-006 (advisory locks), RB-NOTIFY-\* (delivery queues), RB-UPLOAD-SCAN (scanning), RB-CASE-IMPORT (legacy import).
 - Drill cadence: quarterly watchdog stall simulation, queue backlog remediation, provider failover tabletop, backfill replay exercise.
 - Evidence stored in `ops/workers/drills/<date>/` with participants, remediation tasks, and dashboards.
 
@@ -250,7 +250,7 @@ ______________________________________________________________________
 | LLM Registry & Speech     | Capability registry, parity evidence, failover orchestrators               | Workers consume controllers to enforce residency and parity          |
 | Storage subsystem         | Artifact staging, upload sessions, case import bundles                     | Workers manage lifecycle and cleanup                                 |
 | Worker infrastructure     | KEDA, Kubernetes HPA, monitoring dashboards                                | Ops Engineering maintains scaling policies                           |
-| Ops runbook catalog       | Incident response and drill references                                     | Docs lint keeps RB-* entries current                                 |
+| Ops runbook catalog       | Incident response and drill references                                     | Docs lint keeps RB-\* entries current                                 |
 
 ______________________________________________________________________
 
