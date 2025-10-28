@@ -2536,49 +2536,16 @@ ______________________________________________________________________
 
 ### 11.8 Notifications & outbound communications
 
-*Purpose: Guarantee idempotent delivery across email/SMS/providers while preserving audit trails.*
+See [`../services/notifications.md`](../services/notifications.md) for the authoritative specification covering email/SMS outbox orchestration, webhook receipts, download tokens, and multi-channel compliance. Platform teams depend on the following integration points:
 
-- Outbox pattern: `outbox_delivery` stores messages with `status`, OCC `version`, retry counters, and provider metadata. Workers claim batches via `FOR UPDATE SKIP LOCKED` and transition states atomically (`status='PENDING' → 'SENDING'`) with OCC checks to avoid duplicate sends.
-
-- Provider idempotency: unique constraint on `(org_id, channel, external_message_id)` prevents replays; delivery receipts enforce `(org_id, channel, provider_event_id)` uniqueness before updating status.
-
-- Webhook intake: verifies HMAC (`X-Request-Signature`), updates receipts under OCC, and writes `delivery_receipt_secure` view rows for auditor access.
-
-- Email deliverability: org onboarding validates SPF/DKIM alignment; DMARC policy must be `quarantine` or `reject` for production domains. Bounce/complaint webhooks feed delivery receipts and trigger follow-up tasks.
-
-- SMS compliance: enforce opt-in state, STOP/HELP handling, and region-specific sender policies; shortened links stay case/org scoped and inherit download-token rules.
-
-- Download tokens: signed URLs include `artifact_id`, hash, state, expiry, and optional single-use flag. Fetch flow validates tokens via `download_token` table before streaming.
-
-- Sender workers claim batches with `FOR UPDATE SKIP LOCKED` and OCC (`version` column) to ensure single flight per outbox row; helper functions encapsulate the lock usage.
-
-- SQL guardrails (normative):
-
-  ```sql
-  ALTER TABLE outbox_delivery
-    ADD COLUMN external_message_id TEXT,
-    ADD COLUMN version INT NOT NULL DEFAULT 0,
-    ADD CONSTRAINT outbox_unique_extmsg UNIQUE (org_id, channel, external_message_id);
-
-  ALTER TABLE delivery_receipt
-    ADD COLUMN provider_event_id TEXT,
-    ADD CONSTRAINT receipt_provider_event_unique UNIQUE (org_id, channel, provider_event_id);
-  ```
-
-- Resend logic first checks these unique keys; if a provider reports an already-sent ID, the system treats it as delivered and avoids re-sending. Audit events capture every send/receipt attempt with correlation IDs.
-
-- Region revalidation: on every download, ensure `artifact.manifest.storage_region` (and `compute_region`, when present) remains within the current effective allowlist; violations return 403 `POLICY_BLOCK` with audit events.
-
-- Source material: §11.8; Appendix F exemplars
+- Outbox workers in the Notifications service guarantee idempotent sends, provider receipts, and DLQ handling; Compose, Guardian, and worker pipelines enqueue through the service instead of bespoke mailers.
+- Download tokens and signed links live solely in the Notifications service; portal invalidation flows (`portal.link_invalidated`) consume these APIs when Guardian or security policies revoke access.
+- Residency digests, policy waiver reminders, and review-timeout escalations rely on shared templates defined in the Notifications spec; Ops runbooks RB-NOTIFY-* cover provider outages, webhook drift, and STOP/HELP compliance spikes.
+- Settings keys `notifications.*` (rate limits, templates, provider metadata) activate via the Settings Registry; Guardian/Compose sections reference those keys rather than redefining them.
 
 ### 11.9 In-app notifications
 
-*Purpose: Cover real-time notifications inside the portal/staff UI.*
-
-- Channels: rendered through SSE/Channels with read receipts; stored as `IN_APP_NOTIFICATION` artifacts when audit needs persistency.
-- Rate limits: share same quotas as outbox notifications; Settings keys `notifications.in_app.rate_limit_per_minute` and `notifications.in_app.daily_cap`.
-- L10n: UI strings localized via `i18n.notifications.*`; actions link to case resources with RLS checks.
-- Observability: metrics `inapp_notification_sent_total`, `inapp_notification_click_total`; anomalies trigger `alert_notifications_inapp_anomaly` with `../ops/runbooks/index.md` runbook reference.
+In-app toasts, SSE broadcasts, and reviewer alerts share the same Notifications service APIs (`../services/notifications.md §2.6`). Staff UI and portal surfaces subscribe to `notifications.case.*`/`notifications.org.*` topics and enforce rate limits defined in Settings (`notifications.in_app.rate_limit_per_minute`, `notifications.in_app.daily_cap`).
 
 ### 11.10 Document assembly pipeline
 

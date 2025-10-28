@@ -264,6 +264,33 @@ Post-checks:
 - Log decision record in App.O with locale IDs, remediation timeline, and QA sign-offs.
 - Schedule follow-up audit within one release cycle to verify coverage remains intact.
 
+## Notifications — 8) Operations & runbooks
+
+**Purpose:** Maintain operational readiness and evidence for audits. **|**
+**Contract:** Runbooks must stay aligned with alert catalog; quarterly drills validate provider failover, webhook compromise response, STOP/HELP surge handling, and download token abuse detection. **|**
+**State:** Runbooks listed under RB-NOTIFY-* in `docs/src/ops/runbooks/index.md`; drill evidence stored in `ops/notifications/drills/<date>/`. **|**
+**Failure modes & handling:** Missing runbook references or overdue drills flagged by docs lint and Ops governance. **|**
+**Observability:** Docs lint ensures runbook catalog fresh; dashboards track drill cadence. **|**
+**Breadcrumbs:** Runbook catalog `docs/src/ops/runbooks/index.md`, drill scheduler `ops/scripts/notifications/schedule_drills.py`, incident templates `ops/runbooks/templates/notifications/*.md`. **|**
+**References:** Alert catalogue, Ops governance policy App.N.
+
+### Notifications — 8.3 Runbook index (informative)
+
+| Runbook code      | Scenario                                   | Notes |
+| ----------------- | ------------------------------------------ | ----- |
+| RB-NOTIFY-OUTAGE  | Provider outage / degraded delivery        | Provider escalation paths, failover to backup channel |
+| RB-NOTIFY-WEBHOOK | Webhook signature drift / compromise       | Key rotation, backlog replay, SIEM coordination |
+| RB-NOTIFY-SMS     | STOP/HELP surge & regulatory response      | Compliance scripts, opt-in reinstatement |
+| RB-NOTIFY-TOKEN   | Download token abuse or leak               | Token rotation, artifact quarantine |
+
+### Notifications — 8.4 Drill cadence & evidence (normative)
+
+- Quarterly tabletop covering provider failover, webhook compromise, STOP/HELP compliance surge, and download token abuse.
+- Evidence stored in `ops/notifications/drills/<iso_week>/summary.md` with timestamps, participants, remediation tasks.
+- Ops governance job verifies last drill ≤ 90 days; failures escalate to Operations leadership.
+
+______________________________________________________________________
+
 ## Ref Manager — 8.3 Runbooks & drills (binding)
 
 **Purpose:** Maintain authoritative RM recovery guides and drills executed during incidents. **|**

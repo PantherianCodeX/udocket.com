@@ -801,7 +801,7 @@ jobs:
 * [x] LLM Registry: moved & filled, summary.
 * [x] LPE: remaining content moved if any; summary.
 * [x] Reference Manager: moved & filled, summary.
-* [ ] Notifications: moved & filled, summary.
+* [x] Notifications: moved & filled, summary.
 * [ ] Web App: moved & filled, summary.
 * [ ] Worker Cluster: moved & filled, summary.
 * [ ] LangGraph Agents: doc created, content aggregated, filed; summary in TDD.
