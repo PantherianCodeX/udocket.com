@@ -4,13 +4,14 @@ This checklist ensures each service document follows the standardized structure 
 
 ## 0) Reading Guide
 
-**Purpose:** Outline how to consume this document and highlight any prerequisites.\
-**Contract:** Clarify who owns the service doc and which code/tests back it.\
-**State:** Note canonical sources (repos, scripts) that generate content.\
-**Failure modes & handling:** Describe how documentation drift is detected.\
-**Observability:** Mention lint/build commands that gate changes.\
-**Breadcrumbs:** List implementation/tests/observability dashboards.\
-**References:** Link to relevant TDD/appendix sections.
+Use this section to orient readers before they dive into the specification. It should be bespoke to the service—no copy/paste boilerplate and no preamble block. Summarize how to consume the doc, who owns it, required prerequisites, and where to go for adjacent material. Mix short paragraphs and bullets as needed.
+
+- **Scope:** Tailor this to the service’s charter and the audiences that should read it.
+- **Structure:** Explain how this document is laid out (sections, appendices, diagrams) and why.
+- **Maintenance:** Call out linting/build requirements, review cadence, and who approves edits.
+- **Change protocol:** Note how changes to this service must reference or update the doc.
+- **References:** Link to TDD sections, ADRs, runbooks, or repos readers must consult first.
+- **Contacts:** Give the owning teams, mailing lists, or escalation paths.
 
 ## 1) Purpose
 

@@ -101,6 +101,12 @@ scripts/
 To ensure every service and app document covers all required information consistently, adopt a universal section structure.
 Each service, app, or agent document will follow a shared, **standardized set of H2 (`##`) section headings**, which reflect its lifecycle and responsibilities (e.g., Purpose, API Contract, State Management, Failure Modes, Observability, etc.).
 
+#### Phase 0 enforcement checklist
+
+* Retrofit all existing service specs (`services/guardian.md`, `services/settings.md`, `services/lp-engine.md`, `services/ref-manager.md`, etc.) so their H2 hierarchy matches the canonical numbering (`0) Reading guide` … `10) References`) and every major section opens with the standardized preamble block (Purpose, Contract, State, Failure, Observability, References, Breadcrumbs).
+* Capture any missing sections, absent breadcrumbs, or deviations in a shared Phase 0 worksheet so we can resolve gaps before Phase 1 migrations.
+* Treat Guardian as the first remediation target, then sweep remaining service specs once its structure is compliant.
+
 #### Standardized H2 structure
 
 To ensure every service and app document covers all required information consistently, adopt a universal section structure:
@@ -120,7 +126,7 @@ These **top-level sections** make every document familiar and navigable. Within 
 * ## 10) References: Links to ADRs, glossaries, diagrams, etc.
 ```
 
-* Each H2 section may have nested H3/H4 as needed, with the expectation that each major subsection (H2 always and H3 unless unusually thin but necessary) begins with the section preamble block (Purpose, Contract, State, Failure, Observability) to describe that portion clearly.
+* Each H2 section may have nested H3/H4 as needed. Every major section (all H2s and most H3s) should open with the standardized preamble block (Purpose, Contract, State, Failure, Observability, References, Breadcrumbs) **except** `0) Reading guide`, which stays free-form orientation text.
 
 #### Standardized section preamble
 
