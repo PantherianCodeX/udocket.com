@@ -709,14 +709,6 @@ ______________________________________________________________________
 
 ## 10) References (informative)
 
-**Purpose:** Provide a curated list of authoritative materials referenced throughout this specification for quick lookup during reviews and incidents. **|**
-**Contract:** Keep this list current when adding/removing dependencies, ADRs, diagrams, or runbooks; PRs modifying Guardian behavior must update references and link to diff context. **|**
-**State:** Links point to immutable ADRs, diagrams, runbooks, and glossary entries maintained elsewhere in the repo. **|**
-**Failure modes & handling:** Missing/obsolete references cause docs lint to fail (`scripts/docs/lint_docs.py`); owners must refresh the list before merging. **|**
-**Observability:** Docs CI validates reference existence and cross-link formatting. **|**
-**References:** ADR index `docs/adr/README.md`, Glossary `docs/src/overview/tdd/appendices/glossary.md`, §8.3 (this file). **|**
-**Breadcrumbs:** `scripts/docs/lint_docs.py`, `scripts/docs/link_check.py`, MkDocs config `docs/mkdocs.yml`.
-
 - **ADRs:** ADR-0001 Guardian Ready/Quarantine, ADR-0003 API Versioning & Sunset, ADR-0004 Localization & Policy Engine, ADR-0005 OPA Policy Plane.
 - **TDD sections:** TDD §5 Security Architecture, TDD §7 Guardian Integration, TDD Appendix H Operational Guides.
 - **Runbooks:** §8.3 entries RB-GUARD-001/QUEUE/QUAR/MANUAL plus supporting files in `ops/runbooks/guardian/`.

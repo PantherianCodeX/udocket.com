@@ -24,6 +24,21 @@
 
 > Capture expectations for tabletop exercises, on-call readiness checks, and evidence storage.
 
+## Digital Signer — 8.1 Runbooks, rotations, and drills (binding)
+
+**Purpose:** Ensure on-call teams can remediate signing incidents quickly. **|**
+**Contract:** Operational playbooks map alerts to RB-SIGN-* runbooks; quarterly rotations rehearse trust-root renewal, TSA failover, and FIPS recovery. **|**
+**State:** Runbooks live in `ops/runbooks/signer/`; key rotation artifacts archived in `ops/security/key_rotation/`. **|**
+**Failure modes & handling:** Stale runbooks block release sign-off; missing rotation evidence triggers audit findings. **|**
+**Observability:** Docs lint checks references; PagerDuty analytics monitor response time. **|**
+**References:** §5 Failure modes, §6 Observability. **|**
+**Breadcrumbs:** Runbooks `ops/runbooks/signer/`, automation `ops/scripts/security/rotate_signing_keys.py`, drill tracker `ops/change/signer_rotations.ics`.
+
+- RB-SIGN-TSA: TSA/OCSP outage response.
+- RB-SIGN-FIPS: FIPS attestation recovery.
+- RB-SIGN-ACK: Client acknowledgement remediation.
+- RB-SIGN-TRUSTROTATE: Trust-root / certificate rotation checklist.
+
 ## Guardian — 8.3 Runbooks & drills (binding)
 
 **Purpose:** Maintain authoritative Guardian recovery guides, drills, and manual review procedures executed during incidents. **|**

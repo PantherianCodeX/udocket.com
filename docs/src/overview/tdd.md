@@ -1886,64 +1886,17 @@ ______________________________________________________________________
 - Operations: Guardian SLOs, runbooks, and manual review procedures stay with that team; review queue gating (§5.2) and portal invalidation (§11.2.1) represent the platform dependencies.
 - Artifacts & manifests: Guardian judgment IDs, reason codes, and settings hashes persist in manifests consumed by Signer and Portal; schema and payload examples live there.
 
-### 7.2 Digital signature service (PDF/A, TSA, OCSP)
+### 7.2 Digital signature service (summary)
 
-*Purpose: Produce tamper-evident deliverables with verifiable trust anchors.*
+*Purpose: Highlight signer touchpoints while delegating implementation detail to the canonical spec.*\
+*Contract: Document Signer architecture, trust roots, TSA/OCSP integration, and FIPS enforcement live in [`../services/digital-signer.md`](../services/digital-signer.md); this section summarises dependencies.*
 
-- API handles signing requests with `{artifact_id, content_uri, manifest}`; service converts to PDF/A, applies digital signature using org template, and embeds manifests.
-- Trust roots configured via settings (`sign.trust_roots[]`); activation validates certificates, expiry, and records version as audit artifact `SIGN_TRUST_ROOTS@<version>`.
-- OCSP/CRL checks performed per signature; cache responses for min(`max-age`, 12h) with a 30-minute soft-fail window. During the window the portal surfaces a “verification pending” badge, audit logs record `SIGN_VERIFY_SOFT_FAIL`, and downloads remain available. If the responder remains unreachable beyond 30 minutes the signer returns `SIGN_REVOKE_STATUS_UNKNOWN`, the artifact is quarantined from portal delivery, and on-call is paged with escalation to the TSA vendor.
-- TSA integration enforces ±5 second drift vs platform NTP; out-of-drift timestamps rejected. Metrics track `sign_verify_status_total`, `ocsp_latency_seconds`, `ocsp_staple_age_seconds`, `tsa_latency_seconds`, and `tsa_time_drift_seconds`.
-- Output artifacts include signature certificates (`SIGNATURE_CERT`) and optional destruction certificates, each referencing underlying content SHA and manifest.
-- Manifest schema (Pydantic) captures key version, TSA thumbprint, signer identity (Keycloak subject, display name), device fingerprint metadata, and document context; enforcing provenance on every signed artifact.
-
-#### 7.2.1 PKI & signing modes (binding)
-
-**Breadcrumbs:** Implementation `apps/platform/operations/signer.py::issue_signed_document`, Tests `tests/platform/operations/test_signer_modes.py::test_pkcs7_and_cades`, Observability Grafana “Signer & TSA” dashboard with metric `signer_request_latency_seconds`.
-
-*Purpose: Anchor signatures to trusted, compliant crypto domains.*
-
-- Document Signer uses Azure Key Vault Managed HSM partitions with FIPS 140-3 validation; hardware keys never leave the HSM boundary. Settings key `sign.hsm.vault_uri` (system scope) plus per-environment `sign.hsm.key_id` select the active signing key; health probes verify `attestation_status=fips` before admitting requests.
-- Private PKI hierarchy: offline root `uDocket-root` (RSA-4096, air-gapped), online intermediate `uDocket-deliverable` (ECDSA P-384) issued per environment, and per-tenant leaf certificates bound to signing keys. Rotation requires dual approval, emits `SIGN_TRUST_ROOTS` artifacts, and runs automated integration tests that replay signature validation with the new chain.
-- Settings `sign.trust_mode ∈ {internal, hybrid, external}` governs trust anchor exposure. Default `hybrid` issues signatures with the internal intermediate **and** requests cross-certification from an external qualified provider so deliverables validate both inside the platform and with public PKI validators. `external` restricts issuance to the public provider for jurisdictions that mandate it; `internal` is reserved for sandbox or fully private deployments.
-- `sign.fips_mode ∈ {optional, required}` controls algorithm enforcement per org. When `required`, the signer restricts to FIPS-approved suites (ECDSA P-384 + SHA-384 for PDF/JWS, RSASSA-PSS 3072 for legacy interop), loads the OpenSSL FIPS provider, and rejects requests referencing non-compliant profiles. Guardian blocks deliverable promotion if the active signature policy conflicts with an org marked `sign.fips_mode=required`.
-- OCSP and TSA integrations run with mutual TLS using certificates issued from the same PKI. Health probes watch `ocsp_last_success_seconds` and `tsa_last_success_seconds`; thresholds differ per profile (`sign.ocsp.profiles[]`, `sign.tsa.profiles[]`) to support vendor-specific SLAs.
-- Non-production environments use distinct PKI roots and TSA sandboxes; manifests are stamped `trust_level=nonprod` to prevent cross-environment replays.
-
-#### 7.2.2 Deliverable signature policies & client affirmation (binding)
-
-**Breadcrumbs:** Implementation `apps/platform/operations/signer_policy.py::resolve_signature_policy`, Tests `tests/platform/operations/test_signature_policy.py::test_client_ack_enforced`, Observability Grafana “Deliverable Signatures” panel with alert `signature_policy_violation_total`.
-
-*Purpose: Tie deliverable configurations to concrete signing and acknowledgement flows.*
-
-- Settings key `sign.signature_policies[]` defines reusable policies referenced by `DeliverableDefinition.signature_policy_id` (§6.4.1). Each policy specifies `platform_signature` (`required|optional|none`), `client_signature` (`none|attestation_optional|attestation_required|countersign_required`), `tsa_profile_id`, `ocsp_profile_id`, `fips_required`, and optional `ack_template_id` for client-facing attestations.
-- Default mappings: `SIGN_POLICY_PLATFORM_REQUIRED` enforces platform signatures with optional client attestation (used by transcripts and Analyze summaries); `SIGN_POLICY_PLATFORM_REQUIRED_CLIENT_OPTIONAL` requires platform signatures and exposes a client acknowledgement toggle (Compose client deliverable); `SIGN_POLICY_PLATFORM_REQUIRED_CLIENT_REQUIRED` is reserved for regulated deployments where client countersignature is mandatory before portal release.
-- Signing pipeline: (1) producing stage emits canonical content (TXT/MD/JSON); (2) packager renders PDF/A or COSE/JWS envelope per policy; (3) Document Signer applies platform signature + TSA token; (4) manifest records `signatures[]` with `{policy_id, key_version, tsa_token_hash, ocsp_status}`; (5) Guardian verification requirements for deliverable promotion remain defined in `../services/guardian.md`. Raw TXT/MD artifacts remain stored for traceability but are marked `requires_signature=true` to block release without the signed companion.
-- Staff approval UI and portal download flows read the same manifest metadata; releases block unless a PDF/A with an embedded signature manifest is present, preventing drift between enforcement and the copy presented to reviewers/clients.
-- Client acknowledgement workflow: if `client_signature=attestation_optional|attestation_required`, portal prompts the client with the `ack_template_id` form after platform signing. Attestations generate `CLIENT_SIGNATURE_CERT` (digital countersignature) or `CLIENT_ATTESTATION` (logged acknowledgement) auxiliary records, both hash-linked to the signed artifact. Deliverables with `client_signature=countersign_required` remain in `PENDING_CLIENT_ACK` until the auxiliary record reaches `status=completed`; Guardian cancels portal URLs if the SLA expires.
-- Additional deliverables (short summary, timeline-only, future timeline exports) inherit `SIGN_POLICY_PLATFORM_REQUIRED` unless their catalog entry specifies otherwise. Implementation toggles from §6.4.1 cannot activate a deliverable whose signature policy demands a higher trust tier than the org’s configured `sign.trust_mode`.
-- Waivers and manual overrides follow existing approval swap semantics: changing a deliverable’s signature policy emits `SIGNATURE_POLICY_CHANGE` audit events, regenerates signed copies, and revokes previously released versions.
-
-<figure class="full-width-diagram">
-  <img class="diagram" src="../build/mermaid/overview/tdd/diagrams/signing-delivery-v1.png" alt="Signing and delivery flow">
-  <figcaption style="font-size: 0.9em; color: #555;">Signing and delivery flow</figcaption>
-</figure>
-
-#### 7.2.3 FIPS enforcement & runtime guardrails (binding)
-
-**Breadcrumbs:** Implementation `packages/udocket_core/security/fips_guard.py::assert_fips_mode`, Tests `tests/security/test_fips_guard.py::test_rejects_non_fips_cipher`, Observability CI job “fips-mode-check” and Grafana “Signer & TSA” dashboard.
-
-*Purpose: Guarantee that every cryptographic operation honours FIPS 140-2/140-3 requirements when enabled.*
-
-- Settings: `security.crypto.fips_requirement ∈ {disabled, optional, required}` (system scope, default `optional`) and org override `security.crypto.fips_mode ∈ {disabled, required}`. When either resolution yields `required`, the service **must** start in FIPS mode or refuse to boot. Guardian, Signer, Settings, Upload Scan, Reference Manager, and LPE are hard-coded to treat `required` as non-overridable once an org, deployment, or deliverable policy demands it. Boot sequences export `OPENSSL_FIPS=1` (or invoke `openssl fips=on`) so OpenSSL enters validated mode before any cryptographic primitive is initialized.
-- Module attestation: on startup every service invokes the shared `fips_healthcheck.verify()` routine, which validates (1) OpenSSL/BoringCrypto initialized with FIPS provider enabled, (2) module self-test pass/fail from the vendor API, (3) reported CMVP certificate ID matches `security.crypto.expected_cert_id`, and (4) entropy sources map to approved DRBGs (HSM RNG, `/dev/random` in FIPS mode, or cloud KMS FIPS endpoints). Failures abort boot (`EXIT_FIPS_ATTESTATION_FAILED`) and trigger `udocket_fips_startup_failure_total{service}` alerts.
-- Permissible cryptographic modules: OpenSSL 3.x FIPS provider (`openssl-fipsmodule`), AWS CloudHSM, Azure Managed HSM (FIPS 140-3), Google Cloud KMS FIPS endpoints, and BoringCrypto builds compiled in validated FIPS mode. Any alternative module requires Security review and a documented CMVP certificate before enablement.
-- Algorithm enforcement: cryptographic helpers (`packages.udocket_core.crypto.*`) expose only FIPS-approved primitives while FIPS mode is effective. Attempts to use non-approved algorithms raise `FipsAlgorithmError`. Static analysis (`scripts/security/fips_cipher_lint.py`) and CI job `ci-fips-scan` block merges introducing disallowed primitives (`md5`, `chacha20`, `rsa1024`, etc.).
-- DRBG & key generation: key material, nonces, and random tokens originate from FIPS-validated sources—HSM-backed RNG for keys, OpenSSL DRBG with approved seed sources for software operations, and `azure.keyvault.keys` FIPS endpoints for managed keys. Services record `fips_drbg_source` inside manifests/auxiliary records and export `crypto_drbg_health_seconds` gauges.
-- Runtime monitoring: metrics (`crypto_fips_mode{service}`, `crypto_fips_module_cert_id{service}`, `crypto_fips_selftest_fail_total`, `crypto_fips_drbg_reseed_total`) feed the central dashboard. Guardian refuses to approve artifacts whose manifests lack `fips_mode=true` when the owning org or deliverable policy specifies FIPS enforcement.
-- Audit logging: every signing, hashing, HMAC, or envelope-encryption event appends `{fips_mode, fips_module_cert_id, fips_validation_level, fips_drbg_source}` to the ops JSON/JSONL entry plus the case-level auxiliary record. Appendix D schemas and App.F examples reflect the new fields; Settings activation runs `scripts/security/validate_fips_tagging.py` to enforce parity.
-- Exception handling: temporary FIPS downgrades require a waiver artifact (`FIPS_MODE_EXCEPTION`) referencing `waiver_id`, justification, scope (`service`, `org`, `artifact_type`), duration (≤ 7 days), and approval chain. Guardian blocks new deliverables during the waiver unless the artifact type explicitly permits non-FIPS outputs. Alerts (`crypto_fips_waiver_active_total`) page Security daily until the waiver expires or is revoked.
-- Disaster recovery: backup regions maintain identical FIPS-certified modules; failover runbooks include a `verify_fips_attestation` step before traffic cutover. CMVP revalidation or certificate expiration is tracked via `crypto_fips_cert_expiry_days` with 90/30/7-day alert thresholds.
+- Platform signatures: Document Signer converts canonical content to PDF/A (or COSE/JWS), applies platform signatures, and records signature manifests with TSA/OCSP evidence. Deliverables remain blocked until Guardian verifies the manifest.
+- Signature policies & acknowledgements: Settings `sign.signature_policies[]` drive platform signatures and client acknowledgement flows. Portal prompts for countersignatures where required and stores auxiliary artifacts referenced in manifests. Full policy catalog, default mappings, and waiver handling appear in §2.2 of the signer spec.
+- Trust roots & PKI: Managed HSM keys, offline/online certificate hierarchy, and rotation procedures are documented in §2.3. Settings activation validates attestation (`sign.hsm.key_id`, `sign.trust_roots[]`) and records `SIGN_TRUST_ROOTS@<version>` artifacts.
+- TSA/OCSP posture: Soft-fail windows, responder failover, and metrics (`ocsp_latency_seconds`, `tsa_time_drift_seconds`, `sign_verify_status_total`) are owned by the signer service (§2.4, §5.1). Portal quarantine behaviour after soft-fail windows inherits from that spec.
+- FIPS compliance: `security.crypto.fips_requirement` and deliverable policies dictate FIPS mode. Startup attestation, algorithm enforcement, waiver governance, and monitoring live in §7.
+- APIs: Signing, verification, and certificate retrieval endpoints plus acknowledgement flows are formalised in signer §3. Integrators MUST use HMAC headers and Idempotency keys per that contract.
 
 ### 7.3 Request signing and verification (HMAC)
 

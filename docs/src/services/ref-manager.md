@@ -678,14 +678,6 @@ ______________________________________________________________________
 
 ## 10) References (informative)
 
-**Purpose:** Provide quick access to authoritative documents, ADRs, diagrams, and scripts supporting RM. **|**
-**Contract:** Update this list whenever dependencies change; docs lint ensures referenced artifacts exist. **|**
-**State:** References point to immutable ADRs, diagrams, runbooks, and tooling maintained elsewhere in the repo. **|**
-**Failure modes & handling:** Broken references must be resolved before merging; CI highlights missing artifacts. **|**
-**Observability:** `scripts/docs/lint_docs.py` validates references and link health. **|**
-**References:** `docs/mkdocs.yml` navigation entries. **|**
-**Breadcrumbs:** `scripts/docs/lint_docs.py`, `scripts/docs/build_runbook_catalog.py`.
-
 - ADRs: ADR-0004 Localization & Policy Engine, ADR-0005 OPA Policy Plane. **|**
 - TDD: TDD §6 Reference Data, TDD Appendix G ERD, TDD Appendix H Operational Guides. **|**
 - Runbooks: §8.3.2 RB-RM-ROLLBACK, §8.3.3 RB-RM-HARVEST, §8.3.4 RB-RM-PUBLISH, §8.3.5 RB-RM-LICENSE, §8.3.6 RB-RM-RESIDENCY. **|**

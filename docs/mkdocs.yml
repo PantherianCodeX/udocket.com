@@ -49,6 +49,7 @@ nav:
       - Product Requirements: overview/prd.md
   - Services:
       - Guardian: services/guardian.md
+      - Digital Signer: services/digital-signer.md
       - Settings Registry: services/settings.md
       - LPE: services/lp-engine.md
       - Reference Manager: services/ref-manager.md

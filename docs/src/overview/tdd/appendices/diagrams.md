@@ -21,7 +21,7 @@ Selected canonical diagrams (TDD‑owned)
 - System context: `overview/tdd/diagrams/system-context-v1.mmd` (Architecture Overview)
 - Artifact lifecycle (WP/CD): `overview/tdd/diagrams/artifact-lifecycle-overview-v1.mmd`
 - Data lineage: `overview/tdd/diagrams/data-lineage-v1.mmd`
-- Signing and delivery: `overview/tdd/diagrams/signing-delivery-v1.mmd`
+- Signing and delivery: `services/digital-signer/diagrams/signing-delivery-v1.mmd`
 - DR region failover: `overview/tdd/diagrams/dr-region-failover-v1.mmd`
 - DSAR hard purge: `overview/tdd/diagrams/dsar-erasure-v1.mmd`
 

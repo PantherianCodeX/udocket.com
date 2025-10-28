@@ -789,18 +789,18 @@ jobs:
 
 ### Phase 1 (OPA move)
 
-* [ ] OPA details cut from main TDD and added to LPE doc.
-* [ ] Summary placeholder added in main TDD with link to LPE.
-* [ ] All references to OPA/policy updated to point to LPE doc.
+* [x] OPA details cut from main TDD and added to LPE doc.
+* [x] Summary placeholder added in main TDD with link to LPE.
+* [x] All references to OPA/policy updated to point to LPE doc.
 
 ### Phase 2 (Modularization per component) — repeat for each service/app/agent
 
-* [ ] Guardian: content moved, sections filled, TDD summary added.
-* [ ] Digital Signer: content moved, sections filled, TDD summary added.
-* [ ] Settings Registry: moved & filled, summary.
+* [x] Guardian: content moved, sections filled, TDD summary added.
+* [x] Digital Signer: content moved, sections filled, TDD summary added.
+* [x] Settings Registry: moved & filled, summary.
 * [ ] LLM Registry: moved & filled, summary.
-* [ ] LPE: remaining content moved if any; summary.
-* [ ] Reference Manager: moved & filled, summary.
+* [x] LPE: remaining content moved if any; summary.
+* [x] Reference Manager: moved & filled, summary.
 * [ ] Notifications: moved & filled, summary.
 * [ ] Web App: moved & filled, summary.
 * [ ] Worker Cluster: moved & filled, summary.
