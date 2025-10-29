@@ -516,3 +516,44 @@ ______________________________________________________________________
 - Ops runbook catalog — `../ops/runbooks/index.md` (`RB-NOTIFY-*` entries).
 - ADR-0003 — API versioning & sunset policy for notification endpoints.
 - ADR-0004 — Localization & Policy Engine governance for templates.
+
+______________________________________________________________________
+
+## Appendix A — Event catalog & streaming contract (binding)
+
+**Purpose:** Keep the authoritative catalog of notification and portal SSE events in one place. **|**
+**Contract:** Publishers emit events that validate against the shared schemas; consumers implement the envelope contract and respect replay/SLO requirements. **|**
+**State:** Schemas live at `spec/schemas/sse/event_envelope.schema.json` with code‑generated models in `packages/udocket_core/events/schemas.py`. Redis streams back SSE buffers with 24 h retention. **|**
+**Failures & handling:** Schema drift or SLO regressions fail staging drills and block deploys; alerts `alert_sse_delivery_lag_high` and `alert_sse_snapshot_regression` route to on-call. **|**
+**Observability:** Dashboards “SSE Health” and “Notifications Fan-out” track `sse_client_delivery_lag_seconds`, `sse_snapshot_size_bytes`, `notifications_inapp_sent_total`. **|**
+**Breadcrumbs:** Publishers `apps/platform/events/*.py`, fan-out service `apps/platform/notifications/inapp.py`, tests `tests/platform/realtime/test_sse_payloads.py`, `tests/e2e/test_sse_reconnect.py`, `tests/e2e/test_sse_token_binding.py`. **|**
+**References:** Web app spec Appendix A, Settings Registry §5.2 (`notifications.*` keys).
+
+### A.1 Event types
+
+- Core lifecycle: `job.accepted`, `job.running`, `job.update`, `job.blocked`, `job.quarantined`, `job.completed`, `job.canceling`, `job.canceled`.
+- Artifact transitions: `artifact.status`, `qa.notes`, `SIGNATURE.APPLIED`, `DELIVERABLE.RELEASED`, `DELIVERABLE.REVOKED`.
+- Portal & notifications: `portal_link_invalidated`, `notifications.toast`, `notifications.digest_ready`.
+- Provider health: `provider.health`, `settings.activated`, `settings.changed`.
+- Status model lifecycle: `OBJECT.STORED`, `OBJECT.PROCESSING.START|END`, `OBJECT.FAILED`, `OBJECT.PENDING_JUDGMENT`, `OBJECT.CLEARED_FOR_USE`, `OBJECT.OPERATOR_PREP`, `REVIEW.REQUESTED`, `REVIEW.QUEUED`, `REVIEW.SKIPPED`, `REVIEW.APPROVED`, `REVIEW.CHANGES_REQUESTED`, `REVIEW.QUARANTINED`, `GUARDIAN.JUDGMENT.PASS|WARN|BLOCK|WAIVED`.
+
+Each payload includes `schema_version` and `emitted_at` (RFC3339 with timezone) so clients can branch logic during schema upgrades. Producers emit at-most-once business transitions but SSE delivery remains at-least-once; consumers dedupe on `id`.
+
+### A.2 Envelope and replay semantics
+
+- Envelope fields: `id` (monotonic per stream), `event`, `data` (JSON), optional `retry` (ms). `id` echoes in `Last-Event-ID`.
+- Digest + caching: Clients send `If-None-Match` with the last digest; servers respond with `ETag: sse:{scope}:{digest_sha256}`. Digest mismatches trigger bounded snapshots (≤ 500 events, `watermark_ts` included) before live tailing.
+- Size limits: events ≤ 8 KiB payload (post‑JSON), snapshots ≤ 5 MiB serialized, build time ≤ 2 s. Schemas encode field length limits to make budgets enforceable.
+- Retention: Redis stream retains 24 h; reconnects beyond the window receive latest snapshot plus live tail.
+- Load testing: quarterly chaos run `scripts/sse/load_test.py` fans 5k concurrent tails at 1 Hz updates to validate capacity.
+
+### A.3 SLOs & acceptance
+
+- Delivery latency: 95th percentile \< 2 s, 99th percentile \< 5 s (`sse_client_delivery_lag_seconds`).
+- Snapshot guardrails: `sse_snapshot_build_duration_seconds` and `sse_snapshot_size_bytes` stay within limits; alert `alert_sse_snapshot_regression` blocks deploys if breached.
+- Token binding & security: `tests/e2e/test_sse_token_binding.py::test_disconnect_on_org_switch` ensures token/org mismatches close connections and emit `SSE_DISCONNECT_TOKEN_MISMATCH`.
+- Contract validation: `tests/platform/realtime/test_sse_payloads.py` validates schema; `tests/e2e/test_sse_reconnect.py` exercises Last-Event-ID replay plus snapshot delivery.
+
+### A.4 Payload hints
+
+`data.meta` may include `{phase, percent, next_action, badges[]}` aligned with UI progress widgets (e.g., `phase="Judgment"`, `badges=["WARN:PII detector"]`). Providers pipe region/latency metrics into `provider.health`; finance signals surface via `job.blocked` with `warning="BUDGET_HELD"`.

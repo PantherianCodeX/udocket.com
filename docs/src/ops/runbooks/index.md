@@ -2,7 +2,7 @@
 
 <!-- AUTO-GENERATED: Run `python scripts/docs/build_runbook_catalog.py` to refresh. -->
 
-## Digital Signer — 8.3 Runbooks & drills (binding)
+## Digital Signer — 8.3 Runbooks & Drills (binding)
 
 **Purpose:** Maintain executable runbooks and drill cadence for key signing scenarios. **|**
 **Contract:** Alerts map to `RB-SIGN-*` playbooks; quarterly drills rehearse trust-root renewal, TSA failover, FIPS recovery, and client acknowledgement remediation. **|**
@@ -12,7 +12,7 @@
 **Breadcrumbs:** Runbook files, rotation scripts, drill tracker. **|**
 **References:** `RB-SIGN-TSA`, `RB-SIGN-FIPS`, `RB-SIGN-ACK`, `RB-SIGN-TRUSTROTATE`. *
 
-### Digital Signer — 8.3.1 Runbook index (informative)
+### Digital Signer — 8.3.1 Runbook Index (informative)
 
 | Runbook code | Scenario | Notes |
 | ------------ | -------- | ----- |
@@ -21,28 +21,28 @@
 | `RB-SIGN-ACK` | Client acknowledgement remediation | Reconciles acknowledgements, notifies stakeholders, updates App.O |
 | `RB-SIGN-TRUSTROTATE` | Trust-root / certificate rotation | Executes dual-publish rotation, records evidence, updates manifests |
 
-### Digital Signer — 8.3.2 Primary runbooks (binding)
+### Digital Signer — 8.3.2 Primary Runbooks (binding)
 
-**Purpose:** Document operational playbooks responders execute during incidents or exercises. **|**
-**Contract:** Link production alerts to runbook identifiers, outline execution cadence, and name the maintaining team. **|**
-**State:** Summarize where runbooks live (repo paths, automation scripts) and what evidence they produce. **|**
-**Failures & handling:** Explain how missing, stale, or skipped runbooks are surfaced and remediated. **|**
-**Observability:** Note tooling that tracks drill frequency, runbook completion, and incident follow-up. **|**
-**Breadcrumbs:** Runbook files, automation scripts, incident templates. **|**
-**References:** Alert catalogs, governance docs referencing the runbooks.
+**Purpose:** Summarise the signer runbooks executed during incidents and drills so responders act consistently. **|**
+**Contract:** Each runbook ties to specific alerts and evidence requirements; responders update playbooks after every incident or drill. **|**
+**State:** Runbook markdown lives under `ops/runbooks/signer/`, automation scripts under `ops/scripts/security/`, and evidence in `ops/security/key_rotation/`. **|**
+**Failures & handling:** Missing or stale steps block deployment sign-off until refreshed. **|**
+**Observability:** Docs lint, PagerDuty analytics, and drill dashboards track completion. **|**
+**Breadcrumbs:** `ops/runbooks/signer/*.md`, `ops/scripts/security/*.py`, incident templates `ops/security/incidents/signer_*.md`. **|**
+**References:** Alert catalog, Ops governance policy, §5 Failure modes.
 
-- `RB-SIGN-TSA` — TSA/OCSP outage response with rollback steps for deliverable signing.
-- `RB-SIGN-FIPS` — FIPS attestation recovery including startup attestations and hardware validation.
-- `RB-SIGN-ACK` — Client acknowledgement remediation, backlog clearing, and waiver coordination.
-- `RB-SIGN-TRUSTROTATE` — Trust-root / certificate rotation checklist covering dual publish and smoke tests.
+- `RB-SIGN-TSA` — TSA/OCSP outage response with rollback steps for deliverable signing and synthetic verification.
+- `RB-SIGN-FIPS` — FIPS attestation recovery including startup attestations, HSM validation, and waiver handling.
+- `RB-SIGN-ACK` — Client acknowledgement remediation, backlog clearing, and App.O waiver coordination.
+- `RB-SIGN-TRUSTROTATE` — Trust-root/certificate rotation workflow covering dual publish, smoke tests, and evidence upload.
 
-### Digital Signer — 8.3.3 Drill cadence & evidence (binding)
+### Digital Signer — 8.3.3 Drill Cadence & Evidence (binding)
 
 - Quarterly drills cover trust-root renewal, TSA failover, FIPS recovery, and acknowledgement remediation; evidence lands in `ops/security/key_rotation/<timestamp>/`.
 - Drill scheduler `ops/change/signer_rotations.ics` tracks cadence and ownership; missed drills block release sign-off until completed.
 - Docs lint and Ops governance dashboards verify evidence uploads and runbook freshness before closing audits.
 
-## Guardian — 8.3 Runbooks & drills (binding)
+## Guardian Service — 8.3 Runbooks & Drills (binding)
 
 **Purpose:** Maintain authoritative Guardian recovery guides, drills, and manual review procedures executed during incidents. **|**
 **Contract:** Alerts enumerated in §§5–8 map to RB-GUARD identifiers documented here; responders update these runbooks after every incident or drill. **|**
@@ -52,79 +52,35 @@
 **Breadcrumbs:** Runbooks `ops/runbooks/guardian/*.md`, automation `ops/scripts/guardian/`, tests `tests/ops/test_runbook_integrity.py::test_guardian_runbooks`, PagerDuty service “Guardian SLO”, Grafana dashboard “Guardian SLO”. **|**
 **References:** §5 Failure modes, §8.1 Operational posture, §8.3, ADR-0001. *
 
-### Guardian — 8.3.1 Runbook index (informative)
+### Guardian Service — 8.3.1 Runbook Index (informative)
 
-- RB-GUARD-001 — Guardian SLO breach stabilization.
-- RB-GUARD-QUAR — Quarantine spike investigation.
-- RB-GUARD-QUEUE — Submission backlog watchdog.
-- RB-GUARD-MANUAL — Manual review reconciliation.
+- `RB-GUARD-001` — Guardian SLO breach stabilisation
+- `RB-GUARD-QUAR` — Quarantine spike investigation
+- `RB-GUARD-QUEUE` — Submission backlog watchdog
+- `RB-GUARD-MANUAL` — Manual review reconciliation
 
-<a id="rb-guard-001"></a>
+### Guardian Service — 8.3.2 Primary Runbooks (binding)
 
-### Guardian — 8.3.2 RB-GUARD-001 — Guardian SLO breach (binding)
+**Purpose:** Summarise Guardian runbooks responders execute during incidents or exercises. **|**
+**Contract:** Each runbook maps to specific alerts and evidence expectations; responders update the playbook after incidents or drills. **|**
+**State:** Runbook markdown, automation scripts, and ledger templates live under `ops/runbooks/guardian/` and `ops/scripts/guardian/`. **|**
+**Failures & handling:** Missing steps or stale guidance block deployment sign-off until refreshed. **|**
+**Observability:** Docs lint, PagerDuty analytics, and retrospective checklists track coverage. **|**
+**Breadcrumbs:** `ops/runbooks/guardian/*.md`, `ops/scripts/guardian/*.py`, incident templates `ops/guardian/incidents/*.jsonl`. **|**
+**References:** §5 Failure Modes, Ops governance policy, alert catalog.
 
-**Purpose:** Restore Guardian availability and route artifacts through manual review when automated judgments breach the SLO. **|**
-**Contract:** Any availability or latency breach must execute this sequence before re-enabling automated progression; manual review requires ledger capture. **|**
-**State:** Manual review ledger entries persist under `ops/guardian/manual_review/<date>.jsonl`, alongside incident records in `ops/guardian/incidents/`. **|**
-**Failures & handling:** Skipping ledger updates or failing to scale evaluators risks lost audit history and ongoing SLO breaches. **|**
-**Observability:** Alerts `guardian_judgment_latency_seconds`, `guardian_submission_timeout_total`, and synthetic job results confirm recovery once they return to baseline. **|**
-**Breadcrumbs:** Runbook `ops/runbooks/guardian/slo_breach.md`, automation `ops/scripts/guardian/scale_guardian.py`, tests `tests/ops/test_runbook_integrity.py::test_guardian_slo_runbook`, Grafana dashboard “Guardian SLO”. **|**
-**References:** §5.1 Submission backlog, §8.1 Operational posture, §8.3.1 Runbook index. *
+- `RB-GUARD-001`: Restore availability during SLO breaches—validate `/readyz` and `/synthetic/status`, capture queue metrics, decide whether to pause submissions or scale evaluators (`ops/scripts/guardian/scale_guardian.py`), maintain manual review ledgers in `ops/guardian/manual_review/<date>.jsonl`, and replay artifacts once latency returns to target.
+- `RB-GUARD-QUAR`: Investigate quarantine spikes—compare bundle digests, sample artifacts, coordinate waivers with Security/Architecture, and log evidence (manifests, policy hashes, detector logs) before resuming automation.
+- `RB-GUARD-QUEUE`: Clear submission backlog—throttle enqueue rates, scale evaluator pods, reconcile queue offsets via `ops/scripts/guardian/queue_reconcile.py`, and keep artifacts in `PENDING_JUDGMENT` until metrics recover.
+- `RB-GUARD-MANUAL`: Manage manual review mode—capture reviewer decisions, enforce masking policies, and replay manual judgments once automated processing stabilises.
 
-- **Signals:** `guardian_judgment_latency_seconds` P95 > SLO, `guardian_submission_timeout_total` increasing, synthetic job failure (`guardian_slo.yaml`).
-- **Triage (≤ 5 minutes):**
-  1. Check `/readyz` and `/synthetic/status`; capture latency panels in Grafana (“Guardian SLO”).
-  2. Confirm queue depth (`guardian_pending_total`, `guardian_pending_oldest_seconds`) and worker health (Celery heartbeat, pod restarts).
-  3. Inspect recent deploys/settings (`guardian.rules.version`, Helm releases) for regressions.
-- **Decision tree:**
-  - *Service unhealthy*: place Guardian in manual review mode (pause submissions, notify ops). Operators record `MANUAL_GUARDIAN_JUDGMENT` artifacts while following this checklist.
-  - *Compute exhaustion*: scale deployment (`kubectl -n platform scale deploy/guardian --replicas=<n>`), update HPA floor post-incident.
-  - *Upstream dependency slowdown*: coordinate with LPE/Settings owners; consider throttling new submissions until latency stabilizes.
-- **Post-remediation:**
-  - Ensure `guardian_judgment_latency_seconds` P95 ≤ SLO for two consecutive scrapes and `guardian_submission_timeout_total` plateaued.
-  - Clear manual review backlog by replaying queued artifacts once service healthy; annotate incident log with root cause and follow-ups.
+### Guardian Service — 8.3.3 Drill Cadence & Evidence (binding)
 
-<a id="rb-guard-quar"></a>
+- Quarterly drills rehearse SLO breach recovery, quarantine investigation, backlog management, and manual reconciliation; evidence stored in `ops/guardian/drills/<date>/` with retrospective notes.
+- Docs lint (`scripts/docs/build_runbook_catalog.py --check`) and PagerDuty analytics verify execution; missed drills block release sign-off until remediated.
+- Compliance reviews reference drill evidence, incident logs, and manual review ledgers to confirm coverage of Guardian runbooks.
 
-### Guardian — 8.3.3 RB-GUARD-QUAR — Quarantine spike investigation (binding)
-
-- Verify detector bundle digests against Settings (`guardian.rules.version`) and LPE outputs; roll back bundles when digests diverge.
-- Sample quarantined artifacts, classify false positives versus true violations, and coordinate waivers when policy exceptions are justified.
-- Capture evidence (manifests, policy hashes, detector logs) in the incident log prior to reopening automation.
-
-<a id="rb-guard-queue"></a>
-
-### Guardian — 8.3.4 RB-GUARD-QUEUE — Submission backlog watchdog (binding)
-
-**Purpose:** Clear submission backlogs while ensuring artifacts remain gated by Guardian. **|**
-**Contract:** Backlog incidents hold artifacts in `PENDING_JUDGMENT` until the queue drains; any manual progression requires dual approval recorded in the ledger. **|**
-**State:** Queue statistics emit via `guardian_pending_total`, `guardian_pending_oldest_seconds`, and audit tables `guardian_submission_audit`. **|**
-**Failures & handling:** Skipped throttling or missing replay steps cause double-processing or lost submissions; this runbook enforces sequencing and reconciles offsets. **|**
-**Observability:** Alerts `alert_guardian_queue_stale`, `guardian_submission_timeout_total`, and Celery heartbeat dashboards confirm backlog health. **|**
-**References:** §3.2 Submission interfaces, §5.1 Submission backlog, §8.3.1 Runbook index. **|**
-**Breadcrumbs:** Runbook `ops/runbooks/guardian/queue_backlog.md`, reconciliation script `ops/scripts/guardian/queue_reconcile.py`, tests `tests/platform/guardian/test_backlog_handling.py`.
-
-- Pause new submissions if queue age exceeds policy; coordinate with upstream services to shed load.
-- Scale evaluator pods (`kubectl scale deploy/guardian --replicas=<n>`) and confirm Kafka/Service Bus lag recedes.
-- Replay stuck messages via `POST /guardian/judgments:enqueue` with retention-aware offsets; reconcile submission audit tables before closing the incident.
-
-<a id="rb-guard-manual"></a>
-
-### Guardian — 8.3.5 RB-GUARD-MANUAL — Manual review reconciliation (binding)
-
-**Purpose:** Govern manual judgment operation when automation is intentionally paused. **|**
-**Contract:** Manual review requires Security + Architecture approval, dual sign-offs per artifact, and full ledger capture prior to re-enabling automation. **|**
-**State:** Ledgers persist in `ops/guardian/manual_review/<date>.jsonl`, with reconciliation jobs logging outputs to `ops/guardian/reconciliation/<incident_id>.jsonl`. **|**
-**Failures & handling:** Missing ledger entries or skipped reconciliation jobs break provenance; responders must backfill records and hold automation until evidence is complete. **|**
-**Observability:** Dashboard “Guardian Manual Review” tracks backlog age; incident retros verify ledger completeness and follow-up tasks. **|**
-**References:** §4 State management, §5 Failure modes, §8.5.1 Manual review cadence. **|**
-**Breadcrumbs:** Runbook `ops/runbooks/guardian/manual_review.md`, automation `ops/scripts/guardian/reconcile_manual.py`, tests `tests/ops/test_runbook_integrity.py::test_guardian_manual_runbook`.
-
-- Record every manual decision with evidence hashes, reviewer IDs, and timestamps.
-- Reconcile manual artifacts via replay once automation recovers; annotate incidents with residual risk assessments.
-- Update waiver manifests and close-out tasks before declaring the incident resolved.
-
-## Langgraph Agents — 8.3 Runbooks & drills (binding)
+## LangGraph Agent Orchestration — 8.3 Runbooks & Drills (binding)
 
 **Purpose:** Ensure operators have actionable playbooks for agent degradations, activation failures, and QA regressions. **|**
 **Contract:** Runbooks listed here must remain current, link to Ops catalog entries, and surface evidence expectations for compliance. **|**
@@ -138,7 +94,7 @@
 - On-call rotation uses `RB-AGENT-TIMEOUT`, `RB-AGENT-RETRY`, `RB-AGENT-ACTIVATION`, `RB-AGENT-SHADOW`, and `RB-AGENT-QA`.
 - Drill cadence and evidence capture feed quarterly readiness reviews and SOC2/SOCPA audits.
 
-### Langgraph Agents — 8.3.1 Runbook index (informative)
+### LangGraph Agent Orchestration — 8.3.1 Runbook Index (informative)
 
 The catalog enumerates each runbook with owner, verification cadence, and Ops catalog ID. Maintained via `scripts/docs/build_runbook_catalog.py`; stale ownership or verification dates fail the docs lint and block merges.
 
@@ -146,7 +102,7 @@ The catalog enumerates each runbook with owner, verification cadence, and Ops ca
 - `RB-AGENT-SHADOW` — Platform Operations (primary), Applied AI Engineering (secondary), verified quarterly.
 - `RB-AGENT-TIMEOUT` — Worker Cluster owners, verified monthly.
 
-### Langgraph Agents — 8.3.2 Primary runbooks (binding)
+### LangGraph Agent Orchestration — 8.3.2 Primary Runbooks (binding)
 
 **Purpose:** Highlight the runbooks that must exist before activating or modifying agent pipelines. **|**
 **Contract:** Each primary runbook documents trigger conditions, escalation path, mitigation steps, and evidence capture. **|**
@@ -160,15 +116,13 @@ The catalog enumerates each runbook with owner, verification cadence, and Ops ca
 - Shadow divergence: enumerate alert thresholds, disable steps, data capture for analysis, and communications checklist.
 - QA defect surge: describe Guardian quarantine coordination, manual QA staffing, and follow-up tasks.
 
-### Langgraph Agents — 8.3.3 Drill cadence & evidence (normative)
+### LangGraph Agent Orchestration — 8.3.3 Drill Cadence & Evidence (binding)
 
-Runbooks schedule drills at least quarterly (shadow divergence) and semi-annually (activation rollback, QA surge). Evidence (metrics screenshots, retrospective notes, sign-offs) lives under `ops/runbooks/evidence/agents/<YYYY>/<MM>/` and is linked from the drill log. Missed drills escalate to the Architecture Steering Committee and must be rescheduled within 30 days.
+- Quarterly drills cover SLO breach recovery, quarantine spikes, backlog management, and manual reconciliation; evidence stored in `ops/runbooks/evidence/agents/<YYYY>/<MM>/` with retrospective notes.
+- `scripts/docs/build_runbook_catalog.py --check` plus PagerDuty analytics verify execution; missed drills require catch-up within 30 days and block activation rollouts.
+- Compliance reviews reference drill evidence, incident logs, and manual review ledgers to demonstrate readiness for auditors.
 
-- Shadow divergence drill (quarterly): simulate model drift, verify rollback, capture divergence metrics screenshot, update drill log.
-- Activation rollback drill (semi-annual): rehearse settings rollback, confirm artifact safety, capture activation manifest diff.
-- QA surge drill (semi-annual): inject synthetic QA defects, validate Guardian quarantine, record staffing adjustments and metrics.
-
-## Llm Registry — 8.3 Runbooks & drills (binding)
+## LLM Registry & Runtime Governance — 8.3 Runbooks & Drills (binding)
 
 **Purpose:** Keep LLM runbooks actionable and drills on cadence. **|**
 **Contract:** Alerts map to `RB-LLM-*` runbooks; quarterly drills cover provider failover, moderation outage, FinOps budget breach, and replay divergence scenarios. **|**
@@ -178,7 +132,7 @@ Runbooks schedule drills at least quarterly (shadow divergence) and semi-annuall
 **Breadcrumbs:** Runbook catalog, drill scheduler, automation scripts. **|**
 **References:** `RB-LLM-003`, `RB-LLM-JB`, `RB-LLM-FINOPS`, `RB-LLM-REPLAY`. *
 
-### Llm Registry — 8.3.1 Runbook index (informative)
+### LLM Registry & Runtime Governance — 8.3.1 Runbook Index (informative)
 
 | Runbook code | Scenario | Notes |
 | ------------ | -------- | ----- |
@@ -187,28 +141,28 @@ Runbooks schedule drills at least quarterly (shadow divergence) and semi-annuall
 | `RB-LLM-FINOPS` | Budget hold or cost breach | Pauses jobs, coordinates overrides with FinOps and App.O |
 | `RB-LLM-REPLAY` | Replay divergence | Replays envelopes, compares hashes, and documents drift |
 
-### Llm Registry — 8.3.2 Primary runbooks (binding)
+### LLM Registry & Runtime Governance — 8.3.2 Primary Runbooks (binding)
 
-**Purpose:** Document operational playbooks responders execute during incidents or exercises. **|**
-**Contract:** Link production alerts to runbook identifiers, outline execution cadence, and name the maintaining team. **|**
-**State:** Summarize where runbooks live (repo paths, automation scripts) and what evidence they produce. **|**
-**Failures & handling:** Explain how missing, stale, or skipped runbooks are surfaced and remediated. **|**
-**Observability:** Note tooling that tracks drill frequency, runbook completion, and incident follow-up. **|**
-**Breadcrumbs:** Runbook files, automation scripts, incident templates. **|**
-**References:** Alert catalogs, governance docs referencing the runbooks.
+**Purpose:** Document operational playbooks for the registry so responders act consistently during incidents. **|**
+**Contract:** Each runbook maps to specific alerts, evidence requirements, and owning teams; responders update them after every drill or incident. **|**
+**State:** Runbook markdown lives in `ops/runbooks/llm/`, automation scripts under `ops/scripts/llm/`, and evidence within incident records `ops/llm/incidents/`. **|**
+**Failures & handling:** Missing steps or stale guidance block deployment sign-off until refreshed. **|**
+**Observability:** Docs lint, PagerDuty analytics, and Ops governance dashboards track runbook freshness and drill completion. **|**
+**Breadcrumbs:** `ops/runbooks/llm/*.md`, `ops/scripts/llm/*.py`, incident templates `ops/llm/incidents/*.md`. **|**
+**References:** Alert catalog, FinOps policy, Guardian integration docs.
 
 - `RB-LLM-003` — Validates provider failover chains, residency attestations, and waiver approvals before resuming traffic.
-- `RB-LLM-JB` — Investigates moderation regressions, re-runs golden set, and coordinates Guardian enforcement.
+- `RB-LLM-JB` — Investigates moderation regressions, reruns golden set, and coordinates Guardian enforcement.
 - `RB-LLM-FINOPS` — Evaluates budget guardrails, pauses costly workloads, and secures FinOps/App.O overrides.
 - `RB-LLM-REPLAY` — Replays envelopes, compares hashes, and files follow-up tasks for divergence remediation.
 
-### Llm Registry — 8.3.3 Drill cadence & evidence (binding)
+### LLM Registry & Runtime Governance — 8.3.3 Drill Cadence & Evidence (binding)
 
 - Quarterly drills cover provider failover, moderation outage, FinOps budget breach, and replay divergence with evidence in `ops/llm/drills/<date>/summary.md`.
 - Drill calendar `ops/change/llm_rotations.ics` tracks cadence and ownership; missed drills block release sign-off until evidence captured.
 - Docs lint and Ops governance dashboards verify runbook freshness and evidence uploads prior to production changes.
 
-## Lp Engine — 8.3 Runbooks & drills (binding)
+## Localization & Policy Engine — 8.3 Runbooks & Drills (binding)
 
 **Purpose:** Maintain authoritative recovery guides and drill expectations. **|**
 **Contract:** Alerts in §8.2 map to RB-LPE identifiers; responders update the runbook index after each incident or quarterly tabletop. **|**
@@ -218,141 +172,35 @@ Runbooks schedule drills at least quarterly (shadow divergence) and semi-annuall
 **Breadcrumbs:** Runbooks `ops/runbooks/lpe/*.md`, automation `ops/scripts/lpe/*.py`, tests `tests/ops/test_runbook_integrity.py`. **|**
 **References:** §5 Failure modes, §8.1 Operational posture, §6 Observability. *
 
-### Lp Engine — 8.3.1 Runbook index (informative)
+### Localization & Policy Engine — 8.3.1 Runbook Index (informative)
 
-- RB-LPE-COMPILER — Compiler regression / adoption freeze.
-- RB-LPE-OPA-ROLLBACK — OPA Bundle Rollback & discovery remediation.
-- RB-LPE-WAIVER — Waiver expiry response.
-- RB-LPE-LOCALE-GAP — Localization coverage gap.
+- `RB-LPE-COMPILER` — Compiler regression / adoption freeze
+- `RB-LPE-OPA-ROLLBACK` — OPA bundle rollback
+- `RB-LPE-WAIVER` — Waiver expiry response
+- `RB-LPE-LOCALE-GAP` — Localization coverage gap
 
-<a id="rb-lpe-compiler"></a>
+### Localization & Policy Engine — 8.3.2 Primary Runbooks (binding)
 
-### Lp Engine — 8.3.2 RB-LPE-COMPILER — Compiler regression & adoption freeze (binding)
+**Purpose:** Document localization & policy engine runbooks executed during incidents or drills. **|**
+**Contract:** Alerts map to specific RB-LPE identifiers with evidence requirements; responders update runbooks after each incident or drill. **|**
+**State:** Runbook markdown and automation scripts live under `ops/runbooks/lpe/` and `ops/scripts/lpe/`; incident evidence persists in `ops/lpe/incidents/`. **|**
+**Failures & handling:** Missing or stale instructions block deployment approvals until refreshed. **|**
+**Observability:** Docs lint, PagerDuty analytics, and Ops governance dashboards provide freshness metrics. **|**
+**Breadcrumbs:** `ops/runbooks/lpe/*.md`, `ops/scripts/lpe/*.py`, incident templates `ops/lpe/incidents/*.md`. **|**
+**References:** Alert catalog, Settings governance policy, FinOps handbook.
 
-**Purpose:** Restore compiler health when diff guards or adoption lags fail. **|**
-**Contract:** Pause new publishes, roll back to last-good bundle, capture diff artefacts, and verify adoption across Guardian/Settings/Portal before resuming. **|**
-**State:** Evidence stored in `ops/lpe/incidents/<date>/compiler/` with bundle hashes and diff exports. **|**
-**Failures & handling:** Diff classification bugs, expired waivers, adoption lag; follow checklist to freeze, roll back, validate, and document. **|**
-**Observability:** Alerts `lpe_compiler_duration_overrun`, `reference_bundle_stale_total`, `lpe_policy_block_total`. **|**
-**Breadcrumbs:** Runbook `ops/runbooks/lpe/compiler.md`, automation `ops/scripts/lpe/deploy_bundle.py`, tests `tests/specs/test_lpe_compiler.py`. **|**
-**References:** Alert catalogs, governance docs referencing the runbooks.
+- `RB-LPE-COMPILER`: Freeze compiler, roll back to last-known-good bundle, run regression suite, and capture adoption evidence before resuming publishes.
+- `RB-LPE-OPA-ROLLBACK`: Deploy prior OPA bundle, flush discovery caches, validate `/status` endpoints, and document digests and validation output.
+- `RB-LPE-WAIVER`: Renew or retire residency waivers, update Settings allowlists, run waiver verification scripts, and log approvals in App.O.
+- `RB-LPE-LOCALE-GAP`: Restore localization coverage by delivering translations/QA artefacts, executing locale audits, and rebuilding compiler outputs.
 
-Triggers: alerts `lpe_compiler_duration_overrun`, `lpe_bundle_signature_error`, change tickets tagged `LPE-COMPILER`, manual escalations from QA.
+### Localization & Policy Engine — 8.3.3 Drill Cadence & Evidence (binding)
 
-Execution checklist:
+- Quarterly drills cover compiler regression, OPA rollback, waiver expiry, and localization gap scenarios; evidence stored in `ops/lpe/drills/<date>/` with retrospective notes.
+- Docs lint (`scripts/docs/build_runbook_catalog.py --check`) and PagerDuty analytics confirm drill execution; missed drills trigger remediation before releases proceed.
+- Compliance reviews reference drill artefacts, waiver ledgers, and compiler adoption metrics to demonstrate readiness.
 
-1. Freeze compiler pipeline (`lpe.compiler.enabled=false`) and announce in `#ops-announcements`.
-2. Inspect diff artefacts; confirm affected locales/regions and whether unsafe flags were raised.
-3. Promote previous good bundle via `ops/scripts/lpe/promote_bundle.py --bundle <id>` and capture hash evidence.
-4. Re-run regression suite (`make lpe-compiler-regressions`) and snapshot Grafana panels for the incident ticket.
-5. Coordinate Settings activation replay once bundle validated; update change ticket with evidence and adoption metrics.
-
-Post-remediation:
-
-- Resume compiler pipeline and monitor `lpe_compiler_duration_seconds` for two cycles.
-- File corrective tasks (root cause, automation gaps) and attach diff artefacts to the App.O decision log.
-
-<a id="rb-lpe-opa-rollback"></a>
-
-### Lp Engine — 8.3.3 RB-LPE-OPA-ROLLBACK — OPA Bundle Rollback (binding)
-
-Response steps:
-
-1. Capture failing discovery IDs and affected services from alert payload.
-2. Roll back via `ops/scripts/lpe/deploy_opa_bundle.py --bundle <last_good>` and flush worker caches (`scripts/opa/flush_cache.py`).
-3. Validate OPA `/status` and `/health` endpoints plus policy unit tests (`pytest tests/opa/test_policy_context.py`).
-4. Notify dependent teams (Settings, Guardian, Reference Manager) and confirm cached digests refresh.
-5. Attach bundle hashes, validation output, and Grafana snapshots to the incident ticket.
-
-Follow-up:
-
-- Run `ops/scripts/lpe/discovery_audit.py` to confirm discovery parity within 30 minutes.
-- File preventive tasks for root cause (compiler bug, Settings drift, CDN failure).
-
-<a id="rb-lpe-waiver"></a>
-
-### Lp Engine — 8.3.4 RB-LPE-WAIVER — Waiver expiry response (binding)
-
-**Purpose:** Maintain compliant residency posture when waivers expire. **|**
-**Contract:** Renew with dual approvals or decommission before expiry; update Settings allowlists and run verification scripts. **|**
-**State:** Waiver ledger `ops/lpe/waivers.yaml`, renewal artefacts `ops/lpe/waiver_reviews/<date>/`. **|**
-**Failures & handling:** Expired waivers, missing approvals; escalate to Security + Architecture and document outcomes. **|**
-**Observability:** Alerts `lpe_policy_block_spike`, `waiver_expiring_total`. **|**
-**Breadcrumbs:** Runbook `ops/runbooks/lpe/waiver_expiry.md`, automation `ops/scripts/lpe/check_waivers.py`.
-
-Checklist:
-
-1. Review waiver ledger for entries expiring within the alert window; confirm impacted locales and providers.
-2. Engage Security + Architecture for renewal decision; capture approvals in the decision log.
-3. If waiver retired, update Settings allowlists and trigger §8.3.5 RB-LPE-LOCALE-GAP if localization fallback required.
-4. Run `ops/scripts/lpe/check_waivers.py --verify` to ensure updated posture and attach output to the incident ticket.
-5. Communicate outcome to affected product owners and document customer impact, if any.
-
-Audit trail:
-
-- Store approvals, renewal artefacts, and communication templates alongside the incident log.
-- Schedule follow-up review to validate long-term remediation (automation fix, localization updates).
-
-<a id="rb-lpe-locale-gap"></a>
-
-### Lp Engine — 8.3.5 RB-LPE-LOCALE-GAP — Localization coverage gap (binding)
-
-**Purpose:** Restore localization completeness when translations or QA artefacts regress. **|**
-**Contract:** Deliver missing translations, QA recordings, and screenshots before re-enabling locales; Settings activation stays frozen until artefacts pass review. **|**
-**State:** Locale inventories `ops/lpe/locales.csv`, QA artefacts in `ops/localization/*`. **|**
-**Failures & handling:** Missing pseudolocale output, accessibility evidence, or localization tests; follow runbook to gather artefacts and rerun checks. **|**
-**Observability:** Alerts `lpe_localization_gap_total`, pseudolocale CI, Playwright RTL snapshots. **|**
-**Breadcrumbs:** Runbook `ops/runbooks/lpe/locale_gap.md`, automation `ops/scripts/lpe/audit_locales.py`, tests `tests/e2e/test_portal_policy_context.py`.
-
-Resolution steps:
-
-1. Identify affected locales and impacted surfaces (portal, Guardian, notifications) from alert payload.
-2. Coordinate with Localization program to deliver missing translations and QA recordings; update Appendix A checklist items.
-3. Validate `ops/scripts/lpe/audit_locales.py` passes for affected locales and attach proof to the incident ticket.
-4. Run synthetic checks (`tests/e2e/test_portal_policy_context.py::test_disclaimer_l10n`) to confirm correct copy rendering.
-5. Update Settings bundles and trigger an LPE compiler rebuild; monitor `lpe_lookup_latency_p95_breach` for regression.
-
-Post-checks:
-
-- Log decision record in App.O with locale IDs, remediation timeline, and QA sign-offs.
-- Schedule follow-up audit within one release cycle to verify coverage remains intact.
-
-## Notifications — 8) Operational Notes
-
-**Purpose:** Maintain resilient notification delivery, provider readiness, and compliance evidence. **|**
-**Contract:** On-call rotations, runbooks, drills, and release workflows must remain current; notification channels pause when health or compliance gates fail until remediation completes. **|**
-**State:** Runbooks under `ops/runbooks/notifications/`, drill evidence `ops/notifications/drills/<date>/`, DMARC onboarding reports `ops/notifications/dmarc/`, STOP/HELP audit logs in App.O. **|**
-**Failures & handling:** Stale playbooks, missed drills, or expired DMARC/SPF attestations trigger incidents and block change approvals. **|**
-**Observability:** Docs lint (`build_runbook_catalog.py --check`), dashboards “Notifications Delivery” / “In-App Notifications”, alert `alert_notifications_delivery_health`. **|**
-**Breadcrumbs:** Runbook catalog `docs/src/ops/runbooks/index.md`, drill scheduler `ops/scripts/notifications/schedule_drills.py`, provider automation `ops/scripts/notifications/*.py`. **|**
-**References:** §5 Failure modes, §6 Observability, §7 Security & compliance, Ops governance policy App.N.
-
-### Notifications — 8.1 Operational posture (binding)
-
-**Purpose:** Capture on-call coverage, freeze windows, and readiness expectations. **|**
-**Contract:** Platform Engineering (queue health) and Operations Engineering (provider integrations) share PagerDuty “Notifications SLO”, staff a 24/7 rotation, and honor change freezes during major provider cutovers. **|**
-**State:** Roster `ops/notifications/roster.yaml`, freeze calendar `ops/notifications/freeze_windows.ics`, provider credential inventory `ops/notifications/provider_credentials.md`. **|**
-**Failures & handling:** Staffing gaps or ignored freezes trigger management review; deployments pause until coverage restored. **|**
-**Observability:** PagerDuty analytics, delivery dashboards, alert `notifications_oncall_gap_total`. **|**
-**Breadcrumbs:** Roster docs, freeze calendars, App.O escalation notes. **|**
-**References:** Notifications spec §7, `RB-NOTIFY-*`. *
-
-### Notifications — 8.2 Incident triggers (binding)
-
-**Purpose:** Map alerts and dashboards to notification runbooks so responders act immediately. **|**
-**Contract:** Alert rules (`infra/monitoring/notifications-prometheus-rules.yaml`) embed `RB-NOTIFY-*` identifiers; evidence logged before closing incidents. **|**
-**State:** Incident records `ops/notifications/incidents/<date>.jsonl` capture provider, channel, and alert metadata. **|**
-**Failures & handling:** Missing annotations or muted routes require corrective PRs and Ops governance follow-up. **|**
-**Observability:** Dashboards “Notifications Delivery”, “SMS Compliance”, Alertmanager routes. **|**
-**Breadcrumbs:** Alert rule files, PagerDuty services, SIEM integrations. **|**
-**References:** §5 Failure modes, `RB-NOTIFY-OUTAGE`, `RB-NOTIFY-WEBHOOK`, `RB-NOTIFY-SMS`, `RB-NOTIFY-TOKEN`. *
-
-- `alert_notifications_delivery_health` detects provider degradation and opens `RB-NOTIFY-OUTAGE`.
-- `alert_notifications_sms_compliance` / `notifications_sms_stop_spike_total` drive `RB-NOTIFY-SMS` for STOP/HELP surges and regulatory response.
-- `notifications_token_abuse_total` escalates access breaches via `RB-NOTIFY-TOKEN`.
-- `notifications_webhook_signature_fail_total` triggers `RB-NOTIFY-WEBHOOK` for signature rotation and backlog replay.
-
-### Notifications — 8.3 Runbooks & drills (binding)
+## Notifications Service — 8.3 Runbooks & Drills (binding)
 
 **Purpose:** Keep playbooks executable and drills current for core notification scenarios. **|**
 **Contract:** Alerts map to `RB-NOTIFY-*` runbooks; quarterly drills rehearse provider failover, webhook compromise, STOP/HELP compliance surges, and download-token abuse investigations. **|**
@@ -362,7 +210,7 @@ Post-checks:
 **Breadcrumbs:** Runbook catalog, drill scheduler, Slack `#ops-notifications`. **|**
 **References:** `RB-NOTIFY-OUTAGE`, `RB-NOTIFY-WEBHOOK`, `RB-NOTIFY-SMS`, `RB-NOTIFY-TOKEN`. *
 
-#### Notifications — 8.3.1 Runbook index (informative)
+### Notifications Service — 8.3.1 Runbook Index (informative)
 
 | Runbook code | Scenario | Notes |
 | ------------ | -------- | ----- |
@@ -371,7 +219,7 @@ Post-checks:
 | `RB-NOTIFY-SMS` | STOP/HELP surge & regulatory response | Compliance scripts, opt-in reinstatement |
 | `RB-NOTIFY-TOKEN` | Download token abuse or leak | Token rotation, artifact quarantine |
 
-#### Notifications — 8.3.2 Primary runbooks (binding)
+### Notifications Service — 8.3.2 Primary Runbooks (binding)
 
 **Purpose:** Document operational playbooks responders execute during incidents or exercises. **|**
 **Contract:** Link production alerts to runbook identifiers, outline execution cadence, and name the maintaining team. **|**
@@ -386,39 +234,13 @@ Post-checks:
 - `RB-NOTIFY-SMS` — Handles STOP/HELP surges, regulator notifications, and opt-in reconciliation.
 - `RB-NOTIFY-TOKEN` — Investigates token abuse, rotates secrets, and quarantines compromised artifacts.
 
-#### Notifications — 8.3.3 Drill cadence & evidence (binding)
+### Notifications Service — 8.3.3 Drill Cadence & Evidence (binding)
 
 - Quarterly drills cover provider failover, webhook compromise, STOP/HELP surge, and token abuse scenarios with evidence stored in `ops/notifications/drills/<date>/`.
 - Drill scheduler `ops/scripts/notifications/schedule_drills.py` tracks cadence; missed drills block change approvals until evidence uploaded.
 - Docs lint and Ops governance dashboards verify runbook freshness and drill completion ahead of production changes.
 
-### Notifications — 8.4 Migrations & backfills (normative)
-
-**Purpose:** Govern provider onboarding, template migrations, and DLQ replays. **|**
-**Contract:** Provider credential rotations and template migrations require change tickets, dry-run evidence, and rollback plans; DLQ replays run in preview before promotion. **|**
-**State:** Migration scripts `ops/scripts/notifications/onboard_provider.py`, template bundles `config/notifications/templates/*.json`, DLQ replay logs `ops/notifications/dlq_replay/<date>/`. **|**
-**Failures & handling:** Failed migrations revert to previous provider/template and open `RB-NOTIFY-OUTAGE`; replay failures quarantine payloads until corrected. **|**
-**Observability:** Metrics `notifications_migration_success_total`, `notifications_dlq_replay_total`, App.O change tickets. **|**
-**Breadcrumbs:** Migration scripts, template bundles, DLQ tooling. **|**
-**References:** Settings spec §5, Notifications spec §4. *
-
-### Notifications — 8.5 Operational workflows (normative)
-
-**Purpose:** Document recurring tasks that sustain notification compliance and quality. **|**
-**Contract:** Teams review DMARC/SPF attestations quarterly, refresh STOP/HELP evidence, generate weekly residency digests, and audit digest accuracy before distribution. **|**
-**State:** DMARC reports `ops/notifications/dmarc/<quarter>/`, residency digests `ops/residency/digest_<iso_week>.json`, STOP/HELP audit logs `ops/notifications/sms_opt_out.csv`. **|**
-**Failures & handling:** Expired DMARC alignment or missing digests trigger `RB-NOTIFY-SMS` and governance follow-up; digest discrepancies open App.O remediation tasks. **|**
-**Observability:** Metrics `notifications_digest_generated_total`, `notifications_dmca_alignment_total`, STOP/HELP dashboards in SIEM. **|**
-**Breadcrumbs:** Digest generator `apps/platform/operations/task_modules/notifications.py::generate_digest`, compliance scripts `ops/scripts/notifications/audit_opt_out.py`. **|**
-**References:** §7 Security & compliance, §4 State management. *
-
-- Weekly residency digests aggregate waivers, remediation SLAs, and provider drift; evidence archived alongside digests.
-- STOP/HELP audit jobs reconcile opt-out state with provider receipts to enforce compliance.
-- DMARC/SPF attestations renewed before enabling custom sender domains; automation blocks production traffic when alignment lapses.
-
-______________________________________________________________________
-
-## Ref Manager — 8.3 Runbooks & drills (binding)
+## Reference Manager — 8.3 Runbooks & Drills (binding)
 
 **Purpose:** Maintain authoritative RM recovery guides and drills executed during incidents. **|**
 **Contract:** Alerts in §8.2 map to RB-RM identifiers documented here; responders update these runbooks after every incident or quarterly tabletop. **|**
@@ -428,107 +250,35 @@ ______________________________________________________________________
 **Breadcrumbs:** Runbooks `ops/reference/runbooks/*.md`, automation `ops/reference/*.py`, tests `tests/reference/test_runbook_integrity.py`. **|**
 **References:** §5 Failure modes, §8.1 Operational posture, Appendix B metrics. *
 
-### Ref Manager — 8.3.1 Runbook index (informative)
+### Reference Manager — 8.3.1 Runbook Index (informative)
 
-- RB-RM-ROLLBACK — Reference Bundle Rollback & Adoption Freeze
-- RB-RM-HARVEST — Source Harvest Incident Triage
-- RB-RM-PUBLISH — Publish guard failure response
-- RB-RM-LICENSE — License violation remediation
-- RB-RM-RESIDENCY — Residency endpoint alignment
+- `RB-RM-ROLLBACK` — Reference bundle rollback
+- `RB-RM-HARVEST` — Source harvest incident triage
+- `RB-RM-WAIVER` — Residency waiver enforcement
+- `RB-RM-FEED` — External feed outage response
 
-<a id="rb-rm-rollback"></a>
+### Reference Manager — 8.3.2 Primary Runbooks (binding)
 
-### Ref Manager — 8.3.2 RB-RM-ROLLBACK — Reference Bundle Rollback & Adoption Freeze (binding)
+**Purpose:** Summarise Reference Manager runbooks so responders execute consistent mitigation steps. **|**
+**Contract:** Each runbook ties to specific alerts and evidence expectations; responders update the runbooks after incidents or drills. **|**
+**State:** Runbooks live under `ops/runbooks/ref_manager/`, automation scripts under `ops/scripts/ref_manager/`, and incident evidence in `ops/ref_manager/incidents/`. **|**
+**Failures & handling:** Missing steps or stale content block deployment sign-off until refreshed. **|**
+**Observability:** Docs lint, PagerDuty analytics, and Ops governance dashboards track runbook freshness and drill completion. **|**
+**Breadcrumbs:** `ops/runbooks/ref_manager/*.md`, `ops/scripts/ref_manager/*.py`, incident templates `ops/ref_manager/incidents/*.md`. **|**
+**References:** Alert catalog, Guardian integration docs, residency policy.
 
-**Purpose:** Restore catalog stability when published bundles must be reverted. **|**
-**Contract:** Rollbacks execute within 15 minutes of decision, capture evidence, and freeze dependent publishes until adoption latency returns to baseline. **|**
-**State:** Automation uses `ops/reference/rollback_bundle.py`; evidence stored under `ops/reference/incidents/<date>/rollback`. **|**
-**Failures & handling:** Missing rollback evidence or lingering adoption lag triggers escalation to Architecture. **|**
-**Observability:** Alert `reference_bundle_adoption_total{status="stale"}` clears when all services acknowledge the rollback. **|**
-**Breadcrumbs:** Runbook `ops/reference/runbooks/rollback.md`, tests `tests/reference/test_rollback.py`. **|**
-**References:** §4.2 Bundle registry, §5.5 Adoption lag, §8.3.1 Runbook index. *
+- `RB-RM-ROLLBACK`: Roll back reference bundles, flush caches, validate discovery parity, and capture digest evidence before reopening adoption.
+- `RB-RM-HARVEST`: Triages source ingestion failures, replays harvest jobs, coordinates with upstream connectors, and documents missing evidence.
+- `RB-RM-WAIVER`: Renews or retires residency waivers, updates allowlists, runs verification scripts, and records approvals in App.O.
+- `RB-RM-FEED`: Handles external feed outages by pausing downstream adoption, notifying stakeholders, and reconciling data once service resumes.
 
-Execution checklist:
+### Reference Manager — 8.3.3 Drill Cadence & Evidence (binding)
 
-1. Pause new publishes and announce freeze in `#ref-manager-oncall`.
-2. Run `reference rollback --bundle <previous_id>` capturing activation ID and diff artifacts.
-3. Trigger adoption verification for LPE, Settings, Guardian, Compose/Analyze, and Portal.
-4. Update change ticket and App.O decision log with rollback details, evidence links, and remediation tasks.
-5. Resume publishes only after adoption lag returns below SLA and follow-up actions assigned.
+- Quarterly drills cover bundle rollback, harvest failure, waiver expiry, and feed outage; evidence lives in `ops/ref_manager/drills/<date>/` with retrospective notes.
+- Docs lint (`scripts/docs/build_runbook_catalog.py --check`) and PagerDuty analytics confirm drill execution; missed drills block release approvals until remedied.
+- Compliance reviews reference drill evidence, waiver logs, and adoption metrics to demonstrate readiness.
 
-<a id="rb-rm-harvest"></a>
-
-### Ref Manager — 8.3.3 RB-RM-HARVEST — Source Harvest Incident Triage (binding)
-
-Response checklist:
-
-1. Review failing connector logs, capture last successful snapshot, and assess licensing implications.
-2. Engage source owner (court/government contact) and record ETA; initiate manual upload if available.
-3. Queue interim communications to stakeholders when outage exceeds SLA.
-4. Resume scheduled harvest, validate ETL outputs, and confirm review queue impact.
-5. Close incident with root cause, remediation summary, and preventive actions.
-
-<a id="rb-rm-publish"></a>
-
-### Ref Manager — 8.3.4 RB-RM-PUBLISH — Publish guard failure response (binding)
-
-**Purpose:** Triage schema or validation failures that block publish pipelines. **|**
-**Contract:** Guard failures remain blocking until diffs resolve, schema updates approve, and integration tests rerun. **|**
-**State:** Validation artifacts persist alongside bundle drafts in `reference_bundle_registry`; tickets track remediation. **|**
-**Failures & handling:** Ignoring guard signals risks inconsistent bundles; escalate to Architecture if fixes exceed 12 hours. **|**
-**Observability:** Alert `reference_manager_publish_guard_failure` clears when validation suite passes. **|**
-**References:** §5.2 Publish guard failure, §2.9 Testing, §8.3.1 Runbook index. **|**
-**Breadcrumbs:** Runbook `ops/reference/runbooks/publish_guard.md`, tests `tests/reference/test_publish_guard.py`.
-
-Execution checklist:
-
-1. Export failing validation artifacts (`reference validate --bundle <id> --export artifacts/guard/<id>`).
-2. Categorize failure (schema, missing assets, licensing metadata, diff threshold) and assign owners.
-3. Apply fixes in staging, rerun validation and unit/integration suites.
-4. Secure approvals, document evidence, and resume publish pipeline.
-5. Attach diff snapshots and validation logs to incident ticket and update risk register if needed.
-
-<a id="rb-rm-license"></a>
-
-### Ref Manager — 8.3.5 RB-RM-LICENSE — License violation remediation (binding)
-
-**Purpose:** Resolve licensing or attribution violations before they propagate. **|**
-**Contract:** Violations remain open until offending content removed or relicensed, attribution updates verified downstream, and Legal Ops approvals documented. **|**
-**State:** License ledger entries store violation metadata, remediation steps, and waiver approvals. **|**
-**Failures & handling:** Publishing without remediation risks contractual breaches; escalate to Legal Ops immediately. **|**
-**Observability:** Alert `reference_manager_license_violation_total` clears when ledger marks violation mitigated and attribution scanners pass. **|**
-**References:** §2.8 Security & licensing, §5.3 Licensing incidents, §8.3.1 Runbook index. **|**
-**Breadcrumbs:** Runbook `ops/reference/runbooks/license_violation.md`, tests `tests/reference/test_license_ledger.py`.
-
-Remediation checklist:
-
-1. Review violation payload, freeze related publishes, and notify Legal Ops.
-2. Remove or quarantine offending content from staging/curated schemas; note impacted bundle versions.
-3. Coordinate relicensing or replacements; capture approvals in waiver ledger.
-4. Regenerate bundles, validate Guardian/UI attribution, and resume adoption.
-5. Close ledger entry with evidence links and communicate resolution to stakeholders.
-
-<a id="rb-rm-residency"></a>
-
-### Ref Manager — 8.3.6 RB-RM-RESIDENCY — Residency endpoint alignment (binding)
-
-**Purpose:** Restore residency compliance when provider endpoint catalogues drift. **|**
-**Contract:** Findings stay open until catalogues update, Settings activations replay, and residency scanners confirm remediation. **|**
-**State:** Findings tracked in `reference_provider_endpoint_finding` with attestation evidence and waiver metadata. **|**
-**Failures & handling:** Allowing stale endpoints risks policy violations; escalate to Security Engineering if remediation exceeds SLA. **|**
-**Observability:** Alert `reference_manager_provider_endpoint_violation_total` resolves after two clean scans and Settings activations match updated catalogues. **|**
-**References:** §4.4 Residency catalogue, §5.4 Residency incidents, §8.3.1 Runbook index. **|**
-**Breadcrumbs:** Runbook `ops/reference/runbooks/residency_alignment.md`, tests `tests/reference/test_provider_endpoints.py`.
-
-Remediation checklist:
-
-1. Inspect finding details, gather attestation or SAN mismatch evidence, and engage provider contacts.
-2. Update RM catalogue entries (`provider_endpoints[]`) with new CIDRs, SAN expectations, and residency notes.
-3. Publish refreshed bundle, replay Settings activation, and verify Guardian acknowledges new digest.
-4. Archive evidence in incident folder and update waiver ledger for temporary exceptions.
-5. Confirm residency monitors pass twice consecutively before closing the incident.
-
-## Settings — 8.3 Runbooks & drills (binding)
+## Settings Registry — 8.3 Runbooks & Drills (binding)
 
 **Purpose:** Maintain authoritative SR recovery guides, drills, and manual procedures executed during incidents. **|**
 **Contract:** Alerts enumerated in §8.2 and Appendix B map to RB-\* identifiers documented here; responders update these runbooks after every incident or drill. **|**
@@ -538,297 +288,35 @@ Remediation checklist:
 **Breadcrumbs:** Runbooks `ops/runbooks/settings/*.md`, automation scripts under `ops/scripts/settings/`, tests `tests/platform/settings/test_runbook_integrity.py`. **|**
 **References:** §5 Failure modes, §8.1 Operational posture, Appendix B metrics, ADR-0004. *
 
-### Settings — 8.3.1 Runbook index (informative)
-
-- RB-GOV-008 — Settings governance toggle / rollback
-- RB-RES-ENDPOINT — Residency endpoint drift remediation
-- RB-RES-BLOCK — Residency waiver / block handling
-- RB-LOCK-006 — Activation lock stale detection & remediation
-- RB-LLM-003 — Provider degradation / circuit breaker
-- RB-JOB-WATCHDOG — Job stall watchdog
-- RB-UPLOAD-SCAN — Upload scanning outage response
-
-<a id="rb-gov-008"></a>
-
-### Settings — 8.3.2 RB-GOV-008 — Settings governance toggle / rollback (binding)
-
-**Purpose:** Safely activate or revert high-sensitivity governance toggles (waivers, residency overrides, cross-org pilots). **|**
-**Contract:** Any activation flagged `unsafe` or touching governance scopes must follow this sequence before promotion. **|**
-**State:** Runbook automation uses `ops/runbooks/settings_rollback.py`; evidence stores under `ops/settings/<date>/`. **|**
-**Failures & handling:** Missing approvals or failed smoke tests require immediate rollback via `settings rollback --bundle <previous_id>`. **|**
-**Observability:** Alert clears once activation completes with both approvals and validation metrics green. **|**
-**Breadcrumbs:** Runbook `ops/runbooks/settings/governance_toggle.md`, tests `tests/platform/settings/test_rollback.py`, dashboard “Settings Governance”. **|**
-**References:** §4 State management, §5.1 Activation validator failure, §8.3.1 Runbook index. *
-
-- Triggers: `settings_governance_override_total`, change tickets tagged `GOV-TOGGLE`, or manual escalation from Security/Architecture.
-- Execution checklist:
-  1. Announce maintenance window with activation/rollback times in `#ops-announcements`.
-  2. Validate staging dry-run (matching bundle hash) and attach diff evidence to the change ticket.
-  3. Execute activation via CLI/UI, capturing activation ID and `unsafe_reasons[]` result (expected empty).
-  4. Run targeted smoke tests (API read/write, portal toggle, worker snapshot) tied to the toggle.
-  5. Update change ticket and decision log with activation ID, evidence, and rollback window.
-- Rollback steps: reapply prior bundle via `settings rollback --bundle <previous_id>`, verify `settings.changed` emission, rerun smoke tests, and communicate rollback rationale.
-- Evidence requirements: store activation/rollback JSON artifacts under `ops/settings/<date>/`, append decision log entries with activation IDs, and attach customer/support comms templates.
-
-<a id="rb-res-endpoint"></a>
-
-### Settings — 8.3.3 RB-RES-ENDPOINT — Residency endpoint drift remediation (binding)
-
-Triage checklist:
-
-1. Query `residency_endpoint_findings` for `state='open'`; review evidence attachments.
-2. Inspect Istio AuthorizationPolicy revisions to ensure offending hosts remain blocked.
-3. Identify impacted providers/orgs via activation diff linked in alert payload.
-
-Decision tree:
-
-- **Provider expansion** — Engage Reference Manager to ingest metadata, rerun `residency_endpoint_scan --host <fqdn>`, and promote Settings activation once SAN + GeoIP verified.
-- **Configuration drift** — Update Settings bundle with corrected allowlist entries; require Security + Architecture approval before clearing the finding.
-- **False positive** — Document justification, capture scan logs, and close after two consecutive clean scans.
-
-Evidence: Attach updated catalogue hashes, scan output, and change ticket references to the incident log.
-
-<a id="rb-res-block"></a>
-
-### Settings — 8.3.4 RB-RES-BLOCK — Residency waiver / block handling (binding)
-
-**Purpose:** Resolve residency policy blocks triggered during activations or runtime checks. **|**
-**Contract:** Blocks clear only after org allowlists align with Reference Manager catalogues or waivers recorded with expiry and dual approval. **|**
-**State:** Policy blocks logged as `RESIDENCY_POLICY_BLOCK`; waiver metadata stored in `settings_waiver`. **|**
-**Failures & handling:** Waivers without expiry or missing approvals invalidate activation attempts; responders must remediate before promoting changes. **|**
-**Observability:** Alert `alert_residency_policy_block` and dashboard “Residency Compliance” show resolution status. **|**
-**References:** §5.3 Residency enforcement incident, §8.3.1 Runbook index. **|**
-**Breadcrumbs:** Runbook `ops/runbooks/settings/residency_block.md`, tests `tests/platform/settings/test_residency_validators.py::test_block_requires_waiver`.
-
-Steps:
-
-1. Confirm org allowlists (`regions.allowlist.compute/storage/vector`).
-2. Validate provider endpoints and DNS against RM catalogue snapshots.
-3. If cross-region access required, capture dual approval, set `cross_region_waiver=true`, and document expiry.
-4. Re-run activation or job; confirm Guardian manifests reference waiver ID.
-5. Audit waiver usage daily until expiry or remediation.
-
-<a id="rb-lock-006"></a>
-
-### Settings — 8.3.5 RB-LOCK-006 — Activation lock stale detection & remediation (binding)
-
-**Purpose:** Detect and remediate stuck activation locks without risking concurrent edits. **|**
-**Contract:** Lock holders must release within `udlock.max_session_hold_seconds`; stale locks trigger this runbook. **|**
-**State:** Lock registry tracked in `settings_activation_lock`; helper scripts expose current holders. **|**
-**Failures & handling:** Forcing unlock without verifying holder state risks split-brain activations; follow the decision tree below. **|**
-**Observability:** Alert `settings_activation_lock_wait_seconds` and dashboard “Settings Lock” confirm resolution. **|**
-**References:** §4.3 Activation locks, §5.1 Activation validator failure, §8.3.1 Runbook index. **|**
-**Breadcrumbs:** Runbook `ops/runbooks/settings/activation_lock.md`, tests `tests/platform/settings/test_locks.py::test_lock_scope`, script `scripts/settings/show_activation_locks.py`.
-
-Checklist:
-
-1. Inspect lock registry via `scripts/settings/show_activation_locks.py` filtered by environment.
-2. Verify holder liveness (`SELECT ... FROM pg_stat_activity`) to differentiate idle vs active transactions.
-3. If holder dead or idle-in-transaction, coordinate worker/web restart or issue `SELECT pg_terminate_backend(...)` per policy.
-4. After release, rerun activation pipeline smoke tests; capture evidence in incident log.
-5. File follow-up if lock reappears within 24h (root cause investigation, automation fix).
-
-<a id="rb-llm-003"></a>
-
-### Settings — 8.3.6 RB-LLM-003 — Provider degradation / circuit breaker (binding)
-
-**Purpose:** Handle degraded LLM providers to protect cost and SLA budgets. **|**
-**Contract:** OPEN circuits remain until provider health verifies; half-open probes follow the cadence defined here. **|**
-**State:** Circuit state stored in `settings_llm_circuit`; fallback chains defined in Settings bundles. **|**
-**Failures & handling:** Prematurely closing circuits or leaving fallback unmonitored risks runaway spend and job failures. **|**
-**Observability:** Alert `alert_llm_circuit_open` and dashboard “FinOps – LLM Cost & Circuit” show circuit posture. **|**
-**References:** §2.7 Provider governance, §5.2 Detector regression, §8.3.1 Runbook index. **|**
-**Breadcrumbs:** Runbook `ops/runbooks/settings/provider_circuit_breaker.md`, tests `tests/platform/settings/test_llm_circuit.py::test_half_open_probe`, dashboard “FinOps – LLM Cost & Circuit”.
-
-Response steps:
-
-1. Confirm affected models via dashboard filters (`llm_circuit_state{model}`) and review recent error/latency metrics.
-2. Validate fallback outcomes in logs (`PRIMARY_DEGRADED`, `FALLBACK_USED`) and ensure FinOps guardrails intact.
-3. Keep circuits OPEN until three consecutive successful half-open probes; adjust fallback priorities if secondary models degrade.
-4. Notify vendor/support with incident details when degradation persists > 15 minutes; record ticket IDs in incident log.
-5. After recovery, document budget impact and corrective actions; update preventive tasks (synthetic prompts, timeout tuning).
-
-<a id="rb-job-watchdog"></a>
-
-### Settings — 8.3.7 RB-JOB-WATCHDOG — Job stall watchdog (binding)
-
-**Purpose:** Restore stuck jobs and protect downstream SLAs when heartbeats lapse. **|**
-**Contract:** Watchdog alerts trigger within `jobs.watchdog.no_progress_minutes` / `jobs.watchdog.timeout_minutes`; responders must either resume progress or terminate safely. **|**
-**State:** Heartbeats stored in `job_progress_heartbeat`; remediation evidence captured in incident tickets (`ops/watchdog/<date>/`). **|**
-**Failures & handling:** Premature termination can lose customer work; skipping checkpoint verification risks replaying corrupted artifacts. **|**
-**Observability:** Alerts `job_watchdog_warning_total` and `job_watchdog_timeout_total` plus “Watchdog Runner” dashboards confirm recovery. **|**
-**References:** §5.1 Activation validator failure, §8.3.1 Runbook index, Appendix B metrics. **|**
-**Breadcrumbs:** Runbook `ops/runbooks/platform/job_watchdog.md`, tests `tests/platform/watchdog/test_job_timeout.py::test_timeout_escalation`.
-
-Triage & remediation:
-
-1. Identify affected job IDs from alert payload; confirm `job_progress_heartbeat` age and last known task lane.
-2. Inspect worker logs for stalled tasks, resource exhaustion, or upstream dependency failures; capture excerpts in incident notes.
-3. If work-in-progress artifacts exist, trigger checkpoint validation (`ops/jobs/verify_checkpoint.py`) before retrying.
-4. Attempt safe resume via `jobs resume --job <id>` when the worker is healthy; otherwise cancel and requeue after addressing root cause.
-5. Close alert once heartbeats refresh (< 2 × `jobs.watchdog.heartbeat_interval`) and audit trail updated.
-
-Post-incident follow-up: file preventive tasks for repeated stalls and review `jobs.watchdog.*` thresholds for workload fit.
-
-<a id="rb-upload-scan"></a>
-
-### Settings — 8.3.8 RB-UPLOAD-SCAN — Upload scanning outage response (binding)
-
-**Purpose:** Maintain quarantine-first posture when malware scanning or format validation degrades. **|**
-**Contract:** New uploads remain blocked (`uploads.enabled=false`) until scanners return to green and evidence recorded per this runbook. **|**
-**State:** Scan attempts logged in `upload_scan_audit`; quarantined objects isolated under `storage/quarantine/<job_id>/`. **|**
-**Failures & handling:** Re-enabling uploads without updated signatures risks releasing infected files; overriding quarantine without approvals violates security policy. **|**
-**Observability:** Alerts `upload_scan_error_total` and `upload_scan_queue_depth` alongside “Security — Upload Scanning” dashboard indicate recovery. **|**
-**References:** §2.8 Security enforcement, §5.3 Residency enforcement incident, §8.3.1 Runbook index. **|**
-**Breadcrumbs:** Runbook `ops/runbooks/security/upload_scan.md`, tests `tests/security/test_upload_scan_guard.py::test_quarantine_on_failure`, dashboard “Security — Upload Scanning”.
-
-Response sequence:
-
-1. Confirm scope of degradation (engine errors vs queue backlog) using dashboard drill-downs and `upload_scan_audit` sampling.
-2. Freeze new intake by toggling `uploads.enabled=false` in Settings; announce customer impact and expected review window.
-3. Validate scanner health: check signature freshness, sandbox resource utilization, and recent deployment changes.
-4. For malware detections, coordinate with Security to analyze samples; maintain quarantine until signatures updated and retest passes.
-5. Once scanners stable, re-enable uploads, replay quarantined items through the pipeline, and attach evidence to the incident record.
-
-## Web App — 8) Operational Notes
-
-**Purpose:** Keep the staff workspace and client portal operationally ready while satisfying security and compliance controls. **|**
-**Contract:** Runbooks, drills, and release workflows must stay current; UI surfaces pause when alert gates or evidence requirements fail. **|**
-**State:** Runbooks in `ops/runbooks/webapp/` and `ops/runbooks/notifications/`, drill evidence `ops/webapp/drills/<date>/`, freeze calendars `ops/webapp/freeze_windows.ics`. **|**
-**Failures & handling:** Stale playbooks, missed drills, or expired freezes block deployments until remediation and evidence capture. **|**
-**Observability:** Docs lint (`build_runbook_catalog.py --check`), dashboards “Portal Integrity”/“Operator Workspace”, alert `portal_link_invalidated_total`. **|**
-**Breadcrumbs:** Runbook index `docs/src/ops/runbooks/index.md`, drill scripts `ops/scripts/webapp/schedule_drills.py`, governance policies App.N. **|**
-**References:** §5 Failure modes, §6 Observability, §7 Security & compliance.
-
-### Web App — 8.1 Operational posture (binding)
-
-**Purpose:** Document on-call coverage, freeze windows, and readiness assumptions for the web application. **|**
-**Contract:** Platform Engineering owns PagerDuty “WebApp SLO”, enforces release freezes during major UI migrations, and keeps portal/privacy SMEs on-call for high-severity incidents. **|**
-**State:** Roster `ops/webapp/roster.yaml`, freeze calendar `ops/webapp/freeze_windows.ics`, contact matrix in App.N. **|**
-**Failures & handling:** Unstaffed shifts or ignored freezes escalate to Product & Security; deployments halted until posture restored. **|**
-**Observability:** PagerDuty metrics, freeze dashboards, alert `webapp_oncall_gap_total`. **|**
-**Breadcrumbs:** Roster files, freeze calendars, App.O decision logs. **|**
-**References:** Notifications spec §7, Settings spec §7. *
-
-### Web App — 8.2 Incident triggers (binding)
-
-**Purpose:** Tie UI alerts to playbooks so responders execute consistent recovery steps. **|**
-**Contract:** Alert rules (`infra/monitoring/webapp-prometheus-rules.yaml`) annotate RB-\* identifiers; incidents log evidence before closure. **|**
-**State:** Incident records `ops/webapp/incidents/<date>.jsonl` capture alert, context, and applied runbook. **|**
-**Failures & handling:** Missing annotations or muted alerts require corrective PRs and governance follow-up. **|**
-**Observability:** Dashboards “Operator Workspace”, “Portal Integrity”, Alertmanager routes. **|**
-**Breadcrumbs:** Alert rule files, PagerDuty services, SIEM dashboards. **|**
-**References:** `RB-JOB-WATCHDOG`, `RB-PORTAL-INVALIDATION`, `RB-CHAT-ABUSE`. *
-
-- `portal_link_invalidated_total` spikes or `portal_download_precondition_total` errors invoke `RB-PORTAL-INVALIDATION`.
-- `sse_connection_drop_total` sustained > threshold drives SSE recovery drills via `RB-JOB-WATCHDOG`.
-- `chat_policy_block_total` / `chat_abuse_alert_total` escalate to `RB-CHAT-ABUSE`.
-- Accessibility monitors (axe regression jobs) failing in CI pause releases and trigger `RB-LPE-LOCALE-GAP` before resuming deployments.
-
-### Web App — 8.3 Runbooks & drills (binding)
-
-**Purpose:** Keep UI runbooks executable and drills on cadence. **|**
-**Contract:** Alerts map to RB-\* playbooks; quarterly exercises cover SSE resiliency, portal abuse investigation, accessibility audits, and assistant abuse response. **|**
-**State:** Runbooks `ops/runbooks/webapp/*.md`, evidence `ops/webapp/drills/<date>/`. **|**
-**Failures & handling:** Missing drill evidence or outdated steps block release approval until updated. **|**
-**Observability:** Docs lint, drill scheduler reports, governance dashboards. **|**
-**Breadcrumbs:** Runbook catalog, drill scheduler, governance policy App.N. **|**
-**References:** `RB-JOB-WATCHDOG`, `RB-PORTAL-INVALIDATION`, `RB-LPE-LOCALE-GAP`, `RB-NOTIFY-*`, `RB-CHAT-ABUSE`. *
-
-#### Web App — 8.3.1 Runbook index (informative)
-
-| Runbook code | Scenario | Notes |
-| ------------ | -------- | ----- |
-| `RB-JOB-WATCHDOG` | SSE/worker watchdog remediation | Coordinates with worker cluster for stalled jobs |
-| `RB-PORTAL-INVALIDATION` | Token revocation / portal link cleanup | Revokes signed URLs, notifies clients, captures evidence |
-| `RB-LPE-LOCALE-GAP` | Localization/accessibility gap | Partners with LP Engine for missing locales or accessibility gaps |
-| `RB-NOTIFY-*` | Delivery incidents | Aligns portal alerts with outbound notifications |
-| `RB-CHAT-ABUSE` | Assistant abuse or moderation escalation | Disables assistants, gathers evidence for Security |
-
-#### Web App — 8.3.2 Primary runbooks (binding)
-
-**Purpose:** Document operational playbooks responders execute during incidents or exercises. **|**
-**Contract:** Link production alerts to runbook identifiers, outline execution cadence, and name the maintaining team. **|**
-**State:** Summarize where runbooks live (repo paths, automation scripts) and what evidence they produce. **|**
-**Failures & handling:** Explain how missing, stale, or skipped runbooks are surfaced and remediated. **|**
-**Observability:** Note tooling that tracks drill frequency, runbook completion, and incident follow-up. **|**
-**Breadcrumbs:** Runbook files, automation scripts, incident templates. **|**
-**References:** Alert catalogs, governance docs referencing the runbooks.
-
-- `RB-JOB-WATCHDOG` — Restores SSE sessions, resumes watchdog automation, and coordinates backlog remediation.
-- `RB-PORTAL-INVALIDATION` — Revokes signed URLs, reissues secure links, and documents evidence for auditors.
-- `RB-LPE-LOCALE-GAP` — Triages localization/accessibility deficits with LP Engine and revalidates fallback artifacts.
-- `RB-NOTIFY-*` — Synchronizes portal state with outbound notifications when delivery issues surface.
-- `RB-CHAT-ABUSE` — Freezes assistants, escalates to Guardian, and captures moderation evidence.
-
-#### Web App — 8.3.3 Drill cadence & evidence (binding)
-
-- Quarterly drills exercise SSE resiliency, portal abuse response, accessibility audits, and assistant abuse scenarios with evidence in `ops/webapp/drills/<date>/`.
-- Drill scheduler `ops/scripts/webapp/schedule_drills.py` tracks cadence and ownership; missed drills block release approvals until evidence uploaded.
-- Docs lint, governance dashboards, and App.N reviews verify runbook freshness before production changes.
-
-### Web App — 8.4 Migrations & backfills (normative)
-
-**Purpose:** Govern CDN cache pushes, static asset migrations, and portal data backfills. **|**
-**Contract:** UI asset migrations require change tickets, blue/green verification, and rollback plans; backfills of portal metadata run in read-only preview before publishing. **|**
-**State:** Migration scripts `ops/scripts/webapp/deploy_assets.py`, cache manifests `ops/webapp/cdn_manifest.json`, backfill logs `ops/webapp/backfill/<date>/`. **|**
-**Failures & handling:** Failed migrations revert to prior asset version; incomplete backfills trigger `RB-PORTAL-INVALIDATION` to prevent stale downloads. **|**
-**Observability:** Metrics `webapp_asset_publish_total`, `webapp_backfill_success_total`. **|**
-**Breadcrumbs:** Asset deployment scripts, CDN manifests, backfill tooling. **|**
-**References:** Settings spec §5, Notifications spec §4. *
-
-### Web App — 8.5 Operational workflows (normative)
-
-**Purpose:** Document recurring tasks for portal/workspace hygiene. **|**
-**Contract:** Teams review portal invalidations daily, reconcile signed download tokens, audit assistant manifests, and validate accessibility snapshots. **|**
-**State:** Token reconciliation reports `ops/webapp/token_audit/<date>.csv`, accessibility evidence `ops/webapp/accessibility/<run_id>/`, assistant manifest reviews `ops/webapp/chat_manifest_checks.md`. **|**
-**Failures & handling:** Missing audits trigger `RB-PORTAL-INVALIDATION` or `RB-CHAT-ABUSE` follow-up; unresolved accessibility gaps block release. **|**
-**Observability:** Metrics `download_token_validation_total{outcome}`, `chat_sessions_total{audience}`, accessibility CI dashboards. **|**
-**Breadcrumbs:** Token audit scripts `ops/scripts/webapp/audit_tokens.py`, accessibility CI configs, assistant manifest validators. **|**
-**References:** §4 State management, §7 Security & compliance. *
-
-- Daily token audits reconcile download tokens with Guardian artefact states and revoke stale entries.
-- Weekly assistant manifest reviews ensure disclaimers and policy contexts match Settings snapshots.
-- Accessibility jobs (axe/playwright) capture evidence for auditors; failures raise App.O tasks and hold releases.
-
-______________________________________________________________________
-
-## Worker Cluster — 8) Operational Notes
-
-**Purpose:** Maintain the worker fleet’s readiness, watchdog coverage, and remediation playbooks. **|**
-**Contract:** On-call rotations, runbooks, and drills must remain current; queues pause when automation gates fail until remediation completes. **|**
-**State:** Runbooks in `ops/runbooks/worker/`, drill evidence `ops/workers/drills/<date>/`, freeze calendars `ops/workers/freeze_windows.ics`. **|**
-**Failures & handling:** Stale playbooks, missed drills, or unstaffed rotations block change approvals and keep automation paused. **|**
-**Observability:** Docs lint (`build_runbook_catalog.py --check`), dashboards “Worker Queues”/“Watchdog Runner”, alert `watchdog_runner_missed_total`. **|**
-**Breadcrumbs:** Runbook catalog, drill scheduler `ops/scripts/worker/schedule_drills.py`, governance policies App.N. **|**
-**References:** §5 Failure modes, §6 Observability, §7 Security & compliance.
-
-### Worker Cluster — 8.1 Operational posture (binding)
-
-**Purpose:** Capture staffing and readiness expectations for the worker cluster. **|**
-**Contract:** Platform Engineering staffs PagerDuty “Worker Queue SLO”, maintains blue/green deployment freezes during major migrations, and ensures watchdog-runner automation continues within ±60s schedule. **|**
-**State:** Roster `ops/workers/roster.yaml`, freeze calendar `ops/workers/freeze_windows.ics`, watchdog timer reports `ops/workers/watchdog_status.json`. **|**
-**Failures & handling:** Staffing gaps or missed watchdog runs trigger `RB-JOB-WATCHDOG` before resuming automation. **|**
-**Observability:** PagerDuty metrics, watchdog dashboards, alert `watchdog_runner_missed_total`. **|**
-**Breadcrumbs:** Roster files, freeze calendars, watchdog status logs. **|**
-**References:** `RB-JOB-WATCHDOG`, §6 Observability. *
-
-### Worker Cluster — 8.2 Incident triggers (binding)
-
-**Purpose:** Map queue and automation alerts to worker runbooks. **|**
-**Contract:** Alert rules (`infra/monitoring/worker-prometheus-rules.yaml`) embed RB-\* identifiers; responders capture evidence before resolving. **|**
-**State:** Incident records `ops/workers/incidents/<date>.jsonl` document alert context and applied remediation. **|**
-**Failures & handling:** Missing annotations or silenced alerts require governance review and follow-up tasks. **|**
-**Observability:** Dashboards “Worker Queues”, “Watchdog Runner”, Alertmanager routes. **|**
-**Breadcrumbs:** Alert rule files, PagerDuty services, SIEM dashboards. **|**
-**References:** `RB-JOB-WATCHDOG`, `RB-LOCK-006`, `RB-NOTIFY-*`. *
-
-- `celery_queue_depth_high` / `dlq_messages_total` breaches invoke `RB-JOB-WATCHDOG` and `RB-NOTIFY-OUTAGE` for queue remediation.
-- `watchdog_runner_missed_total` or `watchdog_runner_lag_seconds` triggers `RB-JOB-WATCHDOG` to restore automation.
-- `rls_context_missing_total` escalates to `RB-LOCK-006` to re-establish GUC guards.
-- `upload_scan_error_total` routes to `RB-UPLOAD-SCAN`; `case_import_failure_total` invokes `RB-CASE-IMPORT`.
-
-### Worker Cluster — 8.3 Runbooks & drills (binding)
+### Settings Registry — 8.3.1 Runbook Index (informative)
+
+- `RB-GOV-008` — Settings governance toggle / rollback
+- `RB-RES-ENDPOINT` — Residency endpoint drift remediation
+- `RB-SETTINGS-ACTIVATION` — Activation failure response
+- `RB-SETTINGS-WAIVER` — Waiver renewal and auditing
+
+### Settings Registry — 8.3.2 Primary Runbooks (binding)
+
+**Purpose:** Capture Settings service playbooks so responders execute consistent mitigation and evidence capture. **|**
+**Contract:** Each runbook links to alert identifiers, change tickets, and required evidence; responders update the runbooks after incidents or drills. **|**
+**State:** Runbooks under `ops/runbooks/settings/`, automation scripts under `ops/scripts/settings/`, evidence stored in `ops/settings/incidents/`. **|**
+**Failures & handling:** Missing or outdated instructions block deployment approvals. **|**
+**Observability:** Docs lint, PagerDuty analytics, and governance dashboards track freshness and drill coverage. **|**
+**Breadcrumbs:** `ops/runbooks/settings/*.md`, `ops/scripts/settings/*.py`, incident templates `ops/settings/incidents/*.md`. **|**
+**References:** Alert catalog, residency policy, FinOps governance.
+
+- `RB-GOV-008`: Roll back governance toggles, restore prior snapshots, and document change approvals before reactivating.
+- `RB-RES-ENDPOINT`: Remediate residency drift by updating endpoint allowlists, flushing caches, and verifying Guardian exposure.
+- `RB-SETTINGS-ACTIVATION`: Handle activation failures by validating schema diffs, rerunning validation harnesses, and coordinating rollback/promotion sequencing.
+- `RB-SETTINGS-WAIVER`: Renew or retire waivers, update allowlists, run verification scripts, and log approvals in App.O.
+
+### Settings Registry — 8.3.3 Drill Cadence & Evidence (binding)
+
+- Quarterly drills cover activation rollback, residency drift, governance toggle rollback, and waiver renewal; evidence stored in `ops/settings/drills/<date>/` with retrospectives.
+- Docs lint (`scripts/docs/build_runbook_catalog.py --check`) and PagerDuty analytics confirm drill execution; missed drills block releases until mitigated.
+- Compliance reviews reference drill artefacts, waiver logs, and activation evidence to demonstrate readiness.
+
+## Worker Cluster — 8.3 Runbooks & Drills (binding)
 
 **Purpose:** Keep worker playbooks current and drills executed on schedule. **|**
 **Contract:** Alerts map to RB-\*; quarterly exercises cover watchdog stalls, provider failover simulations, queue backlog remediation, and DLQ replay drills. **|**
@@ -838,60 +326,72 @@ ______________________________________________________________________
 **Breadcrumbs:** Runbook catalog, drill scheduler, Ops governance records. **|**
 **References:** `RB-JOB-WATCHDOG`, `RB-LOCK-006`, `RB-NOTIFY-*`, `RB-UPLOAD-SCAN`, `RB-CASE-IMPORT`. *
 
-#### Worker Cluster — 8.3.1 Runbook index (informative)
+### Worker Cluster — 8.3.1 Runbook Index (informative)
+
+- `RB-JOB-WATCHDOG` — Worker/job watchdog
+- `RB-JOB-DRAIN` — Graceful worker drain and redeploy
+- `RB-JOB-RESIDENCY` — Residency drift remediation
+- `RB-JOB-QUEUE` — Queue backlog triage
+
+### Worker Cluster — 8.3.2 Primary Runbooks (binding)
+
+**Purpose:** Summarise worker cluster runbooks so responders execute consistent mitigations for job orchestration incidents. **|**
+**Contract:** Each runbook ties to specific alerts and evidence expectations; responders update these guides after incidents or drills. **|**
+**State:** Runbooks live in `ops/runbooks/worker/`, automation scripts in `ops/scripts/worker/`, and incident evidence under `ops/worker/incidents/`. **|**
+**Failures & handling:** Missing steps or stale guidance blocks deployment approvals. **|**
+**Observability:** Docs lint, PagerDuty analytics, and Ops dashboards track runbook freshness and drill coverage. **|**
+**Breadcrumbs:** `ops/runbooks/worker/*.md`, `ops/scripts/worker/*.py`, incident templates `ops/worker/incidents/*.md`. **|**
+**References:** Alert catalog, Guardian/Settings integration docs.
+
+- `RB-JOB-WATCHDOG`: Recover from stalled or failed jobs by replaying Celery tasks, verifying locks, and notifying portal/UI.
+- `RB-JOB-DRAIN`: Drain workers safely before deploys or failures, ensuring in-flight jobs persist and resume.
+- `RB-JOB-RESIDENCY`: Handle residency drift by enforcing queue segregation, updating allowlists, and coordinating with Settings.
+- `RB-JOB-QUEUE`: Manage backlog spikes, scale workers, and reconcile queue offsets with audit evidence.
+
+### Worker Cluster — 8.3.3 Drill Cadence & Evidence (binding)
+
+- Quarterly drills cover watchdog recovery, drain rehearsal, residency enforcement, and backlog triage; evidence stored in `ops/worker/drills/<date>/` with retrospective notes.
+- Docs lint (`scripts/docs/build_runbook_catalog.py --check`) and PagerDuty analytics confirm drill execution; missed drills block release approvals.
+- Compliance reviews reference drill evidence, queue audits, and residency logs to demonstrate readiness.
+
+## Web Application & Portal — 8.3 Runbooks & Drills (binding)
+
+**Purpose:** Keep UI runbooks executable and drills on cadence. **|**
+**Contract:** Alerts map to RB-\* playbooks; quarterly exercises cover SSE resiliency, portal abuse investigation, accessibility audits, and assistant abuse response. **|**
+**State:** Runbooks `ops/runbooks/webapp/*.md`, evidence `ops/webapp/drills/<date>/`. **|**
+**Failures & handling:** Missing drill evidence or outdated steps block release approval until updated. **|**
+**Observability:** Docs lint, drill scheduler reports, governance dashboards. **|**
+**Breadcrumbs:** Runbook catalog, drill scheduler, governance policy App.N. **|**
+**References:** `RB-JOB-WATCHDOG`, `RB-PORTAL-INVALIDATION`, `RB-LPE-LOCALE-GAP`, `RB-NOTIFY-*`, `RB-CHAT-ABUSE`. *
+
+### Web Application & Portal — 8.3.1 Runbook Index (informative)
 
 | Runbook code | Scenario | Notes |
 | ------------ | -------- | ----- |
-| `RB-JOB-WATCHDOG` | Queue/backlog remediation & watchdog stall | Coordinates pause/resume, collects evidence |
-| `RB-LOCK-006` | Advisory lock / activation lock remediation | Clears stale locks before re-running jobs |
-| `RB-NOTIFY-*` | Delivery queue backlog | Shared with notifications service |
-| `RB-UPLOAD-SCAN` | Upload scanning outage | Quarantines staging blobs, restarts scanners |
-| `RB-CASE-IMPORT` | Legacy case import failure | Replays bundles, validates manifests |
+| `RB-JOB-WATCHDOG` | SSE/worker watchdog remediation | Coordinates with worker cluster for stalled jobs |
+| `RB-PORTAL-INVALIDATION` | Token revocation / portal link cleanup | Revokes signed URLs, notifies clients, captures evidence |
+| `RB-LPE-LOCALE-GAP` | Localization/accessibility gap | Partners with LP Engine for missing locales or accessibility gaps |
+| `RB-NOTIFY-*` | Delivery incidents | Aligns portal alerts with outbound notifications |
+| `RB-CHAT-ABUSE` | Assistant abuse or moderation escalation | Disables assistants, gathers evidence for Security |
 
-#### Worker Cluster — 8.3.2 Primary runbooks (binding)
+### Web Application & Portal — 8.3.2 Primary Runbooks (binding)
 
-**Purpose:** Document operational playbooks responders execute during incidents or exercises. **|**
-**Contract:** Link production alerts to runbook identifiers, outline execution cadence, and name the maintaining team. **|**
-**State:** Summarize where runbooks live (repo paths, automation scripts) and what evidence they produce. **|**
-**Failures & handling:** Explain how missing, stale, or skipped runbooks are surfaced and remediated. **|**
-**Observability:** Note tooling that tracks drill frequency, runbook completion, and incident follow-up. **|**
-**Breadcrumbs:** Runbook files, automation scripts, incident templates. **|**
-**References:** Alert catalogs, governance docs referencing the runbooks.
+**Purpose:** Summarise web-app runbooks so responders execute consistent mitigations across SSE, portal, and assistant incidents. **|**
+**Contract:** Alerts map to RB-Web runbooks with evidence requirements; responders refresh the playbooks after drills or incidents. **|**
+**State:** Runbooks live under `ops/runbooks/webapp/`, automation scripts under `ops/scripts/webapp/`, and incident evidence in `ops/webapp/incidents/`. **|**
+**Failures & handling:** Missing steps or stale content block deployment approvals. **|**
+**Observability:** Docs lint, PagerDuty analytics, and Ops dashboards track runbook freshness and drill coverage. **|**
+**Breadcrumbs:** `ops/runbooks/webapp/*.md`, `ops/scripts/webapp/*.py`, incident templates `ops/webapp/incidents/*.md`. **|**
+**References:** Alert catalog, LP Engine, Notifications integration guides.
 
-- `RB-JOB-WATCHDOG` — Restores queue health, drains DLQs, and coordinates automation restarts.
-- `RB-LOCK-006` — Clears advisory/activation locks and verifies GUC guards before resuming jobs.
-- `RB-NOTIFY-*` — Collaborates with notifications service to resolve delivery queue backlogs.
-- `RB-UPLOAD-SCAN` — Quarantines staging blobs, restarts scanners, and validates clean bills of health.
-- `RB-CASE-IMPORT` — Replays legacy imports, reconciles manifests, and confirms evidence storage.
+- `RB-JOB-WATCHDOG` — Restores SSE sessions, resumes watchdog automation, and coordinates backlog remediation.
+- `RB-PORTAL-INVALIDATION` — Revokes signed URLs, reissues secure links, and documents evidence for auditors.
+- `RB-LPE-LOCALE-GAP` — Triages localization/accessibility deficits with LP Engine and revalidates fallback artefacts.
+- `RB-NOTIFY-*` — Synchronizes portal state with outbound notifications when delivery issues surface.
+- `RB-CHAT-ABUSE` — Freezes assistants, escalates to Guardian, and captures moderation evidence.
 
-#### Worker Cluster — 8.3.3 Drill cadence & evidence (binding)
+### Web Application & Portal — 8.3.3 Drill Cadence & Evidence (binding)
 
-- Quarterly drills cover watchdog stalls, provider failover simulations, queue backlog remediation, and DLQ replay exercises with evidence in `ops/workers/drills/<date>/`.
-- Drill scheduler `ops/scripts/worker/schedule_drills.py` assigns ownership and cadence; missed drills block automation restarts after incidents.
-- Docs lint, Ops governance dashboards, and App.O reviews verify runbook freshness and drill completion.
-
-### Worker Cluster — 8.4 Migrations & backfills (normative)
-
-**Purpose:** Manage queue migrations, Celery upgrades, and DLQ replays. **|**
-**Contract:** Queue renames and Celery upgrades require change tickets, KEDA dry runs, and rollback plans; DLQ replays run in preview before promotion. **|**
-**State:** Migration scripts `ops/scripts/worker/migrate_queue.py`, upgrade playbooks `ops/runbooks/worker/celery_upgrade.md`, DLQ replay logs `ops/workers/dlq_replay/<date>/`. **|**
-**Failures & handling:** Failed migrations revert to prior queue configuration; replay failures quarantine payloads for manual inspection. **|**
-**Observability:** Metrics `worker_migration_success_total`, `dlq_replay_success_total`, change tickets in App.O. **|**
-**Breadcrumbs:** Migration scripts, upgrade playbooks, DLQ tooling. **|**
-**References:** §4 State management, Notifications spec §4. *
-
-### Worker Cluster — 8.5 Operational workflows (normative)
-
-**Purpose:** Document recurring worker tasks (queue audits, watchdog verification, capacity reviews). **|**
-**Contract:** Teams review queue depth daily, reconcile watchdog heartbeat reports, audit Settings snapshot adoption, and refresh worker autoscaling parameters quarterly. **|**
-**State:** Queue audit reports `ops/workers/queue_audit/<date>.csv`, watchdog summaries `ops/workers/watchdog_status.json`, capacity review decks `ops/workers/capacity/<quarter>.pptx`. **|**
-**Failures & handling:** Missing audits trigger `RB-JOB-WATCHDOG` follow-up; outdated scaling parameters escalate via Ops governance. **|**
-**Observability:** Metrics `celery_queue_depth`, `watchdog_runner_lag_seconds`, capacity dashboards. **|**
-**Breadcrumbs:** Audit scripts `ops/scripts/worker/audit_queues.py`, watchdog tools, capacity planning docs. **|**
-**References:** Settings spec §6, LLM registry spec §2.4. *
-
-- Daily queue audits catch runaway jobs and coordinate with agent owners for mitigation.
-- Weekly watchdog verifications ensure metrics, SSE, and logs reflect automation health.
-- Quarterly capacity reviews adjust KEDA/HPA thresholds and record scaling decisions in Ops governance.
-
-______________________________________________________________________
+- Quarterly drills exercise SSE resiliency, portal abuse response, accessibility audits, and assistant abuse scenarios with evidence in `ops/webapp/drills/<date>/`.
+- Drill scheduler `ops/scripts/webapp/schedule_drills.py` tracks cadence and ownership; missed drills block release approvals until evidence uploaded.
+- Docs lint, governance dashboards, and App.N reviews verify runbook freshness before production changes.

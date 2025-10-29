@@ -1879,57 +1879,15 @@ Client retry guidance (normative)
 | `INTEGRITY_ERROR`                 | Hash/ETag mismatch                  | Re-upload/file new hash; do not retry blindly                                |
 | `AUTH_CLOCK_SKEW` (401)           | Request timestamp outside ±120 s    | Re-sync clock; retry with corrected time                                     |
 
-### 10.8 SSE event schema & sync snapshot (normative)
+### 10.8 Stream events & replay (normative)
 
-*Purpose: Define canonical SSE events and replay behavior.*
+*Purpose: Summarize the streaming contract that keeps jobs, artifacts, and notifications in sync.*
 
-- Event types: `job.accepted`, `job.update`, `job.running`, `job.blocked`, `job.quarantined`, `job.completed`, `job.canceling`, `job.canceled`, `artifact.status`, `qa.notes`, `provider.health`, `portal_link_invalidated`, `settings.activated`, plus lifecycle events emitted for the status model (`OBJECT.STORED`, `OBJECT.PROCESSING.START|END`, `OBJECT.FAILED`, `OBJECT.PENDING_JUDGMENT`, `GUARDIAN.JUDGMENT.PASS|WARN|BLOCK|WAIVED`, `OBJECT.CLEARED_FOR_USE`, `OBJECT.OPERATOR_PREP`, `REVIEW.REQUESTED`, `REVIEW.QUEUED`, `REVIEW.SKIPPED`, `REVIEW.APPROVED`, `REVIEW.CHANGES_REQUESTED`, `REVIEW.QUARANTINED`, `SIGNATURE.APPLIED`, `DELIVERABLE.RELEASED`, `DELIVERABLE.REVOKED`, `OBJECT.ARCHIVED`). `job.accepted` emits once per enqueue, `job.running` and `job.completed` bracket successful execution, and `job.blocked`/`job.quarantined` surface policy holds (FinOps, Guardian) that require human action before resumption.
-- Every payload includes `schema_version` (string, currently `"1"`) and `emitted_at` (RFC3339 with timezone) so clients can branch logic during future revisions without breaking older deployments or relying on local clocks.
-- Envelope: `id` (monotonic), `event`, `data` (JSON), `retry` (ms). `data` for snapshot payloads includes `watermark_ts` to indicate the newest event timestamp included. Requests to `/api/v1/jobs/{id}/events` and `/api/v1/cases/{id}/events` MUST send `If-None-Match` with the caller’s cached digest (initially `*`). Servers respond with `ETag: sse:{scope}:{digest_sha256}` so reconnecting clients can prove they have processed the latest PolicyContext and artifact manifests; mismatched digests trigger a synthetic snapshot replay before live tailing. The envelope and payloads validate against `spec/schemas/sse/event_envelope.schema.json`; SSE producers deserialize generated Pydantic models before emit. Schema constraints encode `maxLength`/`maxItems` limits (e.g., snapshot ≤ 500 events, messages ≤ 2 KiB) so the 8 KiB payload budget is enforced mechanically. `id` echoes in `Last-Event-ID`.
-- Payload hints: `data.meta` may include `{phase, percent, next_action, badges[]}` to align with UI progress widgets (e.g., `phase="Judgment"`, `badges=["WARN:PII detector"]`).
-- Sequencing: IDs are monotonic per stream (`sse:case:{case_id}` and `sse:job:{job_id}`) and minted via Redis `INCR`, ensuring ordered delivery across multiple web pods without requiring cross-stream ordering.
-- Sync snapshot: if `Last-Event-ID` predates the 15-minute/500-event replay window (whichever comes first), the server emits a snapshot (RLS‑scoped) containing the last 500 events and `watermark_ts` before tailing live updates.
-- Delivery: at‑least‑once; clients de‑dupe via `id`. Snapshots include a bounded window and `watermark_ts` so consumers know when they are live. Individual events are capped at 8 KiB payloads (post-JSON encoding) and Redis stream memory budgets target ≤ 256 MiB per environment; SREs size `stream.maxlen` accordingly.
-- Operational SLOs: 95th percentile client-perceived delivery latency (`sse_client_delivery_lag_seconds`) stays \< 2 s and 99th percentile \< 5 s; alert `alert_sse_delivery_lag_high` pages when either threshold is exceeded for five consecutive minutes.
-- Replay guardrails: snapshot builds MUST complete within 2 s and stay \< 5 MiB serialized (`sse_snapshot_build_duration_seconds`, `sse_snapshot_size_bytes`). Alert `alert_sse_snapshot_regression` fires and blocks deploys when limits are exceeded.
-- Security: events enforced by RLS; tokens bound to org/case; portal receives a subset.
-- Settings Service emits identical payloads via SSE (`settings.activated`) and Redis `settings.changed` events so workers and browser clients observe the same activation metadata.
-- Retention: SSE replay buffers keep 24 hours of events; reconnects beyond that window receive a snapshot plus the latest live tail.
-- Load testing: quarterly chaos runs (`scripts/sse/load_test.py`) fan 5k concurrent tails at 1 Hz updates to validate Redis memory ceilings and event-size caps; results feed App.L baselines.
-- Source material: `§10.8`, `§10.8`
+- The Notifications specification (Appendix A) owns the authoritative event catalog, envelope schema, and replay rules; the web app spec Appendix A documents the UI contract and accessibility pattern. Producers validate payloads against `spec/schemas/sse/event_envelope.schema.json`; consumers branch on `schema_version` and `emitted_at` during rollouts.
+- Streams deliver at-least-once with monotonic IDs per scope (`case`, `job`). Clients send `If-None-Match` digests; servers respond with bounded snapshots before resuming live events whenever digests diverge. Redis retention remains 24 hours with quarterly load tests (`scripts/sse/load_test.py`) to prove capacity.
+- Operational SLOs (`sse_client_delivery_lag_seconds`, `sse_snapshot_build_duration_seconds`, `sse_snapshot_size_bytes`) gate releases. Token binding and RLS keep events scoped to the active org/case; violations raise `SSE_DISCONNECT_TOKEN_MISMATCH`.
 
-**Acceptance:**
-
-- Unit: `tests/platform/realtime/test_sse_payloads.py::test_event_schema` validates canonical event envelopes and size limits.
-- Integration: `tests/e2e/test_sse_reconnect.py::test_last_event_snapshot` asserts Last-Event-ID replay + snapshot delivery in staging.
-- Security: `tests/e2e/test_sse_token_binding.py::test_disconnect_on_org_switch` confirms token expiry/org switch closes connections and emits audit events.
-
-Binding breadcrumbs:
-
-| Control                | Implementation                                          | Test                                                                 | Observability                                                      |
-| ---------------------- | ------------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| SSE stream contract    | `apps/platform/realtime/sse.py::StreamPublisher`        | `tests/platform/realtime/test_sse_payloads.py::test_event_schema`    | Metric `sse_payload_size_bytes` / Grafana “Realtime Streams” panel |
-| Snapshot replay        | `apps/platform/realtime/sse.py::snapshot_payload`       | `tests/e2e/test_sse_reconnect.py::test_last_event_snapshot`          | Metric `sse_snapshot_gap_seconds`                                  |
-| Token-bound disconnect | `apps/platform/realtime/auth.py::enforce_token_binding` | `tests/e2e/test_sse_token_binding.py::test_disconnect_on_org_switch` | Audit event `SSE_DISCONNECT_TOKEN_MISMATCH`                        |
-
-Payloads (illustrative)
-
-| Event                   | data fields                                                                                        | Notes                                                                                                                                                                                                                    |
-| ----------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| job.accepted            | `{ schema_version, emitted_at, job_id, case_id, org_id }`                                          | Emitted once when a queued job is accepted onto a worker.                                                                                                                                                                |
-| job.running             | `{ schema_version, emitted_at, job_id, case_id, org_id, phase }`                                   | Signifies active execution; `phase` mirrors `provider_progress.phase`.                                                                                                                                                   |
-| job.update              | `{ schema_version, emitted_at, job_id, case_id, org_id, status, progress?, warning?, error? }`     | `status ∈ {PENDING, RUNNING, PAUSED, PAUSED_AWAITING_PROVIDER, PAUSED_AWAITING_BUDGET, CANCELING, FAILED, COMPLETED, CANCELED}`                                                                                          |
-| job.blocked             | `{ schema_version, emitted_at, job_id, case_id, org_id, reason }`                                  | Signals policy or budget block; clients surface remediation guidance.                                                                                                                                                    |
-| job.quarantined         | `{ schema_version, emitted_at, job_id, case_id, org_id, reason }`                                  | Guardian-enforced quarantine; operators must resubmit with fixes/waivers.                                                                                                                                                |
-| job.completed           | `{ schema_version, emitted_at, job_id, case_id, org_id }`                                          | Successful terminal state; emitted before downstream artifact.status updates.                                                                                                                                            |
-| job.canceling           | `{ schema_version, emitted_at, job_id, case_id, org_id, actor_id, reason }`                        | Emitted once per cancel request; clients stop polling progress UI.                                                                                                                                                       |
-| job.canceled            | `{ schema_version, emitted_at, job_id, case_id, org_id, actor_id, reason, provider_outcome }`      | Emitted after providers acknowledge abort; pairs with AR `JOB_CANCELLATION_REPORT`.                                                                                                                                      |
-| artifact.status         | `{ schema_version, emitted_at, artifact_id, case_id, org_id, type, status, previous_status? }`     | `status ∈ {STORED, PROCESSING, FAILED, PENDING_JUDGMENT, CLEARED_FOR_USE, OPERATOR_PREP, APPROVAL_REQUESTED, QUEUED_FOR_REVIEW, CHANGES_REQUESTED, QUARANTINED, APPROVED, SIGNED, RELEASED, REVOKED, ARCHIVED, DELETED}` |
-| qa.notes                | `{ schema_version, emitted_at, job_id?, artifact_id?, case_id, notes:[{level, msg, emitted_at}] }` | Levels: INFO                                                                                                                                                                                                             |
-| portal_link_invalidated | `{ schema_version, emitted_at, artifact_id, case_id, reason }`                                     | Portal consumes to revoke stale links                                                                                                                                                                                    |
-| settings.activated      | `{ schema_version, emitted_at, scope, org_id?, case_id?, bundle_id, version_id }`                  | Triggers cache invalidation on clients                                                                                                                                                                                   |
-
-- Canonical payloads: see `../apps/web-app.md#appendix-a-real-time-payloads-components-binding` for the reference JSON covering `job.update`, `artifact.status`, `portal_link_invalidated`, and snapshot bootstrap messages. Examples are generated from the shared schema test fixtures so they stay aligned with validation logic and SSE contracts.
+**Acceptance:** Contract tests (`tests/platform/realtime/test_sse_payloads.py`, `tests/e2e/test_sse_reconnect.py`, `tests/e2e/test_sse_token_binding.py`) run in CI; staging drills assert dashboard alerts and snapshot budgets before deploy.
 
 ### 10.9 Rate limits & antifraud controls
 
@@ -2062,7 +2020,7 @@ ______________________________________________________________________
 
 - Metrics: queue depth, job durations, review-service latency/throughput (`guardian_judgment_latency_seconds`, `guardian_cleared_ratio`, `guardian_pending_total`, `guardian_pending_oldest_seconds`, `guardian_submission_timeout_total`), Signer verify latency (including `sign_verify_status_total`, `ocsp_latency_seconds`, `ocsp_staple_age_seconds`, `tsa_latency_seconds`, `tsa_time_drift_seconds`), LLM health/circuit state, delivery rates, integrity incidents (`integrity_scan_queue_depth`, `integrity_quarantine_total`), review queue health (`review_queue_backlog_total`, `review_queue_oldest_seconds`), false-positive sampling (`guardian_quarantine_false_positive_total`), job lifecycle signals (`job_stalled_total`, `job_watchdog_warning_total`, `job_watchdog_timeout_total`, `job_cancellation_total`), watchdog runner health (`watchdog_runner_lag_seconds`, `watchdog_runner_missed_total`), upload scanning (`upload_scan_duration_seconds`, `upload_scan_infected_total`, `upload_scan_error_total`), Reference Manager dashboards per `../services/reference-manager.md §5.1`, SSE reconnect rate, `artifacts_cleared_total`, `artifacts_approved_total`, `time_to_approval_seconds`. LPE runtime metrics live in `../services/lp-engine.md §5`. All Prometheus metrics use seconds for duration histograms and `_total` counters for events; legacy `*_ms` signals are deprecated and scheduled for removal in v7 GA (§12.6).
 
-- FinOps metrics: `llm_cost_estimate_total{org, case, job, model}`, `finops_cost_per_case_usd{org, case}`, `finops_cost_per_org_usd{org, month}`, `delivery_events_total{org, channel, status}`, `finops_mom_regression_flag{org}`.
+- FinOps dashboards & alerts: see `../services/llm-registry.md §6` for the full metric inventory and gating thresholds.
 
 - Privacy/Governance: `residency_block_total`, `dpia_records_total{status}`, `ropa_records_total`, `entitlement_snapshots_total`, `policy_unsafe_activations_blocked_total`.
 
@@ -2283,22 +2241,10 @@ Alert routing
 - Metering: counters for usage; monthly exports; tie-in with FinOps budgets; anomaly detection.
 - Source material: `§12.8`, `§12.9`
 
-### 12.9 FinOps dashboards & alert wiring
+### 12.9 Cost dashboards & transparency (informative)
 
-*Purpose: Ensure cost signals are visible and actionable.*
-
-- Dashboards: `llm_cost_estimate_total`, `finops_cost_per_case_usd`, MoM regression panel, top N expensive cases, budget forecasts, and logging volume views (`logging_bytes_ingested_total`, budget vs actual per service).
-- Alerts: regression > threshold (default 10%); monthly cap risk > X%; route to Product/SRE with runbooks; annotate releases.
-- Acceptance: dashboards exist and alerts fire in staging drill before enabling in prod, including `LOG_VOLUME_BUDGET` alerts tied to `../ops/runbooks/index.md (RB-LOG-007)`.
-
-#### 12.9.1 Portal-facing usage transparency
-
-*Purpose: Explain how portal surfaces expose usage, alerts, and audit notices to clients.*
-
-- *Purpose: Extend FinOps visibility to customers while keeping controls consistent with internal reporting.*
-- Admin usage dashboard (`portal.usage_dashboard.enabled`, default `true`): portal `Org Admin` view surfaces rolling 7/30-day spend, token consumption, job counts, and export volumes using the same metrics powering internal FinOps dashboards (`llm_cost_estimate_total`, `finops_cost_per_case_usd`, `case_jobs_total`). CSV exports mirror the monthly reports for finance; APIs provide `GET /portal/org/{org_id}/usage` with pagination and granular filters.
-- Guardrails: data is scoped by org and adheres to residency/privacy policies enforced via secure views (§4.3). Rate limits protect against scraping; anomalies raise `PORTAL_USAGE_EXPORT_ANOMALY` events and notify support.
-- Acceptance: feature flag stays limited to pilot orgs until (1) UX copy passes localization review, (2) support playbooks for billing inquiries are published, and (3) synthetic monitors validate parity between staff and portal dashboards for representative orgs.
+- LLM Registry §6 maintains the authoritative FinOps dashboards, alert thresholds, and staging drill requirements; platform teams ensure those dashboards stay green before release.
+- Portal usage transparency and export workflows follow the web-app specification (§2.2); parity between staff and portal views is validated with synthetic monitors and feature flags gate exposure.
 
 ### 12.10 Business continuity & degraded operations
 
@@ -2750,6 +2696,7 @@ ______________________________________________________________________
 - **App.S** Ownership & RACI map *(source: §1.5, §15)*
 - **App.T** Traceability matrix *(source: §3.8, §7, §10, §12.1, §12.6)*
 - **See also:** `../apps/web-app.md#appendix-a-real-time-payloads-components-binding` *(web app SSE payloads & job widget reference)*
+- **See also:** `../services/notifications.md#appendix-a-event-catalog-streaming-contract` *(SSE event catalog & replay contract)*
 
 ______________________________________________________________________
 

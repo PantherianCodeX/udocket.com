@@ -14,6 +14,9 @@ import re
 SCRIPT_DIR = Path(__file__).resolve().parent
 ROOT_PATH = str(SCRIPT_DIR.parent.parent)
 
+if ROOT_PATH not in sys.path:
+    sys.path.append(ROOT_PATH)
+
 from scripts.docs import doc_utils  # type: ignore  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]

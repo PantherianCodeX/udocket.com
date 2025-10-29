@@ -153,6 +153,8 @@ ______________________________________________________________________
 - Attachments are uploaded as `ATTACHMENT_RAW`/`ATTACHMENT_TEXT` artifacts, run through Guardian/Notifications review, and inherit download-token enforcement when exposed in the portal.
 - Download guard (`apps/platform/portal/downloads.py::enforce_if_match`) verifies `If-Match` headers, signed token hash, artifact status, and residency metadata before streaming; replays or revoked links return `403` with audit `PORTAL_DOWNLOAD_PRECONDITION`.
 - All portal queries rely on secure views (`artifact_secure`, `delivery_receipt_secure`) so masked fields never bypass Guardian policies.
+- Org Admin usage dashboard (`portal.usage_dashboard.enabled`) mirrors staff FinOps metrics (`llm_cost_estimate_total`, `finops_cost_per_case_usd`, `case_jobs_total`) with secure-view scoping; CSV exports respect rate limits and localization constraints.
+- Usage transparency launches only after localization review, support playbooks, and synthetic parity checks with staff dashboards. Anomalies raise `PORTAL_USAGE_EXPORT_ANOMALY` and disable the feature flag until resolved.
 
 ### 2.3 Accessibility & localization (binding)
 

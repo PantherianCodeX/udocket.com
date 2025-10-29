@@ -386,6 +386,11 @@ ______________________________________________________________________
 **Breadcrumbs:** Dashboard configs `infra/observability/dashboards/llm_residency.json`, `llm_safety.json`, `finops_llm.json`; alert rules `infra/monitoring/llm-prometheus-rules.yaml`. **|**
 **References:** TDD §12 Observability dashboards, TDD §8.7 FinOps guard. *
 
+- Cost dashboards surface `llm_cost_estimate_total`, `finops_cost_per_case_usd`, MoM regression panels, top N expensive cases, budget forecasts, and logging volume views (`logging_bytes_ingested_total`, budget vs actual per service).
+- Alerts cover regression > threshold (default 10 %), monthly cap risk, cost forecast drift, and sustained logging budget overages; all alerts route to Product/SRE with runbook IDs (`RB-LLM-FINOPS`, `RB-LOG-007`).
+- Metrics to watch: `llm_cost_estimate_total{org,case,job,model}`, `finops_cost_per_case_usd{org,case}`, `finops_cost_per_org_usd{org,month}`, `finops_mom_regression_flag{org}`, `delivery_events_total{org,channel,status}`. Budget overrides update `llm.finops.override_until` so dashboards annotate active bypass windows.
+- Acceptance: dashboards and alerts must pass staging drills prior to promotion; drills replay budget breaches and log alerts in `ops/finops/mom_guard/`.
+
 ______________________________________________________________________
 
 ## 7) Security & Compliance
