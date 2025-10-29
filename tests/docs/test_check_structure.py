@@ -399,6 +399,110 @@ Body text.
     assert any("should not have preamble entries" in err for err in errors)
 
 
+def test_document_controls_additional_fields_valid() -> None:
+    lines = [
+        "---",
+        "author:",
+        "  - Alice",
+        "version: 1.0",
+        "status: draft",
+        "classification: Confidential",
+        "last_updated: 2025-10-30",
+        "owners:",
+        "  - Team",
+        "reviewers:",
+        "  - Reviewer",
+        "approvers:",
+        "  - Approver",
+        "extra_meta: Extra data",
+        "---",
+        "## Document controls",
+        "| Field | Value |",
+        "| ----- | ----- |",
+        "| Authors | Alice |",
+        "| Version | 1.0 |",
+        "| Status | draft |",
+        "| Classification | Confidential |",
+        "| Last updated | 2025-10-30 |",
+        "| Owners | Team |",
+        "| Reviewers | Reviewer |",
+        "| Approvers | Approver |",
+        "| Approved by |  |",
+        "| Approved date |  |",
+        "| Extra Meta | Extra data |",
+    ]
+
+    errors = check_document_controls(Path("service.md"), lines)
+
+    assert errors == []
+
+
+def test_document_controls_additional_field_missing_row_detected() -> None:
+    lines = [
+        "---",
+        "author: Alice",
+        "version: 1.0",
+        "status: draft",
+        "classification: Confidential",
+        "last_updated: 2025-10-30",
+        "owners: Team",
+        "reviewers: Reviewer",
+        "approvers: Approver",
+        "extra_meta: Extra data",
+        "---",
+        "## Document controls",
+        "| Field | Value |",
+        "| ----- | ----- |",
+        "| Authors | Alice |",
+        "| Version | 1.0 |",
+        "| Status | draft |",
+        "| Classification | Confidential |",
+        "| Last updated | 2025-10-30 |",
+        "| Owners | Team |",
+        "| Reviewers | Reviewer |",
+        "| Approvers | Approver |",
+        "| Approved by |  |",
+        "| Approved date |  |",
+    ]
+
+    errors = check_document_controls(Path("service.md"), lines)
+
+    assert any("Extra Meta" in err for err in errors)
+
+
+def test_document_controls_unexpected_field_detected() -> None:
+    lines = [
+        "---",
+        "author: Alice",
+        "version: 1.0",
+        "status: draft",
+        "classification: Confidential",
+        "last_updated: 2025-10-30",
+        "owners: Team",
+        "reviewers: Reviewer",
+        "approvers: Approver",
+        "---",
+        "## Document controls",
+        "| Field | Value |",
+        "| ----- | ----- |",
+        "| Authors | Alice |",
+        "| Version | 1.0 |",
+        "| Status | draft |",
+        "| Classification | Confidential |",
+        "| Last updated | 2025-10-30 |",
+        "| Owners | Team |",
+        "| Reviewers | Reviewer |",
+        "| Approvers | Approver |",
+        "| Approved by |  |",
+        "| Approved date |  |",
+        "| Custom Field | 123 |",
+    ]
+
+    errors = check_document_controls(Path("service.md"), lines)
+
+    assert any("unexpected field 'Custom Field'" in err for err in errors)
+
+
 def test_document_controls_missing_field_detected() -> None:
     lines = [
         "---",

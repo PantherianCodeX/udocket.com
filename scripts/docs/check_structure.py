@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
@@ -32,19 +33,24 @@ TEMPLATE_NAME = "_template.md"
 HEADING_RE = re.compile(r"^(#{2,6})\s+(.*)")
 PREAMBLE_RE = re.compile(r"^\*\*(.+?):\*\*\s*(.*)$")
 DOCUMENT_CONTROLS_HEADER = "## Document Controls"
-DOCUMENT_CONTROLS_FIELDS = (
-    "Authors",
-    "Version",
-    "Status",
-    "Classification",
-    "Last updated",
-    "Owners",
-    "Reviewers",
-    "Approvers",
-    "Approved by",
-    "Approved date",
-)
+FIELD_MAPPINGS: List[Tuple[str, str]] = [
+    ("Authors", "author"),
+    ("Version", "version"),
+    ("Status", "status"),
+    ("Classification", "classification"),
+    ("Last updated", "last_updated"),
+    ("Owners", "owners"),
+    ("Reviewers", "reviewers"),
+    ("Approvers", "approvers"),
+]
 OPTIONAL_CONTROL_FIELDS = {"Approved by", "Approved date"}
+EXCLUDED_FRONT_MATTER_KEYS = {
+    "title",
+    "subtitle",
+    "header-includes",
+    "adr_index",
+    "related_adrs",
+}
 
 LABEL_NORMALISATION = {
     "failure modes & handling": "Failures & handling",
@@ -205,6 +211,44 @@ def parse_front_matter(lines: Sequence[str]) -> Dict[str, Any]:
         return {}
 
 
+def _stringify(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode().strip()
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, list):
+        return "; ".join(_stringify(item) for item in value if _stringify(item))
+    if isinstance(value, dict):
+        try:
+            import yaml
+
+            dumped = yaml.safe_dump(value, sort_keys=True).strip()
+            return dumped.replace("\n", "; ")
+        except Exception:
+            return str(value)
+    return str(value).strip()
+
+
+def _expected_control_fields(front_matter: Dict[str, Any]) -> Tuple["OrderedDict[str, str]", "OrderedDict[str, str]"]:
+    base: "OrderedDict[str, str]" = OrderedDict()
+    for label, key in FIELD_MAPPINGS:
+        base[label] = _stringify(front_matter.get(key, ""))
+    base["Approved by"] = _stringify(front_matter.get("approved_by", ""))
+    base["Approved date"] = _stringify(front_matter.get("approved_date", ""))
+
+    base_keys = {key for _, key in FIELD_MAPPINGS}
+    base_keys.update({"approved_by", "approved_date"})
+    additional: "OrderedDict[str, str]" = OrderedDict()
+    for key, value in front_matter.items():
+        if key in base_keys or key in EXCLUDED_FRONT_MATTER_KEYS:
+            continue
+        label = key.replace("_", " ").replace("-", " ").title()
+        additional[label] = _stringify(value)
+    return base, additional
+
+
 def check_document_controls(path: Path, lines: Sequence[str]) -> List[str]:
     errors: List[str] = []
     front_matter = parse_front_matter(lines)
@@ -238,48 +282,42 @@ def check_document_controls(path: Path, lines: Sequence[str]) -> List[str]:
         field, value = cells[0], cells[1]
         fields_present[field] = value
 
-    def _as_str_list(value: Any) -> List[str]:
-        if value is None:
-            return []
-        if isinstance(value, (str, bytes)):
-            return [str(value).strip()]
-        if isinstance(value, Iterable):
-            return [str(item).strip() for item in value if str(item).strip()]
-        return [str(value).strip()]
+    base_fields, additional_fields = _expected_control_fields(front_matter or {})
+    expected_map: "OrderedDict[str, str]" = OrderedDict()
+    expected_map.update(base_fields)
+    expected_map.update(additional_fields)
 
-    expected_values: Dict[str, str] = {}
-    if front_matter:
-        authors = _as_str_list(front_matter.get("author"))
-        expected_values = {
-            "Authors": "; ".join(authors),
-            "Version": str(front_matter.get("version", "")).strip(),
-            "Status": str(front_matter.get("status", "")).strip(),
-            "Classification": str(front_matter.get("classification", "")).strip(),
-            "Last updated": str(front_matter.get("last_updated", "")).strip(),
-            "Owners": "; ".join(_as_str_list(front_matter.get("owners"))),
-            "Reviewers": "; ".join(_as_str_list(front_matter.get("reviewers"))),
-            "Approvers": "; ".join(_as_str_list(front_matter.get("approvers"))),
-        }
-
-    for field in DOCUMENT_CONTROLS_FIELDS:
+    for field in base_fields:
         if field not in fields_present:
             errors.append(f"{path}: document controls missing field '{field}'")
+    if front_matter:
+        for label, key in FIELD_MAPPINGS:
+            if not _stringify(front_matter.get(key, "")).strip():
+                errors.append(f"{path}: front matter missing '{label}' value")
+    for field, expected in additional_fields.items():
+        if expected.strip() and field not in fields_present:
+            errors.append(f"{path}: document controls missing field '{field}'")
+
+    for field, expected in expected_map.items():
+        if field not in fields_present:
             continue
-        value = fields_present[field]
-        if not value and field not in OPTIONAL_CONTROL_FIELDS:
+        value = fields_present[field].strip()
+        expected_clean = expected.strip()
+        if expected_clean and value != expected_clean:
+            errors.append(
+                f"{path}: document controls field '{field}' value '{value}' does not match front matter '{expected_clean}'"
+            )
+        if not expected_clean and field not in OPTIONAL_CONTROL_FIELDS and value:
+            errors.append(
+                f"{path}: document controls field '{field}' contains '{value}' but front matter is blank"
+            )
+        if expected_clean and not value and field not in OPTIONAL_CONTROL_FIELDS:
             errors.append(f"{path}: document controls field '{field}' must not be empty")
-        expected = expected_values.get(field)
-        if expected is not None:
-            if expected:
-                if value.strip() != expected.strip():
-                    errors.append(
-                        f"{path}: document controls field '{field}' value '{value.strip()}' does not match front matter '{expected.strip()}'"
-                    )
-            else:
-                if value.strip() and field not in OPTIONAL_CONTROL_FIELDS:
-                    errors.append(
-                        f"{path}: document controls field '{field}' contains '{value.strip()}' but front matter is blank"
-                    )
+
+    for field in fields_present:
+        if field not in expected_map and field not in OPTIONAL_CONTROL_FIELDS:
+            errors.append(f"{path}: document controls has unexpected field '{field}'")
+
     return errors
 
 

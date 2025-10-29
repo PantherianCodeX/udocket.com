@@ -20,26 +20,32 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
-from typing import Dict, Iterable, Iterator, List
+from collections import OrderedDict
+from typing import Dict, Iterable, Iterator, List, Tuple
 
 try:
     import yaml  # type: ignore
 except ImportError:  # pragma: no cover - optional dependency warning
     yaml = None  # type: ignore
 
-DOCUMENT_CONTROLS_FIELDS = (
-    "Authors",
-    "Version",
-    "Status",
-    "Classification",
-    "Last updated",
-    "Owners",
-    "Reviewers",
-    "Approvers",
-    "Approved by",
-    "Approved date",
-)
+FIELD_MAPPINGS: List[Tuple[str, str]] = [
+    ("Authors", "author"),
+    ("Version", "version"),
+    ("Status", "status"),
+    ("Classification", "classification"),
+    ("Last updated", "last_updated"),
+    ("Owners", "owners"),
+    ("Reviewers", "reviewers"),
+    ("Approvers", "approvers"),
+]
 OPTIONAL_FIELDS = {"Approved by", "Approved date"}
+EXCLUDED_FRONT_MATTER_KEYS = {
+    "title",
+    "subtitle",
+    "header-includes",
+    "adr_index",
+    "related_adrs",
+}
 DEFAULT_ROOT = Path("docs/src/services")
 
 
@@ -94,30 +100,42 @@ def parse_front_matter(lines: List[str]) -> Dict[str, object]:
     return data or {}
 
 
-def format_field(field: str, front_matter: Dict[str, object]) -> str:
-    if field == "Authors":
-        authors = front_matter.get("author", []) or []
-        if isinstance(authors, (str, bytes)):
-            authors = [authors]
-        return "; ".join(str(item).strip() for item in authors)
-    if field == "Version":
-        return str(front_matter.get("version", "")).strip()
-    if field == "Status":
-        return str(front_matter.get("status", "")).strip()
-    if field == "Classification":
-        return str(front_matter.get("classification", "")).strip()
-    if field == "Last updated":
-        return str(front_matter.get("last_updated", "")).strip()
-    if field == "Owners":
-        owners = front_matter.get("owners", []) or []
-        return "; ".join(str(item).strip() for item in owners)
-    if field == "Approvers":
-        approvers = front_matter.get("approvers", []) or []
-        return "; ".join(str(item).strip() for item in approvers)
-    if field == "Reviewers":
-        reviewers = front_matter.get("reviewers", []) or []
-        return "; ".join(str(item).strip() for item in reviewers)
-    return ""
+def _stringify(value: object) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode().strip()
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, list):
+        return "; ".join(_stringify(item) for item in value if _stringify(item))
+    if isinstance(value, dict):
+        if yaml is not None:
+            dumped = yaml.safe_dump(value, sort_keys=True).strip()
+            return dumped.replace("\n", "; ")
+        return str(value)
+    return str(value).strip()
+
+
+def _base_fields(front_matter: Dict[str, object]) -> OrderedDict[str, str]:
+    result: "OrderedDict[str, str]" = OrderedDict()
+    for label, key in FIELD_MAPPINGS:
+        result[label] = _stringify(front_matter.get(key, ""))
+    result["Approved by"] = _stringify(front_matter.get("approved_by", ""))
+    result["Approved date"] = _stringify(front_matter.get("approved_date", ""))
+    return result
+
+
+def _additional_fields(front_matter: Dict[str, object]) -> OrderedDict[str, str]:
+    base_keys = {key for _, key in FIELD_MAPPINGS}
+    base_keys.update({"approved_by", "approved_date"})
+    additional: "OrderedDict[str, str]" = OrderedDict()
+    for key, value in front_matter.items():
+        if key in base_keys or key in EXCLUDED_FRONT_MATTER_KEYS:
+            continue
+        label = key.replace("_", " ").replace("-", " ").title()
+        additional[label] = _stringify(value)
+    return additional
 
 
 def sync_file(path: Path) -> bool:
@@ -142,29 +160,44 @@ def sync_file(path: Path) -> bool:
     while idx < len(lines) and lines[idx].startswith("|"):
         table_rows.append(lines[idx])
         idx += 1
-    if len(table_rows) < 3:
-        print(f"[sync-document-controls] warning: {path} has incomplete document controls table; skipping", file=sys.stderr)
+    if len(table_rows) < 2:
+        print(
+            f"[sync-document-controls] warning: {path} has incomplete document controls table; skipping",
+            file=sys.stderr,
+        )
         return False
 
-    header_row, separator_row, *data_rows = table_rows
+    _header_row, _separator_row = table_rows[:2]
+    data_rows = table_rows[2:]
     existing_map = {}
     for row in data_rows:
         cells = [cell.strip() for cell in row.strip().strip("|").split("|")]
         if len(cells) >= 2:
             existing_map[cells[0]] = cells[1]
 
-    new_rows = [header_row, separator_row]
-    changed = False
-    for field in DOCUMENT_CONTROLS_FIELDS:
-        expected = format_field(field, front)
-        if field in OPTIONAL_FIELDS and not expected:
-            expected = existing_map.get(field, "")
-        current = existing_map.get(field, "")
-        if expected != current:
-            changed = True
-        new_rows.append(f"| {field} | {expected} |")
+    base_fields = _base_fields(front)
+    additional_fields = _additional_fields(front)
+    combined_fields: "OrderedDict[str, str]" = OrderedDict()
+    combined_fields.update(base_fields)
+    combined_fields.update(additional_fields)
 
-    if not changed and len(new_rows) == len(table_rows) and all(a == b for a, b in zip(new_rows, table_rows)):
+    unexpected = sorted(
+        field for field in existing_map if field not in combined_fields and field not in OPTIONAL_FIELDS
+    )
+    if unexpected:
+        joined = ", ".join(unexpected)
+        print(
+            f"[sync-document-controls] warning: {path} document controls table has unexpected rows ({joined}); skipping",
+            file=sys.stderr,
+        )
+        return False
+
+    new_rows = ["| Field | Value |", "| ----- | ----- |"]
+    for field, expected in combined_fields.items():
+        value = expected if expected or field not in OPTIONAL_FIELDS else ""
+        new_rows.append(f"| {field} | {value} |")
+
+    if table_rows == new_rows:
         return False
 
     lines[table_start:table_start + len(table_rows)] = new_rows

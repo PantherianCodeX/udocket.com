@@ -56,8 +56,8 @@ ______________________________________________________________________
 
 ## Document Controls
 
-| Field          | Value |
-| -------------- | ----- |
+| Field | Value |
+| ----- | ----- |
 | Authors | Document Signing Working Group |
 | Version | 0.1-draft |
 | Status | implementable |

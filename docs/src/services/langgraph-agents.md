@@ -56,8 +56,8 @@ ______________________________________________________________________
 
 ## Document Controls
 
-| Field          | Value |
-| -------------- | ----- |
+| Field | Value |
+| ----- | ----- |
 | Authors | Agent Platform Working Group |
 | Version | 0.1-draft |
 | Status | implementable |

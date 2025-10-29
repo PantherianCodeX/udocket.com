@@ -55,8 +55,8 @@ ______________________________________________________________________
 
 ## Document Controls
 
-| Field          | Value |
-| -------------- | ----- |
+| Field | Value |
+| ----- | ----- |
 | Authors | LLM Platform Working Group |
 | Version | 0.1-draft |
 | Status | implementable |

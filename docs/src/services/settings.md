@@ -58,8 +58,8 @@ ______________________________________________________________________
 
 ## Document Controls
 
-| Field          | Value |
-| -------------- | ----- |
+| Field | Value |
+| ----- | ----- |
 | Authors | uDocket Platform Architecture Team; Settings Program Leads |
 | Version | 0.1-draft |
 | Status | implementable |
