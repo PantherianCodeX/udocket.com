@@ -72,6 +72,10 @@ def build_tasks(targets: list[Path]) -> list[Task]:
             cmd=[py, str(ROOT / "scripts" / "docs" / "build_runbook_catalog.py"), "--check"],
         ),
         Task(
+            name="build_diagram_index.py --check",
+            cmd=[py, str(ROOT / "scripts" / "docs" / "build_diagram_index.py"), "--check"],
+        ),
+        Task(
             name="check_structure.py (services)",
             cmd=[py, str(ROOT / "scripts" / "docs" / "check_structure.py"), str(ROOT / "docs" / "src" / "services")],
         ),

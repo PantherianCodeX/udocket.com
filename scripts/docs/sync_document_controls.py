@@ -23,10 +23,13 @@ from pathlib import Path
 from collections import OrderedDict
 from typing import Dict, Iterable, Iterator, List, Tuple
 
-try:
-    import yaml
-except ImportError:  # pragma: no cover - optional dependency warning
-    yaml = None
+SCRIPT_DIR = Path(__file__).resolve().parent
+ROOT_DIR = SCRIPT_DIR.parent.parent
+
+if str(ROOT_DIR) not in sys.path:
+    sys.path.append(str(ROOT_DIR))
+
+from scripts.docs import doc_utils  # type: ignore  # noqa: E402
 
 FIELD_MAPPINGS: List[Tuple[str, str]] = [
     ("Authors", "author"),
@@ -82,47 +85,12 @@ def collect_targets(paths: Iterable[Path]) -> Iterator[Path]:
                 yield resolved
 
 
-def parse_front_matter(lines: List[str]) -> Dict[str, object]:
-    if not lines or lines[0].strip() != "---" or yaml is None:
-        return {}
-    fm_lines: List[str] = []
-    for line in lines[1:]:
-        if line.strip() == "---":
-            break
-        fm_lines.append(line)
-    if not fm_lines:
-        return {}
-    try:
-        data = yaml.safe_load("\n".join(fm_lines))
-    except Exception as exc:  # pragma: no cover - hi-level warning only
-        print(f"[sync-document-controls] warning: failed to parse front matter ({exc})", file=sys.stderr)
-        return {}
-    return data or {}
-
-
-def _stringify(value: object) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, bytes):
-        return value.decode().strip()
-    if isinstance(value, str):
-        return value.strip()
-    if isinstance(value, list):
-        return "; ".join(_stringify(item) for item in value if _stringify(item))
-    if isinstance(value, dict):
-        if yaml is not None:
-            dumped = yaml.safe_dump(value, sort_keys=True).strip()
-            return dumped.replace("\n", "; ")
-        return str(value)
-    return str(value).strip()
-
-
 def _base_fields(front_matter: Dict[str, object]) -> OrderedDict[str, str]:
     result: "OrderedDict[str, str]" = OrderedDict()
     for label, key in FIELD_MAPPINGS:
-        result[label] = _stringify(front_matter.get(key, ""))
-    result["Approved by"] = _stringify(front_matter.get("approved_by", ""))
-    result["Approved date"] = _stringify(front_matter.get("approved_date", ""))
+        result[label] = doc_utils.stringify(front_matter.get(key, ""))
+    result["Approved by"] = doc_utils.stringify(front_matter.get("approved_by", ""))
+    result["Approved date"] = doc_utils.stringify(front_matter.get("approved_date", ""))
     return result
 
 
@@ -134,14 +102,18 @@ def _additional_fields(front_matter: Dict[str, object]) -> OrderedDict[str, str]
         if key in base_keys or key in EXCLUDED_FRONT_MATTER_KEYS:
             continue
         label = key.replace("_", " ").replace("-", " ").title()
-        additional[label] = _stringify(value)
+        additional[label] = doc_utils.stringify(value)
     return additional
 
 
 def sync_file(path: Path) -> bool:
     text = path.read_text(encoding="utf-8")
     lines = text.splitlines()
-    front = parse_front_matter(lines)
+    try:
+        front = doc_utils.parse_front_matter(lines)
+    except Exception as exc:  # pragma: no cover - hi-level warning only
+        print(f"[sync-document-controls] warning: failed to parse front matter ({exc})", file=sys.stderr)
+        return False
     if not front:
         print(f"[sync-document-controls] warning: {path} missing usable front matter; skipping", file=sys.stderr)
         return False
@@ -213,7 +185,7 @@ def main() -> int:
         print("[sync-document-controls] no markdown targets found", file=sys.stderr)
         return 0
 
-    if yaml is None:
+    if doc_utils.yaml is None:
         print("[sync-document-controls] warning: PyYAML not available; cannot sync document controls", file=sys.stderr)
         return 0
 

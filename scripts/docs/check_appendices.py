@@ -9,10 +9,13 @@ from collections import OrderedDict
 from pathlib import Path
 from typing import Iterable, Iterator
 
-try:
-    import yaml
-except ImportError:
-    yaml = None
+SCRIPT_DIR = Path(__file__).resolve().parent
+ROOT_DIR = SCRIPT_DIR.parent.parent
+
+if str(ROOT_DIR) not in sys.path:
+    sys.path.append(str(ROOT_DIR))
+
+from scripts.docs import doc_utils  # type: ignore  # noqa: E402
 
 DEFAULT_ROOT = Path("docs/src/overview/tdd/appendices")
 DOCUMENT_CONTROLS_HEADER = "## Document Controls"
@@ -64,48 +67,12 @@ def collect_targets(paths: Iterable[Path]) -> Iterator[Path]:
                 yield resolved
 
 
-def parse_front_matter(text: str) -> dict[str, object]:
-    lines = text.splitlines()
-    if not lines or lines[0].strip() != "---":
-        return {}
-    if yaml is None:
-        return {}
-    fm_lines: list[str] = []
-    for line in lines[1:]:
-        if line.strip() == "---":
-            break
-        fm_lines.append(line)
-    if not fm_lines:
-        return {}
-    try:
-        data = yaml.safe_load("\n".join(fm_lines))
-    except Exception:
-        return {}
-    return data or {}
-
-
-def stringify(value: object) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, str):
-        return value.strip()
-    if isinstance(value, list):
-        joined = "; ".join(stringify(item) for item in value if stringify(item))
-        return joined
-    if isinstance(value, dict):
-        if yaml is not None:
-            dumped = yaml.safe_dump(value, sort_keys=True).strip()
-            return dumped.replace("\n", "; ")
-        return str(value)
-    return str(value).strip()
-
-
 def expected_fields(front_matter: dict[str, object]) -> "OrderedDict[str, str]":
     base: "OrderedDict[str, str]" = OrderedDict()
     for label, key in FIELD_MAPPINGS:
-        base[label] = stringify(front_matter.get(key, ""))
-    base["Approved by"] = stringify(front_matter.get("approved_by", ""))
-    base["Approved date"] = stringify(front_matter.get("approved_date", ""))
+        base[label] = doc_utils.stringify(front_matter.get(key, ""))
+    base["Approved by"] = doc_utils.stringify(front_matter.get("approved_by", ""))
+    base["Approved date"] = doc_utils.stringify(front_matter.get("approved_date", ""))
     return base
 
 
@@ -130,7 +97,7 @@ def locate_document_controls(lines: list[str]) -> tuple[int, list[str]] | None:
 def check_document(path: Path) -> list[str]:
     issues: list[str] = []
     text = path.read_text(encoding="utf-8")
-    front_matter = parse_front_matter(text)
+    front_matter = doc_utils.parse_front_matter(text.splitlines())
     lines = text.splitlines()
 
     if not front_matter:
@@ -190,7 +157,7 @@ def main() -> int:
     if not targets:
         print("[check-appendices] no markdown targets found", file=sys.stderr)
         return 1
-    if yaml is None:
+    if doc_utils.yaml is None:
         print("[check-appendices] PyYAML is required to validate appendices", file=sys.stderr)
         return 1
 
@@ -209,4 +176,3 @@ def main() -> int:
 
 if __name__ == "__main__":  # pragma: no cover
     sys.exit(main())
-

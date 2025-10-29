@@ -10,6 +10,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Sequence
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+ROOT_DIR = SCRIPT_DIR.parent.parent
+
+if str(ROOT_DIR) not in sys.path:
+    sys.path.append(str(ROOT_DIR))
+
+from scripts.docs import doc_utils  # type: ignore  # noqa: E402
+
 ROOT = Path(__file__).resolve().parents[2]
 SRC_DIR = ROOT / "docs" / "src"
 OUTPUT_FILE = SRC_DIR / "ops" / "runbooks" / "index.md"
@@ -51,22 +59,14 @@ def iter_source_files() -> Iterable[Path]:
 def read_doc_label(lines: Sequence[str], path: Path) -> str:
     """Return a short label derived from the document title/front matter."""
 
-    title_pattern = re.compile(r'title:\s*"([^"]+)"')
-    for line in lines[:40]:
-        match = title_pattern.search(line)
-        if not match:
-            continue
-        raw = match.group(1)
-        if "—" in raw:
-            raw = raw.split("—", 1)[1].strip()
-        raw = raw.replace("Technical Design", "").replace("Specification", "")
-        raw = raw.replace("Technical Architecture", "").replace("Overview", "")
-        raw = re.sub(r"\s+", " ", raw).strip(" -–—")
-        if raw:
-            return raw
+    front = doc_utils.parse_front_matter(lines)
+    if front:
+        title = doc_utils.stringify(front.get("title", ""))
+    else:
+        title = ""
 
-    stem = path.stem.replace("tdd-", "").replace("-", " ")
-    return stem.title()
+    fallback = path.stem.replace("tdd-", "").replace("-", " ").title()
+    return doc_utils.derive_doc_label(title, fallback=fallback)
 
 
 def extract_runbook_sections(lines: Sequence[str]) -> list[list[str]]:

@@ -27,6 +27,13 @@ This guide explains how to add and maintain TDD documentation in this repo. The 
 
 - Before generating PDFs, render diagrams: `bash scripts/docs/render_mermaid.sh` (only re-renders `.mmd` files that changed). Use `--all` to force a complete rebuild.
 
+- Embed rules:
+  - Owner docs should contain the Mermaid fence and an adjacent image fallback that points at the pre-rendered SVG.
+  - Consumer docs must link to the owner’s section and reuse the rendered SVG (`/build/mermaid/<REL>.svg`); never duplicate the Mermaid source.
+  - The source path pattern is `docs/src/<REL>.mmd`, and the build artifact lives at `docs/src/build/mermaid/<REL>.svg`.
+- Optional metadata: add `%% id: <slug>`, `%% version: v1`, or `%% owner: <owner-doc>` comments to encode diagram provenance for the index.
+- Keep the appendix up to date by running `python scripts/docs/build_diagram_index.py` whenever diagrams are added, renamed, or removed.
+
 ## Add a runbook
 
 - Create `docs/src/ops/runbooks/<topic>.md` or update `docs/src/ops/runbooks/index.md`.
