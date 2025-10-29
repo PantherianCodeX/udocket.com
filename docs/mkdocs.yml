@@ -67,6 +67,7 @@ nav:
 - Services:
   - Web App: services/web-app.md
   - Worker Cluster: services/worker-cluster.md
+  - LangGraph Agents: services/langgraph-agents.md
   - Guardian: services/guardian.md
   - Digital Signer: services/digital-signer.md
   - Settings Registry: services/settings.md

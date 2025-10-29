@@ -54,7 +54,7 @@ header-includes:
 
 ______________________________________________________________________
 
-## Document controls
+## Document Controls
 
 | Field          | Value |
 | -------------- | ----- |
@@ -87,7 +87,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## Reading guide
+## Reading Guide
 
 - **Scope:** Describes the staff-facing workspace, reviewer consoles, and the client portal. Covers accessibility, collaboration, security posture, manual/agent edit tooling, conversational assistants, and document assembly flows.
 - **Structure:** Sections follow the standard 0–10 service template. Responsibilities (§2) map to the major UI pillars; APIs (§3) reference capability discovery, SSE topics, and secure download flows; state, failure, observability, and compliance requirements are consolidated in §§4–7.
@@ -243,7 +243,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 3) API contract
+## 3) API Contract
 
 **Purpose:** Outline the interfaces powering the web app and portal experiences. **|**
 **Contract:** REST endpoints require OAuth scopes (`org_operator`, `org_client`), enforce optimistic concurrency, and honor RLS context. SSE/Channels topics remain case/org scoped and versioned. **|**
@@ -263,7 +263,7 @@ The UI coordinates with internal controllers for portal messaging, edit manifest
 
 ______________________________________________________________________
 
-## 4) State management
+## 4) State Management
 
 **Purpose:** Explain persistent stores and configuration artifacts backing the UI. **|**
 **Contract:** Secure views, manifests, and token stores must enforce RLS, masking, and reproducibility; Settings snapshots remain authoritative. **|**
@@ -281,7 +281,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 5) Failure modes
+## 5) Failure Modes
 
 **Purpose:** Highlight primary failure scenarios and expected remediation paths. **|**
 **Contract:** UI must fail closed, surface actionable messaging, and avoid silent data exposure. **|**
@@ -316,7 +316,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 7) Security & compliance
+## 7) Security & Compliance
 
 **Purpose:** Capture authentication, masking, and policy obligations for the web surfaces. **|**
 **Contract:** Enforce hardened headers, signed download tokens, step-up MFA, masking, and audit trails; break-glass requires dual approval. **|**
@@ -337,7 +337,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 8) Operations & runbooks
+## 8) Operational Notes
 
 **Purpose:** Keep the staff workspace and client portal operationally ready while satisfying security and compliance controls. **|**
 **Contract:** Runbooks, drills, and release workflows must stay current; UI surfaces pause when alert gates or evidence requirements fail. **|**
@@ -347,7 +347,7 @@ ______________________________________________________________________
 **Breadcrumbs:** Runbook index `docs/src/ops/runbooks/index.md`, drill scripts `ops/scripts/webapp/schedule_drills.py`, governance policies App.N. **|**
 **References:** §5 Failure modes, §6 Observability, §7 Security & compliance.
 
-### 8.1 Operational posture (binding)
+### 8.1 Operational Posture (binding)
 
 **Purpose:** Document on-call coverage, freeze windows, and readiness assumptions for the web application. **|**
 **Contract:** Platform Engineering owns PagerDuty “WebApp SLO”, enforces release freezes during major UI migrations, and keeps portal/privacy SMEs on-call for high-severity incidents. **|**
@@ -357,7 +357,7 @@ ______________________________________________________________________
 **Breadcrumbs:** Roster files, freeze calendars, App.O decision logs. **|**
 **References:** Notifications spec §7, Settings spec §7. *
 
-### 8.2 Incident triggers (binding)
+### 8.2 Incident Triggers (binding)
 
 **Purpose:** Tie UI alerts to playbooks so responders execute consistent recovery steps. **|**
 **Contract:** Alert rules (`infra/monitoring/webapp-prometheus-rules.yaml`) annotate RB-\* identifiers; incidents log evidence before closure. **|**
@@ -372,7 +372,7 @@ ______________________________________________________________________
 - `chat_policy_block_total` / `chat_abuse_alert_total` escalate to `RB-CHAT-ABUSE`.
 - Accessibility monitors (axe regression jobs) failing in CI pause releases and trigger `RB-LPE-LOCALE-GAP` before resuming deployments.
 
-### 8.3 Runbooks & drills (binding)
+### 8.3 Runbooks & Drills (binding)
 
 **Purpose:** Keep UI runbooks executable and drills on cadence. **|**
 **Contract:** Alerts map to RB-\* playbooks; quarterly exercises cover SSE resiliency, portal abuse investigation, accessibility audits, and assistant abuse response. **|**
@@ -382,7 +382,7 @@ ______________________________________________________________________
 **Breadcrumbs:** Runbook catalog, drill scheduler, governance policy App.N. **|**
 **References:** `RB-JOB-WATCHDOG`, `RB-PORTAL-INVALIDATION`, `RB-LPE-LOCALE-GAP`, `RB-NOTIFY-*`, `RB-CHAT-ABUSE`. *
 
-#### 8.3.1 Runbook index (informative)
+#### 8.3.1 Runbook Index (informative)
 
 | Runbook code | Scenario | Notes |
 | ------------ | -------- | ----- |
@@ -392,29 +392,29 @@ ______________________________________________________________________
 | `RB-NOTIFY-*` | Delivery incidents | Aligns portal alerts with outbound notifications |
 | `RB-CHAT-ABUSE` | Assistant abuse or moderation escalation | Disables assistants, gathers evidence for Security |
 
-#### 8.3.2 Primary runbooks (binding)
+#### 8.3.2 Primary Runbooks (binding)
 
-**Purpose:** Document operational playbooks responders execute during incidents or exercises. **|**
-**Contract:** Link production alerts to runbook identifiers, outline execution cadence, and name the maintaining team. **|**
-**State:** Summarize where runbooks live (repo paths, automation scripts) and what evidence they produce. **|**
-**Failures & handling:** Explain how missing, stale, or skipped runbooks are surfaced and remediated. **|**
-**Observability:** Note tooling that tracks drill frequency, runbook completion, and incident follow-up. **|**
-**Breadcrumbs:** Runbook files, automation scripts, incident templates. **|**
-**References:** Alert catalogs, governance docs referencing the runbooks.
+**Purpose:** Summarise web-app runbooks so responders execute consistent mitigations across SSE, portal, and assistant incidents. **|**
+**Contract:** Alerts map to RB-Web runbooks with evidence requirements; responders refresh the playbooks after drills or incidents. **|**
+**State:** Runbooks live under `ops/runbooks/webapp/`, automation scripts under `ops/scripts/webapp/`, and incident evidence in `ops/webapp/incidents/`. **|**
+**Failures & handling:** Missing steps or stale content block deployment approvals. **|**
+**Observability:** Docs lint, PagerDuty analytics, and Ops dashboards track runbook freshness and drill coverage. **|**
+**Breadcrumbs:** `ops/runbooks/webapp/*.md`, `ops/scripts/webapp/*.py`, incident templates `ops/webapp/incidents/*.md`. **|**
+**References:** Alert catalog, LP Engine, Notifications integration guides.
 
 - `RB-JOB-WATCHDOG` — Restores SSE sessions, resumes watchdog automation, and coordinates backlog remediation.
 - `RB-PORTAL-INVALIDATION` — Revokes signed URLs, reissues secure links, and documents evidence for auditors.
-- `RB-LPE-LOCALE-GAP` — Triages localization/accessibility deficits with LP Engine and revalidates fallback artifacts.
+- `RB-LPE-LOCALE-GAP` — Triages localization/accessibility deficits with LP Engine and revalidates fallback artefacts.
 - `RB-NOTIFY-*` — Synchronizes portal state with outbound notifications when delivery issues surface.
 - `RB-CHAT-ABUSE` — Freezes assistants, escalates to Guardian, and captures moderation evidence.
 
-#### 8.3.3 Drill cadence & evidence (binding)
+#### 8.3.3 Drill Cadence & Evidence (binding)
 
 - Quarterly drills exercise SSE resiliency, portal abuse response, accessibility audits, and assistant abuse scenarios with evidence in `ops/webapp/drills/<date>/`.
 - Drill scheduler `ops/scripts/webapp/schedule_drills.py` tracks cadence and ownership; missed drills block release approvals until evidence uploaded.
 - Docs lint, governance dashboards, and App.N reviews verify runbook freshness before production changes.
 
-### 8.4 Migrations & backfills (normative)
+### 8.4 Migrations & Backfills (normative)
 
 **Purpose:** Govern CDN cache pushes, static asset migrations, and portal data backfills. **|**
 **Contract:** UI asset migrations require change tickets, blue/green verification, and rollback plans; backfills of portal metadata run in read-only preview before publishing. **|**
@@ -424,7 +424,7 @@ ______________________________________________________________________
 **Breadcrumbs:** Asset deployment scripts, CDN manifests, backfill tooling. **|**
 **References:** Settings spec §5, Notifications spec §4. *
 
-### 8.5 Operational workflows (normative)
+### 8.5 Operational Workflows (normative)
 
 **Purpose:** Document recurring tasks for portal/workspace hygiene. **|**
 **Contract:** Teams review portal invalidations daily, reconcile signed download tokens, audit assistant manifests, and validate accessibility snapshots. **|**

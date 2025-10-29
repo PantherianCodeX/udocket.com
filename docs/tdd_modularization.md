@@ -104,7 +104,7 @@ Each service, app, or agent document will follow a shared, **standardized set of
 #### Phase 0 enforcement checklist
 
 * Retrofit all existing service specs (`services/guardian.md`, `services/settings.md`, `services/lp-engine.md`, `services/ref-manager.md`, etc.) so their H2 hierarchy matches the canonical numbering (`0) Reading guide` … `10) References`) and every major section opens with the standardized preamble block (Purpose, Contract, State, Failure, Observability, References, Breadcrumbs).
-* Normalize `## 8) Operational notes` to include the standard subsections (`### 8.1 Operational posture`, `### 8.2 Incident triggers`, `### 8.3 Runbooks & drills` with nested index/primary/cadence, `### 8.4 Migrations & backfills`, `### 8.5 Operational workflows`). Relocate legacy “Appendix R” content into those subsections and call out intentional omissions in-line when a subsection does not apply.
+* Normalize `## 8) Operational Notes` to include the standard subsections (`### 8.1 Operational Posture`, `### 8.2 Incident Triggers`, `### 8.3 Runbooks & Drills` with nested index/primary/cadence, `### 8.4 Migrations & Backfills`, `### 8.5 Operational Workflows`). Relocate legacy “Appendix R” content into those subsections and call out intentional omissions in-line when a subsection does not apply.
 * Capture any missing sections, absent breadcrumbs, or deviations in a shared Phase 0 worksheet so we can resolve gaps before Phase 1 migrations.
 * Treat Guardian as the first remediation target, then sweep remaining service specs once its structure is compliant.
 
@@ -121,8 +121,8 @@ These **top-level sections** make every document familiar and navigable. Within 
 * `## 4) State Management`: Persistent storage, configuration, cache/state rules. Details on data the service maintains, important in-memory state, caches, and how data consistency is handled. Also includes status and state transitions. Subdivide as needed (e.g., ### 4.1 Datastore Schema; ### 4.2 Runtime Configuration).
 * `## 5) Failure Modes`: How the service fails and recovers – error conditions, retry logic, what happens if dependencies are down, any circuit breaker or failover behavior. (Think in terms of both systemic failures and domain-specific failure cases.)
 * `## 6) Observability`: What telemetry the service provides – health checks, metrics, logs, traces. Include key metrics (SLIs) it tracks (e.g. request throughput, error rates) and how one can detect if the service is unhealthy or encountering issues.
-* `## 7) Security and Compliance`: Any key auth, data classification, encryption, regulatory rules, privacy laws, PII, SPI, PHI.
-* `## 8) Operational Notes`: Cover deployments plus standardized subsections `### 8.1 Operational posture`, `### 8.2 Incident triggers`, `### 8.3 Runbooks & drills` (with nested index/primary/cadence), `### 8.4 Migrations & backfills`, `### 8.5 Operational workflows`—omit subsections only when they truly do not apply and call that out explicitly.
+* `## 7) Security & Compliance`: Any key auth, data classification, encryption, regulatory rules, privacy laws, PII, SPI, PHI.
+* `## 8) Operational Notes`: Cover deployments plus standardized subsections `### 8.1 Operational Posture`, `### 8.2 Incident Triggers`, `### 8.3 Runbooks & Drills` (with nested index/primary/cadence), `### 8.4 Migrations & Backfills`, `### 8.5 Operational Workflows`—omit subsections only when they truly do not apply and call that out explicitly.
 * `## 9) Dependencies`: Link to other services this interacts with (e.g., “depends on LLM Registry for model availability”).
 * `## 10) References`: Links to ADRs, glossaries, diagrams, etc.
 ```

@@ -55,7 +55,7 @@ header-includes:
 
 ______________________________________________________________________
 
-## Document controls
+## Document Controls
 
 | Field          | Value |
 | -------------- | ----- |
@@ -88,7 +88,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## Reading guide
+## Reading Guide
 
 Use this guide before changing Guardian policy, queue semantics, or downstream workflows.
 
@@ -193,7 +193,7 @@ Guardian respects downstream approval invariants (ExclusiveSwap) and ensures del
 
 ______________________________________________________________________
 
-## 3) API contract (binding)
+## 3) API Contract (binding)
 
 **Purpose:** Describe every programmatic surface (REST, queue, events) Guardian exposes so integrators implement consistent safety gates. **|**
 **Contract:** Guardian accepts submissions via idempotent queue APIs, serves read endpoints with RLS enforcement, and emits deterministic SSE/audit events. Schemas, reason codes, and idempotency keys remain stable across releases; any breaking change requires a new versioned path. **|**
@@ -203,7 +203,7 @@ ______________________________________________________________________
 **Breadcrumbs:** Implementation `apps/platform/operations/guardian.py`, `packages/udocket_core/guardian/api.py`, `packages/udocket_core/guardian/queue.py`; Tests `tests/platform/guardian/test_guardian_api.py`, `tests/platform/guardian/test_guardian_queue.py`. **|**
 **References:** §4 State management, §5 Failure modes, Appendix B (payload schema), TDD §7.4, ADR-0001. *
 
-### 3.1 External interfaces (binding)
+### 3.1 External Interfaces (binding)
 
 | Endpoint / Stream                  | Purpose                                    | Contract notes                                                                                                  |
 | ---------------------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
@@ -218,7 +218,7 @@ ______________________________________________________________________
 | `POST /vault/detokenize`           | Restore masked spans (Compose/Signer only) | Requires `guardian_judgment_id`, purpose, and mTLS; Guardian never logs plaintext.                              |
 | `SSE GUARDIAN.JUDGMENT.*`          | Broadcast PASS/WARN/BLOCK/WAIVED outcomes  | Carries `guardian_judgment_id`, reason codes, waiver IDs, `settings_snapshot_sha256`, span evidence hashes.     |
 
-### 3.2 Submission interfaces (binding)
+### 3.2 Internal Interfaces (binding)
 
 - Internal workers call `apps/platform/operations/guardian.py::enqueue_with_idempotency` with `artifact_id`, `artifact_class`, `payload_sha256`, `policy_context`, and `source_artifacts[]`.
 - Idempotency key: `sha256(case_id + artifact_id + payload_sha256 + policy_context_hash)`; collisions return the prior judgment and increment `guardian_enqueue_conflict_total`.
@@ -295,7 +295,7 @@ Guardian enforces parent-child integrity by locking upstream artifacts (`SELECT 
 
 ______________________________________________________________________
 
-## 4) State management (binding)
+## 4) State Management (binding)
 
 **Purpose:** Describe the stores, queues, and configuration sources Guardian owns so persistence, reconciliation, and policy enforcement stay deterministic. **|**
 **Contract:** Guardian maintains append-only judgment history, span evidence, and submission audit trails in Postgres; queue state mirrors the persisted records, and all configuration enters via Settings/LPE snapshots. Direct database edits or ad-hoc queue injections are prohibited. **|**
@@ -377,7 +377,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 5) Failure modes (binding)
+## 5) Failure Modes (binding)
 
 **Purpose:** Capture the primary ways Guardian can degrade and the contractual responses required to preserve artifact integrity and compliance. **|**
 **Contract:** Guardian must fail closed on policy violations, residency breaches, and detector uncertainty; backlog or dependency failures trigger the operational playbooks in §8.3 before artifacts progress. Manual overrides require dual approval and explicit manifest stamping. **|**
@@ -431,7 +431,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 6) Observability & SLOs (binding)
+## 6) Observability (binding)
 
 **Purpose:** Define the telemetry, dashboards, and synthetic coverage that prove Guardian is meeting its safety and latency commitments. **|**
 **Contract:** Metrics, logs, and synthetic probes listed here are mandatory; removing any signal requires Observability + Security approval and equivalent replacement. SLOs are 99.9 % availability with judgment P95 ≤ 5 minutes. **|**
@@ -501,7 +501,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 7) Security & compliance (binding)
+## 7) Security & Compliance (binding)
 
 **Purpose:** Capture Guardian’s security posture, residency guarantees, and regulatory obligations so downstream services rely on accurate enforcement boundaries. **|**
 **Contract:** Guardian must enforce residency and HIPAA/SPI policies exactly as configured, reject unsigned or stale policy bundles, and preserve tamper-evident audit trails. Dual approval is mandatory for waivers or manual overrides. **|**
@@ -519,7 +519,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 8) Operational notes (binding)
+## 8) Operational Notes (binding)
 
 **Purpose:** Summarize Guardian’s on-call posture, deployment practices, and response coordination so operators can keep the safety gate available. **|**
 **Contract:** Operational procedures, incident triggers, and manual review steps must stay in sync with §8.3. Any change to runbooks, alert thresholds, or response ownership requires updating this section and the appendices simultaneously. **|**
@@ -529,7 +529,7 @@ ______________________________________________________________________
 **Breadcrumbs:** Helm charts `infra/kubernetes/guardian/helm`, Terraform modules `infra/terraform/guardian`, runbooks `ops/runbooks/guardian/*.md`, deployment scripts `ops/scripts/guardian/deploy.py`. **|**
 **References:** §5 Failure modes, §8.3 Runbooks & drills, §8.3, `infra/kubernetes/guardian/`, `ops/runbooks/guardian/`. *
 
-### 8.1 Operational posture
+### 8.1 Operational Posture
 
 **Purpose:** Outline day-to-day guardrails that keep Guardian healthy outside of incidents. **|**
 **Contract:** On-call rotations monitor SLO dashboards and maintain readiness to execute §8.3 procedures; ownership alternates between Security Engineering and Platform Operations. **|**
@@ -543,7 +543,7 @@ ______________________________________________________________________
 - Queue submission health depends on Celery worker heartbeats and Settings/LPE dependencies; §8.3.4 RB-GUARD-QUEUE describes how to remediate backlog growth while preserving auditability.
 - Quarantine volume and waiver approvals follow §8.3.3 RB-GUARD-QUAR, keeping manifests and waiver artifacts in lockstep with Security/Architecture approvals.
 
-### 8.2 Incident triggers
+### 8.2 Incident Triggers
 
 **Purpose:** Enumerate the alerts that escalate Guardian incidents and map directly to runbook entries. **|**
 **Contract:** Each trigger routes to PagerDuty with the corresponding RB-GUARD identifier; responders must execute the linked runbook before mitigation counts as complete. **|**
@@ -557,7 +557,7 @@ ______________________________________________________________________
 - `guardian_policy_block_total` spikes or synthetic job failures (`guardian_slo.yaml`) escalate via §8.3 entries RB-GUARD-001 and RB-GUARD-QUAR, depending on whether latency or policy regression drives the alert.
 - `PHI_DETECTION_DRIFT` incidents originate from classifier sampling (§6.3); §8.3.3 RB-GUARD-QUAR covers containment and follow-up requirements.
 
-### 8.3 Runbooks & drills (binding)
+### 8.3 Runbooks & Drills (binding)
 
 **Purpose:** Maintain authoritative Guardian recovery guides, drills, and manual review procedures executed during incidents. **|**
 **Contract:** Alerts enumerated in §§5–8 map to RB-GUARD identifiers documented here; responders update these runbooks after every incident or drill. **|**
@@ -567,71 +567,35 @@ ______________________________________________________________________
 **Breadcrumbs:** Runbooks `ops/runbooks/guardian/*.md`, automation `ops/scripts/guardian/`, tests `tests/ops/test_runbook_integrity.py::test_guardian_runbooks`, PagerDuty service “Guardian SLO”, Grafana dashboard “Guardian SLO”. **|**
 **References:** §5 Failure modes, §8.1 Operational posture, §8.3, ADR-0001. *
 
-#### 8.3.1 Runbook index (informative)
+#### 8.3.1 Runbook Index (informative)
 
-- RB-GUARD-001 — Guardian SLO breach stabilization.
-- RB-GUARD-QUAR — Quarantine spike investigation.
-- RB-GUARD-QUEUE — Submission backlog watchdog.
-- RB-GUARD-MANUAL — Manual review reconciliation.
+- `RB-GUARD-001` — Guardian SLO breach stabilisation
+- `RB-GUARD-QUAR` — Quarantine spike investigation
+- `RB-GUARD-QUEUE` — Submission backlog watchdog
+- `RB-GUARD-MANUAL` — Manual review reconciliation
 
-#### 8.3.2 RB-GUARD-001 — Guardian SLO breach (binding)
+#### 8.3.2 Primary Runbooks (binding)
 
-**Purpose:** Restore Guardian availability and route artifacts through manual review when automated judgments breach the SLO. **|**
-**Contract:** Any availability or latency breach must execute this sequence before re-enabling automated progression; manual review requires ledger capture. **|**
-**State:** Manual review ledger entries persist under `ops/guardian/manual_review/<date>.jsonl`, alongside incident records in `ops/guardian/incidents/`. **|**
-**Failures & handling:** Skipping ledger updates or failing to scale evaluators risks lost audit history and ongoing SLO breaches. **|**
-**Observability:** Alerts `guardian_judgment_latency_seconds`, `guardian_submission_timeout_total`, and synthetic job results confirm recovery once they return to baseline. **|**
-**Breadcrumbs:** Runbook `ops/runbooks/guardian/slo_breach.md`, automation `ops/scripts/guardian/scale_guardian.py`, tests `tests/ops/test_runbook_integrity.py::test_guardian_slo_runbook`, Grafana dashboard “Guardian SLO”. **|**
-**References:** §5.1 Submission backlog, §8.1 Operational posture, §8.3.1 Runbook index. *
+**Purpose:** Summarise Guardian runbooks responders execute during incidents or exercises. **|**
+**Contract:** Each runbook maps to specific alerts and evidence expectations; responders update the playbook after incidents or drills. **|**
+**State:** Runbook markdown, automation scripts, and ledger templates live under `ops/runbooks/guardian/` and `ops/scripts/guardian/`. **|**
+**Failures & handling:** Missing steps or stale guidance block deployment sign-off until refreshed. **|**
+**Observability:** Docs lint, PagerDuty analytics, and retrospective checklists track coverage. **|**
+**Breadcrumbs:** `ops/runbooks/guardian/*.md`, `ops/scripts/guardian/*.py`, incident templates `ops/guardian/incidents/*.jsonl`. **|**
+**References:** §5 Failure Modes, Ops governance policy, alert catalog.
 
-- **Signals:** `guardian_judgment_latency_seconds` P95 > SLO, `guardian_submission_timeout_total` increasing, synthetic job failure (`guardian_slo.yaml`).
-- **Triage (≤ 5 minutes):**
-  1. Check `/readyz` and `/synthetic/status`; capture latency panels in Grafana (“Guardian SLO”).
-  2. Confirm queue depth (`guardian_pending_total`, `guardian_pending_oldest_seconds`) and worker health (Celery heartbeat, pod restarts).
-  3. Inspect recent deploys/settings (`guardian.rules.version`, Helm releases) for regressions.
-- **Decision tree:**
-  - *Service unhealthy*: place Guardian in manual review mode (pause submissions, notify ops). Operators record `MANUAL_GUARDIAN_JUDGMENT` artifacts while following this checklist.
-  - *Compute exhaustion*: scale deployment (`kubectl -n platform scale deploy/guardian --replicas=<n>`), update HPA floor post-incident.
-  - *Upstream dependency slowdown*: coordinate with LPE/Settings owners; consider throttling new submissions until latency stabilizes.
-- **Post-remediation:**
-  - Ensure `guardian_judgment_latency_seconds` P95 ≤ SLO for two consecutive scrapes and `guardian_submission_timeout_total` plateaued.
-  - Clear manual review backlog by replaying queued artifacts once service healthy; annotate incident log with root cause and follow-ups.
+- `RB-GUARD-001`: Restore availability during SLO breaches—validate `/readyz` and `/synthetic/status`, capture queue metrics, decide whether to pause submissions or scale evaluators (`ops/scripts/guardian/scale_guardian.py`), maintain manual review ledgers in `ops/guardian/manual_review/<date>.jsonl`, and replay artifacts once latency returns to target.
+- `RB-GUARD-QUAR`: Investigate quarantine spikes—compare bundle digests, sample artifacts, coordinate waivers with Security/Architecture, and log evidence (manifests, policy hashes, detector logs) before resuming automation.
+- `RB-GUARD-QUEUE`: Clear submission backlog—throttle enqueue rates, scale evaluator pods, reconcile queue offsets via `ops/scripts/guardian/queue_reconcile.py`, and keep artifacts in `PENDING_JUDGMENT` until metrics recover.
+- `RB-GUARD-MANUAL`: Manage manual review mode—capture reviewer decisions, enforce masking policies, and replay manual judgments once automated processing stabilises.
 
-#### 8.3.3 RB-GUARD-QUAR — Quarantine spike investigation (binding)
+#### 8.3.3 Drill Cadence & Evidence (binding)
 
-- Verify detector bundle digests against Settings (`guardian.rules.version`) and LPE outputs; roll back bundles when digests diverge.
-- Sample quarantined artifacts, classify false positives versus true violations, and coordinate waivers when policy exceptions are justified.
-- Capture evidence (manifests, policy hashes, detector logs) in the incident log prior to reopening automation.
+- Quarterly drills rehearse SLO breach recovery, quarantine investigation, backlog management, and manual reconciliation; evidence stored in `ops/guardian/drills/<date>/` with retrospective notes.
+- Docs lint (`scripts/docs/build_runbook_catalog.py --check`) and PagerDuty analytics verify execution; missed drills block release sign-off until remediated.
+- Compliance reviews reference drill evidence, incident logs, and manual review ledgers to confirm coverage of Guardian runbooks.
 
-#### 8.3.4 RB-GUARD-QUEUE — Submission backlog watchdog (binding)
-
-**Purpose:** Clear submission backlogs while ensuring artifacts remain gated by Guardian. **|**
-**Contract:** Backlog incidents hold artifacts in `PENDING_JUDGMENT` until the queue drains; any manual progression requires dual approval recorded in the ledger. **|**
-**State:** Queue statistics emit via `guardian_pending_total`, `guardian_pending_oldest_seconds`, and audit tables `guardian_submission_audit`. **|**
-**Failures & handling:** Skipped throttling or missing replay steps cause double-processing or lost submissions; this runbook enforces sequencing and reconciles offsets. **|**
-**Observability:** Alerts `alert_guardian_queue_stale`, `guardian_submission_timeout_total`, and Celery heartbeat dashboards confirm backlog health. **|**
-**References:** §3.2 Submission interfaces, §5.1 Submission backlog, §8.3.1 Runbook index. **|**
-**Breadcrumbs:** Runbook `ops/runbooks/guardian/queue_backlog.md`, reconciliation script `ops/scripts/guardian/queue_reconcile.py`, tests `tests/platform/guardian/test_backlog_handling.py`.
-
-- Pause new submissions if queue age exceeds policy; coordinate with upstream services to shed load.
-- Scale evaluator pods (`kubectl scale deploy/guardian --replicas=<n>`) and confirm Kafka/Service Bus lag recedes.
-- Replay stuck messages via `POST /guardian/judgments:enqueue` with retention-aware offsets; reconcile submission audit tables before closing the incident.
-
-#### 8.3.5 RB-GUARD-MANUAL — Manual review reconciliation (binding)
-
-**Purpose:** Govern manual judgment operation when automation is intentionally paused. **|**
-**Contract:** Manual review requires Security + Architecture approval, dual sign-offs per artifact, and full ledger capture prior to re-enabling automation. **|**
-**State:** Ledgers persist in `ops/guardian/manual_review/<date>.jsonl`, with reconciliation jobs logging outputs to `ops/guardian/reconciliation/<incident_id>.jsonl`. **|**
-**Failures & handling:** Missing ledger entries or skipped reconciliation jobs break provenance; responders must backfill records and hold automation until evidence is complete. **|**
-**Observability:** Dashboard “Guardian Manual Review” tracks backlog age; incident retros verify ledger completeness and follow-up tasks. **|**
-**References:** §4 State management, §5 Failure modes, §8.5.1 Manual review cadence. **|**
-**Breadcrumbs:** Runbook `ops/runbooks/guardian/manual_review.md`, automation `ops/scripts/guardian/reconcile_manual.py`, tests `tests/ops/test_runbook_integrity.py::test_guardian_manual_runbook`.
-
-- Record every manual decision with evidence hashes, reviewer IDs, and timestamps.
-- Reconcile manual artifacts via replay once automation recovers; annotate incidents with residual risk assessments.
-- Update waiver manifests and close-out tasks before declaring the incident resolved.
-
-### 8.4 Migrations & backfills (binding)
+### 8.4 Migrations & Backfills (binding)
 
 **Purpose:** Capture the schema rotations and replay tooling required to keep Guardian’s queues, manifests, and policy caches aligned. **|**
 **Contract:** Partition rotations, manifest replays, and policy cache backfills must run from tagged scripts with dry-run output captured before production execution. **|**
@@ -645,7 +609,7 @@ ______________________________________________________________________
 - Policy cache backfills run after Settings/LPE bundle releases to ensure Guardian evaluators load the latest digests.
 - Reconciliation scripts compare audit tables to queue offsets and raise incidents when mismatches persist.
 
-### 8.5 Operational workflows (binding)
+### 8.5 Operational Workflows (binding)
 
 **Purpose:** Describe recurring operational tasks that preserve Guardian readiness outside of incidents. **|**
 **Contract:** Each workflow enumerated here has an owner, cadence, and evidence requirement; skipping a workflow triggers a follow-up task before deploy approvals resume. **|**

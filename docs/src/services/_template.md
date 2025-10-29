@@ -51,7 +51,7 @@ ______________________________________________________________________
 
 > This checklist ensures each service document follows the standardized structure. Copy this file when authoring a new service spec and replace the placeholder text. Remove the guidance notes before publishing.
 
-## Document controls
+## Document Controls
 
 **<< AUTOMATED AREA >>** - Updates automatically on pre-commit hook.
 *Do not edit the values here. Make all updates in the frontmatter above.*
@@ -61,7 +61,7 @@ ______________________________________________________________________
 | Authors        | <Primary authors> |
 | Version        | <0.1-draft> |
 | Status         | <Provisional/Implementable/Implemented> |
-| Classificatoin | <Confidential> |
+| Classification | <Confidential> |
 | Last updated   | <1970-01-01> |
 | Owners         | <Teams accountable for day-to-day ownership> |
 | Reviewers      | <Stakeholders providing technical/operational review> |
@@ -166,7 +166,7 @@ Use this section to orient readers before they dive into the specification. It s
 **Breadcrumbs:** Monitoring configs, dashboards, alert definitions. **|**
 **References:** Observability standards or shared appendices.
 
-## 7) Security and Compliance
+## 7) Security & Compliance
 
 **Purpose:** Capture authZ/authN, data handling classes, and regulatory duties. **|**
 **Contract:** Define encryption rules, residency bounds, and audit requirements. **|**
@@ -186,7 +186,7 @@ Use this section to orient readers before they dive into the specification. It s
 **Breadcrumbs:** Helm charts, Terraform modules, runbooks, incident templates. **|**
 **References:** Ops appendices, deployment ADRs, alert catalogs.
 
-### 8.1 Operational posture
+### 8.1 Operational Posture
 
 **Purpose:** Describe on-call coverage, staffing, maintenance windows, and readiness assumptions. **|**
 **Contract:** Define required rotations, required skill sets, and rota expectations (follow-the-sun, pager response times). **|**
@@ -196,7 +196,7 @@ Use this section to orient readers before they dive into the specification. It s
 **Breadcrumbs:** Staffing docs, rota configs, escalation policies. **|**
 **References:** Incident management playbooks, HR/ops policies.
 
-### 8.2 Incident triggers
+### 8.2 Incident Triggers
 
 **Purpose:** Enumerate the alerts, dashboards, or metrics that declare an incident for this service. **|**
 **Contract:** Map each trigger to severity, owning team, and required first actions. **|**
@@ -206,7 +206,7 @@ Use this section to orient readers before they dive into the specification. It s
 **Breadcrumbs:** Alert definitions, PagerDuty services, Grafana dashboards. **|**
 **References:** Runbook sections, observability standards.
 
-### 8.3 Runbooks & drills
+### 8.3 Runbooks & Drills
 
 **Purpose:** Document operational playbooks responders execute during incidents or exercises. **|**
 **Contract:** Link production alerts to runbook identifiers, outline execution cadence, and name the maintaining team. **|**
@@ -216,11 +216,11 @@ Use this section to orient readers before they dive into the specification. It s
 **Breadcrumbs:** Runbook files, automation scripts, incident templates. **|**
 **References:** Alert catalogs, governance docs referencing the runbooks.
 
-#### 8.3.1 Runbook index
+#### 8.3.1 Runbook Index
 
 > Provide a quick map from alert codes/signals to runbook identifiers.
 
-#### 8.3.2 Primary runbooks
+#### 8.3.2 Primary Runbooks
 
 **Purpose:** Document operational playbooks responders execute during incidents or exercises. **|**
 **Contract:** Link production alerts to runbook identifiers, outline execution cadence, and name the maintaining team. **|**
@@ -232,11 +232,11 @@ Use this section to orient readers before they dive into the specification. It s
 
 > Document the key runbooks (rollback, incident triage, hotfix, etc.) with summary tables or links.
 
-#### 8.3.3 Drill cadence & evidence
+#### 8.3.3 Drill Cadence & Evidence
 
 > Capture expectations for tabletop exercises, on-call readiness checks, and evidence storage.
 
-### 8.4 Migrations & backfills
+### 8.4 Migrations & Backfills
 
 **Purpose:** Capture schema/data migrations, backfills, and replay tooling required to maintain the service. **|**
 **Contract:** Define approvals, sequencing, and rollback expectations for each migration class. **|**
@@ -246,7 +246,7 @@ Use this section to orient readers before they dive into the specification. It s
 **Breadcrumbs:** Migration scripts, replay jobs, change-management templates. **|**
 **References:** ADRs or ops docs governing migrations.
 
-### 8.5 Operational workflows
+### 8.5 Operational Workflows
 
 **Purpose:** Describe recurring operational tasks (manual review, quarterly audits, data purges). **|**
 **Contract:** Define who executes each workflow, prerequisites, and escalation thresholds. **|**

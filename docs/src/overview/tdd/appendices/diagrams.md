@@ -28,6 +28,7 @@ Selected canonical diagrams (TDD‑owned)
 Service-owned diagrams (examples)
 
 - Guardian: `services/guardian/diagrams/` — upload happy path, approval workflows, judgment class model, portal invalidation UX.
+- LangGraph agents: `services/langgraph-agents/diagrams/` — analyze/compose pipeline, orchestration classes, shadow-mode flows.
 - Localization & Policy Engine: `services/lp-engine/diagrams/` — residency policy enforcement, LLM failover orchestrator, FinOps deploy guard.
 - Settings Registry: `services/settings/diagrams/` — activation state machine and class model.
 

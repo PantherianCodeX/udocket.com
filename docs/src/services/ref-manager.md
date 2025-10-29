@@ -52,7 +52,7 @@ header-includes:
 
 ______________________________________________________________________
 
-## Document controls
+## Document Controls
 
 | Field          | Value |
 | -------------- | ----- |
@@ -85,7 +85,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## Reading guide
+## Reading Guide
 
 - **Scope:** Service charter, source ingestion, editorial workflows, publishing, integrations, and observability for Reference Manager.
 - **Structure:** Sections are limited to three levels of depth; cross-cutting diagrams live in the platform TDD appendices (App.A state flows, App.G ERD).
@@ -103,7 +103,7 @@ ______________________________________________________________________
 **Failures & handling:** Validation guard failures or adoption lag freeze new publishes and trigger runbooks until bundles validate or roll back. **|**
 **Observability:** Dashboards “Reference Manager – Availability”, “Harvest”, “Publish”, and “Adoption” monitor request volume, error rates, and adoption lag; events feed SIEM and audit sinks. **|**
 **Breadcrumbs:** Service entry `packages/udocket_core/reference_manager/service.py`, tests `tests/reference/test_charter.py`, telemetry `packages/udocket_core/reference_manager/telemetry.py`. **|**
-**References:** TDD §6 Reference Data, ADR-0004, §8.3.2–§8.3.6 RB-RM-\* runbooks. *
+**References:** TDD §6 Reference Data, ADR-0004, §8.3.2–§8.3.6 RB-RM-\* runbooks.
 
 - RM governs acquisition, normalization, review, publishing, and downstream adoption tracking.
 - RM publishes signed bundles and manifests; enforcement lives in Settings, Guardian, and downstream applications.
@@ -242,7 +242,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 3) API contract
+## 3) API Contract
 
 **Purpose:** Document public and internal interfaces. **|**
 **Contract:** Define required inputs/outputs, authentication, and versioning. **|**
@@ -252,13 +252,13 @@ ______________________________________________________________________
 **Breadcrumbs:** Controller handlers, schema definitions, integration tests. **|**
 **References:** Link to schema fixtures or appendices.
 
-### 3.1 REST & automation surfaces (binding)
+### 3.1 External Interfaces (binding)
 
 - REST endpoints: `/reference_manager/bundles`, `/catalog/<domain>`, `/templates`, `/questionnaires`, `/forms`.
 - GraphQL queries support filtering, diff history, and search.
 - CLI workflows (`reference bundle validate/publish/diff`) integrate with automation pipelines.
 
-### 3.2 Events & downstream adoption (binding)
+### 3.2 Internal Interfaces (binding)
 
 - Adoption statuses: `pending`, `in_progress`, `acknowledged`, `stale`.
 - Adoption reports join LPE compile results, Settings activation diffs, and Guardian acknowledgements.
@@ -275,7 +275,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 4) State management
+## 4) State Management
 
 **Purpose:** Explain storage and configuration strategy. **|**
 **Contract:** Define persistence guarantees, migration expectations, and retention. **|**
@@ -337,7 +337,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 5) Failure modes (binding)
+## 5) Failure Modes (binding)
 
 **Purpose:** Summarize the critical failure scenarios RM prepares for and the required responses. **|**
 **Contract:** RM freezes publishes, triggers incidents, and follows §8.3 Runbooks & drills whenever harvest, validation, licensing, residency, or adoption controls break. **|**
@@ -399,7 +399,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 6) Observability & SLOs (binding)
+## 6) Observability (binding)
 
 **Purpose:** Define the telemetry, dashboards, and synthetic coverage validating RM performance and compliance. **|**
 **Contract:** Metrics, logs, and synthetic probes listed below must exist and remain accurate; removing signals requires Observability + Security approval. **|**
@@ -451,7 +451,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 7) Security & compliance (binding)
+## 7) Security & Compliance (binding)
 
 **Purpose:** Document RM’s controls for data sanitization, access management, licensing, and residency compliance. **|**
 **Contract:** RM enforces least privilege roles, sanitizes harvested content, records license obligations, rotates credentials, and maintains immutable audit trails. **|**
@@ -467,7 +467,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 8) Operational notes (normative)
+## 8) Operational Notes (normative)
 
 **Purpose:** Capture day-to-day operational practices, staffing expectations, and tooling that keep Reference Manager reliable. **|**
 **Contract:** Teams follow documented change control, runbook execution, and editorial workflows; deviations demand incident documentation and retro actions. **|**
@@ -477,7 +477,7 @@ ______________________________________________________________________
 **Breadcrumbs:** Deployment scripts `ops/reference/deploy.py`, CI workflows `.github/workflows/reference-manager.yml`, runbooks `ops/reference/runbooks/`. **|**
 **References:** §4 State management, §5 Failure modes, §8.3 Runbooks & drills, Appendix B metrics. *
 
-### 8.1 Operational posture (binding)
+### 8.1 Operational Posture (binding)
 
 **Purpose:** Define staffing, editorial coverage, and escalation paths across time zones. **|**
 **Contract:** RM maintains a 24/5 on-call rotation with escalation to Program Leads; incidents execute RB-RM-\* runbooks with evidence stored in App.O. **|**
@@ -491,7 +491,7 @@ ______________________________________________________________________
 - Duty officers escalate to Architecture, Legal Ops, or Program Leads within 15 minutes of Severity 1 incidents.
 - Shared change calendar captures freezes, harvest maintenance windows, and major provider events.
 
-### 8.2 Incident triggers (binding)
+### 8.2 Incident Triggers (binding)
 
 **Purpose:** Map RM alerts to their playbooks so responders start with the correct context. **|**
 **Contract:** Alert definitions in `infra/monitoring/reference_manager-prometheus-rules.yaml` embed RB-RM identifiers; responders gather evidence before clearing alerts. **|**
@@ -503,11 +503,10 @@ ______________________________________________________________________
 
 - `reference_bundle_adoption_total{status="stale"}` and `reference_manager_adoption_lag_seconds` invoke RB-RM-ROLLBACK.
 - `reference_manager_harvest_error_total` and connector synthetic failures trigger RB-RM-HARVEST.
-- `reference_manager_publish_guard_failure` routes to RB-RM-PUBLISH for schema/validation issues.
-- `reference_manager_license_violation_total` escalates via RB-RM-LICENSE with Legal Ops coordination.
-- `reference_manager_provider_endpoint_violation_total` invokes RB-RM-RESIDENCY to align Settings and provider catalogues.
+- `reference_manager_waiver_expiring_total` routes to RB-RM-WAIVER for residency enforcement.
+- `reference_feed_unreachable_total` or `reference_feed_latency_seconds` fire RB-RM-FEED to coordinate with external providers and pause downstream adoption.
 
-### 8.3 Runbooks & drills (binding)
+### 8.3 Runbooks & Drills (binding)
 
 **Purpose:** Maintain authoritative RM recovery guides and drills executed during incidents. **|**
 **Contract:** Alerts in §8.2 map to RB-RM identifiers documented here; responders update these runbooks after every incident or quarterly tabletop. **|**
@@ -517,97 +516,35 @@ ______________________________________________________________________
 **Breadcrumbs:** Runbooks `ops/reference/runbooks/*.md`, automation `ops/reference/*.py`, tests `tests/reference/test_runbook_integrity.py`. **|**
 **References:** §5 Failure modes, §8.1 Operational posture, Appendix B metrics. *
 
-#### 8.3.1 Runbook index (informative)
+#### 8.3.1 Runbook Index (informative)
 
-- RB-RM-ROLLBACK — Reference bundle rollback & adoption freeze
-- RB-RM-HARVEST — Source harvest incident triage
-- RB-RM-PUBLISH — Publish guard failure response
-- RB-RM-LICENSE — License violation remediation
-- RB-RM-RESIDENCY — Residency endpoint alignment
+- `RB-RM-ROLLBACK` — Reference bundle rollback
+- `RB-RM-HARVEST` — Source harvest incident triage
+- `RB-RM-WAIVER` — Residency waiver enforcement
+- `RB-RM-FEED` — External feed outage response
 
-#### 8.3.2 RB-RM-ROLLBACK — Reference bundle rollback & adoption freeze (binding)
+#### 8.3.2 Primary Runbooks (binding)
 
-**Purpose:** Restore catalog stability when published bundles must be reverted. **|**
-**Contract:** Rollbacks execute within 15 minutes of decision, capture evidence, and freeze dependent publishes until adoption latency returns to baseline. **|**
-**State:** Automation uses `ops/reference/rollback_bundle.py`; evidence stored under `ops/reference/incidents/<date>/rollback`. **|**
-**Failures & handling:** Missing rollback evidence or lingering adoption lag triggers escalation to Architecture. **|**
-**Observability:** Alert `reference_bundle_adoption_total{status="stale"}` clears when all services acknowledge the rollback. **|**
-**Breadcrumbs:** Runbook `ops/reference/runbooks/rollback.md`, tests `tests/reference/test_rollback.py`. **|**
-**References:** §4.2 Bundle registry, §5.5 Adoption lag, §8.3.1 Runbook index. *
+**Purpose:** Summarise Reference Manager runbooks so responders execute consistent mitigation steps. **|**
+**Contract:** Each runbook ties to specific alerts and evidence expectations; responders update the runbooks after incidents or drills. **|**
+**State:** Runbooks live under `ops/runbooks/ref_manager/`, automation scripts under `ops/scripts/ref_manager/`, and incident evidence in `ops/ref_manager/incidents/`. **|**
+**Failures & handling:** Missing steps or stale content block deployment sign-off until refreshed. **|**
+**Observability:** Docs lint, PagerDuty analytics, and Ops governance dashboards track runbook freshness and drill completion. **|**
+**Breadcrumbs:** `ops/runbooks/ref_manager/*.md`, `ops/scripts/ref_manager/*.py`, incident templates `ops/ref_manager/incidents/*.md`. **|**
+**References:** Alert catalog, Guardian integration docs, residency policy.
 
-Execution checklist:
+- `RB-RM-ROLLBACK`: Roll back reference bundles, flush caches, validate discovery parity, and capture digest evidence before reopening adoption.
+- `RB-RM-HARVEST`: Triages source ingestion failures, replays harvest jobs, coordinates with upstream connectors, and documents missing evidence.
+- `RB-RM-WAIVER`: Renews or retires residency waivers, updates allowlists, runs verification scripts, and records approvals in App.O.
+- `RB-RM-FEED`: Handles external feed outages by pausing downstream adoption, notifying stakeholders, and reconciling data once service resumes.
 
-1. Pause new publishes and announce freeze in `#ref-manager-oncall`.
-2. Run `reference rollback --bundle <previous_id>` capturing activation ID and diff artifacts.
-3. Trigger adoption verification for LPE, Settings, Guardian, Compose/Analyze, and Portal.
-4. Update change ticket and App.O decision log with rollback details, evidence links, and remediation tasks.
-5. Resume publishes only after adoption lag returns below SLA and follow-up actions assigned.
+#### 8.3.3 Drill Cadence & Evidence (binding)
 
-#### 8.3.3 RB-RM-HARVEST — Source harvest incident triage (binding)
+- Quarterly drills cover bundle rollback, harvest failure, waiver expiry, and feed outage; evidence lives in `ops/ref_manager/drills/<date>/` with retrospective notes.
+- Docs lint (`scripts/docs/build_runbook_catalog.py --check`) and PagerDuty analytics confirm drill execution; missed drills block release approvals until remedied.
+- Compliance reviews reference drill evidence, waiver logs, and adoption metrics to demonstrate readiness.
 
-Response checklist:
-
-1. Review failing connector logs, capture last successful snapshot, and assess licensing implications.
-2. Engage source owner (court/government contact) and record ETA; initiate manual upload if available.
-3. Queue interim communications to stakeholders when outage exceeds SLA.
-4. Resume scheduled harvest, validate ETL outputs, and confirm review queue impact.
-5. Close incident with root cause, remediation summary, and preventive actions.
-
-#### 8.3.4 RB-RM-PUBLISH — Publish guard failure response (binding)
-
-**Purpose:** Triage schema or validation failures that block publish pipelines. **|**
-**Contract:** Guard failures remain blocking until diffs resolve, schema updates approve, and integration tests rerun. **|**
-**State:** Validation artifacts persist alongside bundle drafts in `reference_bundle_registry`; tickets track remediation. **|**
-**Failures & handling:** Ignoring guard signals risks inconsistent bundles; escalate to Architecture if fixes exceed 12 hours. **|**
-**Observability:** Alert `reference_manager_publish_guard_failure` clears when validation suite passes. **|**
-**References:** §5.2 Publish guard failure, §2.9 Testing, §8.3.1 Runbook index. **|**
-**Breadcrumbs:** Runbook `ops/reference/runbooks/publish_guard.md`, tests `tests/reference/test_publish_guard.py`.
-
-Execution checklist:
-
-1. Export failing validation artifacts (`reference validate --bundle <id> --export artifacts/guard/<id>`).
-2. Categorize failure (schema, missing assets, licensing metadata, diff threshold) and assign owners.
-3. Apply fixes in staging, rerun validation and unit/integration suites.
-4. Secure approvals, document evidence, and resume publish pipeline.
-5. Attach diff snapshots and validation logs to incident ticket and update risk register if needed.
-
-#### 8.3.5 RB-RM-LICENSE — License violation remediation (binding)
-
-**Purpose:** Resolve licensing or attribution violations before they propagate. **|**
-**Contract:** Violations remain open until offending content removed or relicensed, attribution updates verified downstream, and Legal Ops approvals documented. **|**
-**State:** License ledger entries store violation metadata, remediation steps, and waiver approvals. **|**
-**Failures & handling:** Publishing without remediation risks contractual breaches; escalate to Legal Ops immediately. **|**
-**Observability:** Alert `reference_manager_license_violation_total` clears when ledger marks violation mitigated and attribution scanners pass. **|**
-**References:** §2.8 Security & licensing, §5.3 Licensing incidents, §8.3.1 Runbook index. **|**
-**Breadcrumbs:** Runbook `ops/reference/runbooks/license_violation.md`, tests `tests/reference/test_license_ledger.py`.
-
-Remediation checklist:
-
-1. Review violation payload, freeze related publishes, and notify Legal Ops.
-2. Remove or quarantine offending content from staging/curated schemas; note impacted bundle versions.
-3. Coordinate relicensing or replacements; capture approvals in waiver ledger.
-4. Regenerate bundles, validate Guardian/UI attribution, and resume adoption.
-5. Close ledger entry with evidence links and communicate resolution to stakeholders.
-
-#### 8.3.6 RB-RM-RESIDENCY — Residency endpoint alignment (binding)
-
-**Purpose:** Restore residency compliance when provider endpoint catalogues drift. **|**
-**Contract:** Findings stay open until catalogues update, Settings activations replay, and residency scanners confirm remediation. **|**
-**State:** Findings tracked in `reference_provider_endpoint_finding` with attestation evidence and waiver metadata. **|**
-**Failures & handling:** Allowing stale endpoints risks policy violations; escalate to Security Engineering if remediation exceeds SLA. **|**
-**Observability:** Alert `reference_manager_provider_endpoint_violation_total` resolves after two clean scans and Settings activations match updated catalogues. **|**
-**References:** §4.4 Residency catalogue, §5.4 Residency incidents, §8.3.1 Runbook index. **|**
-**Breadcrumbs:** Runbook `ops/reference/runbooks/residency_alignment.md`, tests `tests/reference/test_provider_endpoints.py`.
-
-Remediation checklist:
-
-1. Inspect finding details, gather attestation or SAN mismatch evidence, and engage provider contacts.
-2. Update RM catalogue entries (`provider_endpoints[]`) with new CIDRs, SAN expectations, and residency notes.
-3. Publish refreshed bundle, replay Settings activation, and verify Guardian acknowledges new digest.
-4. Archive evidence in incident folder and update waiver ledger for temporary exceptions.
-5. Confirm residency monitors pass twice consecutively before closing the incident.
-
-### 8.4 Migrations & backfills (binding)
+### 8.4 Migrations & Backfills (binding)
 
 **Purpose:** Capture schema migrations, backfills, and catalog replays needed to keep RM aligned with downstream systems. **|**
 **Contract:** Migration scripts run with dry-run evidence, tagged change tickets, and rollback checkpoints; partial completion requires RB-RM-ROLLBACK coordination. **|**
@@ -621,7 +558,7 @@ Remediation checklist:
 - Capture bundle digests before/after migration; verify Settings and Guardian adoption reports reconcile.
 - Roll back via RB-RM-ROLLBACK when adoption lag fails to recover within SLA.
 
-### 8.5 Operational workflows (normative)
+### 8.5 Operational Workflows (normative)
 
 **Purpose:** Describe recurring operational tasks that preserve RM readiness outside of incidents. **|**
 **Contract:** Each workflow has an owner, cadence, and evidence requirement; skipped cadences block publish approvals until remediated. **|**

@@ -54,7 +54,7 @@ header-includes:
 
 ______________________________________________________________________
 
-## Document controls
+## Document Controls
 
 | Field          | Value |
 | -------------- | ----- |
@@ -87,7 +87,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## Reading guide
+## Reading Guide
 
 - **Scope:** Document Signer service responsible for platform signatures, client attestation workflows, TSA/OCSP validation, trust-root management, and FIPS enforcement.
 - **Structure:** Sections follow the standard 0–10 service template; appendices referenced here live in the ops runbook catalog and Settings registry key maps.
@@ -197,7 +197,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 3) API contract
+## 3) API Contract
 
 **Purpose:** Document public and internal interfaces. **|**
 **Contract:** Define required inputs/outputs, authentication, and versioning. **|**
@@ -207,7 +207,7 @@ ______________________________________________________________________
 **Breadcrumbs:** Controller handlers, schema definitions, integration tests. **|**
 **References:** Link to schema fixtures or appendices.
 
-### 3.1 Signing endpoints (binding)
+### 3.1 External Interfaces (binding)
 
 | Endpoint / Stream               | Purpose                                          | Contract notes                                                                                         |
 | --------------------------------| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
@@ -229,11 +229,16 @@ curl -X POST https://platform.local/api/v1/sign \
   -d @body.json
 ```
 
-### 3.2 Client acknowledgement & release APIs (normative)
+### 3.2 Internal Interfaces (normative)
+
+- Celery worker orchestration uses dedicated queues (`signature.high`, `signature.bulk`) and relies on Worker Cluster job controllers; retries, backoff, and idempotency enforcement flow through `apps/platform/operations/signer_job.py`.
+- Guardian integration submits deliverable manifests for judgment prior to release; acknowledgements and portal invalidation messages route through Notifications topics `deliverable.ready` and `deliverable.revoked`.
+- Settings activation (`sign.*`) pushes trust-root, TSA/OCSP, and waiver configuration; activation lints invoke signer contract tests before enabling changes.
+- Evidence store writers, manifest generators, and ack processors share the internal API layer `packages/udocket_core/signer/*`, ensuring deterministic manifests and audit append-only logs.
 
 ______________________________________________________________________
 
-## 4) State management
+## 4) State Management
 
 **Purpose:** Explain storage and configuration strategy. **|**
 **Contract:** Define persistence guarantees, migration expectations, and retention. **|**
@@ -274,7 +279,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 5) Failure modes
+## 5) Failure Modes
 
 **Purpose:** Provide the resilience profile and default mitigations. **|**
 **Contract:** Identify what must fail closed vs. degraded. **|**
@@ -313,7 +318,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 6) Observability & SLOs
+## 6) Observability
 
 **Purpose:** Summarize telemetry and reliability expectations. **|**
 **Contract:** SLO: signing request success ≥ 99.9 %, TSA drift ≤ 5 seconds, OCSP latency P95 ≤ 5 seconds. Removal of metrics requires Observability review. **|**
@@ -325,7 +330,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 7) Security & compliance
+## 7) Security & Compliance
 
 **Purpose:** Detail cryptographic, residency, and regulatory controls enforced by the signer. **|**
 **Contract:** FIPS 140-3 compliance enforced when `security.crypto.fips_requirement` or deliverable policy demands it; waivers require dual approval and time-boxed scope. Residency/policy waivers documented alongside `waiver_id` in manifests. **|**
@@ -343,7 +348,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 8) Operational notes
+## 8) Operational Notes
 
 **Purpose:** Keep signing operations, drills, and release gates aligned with policy and security expectations. **|**
 **Contract:** On-call rotations, runbooks, and release evidence must stay current; signing halts when FIPS, TSA/OCSP, or waiver gates fail until remediation completes. **|**
@@ -353,7 +358,7 @@ ______________________________________________________________________
 **Breadcrumbs:** Runbooks `ops/runbooks/signer/`, automation `ops/scripts/security/rotate_signing_keys.py`, release tooling `ops/scripts/deploy/signing_release_gate.py`, drill tracker `ops/change/signer_rotations.ics`. **|**
 **References:** §5 Failure modes, §6 Observability, §7 Security & compliance, Ops runbooks `RB-SIGN-*`.
 
-### 8.1 Operational posture (binding)
+### 8.1 Operational Posture (binding)
 
 **Purpose:** Capture staffing, freeze windows, and attestation requirements that keep signing services ready. **|**
 **Contract:** Security Engineering and Platform Architecture share PagerDuty “Signer SLO”, maintain FIPS-certified operators on-call, enforce change freezes during rotations, and document startup attestation evidence. **|**
@@ -368,7 +373,7 @@ ______________________________________________________________________
 - Cross-region waivers require ≤7 day expiry with dual approval; Guardian blocks deliverables while waivers remain active.
 - Mutating APIs require mTLS, HMAC headers, and `Idempotency-Key`; clients maintain ≤120 s clock skew and reuse idempotency tokens for retries.
 
-### 8.2 Incident triggers (binding)
+### 8.2 Incident Triggers (binding)
 
 **Purpose:** Map alerts and dashboards to signer playbooks so responders act immediately. **|**
 **Contract:** Alert definitions (`infra/monitoring/signer-prometheus-rules.yaml`) embed `RB-SIGN-*` identifiers; on-call documents evidence before clearing incidents. **|**
@@ -383,7 +388,7 @@ ______________________________________________________________________
 - `signer_waiver_active_total` / `signer_release_gate_blocked_total` → review waivers via `RB-SIGN-ACK` or `RB-SIGN-TRUSTROTATE` and update App.O.
 - `signer_queue_depth_high` and latency SLO breaches trigger backlog remediation via RB-SIGN-PIPELINE and scaling playbooks.
 
-### 8.3 Runbooks & drills (binding)
+### 8.3 Runbooks & Drills (binding)
 
 **Purpose:** Maintain executable runbooks and drill cadence for key signing scenarios. **|**
 **Contract:** Alerts map to `RB-SIGN-*` playbooks; quarterly drills rehearse trust-root renewal, TSA failover, FIPS recovery, and client acknowledgement remediation. **|**
@@ -393,7 +398,7 @@ ______________________________________________________________________
 **Breadcrumbs:** Runbook files, rotation scripts, drill tracker. **|**
 **References:** `RB-SIGN-TSA`, `RB-SIGN-FIPS`, `RB-SIGN-ACK`, `RB-SIGN-TRUSTROTATE`. *
 
-#### 8.3.1 Runbook index (informative)
+#### 8.3.1 Runbook Index (informative)
 
 | Runbook code | Scenario | Notes |
 | ------------ | -------- | ----- |
@@ -402,28 +407,28 @@ ______________________________________________________________________
 | `RB-SIGN-ACK` | Client acknowledgement remediation | Reconciles acknowledgements, notifies stakeholders, updates App.O |
 | `RB-SIGN-TRUSTROTATE` | Trust-root / certificate rotation | Executes dual-publish rotation, records evidence, updates manifests |
 
-#### 8.3.2 Primary runbooks (binding)
+#### 8.3.2 Primary Runbooks (binding)
 
-**Purpose:** Document operational playbooks responders execute during incidents or exercises. **|**
-**Contract:** Link production alerts to runbook identifiers, outline execution cadence, and name the maintaining team. **|**
-**State:** Summarize where runbooks live (repo paths, automation scripts) and what evidence they produce. **|**
-**Failures & handling:** Explain how missing, stale, or skipped runbooks are surfaced and remediated. **|**
-**Observability:** Note tooling that tracks drill frequency, runbook completion, and incident follow-up. **|**
-**Breadcrumbs:** Runbook files, automation scripts, incident templates. **|**
-**References:** Alert catalogs, governance docs referencing the runbooks.
+**Purpose:** Summarise the signer runbooks executed during incidents and drills so responders act consistently. **|**
+**Contract:** Each runbook ties to specific alerts and evidence requirements; responders update playbooks after every incident or drill. **|**
+**State:** Runbook markdown lives under `ops/runbooks/signer/`, automation scripts under `ops/scripts/security/`, and evidence in `ops/security/key_rotation/`. **|**
+**Failures & handling:** Missing or stale steps block deployment sign-off until refreshed. **|**
+**Observability:** Docs lint, PagerDuty analytics, and drill dashboards track completion. **|**
+**Breadcrumbs:** `ops/runbooks/signer/*.md`, `ops/scripts/security/*.py`, incident templates `ops/security/incidents/signer_*.md`. **|**
+**References:** Alert catalog, Ops governance policy, §5 Failure modes.
 
-- `RB-SIGN-TSA` — TSA/OCSP outage response with rollback steps for deliverable signing.
-- `RB-SIGN-FIPS` — FIPS attestation recovery including startup attestations and hardware validation.
-- `RB-SIGN-ACK` — Client acknowledgement remediation, backlog clearing, and waiver coordination.
-- `RB-SIGN-TRUSTROTATE` — Trust-root / certificate rotation checklist covering dual publish and smoke tests.
+- `RB-SIGN-TSA` — TSA/OCSP outage response with rollback steps for deliverable signing and synthetic verification.
+- `RB-SIGN-FIPS` — FIPS attestation recovery including startup attestations, HSM validation, and waiver handling.
+- `RB-SIGN-ACK` — Client acknowledgement remediation, backlog clearing, and App.O waiver coordination.
+- `RB-SIGN-TRUSTROTATE` — Trust-root/certificate rotation workflow covering dual publish, smoke tests, and evidence upload.
 
-#### 8.3.3 Drill cadence & evidence (binding)
+#### 8.3.3 Drill Cadence & Evidence (binding)
 
 - Quarterly drills cover trust-root renewal, TSA failover, FIPS recovery, and acknowledgement remediation; evidence lands in `ops/security/key_rotation/<timestamp>/`.
 - Drill scheduler `ops/change/signer_rotations.ics` tracks cadence and ownership; missed drills block release sign-off until completed.
 - Docs lint and Ops governance dashboards verify evidence uploads and runbook freshness before closing audits.
 
-### 8.4 Migrations & backfills (normative)
+### 8.4 Migrations & Backfills (normative)
 
 **Purpose:** Govern trust-root rotations, HSM migrations, and manifest replays. **|**
 **Contract:** Rotations follow dual publish (current/next) with ≤24 h overlap; manifest replays verify signatures after migrations before reopening queues. **|**
@@ -437,7 +442,7 @@ ______________________________________________________________________
 - Post-rotation smoke tests re-sign representative artifacts and validate OCSP/TSA status before releasing queue holds.
 - Replay tooling supports manifest regeneration when signature policies or templates change, preserving audit trails.
 
-### 8.5 Operational workflows (normative)
+### 8.5 Operational Workflows (normative)
 
 **Purpose:** Document recurring signing tasks and release gating requirements. **|**
 **Contract:** Releases require green TSA/OCSP dashboards, no outstanding waivers without expiry/mitigation, and signer backlog SLO compliance; acknowledgment workflows must close before client delivery. **|**

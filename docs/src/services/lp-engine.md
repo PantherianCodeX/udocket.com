@@ -56,7 +56,7 @@ header-includes:
 
 ______________________________________________________________________
 
-## Document controls
+## Document Controls
 
 | Field          | Value |
 | -------------- | ----- |
@@ -89,7 +89,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## Reading guide
+## Reading Guide
 
 - **Scope:** Service charter, compiler/runtime internals, API contracts, observability, OPA bundle management, rollout controls, and runbooks for LPE.
 - **Structure:** Sections follow the standard 0–10 outline; §8 contains the operational posture, alert triggers, runbook summaries, migrations, and workflows that previously lived in Appendix R.
@@ -297,7 +297,7 @@ Residency outcomes derive from `PolicyContext` allowlists while OPA enforces den
 
 ______________________________________________________________________
 
-## 3) API contract
+## 3) API Contract
 
 **Purpose:** Document public and internal interfaces. **|**
 **Contract:** Define required inputs/outputs, authentication, and versioning. **|**
@@ -307,7 +307,7 @@ ______________________________________________________________________
 **Breadcrumbs:** Controller handlers, schema definitions, integration tests. **|**
 **References:** Link to schema fixtures or appendices.
 
-### 3.1 External interfaces (binding)
+### 3.1 External Interfaces (binding)
 
 - Runtime helpers supply immutable `PolicyContext` payloads carrying `generated_at`, `policy_context_version`, `settings_snapshot_version`, digests, residency allowlists, masking profiles, disclaimer keys, retention defaults, and logging directives.
 - Enforcement consumers: Guardian, workers, Portal bootstrap, Compose/Analyze, Notifications, Search/Vector, and Signer manifests read contexts to enforce PHI posture, disclaimers, DSAR retention, and region placement.
@@ -318,7 +318,7 @@ ______________________________________________________________________
 - Conditional GETs: clients reuse digests via `If-None-Match`; stale requests receive `412 Precondition Failed` with hints to refresh caches.
 - Discovery hints: responses include `Link: <https://docs.udocket.io/reference-migration>; rel="successor-version"` while legacy shims operate.
 
-### 3.2 Internal interfaces & events (normative)
+### 3.2 Internal Interfaces (normative)
 
 - Discovery endpoint `/api/v1/lpe/opa/discovery` serves signed manifests with bundle URIs per region, SHA-256 digests, rollout windows, and rollback pointers; clients poll every 60 seconds with `If-None-Match` and fail closed when manifests stale.
 - Bundles require mTLS + HMAC headers and carry dual signatures (Ed25519 + ECDSA P-256 for FIPS). When `security.crypto.fips_mode|required`, clients invoke `opa_verify_dual_signature()`; missing ECDSA signatures raise `FipsBundleSignatureError` and block activation.
@@ -369,7 +369,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 4) State management
+## 4) State Management
 
 **Purpose:** Explain storage and configuration strategy. **|**
 **Contract:** Define persistence guarantees, migration expectations, and retention. **|**
@@ -446,7 +446,7 @@ Settings-driven compiler runs as part of activation; background cron validates d
 
 ______________________________________________________________________
 
-## 5) Failure modes
+## 5) Failure Modes
 
 **Purpose:** Provide the resilience profile and default mitigations. **|**
 **Contract:** Identify what must fail closed vs. degraded. **|**
@@ -485,7 +485,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 6) Observability & SLOs
+## 6) Observability
 
 **Purpose:** Summarize telemetry, logging, and SLO governance. **|**
 **Contract:** Metrics enumerated here must exist in production; removal requires Observability review and equivalent replacements. LPE honours the platform “never log” policy (TDD §12.1.3) and maintains decision-log schema guarantees. **|**
@@ -503,7 +503,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 7) Security & compliance
+## 7) Security & Compliance
 
 **Purpose:** Capture security posture, privacy obligations, and compliance artefacts. **|**
 **Contract:** STRIDE-by-component threat model artefacts must stay current; activations referencing risky controls cite threat IDs. Dual-signed bundles, waiver governance, HIPAA/PHIPA/PIPA retention overrides, and DPIA/RoPA linkage remain mandatory. **|**
@@ -524,7 +524,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 8) Operational notes (binding)
+## 8) Operational Notes (binding)
 
 **Purpose:** Summarize deployments, maintenance windows, readiness posture, and day-2 workflows that keep the service healthy. **|**
 **Contract:** Capture SLAs, rollout gates, and operational ownership, including how alerts map to playbooks. **|**
@@ -534,7 +534,7 @@ ______________________________________________________________________
 **Breadcrumbs:** Helm charts, Terraform modules, runbooks, incident templates. **|**
 **References:** Ops appendices, deployment ADRs, alert catalogs.
 
-### 8.1 Operational posture
+### 8.1 Operational Posture
 
 **Purpose:** Document staffing, maintenance windows, and readiness expectations. **|**
 **Contract:** Shared on-call rotation with Guardian/Settings monitors LPE dashboards, attends weekly localization syncs, and enforces blue/green deployment windows (weekday 16:00–18:00 UTC). Burn-rate breaches freeze new activations automatically. **|**
@@ -547,7 +547,7 @@ ______________________________________________________________________
 - Editorial shifts overlap to keep localization queue staffed; quarterly readiness reviews audit roster coverage and runbook adherence.
 - Synthetic tenant “EU-REFERENCE” runs weekly to confirm residency baseline across Azure endpoints and TSA integrations.
 
-### 8.2 Incident triggers
+### 8.2 Incident Triggers
 
 **Purpose:** Map alerts to runbooks so responders start with the correct context. **|**
 **Contract:** Alert definitions in `infra/monitoring/lpe-prometheus-rules.yaml` embed RB-LPE identifiers; responders must attach evidence before clearing alerts. **|**
@@ -564,7 +564,7 @@ ______________________________________________________________________
 - `lpe_policy_block_spike` or `waiver_expiring_total` → RB-LPE-WAIVER.
 - `reference_bundle_stale_total` → RB-LPE-COMPILER.
 
-### 8.3 Runbooks & drills (binding)
+### 8.3 Runbooks & Drills (binding)
 
 **Purpose:** Maintain authoritative recovery guides and drill expectations. **|**
 **Contract:** Alerts in §8.2 map to RB-LPE identifiers; responders update the runbook index after each incident or quarterly tabletop. **|**
@@ -574,98 +574,35 @@ ______________________________________________________________________
 **Breadcrumbs:** Runbooks `ops/runbooks/lpe/*.md`, automation `ops/scripts/lpe/*.py`, tests `tests/ops/test_runbook_integrity.py`. **|**
 **References:** §5 Failure modes, §8.1 Operational posture, §6 Observability. *
 
-#### 8.3.1 Runbook index (informative)
+#### 8.3.1 Runbook Index (informative)
 
-- RB-LPE-COMPILER — Compiler regression / adoption freeze.
-- RB-LPE-OPA-ROLLBACK — OPA bundle rollback & discovery remediation.
-- RB-LPE-WAIVER — Waiver expiry response.
-- RB-LPE-LOCALE-GAP — Localization coverage gap.
+- `RB-LPE-COMPILER` — Compiler regression / adoption freeze
+- `RB-LPE-OPA-ROLLBACK` — OPA bundle rollback
+- `RB-LPE-WAIVER` — Waiver expiry response
+- `RB-LPE-LOCALE-GAP` — Localization coverage gap
 
-#### 8.3.2 RB-LPE-COMPILER — Compiler regression & adoption freeze (binding)
+#### 8.3.2 Primary Runbooks (binding)
 
-**Purpose:** Restore compiler health when diff guards or adoption lags fail. **|**
-**Contract:** Pause new publishes, roll back to last-good bundle, capture diff artefacts, and verify adoption across Guardian/Settings/Portal before resuming. **|**
-**State:** Evidence stored in `ops/lpe/incidents/<date>/compiler/` with bundle hashes and diff exports. **|**
-**Failures & handling:** Diff classification bugs, expired waivers, adoption lag; follow checklist to freeze, roll back, validate, and document. **|**
-**Observability:** Alerts `lpe_compiler_duration_overrun`, `reference_bundle_stale_total`, `lpe_policy_block_total`. **|**
-**Breadcrumbs:** Runbook `ops/runbooks/lpe/compiler.md`, automation `ops/scripts/lpe/deploy_bundle.py`, tests `tests/specs/test_lpe_compiler.py`. **|**
-**References:** Alert catalogs, governance docs referencing the runbooks.
+**Purpose:** Document localization & policy engine runbooks executed during incidents or drills. **|**
+**Contract:** Alerts map to specific RB-LPE identifiers with evidence requirements; responders update runbooks after each incident or drill. **|**
+**State:** Runbook markdown and automation scripts live under `ops/runbooks/lpe/` and `ops/scripts/lpe/`; incident evidence persists in `ops/lpe/incidents/`. **|**
+**Failures & handling:** Missing or stale instructions block deployment approvals until refreshed. **|**
+**Observability:** Docs lint, PagerDuty analytics, and Ops governance dashboards provide freshness metrics. **|**
+**Breadcrumbs:** `ops/runbooks/lpe/*.md`, `ops/scripts/lpe/*.py`, incident templates `ops/lpe/incidents/*.md`. **|**
+**References:** Alert catalog, Settings governance policy, FinOps handbook.
 
-Triggers: alerts `lpe_compiler_duration_overrun`, `lpe_bundle_signature_error`, change tickets tagged `LPE-COMPILER`, manual escalations from QA.
+- `RB-LPE-COMPILER`: Freeze compiler, roll back to last-known-good bundle, run regression suite, and capture adoption evidence before resuming publishes.
+- `RB-LPE-OPA-ROLLBACK`: Deploy prior OPA bundle, flush discovery caches, validate `/status` endpoints, and document digests and validation output.
+- `RB-LPE-WAIVER`: Renew or retire residency waivers, update Settings allowlists, run waiver verification scripts, and log approvals in App.O.
+- `RB-LPE-LOCALE-GAP`: Restore localization coverage by delivering translations/QA artefacts, executing locale audits, and rebuilding compiler outputs.
 
-Execution checklist:
+#### 8.3.3 Drill Cadence & Evidence (binding)
 
-1. Freeze compiler pipeline (`lpe.compiler.enabled=false`) and announce in `#ops-announcements`.
-2. Inspect diff artefacts; confirm affected locales/regions and whether unsafe flags were raised.
-3. Promote previous good bundle via `ops/scripts/lpe/promote_bundle.py --bundle <id>` and capture hash evidence.
-4. Re-run regression suite (`make lpe-compiler-regressions`) and snapshot Grafana panels for the incident ticket.
-5. Coordinate Settings activation replay once bundle validated; update change ticket with evidence and adoption metrics.
+- Quarterly drills cover compiler regression, OPA rollback, waiver expiry, and localization gap scenarios; evidence stored in `ops/lpe/drills/<date>/` with retrospective notes.
+- Docs lint (`scripts/docs/build_runbook_catalog.py --check`) and PagerDuty analytics confirm drill execution; missed drills trigger remediation before releases proceed.
+- Compliance reviews reference drill artefacts, waiver ledgers, and compiler adoption metrics to demonstrate readiness.
 
-Post-remediation:
-
-- Resume compiler pipeline and monitor `lpe_compiler_duration_seconds` for two cycles.
-- File corrective tasks (root cause, automation gaps) and attach diff artefacts to the App.O decision log.
-
-#### 8.3.3 RB-LPE-OPA-ROLLBACK — OPA bundle rollback (binding)
-
-Response steps:
-
-1. Capture failing discovery IDs and affected services from alert payload.
-2. Roll back via `ops/scripts/lpe/deploy_opa_bundle.py --bundle <last_good>` and flush worker caches (`scripts/opa/flush_cache.py`).
-3. Validate OPA `/status` and `/health` endpoints plus policy unit tests (`pytest tests/opa/test_policy_context.py`).
-4. Notify dependent teams (Settings, Guardian, Reference Manager) and confirm cached digests refresh.
-5. Attach bundle hashes, validation output, and Grafana snapshots to the incident ticket.
-
-Follow-up:
-
-- Run `ops/scripts/lpe/discovery_audit.py` to confirm discovery parity within 30 minutes.
-- File preventive tasks for root cause (compiler bug, Settings drift, CDN failure).
-
-#### 8.3.4 RB-LPE-WAIVER — Waiver expiry response (binding)
-
-**Purpose:** Maintain compliant residency posture when waivers expire. **|**
-**Contract:** Renew with dual approvals or decommission before expiry; update Settings allowlists and run verification scripts. **|**
-**State:** Waiver ledger `ops/lpe/waivers.yaml`, renewal artefacts `ops/lpe/waiver_reviews/<date>/`. **|**
-**Failures & handling:** Expired waivers, missing approvals; escalate to Security + Architecture and document outcomes. **|**
-**Observability:** Alerts `lpe_policy_block_spike`, `waiver_expiring_total`. **|**
-**Breadcrumbs:** Runbook `ops/runbooks/lpe/waiver_expiry.md`, automation `ops/scripts/lpe/check_waivers.py`.
-
-Checklist:
-
-1. Review waiver ledger for entries expiring within the alert window; confirm impacted locales and providers.
-2. Engage Security + Architecture for renewal decision; capture approvals in the decision log.
-3. If waiver retired, update Settings allowlists and trigger §8.3.5 RB-LPE-LOCALE-GAP if localization fallback required.
-4. Run `ops/scripts/lpe/check_waivers.py --verify` to ensure updated posture and attach output to the incident ticket.
-5. Communicate outcome to affected product owners and document customer impact, if any.
-
-Audit trail:
-
-- Store approvals, renewal artefacts, and communication templates alongside the incident log.
-- Schedule follow-up review to validate long-term remediation (automation fix, localization updates).
-
-#### 8.3.5 RB-LPE-LOCALE-GAP — Localization coverage gap (binding)
-
-**Purpose:** Restore localization completeness when translations or QA artefacts regress. **|**
-**Contract:** Deliver missing translations, QA recordings, and screenshots before re-enabling locales; Settings activation stays frozen until artefacts pass review. **|**
-**State:** Locale inventories `ops/lpe/locales.csv`, QA artefacts in `ops/localization/*`. **|**
-**Failures & handling:** Missing pseudolocale output, accessibility evidence, or localization tests; follow runbook to gather artefacts and rerun checks. **|**
-**Observability:** Alerts `lpe_localization_gap_total`, pseudolocale CI, Playwright RTL snapshots. **|**
-**Breadcrumbs:** Runbook `ops/runbooks/lpe/locale_gap.md`, automation `ops/scripts/lpe/audit_locales.py`, tests `tests/e2e/test_portal_policy_context.py`.
-
-Resolution steps:
-
-1. Identify affected locales and impacted surfaces (portal, Guardian, notifications) from alert payload.
-2. Coordinate with Localization program to deliver missing translations and QA recordings; update Appendix A checklist items.
-3. Validate `ops/scripts/lpe/audit_locales.py` passes for affected locales and attach proof to the incident ticket.
-4. Run synthetic checks (`tests/e2e/test_portal_policy_context.py::test_disclaimer_l10n`) to confirm correct copy rendering.
-5. Update Settings bundles and trigger an LPE compiler rebuild; monitor `lpe_lookup_latency_p95_breach` for regression.
-
-Post-checks:
-
-- Log decision record in App.O with locale IDs, remediation timeline, and QA sign-offs.
-- Schedule follow-up audit within one release cycle to verify coverage remains intact.
-
-### 8.4 Migrations & backfills (binding)
+### 8.4 Migrations & Backfills (binding)
 
 **Purpose:** Govern schema migrations, bundle backfills, and cutover from `/reference/*` shims. **|**
 **Contract:** Run migrations with `ops/scripts/lpe/migrate.py --dry-run` prior to production, capture digests, and retain rollback checkpoints. Shim retirement occurs when adoption metrics show <5 % shim usage for 30 days and all clients record modern endpoints. **|**
@@ -688,7 +625,7 @@ Post-checks:
   - Provincial privacy mappings with DPIA/RoPA linkage and FinOps compute dashboards tied to LPE hints.
   - BCDR drill + DSAR replay evidence recorded under `ops/lpe/cutover_checklist.md`.
 
-### 8.5 Operational workflows (normative)
+### 8.5 Operational Workflows (normative)
 
 **Purpose:** Describe recurring operational tasks (manual review, quarterly audits, data purges). **|**
 **Contract:** Define who executes each workflow, prerequisites, and escalation thresholds. **|**

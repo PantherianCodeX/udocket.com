@@ -54,7 +54,7 @@ header-includes:
 
 ______________________________________________________________________
 
-## Document controls
+## Document Controls
 
 | Field          | Value |
 | -------------- | ----- |
@@ -87,7 +87,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## Reading guide
+## Reading Guide
 
 - **Scope:** Celery workers, beat schedulers, and task modules that execute agent pipelines, storage operations, notifications, watchdogs, and backfills. Covers queue topology, retries, residency enforcement, settings snapshots, and observability.
 - **Structure:** Follows the standard 0–10 template. Responsibilities (§2) describe orchestration, queue management, watchdog automation, and provider integrations. APIs (§3) reference task entry points, job control RPC endpoints, and SSE updates. State, failure, observability, security, and ops guidance live in §§4–8.
@@ -181,7 +181,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 3) API contract
+## 3) API Contract
 
 **Purpose:** Document interfaces for enqueueing jobs, controlling runs, and surfacing progress. **|**
 **Contract:** Job creation (`POST /api/v1/cases/{case_id}/jobs/{kind}`) returns `retry_token`; control endpoints (`pause`, `resume`, `cancel`, `retry`) require OCC and idempotency keys. Workers publish SSE `job.update` events with schema-versioned payloads. **|**
@@ -191,19 +191,19 @@ ______________________________________________________________________
 **Breadcrumbs:** API handlers `apps/platform/jobs/views.py`, SSE publisher `apps/platform/events/jobs.py`, schema fixtures `spec/schemas/job_event.schema.json`. **|**
 **References:** TDD §10 (job APIs), Notifications spec (outbox endpoints).
 
-### 3.1 Task modules & entry points
+### 3.1 External Interfaces
 
 - Primary tasks located in `apps/platform/operations/task_modules/*.py`; each module declares queue bindings, retry policies, and capability requirements.
 - Beat schedules defined in `apps/platform/operations/bootstrap.py`; scheduling changes require documentation updates and runbook references.
 
-### 3.2 Job control endpoints
+### 3.2 Internal Interfaces
 
 - `POST /api/v1/jobs/{id}:pause|resume|cancel|retry` enforce OCC on `version`, require `Idempotency-Key`, and propagate `retry_token` to keep retries idempotent.
 - Responses include current status, warnings (`BUDGET_HELD`, `REGION_DRIFT`), and updated `retry_generation`.
 
 ______________________________________________________________________
 
-## 4) State management
+## 4) State Management
 
 **Purpose:** Explain storage and configuration strategy. **|**
 **Contract:** Define persistence guarantees, migration expectations, and retention. **|**
@@ -221,7 +221,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 5) Failure modes
+## 5) Failure Modes
 
 **Purpose:** Provide the resilience profile and default mitigations. **|**
 **Contract:** Identify what must fail closed vs. degraded. **|**
@@ -256,7 +256,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 7) Security & compliance
+## 7) Security & Compliance
 
 **Purpose:** Capture authZ/authN, data handling classes, and regulatory duties. **|**
 **Contract:** Define encryption rules, residency bounds, and audit requirements. **|**
@@ -274,7 +274,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 8) Operations & runbooks
+## 8) Operational Notes
 
 **Purpose:** Maintain the worker fleet’s readiness, watchdog coverage, and remediation playbooks. **|**
 **Contract:** On-call rotations, runbooks, and drills must remain current; queues pause when automation gates fail until remediation completes. **|**
@@ -284,7 +284,7 @@ ______________________________________________________________________
 **Breadcrumbs:** Runbook catalog, drill scheduler `ops/scripts/worker/schedule_drills.py`, governance policies App.N. **|**
 **References:** §5 Failure modes, §6 Observability, §7 Security & compliance.
 
-### 8.1 Operational posture (binding)
+### 8.1 Operational Posture (binding)
 
 **Purpose:** Capture staffing and readiness expectations for the worker cluster. **|**
 **Contract:** Platform Engineering staffs PagerDuty “Worker Queue SLO”, maintains blue/green deployment freezes during major migrations, and ensures watchdog-runner automation continues within ±60s schedule. **|**
@@ -294,7 +294,7 @@ ______________________________________________________________________
 **Breadcrumbs:** Roster files, freeze calendars, watchdog status logs. **|**
 **References:** `RB-JOB-WATCHDOG`, §6 Observability. *
 
-### 8.2 Incident triggers (binding)
+### 8.2 Incident Triggers (binding)
 
 **Purpose:** Map queue and automation alerts to worker runbooks. **|**
 **Contract:** Alert rules (`infra/monitoring/worker-prometheus-rules.yaml`) embed RB-\* identifiers; responders capture evidence before resolving. **|**
@@ -304,12 +304,12 @@ ______________________________________________________________________
 **Breadcrumbs:** Alert rule files, PagerDuty services, SIEM dashboards. **|**
 **References:** `RB-JOB-WATCHDOG`, `RB-LOCK-006`, `RB-NOTIFY-*`. *
 
-- `celery_queue_depth_high` / `dlq_messages_total` breaches invoke `RB-JOB-WATCHDOG` and `RB-NOTIFY-OUTAGE` for queue remediation.
-- `watchdog_runner_missed_total` or `watchdog_runner_lag_seconds` triggers `RB-JOB-WATCHDOG` to restore automation.
-- `rls_context_missing_total` escalates to `RB-LOCK-006` to re-establish GUC guards.
-- `upload_scan_error_total` routes to `RB-UPLOAD-SCAN`; `case_import_failure_total` invokes `RB-CASE-IMPORT`.
+- `celery_queue_depth_high` or `dlq_messages_total` breaches invoke RB-JOB-QUEUE to throttle enqueue, scale workers, and reconcile offsets.
+- `watchdog_runner_missed_total` or `watchdog_runner_lag_seconds` triggers RB-JOB-WATCHDOG to restore automation and notify portal/UI.
+- `worker_residency_violation_total` and queue segregation alerts fire RB-JOB-RESIDENCY for allowlist reconciliation.
+- Planned deploys or node failures requiring drain signal RB-JOB-DRAIN to preserve in-flight jobs and evidence.
 
-### 8.3 Runbooks & drills (binding)
+### 8.3 Runbooks & Drills (binding)
 
 **Purpose:** Keep worker playbooks current and drills executed on schedule. **|**
 **Contract:** Alerts map to RB-\*; quarterly exercises cover watchdog stalls, provider failover simulations, queue backlog remediation, and DLQ replay drills. **|**
@@ -319,39 +319,35 @@ ______________________________________________________________________
 **Breadcrumbs:** Runbook catalog, drill scheduler, Ops governance records. **|**
 **References:** `RB-JOB-WATCHDOG`, `RB-LOCK-006`, `RB-NOTIFY-*`, `RB-UPLOAD-SCAN`, `RB-CASE-IMPORT`. *
 
-#### 8.3.1 Runbook index (informative)
+#### 8.3.1 Runbook Index (informative)
 
-| Runbook code | Scenario | Notes |
-| ------------ | -------- | ----- |
-| `RB-JOB-WATCHDOG` | Queue/backlog remediation & watchdog stall | Coordinates pause/resume, collects evidence |
-| `RB-LOCK-006` | Advisory lock / activation lock remediation | Clears stale locks before re-running jobs |
-| `RB-NOTIFY-*` | Delivery queue backlog | Shared with notifications service |
-| `RB-UPLOAD-SCAN` | Upload scanning outage | Quarantines staging blobs, restarts scanners |
-| `RB-CASE-IMPORT` | Legacy case import failure | Replays bundles, validates manifests |
+- `RB-JOB-WATCHDOG` — Worker/job watchdog
+- `RB-JOB-DRAIN` — Graceful worker drain and redeploy
+- `RB-JOB-RESIDENCY` — Residency drift remediation
+- `RB-JOB-QUEUE` — Queue backlog triage
 
-#### 8.3.2 Primary runbooks (binding)
+#### 8.3.2 Primary Runbooks (binding)
 
-**Purpose:** Document operational playbooks responders execute during incidents or exercises. **|**
-**Contract:** Link production alerts to runbook identifiers, outline execution cadence, and name the maintaining team. **|**
-**State:** Summarize where runbooks live (repo paths, automation scripts) and what evidence they produce. **|**
-**Failures & handling:** Explain how missing, stale, or skipped runbooks are surfaced and remediated. **|**
-**Observability:** Note tooling that tracks drill frequency, runbook completion, and incident follow-up. **|**
-**Breadcrumbs:** Runbook files, automation scripts, incident templates. **|**
-**References:** Alert catalogs, governance docs referencing the runbooks.
+**Purpose:** Summarise worker cluster runbooks so responders execute consistent mitigations for job orchestration incidents. **|**
+**Contract:** Each runbook ties to specific alerts and evidence expectations; responders update these guides after incidents or drills. **|**
+**State:** Runbooks live in `ops/runbooks/worker/`, automation scripts in `ops/scripts/worker/`, and incident evidence under `ops/worker/incidents/`. **|**
+**Failures & handling:** Missing steps or stale guidance blocks deployment approvals. **|**
+**Observability:** Docs lint, PagerDuty analytics, and Ops dashboards track runbook freshness and drill coverage. **|**
+**Breadcrumbs:** `ops/runbooks/worker/*.md`, `ops/scripts/worker/*.py`, incident templates `ops/worker/incidents/*.md`. **|**
+**References:** Alert catalog, Guardian/Settings integration docs.
 
-- `RB-JOB-WATCHDOG` — Restores queue health, drains DLQs, and coordinates automation restarts.
-- `RB-LOCK-006` — Clears advisory/activation locks and verifies GUC guards before resuming jobs.
-- `RB-NOTIFY-*` — Collaborates with notifications service to resolve delivery queue backlogs.
-- `RB-UPLOAD-SCAN` — Quarantines staging blobs, restarts scanners, and validates clean bills of health.
-- `RB-CASE-IMPORT` — Replays legacy imports, reconciles manifests, and confirms evidence storage.
+- `RB-JOB-WATCHDOG`: Recover from stalled or failed jobs by replaying Celery tasks, verifying locks, and notifying portal/UI.
+- `RB-JOB-DRAIN`: Drain workers safely before deploys or failures, ensuring in-flight jobs persist and resume.
+- `RB-JOB-RESIDENCY`: Handle residency drift by enforcing queue segregation, updating allowlists, and coordinating with Settings.
+- `RB-JOB-QUEUE`: Manage backlog spikes, scale workers, and reconcile queue offsets with audit evidence.
 
-#### 8.3.3 Drill cadence & evidence (binding)
+#### 8.3.3 Drill Cadence & Evidence (binding)
 
-- Quarterly drills cover watchdog stalls, provider failover simulations, queue backlog remediation, and DLQ replay exercises with evidence in `ops/workers/drills/<date>/`.
-- Drill scheduler `ops/scripts/worker/schedule_drills.py` assigns ownership and cadence; missed drills block automation restarts after incidents.
-- Docs lint, Ops governance dashboards, and App.O reviews verify runbook freshness and drill completion.
+- Quarterly drills cover watchdog recovery, drain rehearsal, residency enforcement, and backlog triage; evidence stored in `ops/worker/drills/<date>/` with retrospective notes.
+- Docs lint (`scripts/docs/build_runbook_catalog.py --check`) and PagerDuty analytics confirm drill execution; missed drills block release approvals.
+- Compliance reviews reference drill evidence, queue audits, and residency logs to demonstrate readiness.
 
-### 8.4 Migrations & backfills (normative)
+### 8.4 Migrations & Backfills (normative)
 
 **Purpose:** Manage queue migrations, Celery upgrades, and DLQ replays. **|**
 **Contract:** Queue renames and Celery upgrades require change tickets, KEDA dry runs, and rollback plans; DLQ replays run in preview before promotion. **|**
@@ -361,7 +357,7 @@ ______________________________________________________________________
 **Breadcrumbs:** Migration scripts, upgrade playbooks, DLQ tooling. **|**
 **References:** §4 State management, Notifications spec §4. *
 
-### 8.5 Operational workflows (normative)
+### 8.5 Operational Workflows (normative)
 
 **Purpose:** Document recurring worker tasks (queue audits, watchdog verification, capacity reviews). **|**
 **Contract:** Teams review queue depth daily, reconcile watchdog heartbeat reports, audit Settings snapshot adoption, and refresh worker autoscaling parameters quarterly. **|**

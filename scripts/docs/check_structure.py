@@ -26,12 +26,12 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, Iterator, List, Sequence, Tuple
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
 
 TEMPLATE_NAME = "_template.md"
 HEADING_RE = re.compile(r"^(#{2,6})\s+(.*)")
 PREAMBLE_RE = re.compile(r"^\*\*(.+?):\*\*\s*(.*)$")
-DOCUMENT_CONTROLS_HEADER = "## Document controls"
+DOCUMENT_CONTROLS_HEADER = "## Document Controls"
 DOCUMENT_CONTROLS_FIELDS = (
     "Authors",
     "Version",
@@ -185,7 +185,7 @@ def walk_targets(paths: Iterable[Path]) -> Iterator[Path]:
                 yield resolved
 
 
-def parse_front_matter(lines: Sequence[str]) -> Dict[str, object]:
+def parse_front_matter(lines: Sequence[str]) -> Dict[str, Any]:
     if not lines or lines[0].strip() != "---":
         return {}
     fm_lines: List[str] = []
@@ -196,7 +196,7 @@ def parse_front_matter(lines: Sequence[str]) -> Dict[str, object]:
     if not fm_lines:
         return {}
     try:
-        import yaml  # type: ignore
+        import yaml
     except ImportError:
         return {}
     try:
@@ -238,20 +238,27 @@ def check_document_controls(path: Path, lines: Sequence[str]) -> List[str]:
         field, value = cells[0], cells[1]
         fields_present[field] = value
 
+    def _as_str_list(value: Any) -> List[str]:
+        if value is None:
+            return []
+        if isinstance(value, (str, bytes)):
+            return [str(value).strip()]
+        if isinstance(value, Iterable):
+            return [str(item).strip() for item in value if str(item).strip()]
+        return [str(value).strip()]
+
     expected_values: Dict[str, str] = {}
     if front_matter:
-        authors = front_matter.get("author", []) or []
-        if isinstance(authors, (str, bytes)):
-            authors = [authors]
+        authors = _as_str_list(front_matter.get("author"))
         expected_values = {
-            "Authors": "; ".join(str(item).strip() for item in authors),
+            "Authors": "; ".join(authors),
             "Version": str(front_matter.get("version", "")).strip(),
             "Status": str(front_matter.get("status", "")).strip(),
             "Classification": str(front_matter.get("classification", "")).strip(),
             "Last updated": str(front_matter.get("last_updated", "")).strip(),
-            "Owners": "; ".join(str(item).strip() for item in (front_matter.get("owners", []) or [])),
-            "Reviewers": "; ".join(str(item).strip() for item in (front_matter.get("reviewers", []) or [])),
-            "Approvers": "; ".join(str(item).strip() for item in (front_matter.get("approvers", []) or [])),
+            "Owners": "; ".join(_as_str_list(front_matter.get("owners"))),
+            "Reviewers": "; ".join(_as_str_list(front_matter.get("reviewers"))),
+            "Approvers": "; ".join(_as_str_list(front_matter.get("approvers"))),
         }
 
     for field in DOCUMENT_CONTROLS_FIELDS:
@@ -280,7 +287,7 @@ def validate_sections(path: Path, template_specs: List[SectionSpec], lines: Sequ
     errors: List[str] = []
     content = "\n".join(lines)
     doc_sections = parse_sections(content)
-    section_lookup = {num: (idx, title) for num, _, title, idx in doc_sections}
+    section_lookup = {num: (idx, title, level) for num, level, title, idx in doc_sections}
     section_order = {num: position for position, (num, _, _, _) in enumerate(doc_sections)}
 
     previous_position = -1
@@ -297,7 +304,54 @@ def validate_sections(path: Path, template_specs: List[SectionSpec], lines: Sequ
             errors.append(f"{path}: section {human} appears out of order")
         previous_position = position
 
-        line_no = section_lookup[numbering][0]
+        line_no, actual_title, actual_level = section_lookup[numbering]
+
+        # Ensure heading level matches template (e.g., ## vs ###)
+        if actual_level != spec.level:
+            errors.append(
+                f"{path}: section {human} uses heading level {actual_level} but template requires {spec.level}"
+            )
+
+        # Ensure heading title matches template exactly, allowing optional binding suffix
+        def _strip_suffix(value: str) -> Tuple[str, Optional[str]]:
+            stripped = value.strip()
+            for suffix in (" (binding)", " (informative)", " (normative)"):
+                if stripped.endswith(suffix):
+                    return stripped[: -len(suffix)].rstrip(), suffix.strip()
+            return stripped, None
+
+        actual_title_base, _ = _strip_suffix(actual_title)
+        spec_title_base = spec.title.strip()
+
+        # Enforce title case (excluding suffix) for headings
+        def _is_title_case(text: str) -> bool:
+            lowercase_allowed = {"and", "or", "the", "a", "an", "of", "in", "on", "for", "to", "with", "by"}
+
+            words = [word for word in text.split() if word]
+            for index, word in enumerate(words):
+                if word[0].isdigit():
+                    continue
+                cleaned = word.strip("&()[]{}-/_")
+                if not cleaned:
+                    continue
+                if cleaned.isupper():
+                    continue
+                if index > 0 and cleaned.lower() in lowercase_allowed:
+                    continue
+                if not cleaned[0].isupper():
+                    return False
+            return True
+
+        if not _is_title_case(actual_title_base):
+            errors.append(
+                f"{path}: section {human} heading '{actual_title.strip()}' must use Title Case before suffix"
+            )
+
+        if actual_title_base != spec_title_base:
+            errors.append(
+                f"{path}: section {human} heading '{actual_title.strip()}' does not match template '{spec.title.strip()}'"
+            )
+
         preamble_lines = gather_preamble(lines, line_no)
 
         if spec.preamble_order:
@@ -308,7 +362,7 @@ def validate_sections(path: Path, template_specs: List[SectionSpec], lines: Sequ
                 missing = spec.preamble_order[len(preamble_lines):]
                 errors.append(f"{path}: section {human} missing preamble entries: {', '.join(missing)}")
                 continue
-            for expected, (idx, actual_label, body) in zip(spec.preamble_order, preamble_lines):
+            for expected, (_, actual_label, body) in zip(spec.preamble_order, preamble_lines):
                 if actual_label != expected:
                     errors.append(f"{path}: section {human} expected preamble entry '{expected}' but found '{actual_label}'")
                 text = body.strip()

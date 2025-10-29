@@ -129,7 +129,7 @@ def sync_file(path: Path) -> bool:
         return False
 
     try:
-        header_idx = next(i for i, line in enumerate(lines) if line.strip().lower() == "## document controls".lower())
+        header_idx = next(i for i, line in enumerate(lines) if line.strip().lower() == "## Document Controls".lower())
     except StopIteration:
         print(f"[sync-document-controls] warning: {path} missing 'Document controls' section; skipping", file=sys.stderr)
         return False

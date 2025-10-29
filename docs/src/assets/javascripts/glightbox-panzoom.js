@@ -9,7 +9,7 @@
   var MIN_SCALE = 0.1;
   var MAX_SCALE = 6;
   var SCALE_STEP = 0.25;
-  var IMAGE_GROWTH_RATIO = 0.6;
+  var IMAGE_GROWTH_RATIO = 1.0;
 
   function computeDisplayScale(scale) {
     if (scale <= 1) {
@@ -120,7 +120,7 @@
           updateStageSize(1);
           img.style.width = '100%';
           img.style.height = '100%';
-          if (!opts || opts.reset !== false) {
+          if (!opts || opts.reset == true) {
             root.classList.remove('glb-zoomed');
             panzoom.reset({ animate: false });
           }
@@ -136,13 +136,13 @@
           return;
         }
         var s = panzoom.getScale();
-        if (s > 1.01) {
+        if (s > 1.00) {
           root.classList.add('glb-zoomed');
         } else {
           root.classList.remove('glb-zoomed');
         }
         updateStageSize(s);
-        if (s <= 1.01) {
+        if (s <= 1.00) {
           // keep transforms but ensure stage is aligned to base size
           applyBaseSize();
         }

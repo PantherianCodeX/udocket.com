@@ -69,7 +69,7 @@ header-includes:
 
 ______________________________________________________________________
 
-## Document controls
+## Document Controls
 
 | Field          | Value |
 | -------------- | ----- |
@@ -1477,407 +1477,60 @@ Example
 
 ## 6) Agent ecosystem
 
-### 6.1 Agent contract (inputs, outputs, manifests, ops logging)
+**Purpose:** Provide a high-level view of the LangGraph-powered agent suite (Transcribe, Analyze, Compose, Timeline, Relationship) and show how they collaborate with Settings, Guardian, and Worker Cluster. **|**
+**Contract:** Implementation details, canonical pipelines, manifests, QA gates, and operational guardrails live in [`../services/langgraph-agents.md`](../services/langgraph-agents.md); this section summarises integration edges and key dependencies other services rely on. **|**
+**State:** Agents persist manifests, ops logs, and deterministic artifacts under `storage/media/cases/<case>/`; Settings stores pipeline/tool configuration; Worker Cluster orchestrates Celery jobs; Guardian verdicts gate promotion. **|**
+**Failures & handling:** Failure taxonomy (`TRANSIENT`, `POLICY`, `INPUT`, `INTEGRITY`, `CONCURRENCY`, `REGION_POLICY`) is defined in the LangGraph agents spec; Worker Cluster retries and Guardian quarantines apply consistently across pipelines. **|**
+**Observability:** Metrics dashboards “Agent Pipelines – Activation”, “LangGraph QA”, and “Agent Shadow Runs” plus audit JSONL streams provide traceability; quality targets (WER, reviewer delta, QA issue density) remain anchored in the LangGraph agents spec. **|**
+**Breadcrumbs:** Canonical design [`../services/langgraph-agents.md`](../services/langgraph-agents.md); runtime `packages/udocket_core/agents/graph_runner.py`; Settings integration `apps/platform/settings/agents_pipeline.py`; Celery tasks `apps/platform/operations/tasks/agents.py`; QA harness `tests/agents/test_langgraph_acceptance.py`. **|**
+**References:** §3 (platform architecture), §5 (artifact lifecycle), §§7–8 (Guardian & Signer summaries), Appendices I & U, LangGraph agents spec §§1–10.
 
-*Purpose: Define the shared behavior that keeps agents composable and observable.*
+### 6.1 LangGraph orchestration (summary)
 
-- Terminology: Appendix I covers lane names, artifact states, and failure classes referenced throughout this section.
-- Agents implement the `TranscriptionAgent`-style interface: accept structured config (`TranscriptionConfig` family), pull secrets from Settings service.
-- Provider-agnostic planning: agents consult the shared `TranscriptionCapabilityMap` (speech) or equivalent planners to negotiate supported features, pick an execution flow, and guarantee outputs conform to the normalized schema the downstream stages expect.
-- Return value encapsulates success data (`TranscriptionResult`/agent-specific models) and raises rich exceptions with machine-actionable codes; Celery tasks capture and surface to UI.
-- Filesystem layout: artifacts saved under `storage/media/<org_id>/cases/<case_id>/<category>/` with `job_id` prefixes; ops logs in `ops/` with per-run JSON + human-readable log, plus append-only `ops_<agent>.jsonl`.
-- Deterministic naming/versioning: reruns append `_v{n}` suffix; manifests store `settings_snapshot_sha256`, model/provider versions, compute/storage regions, and SHA-256 of outputs.
-- Audit & telemetry: each run logs structured metadata (duration, attempts, cost envelope) and writes SSE updates; metrics exported for `job_duration_seconds`, `agent_retry_total`, etc.
+- *Primary spec:* [`LangGraph agents §3`](../services/langgraph-agents.md#3-pipeline--api-contract).
+- Pipelines are declared in Settings (`agents.pipeline.*`) with blue/green rollout, deterministic manifests, and schema hashes enforced by GraphRunner before activation.
+- Tool catalogue (`agents.tools.catalog[]`) governs residency/PII metadata, retry safety, and telemetry; onboarding requires schema validation and dry-run LangGraph execution.
+- Assistant pipelines reuse the same activation path, ensuring retrieval, guardrails, and moderation inherit policy controls before customer exposure.
 
-<figure class="full-width-diagram">
-  <img class="diagram" src="../build/mermaid/overview/tdd/diagrams/analyze-compose-v1.svg" alt="Analyze and Compose pipeline overview">
-  <figcaption style="font-size: 0.9em; color: #555;">Analyze and Compose pipeline overview</figcaption>
-</figure>
+### 6.2 Transcription pipeline (summary)
 
-<figure class="full-width-diagram">
-  <img class="diagram" src="../build/mermaid/overview/tdd/diagrams/agent-orchestration-classes-v1.svg" alt="Agent orchestration classes">
-  <figcaption style="font-size: 0.9em; color: #555;">Agent orchestration classes</figcaption>
-</figure>
+- *Primary spec:* [`LangGraph agents §2.1`](../services/langgraph-agents.md#21-transcription-agent-binding).
+- Supports on-demand streaming and Azure batch modes with diarisation (batch only); artifacts land under `transcript/` with deterministic headers/hashes.
+- Capability negotiation (`TranscriptionCapabilityMap`) enforces region, language, and diarisation support; unsupported combinations raise `E_INPUT_INVALID`.
+- Ops telemetry writes human + JSON logs and appends to `ops_transcription.jsonl`; retries/cancellations follow the shared failure taxonomy.
 
-### 6.1.1 Configurable pipeline definitions & stage catalog (binding)
+### 6.3 Analyze pipeline (summary)
 
-**Breadcrumbs:** Implementation `packages/udocket_core/agents/pipeline_catalog.py::PipelineCatalog`, Tests `tests/udocket_core/agents/test_pipeline_catalog.py::test_activation_contract`, Observability Grafana “Agent Pipelines – Activation” dashboard.
+- *Primary spec:* [`LangGraph agents §2.2`](../services/langgraph-agents.md#22-analyze-agent-binding).
+- Produces summary markdown/JSON, outline, timeline seeds, entity hints, and mandatory staff report with deterministic UUIDs.
+- QA gates enforce schema, evidence references, and score reporting before Guardian promotion; reruns version outputs with `_v{n}` suffix.
+- Ops metadata (`ops/ops_summary.jsonl`) and manifests capture template hashes, settings snapshot, and Guardian dependencies for downstream Compose lanes.
 
-*Purpose: Let sysadmins compose and adjust LangGraph-driven pipelines without redeploying code.*
+### 6.4 Compose pipeline (summary)
 
-- System scope Settings key `agents.pipeline.definitions[]` enumerates every agent pipeline variant (`transcription`, `analyze`, `compose`, `assistant.staff`, `assistant.client`, and future agent types). Each entry tracks `pipeline_id`, `graph_version`, `graph_schema_sha256`, default runner (`langgraph` or `linear`), and an ordered `stages[]` array so GraphRunner can hydrate LangGraph graphs directly from configuration. System defaults seed from JSON bundles in `config/*.json` (for example, `config/bootstrap_defaults.json`, `config/guardian_defaults.json`, `config/analyze_defaults.json`) so fresh deployments or sandboxes bootstrap without writing code; subsequent edits reuse the same bundle loader as Settings activations.
-- Stage objects declare `stage_id`, `langgraph_node_id`, `enabled`, `llm_profile_id`, `prompt_template_id`, `tool_ids[]`, retry budgets, token/cost ceilings, and optional `depends_on[]`. Metadata mirrors the LangGraph `NodeSpec` contract, ensuring node composition, input schemas, and tool wiring stay in sync with the runtime.
-- Org/case overrides live in `agents.pipeline.assignments[]` and `agents.pipeline.overrides[]`. Overrides permit toggling stage enablement, swapping prompt or LLM profile references, or tightening budgets within validator bounds; structural edits (adding/removing stages or changing order) require SYSTEM-scope activation to preserve deterministic manifests.
-- Activation diffs run the LangGraph contract tests from §13.4 against the candidate graph, validate schema hashes, and refuse definitions that break the `TranscriptionAgent`/`AnalyzeAgent`/`ComposeAgent` interfaces. Successful activation snapshots `{graph_version, settings_snapshot_sha256}` into the pipeline manifest so replays remain reproducible.
-- Every pipeline activation is labeled `change_class="system"` and must follow the blue/green rollout path in §14.5. Traffic migrates org-by-org with automatic rollback to the prior pipeline when health probes, QA acceptance, or Guardian readiness fail; manifests record which orgs completed cutover.
-- Stage definitions are additive and versioned. Prior versions stay callable for queued jobs and replays until Guardian signs off on the new version and the rollout window closes; deletion is blocked until no active job references the stage and archival manifests exist under `ops/pipeline_manifests/`.
+- *Primary spec:* [`LangGraph agents §2.3`](../services/langgraph-agents.md#23-compose-agent-binding).
+- Generates client/lawyer deliverables, bundle excerpts, staff & QA reports while enforcing policy lints (forbidden patterns, required sections, link limits).
+- Templates come from Settings deliverable catalog; manifests record template + pipeline version, Guardian judgement IDs, and Signer dependencies.
+- QA loops block promotion until PASS; manual or agent edits create new artifact versions subject to reviewer approval.
 
-### 6.1.2 LangGraph tool registry & custom tool onboarding (binding)
+### 6.5 Timeline & relationship pipelines (summary)
 
-**Breadcrumbs:** Implementation `packages/udocket_core/agents/tool_registry.py`, Tests `tests/udocket_core/agents/test_tool_registry.py::test_schema_validation`, Observability CI job “agents-tool-registry-lint” plus Grafana “Agent Tooling” panel.
+- *Primary spec:* [`LangGraph agents §2.4`](../services/langgraph-agents.md#24-timeline--relationship-agents-roadmap-informative).
+- Prototype lanes turn transcripts + Analyze seeds into events and entity graphs with deterministic IDs; residency and Guardian gating apply before UI exposure.
+- Graduation to binding requires QA + shadow metrics to meet thresholds; roadmap tracked in LangGraph agents §10.
 
-*Purpose: Provide a configurable, auditable catalog of LangGraph tools for agents and editors.*
+### 6.6 Manifests, lineage, and failure taxonomy (summary)
 
-- Settings `agents.tools.catalog[]` (SYSTEM scope with ORG allowlists) mirrors the LangGraph `Tool` specification: each entry defines `tool_id`, `description`, `input_schema` (JSON Schema Draft 2020-12), `output_schema`, `binding` (Python module path, gRPC target, or HTTP service), `timeout_seconds`, `cost_profile_id`, residency/PII classification, and `idempotent` (`true|false`). When `idempotent=true` the catalog must also include `tool_idempotency_key` (stable across retries) so GraphRunner can deduplicate invocations during job restarts; non-idempotent tools are fenced behind retry guards (`max_attempts=1`) and require human inspection before re-run.
-- Tool bindings reuse adapters in `packages/udocket_core/agents/common/factories.py` and follow the LangGraph `Tool` interface. GraphRunner resolves the `binding` at runtime and injects shared dependencies (Settings client, PolicyContext, Guardian client) through the adapter so tools stay portable across pipelines.
-- Org/case overrides are expressed via `agents.tools.allowlist[]`, enabling or disabling tools per tenant without redefining the base catalog. Overrides can also tune per-tool budgets and concurrency caps inside validator limits; policy validation blocks overrides that widen residency or PII scopes beyond the SYSTEM baseline.
-- Activation lints validate schemas, execute dry-run LangGraph graphs that exercise the tool, and confirm telemetry registration (`tool_invocation_total`, `tool_cost_estimate_total`). Failures surface actionable errors and block promotion until fixed.
-- Tool catalog activations are treated as system-level changes and must follow the blue/green rollout pipeline (§14.5). JSON seeds under `config/` (for example, `config/llm_assignments.json`, `config/llm_providers.json`) preload the baseline catalog; operators extend it by uploading updated JSON bundles or using the Settings UI without touching code. During rollout both blue and green environments load the catalog, but only green advertises new tools; on rollback GraphRunner falls back to the previous allowlist without redeploying workers.
-- Evidence manifests capture `{tool_id, tool_version, binding_sha256}` for every invocation so Guardian, Privacy, and FinOps teams can audit side effects and cost. Tools handling sensitive data must declare `data_classification` and pass Privacy/Architecture review before activation.
+- *Primary spec:* [`LangGraph agents §4–§5`](../services/langgraph-agents.md#4-state-management--artifacts).
+- Every job writes manifests with input hashes, settings snapshot, pipeline version, tool usage, and Guardian references; audit JSONL streams remain append-only.
+- Failure classes map to error codes (`E_TRANSIENT_PROVIDER`, `E_POLICY_FORBIDDEN`, etc.); Worker Cluster enforces retries/backoff and surfaces SSE updates to the UI.
 
-### 6.1.3 Conversational assistant pipelines (binding)
+### 6.7 Quality, security, and operations (summary)
 
-**Breadcrumbs:** Implementation `packages/udocket_core/assistants/orchestrator.py::AssistantOrchestrator`, Tests `tests/udocket_core/assistants/test_pipeline_manifest.py::test_chat_pipeline_roundtrip`, Observability Grafana “Assistant Sessions” dashboard.
-
-*Purpose: Apply the same managed pipeline controls to chat assistants that power staff and client surfaces.*
-
-- Assistant pipelines (`assistant.staff`, `assistant.client`, and future chat variants) are LangGraph graphs composed through `agents.pipeline.definitions[]` with lane metadata mirroring other agents: retrieval nodes, guardrails, responder nodes, moderation gates, and post-processing writers. Stages reference shared tools (retrieval search, citation builder, policy explainer) declared in `agents.tools.catalog[]`.
-- Runtime orchestration lives in `packages/udocket_core/assistants/orchestrator.py::AssistantOrchestrator`, which wraps GraphRunner, handles conversation state checkpoints, and routes telemetry to chat-specific metrics. The orchestrator consumes the same `pipeline_definition_version` manifest as batch agents so replays and rollbacks remain deterministic.
-- Conversation manifests capture `{pipeline_definition_version, llm_profile_id, prompt_template_id, tool_invocations[], moderation_outcomes[]}`. Storage layout mirrors ops logs (`ops/<session_id>__chat_*.jsonl`).
-- Settings overrides allow orgs to adjust retrieval scope (`assistant.retrieval.sources[]`), citation verbosity, or moderation strictness within validator limits. Structural edits (adding/removing lanes, reordering stages) remain SYSTEM-only and must pass LangGraph contract tests plus conversational replay harnesses (§13.4) before rollout.
-- Assistant pipelines participate in the same blue/green rollout flows as other agents. Rollout plans can target staff-only, client-only, or mixed cohorts, with auto-rollback triggered by moderation overruns, SLA breaches, FinOps budget violations, or quarantines captured in telemetry.
-
-### 6.2 Transcription agent (batch/on-demand modes)
-
-*Purpose: Summarize ingestion flow from audio to transcript artifacts.*
-
-- Modes: `on-demand` streaming for shorter recordings (local processing), `batch` for longer files via Azure Batch Transcription (HTTPS SAS URL). Region allowlists from Settings are enforced at job dispatch.
-- Input processing: audio uploads hashed, normalized via ffmpeg (PCM 16 kHz mono). Artifacts created: `TRANSCRIPT_INPUT`, `AUDIO_NORMALIZED`.
-- Malware & format validation: every upload (audio, documents, exhibits) routes through the `upload_scan` pipeline—an isolated Kubernetes job running ClamAV with daily `freshclam` updates plus org-specific YARA rules (`packages/security/yara/`). Files are scanned before workers access them; positive hits set `upload_session.status='SCANNING_FAILED'`, quarantine the staging object, emit `MALWARE_DETECTED` audit events, and notify Security (remediation flow in [Runbook RB-UPLOAD-SCAN](../ops/runbooks/index.md#rb-upload-scan)). Format validators (mediainfo/ffprobe, pdfcpu, tika) run in the same sandbox to confirm claimed MIME/codec; malformed files are rejected with actionable error codes and attached diagnostic logs.
-- Capability-aware ingestion: workers inspect `speech.providers[].capabilities` (for example `multi_track`, `speaker_diarization`, `punctuation_normalization`, `numerical_normalization`) to select an execution plan. Multi-track inputs trigger track-aware pipelines; single-track jobs fall back to diarization when providers expose that capability.
-- Capability gates & planning: before dispatch, the `TranscriptionCapabilityMap` evaluates requested features (multi-track, diarization, locale) against provider claims. Unsupported combinations fail fast with `CAPABILITY_UNAVAILABLE`, SSE guidance, and no provider calls. When multiple flows are viable, planners prefer native multi-track, then synthetic track merge, then diarization-only as the final option.
-- Multi-track support: batch mode splits per-channel audio when `multi_track` is available; otherwise the Track Merge sub-task (see §6.2.2) generates per-speaker transcripts by splitting channels, running parallel jobs, and merging on precise timestamps. Single-track jobs without diarization support return policy errors rather than emitting unlabelled transcripts.
-- Outputs: normalized transcript (`transcript/<job_id>__transcript.txt`) with header metadata (case, source name, hashes, language, region, duration) and body rewritten via the shared normalizer (see §6.2.2) so downstream agents receive consistent punctuation, casing, and numeric treatment; optional `DIARIZATION` JSON for batch mode.
-- Ops artifacts: `ops/<job_id>__transcription.log`, `ops/<job_id>__transcription_log.json`, case-level `ops_transcription.jsonl` append.
-- Stdout contract: single JSON line `{status, transcript_file, region, language, attempts, duration_s}` enabling CLI automation.
-- See App.D for canonical artifact types and filenames (TRANSCRIPT, AUDIO_NORMALIZED) and versioning rules.
-
-#### 6.2.1 Provider fallback & health-governed resume (binding)
-
-**Breadcrumbs:** Implementation `packages/udocket_core/agents/transcribe_planner.py::plan_with_health_resume`, Tests `tests/udocket_core/transcription/test_fallback_resume.py::test_health_governed_routing`, Observability Grafana “Transcription Health & Retry” dashboard.
-
-*Purpose: Define fallback chains and health checks that govern provider selection and resumption.*
-
-- Provider catalog: `speech.providers[]` mirrors the LLM registry, capturing API endpoints, residency, pricing, and `health_check.url`. Each `speech.jobs[]` entry defines a `fallback_chain` where every hop is validated against an equivalence harness (`tests/udocket_core/agents/test_transcribe_fallback.py`) demonstrating WER delta ≤ 1.5 % and diarization accuracy within tolerance on the golden corpus.
-- Orchestration helper: `packages/udocket_core/failover/speech.py::SpeechFailoverController` applies the fallback chain uniformly across batch/on-demand workers. It shares telemetry/event naming with the LLM orchestrator and exposes `speech.failover.for_request(...)` so Celery tasks and new speech processors remain provider-agnostic.
-- Automated retries: when Azure Speech (primary) degrades or breaches SLA thresholds, workers emit `TRANSCRIBE_FALLBACK_TRIGGERED`, replay the batch against the next healthy provider/region pair, and annotate manifests with `fallback_source_provider_id` and `fallback_attempt`. Retries respect org budgets and residency settings; no human transcription path exists in the automated flow.
-- Pause semantics: if the chain exhausts without a healthy provider, the job enters `PAUSED_AWAITING_PROVIDER`, preserving the queue order. Health monitors run every 60 seconds, requiring three consecutive successes before the job automatically resumes from the point of failure. UI surfaces status with next probe ETA; operators can trigger an on-demand probe via `POST /ops/transcription/{job}/probe`.
-- Observability: metrics `transcribe_fallback_total{provider, reason}`, `transcribe_pause_total`, and `transcribe_paused_jobs` feed dashboards. Audit events capture provider transitions and parity evidence hash; ops logs include health snapshots for every pause/resume cycle.
-- Testing: `tests/udocket_core/failover/test_speech_orchestrator.py` exercises controller parity checks, health-driven pauses, and auto-resume, while `synthetics/transcribe_failover.yaml` validates staging behavior.
-
-#### 6.2.2 Capability negotiation & track merge pipeline (binding)
-
-**Breadcrumbs:** Implementation `packages/udocket_core/audio/track_merge.py::plan_capabilities`, Tests `tests/udocket_core/audio/test_track_merge.py::test_capability_negotiation`, Observability Grafana “Transcription Track Merge” panel.
-
-*Purpose: Explain capability negotiation, normalization, and track-merge flows for transcripts.*
-
-- Capability registry: `speech.providers[].capabilities` declares booleans + enums (`multi_track`, `diarization`, `dominant_speaker`, `timestamp_precision_ms`, `max_parallel_channels`). Settings validators ensure advertised capabilities match integration tests before activation. Workers resolve execution plans through `TranscriptionCapabilityMap` (new module) that maps provider capability sets to supported processing flows and emits a provider-agnostic plan contract consumed by every `TranscriptionAgent` implementation.
-- Normalization contract: regardless of provider, outputs conform to `NormalizedTranscript@1.1` (Appendix D) with segments shaped as `{start_ms, end_ms, speaker_label, text_norm, raw_text}` plus optional diarization/confidence metadata. The `TranscriptionNormalizer` layer applies shared transforms (numeral expansion, capitalization policy, punctuation smoothing, profanity masking) so Analyze/Compose receive consistent text.
-- Track Merge sub-task: when an audio upload contains ≥2 channels but the active provider lacks native multi-track support, the Track Merge controller (Celery chord) performs:
-  1. `SplitTracks` (ffmpeg) emits isolated WAVs per channel with preserved timestamps and writes `AUDIO_TRACK_SPLIT` artifacts.
-  1. Parallel `TranscriptionAgent` invocations per track using provider capabilities (single-track diarization toggled off).
-  1. `MergeTracks` reconciles segments using timestamp offsets, ordering by `start_ms` and applying deterministic speaker labels (`Speaker A/B/...`). Overlaps trigger merge heuristics (highest confidence wins; otherwise interleave by start time). The merged transcript re-runs normalization to ensure downstream parity.
-  1. Controller persists merge provenance (`track_merge_manifest.json`) capturing channel counts, offsets, and chosen heuristics.
-- Diarization policy: if both `multi_track` and `diarization` exist, multi-track takes precedence (channel identity is more reliable). If neither is available, the job fails fast with `CAPABILITY_UNAVAILABLE` and SSE guidance to select a provider with required capabilities.
-- Testing & drills: `tests/udocket_core/transcription/test_capability_map.py` validates routing, `tests/udocket_core/transcription/test_track_merge.py` verifies merge ordering/conflict resolution, and synthetic `synthetics/transcribe_capabilities.yaml` asserts capability negotiation in staging. Ops drill `../ops/runbooks/index.md (RB-TRANSCRIBE-CAP)` ensures runbooks cover channel splits and merge artifact inspection.
-
-#### 6.2.3 Speech capability registry & audio format policy (binding)
-
-**Breadcrumbs:** Implementation `packages/udocket_core/audio/policy.py::SpeechCapabilityRegistry`, Tests `tests/udocket_core/audio/test_format_policy.py::test_enforces_policy`, Observability CI job “audio-policy-lint” with ffprobe synthetic monitor.
-
-*Purpose: Record registry fields and policies that govern audio formats and provider capabilities.*
-
-- Registry source of truth: `speech.providers[]` (Settings Service) defines each adapter’s declared capabilities, with overrides allowed per organization/case. Activation validators cross-check declarations against integration fixtures (`tests/udocket_core/transcription/providers/fixtures/*.json`) to prevent drift.
-- Capability groups (all required unless noted):
-  - `ingest`: `supported_containers[]` (e.g., `["wav", "mp3", "m4a", "ogg"]`), `preferred_audio_format` (`"wav/pcm16"` default), `max_channels` (int), `max_duration_minutes`, `max_file_mb`, `requires_conversion` (bool) when provider enforces PCM inputs, `streaming_modes[]` (`"on_demand"`, `"batch"`).
-  - `analysis`: `diarization` (`none|provider|external`), `speaker_labels` (bool), `dominant_speaker` (bool), `word_timestamps` (`none|per_word|per_token`), `timestamp_precision_ms` (int), `channel_separation` (bool).
-  - `normalization`: `punctuation_normalization` (enum), `numerical_normalization` (enum), `capitalization` (enum), `profanity_filters` (enum), `locale_support[]` (BCP-47 codes) indicating verified language/localization coverage, `preferred_locale_fallback` (BCP-47).
-  - `translation` (optional): `supports_translation` (`none|provider|external`), `translation_modes[]` (for example `["source_to_target", "source_to_many"]`), `verified_target_locales[]` (BCP-47), `verified_language_pairs[]` (array of `{source, target[], mode}` records), `max_parallel_targets` (int), `pivot_locale` (BCP-47) when the provider requires an intermediate locale, `requires_custom_glossary` (bool), `supports_glossary` (bool), `supports_formality_tone` (enum), and `fallback_translation_strategy` (`"pivot"`, `"reject"`, `"external"`) for unsupported pairs.
-  - `operational`: `billing_unit` (`"minute"`, `"second"`, `"character"`), `max_parallel_jobs`, `region_allowlist[]` (subset of Settings region catalog), `requires_data_residency_attestation` (bool), `sla_compliant` (bool), `health_check.url`.
-- Execution planning best practices:
-- Agents always normalize inputs to `preferred_audio_format`; if the source already matches (e.g., PCM 16 kHz mono) conversion is skipped; otherwise ffmpeg converts to PCM 16-bit little-endian WAV at the provider’s highest verified sample rate ≤ 32 kHz to balance accuracy and cost. Conversion artifacts are saved (`AUDIO_NORMALIZED`) with SHA-256 so replays share a stable baseline.
-- When `supported_containers` excludes the upload type, the pipeline re-muxes into WAV before plan evaluation, logs the operation in `compile_notes`, and retains original audio under `audio/` for audit parity.
-- `max_channels` governs whether the pipeline attempts native multi-channel; when the input exceeds this value, the registry can declare `fallback_channel_strategy` (`"synthetic_merge"` or `"reject"`). Synthetic merges are only attempted if integration tests demonstrate \<1.5% WER regression compared to provider multi-channel output.
-- `max_duration_minutes` and `max_file_mb` gate plan selection; exceeding either triggers preflight chunking (feature-flagged) or a policy failure with actionable guidance in SSE and ops logs.
-- Language/locale negotiation respects `locale_support[]`: if the requested locale is missing, the planner either downgrades to `preferred_locale_fallback` (noting the downgrade in manifest) or fails fast depending on Settings (`speech.require_locale_match`).
-- Combined transcribe+translate providers (`supports_translation="provider"`) still follow the plan pipeline: planners request both source and target locales explicitly, set `dual_output=true`, and verify capabilities for diarization/timestamps on both outputs. Providers must return a structured payload containing source and translated segments; normalized transcripts split these outputs into discrete artifacts while sharing provenance metadata.
-- Translation coverage guardrails: the registry’s `verified_language_pairs[]` enumerates source→target combinations that have passed integration tests. The planner refuses to dispatch pairs absent from the list unless `speech.translation.allow_unverified_pairs=true` (waiver-only). Per-org overrides may remove pairs for contractual reasons; removals are stored in Settings activation history for audit.
-  - Residency redundancy: each residency bundle must approve at least two speech providers per allowed region; nightly health checks validate coverage and raise `SPEECH_REGION_PROVIDER_DEGRADED` alerts if redundancy drops below two active providers, prompting immediate remediation before new jobs are accepted.
-  - Audio optimization guidance (binding):
-    - Prefer lossless PCM WAV at 16 kHz mono for dialog; escalate to 24 kHz stereo only when the provider’s accuracy materially improves for music-heavy or courtroom recordings (documented per provider in Appendix Q notes). The planner records any higher sample rate conversions in manifest metadata (`normalization.sample_rate_hz`).
-    - Apply loudness normalization (`-16 LUFS` target, ±1 LU tolerance) and dynamic range compression (light preset) before transcription only when `speech.allow_preprocessing=true`; defaults preserve raw audio aside from format conversion to maintain evidentiary integrity.
-    - Size optimization uses ffmpeg `-ar` (sample rate) and `-ac` (channels) parameters, never applying lossy codecs; storage deduplicates normalized outputs via content hash.
-  - Provider capability validation: nightly job `scripts/agents/validate_speech_capabilities.py` runs golden audio fixtures against each provider, verifies declared fields (diarization, timestamps, normalization behaviors, translation language pairs), and writes results to `ops/speech_capability_report.json` per org. Failures block new activations and trigger `../ops/runbooks/index.md (RB-TRANSCRIBE-CAP)` escalation; translation pair regressions additionally file `TRANSLATION_PAIR_REGRESSION` incidents and remove the affected pair from `verified_language_pairs[]` until retested.
-  - Documentation & SDK alignment: OpenAPI schemas expose the negotiated capability plan in `GET /api/v1/speech/providers` for UI/SDK consumers. SDK samples in `docs/examples/api/speech_capabilities/*.md` stay synchronized with Settings keys and the registry schema.
-
-#### 6.2.5 Cancellation & retry semantics (binding)
-
-**Breadcrumbs:** Implementation `packages/udocket_core/transcription/runner.py::handle_cancel_retry`, Tests `tests/udocket_core/transcription/test_cancel_retry.py::test_provider_cleanup`, Observability Grafana “Transcription Health & Retry” dashboard (metric `transcription_retry_total`).
-
-*Purpose: Specify cancellation hooks, retry tokens, and validation for speech jobs.*
-
-- Provider hooks: each speech adapter implements `cancel(job_id, retry_token)` and `cleanup(job_id, retry_token)`; `cleanup` executes irrespective of provider success so SAS uploads, staging blobs, and stream leases are always revoked. Both hooks MUST remain idempotent.
-- Azure Batch transcription:
-  - Cancellation deletes the Batch job via Azure Cognitive Services, revokes SAS upload URLs, and purges staging containers (`storage.staging.<region>`). The adapter records `provider_outcome` (`azure_batch:deleted`, `azure_batch:not_found`, or `azure_batch:timeout_force_cancel`) in the job tombstone for audit.
-  - Retries reuse normalized audio artifacts and only submit a fresh Batch job after verifying the stored `retry_token` (`{provider_job_id, audio_sha256, diarization_enabled}`) still matches the source artifact. Hash drift blocks the retry and surfaces `RETRY_INPUT_DIVERGED`.
-- Streaming transcription:
-  - Cancellation closes the streaming session, discards buffered audio, revokes session SAS grants, and commits partial transcripts to the tombstone artifact for operator review.
-  - Retries resume from the last committed segment index contained in `retry_token.segments[]`; adapters skip already confirmed segments so replaying remains safe even if the worker crashed mid-stream.
-- Manifest requirements: speech artifacts append `{retry_token, retry_generation, masking_profile_id, token_vault_version, fips_mode, fips_module_cert_id}` (see §4.5.2 and §5.6) to preserve vault provenance and cryptographic attestation.
-- Validation: `tests/udocket_core/transcription/test_cancel_retry.py` exercises cancellation and replay flows; synthetic job `synthetics/transcription_cancel.yaml` confirms provider cleanup in staging. Failures block deploys until remediation.
-
-#### 6.2.4 Multilingual speech & translation pipeline (binding)
-
-**Breadcrumbs:** Implementation `packages/udocket_core/transcription/multilingual.py`, Tests `tests/udocket_core/transcription/test_multilingual_pipeline.py::test_locale_negotiation`, Observability Grafana “Transcription Multilingual” dashboard with alert `speech_translation_glossary_miss_total`.
-
-*Purpose: Describe multilingual detection, negotiation, and translation workflows.*
-
-- Scope: captures language detection, multi-locale transcription, and optional translation flows, ensuring downstream artifacts remain deterministic and policy compliant across locales.
-- Locale negotiation:
-  - Inputs declare `source_language` (BCP-47) and optional `requested_locales[]`. If `source_language` is omitted and `speech.detect_language.enabled=true`, the `LanguageProbe` step samples audio snippets (≤30 seconds) using CLD3 + provider hints to produce a ranked list with confidence. Detections below confidence threshold (default 0.75) require human confirmation before dispatch (SSE `LANGUAGE_CONFIRMATION_REQUIRED`).
-  - Providers must have the requested locale in `locale_support[]`; otherwise the planner either downgrades to `preferred_locale_fallback` (recorded in manifest `locale_resolution`) or blocks execution when `speech.require_locale_match=true`.
-- Native multilingual transcription:
-  - When a provider supports direct transcription into the source language (`supports_translation in {"none", "external"}` but `locale_support` includes the source), the agent emits a single normalized transcript tagged with `language`/`locale` fields. Multi-language sessions (code-switching) use diarization segments to attach `segment.language` metadata; transcripts remain in the predominant locale unless `speech.multilingual_segments.enabled=true`, which produces language-tagged segments and writes `compile_notes` describing each language span.
-  - Segment-level metadata stores `language_confidence` (0-1) and optional `transliteration` for scripts requiring romanization (provider capability `supports_transliteration=true`). Transliteration is stored separately from the normalized text to preserve original script in downstream artifacts.
-- Translation workflow:
-  - Translation requests create derivative artifacts `transcript/<job_id>__transcript_<locale>.txt` alongside JSON manifests referencing the source transcript ID, translation provider, glossary version, and pivot locale (if used). The base transcript remains the source of truth; translated transcripts carry `schema_version: "speech_translation@1.0"` with fields `{source_locale, target_locale, translation_mode, glossary_ids[], segments[]}`.
-  - Translation providers declare `translation_modes[]`; the planner batches target locales up to `max_parallel_targets`, respecting rate limits and cost envelopes. During planning the agent filters requested locales against `verified_language_pairs[]`, logging `TRANSLATION_PAIR_BLOCKED` when a combination is unsupported and surfacing actionable guidance (`try_pivot_locale`, `choose_different_provider`). Providers advertising `supports_translation="provider"` can execute transcription and translation in a single call; the planner still writes two artifacts: the primary transcript (source locale) and each translated transcript, both derived from a single provider response with provenance recorded in manifests (`translation_bundle_id`, `provider_job_id`, `source_transcript_offset`).
-  - When `supports_translation="provider"` and the provider lacks word-level timestamps or diarization for translated text, the agent backfills alignments by projecting source timestamps, storing alignment confidence (`alignment_confidence`) per segment. Providers that emit both transcribed and translated text with distinct timestamps must pass integration tests (`tests/udocket_core/transcription/test_dual_output_alignment.py`) to ensure timestamp drift stays under 100 ms.
-  - If the provider requires separate translation calls (`supports_translation="external"`), the planner first generates the normalized source-language transcript and then fans out translation jobs per target locale. Each target locale job inherits Guardian gating and writes ops logs (`ops/<job_id>__translation_<locale>.log`), JSON metadata (`..._log.json`), and case-level audit entries (`ops_transcription_translation.jsonl`).
-  - Glossary management integrates with Reference Manager: settings key `speech.translation.glossary_set` references immutable glossary bundles. Providers advertising `requires_custom_glossary=true` block activation until a glossary is configured and parity tests (`tests/udocket_core/transcription/test_translation_glossary.py`) pass.
-- Accessibility & locale formatting:
-  - Normalize punctuation/casing per target locale using LPE formatters. Number/date normalization respects locale-specific rules (for example, decimal separators). Each translated transcript includes `normalization.locale_pack_version` linking back to the LPE bundle used for formatting.
-  - Right-to-left scripts store `direction: "rtl"` in metadata; UI renderers consume this flag to adjust layout without altering stored content.
-- Policy & compliance:
-  - Residency rules mirror primary transcription; translation providers must belong to the same (or stricter) region allowlist. Manifest fields record `translation_provider_region` and `waiver_id` when applicable.
-  - HIPAA/PHI rules apply identically: translations inherit PHI tags from the source transcript. If a translation provider lacks HIPAA attestation, the planner blocks translation when HIPAA mode is on.
-  - Never-log still applies; raw translated text is confined to artifacts. Audit logs capture only identifiers, locale codes, provider IDs, and hashes.
-- Observability:
-  - Metrics: `speech_language_detect_total{result}`, `speech_translation_jobs_total{locale, provider}`, `speech_translation_duration_seconds`, `speech_locale_downgrade_total`, `speech_translation_glossary_miss_total`.
-  - Dashboards correlate translation costs with FinOps budgets; alerts fire when translation error rates exceed thresholds or when locale downgrades occur repeatedly for an org.
-- Testing & fixtures:
-  - Golden audio/translation pairs stored under `tests/udocket_core/transcription/multilingual/`; CI asserts locale negotiation, glossary application, and parity between provider-native translation and fallback external translation within documented tolerance.
-  - Synthetic tenant `GLOBAL-MULTI` exercises quarterly drills covering multilingual flows, ensuring Guardian judgments, portal rendering, and downstream Analyze/Compose consumption remain stable across locales.
-
-### 6.3 Analyze agent (LangGraph lanes, QA, artifacts)
-
-*Purpose: Capture the multi-lane analysis pipeline that feeds Compose and downstream tooling.*
-
-- Graph built with LangGraph; lanes include `Events`, `Timeline`, `Issues`, `Entities`, `Facts`, plus staff report generation. Each lane produces typed Pydantic outputs.
-- Inputs: latest transcript (`TRANSCRIPT`), optional `DIARIZATION`, approved exhibits (`EXHIBIT_TEXT`, etc.), and settings snapshot. Retrieval uses chunking + embeddings constrained to allowed regions.
-- Deterministic IDs: row IDs rely on UUIDv7; cross-lane references include a `content_fingerprint_sha256` and a namespace UUIDv5 derived from `{org_id, case_id, lane_scope, canonical_anchor}` so reruns reuse the same identity when anchors match.
-- QA stages: per-lane validation (schema, references, policy lint, token bounds) with `qa_log` entries; final QA ensures cross-lane consistency before Guardian submission.
-- Cross-lane integration tests: `tests/udocket_core/agents/test_analyze_graph.py::test_cross_lane_consistency` executes the full graph with synthetic transcripts to assert lane ordering, data dependencies, and deterministic fingerprints before Compose consumes outputs.
-- Artifacts: Follow the pattern `analysis/<job_id>__<title>_v<version>.json` where title=\[timeline_seeds, entity_hints, issues, facts, gaps, staff_report(.md)\]; plus ops JSON + JSONL audit. Failures surface via SSE with actionable errors.
-- See App.D for artifact schemas, filenames, and versioning.
-
-#### 6.3.1 Cancellation & retry semantics (binding)
-
-**Breadcrumbs:** Implementation `packages/udocket_core/agents/analyze_runner.py::cancel_and_retry`, Tests `tests/udocket_core/agents/test_analyze_cancel_retry.py::test_lane_resume`, Observability Grafana “Analyze Pipeline Health” dashboard.
-
-*Purpose: Define cancellation handling and retry behavior for Analyze lanes.*
-
-- `GraphRunner.cancel(job_id, retry_token)` stops active lanes, drains tool queues, and guarantees `cleanup()` executes for every registered tool adapter. Tool adapters marked `idempotent=true` in `agents.tools.catalog[]` MAY be re-run during retries; non-idempotent tools log `RETRY_DISALLOWED_NON_IDEMPOTENT`.
-- Cancellation transitions Analyze jobs through the shared lifecycle (§10.2) and emits `job.blocked` when Guardian/FinOps halts processing; `job.quarantined` surfaces service-triggered policy holds.
-- Retry behavior:
-  - Analyze manifests store `{retry_token, retry_generation, lane_progress}`; `lane_progress` records the last successful node per lane so replays resume deterministically without re-invoking completed steps.
-  - LangGraph nodes persist checkpoint digests; `GraphRunner.retry(job_id, retry_token)` compares the stored digest to the queued inputs before resuming.
-  - Tool invocations include `tool_idempotency_key` (when supplied) so GraphRunner can dedupe HTTP/gRPC calls after a worker crash. Replays lacking idempotency data block with `RETRY_IDEMPOTENCY_UNKNOWN`.
-- Cleanup obligations: cancellation purges intermediate artifacts (`analysis/<job_id>__*_tmp.json`) and closes vector search cursors to avoid leaking residency-scoped handles.
-- Contract tests: `tests/udocket_core/agents/test_analyze_cancel_retry.py` exercises cancellation across representative transcripts; synthetic `synthetics/analyze_cancel.yaml` validates SSE emissions and manifest deltas.
-
-### 6.4 Compose agent (deliverables, QA loops, templates)
-
-*Purpose: Describe final deliverable generation and QA gating.*
-
-- LangGraph pipeline with `OutlineBuilder`, parallel `SectionWriter` nodes (client/lawyer lanes), `SectionQA`, and `FinalWeave`. Inputs include Analyze outputs, intake data, templates.
-- Templates resolved via Settings + organization-specific overrides; `unique_title` helper prevents collisions. Manifest stores template version, language, document type.
-- QA loops enforce forbidden patterns (`compose.policy.forbidden_patterns[]`), required sections, link counts, and reference integrity. `SectionQA` runs per lane before `FinalWeave`; a final QA pass checks cross-lane coherence. Lane retries limited by `compose.max_retries`.
-- Safety contracts: Compose `JobContext` separates agent directives (`instructions[]`) from evidentiary payloads (`source_content[]`, transcripts, manifests). Lane runtimes treat instructions as immutable policy input; attempts to promote transcript text to directives are rejected with `E_POLICY_FORBIDDEN`. Envelope schema `spec/schemas/llm_envelope.schema.json` codifies the separation (`instructions[]`, `source_content[]`, `system_policies[]`, `safety_tags[]`) and LangGraph adapters verify that directives reference only policy-registered instruction IDs. Per-model policy manifests declare the maximum instruction scope; Guardian rejects runs whose envelope attempts to merge instructions with evidentiary content or bypass policy tags. Each LangGraph node registers an `opa_policy_id` enforced server-side; tool invocations must appear on the per-node allowlist, and escalation attempts emit `OPA_TOOL_ESCALATION_DENIED` audit events.
-- Outputs written to `docs/`: `compose_client_v1.md|docx`, `compose_lawyer_v1.md|docx`, bundle excerpt, QA/staff reports. Guardian ensures readiness before reviewer approval.
-- Envelopes capture LLM metadata (model, prompt version, region) for reproducibility; FinOps counters track token usage per section.
-- See App.D for compose deliverables and QA artifacts and their canonical filenames.
-- Model selection: stage-specific profiles defined in `config/llm_assignments.json` map Analyze/Compose lanes to settings keys (`analyze.model.id`, `compose.model.id`) so org/case overrides stay deterministic.
-
-#### 6.4.0 Cancellation & retry semantics (binding)
-
-**Breadcrumbs:** Implementation `packages/udocket_core/agents/compose_runner.py::cancel_and_retry`, Tests `tests/udocket_core/agents/test_compose_cancel_retry.py::test_checkpoint_resume`, Observability Grafana “Compose Pipeline Health” dashboard.
-
-*Purpose: Explain how Compose manages cancellation, checkpoints, and replay safety.*
-
-- `GraphRunner.cancel(job_id, retry_token)` stops all active lanes, requests `cancel()` on outstanding tool invocations, and records per-lane status snapshots (`{lane_id, node_id, state}`) in the tombstone artifact.
-- Compose retries depend on persistent checkpoints:
-  - Manifests append `{retry_token, retry_generation, lane_progress, weaver_state_digest}`. `lane_progress` records the last committed section per lane; `weaver_state_digest` protects against template drift mid-retry.
-  - Section writers marked `idempotent=true` rerun automatically; others require operator acknowledgement (`RETRY_REQUIRES_OPERATOR`) before resubmission.
-  - QA nodes re-evaluate only sections that changed in the replay; unchanged sections reference their prior fingerprints, preventing double-counting FinOps metrics.
-- Cancellation ensures Document Signer work has not been emitted. If cancellation occurs after signing kicked off, the workflow revokes signatures, deletes draft deliverables, and sets `signing_revoked=true` in the tombstone.
-- SSE events follow the contract defined in §10.8: Compose jobs emit `job.running` per lane, `job.blocked` on policy holds (for example, FinOps budget exhaustion), `job.quarantined` when Guardian intervenes, and `job.completed` once deliverables are stored.
-- Test coverage: `tests/udocket_core/agents/test_compose_cancel_retry.py` exercises lane-level cancellation, replay from checkpoints, and signature revocation. Synthetic monitor `synthetics/compose_cancel.yaml` validates SSE sequencing and manifest updates in staging.
-
-#### 6.4.1 Deliverable catalog & template registry (binding)
-
-**Breadcrumbs:** Implementation `packages/udocket_core/deliverables/catalog.py::DeliverableCatalog`, Tests `tests/udocket_core/deliverables/test_catalog_activation.py::test_registry_contract`, Observability Grafana “Deliverable Catalog & Templates” dashboard with alert `deliverable_catalog_drift_total`.
-
-*Purpose: Guarantee deliverables stay extensible while remaining policy-gated.*
-
-- System-scope Settings key `deliverables.catalog[]` enumerates every deliverable produced across Transcribe/Analyze/Compose. Each `DeliverableDefinition` captures `deliverable_id`, `stage` (`transcribe|analyze|compose`), `artifact_type`, `default_formats[]` (`txt`, `md`, `pdf`, `docx`), `template_id`, `signature_policy_id`, `client_visibility`, `requires_client_ack`, `default_state` (`enabled|disabled|shadow`), and `implementation_tier` (minor|major) so GraphRunner, Guardian, and the portal share a single source of truth.
-- Base catalog entries ship for `TRANSCRIPT_CANONICAL` (Transcribe: `.txt` + PDF wrapper for signing), `SUMMARY_STANDARD` (Analyze summary deliverable), and `SUMMARY_LAWYER` (Compose lawyer document). Future deliverables—`SUMMARY_BRIEF`, `TIMELINE_ONLY`, `TIMELINE_WITH_EVIDENCE`, etc.—are pre-declared with `default_state=disabled` and `implementation_tier=major`; enabling them requires Architecture/Product sign-off and a recorded Implementation Strategy milestone before Settings activation succeeds.
-- Template registry, localization packs, and template invalidation events are curated by Reference Manager; see `../services/reference-manager.md §3.4` for schema, approval, and cache contract.
-- Organization overrides follow the same schema: uploads enter Guardian review, must pass placeholder linting against the corresponding `DeliverableContext` Pydantic model, and create `TEMPLATE_OVERRIDE_PROPOSAL` artifacts before promotion. Rollback keeps prior versions addressable; CI fixtures under `tests/udocket_core/agents/` validate compatibility end-to-end.
-- Every deliverable definition links to a `signature_policy_id` (§7.2.2). Transcripts and summaries default to `SIGN_POLICY_PLATFORM_REQUIRED`; Compose deliverables default to `SIGN_POLICY_PLATFORM_REQUIRED_CLIENT_OPTIONAL`. Pipelines hydrate signature policies when queuing Document Signer work so platform signatures and client attestations stay declarative rather than hard-coded.
-- Feature toggles (`deliverables.features.short_summary`, `deliverables.features.timeline_pdf`, etc.) guard UI/API exposure. Guardian rejects enabling toggles tagged `implementation_tier=major` unless the linked Implementation Strategy artifact is `status=approved`, ensuring large-impact additions follow the agreed rollout path.
-- Appendix D documents artifact schemas keyed by `deliverable_id`; [`../services/settings-registry.md Appendix A`](../services/settings.md#appendix-a-settings-key-map-traceability-index) cross-references catalog entries with settings/tests/runbooks so auditors can trace coverage for any newly activated deliverable.
-
-<figure class="full-width-diagram">
-  <img class="diagram" src="../build/mermaid/overview/tdd/diagrams/data-lineage-v1.svg" alt="Artifact data lineage">
-  <figcaption style="font-size: 0.9em; color: #555;">Artifact data lineage</figcaption>
-</figure>
-
-### 6.5 Timeline and relationship graph agents integration checklist
-
-*Purpose: Define integration requirements for the timeline and relationship graph agents.*
-
-- Both agents adhere to the common contract: deterministic IDs, manifest provenance, Guardian gating, ops logging, and Settings-driven configuration.
-- Checklist: define artifact types (Appendix D), extend manifests, register Celery task + SSE events, add ops JSON/JSONL schema, wire Settings keys, update QA/approval flows, and document review UX impacts.
-- Integration tests (settings dry-run/diff, policy linting, cross-artifact dependency validation—for example, timeline referencing approved transcripts) run in CI.
-- Agents expose FinOps metrics, honor region allowlists, and update the Appendix E traceability map prior to activation.
-- **Source material:** `§5`, `§9`, `§10`, `§11`, `§16`, `AGENTS.md`
-- **Priority:** High (core agent pipeline)
-
-### 6.6 Agent failure handling & resilience
-
-*Purpose: Standardize failure classes, retries, and safeguards to avoid duplication and policy drift.*
-
-- Failure taxonomy (binding):
-  - `TRANSIENT`: upstream 429/5xx/timeouts/network. Action → exponential backoff with jitter; respect `Retry-After`; bounded attempts; trip provider circuit on threshold.
-  - `POLICY`: forbidden pattern, redaction breach, region disallow. Action → fail lane; emit Guardian quarantine if applicable; surface actionable reason codes.
-  - `INPUT`: bad media/schema. Action → fail lane; no auto-retry; record validation details in ops JSON.
-  - `INTEGRITY`: hash mismatch/content drift. Action → block downstream; require resubmit with corrected input; log `ARTIFACT_INTEGRITY_MISMATCH`.
-  - `CONCURRENCY`: OCC/version conflicts or lock contention. Action → short jittered retry; escalate if repeated; surface conflict to UI.
-  - `REGION_POLICY`: residency disallowance. Action → block and log `RESIDENCY_POLICY_BLOCK`; waivers per §3.8.
-- Retries & budgets: default 5 attempts; `backoff_factor=2`; jitter 10-20%; max delay 120s; per-agent overrides allowed via Settings.
-- Node idempotency (binding): rerunning a completed lane issues zero new provider calls; outputs identical or schema-equivalent.
-- Single-flight: use `udlock` advisory locks for job/lane scopes; hold \< `udlock.max_session_hold_seconds` with heartbeats every `udlock.heartbeat.interval_seconds`.
-- Telemetry: export `agent_retry_total`, `agent_lane_fail_total{reason}`, and duration histograms; write ops logs with `attempt`, `final_state`, `reasons[]`.
-
-### 6.7 LangGraph implementation spec (normative)
-
-*Purpose: Standardize graph runtime behavior for Analyze/Compose.*
-
-- Graph state: typed payloads; immutable inputs; explicit checkpoints.
-- Nodes & contracts: input/output schemas; side‑effect boundaries; reproducibility requirements.
-- Concurrency & ordering: deterministic ordering where needed; fan‑out/fan‑in patterns documented.
-- Checkpointing & idempotency: resume from last good node; no duplicate provider calls after success.
-- LLM call wrapper (mandatory): consistent logging, redaction, retry, and cost accounting.
-- Memory & retrieval policy: bounded context, chunking, embeddings restricted to allowed regions.
-- Error classes & actions: per §6.6 taxonomy mapped to node behaviors.
-- Source material: `§6.6-§6.10`, `§6.10`
-
-#### 6.7.1 Deterministic identity & fingerprints (normative)
-
-*Purpose: Maintain stable cross-run identifiers without relying on experimental UUID versions.*
-
-- Row identifiers (`artifact.id`, `qa_log.id`, etc.) use UUIDv7 for temporal ordering and compatibility with existing tooling.
-- Each lane computes a canonical anchor dictionary (sorted keys, normalized transcript spans, referenced IDs, outline offsets) and hashes it to `content_fingerprint_sha256`.
-- Deterministic reference IDs use UUIDv5 with an org-scoped namespace: `namespace_uuid = uuid.uuid5(uuid.NAMESPACE_URL, f"uDocket:{org_id}:{case_id}")`; `stable_id = uuid.uuid5(namespace_uuid, content_fingerprint_sha256)`. This keeps IDs stable when anchors match while avoiding disclosure of the raw anchor payload.
-- Because LLM outputs are inherently non-deterministic, downstream comparisons rely on the `content_fingerprint_sha256` rather than byte-for-byte equality; replays that diverge mark artifacts for review while preserving the original UUIDv7 identifiers.
-- Manifests and JSON artifacts include both `uuid` (UUIDv7) and `content_fingerprint_sha256`; downstream tools prefer the fingerprint for drift detection.
-- Per-org secret rotation updates only the namespace seed; historical UUIDv5 values remain valid because manifests treat IDs as immutable once published.
-- Test vectors live in `spec/vectors/uuid_fingerprints.json`; CI test `tests/spec/test_uuid_fingerprints.py` asserts canonicalization and UUIDv5 output stability.
-
-Node catalog (illustrative)
-
-| Node                   | Purpose                   | Inputs                       | Outputs                 |
-| ---------------------- | ------------------------- | ---------------------------- | ----------------------- |
-| OutlineBuilder         | produce narrative outline | transcript, settings         | outline JSON            |
-| SectionWriter (client) | draft client section(s)   | outline, settings, templates | section text + metadata |
-| SectionWriter (lawyer) | draft lawyer section(s)   | outline, settings, templates | section text + metadata |
-| SectionQA              | enforce policy gates      | section text, policies       | QA notes, status        |
-| FinalWeave             | assemble deliverable      | sections, templates          | composed MD/DOCX        |
-
-#### 6.7.2 Adoption guardrails & fallback plan
-
-*Purpose: Establish guardrails and rollback paths for LangGraph adoption.*
-
-- Framework encapsulation: LangGraph graphs execute behind `packages.udocket_core.agents.graph_runner.GraphRunner`. Settings key `agents.langgraph.runner ∈ {'langgraph', 'linear'}` plus a CLI override allow swapping to the linear runner for smoke tests or incident mitigation. Contract tests run against both runners to ensure parity.
-- Training & SOP: engineering onboarding includes LangGraph workshops, code walkthroughs, and pairing sessions; a living playbook in `docs/runbooks/langgraph-adoption.md` captures patterns, anti-patterns, and upgrade notes.
-- Upgrade cadence: LangGraph pinned via Poetry with weekly review of upstream releases; canary staging job (`synthetics/langgraph_canary.yaml`) executes against new versions before upgrade PRs. Major version bumps require ADR review.
-- UUID safeguards: default UUIDv7/UUIDv5 strategy (see §6.7.1) is mandatory; no experimental UUID versions are permitted in manifests or identifiers.
-- Automated failover: lanes invoke the shared `ModelFailoverOrchestrator` (§8.1.2) so `llm.models[].fallback_chain` is applied consistently across Analyze/Compose/Audit tasks. Each allowed residency region must have at least two approved providers/models in the chain; health probes cycle through providers without leaving the region. The orchestrator surfaces `LLM_FALLBACK_TRIGGERED` events, records parity hashes, and continues processing without human drafting. When the chain is exhausted the queue marks `PAUSED_AWAITING_PROVIDER`; on-call focuses on restoring provider health rather than producing manual content. Manual drafting is not an availability strategy and remains a break-glass SOP only under an executive waiver recorded in Appendix O.
-
-### 6.8 Compose/Policy lint settings (declarative)
-
-*Purpose: Enforce structural and policy rules via settings instead of code.*
-
-- Settings: `compose.policy.*` (forbidden patterns, required sections, link limits) and `analyze.policy.*` for lane checks.
-- Lint flow: pre‑publish checks at node and final weave; failures produce QA logs and block Guardian submission.
-- Extensibility: org overrides constrained by safety validators in Settings activation.
-- Source material: `§6.8`, `§6.4`
-
-### 6.9 Graph versioning & migrations
-
-*Purpose: Allow safe evolution of graphs across versions.*
-
-- Version pins: manifests include graph version; upgrades supported via migration plan per change.
-- Compatibility: nodes may support multiple versions; deprecations follow the API deprecation policy.
-- Acceptance: migration tests verifying schema equivalence or documented deviations.
-- Source material: `§6.9`, `§6.10`
-
-### 6.10 Compose Graph details (parallels Analyze)
-
-*Purpose: Provide deeper detail on Compose graph structure and gates.*
-
-- Lanes: client and lawyer lanes in parallel; optional bundle excerpt lane; shared OutlineBuilder and FinalWeave.
-- Concurrency: SectionWriter nodes run in parallel with bounded concurrency; OCC on artifact writes; udlock on section scopes.
-- Retries: per‑section retry budgets; failures summarized in QA; forbidden patterns and missing sections block FinalWeave.
-- Provenance: per section envelope logged with model/prompt versions; manifests include graph_version and template versions.
-- QA gates: enforce required sections, link counts, references, and forbidden patterns (`compose.policy.*`).
-- Source material: `§6.10`
-
-### 6.11 Agent schemas and error codes
-
-*Purpose: Provide typed outputs per lane and a canonical error taxonomy mapping.*
-
-- Schemas (illustrative Pydantic models):
-  - Analyze: `SummaryJSON`, `OutlineJSON`, `TimelineSeed`, `EntityHint`, `StaffReport` with `uuid`, `source_span`, `evidence_refs[]`.
-  - Compose: `SectionOutput { section_id, role: client|lawyer, text_md, envelope_id, issues[] }`.
-  - QA: `QAIssue { code, level, message, ref?, location? }`.
-- Example Pydantic models (Analyze extract): see App.U.1 for the canonical typed definitions including source-span handling and deterministic enums.
-- Compose JSON example: App.U.2 captures the Compose document/section models with default factories and typed references.
-- Error codes (binding):
-  - `E_TRANSIENT_PROVIDER` (TRANSIENT): wrap 429/5xx/timeouts; retry per §6.6.
-  - `E_POLICY_FORBIDDEN` (POLICY): forbidden pattern redaction failure; fail lane.
-  - `E_INPUT_INVALID` (INPUT): schema/media invalid; fail lane with details.
-  - `E_INTEGRITY_MISMATCH` (INTEGRITY): hash/content drift; quarantine and halt.
-  - `E_CONFLICT` (CONCURRENCY): OCC/lock conflict; short retry then surface.
-  - `E_REGION_BLOCK` (REGION_POLICY): residency disallow; block with remediation.
-- Mapping: All error codes must map to §6.6 failure taxonomy; ops JSON must include `{ code, class, message, attempt, final }`.
-
-### 6.12 Quality KPIs & monitoring
-
-*Purpose: Make analysis, transcription, and Guardian quality targets measurable and auditable.*
-
-- **Speech accuracy:** Word Error Rate (WER) target ≤ 8 % for on-demand, ≤ 6 % for batch transcripts measured against quarterly golden sets; dashboards plot WER trend per language with alerts when ≥ 2 % regression (`metrics: transcription_wer_pct{mode, language}`).
-- **Guardian effectiveness:** False-negative rate (quarantined after customer exposure) ≤ 0.5 % per quarter, false-positive (unjustified quarantine) ≤ 5 % with remediation documented in Appendix B.2 review log. Weekly sampling validates judgment reasons against the policy matrix using `guardian_quarantine_false_positive_total` vs `guardian_judgment_total` to quantify drift and trigger tuning.
-- **Review delta:** Reviewer change rate for Analyze/Compose deliverables \< 15 % of sections (measured via `qa_log` issue density and Manual/Agent edit diffs). Exceeding thresholds triggers regression analysis in LangGraph acceptance tests (§13.3).
-- **QA defect density:** `qa_issue_density` metric targets ≤ 0.2 blocking defects per artifact; Compose/Analyze QA lanes surface severity distribution for release gates.
-- **FinOps + quality blend:** Track tokens-per-approved artifact and rejection counts to ensure budget adherence does not degrade quality; anomalies produce decision-log entries (§15.3).
-- Quality KPIs feed quarterly leadership reviews; results archived as `QUALITY_KPI_REPORT` artifacts in Appendix D catalog.
-
-### 6.13 Shadow mode deployments (binding)
-
-**Breadcrumbs:** Implementation `apps/platform/operations/shadow.py::run_shadow_pipeline`, Tests `tests/platform/operations/test_shadow_mode.py::test_divergence_reporting`, Observability Grafana “Agent Shadow Runs” dashboard with metric `agent_shadow_divergence_total`.
-
-*Purpose: Let new agent behaviours soak in production safely before they become user-visible.*
-
-- Activation: flip `agents.shadow_mode.enabled=true` (ORG/CASE scope) to run the new lane/pipeline against live inputs while suppressing downstream writes. Shadow executions read the same settings snapshot as production jobs and log outputs under `ops/<job_id>__shadow_<agent>_log.json` plus case-level JSONL streams (`ops_shadow_<agent>.jsonl`).
-- Evaluation metrics: compare shadow vs primary outputs using divergence counters (`shadow_match_rate`, `shadow_token_delta`, `shadow_runtime_ratio`) and reviewer sampling tasks. An alert (`agent_shadow_divergence_total`) fires when divergence exceeds configured tolerances.
-- Promotion checklist: (1) shadow match rate ≥ 98% over the agreed soak period, (2) no open Sev-2/3 incidents attributed to the shadow agent, (3) Product/Security sign-off recorded in the decision log, and (4) App.T traceability row updated with tests/monitors/runbooks.
-- Rollback: disable via settings toggle; purge shadow outputs with `ops/scripts/agents/cleanup_shadow.py` to avoid confusing reviewers.
-- Isolation guarantee: shadow artifacts never transition beyond `DRAFT_SHADOW` and are excluded from Guardian submission, portal listings, or cost/billing tallies; only divergence metrics and audit trails are surfaced to staff for analysis.
-- Abuse coverage: shadow runs feed the abuse prevention detectors (§B.4) so fraud heuristics see the same traffic profile before we expose new flows to customers. Per-org thresholds for shadow soak (`abuse.shadow.threshold_per_org`) require dual approval at activation, expire automatically with the soak window, and are linted by `settings:lint-keys` so relaxed thresholds cannot persist once the feature goes live.
-
-______________________________________________________________________
+- *Primary spec:* [`LangGraph agents §6–§9`](../services/langgraph-agents.md#6-observability--quality).
+- Quality KPIs (WER, reviewer delta, QA issue density, FinOps blend) drive acceptance tests and shadow mode gates; results archived as `QUALITY_KPI_REPORT` artifacts.
+- Residency/HIPAA/SPI enforcement relies on Settings allowlists and Guardian policy integration; compliance details documented in §7 of the LangGraph agents spec.
+- Operational procedures (pipeline activation, shadow runs, migration plans) follow blue/green rollout with rollback triggers; Ops runbooks `RB-AGENT-*` provide drills referenced in §8–§9.
 
 ## 7) Digital signing & Guardian services
 
@@ -3129,7 +2782,7 @@ ______________________________________________________________________
 
 ### A.7 Analyze/Compose pipeline
 
-- Sequence `overview/tdd/diagrams/analyze-compose-v1.mmd`; illustrates LangGraph lanes, artifact writes, and Guardian readiness.
+- Sequence `services/langgraph-agents/diagrams/analyze-compose-v1.mmd`; illustrates LangGraph lanes, artifact writes, and Guardian readiness.
 
 ### A.8 Manual/Agent Edit flows
 

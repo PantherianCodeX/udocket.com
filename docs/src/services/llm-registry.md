@@ -53,7 +53,7 @@ header-includes:
 
 ______________________________________________________________________
 
-## Document controls
+## Document Controls
 
 | Field          | Value |
 | -------------- | ----- |
@@ -86,7 +86,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## Reading guide
+## Reading Guide
 
 - **Scope:** LLM provider catalog, selection orchestration, residency safeguards, moderation, reproducibility, and FinOps controls governing Analyze/Compose lanes and other agent workloads.
 - **Structure:** Follows the standard 0–10 template; subsections are marked (binding/normative/informative) per policy vocabulary. Appendices live in ops runbooks for golden sets and moderation configs.
@@ -252,7 +252,7 @@ Binding checkpoints (sample)
 
 ______________________________________________________________________
 
-## 3) API contract
+## 3) API Contract
 
 **Purpose:** Document interfaces that govern registry updates, health reporting, and decision telemetry. **|**
 **Contract:** Settings activation remains the authoritative write path for provider/catalog changes; runtime exposes health summaries, circuit events, and evidence envelopes rather than direct public APIs. **|**
@@ -262,13 +262,13 @@ ______________________________________________________________________
 **Breadcrumbs:** Health endpoint `apps/platform/api/providers.py::get_health`, decision trace writer `packages/udocket_core/llm/decision_trace.py`, SSE publisher `apps/platform/events/llm.py`, tests `tests/platform/api/test_provider_health.py`. **|**
 **References:** Settings spec §2, Jobs API §10 (TDD), Guardian spec §3, Compose/Analyze agents.
 
-### 3.1 External interfaces
+### 3.1 External Interfaces
 
 - Settings activation (`apps/platform/settings/services/llm.py`) remains the single write surface for provider metadata; change management requires ADR references and dual approval.
 - Admin API `GET /ops/llm/providers/health` returns circuit status, residency posture, and probe metrics for dashboards; responses cached for 10 seconds.
 - SSE channel `provider.health` broadcasts status deltas (`OPEN`, `HALF_OPEN`, `CLOSED`) so Portal, Compose, and Guardian halt workloads when registry fails closed.
 
-### 3.2 Internal interfaces
+### 3.2 Internal Interfaces
 
 - Celery task modules `operations.task_modules.llm.*` invoke `RegistrySelector` helpers and emit decision traces to evidence store queues.
 - Background job `llm_health_poll` writes probe results and flips circuit states; results persisted in `ops/llm/health_poll/<date>.jsonl`.
@@ -282,7 +282,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 4) State management
+## 4) State Management
 
 **Purpose:** Explain storage and configuration strategy. **|**
 **Contract:** Define persistence guarantees, migration expectations, and retention. **|**
@@ -332,7 +332,7 @@ Notes
 
 ______________________________________________________________________
 
-## 5) Failure modes
+## 5) Failure Modes
 
 **Purpose:** Provide the resilience profile and default mitigations. **|**
 **Contract:** Identify what must fail closed vs. degraded. **|**
@@ -376,7 +376,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 6) Observability & SLOs
+## 6) Observability
 
 **Purpose:** Keep registry health, safety, and cost posture visible and alertable. **|**
 **Contract:** Maintain Grafana dashboards for residency/failover, moderation, and FinOps; uphold SLOs (provider health ≥ 99.5 %, moderation pipeline availability ≥ 99.9 %, budget controller response < 5 minutes). **|**
@@ -388,7 +388,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 7) Security & compliance
+## 7) Security & Compliance
 
 **Purpose:** Ensure LLM operations honor residency, privacy, and contractual data-use constraints. **|**
 **Contract:** Providers must operate in approved regions, disable training/log retention, and satisfy HIPAA/PHIPA requirements; waivers documented with expiry and remediation. **|**
@@ -405,7 +405,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 8) Operational notes
+## 8) Operational Notes
 
 **Purpose:** Keep the LLM registry’s operational posture, failover drills, and release gates aligned with safety and cost guardrails. **|**
 **Contract:** On-call rotations, runbooks, and gating evidence must stay current; registry traffic pauses when residency, moderation, or FinOps alerts breach thresholds until remediation completes. **|**
@@ -415,7 +415,7 @@ ______________________________________________________________________
 **Breadcrumbs:** Runbook catalog `docs/src/ops/runbooks/index.md`, automation scripts `ops/scripts/llm/*.py`, release tooling `scripts/finops/check_mom_guard.py`. **|**
 **References:** §5 Failure modes, §6 Observability, §7 Security & compliance.
 
-### 8.1 Operational posture (binding)
+### 8.1 Operational Posture (binding)
 
 **Purpose:** Capture staffing, freeze windows, and readiness expectations for the registry. **|**
 **Contract:** Platform Architecture and Applied AI Programs share PagerDuty “LLM Registry SLO”, maintain blue/green deployment freezes during provider onboarding, and staff a weekly rotation to review parity evidence and golden-set results. **|**
@@ -429,7 +429,7 @@ ______________________________________________________________________
 - Golden-set jailbreak runs monitored daily; regressions halt releases until RB-LLM-JB completes.
 - FinOps budget dashboards reviewed alongside `finops_budget_hold_active_total`; overrides require App.O approval before resuming jobs.
 
-### 8.2 Incident triggers (binding)
+### 8.2 Incident Triggers (binding)
 
 **Purpose:** Map alerts and dashboards to registry runbooks. **|**
 **Contract:** Alert rules (`infra/monitoring/llm-prometheus-rules.yaml`) annotate `RB-LLM-*` identifiers; responders capture evidence before clearing incidents. **|**
@@ -444,7 +444,7 @@ ______________________________________________________________________
 - `finops_budget_hold_active_total` or `llm_cost_estimate_total` projections breaching guard thresholds execute `RB-LLM-FINOPS`.
 - Replay mismatches (`llm_replay_mismatch_total`) trigger `RB-LLM-REPLAY` for divergence analysis.
 
-### 8.3 Runbooks & drills (binding)
+### 8.3 Runbooks & Drills (binding)
 
 **Purpose:** Keep LLM runbooks actionable and drills on cadence. **|**
 **Contract:** Alerts map to `RB-LLM-*` runbooks; quarterly drills cover provider failover, moderation outage, FinOps budget breach, and replay divergence scenarios. **|**
@@ -454,7 +454,7 @@ ______________________________________________________________________
 **Breadcrumbs:** Runbook catalog, drill scheduler, automation scripts. **|**
 **References:** `RB-LLM-003`, `RB-LLM-JB`, `RB-LLM-FINOPS`, `RB-LLM-REPLAY`. *
 
-#### 8.3.1 Runbook index (informative)
+#### 8.3.1 Runbook Index (informative)
 
 | Runbook code | Scenario | Notes |
 | ------------ | -------- | ----- |
@@ -463,28 +463,28 @@ ______________________________________________________________________
 | `RB-LLM-FINOPS` | Budget hold or cost breach | Pauses jobs, coordinates overrides with FinOps and App.O |
 | `RB-LLM-REPLAY` | Replay divergence | Replays envelopes, compares hashes, and documents drift |
 
-#### 8.3.2 Primary runbooks (binding)
+#### 8.3.2 Primary Runbooks (binding)
 
-**Purpose:** Document operational playbooks responders execute during incidents or exercises. **|**
-**Contract:** Link production alerts to runbook identifiers, outline execution cadence, and name the maintaining team. **|**
-**State:** Summarize where runbooks live (repo paths, automation scripts) and what evidence they produce. **|**
-**Failures & handling:** Explain how missing, stale, or skipped runbooks are surfaced and remediated. **|**
-**Observability:** Note tooling that tracks drill frequency, runbook completion, and incident follow-up. **|**
-**Breadcrumbs:** Runbook files, automation scripts, incident templates. **|**
-**References:** Alert catalogs, governance docs referencing the runbooks.
+**Purpose:** Document operational playbooks for the registry so responders act consistently during incidents. **|**
+**Contract:** Each runbook maps to specific alerts, evidence requirements, and owning teams; responders update them after every drill or incident. **|**
+**State:** Runbook markdown lives in `ops/runbooks/llm/`, automation scripts under `ops/scripts/llm/`, and evidence within incident records `ops/llm/incidents/`. **|**
+**Failures & handling:** Missing steps or stale guidance block deployment sign-off until refreshed. **|**
+**Observability:** Docs lint, PagerDuty analytics, and Ops governance dashboards track runbook freshness and drill completion. **|**
+**Breadcrumbs:** `ops/runbooks/llm/*.md`, `ops/scripts/llm/*.py`, incident templates `ops/llm/incidents/*.md`. **|**
+**References:** Alert catalog, FinOps policy, Guardian integration docs.
 
 - `RB-LLM-003` — Validates provider failover chains, residency attestations, and waiver approvals before resuming traffic.
-- `RB-LLM-JB` — Investigates moderation regressions, re-runs golden set, and coordinates Guardian enforcement.
+- `RB-LLM-JB` — Investigates moderation regressions, reruns golden set, and coordinates Guardian enforcement.
 - `RB-LLM-FINOPS` — Evaluates budget guardrails, pauses costly workloads, and secures FinOps/App.O overrides.
 - `RB-LLM-REPLAY` — Replays envelopes, compares hashes, and files follow-up tasks for divergence remediation.
 
-#### 8.3.3 Drill cadence & evidence (binding)
+#### 8.3.3 Drill Cadence & Evidence (binding)
 
 - Quarterly drills cover provider failover, moderation outage, FinOps budget breach, and replay divergence with evidence in `ops/llm/drills/<date>/summary.md`.
 - Drill calendar `ops/change/llm_rotations.ics` tracks cadence and ownership; missed drills block release sign-off until evidence captured.
 - Docs lint and Ops governance dashboards verify runbook freshness and evidence uploads prior to production changes.
 
-### 8.4 Migrations & backfills (normative)
+### 8.4 Migrations & Backfills (normative)
 
 **Purpose:** Govern provider onboarding, parity evidence refresh, and replay migrations. **|**
 **Contract:** Provider additions require parity evidence, evaluation digests, and residency attestations before activation; replay migrations run in staging with manifest comparisons before production. **|**
@@ -498,7 +498,7 @@ ______________________________________________________________________
 - Replay migrations compare envelope hashes and content fingerprints before promoting new defaults.
 - Decommissioned providers archive evidence and update waiver logs in App.O.
 
-### 8.5 Operational workflows (normative)
+### 8.5 Operational Workflows (normative)
 
 **Purpose:** Document recurring tasks that sustain registry readiness. **|**
 **Contract:** Teams review golden-set results daily, audit parity evidence weekly, refresh moderation thresholds, and reconcile FinOps guard reports. **|**

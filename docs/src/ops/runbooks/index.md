@@ -124,6 +124,50 @@
 - Reconcile manual artifacts via replay once automation recovers; annotate incidents with residual risk assessments.
 - Update waiver manifests and close-out tasks before declaring the incident resolved.
 
+## Langgraph Agents — 8.3 Runbooks & drills (binding)
+
+**Purpose:** Ensure operators have actionable playbooks for agent degradations, activation failures, and QA regressions. **|**
+**Contract:** Runbooks listed here must remain current, link to Ops catalog entries, and surface evidence expectations for compliance. **|**
+**State:** Runbook markdown lives under `docs/src/ops/runbooks/agents/`; drill evidence and after-action reviews are archived in `ops/runbooks/evidence/agents/`. **|**
+**Failures & handling:** Missing or stale runbooks block launch; drills uncover coverage gaps and feed remediation tickets. **|**
+**Observability:** Ops catalog build (`scripts/docs/build_runbook_catalog.py`), drill checklist dashboards, and on-call retros track preparedness. **|**
+**Breadcrumbs:** Runbook catalog `docs/src/ops/runbooks/index.md`, evidence store `ops/runbooks/evidence/agents/`, drill tracker `ops/runbooks/agents/drill_log.csv`. **|**
+**References:** Ops runbooks index, TDD Appendix B, Worker Cluster spec §3.5, QA governance §6.
+
+- Runbooks must cover activation rollback, shadow divergence, Guardian quarantine escalation, and QA defect surge.
+- On-call rotation uses `RB-AGENT-TIMEOUT`, `RB-AGENT-RETRY`, `RB-AGENT-ACTIVATION`, `RB-AGENT-SHADOW`, and `RB-AGENT-QA`.
+- Drill cadence and evidence capture feed quarterly readiness reviews and SOC2/SOCPA audits.
+
+### Langgraph Agents — 8.3.1 Runbook index (informative)
+
+The catalog enumerates each runbook with owner, verification cadence, and Ops catalog ID. Maintained via `scripts/docs/build_runbook_catalog.py`; stale ownership or verification dates fail the docs lint and block merges.
+
+- `RB-AGENT-ACTIVATION` — Applied AI Engineering (primary), Platform Operations (secondary), verified quarterly.
+- `RB-AGENT-SHADOW` — Platform Operations (primary), Applied AI Engineering (secondary), verified quarterly.
+- `RB-AGENT-TIMEOUT` — Worker Cluster owners, verified monthly.
+
+### Langgraph Agents — 8.3.2 Primary runbooks (binding)
+
+**Purpose:** Highlight the runbooks that must exist before activating or modifying agent pipelines. **|**
+**Contract:** Each primary runbook documents trigger conditions, escalation path, mitigation steps, and evidence capture. **|**
+**State:** Markdown sources under `docs/src/ops/runbooks/agents/`; evidence appended to drill log. **|**
+**Failures & handling:** Missing steps or outdated escalations prompt remediation tickets before launch readiness sign-off. **|**
+**Observability:** Ops QA reviews, incident postmortems, and audit sampling confirm runbook quality. **|**
+**Breadcrumbs:** `docs/src/ops/runbooks/agents/agent_activation.md`, `docs/src/ops/runbooks/agents/agent_shadow.md`, `docs/src/ops/runbooks/agents/agent_retry.md`. **|**
+**References:** Ops QA policy, TDD §12 (observability/DR), Worker Cluster spec §3.5.
+
+- Activation rollback: capture commands to revert settings activation, disable pipelines, and restore prior manifests.
+- Shadow divergence: enumerate alert thresholds, disable steps, data capture for analysis, and communications checklist.
+- QA defect surge: describe Guardian quarantine coordination, manual QA staffing, and follow-up tasks.
+
+### Langgraph Agents — 8.3.3 Drill cadence & evidence (normative)
+
+Runbooks schedule drills at least quarterly (shadow divergence) and semi-annually (activation rollback, QA surge). Evidence (metrics screenshots, retrospective notes, sign-offs) lives under `ops/runbooks/evidence/agents/<YYYY>/<MM>/` and is linked from the drill log. Missed drills escalate to the Architecture Steering Committee and must be rescheduled within 30 days.
+
+- Shadow divergence drill (quarterly): simulate model drift, verify rollback, capture divergence metrics screenshot, update drill log.
+- Activation rollback drill (semi-annual): rehearse settings rollback, confirm artifact safety, capture activation manifest diff.
+- QA surge drill (semi-annual): inject synthetic QA defects, validate Guardian quarantine, record staffing adjustments and metrics.
+
 ## Llm Registry — 8.3 Runbooks & drills (binding)
 
 **Purpose:** Keep LLM runbooks actionable and drills on cadence. **|**
@@ -177,7 +221,7 @@
 ### Lp Engine — 8.3.1 Runbook index (informative)
 
 - RB-LPE-COMPILER — Compiler regression / adoption freeze.
-- RB-LPE-OPA-ROLLBACK — OPA bundle rollback & discovery remediation.
+- RB-LPE-OPA-ROLLBACK — OPA Bundle Rollback & discovery remediation.
 - RB-LPE-WAIVER — Waiver expiry response.
 - RB-LPE-LOCALE-GAP — Localization coverage gap.
 
@@ -210,7 +254,7 @@ Post-remediation:
 
 <a id="rb-lpe-opa-rollback"></a>
 
-### Lp Engine — 8.3.3 RB-LPE-OPA-ROLLBACK — OPA bundle rollback (binding)
+### Lp Engine — 8.3.3 RB-LPE-OPA-ROLLBACK — OPA Bundle Rollback (binding)
 
 Response steps:
 
@@ -273,7 +317,7 @@ Post-checks:
 - Log decision record in App.O with locale IDs, remediation timeline, and QA sign-offs.
 - Schedule follow-up audit within one release cycle to verify coverage remains intact.
 
-## Notifications — 8) Operations & runbooks
+## Notifications — 8) Operational Notes
 
 **Purpose:** Maintain resilient notification delivery, provider readiness, and compliance evidence. **|**
 **Contract:** On-call rotations, runbooks, drills, and release workflows must remain current; notification channels pause when health or compliance gates fail until remediation completes. **|**
@@ -386,15 +430,15 @@ ______________________________________________________________________
 
 ### Ref Manager — 8.3.1 Runbook index (informative)
 
-- RB-RM-ROLLBACK — Reference bundle rollback & adoption freeze
-- RB-RM-HARVEST — Source harvest incident triage
+- RB-RM-ROLLBACK — Reference Bundle Rollback & Adoption Freeze
+- RB-RM-HARVEST — Source Harvest Incident Triage
 - RB-RM-PUBLISH — Publish guard failure response
 - RB-RM-LICENSE — License violation remediation
 - RB-RM-RESIDENCY — Residency endpoint alignment
 
 <a id="rb-rm-rollback"></a>
 
-### Ref Manager — 8.3.2 RB-RM-ROLLBACK — Reference bundle rollback & adoption freeze (binding)
+### Ref Manager — 8.3.2 RB-RM-ROLLBACK — Reference Bundle Rollback & Adoption Freeze (binding)
 
 **Purpose:** Restore catalog stability when published bundles must be reverted. **|**
 **Contract:** Rollbacks execute within 15 minutes of decision, capture evidence, and freeze dependent publishes until adoption latency returns to baseline. **|**
@@ -414,7 +458,7 @@ Execution checklist:
 
 <a id="rb-rm-harvest"></a>
 
-### Ref Manager — 8.3.3 RB-RM-HARVEST — Source harvest incident triage (binding)
+### Ref Manager — 8.3.3 RB-RM-HARVEST — Source Harvest Incident Triage (binding)
 
 Response checklist:
 
@@ -646,7 +690,7 @@ Response sequence:
 4. For malware detections, coordinate with Security to analyze samples; maintain quarantine until signatures updated and retest passes.
 5. Once scanners stable, re-enable uploads, replay quarantined items through the pipeline, and attach evidence to the incident record.
 
-## Web App — 8) Operations & runbooks
+## Web App — 8) Operational Notes
 
 **Purpose:** Keep the staff workspace and client portal operationally ready while satisfying security and compliance controls. **|**
 **Contract:** Runbooks, drills, and release workflows must stay current; UI surfaces pause when alert gates or evidence requirements fail. **|**
@@ -749,7 +793,7 @@ Response sequence:
 
 ______________________________________________________________________
 
-## Worker Cluster — 8) Operations & runbooks
+## Worker Cluster — 8) Operational Notes
 
 **Purpose:** Maintain the worker fleet’s readiness, watchdog coverage, and remediation playbooks. **|**
 **Contract:** On-call rotations, runbooks, and drills must remain current; queues pause when automation gates fail until remediation completes. **|**

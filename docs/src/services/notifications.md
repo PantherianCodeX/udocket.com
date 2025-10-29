@@ -53,7 +53,7 @@ header-includes:
 
 ______________________________________________________________________
 
-## Document controls
+## Document Controls
 
 | Field          | Value |
 | -------------- | ----- |
@@ -86,7 +86,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## Reading guide
+## Reading Guide
 
 - **Scope:** Governs outbound communications (email, SMS, phone-adjacent alerts, secure download tokens) and in-app notifications emitted by the uDocket platform. Covers outbox/state machines, provider adapters, webhook ingestion, receipts, audit posture, digest generation, and rate limiting. Portal banners and SSE fan-out ride on the same orchestration, so UI sections reference this specification for delivery guarantees.
 - **Structure:** Sections follow the 0–10 template. Responsibilities (§2) enumerate channels and compliance requirements; APIs (§3) describe outbound queues and webhook callbacks; State management (§4) documents schema, RLS, and secure-view contracts; Failure/Observability (§5–§6) map to alerting; Security & Compliance (§7) captures DMARC/SMS obligations; Operations (§8) links to runbooks/digests; Dependencies, references close the doc.
@@ -202,7 +202,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 3) API contract
+## 3) API Contract
 
 **Purpose:** Document the interfaces used to enqueue outbound messages, fetch receipts, and accept provider callbacks. **|**
 **Contract:** Internal APIs accept authenticated REST requests (OAuth2) with OCC; provider callbacks rely on HMAC-signed webhooks. All endpoints versioned under `/api/v1/notifications/`. **|**
@@ -212,7 +212,7 @@ ______________________________________________________________________
 **Breadcrumbs:** API router `apps/platform/api/notifications.py`, schema `spec/schemas/notification_outbox.schema.json`, tests `tests/platform/api/test_notifications_api.py`. **|**
 **References:** OpenAPI bundle `ops/openapi/uDocket-platform.openapi.yaml`, ADR-0003.
 
-### 3.1 External interfaces
+### 3.1 External Interfaces
 
 - `POST /api/v1/notifications/outbox` — enqueue email/SMS/in-app notifications; requires `Idempotency-Key`. Payload includes `{channel, template_id, locale, recipient, context}`. Responds with `{outbox_id, status}`.
 - `GET /api/v1/notifications/outbox/{id}` — fetch status; includes receipt summary.
@@ -220,7 +220,7 @@ ______________________________________________________________________
 - `POST /api/v1/notifications/download-tokens` — issue signed tokens; returns `{token, expires_at}`. Allowed roles defined in Settings.
 - `POST /api/v1/notifications/inapp` — internal endpoint for agent workers to enqueue in-app notifications with case/job scoping.
 
-### 3.2 Internal interfaces
+### 3.2 Internal Interfaces
 
 - Celery tasks `notifications.dispatch_outbox` and `notifications.generate_digest` run within worker cluster, sized separately from agent queues.
 - SSE publisher `apps/platform/events/notifications.py` broadcasts in-app and portal invalidation events. Channel topics namespaced `notifications.org.{org_id}` and `notifications.case.{case_id}`.
@@ -228,7 +228,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 4) State management
+## 4) State Management
 
 **Purpose:** Describe persistence, retention, and access patterns for notifications artifacts. **|**
 **Contract:** `outbox_delivery`, `delivery_receipt`, and `download_token` enforce OCC, secure views, and residency-friendly partitioning. **|**
@@ -305,7 +305,7 @@ GRANT SELECT ON delivery_receipt_secure TO udocket_app;
 
 ______________________________________________________________________
 
-## 5) Failure modes
+## 5) Failure Modes
 
 **Purpose:** Provide the resilience profile and default mitigations. **|**
 **Contract:** Identify what must fail closed vs. degraded. **|**
@@ -360,7 +360,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 7) Security & compliance
+## 7) Security & Compliance
 
 **Purpose:** Capture authZ/authN, data handling classes, and regulatory duties. **|**
 **Contract:** Define encryption rules, residency bounds, and audit requirements. **|**
@@ -386,7 +386,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 8) Operations & runbooks
+## 8) Operational Notes
 
 **Purpose:** Maintain resilient notification delivery, provider readiness, and compliance evidence. **|**
 **Contract:** On-call rotations, runbooks, drills, and release workflows must remain current; notification channels pause when health or compliance gates fail until remediation completes. **|**
@@ -396,7 +396,7 @@ ______________________________________________________________________
 **Breadcrumbs:** Runbook catalog `docs/src/ops/runbooks/index.md`, drill scheduler `ops/scripts/notifications/schedule_drills.py`, provider automation `ops/scripts/notifications/*.py`. **|**
 **References:** §5 Failure modes, §6 Observability, §7 Security & compliance, Ops governance policy App.N.
 
-### 8.1 Operational posture (binding)
+### 8.1 Operational Posture (binding)
 
 **Purpose:** Capture on-call coverage, freeze windows, and readiness expectations. **|**
 **Contract:** Platform Engineering (queue health) and Operations Engineering (provider integrations) share PagerDuty “Notifications SLO”, staff a 24/7 rotation, and honor change freezes during major provider cutovers. **|**
@@ -406,7 +406,7 @@ ______________________________________________________________________
 **Breadcrumbs:** Roster docs, freeze calendars, App.O escalation notes. **|**
 **References:** Notifications spec §7, `RB-NOTIFY-*`. *
 
-### 8.2 Incident triggers (binding)
+### 8.2 Incident Triggers (binding)
 
 **Purpose:** Map alerts and dashboards to notification runbooks so responders act immediately. **|**
 **Contract:** Alert rules (`infra/monitoring/notifications-prometheus-rules.yaml`) embed `RB-NOTIFY-*` identifiers; evidence logged before closing incidents. **|**
@@ -421,7 +421,7 @@ ______________________________________________________________________
 - `notifications_token_abuse_total` escalates access breaches via `RB-NOTIFY-TOKEN`.
 - `notifications_webhook_signature_fail_total` triggers `RB-NOTIFY-WEBHOOK` for signature rotation and backlog replay.
 
-### 8.3 Runbooks & drills (binding)
+### 8.3 Runbooks & Drills (binding)
 
 **Purpose:** Keep playbooks executable and drills current for core notification scenarios. **|**
 **Contract:** Alerts map to `RB-NOTIFY-*` runbooks; quarterly drills rehearse provider failover, webhook compromise, STOP/HELP compliance surges, and download-token abuse investigations. **|**
@@ -431,7 +431,7 @@ ______________________________________________________________________
 **Breadcrumbs:** Runbook catalog, drill scheduler, Slack `#ops-notifications`. **|**
 **References:** `RB-NOTIFY-OUTAGE`, `RB-NOTIFY-WEBHOOK`, `RB-NOTIFY-SMS`, `RB-NOTIFY-TOKEN`. *
 
-#### 8.3.1 Runbook index (informative)
+#### 8.3.1 Runbook Index (informative)
 
 | Runbook code | Scenario | Notes |
 | ------------ | -------- | ----- |
@@ -440,7 +440,7 @@ ______________________________________________________________________
 | `RB-NOTIFY-SMS` | STOP/HELP surge & regulatory response | Compliance scripts, opt-in reinstatement |
 | `RB-NOTIFY-TOKEN` | Download token abuse or leak | Token rotation, artifact quarantine |
 
-#### 8.3.2 Primary runbooks (binding)
+#### 8.3.2 Primary Runbooks (binding)
 
 **Purpose:** Document operational playbooks responders execute during incidents or exercises. **|**
 **Contract:** Link production alerts to runbook identifiers, outline execution cadence, and name the maintaining team. **|**
@@ -455,13 +455,13 @@ ______________________________________________________________________
 - `RB-NOTIFY-SMS` — Handles STOP/HELP surges, regulator notifications, and opt-in reconciliation.
 - `RB-NOTIFY-TOKEN` — Investigates token abuse, rotates secrets, and quarantines compromised artifacts.
 
-#### 8.3.3 Drill cadence & evidence (binding)
+#### 8.3.3 Drill Cadence & Evidence (binding)
 
 - Quarterly drills cover provider failover, webhook compromise, STOP/HELP surge, and token abuse scenarios with evidence stored in `ops/notifications/drills/<date>/`.
 - Drill scheduler `ops/scripts/notifications/schedule_drills.py` tracks cadence; missed drills block change approvals until evidence uploaded.
 - Docs lint and Ops governance dashboards verify runbook freshness and drill completion ahead of production changes.
 
-### 8.4 Migrations & backfills (normative)
+### 8.4 Migrations & Backfills (normative)
 
 **Purpose:** Govern provider onboarding, template migrations, and DLQ replays. **|**
 **Contract:** Provider credential rotations and template migrations require change tickets, dry-run evidence, and rollback plans; DLQ replays run in preview before promotion. **|**
@@ -471,7 +471,7 @@ ______________________________________________________________________
 **Breadcrumbs:** Migration scripts, template bundles, DLQ tooling. **|**
 **References:** Settings spec §5, Notifications spec §4. *
 
-### 8.5 Operational workflows (normative)
+### 8.5 Operational Workflows (normative)
 
 **Purpose:** Document recurring tasks that sustain notification compliance and quality. **|**
 **Contract:** Teams review DMARC/SPF attestations quarterly, refresh STOP/HELP evidence, generate weekly residency digests, and audit digest accuracy before distribution. **|**
