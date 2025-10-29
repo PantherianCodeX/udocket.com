@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-import sys
 
 import pytest
 
@@ -130,10 +129,3 @@ def test_main_flags_stale(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsy
     captured = capsys.readouterr()
     assert rc == 1
     assert "stale" in captured.err
-
-
-def test_ensure_root_on_path_invoked(monkeypatch: pytest.MonkeyPatch) -> None:
-    path = str(bdi.ROOT_DIR)
-    monkeypatch.setattr(sys, "path", [path, "other"])
-    bdi._ensure_root_on_path()
-    assert sys.path[0] == path

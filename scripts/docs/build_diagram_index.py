@@ -12,17 +12,7 @@ from typing import Dict, Sequence
 import re
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-ROOT_DIR = SCRIPT_DIR.parent.parent
-
-ROOT_PATH = str(ROOT_DIR)
-
-
-def _ensure_root_on_path() -> None:
-    if ROOT_PATH not in sys.path:
-        sys.path.insert(0, ROOT_PATH)
-
-
-_ensure_root_on_path()
+ROOT_PATH = str(SCRIPT_DIR.parent.parent)
 
 from scripts.docs import doc_utils  # type: ignore  # noqa: E402
 
