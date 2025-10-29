@@ -64,6 +64,8 @@ nav:
 - PRD:
   - Overview: overview/prd/index.md
   - Product Requirements: overview/prd.md
+- Apps:
+  - Web App: apps/web-app.md
 - Services:
   - Worker Cluster: services/worker-cluster.md
   - LangGraph Agents: services/langgraph-agents.md
@@ -74,8 +76,6 @@ nav:
   - Reference Manager: services/ref-manager.md
   - LLM Registry: services/llm-registry.md
   - Notifications: services/notifications.md
-- Apps:
-  - Web App: apps/web-app.md
 - Ops:
   - Runbooks: ops/runbooks/index.md
 - ADR:

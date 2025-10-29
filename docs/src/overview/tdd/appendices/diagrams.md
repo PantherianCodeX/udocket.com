@@ -1,4 +1,42 @@
-# Diagrams Index
+---
+title: "uDocket — TDD Appendix: Diagrams Index"
+subtitle: "Canonical diagram ownership reference"
+authors:
+  - "Platform Documentation Team"
+version: "0.1-draft"
+status: implementable
+classification: Confidential
+last_updated: "2025-10-29"
+owners:
+  - "Platform Documentation Team"
+reviewers:
+  - "Platform Architecture"
+approvers:
+  - "Architecture Steering Committee"
+approved_by:
+approved_date:
+---
+
+______________________________________________________________________
+
+## Document Controls
+
+| Field | Value |
+| ----- | ----- |
+| Authors | Platform Documentation Team |
+| Version | 0.1-draft |
+| Status | implementable |
+| Classification | Confidential |
+| Last updated | 2025-10-29 |
+| Owners | Platform Documentation Team |
+| Reviewers | Platform Architecture |
+| Approvers | Architecture Steering Committee |
+| Approved by |  |
+| Approved date |  |
+
+______________________________________________________________________
+
+## Overview
 
 Purpose: Canonical index of platform diagrams and where to find their owner documents. Sources live next to their owner docs under a local `diagrams/` folder. Cross‑cutting visuals are owned by the TDD overview and live under `overview/tdd/diagrams/`.
 

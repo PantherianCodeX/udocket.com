@@ -76,6 +76,10 @@ def build_tasks(targets: list[Path]) -> list[Task]:
             cmd=[py, str(ROOT / "scripts" / "docs" / "check_structure.py"), str(ROOT / "docs" / "src" / "services")],
         ),
         Task(
+            name="check_appendices.py",
+            cmd=[py, str(ROOT / "scripts" / "docs" / "check_appendices.py")],
+        ),
+        Task(
             name="markdownlint docs/src",
             cmd=[
                 "npx",

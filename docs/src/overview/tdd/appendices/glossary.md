@@ -1,4 +1,42 @@
-# Glossary
+---
+title: "uDocket — TDD Appendix: Glossary"
+subtitle: "Canonical terminology reference"
+authors:
+  - "Platform Documentation Team"
+version: "0.1-draft"
+status: implementable
+classification: Confidential
+last_updated: "2025-10-29"
+owners:
+  - "Platform Documentation Team"
+reviewers:
+  - "Platform Architecture"
+approvers:
+  - "Architecture Steering Committee"
+approved_by:
+approved_date:
+---
+
+______________________________________________________________________
+
+## Document Controls
+
+| Field | Value |
+| ----- | ----- |
+| Authors | Platform Documentation Team |
+| Version | 0.1-draft |
+| Status | implementable |
+| Classification | Confidential |
+| Last updated | 2025-10-29 |
+| Owners | Platform Documentation Team |
+| Reviewers | Platform Architecture |
+| Approvers | Architecture Steering Committee |
+| Approved by |  |
+| Approved date |  |
+
+______________________________________________________________________
+
+## Terms
 
 Authoritative definitions used across TDD, services, and UI. Keep terms concise and stable; link here from specs instead of duplicating definitions.
 

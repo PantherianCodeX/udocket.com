@@ -6,7 +6,7 @@ author:
 version: 0.1-draft
 status: implementable
 classification: Confidential
-last_updated: 2025-10-23
+last_updated: 2025-10-29
 owners:
   - Platform Engineering
   - Operations Engineering
@@ -61,7 +61,7 @@ ______________________________________________________________________
 | Version | 0.1-draft |
 | Status | implementable |
 | Classification | Confidential |
-| Last updated | 2025-10-23 |
+| Last updated | 2025-10-29 |
 | Owners | Platform Engineering; Operations Engineering |
 | Reviewers | Compliance Lead; SRE Manager |
 | Approvers | Architecture Steering Committee; Security Review Board |

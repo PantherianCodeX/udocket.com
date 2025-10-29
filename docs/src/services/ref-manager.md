@@ -7,7 +7,7 @@ author:
 version: 0.1-draft
 status: implementable
 classification: Confidential
-last_updated: 2025-10-28
+last_updated: 2025-10-29
 owners:
   - Platform Architecture
   - Security Engineering
@@ -60,7 +60,7 @@ ______________________________________________________________________
 | Version | 0.1-draft |
 | Status | implementable |
 | Classification | Confidential |
-| Last updated | 2025-10-28 |
+| Last updated | 2025-10-29 |
 | Owners | Platform Architecture; Security Engineering; Reference Programs |
 | Reviewers | QA Engineering Lead; SRE Manager |
 | Approvers | Architecture Steering Committee; Security Review Board |

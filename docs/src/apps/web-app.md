@@ -6,7 +6,7 @@ author:
 version: 0.1-draft
 status: implementable
 classification: Confidential
-last_updated: 2025-10-23
+last_updated: 2025-10-29
 owners:
   - Platform Engineering
   - Product Management
@@ -62,7 +62,7 @@ ______________________________________________________________________
 | Version | 0.1-draft |
 | Status | implementable |
 | Classification | Confidential |
-| Last updated | 2025-10-23 |
+| Last updated | 2025-10-29 |
 | Owners | Platform Engineering; Product Management |
 | Reviewers | Accessibility Program Lead; Operations Engineering |
 | Approvers | Architecture Steering Committee; Security Review Board |
