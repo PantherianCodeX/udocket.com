@@ -24,9 +24,9 @@ from collections import OrderedDict
 from typing import Dict, Iterable, Iterator, List, Tuple
 
 try:
-    import yaml  # type: ignore
+    import yaml
 except ImportError:  # pragma: no cover - optional dependency warning
-    yaml = None  # type: ignore
+    yaml = None
 
 FIELD_MAPPINGS: List[Tuple[str, str]] = [
     ("Authors", "author"),

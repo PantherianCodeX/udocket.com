@@ -1,13 +1,25 @@
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
+import sys
 
 import pytest
 
+from scripts.docs import check_structure as cs
 from scripts.docs.check_structure import (
+    SectionSpec,
     build_template_spec,
     check_document_controls,
+    extract_numbering,
+    gather_preamble,
+    main as cs_main,
+    parse_args as cs_parse_args,
+    parse_front_matter,
+    parse_sections,
+    _stringify,
     validate_sections,
+    walk_targets,
 )
 
 
@@ -43,6 +55,153 @@ def _write(path: Path, content: str) -> Path:
 @pytest.fixture()
 def template_path(tmp_path: Path) -> Path:
     return _write(tmp_path / "_template.md", TEMPLATE_CONTENT)
+
+def test_parse_args_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cs.sys, "argv", ["check_structure.py"])
+
+    args = cs_parse_args()
+
+    assert args.paths == [Path("docs/src/services")]
+    assert args.template is None
+
+
+def test_find_template_override_missing(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError):
+        cs.find_template(tmp_path, tmp_path / "missing.md")
+
+
+def test_extract_numbering_variants() -> None:
+    assert extract_numbering("1) Heading") == (1,)
+    assert extract_numbering("2.3 Title") == (2, 3)
+    assert extract_numbering("Heading") is None
+
+
+def test_parse_sections_and_preamble_normalisation() -> None:
+    markdown = """## 1) Section
+**failure mode & handling:** Example **|**
+Paragraph text.
+
+## Heading
+"""
+    sections = parse_sections(markdown)
+    assert sections == [((1,), 2, "1) Section", 1)]
+    lines = markdown.splitlines()
+    entries = gather_preamble(lines, 1)
+    assert entries[0][1] == "Failures & handling"
+
+
+def test_parse_front_matter_invalid_yaml(monkeypatch: pytest.MonkeyPatch) -> None:
+    lines = ["---", "key: [", "---"]
+    monkeypatch.setitem(sys.modules, "yaml", __import__("yaml"))
+
+    assert parse_front_matter(lines) == {}
+
+
+def test_stringify_handles_structured_values(monkeypatch: pytest.MonkeyPatch) -> None:
+    yaml = __import__("yaml")
+    monkeypatch.setitem(sys.modules, "yaml", yaml)
+
+    result = _stringify({"a": 1, "b": 2})
+
+    assert "a: 1" in result
+    assert "; " in result
+
+
+def test_walk_targets_skips_missing(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    missing = tmp_path / "missing"
+
+    targets = list(walk_targets([missing]))
+
+    assert targets == []
+    assert "does not exist" in capsys.readouterr().err
+
+
+def _write_service_doc(path: Path) -> Path:
+    content = """---
+author: Alice
+version: 1.0
+status: draft
+classification: Internal
+last_updated: 2025-01-01
+owners:
+  - Team
+reviewers:
+  - Rev
+approvers:
+  - Approver
+---
+
+## Document Controls
+
+| Field | Value |
+| ----- | ----- |
+| Authors | Alice |
+| Version | 1.0 |
+| Status | draft |
+| Classification | Internal |
+| Last updated | 2025-01-01 |
+| Owners | Team |
+| Reviewers | Rev |
+| Approvers | Approver |
+| Approved by |  |
+| Approved date |  |
+
+## 1) Purpose
+**Purpose:** Template **|**
+**Contract:** Template **|**
+**State:** Template **|**
+**Failures & handling:** Template **|**
+**Observability:** Template **|**
+**Breadcrumbs:** Template **|**
+**References:** Template **|**
+
+## 2) Responsibilities
+**Purpose:** Template **|**
+**Contract:** Template **|**
+**State:** Template **|**
+**Failures & handling:** Template **|**
+**Observability:** Template **|**
+**Breadcrumbs:** Template **|**
+**References:** Template **|**
+
+## 3) Extras
+Body text.
+"""
+    path.write_text(content, encoding="utf-8")
+    return path
+
+
+def test_main_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    services = tmp_path / "docs" / "src" / "services"
+    services.mkdir(parents=True)
+    template = services / "_template.md"
+    template.write_text(TEMPLATE_CONTENT, encoding="utf-8")
+    doc = _write_service_doc(services / "service.md")
+
+    monkeypatch.setattr(cs, "parse_args", lambda: argparse.Namespace(paths=[doc], template=None))
+
+    rc = cs_main()
+
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert "All service specifications comply" in captured.out
+
+
+def test_main_reports_issues(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    services = tmp_path / "docs" / "src" / "services"
+    services.mkdir(parents=True)
+    template = services / "_template.md"
+    template.write_text(TEMPLATE_CONTENT, encoding="utf-8")
+    doc = services / "service.md"
+    doc.write_text("---\n---\n\n## Document Controls\n| Field | Value |\n| ----- | ----- |\n", encoding="utf-8")
+
+    monkeypatch.setattr(cs, "parse_args", lambda: argparse.Namespace(paths=[services], template=None))
+
+    rc = cs_main()
+
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert "document controls table incomplete" in captured.out
 
 
 def test_heading_mismatch_detected(tmp_path: Path, template_path: Path) -> None:
