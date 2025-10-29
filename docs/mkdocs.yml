@@ -7,41 +7,50 @@ use_directory_urls: false
 theme:
   name: material
   features:
-    - navigation.sections
-    - content.code.copy
+  - navigation.sections
+  - content.code.copy
 
 markdown_extensions:
-  - admonition
-  - footnotes
-  - toc:
-      permalink: true
-  - pymdownx.details
-  - pymdownx.highlight
-  - pymdownx.superfences:
-      custom_fences:
-        - name: mermaid
-          class: mermaid
-          format: pymdownx.superfences.fence_div_format
-  - pymdownx.tabbed
-  - attr_list
+- admonition
+- footnotes
+- toc:
+    permalink: true
+- pymdownx.details
+- pymdownx.highlight
+- pymdownx.superfences:
+    custom_fences:
+    - name: mermaid
+      class: mermaid
+      format: pymdownx.superfences.fence_div_format
+- pymdownx.tabbed
+- attr_list
 
 plugins:
-  - search
-  - tags
-  - redirects
-  - auto-image-scale:
-      scale_attr: "data-scale"
-      class_map:
-        img--half: 0.5
-      strict_missing: false
-      default_scale: 0.5
+- search
+- tags
+- redirects
+- auto-image-scale:
+    scale_attr: data-scale
+    class_map:
+      img--half: 0.5
+    strict_missing: false
+    default_scale: 0.7
+- glightbox:
+    width: 95vw
+    height: 90vh
+    zoomable: true
+    draggable: false
+    effect: none
+    slide_effect: none
 
 extra_css:
-  - assets/stylesheets/diagrams.css
+- assets/stylesheets/diagrams.css
 
 extra_javascript:
-  - https://unpkg.com/mermaid@10/dist/mermaid.min.js
-  - js/mermaid-init.js
+- https://unpkg.com/mermaid@10/dist/mermaid.min.js
+- js/mermaid-init.js
+- assets/javascripts/vendor/panzoom.min.js
+- assets/javascripts/glightbox-panzoom.js
 
 nav:
 - Overview: index.md

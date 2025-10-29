@@ -4,6 +4,7 @@ mdformat-frontmatter==0.4.1
 mkdocs==1.6.1
 mkdocs-material==9.5.44
 mkdocs-redirects==1.2.1
+mkdocs-glightbox==0.5.2
 beautifulsoup4==4.12.3
 pillow==10.4.0
 -e ./plugins/auto_image_scale

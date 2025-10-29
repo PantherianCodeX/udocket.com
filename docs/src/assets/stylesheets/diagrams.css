@@ -1,0 +1,58 @@
+:root {
+  --diagram-scale-factor: 1;
+}
+
+.md-typeset figure.full-width-diagram {
+  display: block;
+  margin: 3rem auto;
+  text-align: center;
+}
+
+.md-typeset figure.full-width-diagram > a {
+  display: inline-block;
+  max-width: 100%;
+}
+
+.md-typeset figure.full-width-diagram img.diagram {
+  display: block;
+  margin: 0 auto;
+  height: auto;
+  max-width: 100%;
+}
+
+.md-typeset figure.full-width-diagram figcaption {
+  display: block;
+  margin-top: 0.8rem;
+  font-size: 0.9em;
+  color: var(--md-typeset-color);
+}
+
+.glightbox-container .gslide {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto !important;
+}
+
+.glightbox-container .gslide-content,
+.glightbox-container .gslide-media,
+.glightbox-container .gslide-image {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.glightbox-container .gslide-image img {
+  width: auto;
+  height: auto;
+  max-width: 95vw;
+  max-height: 90vh;
+  object-fit: contain !important;
+  cursor: grab;
+  touch-action: none;
+}
+
+.glightbox-container .gslide-image img.is-panning {
+  cursor: grabbing;
+}
