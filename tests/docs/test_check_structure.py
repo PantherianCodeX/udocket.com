@@ -7,6 +7,7 @@ import sys
 import pytest
 
 from scripts.docs import check_structure as cs
+from scripts.docs import doc_utils
 from scripts.docs.check_structure import (
     SectionSpec,
     build_template_spec,
@@ -15,9 +16,7 @@ from scripts.docs.check_structure import (
     gather_preamble,
     main as cs_main,
     parse_args as cs_parse_args,
-    parse_front_matter,
     parse_sections,
-    _stringify,
     validate_sections,
     walk_targets,
 )
@@ -94,14 +93,15 @@ def test_parse_front_matter_invalid_yaml(monkeypatch: pytest.MonkeyPatch) -> Non
     lines = ["---", "key: [", "---"]
     monkeypatch.setitem(sys.modules, "yaml", __import__("yaml"))
 
-    assert parse_front_matter(lines) == {}
+    with pytest.raises(Exception):
+        doc_utils.parse_front_matter(lines)
 
 
 def test_stringify_handles_structured_values(monkeypatch: pytest.MonkeyPatch) -> None:
     yaml = __import__("yaml")
     monkeypatch.setitem(sys.modules, "yaml", yaml)
 
-    result = _stringify({"a": 1, "b": 2})
+    result = doc_utils.stringify({"a": 1, "b": 2})
 
     assert "a: 1" in result
     assert "; " in result

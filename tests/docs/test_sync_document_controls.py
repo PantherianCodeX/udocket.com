@@ -5,12 +5,12 @@ from pathlib import Path
 
 import pytest
 
+from scripts.docs import doc_utils
 from scripts.docs import sync_document_controls as sdc
 from scripts.docs.sync_document_controls import (
     OPTIONAL_FIELDS,
     collect_targets,
     parse_args,
-    parse_front_matter,
     sync_file,
 )
 
@@ -101,9 +101,9 @@ def test_collect_targets_handles_dirs(tmp_path: Path) -> None:
 
 
 def test_parse_front_matter_handles_missing_yaml(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sdc, "yaml", None)
+    monkeypatch.setattr(doc_utils, "yaml", None)
 
-    assert parse_front_matter(["---", "key: value", "---"]) == {}
+    assert doc_utils.parse_front_matter(["---", "key: value", "---"]) == {}
 
 
 def test_sync_updates_document_controls(tmp_path: Path) -> None:
@@ -304,7 +304,7 @@ def test_main_aborts_without_yaml(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
     doc = _write_doc(tmp_path)
     monkeypatch.setattr(sdc, "parse_args", lambda: argparse.Namespace(paths=[doc]))
     monkeypatch.setattr(sdc, "collect_targets", lambda paths: iter([doc]))
-    monkeypatch.setattr(sdc, "yaml", None)
+    monkeypatch.setattr(doc_utils, "yaml", None)
 
     rc = sdc.main()
 

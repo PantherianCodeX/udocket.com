@@ -56,6 +56,7 @@ def test_build_tasks_contains_expected_entries(monkeypatch: pytest.MonkeyPatch) 
 
     names = [task.name for task in tasks]
     assert "build_runbook_catalog.py --check" in names
+    assert "build_diagram_index.py --check" in names
     assert any(task.env and task.env.get("STRICT_DOCS") == "1" for task in tasks)
 
 

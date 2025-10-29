@@ -9,6 +9,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Sequence
+import re
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 ROOT_DIR = SCRIPT_DIR.parent.parent
@@ -73,6 +74,16 @@ def determine_owner(path: Path) -> Path | None:
     return None
 
 
+def derive_version(metadata: Dict[str, str], stem: str) -> str:
+    version = metadata.get("version", "")
+    if version:
+        return version
+    match = re.search(r"(?:^|[-_])v(\d+)$", stem.lower())
+    if match:
+        return f"v{match.group(1)}"
+    return ""
+
+
 def collect_diagrams() -> Dict[Path | None, list[Diagram]]:
     diagrams: Dict[Path | None, list[Diagram]] = {}
     for path in sorted(SRC_DIR.rglob("*.mmd")):
@@ -84,7 +95,7 @@ def collect_diagrams() -> Dict[Path | None, list[Diagram]]:
 
         metadata = parse_metadata(path)
         slug = metadata.get("id") or path.stem
-        version = metadata.get("version", "")
+        version = derive_version(metadata, path.stem)
         owner_doc = determine_owner(path)
         source_rel = rel
         svg_rel = Path("build/mermaid").joinpath(rel).with_suffix(".svg")
@@ -139,7 +150,8 @@ def render_table_row(diagram: Diagram) -> str:
     thumb_html = (
         f'<a class="glightbox" href="{svg_link}" data-type="image">'
         f'<img src="{svg_link}" alt="{diagram.slug} diagram" '
-        'style="max-width: 200px; border: 1px solid #d0d0d0; border-radius: 4px;"></a>'
+        'style="max-height: 160px; max-width: 200px; width: auto; height: auto; '
+        'border: 1px solid #d0d0d0; border-radius: 4px; vertical-align: middle;"></a>'
     )
     return (
         f"| `{diagram.slug}` | {version} | "
@@ -173,23 +185,12 @@ def render_groups(groups: Sequence[OwnerGroup]) -> str:
     return "\n".join(lines)
 
 
-def replace_section(original: str, generated: str) -> str:
-    if BEGIN_MARKER not in original or END_MARKER not in original:
-        raise RuntimeError(
-            f"Expected markers '{BEGIN_MARKER}' and '{END_MARKER}' in {APPENDIX_FILE}"
-        )
-    before, remainder = original.split(BEGIN_MARKER, 1)
-    _, after = remainder.split(END_MARKER, 1)
-    new_middle = f"{BEGIN_MARKER}\n{generated.strip()}\n{END_MARKER}"
-    return f"{before}{new_middle}{after}"
-
-
 def build_content() -> str:
     diagrams = collect_diagrams()
     groups = build_groups(diagrams)
     appendix_text = APPENDIX_FILE.read_text(encoding="utf-8")
     generated = render_groups(groups)
-    return replace_section(appendix_text, generated)
+    return doc_utils.replace_marked_section(appendix_text, BEGIN_MARKER, END_MARKER, generated)
 
 
 def main(argv: Sequence[str] | None = None) -> int:

@@ -20,6 +20,13 @@ TITLE_CLEAN_REPLACEMENTS = [
 ]
 
 
+def slugify(text: str) -> str:
+    """Return a URL-safe slug derived from *text*."""
+
+    slug = re.sub(r"[^a-z0-9]+", "-", text.lower())
+    return slug.strip("-")
+
+
 def read_markdown_lines(path: Path) -> list[str]:
     """Return the contents of *path* as a list of lines."""
 
@@ -87,3 +94,15 @@ def derive_doc_label(title: str, *, fallback: str) -> str:
     if not cleaned or cleaned.lower() in {"document"}:
         cleaned = baseline
     return cleaned or fallback
+
+
+def replace_marked_section(original: str, begin: str, end: str, replacement: str) -> str:
+    """Replace the content enclosed by *begin* and *end* markers in *original*."""
+
+    if begin not in original or end not in original:
+        raise RuntimeError(f"Expected markers '{begin}' and '{end}' to be present")
+
+    before, remainder = original.split(begin, 1)
+    _, after = remainder.split(end, 1)
+    body = replacement.strip()
+    return f"{before}{begin}\n{body}\n{end}{after}"

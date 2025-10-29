@@ -29,6 +29,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+ROOT_DIR = SCRIPT_DIR.parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.append(str(ROOT_DIR))
+
+from scripts.docs import doc_utils  # type: ignore  # noqa: E402
+
 TEMPLATE_NAME = "_template.md"
 HEADING_RE = re.compile(r"^(#{2,6})\s+(.*)")
 PREAMBLE_RE = re.compile(r"^\*\*(.+?):\*\*\s*(.*)$")
@@ -189,54 +196,12 @@ def walk_targets(paths: Iterable[Path]) -> Iterator[Path]:
             if resolved.name != TEMPLATE_NAME and resolved not in seen:
                 seen.add(resolved)
                 yield resolved
-
-
-def parse_front_matter(lines: Sequence[str]) -> Dict[str, Any]:
-    if not lines or lines[0].strip() != "---":
-        return {}
-    fm_lines: List[str] = []
-    for line in lines[1:]:
-        if line.strip() == "---":
-            break
-        fm_lines.append(line)
-    if not fm_lines:
-        return {}
-    try:
-        import yaml
-    except ImportError:
-        return {}
-    try:
-        return yaml.safe_load("\n".join(fm_lines)) or {}
-    except Exception:
-        return {}
-
-
-def _stringify(value: Any) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, bytes):
-        return value.decode().strip()
-    if isinstance(value, str):
-        return value.strip()
-    if isinstance(value, list):
-        return "; ".join(_stringify(item) for item in value if _stringify(item))
-    if isinstance(value, dict):
-        try:
-            import yaml
-
-            dumped = yaml.safe_dump(value, sort_keys=True).strip()
-            return dumped.replace("\n", "; ")
-        except Exception:
-            return str(value)
-    return str(value).strip()
-
-
 def _expected_control_fields(front_matter: Dict[str, Any]) -> Tuple["OrderedDict[str, str]", "OrderedDict[str, str]"]:
     base: "OrderedDict[str, str]" = OrderedDict()
     for label, key in FIELD_MAPPINGS:
-        base[label] = _stringify(front_matter.get(key, ""))
-    base["Approved by"] = _stringify(front_matter.get("approved_by", ""))
-    base["Approved date"] = _stringify(front_matter.get("approved_date", ""))
+        base[label] = doc_utils.stringify(front_matter.get(key, ""))
+    base["Approved by"] = doc_utils.stringify(front_matter.get("approved_by", ""))
+    base["Approved date"] = doc_utils.stringify(front_matter.get("approved_date", ""))
 
     base_keys = {key for _, key in FIELD_MAPPINGS}
     base_keys.update({"approved_by", "approved_date"})
@@ -245,13 +210,13 @@ def _expected_control_fields(front_matter: Dict[str, Any]) -> Tuple["OrderedDict
         if key in base_keys or key in EXCLUDED_FRONT_MATTER_KEYS:
             continue
         label = key.replace("_", " ").replace("-", " ").title()
-        additional[label] = _stringify(value)
+        additional[label] = doc_utils.stringify(value)
     return base, additional
 
 
 def check_document_controls(path: Path, lines: Sequence[str]) -> List[str]:
     errors: List[str] = []
-    front_matter = parse_front_matter(lines)
+    front_matter = doc_utils.parse_front_matter(lines)
     try:
         header_idx = next(i for i, line in enumerate(lines) if line.strip().lower() == DOCUMENT_CONTROLS_HEADER.lower())
     except StopIteration:
@@ -292,7 +257,7 @@ def check_document_controls(path: Path, lines: Sequence[str]) -> List[str]:
             errors.append(f"{path}: document controls missing field '{field}'")
     if front_matter:
         for label, key in FIELD_MAPPINGS:
-            if not _stringify(front_matter.get(key, "")).strip():
+            if not doc_utils.stringify(front_matter.get(key, "")).strip():
                 errors.append(f"{path}: front matter missing '{label}' value")
     for field, expected in additional_fields.items():
         if expected.strip() and field not in fields_present:

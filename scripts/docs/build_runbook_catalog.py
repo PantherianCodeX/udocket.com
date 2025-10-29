@@ -34,11 +34,6 @@ class Heading:
     slug: str
 
 
-def slugify(text: str) -> str:
-    slug = re.sub(r"[^a-z0-9]+", "-", text.lower())
-    return slug.strip("-")
-
-
 def iter_source_files() -> Iterable[Path]:
     """Yield component documentation files that may contain runbook sections."""
 
@@ -127,7 +122,7 @@ def transform_section(section: list[str], label: str, path: Path) -> tuple[list[
             output.append(f"{'#' * normalized_level} {prefixed_text}")
             pending_blank_after_heading = True
             headings.append(
-                Heading(level=normalized_level, text=prefixed_text, slug=slugify(prefixed_text))
+                Heading(level=normalized_level, text=prefixed_text, slug=doc_utils.slugify(prefixed_text))
             )
         else:
             if pending_blank_after_heading:
