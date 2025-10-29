@@ -181,19 +181,10 @@
       img.addEventListener('dblclick', function (event) {
         event.preventDefault();
         event.stopPropagation();
-        var rect = img.getBoundingClientRect();
-        var scale = panzoom.getScale();
-        var targetScale;
-        if ((event.ctrlKey || event.metaKey) && scale > 1.01) {
-          targetScale = 1;
-        } else if (scale < 1.01) {
-          targetScale = Math.min(MAX_SCALE, 2);
-        } else if (scale >= MAX_SCALE - 0.01) {
-          targetScale = MAX_SCALE;
-        } else {
-          targetScale = Math.min(MAX_SCALE, scale * 1.5);
-        }
-        panzoom.zoom(targetScale, { animate: true, focal: { clientX: event.clientX - rect.left, clientY: event.clientY - rect.top } });
+        panzoom.reset({ animate: true });
+        updateStageSize(1);
+        applyBaseSize();
+        root.classList.remove('glb-zoomed');
         updateZoomed();
       });
 
