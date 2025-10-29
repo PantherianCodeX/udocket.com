@@ -1,4 +1,4 @@
-# ADR-0003 — Public API versioning & sunset policy
+# ADR-0002 — Public API versioning & sunset policy
 
 - **Status:** Accepted
 - **Date:** 2025-04-02

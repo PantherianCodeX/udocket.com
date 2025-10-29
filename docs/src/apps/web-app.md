@@ -7,6 +7,7 @@ version: 0.1-draft
 status: implementable
 classification: Confidential
 last_updated: 2025-10-29
+updated_by: Documentation Team
 owners:
   - Platform Engineering
   - Product Management
@@ -16,11 +17,8 @@ approvers:
 reviewers:
   - Accessibility Program Lead
   - Operations Engineering
-adr_index: docs/adr/README.md
-related_adrs:
-  - ADR-0001-guardian-ready-quarantine.md
-  - ADR-0003-api-versioning-and-sunset.md
-  - ADR-0004-localization-and-policy-engine.md
+approved_by: 
+approved_date: 
 header-includes:
   - |
     <style>
@@ -63,6 +61,7 @@ ______________________________________________________________________
 | Status | implementable |
 | Classification | Confidential |
 | Last updated | 2025-10-29 |
+| Updated by | Documentation Team |
 | Owners | Platform Engineering; Product Management |
 | Reviewers | Accessibility Program Lead; Operations Engineering |
 | Approvers | Architecture Steering Committee; Security Review Board |
@@ -92,7 +91,7 @@ ______________________________________________________________________
 - **Scope:** Describes the staff-facing workspace, reviewer consoles, and the client portal. Covers accessibility, collaboration, security posture, manual/agent edit tooling, conversational assistants, and document assembly flows.
 - **Structure:** Sections follow the standard 0–10 service template. Responsibilities (§2) map to the major UI pillars; APIs (§3) reference capability discovery, SSE topics, and secure download flows; state, failure, observability, and compliance requirements are consolidated in §§4–7.
 - **Maintenance:** Run `python scripts/docs/lint_docs.py docs/src/apps/web-app.md docs/src/overview/tdd.md docs/tdd_modularization.md` before submitting UI changes. Accessibility or localization updates must retain Appendix references and regenerate Vale/axe snapshots where noted.
-- **Change protocol:** UX-affecting PRs update this spec and cite ADR-0003 when API contracts change. Security posture updates (headers, invalidation flows, break-glass) require Security + Architecture approval.
+- **Change protocol:** UX-affecting PRs update this spec and cite ADR-0002 when API contracts change. Security posture updates (headers, invalidation flows, break-glass) require Security + Architecture approval.
 - **References:** TDD §11 summary, Guardian spec §5, Notifications spec §2.6, Settings Registry §5 (UI policy keys), Ops runbooks `RB-PORTAL-INVALIDATION` and `RB-JOB-WATCHDOG`.
 - **Contacts:** Platform Engineering (frontend owners), Product Management (experience roadmap), Accessibility guild, `#web-app` Slack channel, on-call rotation `webapp-oncall@`.
 
@@ -253,7 +252,7 @@ ______________________________________________________________________
 **Failures & handling:** Missing tokens, stale ETags, or scope violations return typed errors (`401`, `403`, `409`) with audit trails. **|**
 **Observability:** API metrics `portal_request_total`, `review_action_total`, `chat_assistant_metadata_requests_total`; SSE schema changes trigger synthetic monitors. **|**
 **Breadcrumbs:** REST controllers `apps/platform/api/*.py`, SSE publishers `apps/platform/events/*.py`, OpenAPI specs `ops/openapi/uDocket-platform.openapi.yaml`, `ops/openapi/chat_assistants.yaml`. **|**
-**References:** Notifications spec (download/token APIs), Guardian spec (approval endpoints), ADR-0003 (versioning policy).
+**References:** Notifications spec (download/token APIs), Guardian spec (approval endpoints), ADR-0002 (versioning policy).
 
 ### 3.1 External Interfaces
 
@@ -402,7 +401,7 @@ ______________________________________________________________________
 **Failures & handling:** Unstaffed shifts or ignored freezes escalate to Product & Security; deployments halted until posture restored. **|**
 **Observability:** PagerDuty metrics, freeze dashboards, alert `webapp_oncall_gap_total`. **|**
 **Breadcrumbs:** Roster files, freeze calendars, App.O decision logs. **|**
-**References:** Notifications spec §7, Settings spec §7. *
+**References:** Notifications spec §7, Settings spec §7.
 
 ### 8.2 Incident Triggers (binding)
 
@@ -412,7 +411,7 @@ ______________________________________________________________________
 **Failures & handling:** Missing annotations or muted alerts require corrective PRs and governance follow-up. **|**
 **Observability:** Dashboards “Operator Workspace”, “Portal Integrity”, Alertmanager routes. **|**
 **Breadcrumbs:** Alert rule files, PagerDuty services, SIEM dashboards. **|**
-**References:** `RB-JOB-WATCHDOG`, `RB-PORTAL-INVALIDATION`, `RB-CHAT-ABUSE`. *
+**References:** `RB-JOB-WATCHDOG`, `RB-PORTAL-INVALIDATION`, `RB-CHAT-ABUSE`.
 
 - `portal_link_invalidated_total` spikes or `portal_download_precondition_total` errors invoke `RB-PORTAL-INVALIDATION`.
 - `sse_connection_drop_total` sustained > threshold drives SSE recovery drills via `RB-JOB-WATCHDOG`.
@@ -427,7 +426,7 @@ ______________________________________________________________________
 **Failures & handling:** Missing drill evidence or outdated steps block release approval until updated. **|**
 **Observability:** Docs lint, drill scheduler reports, governance dashboards. **|**
 **Breadcrumbs:** Runbook catalog, drill scheduler, governance policy App.N. **|**
-**References:** `RB-JOB-WATCHDOG`, `RB-PORTAL-INVALIDATION`, `RB-LPE-LOCALE-GAP`, `RB-NOTIFY-*`, `RB-CHAT-ABUSE`. *
+**References:** `RB-JOB-WATCHDOG`, `RB-PORTAL-INVALIDATION`, `RB-LPE-LOCALE-GAP`, `RB-NOTIFY-*`, `RB-CHAT-ABUSE`.
 
 #### 8.3.1 Runbook Index (informative)
 
@@ -469,7 +468,7 @@ ______________________________________________________________________
 **Failures & handling:** Failed migrations revert to prior asset version; incomplete backfills trigger `RB-PORTAL-INVALIDATION` to prevent stale downloads. **|**
 **Observability:** Metrics `webapp_asset_publish_total`, `webapp_backfill_success_total`. **|**
 **Breadcrumbs:** Asset deployment scripts, CDN manifests, backfill tooling. **|**
-**References:** Settings spec §5, Notifications spec §4. *
+**References:** Settings spec §5, Notifications spec §4.
 
 ### 8.5 Operational Workflows (normative)
 
@@ -479,7 +478,7 @@ ______________________________________________________________________
 **Failures & handling:** Missing audits trigger `RB-PORTAL-INVALIDATION` or `RB-CHAT-ABUSE` follow-up; unresolved accessibility gaps block release. **|**
 **Observability:** Metrics `download_token_validation_total{outcome}`, `chat_sessions_total{audience}`, accessibility CI dashboards. **|**
 **Breadcrumbs:** Token audit scripts `ops/scripts/webapp/audit_tokens.py`, accessibility CI configs, assistant manifest validators. **|**
-**References:** §4 State management, §7 Security & compliance. *
+**References:** §4 State management, §7 Security & compliance.
 
 - Daily token audits reconcile download tokens with Guardian artefact states and revoke stale entries.
 - Weekly assistant manifest reviews ensure disclaimers and policy contexts match Settings snapshots.

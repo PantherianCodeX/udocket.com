@@ -8,6 +8,7 @@ version: 0.1-draft
 status: implementable
 classification: Confidential
 last_updated: 2025-10-29
+updated_by: Documentation Team
 owners:
   - Platform Architecture
   - Security Engineering
@@ -18,10 +19,8 @@ approvers:
 reviewers:
   - QA Engineering Lead
   - SRE Manager
-adr_index: docs/adr/README.md
-related_adrs:
-  - ADR-0003-api-versioning-and-sunset.md
-  - ADR-0004-localization-and-policy-engine.md
+approved_by: 
+approved_date: 
 header-includes:
   - |
     <style>
@@ -65,6 +64,7 @@ ______________________________________________________________________
 | Status | implementable |
 | Classification | Confidential |
 | Last updated | 2025-10-29 |
+| Updated by | Documentation Team |
 | Owners | Platform Architecture; Security Engineering; Settings Program |
 | Reviewers | QA Engineering Lead; SRE Manager |
 | Approvers | Architecture Steering Committee; Security Review Board |
@@ -107,7 +107,7 @@ ______________________________________________________________________
 **Failures & handling:** Validator failures or long-held advisory locks force SR into read-only mode; consumers rely on embedded snapshots until remediation (see §5). **|**
 **Observability:** Availability SLO 99.9%, metrics `settings_request_total`, `settings_error_total`, and `settings_activation_total{result}` feed the “Settings Registry – Availability” dashboard; traces annotate `settings_version` and `activation_id`. **|**
 **Breadcrumbs:** Implementation `apps/platform/settings/service.py::create_app`, Tests `tests/platform/settings/test_charter.py::test_scope_enforced`, Grafana “Settings Registry – Availability”. **|**
-**References:** §2 Responsibilities, §3 API contract, §4 State management, §6 Observability, ADR-0003, ADR-0004. *
+**References:** §2 Responsibilities, §3 API contract, §4 State management, §6 Observability, ADR-0002, ADR-0003.
 
 - SR governs configuration inheritance, residency allowlists, FinOps ceilings, LLM profiles, Guardian/Signer guards, and UI feature flags.
 - Lifecycle changes flow through ADRs; structural edits require dual Architecture/Security approval.
@@ -162,7 +162,7 @@ ______________________________________________________________________
 **Failures & handling:** Invalid overrides, unknown keys, or failed validators reject activations and block dependent workflows until corrected (see §5). **|**
 **Observability:** Scope mix, validation failure, and bundle adoption metrics feed “Settings – Scope Mix” and “Settings – Validation” dashboards. **|**
 **Breadcrumbs:** Models `apps/platform/settings/models.py`, schema `packages/udocket_core/settings/schema.py`, governance services `apps/platform/settings/services/`. **|**
-**References:** §3 API contract, §4 State management, Appendix A, Appendix C. *
+**References:** §3 API contract, §4 State management, Appendix A, Appendix C.
 
 ### 2.1 Hierarchical scopes & precedence (binding)
 
@@ -273,7 +273,7 @@ ______________________________________________________________________
 **Failures & handling:** Signature mismatches, stale caches, or idempotency conflicts return explicit errors and require client remediation. **|**
 **Observability:** “Settings API”, “Settings Client Cache”, and “Settings Auth” dashboards monitor traffic, cache hit ratio, and auth errors. **|**
 **Breadcrumbs:** API implementation `apps/platform/settings/api.py`, client `packages/udocket_core/settings/client.py`, security helpers `apps/platform/settings/security.py`. **|**
-**References:** §2 Responsibilities, §4 State management, Appendix A key catalog. *
+**References:** §2 Responsibilities, §4 State management, Appendix A key catalog.
 
 ### 3.1 External Interfaces (binding)
 
@@ -315,7 +315,7 @@ ______________________________________________________________________
 **Failures & handling:** Validator failures, lock contention, or stale caches halt activations until remediation (see §§4.2–4.5 and §5). **|**
 **Observability:** “Settings Activation”, “Settings Diff”, “Settings Lock”, and “Settings Cache” dashboards track duration, unsafe counts, contention, and invalidation lag. **|**
 **Breadcrumbs:** Activation services `apps/platform/settings/services/`, diff renderer `apps/platform/settings/services/diff.py`, lock manager `apps/platform/settings/services/locks.py`. **|**
-**References:** §2 Responsibilities, §3 API contract, §5 Failure modes, §8.3 Runbooks & drills. *
+**References:** §2 Responsibilities, §3 API contract, §5 Failure modes, §8.3 Runbooks & drills.
 
 ### 4.1 Activation pipeline (binding)
 
@@ -380,7 +380,7 @@ ______________________________________________________________________
 **Failures & handling:** Validator failures, snapshot mismatches, and residency drift each trigger dedicated runbooks detailed below. **|**
 **Observability:** Alerts on `settings_activation_unsafe_total`, `settings_snapshot_mismatch_total`, and `settings_residency_violation_total` page on-call responders. **|**
 **Breadcrumbs:** Incident automation `ops/scripts/guardian/*.py` (shared framework), drift detector `apps/platform/settings/telemetry.py`, residency validators `apps/platform/settings/validators/residency.py`. **|**
-**References:** §4 State management, §6 Observability, §8.3.2 RB-GOV-008 / §8.3.3–§8.3.4 RB-RES-\* / §8.3.5 RB-LOCK-006. *
+**References:** §4 State management, §6 Observability, §8.3.2 RB-GOV-008 / §8.3.3–§8.3.4 RB-RES-\* / §8.3.5 RB-LOCK-006.
 
 ### 5.1 Activation validator failure (binding)
 
@@ -422,7 +422,7 @@ ______________________________________________________________________
 **Failures & handling:** Breaches escalate through Section 5 runbooks (RB-GOV-008, RB-RES-\*, RB-LOCK-006) before activations resume. **|**
 **Observability:** Grafana dashboards “Settings Registry – SLO”, “Settings Cache”, “Settings Drift”, and “Settings Governance” visualize health; Alertmanager routes incidents to Settings on-call. **|**
 **Breadcrumbs:** Dashboards `infra/grafana/settings_*.json`, synthetic config `ops/synthetics/settings_slo.yaml`, telemetry module `apps/platform/settings/telemetry.py`. **|**
-**References:** §1 Purpose, §4 State management, §5 Failure modes, Appendix B metrics, §8.3 Runbooks & drills. *
+**References:** §1 Purpose, §4 State management, §5 Failure modes, Appendix B metrics, §8.3 Runbooks & drills.
 
 ### 6.1 Metrics
 
@@ -474,7 +474,7 @@ ______________________________________________________________________
 **Failures & handling:** Auth violations, residency breaches, or secret exposure escalate through §8.3 Runbooks & drills and Security incident workflows. **|**
 **Observability:** Dashboards “Settings Auth”, “Settings Governance”, and “Residency Compliance” plus audit alerts surface violations. **|**
 **Breadcrumbs:** IAM policies `infra/iam/settings/`, RLS definitions `apps/platform/settings/models.py`, security tests `tests/platform/settings/test_security.py`. **|**
-**References:** §2.4 Residency, §3.3 Authentication, §5 Failure modes, §8.3.3–§8.3.4 RB-RES-\*/RB-GOV-008. *
+**References:** §2.4 Residency, §3.3 Authentication, §5 Failure modes, §8.3.3–§8.3.4 RB-RES-\*/RB-GOV-008.
 
 ### 7.1 Access control & RLS (binding)
 
@@ -528,7 +528,7 @@ ______________________________________________________________________
 **Failures & handling:** Skipping change control or drifting from operational guides increases audit risk; §8.3 runbooks codify the required responses. **|**
 **Observability:** Deployment dashboards, runbook completion checklists, and CI jobs surface operational hygiene. **|**
 **Breadcrumbs:** Deployment scripts `ops/scripts/settings_deploy.py`, CI workflows `.github/workflows/docs-ci.yml`, runbooks `ops/runbooks/settings/`. **|**
-**References:** §4 State management, §5 Failure modes, §8.3 Runbooks & drills, Appendix B alerts. *
+**References:** §4 State management, §5 Failure modes, §8.3 Runbooks & drills, Appendix B alerts.
 
 ### 8.1 Operational Posture (binding)
 
@@ -538,7 +538,7 @@ ______________________________________________________________________
 **Failures & handling:** Missing coverage or ignored freezes trigger management review and corrective actions. **|**
 **Observability:** PagerDuty response metrics, deployment dashboards, and freeze indicators highlight posture drift. **|**
 **Breadcrumbs:** Roster `ops/guardian/roster.yaml`, freeze calendar `ops/settings/freeze_windows.yaml`, workflow `.github/workflows/settings-deploy.yml`. **|**
-**References:** §6 Observability, §8.3 Runbooks & drills, §8.5.1 Release cadence & change control. *
+**References:** §6 Observability, §8.3 Runbooks & drills, §8.5.1 Release cadence & change control.
 
 - Blue/green deploys require active change tickets and explicit freeze acknowledgements; freezes lift only after post-deploy SLO burn remains < 0.5 for two hours.
 - Duty officers escalate to Architecture and Security when governance toggles or residency incidents occur; contact paths live in the roster file.
@@ -552,7 +552,7 @@ ______________________________________________________________________
 **Failures & handling:** Misconfigured alert → runbook mapping or suppressed notifications require Ops sign-off and follow-up tasks. **|**
 **Observability:** Grafana dashboards, Alertmanager routing, and post-incident reviews track trigger efficacy. **|**
 **Breadcrumbs:** Alert configuration `infra/monitoring/settings-prometheus-rules.yaml`, PagerDuty “Settings SLO”, incident templates `ops/settings/incident_template.md`. **|**
-**References:** §5 Failure modes, §8.3 Runbooks & drills, Appendix B metrics. *
+**References:** §5 Failure modes, §8.3 Runbooks & drills, Appendix B metrics.
 
 - `settings_activation_failure_total` and governance toggle alerts invoke RB-SETTINGS-ACTIVATION to validate diffs, roll back, or re-run promotion.
 - `settings_residency_violation_total` and endpoint drift alerts route to RB-RES-ENDPOINT for allowlist reconciliation and cache flush.
@@ -567,7 +567,7 @@ ______________________________________________________________________
 **Failures & handling:** Missing or stale steps block deployment sign-off; responders raise follow-up tasks to refresh runbooks before closing incidents. **|**
 **Observability:** Post-incident retros, quarterly tabletop exercises, and docs lint verify runbook coverage. **|**
 **Breadcrumbs:** Runbooks `ops/runbooks/settings/*.md`, automation scripts under `ops/scripts/settings/`, tests `tests/platform/settings/test_runbook_integrity.py`. **|**
-**References:** §5 Failure modes, §8.1 Operational posture, Appendix B metrics, ADR-0004. *
+**References:** §5 Failure modes, §8.1 Operational posture, Appendix B metrics, ADR-0003.
 
 #### 8.3.1 Runbook Index (informative)
 
@@ -605,7 +605,7 @@ ______________________________________________________________________
 **Failures & handling:** Partial migrations risk drift; responders must execute RB-LOCK-006 or RB-RES-\* before re-opening activations. **|**
 **Observability:** Dashboards “Settings Deployment” and “Residency Compliance” plus CI migration smoke tests confirm success. **|**
 **Breadcrumbs:** Migration scripts `ops/scripts/settings/migrate.py`, backfill tooling `ops/scripts/settings/replay_snapshot.py`, change-control template `ops/settings/migrations/README.md`. **|**
-**References:** §4 State management, §5 Failure modes, ADR-0004, §8.3 Runbooks & drills. *
+**References:** §4 State management, §5 Failure modes, ADR-0003, §8.3 Runbooks & drills.
 
 - Run `ops/scripts/settings/migrate.py --dry-run` before production execution; attach output to the change ticket.
 - Capture bundle digests before/after migration; verify consumers emit `settings.changed` events.
@@ -619,7 +619,7 @@ ______________________________________________________________________
 **Failures & handling:** Missed cadences surface in quarterly audits; owners must backfill evidence and update processes. **|**
 **Observability:** Staffing dashboards, workflow logs, and CI history provide signals. **|**
 **Breadcrumbs:** Workflow docs `ops/settings/workflows/*.md`, automation scripts `scripts/docs/*.py`, staffing roster `ops/guardian/roster.yaml`. **|**
-**References:** §8.3 Runbooks & drills, §6 Observability, Appendix B metrics. *
+**References:** §8.3 Runbooks & drills, §6 Observability, Appendix B metrics.
 
 #### 8.5.1 Release cadence & change control (binding)
 
@@ -651,7 +651,7 @@ ______________________________________________________________________
 **Failures & handling:** Missed invalidations or integration drift trigger Section 5 runbooks (RB-RES-\*, RB-JOB-WATCHDOG) and §8.3.2 RB-GOV-008 coordination. **|**
 **Observability:** Dashboards “Settings Enforcement”, “Settings Integration”, “Portal Settings”, and “Worker Settings” expose adoption health; alerts highlight stale snapshots or misaligned bundles. **|**
 **Breadcrumbs:** Integration services `apps/platform/settings/services/`, worker tasks `apps/platform/operations/tasks.py`, tests `tests/platform/settings/test_enforcement_points.py`, `tests/platform/settings/test_lpe_guardian_bridge.py`. **|**
-**References:** §2 Responsibilities, §3 API contract, §6 Observability, Appendix B metrics. *
+**References:** §2 Responsibilities, §3 API contract, §6 Observability, Appendix B metrics.
 
 ### 9.1 Enforcement touchpoints (binding)
 
@@ -707,7 +707,7 @@ ______________________________________________________________________
 
 ## 10) References (informative)
 
-- ADRs: ADR-0003 API Versioning & Sunset, ADR-0004 Localization & Policy Engine, ADR-0005 OPA Policy Plane. - TDD: TDD §5 Security Architecture, TDD §7 Settings Governance, TDD Appendix H Operational Guides.
+- ADRs: ADR-0002 API Versioning & Sunset, ADR-0003 Localization & Policy Engine, ADR-0004 OPA Policy Plane. - TDD: TDD §5 Security Architecture, TDD §7 Settings Governance, TDD Appendix H Operational Guides.
 - Runbooks: §8.3.2 RB-GOV-008, RB-RES-ENDPOINT, RB-RES-BLOCK, RB-JOB-WATCHDOG, RB-LOCK-006.
 - Diagrams: `docs/src/services/settings/diagrams/*.mmd`, `docs/src/overview/tdd/diagrams/data-lineage-v1.mmd`.
 - Scripts & tooling: `scripts/docs/check_settings_keys.py`, `scripts/sdk/check_openapi_alignment.py`, `ops/scripts/settings_deploy.py`.

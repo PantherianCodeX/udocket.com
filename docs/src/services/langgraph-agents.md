@@ -7,6 +7,7 @@ version: 0.1-draft
 status: implementable
 classification: Confidential
 last_updated: 2025-10-29
+updated_by: Documentation Team
 owners:
   - Platform Architecture
   - Applied AI Engineering
@@ -16,11 +17,8 @@ approvers:
 reviewers:
   - QA Engineering Lead
   - SRE Manager
-adr_index: docs/adr/README.md
-related_adrs:
-  - ADR-0001-guardian-ready-quarantine.md
-  - ADR-0003-api-versioning-and-sunset.md
-  - ADR-0004-localization-and-policy-engine.md
+approved_by: 
+approved_date: 
 header-includes:
   - |
     <style>
@@ -63,6 +61,7 @@ ______________________________________________________________________
 | Status | implementable |
 | Classification | Confidential |
 | Last updated | 2025-10-29 |
+| Updated by | Documentation Team |
 | Owners | Platform Architecture; Applied AI Engineering |
 | Reviewers | QA Engineering Lead; SRE Manager |
 | Approvers | Architecture Steering Committee; Security Review Board |
@@ -430,7 +429,7 @@ ______________________________________________________________________
 - LLM Registry spec §2 (provider selection, residency)
 - Worker Cluster spec §3 (job orchestration)
 - Ops runbooks `RB-AGENT-*`
-- ADR-0004 Localization & Policy Engine, ADR-0001 Guardian READY/QUARANTINED
+- ADR-0003 Localization & Policy Engine, ADR-0001 Guardian READY/QUARANTINED
 
 ______________________________________________________________________
 

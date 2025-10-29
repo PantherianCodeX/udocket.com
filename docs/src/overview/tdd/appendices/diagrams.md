@@ -7,6 +7,7 @@ version: "0.1-draft"
 status: implementable
 classification: Confidential
 last_updated: "2025-10-29"
+updated_by: "Documentation Team"
 owners:
   - "Platform Documentation Team"
 reviewers:
@@ -28,6 +29,7 @@ ______________________________________________________________________
 | Status | implementable |
 | Classification | Confidential |
 | Last updated | 2025-10-29 |
+| Updated by | Documentation Team |
 | Owners | Platform Documentation Team |
 | Reviewers | Platform Architecture |
 | Approvers | Architecture Steering Committee |
@@ -46,13 +48,13 @@ Diagram authoring guidelines live in [Docs: How To](../../../../CONTRIBUTING-doc
 ### [Digital Signer](../../../services/digital-signer.md)
 
 | Diagram | Version | Mermaid source | Rendered SVG | Preview |
-| --- | --- | --- | --- | --- |
+| ------- | ------- | -------------- | ------------ | ------- |
 | `signing-delivery-v1` | v1 | [`services/digital-signer/diagrams/signing-delivery-v1.mmd`](../../../services/digital-signer/diagrams/signing-delivery-v1.mmd) | [`build/mermaid/services/digital-signer/diagrams/signing-delivery-v1.svg`](../../../build/mermaid/services/digital-signer/diagrams/signing-delivery-v1.svg) | <a class="glightbox" href="../../../build/mermaid/services/digital-signer/diagrams/signing-delivery-v1.svg" data-type="image"><img src="../../../build/mermaid/services/digital-signer/diagrams/signing-delivery-v1.svg" alt="signing-delivery-v1 diagram" style="max-height: 160px; max-width: 200px; width: auto; height: auto; border: 1px solid #d0d0d0; border-radius: 4px; vertical-align: middle;"></a> |
 
 ### [Guardian Service](../../../services/guardian.md)
 
 | Diagram | Version | Mermaid source | Rendered SVG | Preview |
-| --- | --- | --- | --- | --- |
+| ------- | ------- | -------------- | ------------ | ------- |
 | `approvals-edit-flows-v1` | v1 | [`services/guardian/diagrams/approvals-edit-flows-v1.mmd`](../../../services/guardian/diagrams/approvals-edit-flows-v1.mmd) | [`build/mermaid/services/guardian/diagrams/approvals-edit-flows-v1.svg`](../../../build/mermaid/services/guardian/diagrams/approvals-edit-flows-v1.svg) | <a class="glightbox" href="../../../build/mermaid/services/guardian/diagrams/approvals-edit-flows-v1.svg" data-type="image"><img src="../../../build/mermaid/services/guardian/diagrams/approvals-edit-flows-v1.svg" alt="approvals-edit-flows-v1 diagram" style="max-height: 160px; max-width: 200px; width: auto; height: auto; border: 1px solid #d0d0d0; border-radius: 4px; vertical-align: middle;"></a> |
 | `approvals-ux-v1` | v1 | [`services/guardian/diagrams/approvals-ux-v1.mmd`](../../../services/guardian/diagrams/approvals-ux-v1.mmd) | [`build/mermaid/services/guardian/diagrams/approvals-ux-v1.svg`](../../../build/mermaid/services/guardian/diagrams/approvals-ux-v1.svg) | <a class="glightbox" href="../../../build/mermaid/services/guardian/diagrams/approvals-ux-v1.svg" data-type="image"><img src="../../../build/mermaid/services/guardian/diagrams/approvals-ux-v1.svg" alt="approvals-ux-v1 diagram" style="max-height: 160px; max-width: 200px; width: auto; height: auto; border: 1px solid #d0d0d0; border-radius: 4px; vertical-align: middle;"></a> |
 | `guardian-class-model-v1` | v1 | [`services/guardian/diagrams/guardian-class-model-v1.mmd`](../../../services/guardian/diagrams/guardian-class-model-v1.mmd) | [`build/mermaid/services/guardian/diagrams/guardian-class-model-v1.svg`](../../../build/mermaid/services/guardian/diagrams/guardian-class-model-v1.svg) | <a class="glightbox" href="../../../build/mermaid/services/guardian/diagrams/guardian-class-model-v1.svg" data-type="image"><img src="../../../build/mermaid/services/guardian/diagrams/guardian-class-model-v1.svg" alt="guardian-class-model-v1 diagram" style="max-height: 160px; max-width: 200px; width: auto; height: auto; border: 1px solid #d0d0d0; border-radius: 4px; vertical-align: middle;"></a> |
@@ -63,14 +65,14 @@ Diagram authoring guidelines live in [Docs: How To](../../../../CONTRIBUTING-doc
 ### [LangGraph Agent Orchestration](../../../services/langgraph-agents.md)
 
 | Diagram | Version | Mermaid source | Rendered SVG | Preview |
-| --- | --- | --- | --- | --- |
+| ------- | ------- | -------------- | ------------ | ------- |
 | `agent-orchestration-classes-v1` | v1 | [`services/langgraph-agents/diagrams/agent-orchestration-classes-v1.mmd`](../../../services/langgraph-agents/diagrams/agent-orchestration-classes-v1.mmd) | [`build/mermaid/services/langgraph-agents/diagrams/agent-orchestration-classes-v1.svg`](../../../build/mermaid/services/langgraph-agents/diagrams/agent-orchestration-classes-v1.svg) | <a class="glightbox" href="../../../build/mermaid/services/langgraph-agents/diagrams/agent-orchestration-classes-v1.svg" data-type="image"><img src="../../../build/mermaid/services/langgraph-agents/diagrams/agent-orchestration-classes-v1.svg" alt="agent-orchestration-classes-v1 diagram" style="max-height: 160px; max-width: 200px; width: auto; height: auto; border: 1px solid #d0d0d0; border-radius: 4px; vertical-align: middle;"></a> |
 | `analyze-compose-v1` | v1 | [`services/langgraph-agents/diagrams/analyze-compose-v1.mmd`](../../../services/langgraph-agents/diagrams/analyze-compose-v1.mmd) | [`build/mermaid/services/langgraph-agents/diagrams/analyze-compose-v1.svg`](../../../build/mermaid/services/langgraph-agents/diagrams/analyze-compose-v1.svg) | <a class="glightbox" href="../../../build/mermaid/services/langgraph-agents/diagrams/analyze-compose-v1.svg" data-type="image"><img src="../../../build/mermaid/services/langgraph-agents/diagrams/analyze-compose-v1.svg" alt="analyze-compose-v1 diagram" style="max-height: 160px; max-width: 200px; width: auto; height: auto; border: 1px solid #d0d0d0; border-radius: 4px; vertical-align: middle;"></a> |
 
 ### [Localization & Policy Engine](../../../services/lp-engine.md)
 
 | Diagram | Version | Mermaid source | Rendered SVG | Preview |
-| --- | --- | --- | --- | --- |
+| ------- | ------- | -------------- | ------------ | ------- |
 | `finops-guard-v1` | v1 | [`services/lp-engine/diagrams/finops-guard-v1.mmd`](../../../services/lp-engine/diagrams/finops-guard-v1.mmd) | [`build/mermaid/services/lp-engine/diagrams/finops-guard-v1.svg`](../../../build/mermaid/services/lp-engine/diagrams/finops-guard-v1.svg) | <a class="glightbox" href="../../../build/mermaid/services/lp-engine/diagrams/finops-guard-v1.svg" data-type="image"><img src="../../../build/mermaid/services/lp-engine/diagrams/finops-guard-v1.svg" alt="finops-guard-v1 diagram" style="max-height: 160px; max-width: 200px; width: auto; height: auto; border: 1px solid #d0d0d0; border-radius: 4px; vertical-align: middle;"></a> |
 | `llm-failover-v1` | v1 | [`services/lp-engine/diagrams/llm-failover-v1.mmd`](../../../services/lp-engine/diagrams/llm-failover-v1.mmd) | [`build/mermaid/services/lp-engine/diagrams/llm-failover-v1.svg`](../../../build/mermaid/services/lp-engine/diagrams/llm-failover-v1.svg) | <a class="glightbox" href="../../../build/mermaid/services/lp-engine/diagrams/llm-failover-v1.svg" data-type="image"><img src="../../../build/mermaid/services/lp-engine/diagrams/llm-failover-v1.svg" alt="llm-failover-v1 diagram" style="max-height: 160px; max-width: 200px; width: auto; height: auto; border: 1px solid #d0d0d0; border-radius: 4px; vertical-align: middle;"></a> |
 | `residency-policy-enforcement-v1` | v1 | [`services/lp-engine/diagrams/residency-policy-enforcement-v1.mmd`](../../../services/lp-engine/diagrams/residency-policy-enforcement-v1.mmd) | [`build/mermaid/services/lp-engine/diagrams/residency-policy-enforcement-v1.svg`](../../../build/mermaid/services/lp-engine/diagrams/residency-policy-enforcement-v1.svg) | <a class="glightbox" href="../../../build/mermaid/services/lp-engine/diagrams/residency-policy-enforcement-v1.svg" data-type="image"><img src="../../../build/mermaid/services/lp-engine/diagrams/residency-policy-enforcement-v1.svg" alt="residency-policy-enforcement-v1 diagram" style="max-height: 160px; max-width: 200px; width: auto; height: auto; border: 1px solid #d0d0d0; border-radius: 4px; vertical-align: middle;"></a> |
@@ -78,14 +80,14 @@ Diagram authoring guidelines live in [Docs: How To](../../../../CONTRIBUTING-doc
 ### [Settings Registry](../../../services/settings.md)
 
 | Diagram | Version | Mermaid source | Rendered SVG | Preview |
-| --- | --- | --- | --- | --- |
+| ------- | ------- | -------------- | ------------ | ------- |
 | `settings-activation-classes-v1` | v1 | [`services/settings/diagrams/settings-activation-classes-v1.mmd`](../../../services/settings/diagrams/settings-activation-classes-v1.mmd) | [`build/mermaid/services/settings/diagrams/settings-activation-classes-v1.svg`](../../../build/mermaid/services/settings/diagrams/settings-activation-classes-v1.svg) | <a class="glightbox" href="../../../build/mermaid/services/settings/diagrams/settings-activation-classes-v1.svg" data-type="image"><img src="../../../build/mermaid/services/settings/diagrams/settings-activation-classes-v1.svg" alt="settings-activation-classes-v1 diagram" style="max-height: 160px; max-width: 200px; width: auto; height: auto; border: 1px solid #d0d0d0; border-radius: 4px; vertical-align: middle;"></a> |
 | `settings-activation-v1` | v1 | [`services/settings/diagrams/settings-activation-v1.mmd`](../../../services/settings/diagrams/settings-activation-v1.mmd) | [`build/mermaid/services/settings/diagrams/settings-activation-v1.svg`](../../../build/mermaid/services/settings/diagrams/settings-activation-v1.svg) | <a class="glightbox" href="../../../build/mermaid/services/settings/diagrams/settings-activation-v1.svg" data-type="image"><img src="../../../build/mermaid/services/settings/diagrams/settings-activation-v1.svg" alt="settings-activation-v1 diagram" style="max-height: 160px; max-width: 200px; width: auto; height: auto; border: 1px solid #d0d0d0; border-radius: 4px; vertical-align: middle;"></a> |
 
 ### [Technical Design Document](../../tdd.md)
 
 | Diagram | Version | Mermaid source | Rendered SVG | Preview |
-| --- | --- | --- | --- | --- |
+| ------- | ------- | -------------- | ------------ | ------- |
 | `artifact-cd-lifecycle-v1` | v1 | [`overview/tdd/diagrams/artifact-cd-lifecycle-v1.mmd`](../diagrams/artifact-cd-lifecycle-v1.mmd) | [`build/mermaid/overview/tdd/diagrams/artifact-cd-lifecycle-v1.svg`](../../../build/mermaid/overview/tdd/diagrams/artifact-cd-lifecycle-v1.svg) | <a class="glightbox" href="../../../build/mermaid/overview/tdd/diagrams/artifact-cd-lifecycle-v1.svg" data-type="image"><img src="../../../build/mermaid/overview/tdd/diagrams/artifact-cd-lifecycle-v1.svg" alt="artifact-cd-lifecycle-v1 diagram" style="max-height: 160px; max-width: 200px; width: auto; height: auto; border: 1px solid #d0d0d0; border-radius: 4px; vertical-align: middle;"></a> |
 | `artifact-lifecycle-overview-v1` | v1 | [`overview/tdd/diagrams/artifact-lifecycle-overview-v1.mmd`](../diagrams/artifact-lifecycle-overview-v1.mmd) | [`build/mermaid/overview/tdd/diagrams/artifact-lifecycle-overview-v1.svg`](../../../build/mermaid/overview/tdd/diagrams/artifact-lifecycle-overview-v1.svg) | <a class="glightbox" href="../../../build/mermaid/overview/tdd/diagrams/artifact-lifecycle-overview-v1.svg" data-type="image"><img src="../../../build/mermaid/overview/tdd/diagrams/artifact-lifecycle-overview-v1.svg" alt="artifact-lifecycle-overview-v1 diagram" style="max-height: 160px; max-width: 200px; width: auto; height: auto; border: 1px solid #d0d0d0; border-radius: 4px; vertical-align: middle;"></a> |
 | `artifact-wp-lifecycle-v1` | v1 | [`overview/tdd/diagrams/artifact-wp-lifecycle-v1.mmd`](../diagrams/artifact-wp-lifecycle-v1.mmd) | [`build/mermaid/overview/tdd/diagrams/artifact-wp-lifecycle-v1.svg`](../../../build/mermaid/overview/tdd/diagrams/artifact-wp-lifecycle-v1.svg) | <a class="glightbox" href="../../../build/mermaid/overview/tdd/diagrams/artifact-wp-lifecycle-v1.svg" data-type="image"><img src="../../../build/mermaid/overview/tdd/diagrams/artifact-wp-lifecycle-v1.svg" alt="artifact-wp-lifecycle-v1 diagram" style="max-height: 160px; max-width: 200px; width: auto; height: auto; border: 1px solid #d0d0d0; border-radius: 4px; vertical-align: middle;"></a> |
@@ -102,6 +104,6 @@ Diagram authoring guidelines live in [Docs: How To](../../../../CONTRIBUTING-doc
 ### [Web Application & Portal](../../../apps/web-app.md)
 
 | Diagram | Version | Mermaid source | Rendered SVG | Preview |
-| --- | --- | --- | --- | --- |
+| ------- | ------- | -------------- | ------------ | ------- |
 | `webapp-interaction-topology` | v1 | [`apps/web-app/diagrams/ui-interaction-topology-v1.mmd`](../../../apps/web-app/diagrams/ui-interaction-topology-v1.mmd) | [`build/mermaid/apps/web-app/diagrams/ui-interaction-topology-v1.svg`](../../../build/mermaid/apps/web-app/diagrams/ui-interaction-topology-v1.svg) | <a class="glightbox" href="../../../build/mermaid/apps/web-app/diagrams/ui-interaction-topology-v1.svg" data-type="image"><img src="../../../build/mermaid/apps/web-app/diagrams/ui-interaction-topology-v1.svg" alt="webapp-interaction-topology diagram" style="max-height: 160px; max-width: 200px; width: auto; height: auto; border: 1px solid #d0d0d0; border-radius: 4px; vertical-align: middle;"></a> |
 <!-- END AUTO-GENERATED DIAGRAM INDEX -->

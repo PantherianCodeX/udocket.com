@@ -8,6 +8,7 @@ version: 0.1-draft
 status: implementable
 classification: Confidential
 last_updated: 2025-10-29
+updated_by: Documentation Team
 owners:
   - Platform Architecture
   - Security Engineering
@@ -18,9 +19,8 @@ approvers:
 reviewers:
   - QA Engineering Lead
   - SRE Manager
-adr_index: docs/adr/README.md
-related_adrs:
-  - ADR-0004-localization-and-policy-engine.md
+approved_by: 
+approved_date: 
 header-includes:
   - |
     <style>
@@ -65,6 +65,7 @@ ______________________________________________________________________
 | Status | implementable |
 | Classification | Confidential |
 | Last updated | 2025-10-29 |
+| Updated by | Documentation Team |
 | Owners | Platform Architecture; Security Engineering; Localization & Policy Program |
 | Reviewers | QA Engineering Lead; SRE Manager |
 | Approvers | Architecture Steering Committee; Security Review Board |
@@ -95,7 +96,7 @@ ______________________________________________________________________
 - **Structure:** Sections follow the standard 0–10 outline; §8 contains the operational posture, alert triggers, runbook summaries, migrations, and workflows that previously lived in Appendix R.
 - **Cross-references:** Use `§<number>` for this document, `TDD §<number>` for the platform TDD, and `App.<letter>` when pointing at shared appendices (for example TDD App.J for FIPS tracing).
 - **Maintenance:** Run `python scripts/docs/lint_docs.py` before submitting edits. Localization and policy schema snippets must match `spec/schemas/*`; CI enforces localization completeness, policy coverage, and decision-log schema validation.
-- **Change protocol:** PRs touching localization packs, residency policies, OPA bundles, or PolicyContext generation must cite this spec and ADR-0004 in the review summary. Architecture + Security approvals are required when SDKs, Settings bundles, or compiler behaviour change.
+- **Change protocol:** PRs touching localization packs, residency policies, OPA bundles, or PolicyContext generation must cite this spec and ADR-0003 in the review summary. Architecture + Security approvals are required when SDKs, Settings bundles, or compiler behaviour change.
 
 ______________________________________________________________________
 
@@ -107,7 +108,7 @@ ______________________________________________________________________
 **Failures & handling:** Compiler regressions, residency drift, or OPA discovery failures freeze bundle promotion until runbooks in §8.3 restore safe posture. **|**
 **Observability:** “LPE – Enforcement & Residency”, “LPE Compiler”, and “Localization QA” dashboards track latency, adoption, and localization completeness; OPA discovery emits decision logs with guaranteed schema. **|**
 **Breadcrumbs:** Service entry `packages/udocket_core/lpe/service.py`, compiler pipeline `packages/udocket_core/lpe/compiler.py`, tests `tests/specs/test_policy_context_contract.py`, observability config `infra/observability/dashboards/lpe.json`. **|**
-**References:** §2 Responsibilities, §4 State management, §8 Operational notes, ADR-0004. *
+**References:** §2 Responsibilities, §4 State management, §8 Operational notes, ADR-0003.
 
 - Runtime availability target: 99.9 % with a 43 minute monthly error budget; compiler jobs P95 ≤ 6 minutes. Burn-rate breaches freeze new bundle activations and OPA discovery pushes until stabilization.
 - Policy artifacts remain hash-stable for identical inputs; `/reference/*` shims stay read-only with RFC 8594 `Sunset`/`Deprecation` headers until §8.4 migration completes.
@@ -115,7 +116,7 @@ ______________________________________________________________________
 - LPE is the single enforcement source for locale packs, residency allowlists, privacy frameworks, masking profiles, disclaimer copy, and logging directives consumed by Guardian, Portal, Settings, Compose/Analyze, and workers.
 - Deterministic `PolicyContext` payloads cover every `(org_id, case_id?, locale, privacy_flags)` tuple; Settings snapshots embed digests so downstream services can prove which context they used.
 - Compiler outputs and localization packs inherit Reference Manager licensing metadata; deployments fail closed if unsigned bundles or stale manifests reach the pipeline.
-- Service lifecycle mirrors ADR-0004 transitions: rename from the legacy Reference Engine completes only after compiler parity, production cutover verification, and documentation updates referenced in §8.4.
+- Service lifecycle mirrors ADR-0003 transitions: rename from the legacy Reference Engine completes only after compiler parity, production cutover verification, and documentation updates referenced in §8.4.
 - Synthetic monitors invoke `GET /api/v1/lpe/policy_context` for HIPAA/PHIPA/PIPA cases after each deploy to validate Guardian and Portal behaviour end-to-end.
 - Synthetic tenant “EU-REFERENCE” exercises EU-only paths quarterly to confirm residency posture across Azure endpoints, storage buckets, vector shards, and TSA integrations.
 
@@ -572,7 +573,7 @@ ______________________________________________________________________
 **Failures & handling:** Missing or stale steps block deploy sign-off until the runbook is refreshed. **|**
 **Observability:** Docs lint validates references; quarterly drill calendar tracks execution. **|**
 **Breadcrumbs:** Runbooks `ops/runbooks/lpe/*.md`, automation `ops/scripts/lpe/*.py`, tests `tests/ops/test_runbook_integrity.py`. **|**
-**References:** §5 Failure modes, §8.1 Operational posture, §6 Observability. *
+**References:** §5 Failure modes, §8.1 Operational posture, §6 Observability.
 
 #### 8.3.1 Runbook Index (informative)
 
@@ -697,5 +698,5 @@ ______________________________________________________________________
 - FIPS tracing for dual-signed policy bundles — TDD App.J.
 - Localization QA evidence templates — `ops/localization/checklists/lpe_release.yaml`.
 - OPA toolkit — `ops/scripts/lpe/deploy_opa_bundle.py`, `scripts/opa/validate_decision_logs.py`.
-- LPE lifecycle ADR — `docs/adr/ADR-0004-localization-and-policy-engine.md`.
+- LPE lifecycle ADR — `docs/adr/ADR-0003-localization-and-policy-engine.md`.
 - Reference migration guide — `https://docs.udocket.io/reference-migration`.

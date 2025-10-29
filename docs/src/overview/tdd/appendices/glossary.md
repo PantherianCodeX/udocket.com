@@ -7,6 +7,7 @@ version: "0.1-draft"
 status: implementable
 classification: Confidential
 last_updated: "2025-10-29"
+updated_by: "Documentation Team"
 owners:
   - "Platform Documentation Team"
 reviewers:
@@ -28,6 +29,7 @@ ______________________________________________________________________
 | Status | implementable |
 | Classification | Confidential |
 | Last updated | 2025-10-29 |
+| Updated by | Documentation Team |
 | Owners | Platform Documentation Team |
 | Reviewers | Platform Architecture |
 | Approvers | Architecture Steering Committee |

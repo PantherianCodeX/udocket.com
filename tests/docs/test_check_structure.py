@@ -12,6 +12,7 @@ from scripts.docs.check_structure import (
     SectionSpec,
     build_template_spec,
     check_document_controls,
+    ensure_template_requirements,
     extract_numbering,
     gather_preamble,
     main as cs_main,
@@ -22,7 +23,42 @@ from scripts.docs.check_structure import (
 )
 
 
-TEMPLATE_CONTENT = """## 1) Purpose
+TEMPLATE_CONTENT = """---
+title: Template
+subtitle: Example Template
+author: Template Author
+version: 0.1
+status: draft
+classification: Internal
+last_updated: 2025-01-01
+updated_by: Template Author
+owners:
+  - Template Team
+reviewers:
+  - Template Reviewer
+approvers:
+  - Template Approver
+approved_by: 
+approved_date: 
+---
+
+## Document Controls
+
+| Field | Value |
+| --- | --- |
+| Authors | Template Author |
+| Version | 0.1 |
+| Status | draft |
+| Classification | Internal |
+| Last updated | 2025-01-01 |
+| Updated by | Template Author |
+| Owners | Template Team |
+| Reviewers | Template Reviewer |
+| Approvers | Template Approver |
+| Approved by |  |
+| Approved date |  |
+
+## 1) Purpose
 **Purpose:** Template **|**
 **Contract:** Template **|**
 **State:** Template **|**
@@ -62,6 +98,15 @@ def test_parse_args_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert args.paths == [Path("docs/src/services")]
     assert args.template is None
+    assert args.frontmatter is False
+
+
+def test_parse_args_frontmatter_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cs.sys, "argv", ["check_structure.py", "--frontmatter"])
+
+    args = cs_parse_args()
+
+    assert args.frontmatter is True
 
 
 def test_find_template_override_missing(tmp_path: Path) -> None:
@@ -86,7 +131,7 @@ Paragraph text.
     assert sections == [((1,), 2, "1) Section", 1)]
     lines = markdown.splitlines()
     entries = gather_preamble(lines, 1)
-    assert entries[0][1] == "Failures & handling"
+    assert entries[0][1] == "failure mode & handling"
 
 
 def test_parse_front_matter_invalid_yaml(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -118,17 +163,22 @@ def test_walk_targets_skips_missing(tmp_path: Path, capsys: pytest.CaptureFixtur
 
 def _write_service_doc(path: Path) -> Path:
     content = """---
+title: Sample Service
+subtitle: Example subtitle
 author: Alice
 version: 1.0
 status: draft
 classification: Internal
 last_updated: 2025-01-01
+updated_by: Alice
 owners:
   - Team
 reviewers:
   - Rev
 approvers:
   - Approver
+approved_by: 
+approved_date: 
 ---
 
 ## Document Controls
@@ -140,6 +190,7 @@ approvers:
 | Status | draft |
 | Classification | Internal |
 | Last updated | 2025-01-01 |
+| Updated by | Alice |
 | Owners | Team |
 | Reviewers | Rev |
 | Approvers | Approver |
@@ -178,7 +229,7 @@ def test_main_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: p
     template.write_text(TEMPLATE_CONTENT, encoding="utf-8")
     doc = _write_service_doc(services / "service.md")
 
-    monkeypatch.setattr(cs, "parse_args", lambda: argparse.Namespace(paths=[doc], template=None))
+    monkeypatch.setattr(cs, "parse_args", lambda: argparse.Namespace(paths=[doc], template=None, frontmatter=False))
 
     rc = cs_main()
 
@@ -195,13 +246,65 @@ def test_main_reports_issues(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, ca
     doc = services / "service.md"
     doc.write_text("---\n---\n\n## Document Controls\n| Field | Value |\n| ----- | ----- |\n", encoding="utf-8")
 
-    monkeypatch.setattr(cs, "parse_args", lambda: argparse.Namespace(paths=[services], template=None))
+    monkeypatch.setattr(cs, "parse_args", lambda: argparse.Namespace(paths=[services], template=None, frontmatter=False))
 
     rc = cs_main()
 
     captured = capsys.readouterr()
     assert rc == 1
-    assert "document controls table incomplete" in captured.out
+    assert "missing or invalid YAML front matter" in captured.out
+
+
+def test_main_frontmatter_only_skips_section_validation(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    doc = _write(
+        tmp_path / "service.md",
+        """---
+title: Sample
+subtitle: Example
+authors:
+  - Alice
+version: 1.0
+status: draft
+classification: Confidential
+last_updated: 2025-01-01
+updated_by: Alice
+owners:
+  - Team
+reviewers:
+  - Reviewer
+approvers:
+  - Approver
+approved_by: 
+approved_date: 
+---
+
+## Document Controls
+
+| Field | Value |
+| --- | --- |
+| Authors | Alice |
+| Version | 1.0 |
+| Status | draft |
+| Classification | Confidential |
+| Last updated | 2025-01-01 |
+| Updated by | Alice |
+| Owners | Team |
+| Reviewers | Reviewer |
+| Approvers | Approver |
+| Approved by |  |
+| Approved date |  |
+""",
+    )
+
+    monkeypatch.setattr(cs, "parse_args", lambda: argparse.Namespace(paths=[doc], template=None, frontmatter=True))
+
+    rc = cs_main()
+
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert "synced front matter and document controls" in captured.out
 
 
 def test_heading_mismatch_detected(tmp_path: Path, template_path: Path) -> None:
@@ -561,12 +664,15 @@ Body text.
 def test_document_controls_additional_fields_valid() -> None:
     lines = [
         "---",
+        "title: Sample",
+        "subtitle: Example",
         "author:",
         "  - Alice",
         "version: 1.0",
         "status: draft",
         "classification: Confidential",
         "last_updated: 2025-10-30",
+        "updated_by: Alice",
         "owners:",
         "  - Team",
         "reviewers:",
@@ -574,6 +680,8 @@ def test_document_controls_additional_fields_valid() -> None:
         "approvers:",
         "  - Approver",
         "extra_meta: Extra data",
+        "approved_by: ",
+        "approved_date: ",
         "---",
         "## Document controls",
         "| Field | Value |",
@@ -583,6 +691,7 @@ def test_document_controls_additional_fields_valid() -> None:
         "| Status | draft |",
         "| Classification | Confidential |",
         "| Last updated | 2025-10-30 |",
+        "| Updated by | Alice |",
         "| Owners | Team |",
         "| Reviewers | Reviewer |",
         "| Approvers | Approver |",
@@ -599,15 +708,20 @@ def test_document_controls_additional_fields_valid() -> None:
 def test_document_controls_additional_field_missing_row_detected() -> None:
     lines = [
         "---",
+        "title: Sample",
+        "subtitle: Example",
         "author: Alice",
         "version: 1.0",
         "status: draft",
         "classification: Confidential",
         "last_updated: 2025-10-30",
+        "updated_by: Alice",
         "owners: Team",
         "reviewers: Reviewer",
         "approvers: Approver",
         "extra_meta: Extra data",
+        "approved_by: ",
+        "approved_date: ",
         "---",
         "## Document controls",
         "| Field | Value |",
@@ -617,6 +731,7 @@ def test_document_controls_additional_field_missing_row_detected() -> None:
         "| Status | draft |",
         "| Classification | Confidential |",
         "| Last updated | 2025-10-30 |",
+        "| Updated by | Alice |",
         "| Owners | Team |",
         "| Reviewers | Reviewer |",
         "| Approvers | Approver |",
@@ -632,14 +747,19 @@ def test_document_controls_additional_field_missing_row_detected() -> None:
 def test_document_controls_unexpected_field_detected() -> None:
     lines = [
         "---",
+        "title: Sample",
+        "subtitle: Example",
         "author: Alice",
         "version: 1.0",
         "status: draft",
         "classification: Confidential",
         "last_updated: 2025-10-30",
+        "updated_by: Alice",
         "owners: Team",
         "reviewers: Reviewer",
         "approvers: Approver",
+        "approved_by: ",
+        "approved_date: ",
         "---",
         "## Document controls",
         "| Field | Value |",
@@ -649,6 +769,7 @@ def test_document_controls_unexpected_field_detected() -> None:
         "| Status | draft |",
         "| Classification | Confidential |",
         "| Last updated | 2025-10-30 |",
+        "| Updated by | Alice |",
         "| Owners | Team |",
         "| Reviewers | Reviewer |",
         "| Approvers | Approver |",
@@ -666,16 +787,21 @@ def test_document_controls_missing_field_detected() -> None:
     lines = [
         "---",
         "title: Sample",
+        "subtitle: Example",
+        "author: Author Name",
         "version: 1.0",
         "status: draft",
         "classification: Confidential",
         "last_updated: 2025-01-01",
+        "updated_by: Alice",
         "owners:",
         "  - Owner Team",
         "reviewers:",
         "  - Reviewer",
         "approvers:",
         "  - Approver",
+        "approved_by: ",
+        "approved_date: ",
         "---",
         "",
         "## Document controls",
@@ -687,6 +813,7 @@ def test_document_controls_missing_field_detected() -> None:
         "| Status | draft |",
         "| Classification | Confidential |",
         "| Last updated | 2025-01-01 |",
+        "| Updated by | Alice |",
         "| Owners | Owner Team |",
         "| Reviewers | Reviewer |",
         "| Approvers | Approver |",
@@ -702,17 +829,22 @@ def test_document_controls_missing_field_detected() -> None:
 def test_document_controls_mismatch_detected() -> None:
     lines = [
         "---",
+        "title: Sample",
+        "subtitle: Example",
         "author: Author Name",
         "version: 1.0",
         "status: draft",
         "classification: Confidential",
         "last_updated: 2025-01-01",
+        "updated_by: Alice",
         "owners:",
         "  - Owner Team",
         "reviewers:",
         "  - Reviewer",
         "approvers:",
         "  - Approver",
+        "approved_by: ",
+        "approved_date: ",
         "---",
         "## Document controls",
         "| Field | Value |",
@@ -722,6 +854,7 @@ def test_document_controls_mismatch_detected() -> None:
         "| Status | draft |",
         "| Classification | Confidential |",
         "| Last updated | 2025-01-01 |",
+        "| Updated by | Alice |",
         "| Owners | Owner Team |",
         "| Reviewers | Reviewer |",
         "| Approvers | Approver |",
@@ -737,17 +870,22 @@ def test_document_controls_mismatch_detected() -> None:
 def test_document_controls_optional_fields_blank() -> None:
     lines = [
         "---",
+        "title: Sample",
+        "subtitle: Example",
         "author: Author Name",
         "version: 1.0",
         "status: draft",
         "classification: Confidential",
         "last_updated: 2025-01-01",
+        "updated_by: Alice",
         "owners:",
         "  - Owner Team",
         "reviewers:",
         "  - Reviewer",
         "approvers:",
         "  - Approver",
+        "approved_by: ",
+        "approved_date: ",
         "---",
         "## Document controls",
         "| Field | Value |",
@@ -757,6 +895,7 @@ def test_document_controls_optional_fields_blank() -> None:
         "| Status | draft |",
         "| Classification | Confidential |",
         "| Last updated | 2025-01-01 |",
+        "| Updated by | Alice |",
         "| Owners | Owner Team |",
         "| Reviewers | Reviewer |",
         "| Approvers | Approver |",
@@ -767,3 +906,119 @@ def test_document_controls_optional_fields_blank() -> None:
     errors = check_document_controls(Path("service.md"), lines)
 
     assert errors == []
+
+
+def test_document_controls_missing_updated_by_field_detected() -> None:
+    lines = [
+        "---",
+        "title: Sample",
+        "subtitle: Example",
+        "author: Alice",
+        "version: 1.0",
+        "status: draft",
+        "classification: Confidential",
+        "last_updated: 2025-01-01",
+        "updated_by: Alice",
+        "owners: Team",
+        "reviewers: Reviewer",
+        "approvers: Approver",
+        "approved_by: ",
+        "approved_date: ",
+        "---",
+        "## Document controls",
+        "| Field | Value |",
+        "| ----- | ----- |",
+        "| Authors | Alice |",
+        "| Version | 1.0 |",
+        "| Status | draft |",
+        "| Classification | Confidential |",
+        "| Last updated | 2025-01-01 |",
+        "| Owners | Team |",
+        "| Reviewers | Reviewer |",
+        "| Approvers | Approver |",
+        "| Approved by | |",
+        "| Approved date | |",
+    ]
+
+    errors = check_document_controls(Path("service.md"), lines)
+
+    assert any("Updated by" in err for err in errors)
+
+
+def test_document_controls_duplicate_field_detected() -> None:
+    lines = [
+        "---",
+        "title: Sample",
+        "subtitle: Example",
+        "author: Alice",
+        "version: 1.0",
+        "status: draft",
+        "classification: Confidential",
+        "last_updated: 2025-01-01",
+        "updated_by: Alice",
+        "owners: Team",
+        "reviewers: Reviewer",
+        "approvers: Approver",
+        "approved_by: ",
+        "approved_date: ",
+        "---",
+        "## Document controls",
+        "| Field | Value |",
+        "| ----- | ----- |",
+        "| Authors | Alice |",
+        "| Version | 1.0 |",
+        "| Status | draft |",
+        "| Classification | Confidential |",
+        "| Last updated | 2025-01-01 |",
+        "| Updated by | Alice |",
+        "| Owners | Team |",
+        "| Owners | Duplicate |",
+        "| Reviewers | Reviewer |",
+        "| Approvers | Approver |",
+        "| Approved by | |",
+        "| Approved date | |",
+    ]
+
+    errors = check_document_controls(Path("service.md"), lines)
+
+    assert any("duplicate fields" in err for err in errors)
+
+
+def test_ensure_template_requirements_missing_key(tmp_path: Path) -> None:
+    template = tmp_path / "_template.md"
+    template.write_text(
+        """---
+title: Missing
+subtitle: Example
+author: Person
+version: 0.1
+status: draft
+classification: Internal
+last_updated: 2025-01-01
+owners: []
+reviewers: []
+approvers: []
+approved_by: 
+approved_date: 
+---
+
+## Document Controls
+
+| Field | Value |
+| --- | --- |
+| Authors | Person |
+| Version | 0.1 |
+| Status | draft |
+| Classification | Internal |
+| Last updated | 2025-01-01 |
+| Owners |  |
+| Reviewers |  |
+| Approvers |  |
+| Approved by |  |
+| Approved date |  |
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RuntimeError):
+        ensure_template_requirements(template)

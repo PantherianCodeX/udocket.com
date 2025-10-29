@@ -7,6 +7,7 @@ version: 0.1-draft
 status: implementable
 classification: Confidential
 last_updated: 2025-10-29
+updated_by: Documentation Team
 owners:
   - Platform Engineering
   - Operations Engineering
@@ -16,10 +17,8 @@ approvers:
 reviewers:
   - Compliance Lead
   - SRE Manager
-adr_index: docs/adr/README.md
-related_adrs:
-  - ADR-0003-api-versioning-and-sunset.md
-  - ADR-0004-localization-and-policy-engine.md
+approved_by: 
+approved_date: 
 header-includes:
   - |
     <style>
@@ -62,6 +61,7 @@ ______________________________________________________________________
 | Status | implementable |
 | Classification | Confidential |
 | Last updated | 2025-10-29 |
+| Updated by | Documentation Team |
 | Owners | Platform Engineering; Operations Engineering |
 | Reviewers | Compliance Lead; SRE Manager |
 | Approvers | Architecture Steering Committee; Security Review Board |
@@ -91,8 +91,8 @@ ______________________________________________________________________
 - **Scope:** Governs outbound communications (email, SMS, phone-adjacent alerts, secure download tokens) and in-app notifications emitted by the uDocket platform. Covers outbox/state machines, provider adapters, webhook ingestion, receipts, audit posture, digest generation, and rate limiting. Portal banners and SSE fan-out ride on the same orchestration, so UI sections reference this specification for delivery guarantees.
 - **Structure:** Sections follow the 0–10 template. Responsibilities (§2) enumerate channels and compliance requirements; APIs (§3) describe outbound queues and webhook callbacks; State management (§4) documents schema, RLS, and secure-view contracts; Failure/Observability (§5–§6) map to alerting; Security & Compliance (§7) captures DMARC/SMS obligations; Operations (§8) links to runbooks/digests; Dependencies, references close the doc.
 - **Maintenance:** Run `python scripts/docs/lint_docs.py docs/src/services/notifications.md docs/src/overview/tdd.md docs/tdd_modularization.md` before submitting changes. Updates that alter schema, queue semantics, or provider adapters also require `build_runbook_catalog.py --check` to pass. Notify Platform + Ops architecture lists on PRs.
-- **Change protocol:** Any PR affecting `outbox_delivery`/`delivery_receipt` schema, webhook signatures, download token format, or notification templates must reference this spec and ADR-0003. Provider onboarding/offboarding, DMARC policy changes, or SMS compliance updates demand Security + Architecture approval and runbook refreshes per §8.
-- **References:** TDD §11 summary, Settings Registry §5 (keys under `notifications.*`), Guardian §5 (quarantine notifications), LP Engine §7 (localization bundles), Ops runbook catalog (`RB-NOTIFY-*`), policy references in ADR-0003/0004.
+- **Change protocol:** Any PR affecting `outbox_delivery`/`delivery_receipt` schema, webhook signatures, download token format, or notification templates must reference this spec and ADR-0002. Provider onboarding/offboarding, DMARC policy changes, or SMS compliance updates demand Security + Architecture approval and runbook refreshes per §8.
+- **References:** TDD §11 summary, Settings Registry §5 (keys under `notifications.*`), Guardian §5 (quarantine notifications), LP Engine §7 (localization bundles), Ops runbook catalog (`RB-NOTIFY-*`), policy references in ADR-0002/0004.
 - **Contacts:** Platform Engineering (service ownership), Operations Engineering (runbooks/delivery providers), on-call `notify-oncall@`, escalation `#ops-notifications`.
 
 ______________________________________________________________________
@@ -105,7 +105,7 @@ ______________________________________________________________________
 **Failures & handling:** Provider outages, webhook signature drift, STOP/HELP compliance events, or token misuse trigger runbooks (§5, §8) and fan-out warnings. **|**
 **Observability:** Grafana dashboards “Notifications Delivery” (`delivery_success_ratio`, `delivery_retry_total`), “In-App Notifications” (`inapp_notification_sent_total`, `inapp_notification_click_total`), “Download Tokens” (`download_token_validation_total`). Alert catalog tags `RB-NOTIFY-*` entries. **|**
 **Breadcrumbs:** Implementation `apps/platform/notifications/outbox.py`, provider adapters `apps/platform/notifications/providers/*.py`, webhook handlers `apps/platform/notifications/webhooks.py`, SSE publisher `apps/platform/events/notifications.py`, dashboards `infra/observability/dashboards/notifications_delivery.json`, tests `tests/platform/notifications/test_outbox.py`, `tests/platform/notifications/test_webhooks.py`. **|**
-**References:** §2 Responsibilities, §4 State management, §5 Failure modes, §7 Security & compliance, Ops runbooks `RB-NOTIFY-OUTAGE`/`RB-NOTIFY-WEBHOOK`/`RB-NOTIFY-SMS`. *
+**References:** §2 Responsibilities, §4 State management, §5 Failure modes, §7 Security & compliance, Ops runbooks `RB-NOTIFY-OUTAGE`/`RB-NOTIFY-WEBHOOK`/`RB-NOTIFY-SMS`.
 
 ______________________________________________________________________
 
@@ -210,7 +210,7 @@ ______________________________________________________________________
 **Failures & handling:** Idempotency conflicts, missing HMAC signatures, stale tokens return typed errors with audit events. **|**
 **Observability:** API metrics `notifications_api_request_total`, latency histograms, audit `NOTIFY_API_*` events; Spectral lints enforce OpenAPI coverage. **|**
 **Breadcrumbs:** API router `apps/platform/api/notifications.py`, schema `spec/schemas/notification_outbox.schema.json`, tests `tests/platform/api/test_notifications_api.py`. **|**
-**References:** OpenAPI bundle `ops/openapi/uDocket-platform.openapi.yaml`, ADR-0003.
+**References:** OpenAPI bundle `ops/openapi/uDocket-platform.openapi.yaml`, ADR-0002.
 
 ### 3.1 External Interfaces
 
@@ -404,7 +404,7 @@ ______________________________________________________________________
 **Failures & handling:** Staffing gaps or ignored freezes trigger management review; deployments pause until coverage restored. **|**
 **Observability:** PagerDuty analytics, delivery dashboards, alert `notifications_oncall_gap_total`. **|**
 **Breadcrumbs:** Roster docs, freeze calendars, App.O escalation notes. **|**
-**References:** Notifications spec §7, `RB-NOTIFY-*`. *
+**References:** Notifications spec §7, `RB-NOTIFY-*`.
 
 ### 8.2 Incident Triggers (binding)
 
@@ -414,7 +414,7 @@ ______________________________________________________________________
 **Failures & handling:** Missing annotations or muted routes require corrective PRs and Ops governance follow-up. **|**
 **Observability:** Dashboards “Notifications Delivery”, “SMS Compliance”, Alertmanager routes. **|**
 **Breadcrumbs:** Alert rule files, PagerDuty services, SIEM integrations. **|**
-**References:** §5 Failure modes, `RB-NOTIFY-OUTAGE`, `RB-NOTIFY-WEBHOOK`, `RB-NOTIFY-SMS`, `RB-NOTIFY-TOKEN`. *
+**References:** §5 Failure modes, `RB-NOTIFY-OUTAGE`, `RB-NOTIFY-WEBHOOK`, `RB-NOTIFY-SMS`, `RB-NOTIFY-TOKEN`.
 
 - `alert_notifications_delivery_health` detects provider degradation and opens `RB-NOTIFY-OUTAGE`.
 - `alert_notifications_sms_compliance` / `notifications_sms_stop_spike_total` drive `RB-NOTIFY-SMS` for STOP/HELP surges and regulatory response.
@@ -429,7 +429,7 @@ ______________________________________________________________________
 **Failures & handling:** Missing drill evidence or outdated steps block change approval until updated. **|**
 **Observability:** Docs lint, Ops governance dashboards, drill scheduler reports. **|**
 **Breadcrumbs:** Runbook catalog, drill scheduler, Slack `#ops-notifications`. **|**
-**References:** `RB-NOTIFY-OUTAGE`, `RB-NOTIFY-WEBHOOK`, `RB-NOTIFY-SMS`, `RB-NOTIFY-TOKEN`. *
+**References:** `RB-NOTIFY-OUTAGE`, `RB-NOTIFY-WEBHOOK`, `RB-NOTIFY-SMS`, `RB-NOTIFY-TOKEN`.
 
 #### 8.3.1 Runbook Index (informative)
 
@@ -469,7 +469,7 @@ ______________________________________________________________________
 **Failures & handling:** Failed migrations revert to previous provider/template and open `RB-NOTIFY-OUTAGE`; replay failures quarantine payloads until corrected. **|**
 **Observability:** Metrics `notifications_migration_success_total`, `notifications_dlq_replay_total`, App.O change tickets. **|**
 **Breadcrumbs:** Migration scripts, template bundles, DLQ tooling. **|**
-**References:** Settings spec §5, Notifications spec §4. *
+**References:** Settings spec §5, Notifications spec §4.
 
 ### 8.5 Operational Workflows (normative)
 
@@ -479,7 +479,7 @@ ______________________________________________________________________
 **Failures & handling:** Expired DMARC alignment or missing digests trigger `RB-NOTIFY-SMS` and governance follow-up; digest discrepancies open App.O remediation tasks. **|**
 **Observability:** Metrics `notifications_digest_generated_total`, `notifications_dmca_alignment_total`, STOP/HELP dashboards in SIEM. **|**
 **Breadcrumbs:** Digest generator `apps/platform/operations/task_modules/notifications.py::generate_digest`, compliance scripts `ops/scripts/notifications/audit_opt_out.py`. **|**
-**References:** §7 Security & compliance, §4 State management. *
+**References:** §7 Security & compliance, §4 State management.
 
 - Weekly residency digests aggregate waivers, remediation SLAs, and provider drift; evidence archived alongside digests.
 - STOP/HELP audit jobs reconcile opt-out state with provider receipts to enforce compliance.
@@ -514,8 +514,8 @@ ______________________________________________________________________
 - Settings Registry specification — `../services/settings.md §5.2` (notifications keys).
 - Localization & Policy Engine — `../services/lp-engine.md §2.1` (locale bundles for notifications).
 - Ops runbook catalog — `../ops/runbooks/index.md` (`RB-NOTIFY-*` entries).
-- ADR-0003 — API versioning & sunset policy for notification endpoints.
-- ADR-0004 — Localization & Policy Engine governance for templates.
+- ADR-0002 — API versioning & sunset policy for notification endpoints.
+- ADR-0003 — Localization & Policy Engine governance for templates.
 
 ______________________________________________________________________
 

@@ -7,6 +7,7 @@ version: 0.1-draft
 status: implementable
 classification: Confidential
 last_updated: 2025-10-29
+updated_by: Documentation Team
 owners:
   - Platform Engineering
   - Site Reliability Engineering
@@ -16,11 +17,8 @@ approvers:
 reviewers:
   - Operations Engineering
   - Security Engineering
-adr_index: docs/adr/README.md
-related_adrs:
-  - ADR-0001-guardian-ready-quarantine.md
-  - ADR-0003-api-versioning-and-sunset.md
-  - ADR-0004-localization-and-policy-engine.md
+approved_by: 
+approved_date: 
 header-includes:
   - |
     <style>
@@ -56,6 +54,7 @@ ______________________________________________________________________
 | Status | implementable |
 | Classification | Confidential |
 | Last updated | 2025-10-29 |
+| Updated by | Documentation Team |
 | Owners | Platform Engineering; Site Reliability Engineering |
 | Reviewers | Operations Engineering; Security Engineering |
 | Approvers | Architecture Steering Committee; Security Review Board |

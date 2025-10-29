@@ -21,7 +21,8 @@ import argparse
 import sys
 from pathlib import Path
 from collections import OrderedDict
-from typing import Dict, Iterable, Iterator, List, Tuple
+from typing import Dict, Iterable, Iterator, List, Sequence, Tuple
+import subprocess
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 ROOT_DIR = SCRIPT_DIR.parent.parent
@@ -31,23 +32,26 @@ if str(ROOT_DIR) not in sys.path:
 
 from scripts.docs import doc_utils  # type: ignore  # noqa: E402
 
-FIELD_MAPPINGS: List[Tuple[str, str]] = [
-    ("Authors", "author"),
-    ("Version", "version"),
-    ("Status", "status"),
-    ("Classification", "classification"),
-    ("Last updated", "last_updated"),
-    ("Owners", "owners"),
-    ("Reviewers", "reviewers"),
-    ("Approvers", "approvers"),
+FieldMapping = Tuple[str, Tuple[str, ...]]
+
+FIELD_MAPPINGS: List[FieldMapping] = [
+    ("Authors", ("authors", "author")),
+    ("Version", ("version",)),
+    ("Status", ("status",)),
+    ("Classification", ("classification",)),
+    ("Last updated", ("last_updated", "last-update")),
+    ("Updated by", ("updated_by", "updated-by")),
+    ("Owners", ("owners", "owner")),
+    ("Reviewers", ("reviewers", "reviewer")),
+    ("Approvers", ("approvers", "approver")),
+    ("Approved by", ("approved_by", "approved-by")),
+    ("Approved date", ("approved_date", "approved-at", "approved_at")),
 ]
 OPTIONAL_FIELDS = {"Approved by", "Approved date"}
 EXCLUDED_FRONT_MATTER_KEYS = {
     "title",
     "subtitle",
     "header-includes",
-    "adr_index",
-    "related_adrs",
 }
 DEFAULT_ROOT = Path("docs/src/services")
 
@@ -85,18 +89,22 @@ def collect_targets(paths: Iterable[Path]) -> Iterator[Path]:
                 yield resolved
 
 
+def _select_first(front_matter: Dict[str, object], keys: Sequence[str]) -> str:
+    for candidate in keys:
+        if candidate in front_matter:
+            return doc_utils.stringify(front_matter[candidate])
+    return ""
+
+
 def _base_fields(front_matter: Dict[str, object]) -> OrderedDict[str, str]:
     result: "OrderedDict[str, str]" = OrderedDict()
-    for label, key in FIELD_MAPPINGS:
-        result[label] = doc_utils.stringify(front_matter.get(key, ""))
-    result["Approved by"] = doc_utils.stringify(front_matter.get("approved_by", ""))
-    result["Approved date"] = doc_utils.stringify(front_matter.get("approved_date", ""))
+    for label, keys in FIELD_MAPPINGS:
+        result[label] = _select_first(front_matter, keys)
     return result
 
 
 def _additional_fields(front_matter: Dict[str, object]) -> OrderedDict[str, str]:
-    base_keys = {key for _, key in FIELD_MAPPINGS}
-    base_keys.update({"approved_by", "approved_date"})
+    base_keys = {alias for _, aliases in FIELD_MAPPINGS for alias in aliases}
     additional: "OrderedDict[str, str]" = OrderedDict()
     for key, value in front_matter.items():
         if key in base_keys or key in EXCLUDED_FRONT_MATTER_KEYS:
@@ -196,6 +204,13 @@ def main() -> int:
                 updated += 1
         except Exception as exc:  # pragma: no cover - defensive
             print(f"[sync-document-controls] warning: failed to process {target}: {exc}", file=sys.stderr)
+
+    checker = ROOT_DIR / "scripts" / "docs" / "check_structure.py"
+    verify_cmd = [sys.executable, str(checker), "--frontmatter", *[str(path) for path in targets]]
+    result = subprocess.run(verify_cmd, cwd=str(ROOT_DIR))
+    if result.returncode != 0:
+        print("[sync-document-controls] verification via check_structure failed", file=sys.stderr)
+        return result.returncode
 
     print(f"[sync-document-controls] completed ({updated} file(s) updated)")
     return 0

@@ -7,6 +7,7 @@ version: 0.1-draft
 status: implementable
 classification: Confidential
 last_updated: 2025-10-29
+updated_by: Documentation Team
 owners:
   - Platform Engineering
   - Operations Engineering
@@ -16,11 +17,8 @@ approvers:
 reviewers:
   - SRE Manager
   - Applied AI Programs
-adr_index: docs/adr/README.md
-related_adrs:
-  - ADR-0001-guardian-ready-quarantine.md
-  - ADR-0003-api-versioning-and-sunset.md
-  - ADR-0004-localization-and-policy-engine.md
+approved_by: 
+approved_date: 
 header-includes:
   - |
     <style>
@@ -63,6 +61,7 @@ ______________________________________________________________________
 | Status | implementable |
 | Classification | Confidential |
 | Last updated | 2025-10-29 |
+| Updated by | Documentation Team |
 | Owners | Platform Engineering; Operations Engineering |
 | Reviewers | SRE Manager; Applied AI Programs |
 | Approvers | Architecture Steering Committee; Security Review Board |
@@ -106,7 +105,7 @@ ______________________________________________________________________
 **Failures & handling:** Provider outages, queue backlogs, watchdog stalls, or RLS guard failures trigger runbooks and pause processing safely. **|**
 **Observability:** Dashboards “Worker Queues”, “Watchdog Runner”, “Job Progress”, metrics `celery_queue_depth`, `job_duration_seconds`, `watchdog_runner_lag_seconds`, `job_watchdog_warning_total`. **|**
 **Breadcrumbs:** Celery config `apps/platform/operations/tasks.py`, task modules `apps/platform/operations/task_modules/*`, beat scheduler `apps/platform/operations/bootstrap.py`, watchdog runner `apps/platform/operations/watchdogs.py`, tests `tests/platform/operations/test_watchdogs.py`, `tests/platform/jobs/test_provider_progress_adapter.py`. **|**
-**References:** §2 Responsibilities, §4 State management, §5 Failure modes, §7 Security & compliance, Ops runbooks `RB-JOB-WATCHDOG`/`RB-LOCK-006`. *
+**References:** §2 Responsibilities, §4 State management, §5 Failure modes, §7 Security & compliance, Ops runbooks `RB-JOB-WATCHDOG`/`RB-LOCK-006`.
 
 ______________________________________________________________________
 
@@ -292,7 +291,7 @@ ______________________________________________________________________
 **Failures & handling:** Staffing gaps or missed watchdog runs trigger `RB-JOB-WATCHDOG` before resuming automation. **|**
 **Observability:** PagerDuty metrics, watchdog dashboards, alert `watchdog_runner_missed_total`. **|**
 **Breadcrumbs:** Roster files, freeze calendars, watchdog status logs. **|**
-**References:** `RB-JOB-WATCHDOG`, §6 Observability. *
+**References:** `RB-JOB-WATCHDOG`, §6 Observability.
 
 ### 8.2 Incident Triggers (binding)
 
@@ -302,7 +301,7 @@ ______________________________________________________________________
 **Failures & handling:** Missing annotations or silenced alerts require governance review and follow-up tasks. **|**
 **Observability:** Dashboards “Worker Queues”, “Watchdog Runner”, Alertmanager routes. **|**
 **Breadcrumbs:** Alert rule files, PagerDuty services, SIEM dashboards. **|**
-**References:** `RB-JOB-WATCHDOG`, `RB-LOCK-006`, `RB-NOTIFY-*`. *
+**References:** `RB-JOB-WATCHDOG`, `RB-LOCK-006`, `RB-NOTIFY-*`.
 
 - `celery_queue_depth_high` or `dlq_messages_total` breaches invoke RB-JOB-QUEUE to throttle enqueue, scale workers, and reconcile offsets.
 - `watchdog_runner_missed_total` or `watchdog_runner_lag_seconds` triggers RB-JOB-WATCHDOG to restore automation and notify portal/UI.
@@ -317,7 +316,7 @@ ______________________________________________________________________
 **Failures & handling:** Missing drill evidence or outdated steps block automation restart after incidents. **|**
 **Observability:** Docs lint, drill scheduler reports, Ops governance dashboards. **|**
 **Breadcrumbs:** Runbook catalog, drill scheduler, Ops governance records. **|**
-**References:** `RB-JOB-WATCHDOG`, `RB-LOCK-006`, `RB-NOTIFY-*`, `RB-UPLOAD-SCAN`, `RB-CASE-IMPORT`. *
+**References:** `RB-JOB-WATCHDOG`, `RB-LOCK-006`, `RB-NOTIFY-*`, `RB-UPLOAD-SCAN`, `RB-CASE-IMPORT`.
 
 #### 8.3.1 Runbook Index (informative)
 
@@ -355,7 +354,7 @@ ______________________________________________________________________
 **Failures & handling:** Failed migrations revert to prior queue configuration; replay failures quarantine payloads for manual inspection. **|**
 **Observability:** Metrics `worker_migration_success_total`, `dlq_replay_success_total`, change tickets in App.O. **|**
 **Breadcrumbs:** Migration scripts, upgrade playbooks, DLQ tooling. **|**
-**References:** §4 State management, Notifications spec §4. *
+**References:** §4 State management, Notifications spec §4.
 
 ### 8.5 Operational Workflows (normative)
 
@@ -365,7 +364,7 @@ ______________________________________________________________________
 **Failures & handling:** Missing audits trigger `RB-JOB-WATCHDOG` follow-up; outdated scaling parameters escalate via Ops governance. **|**
 **Observability:** Metrics `celery_queue_depth`, `watchdog_runner_lag_seconds`, capacity dashboards. **|**
 **Breadcrumbs:** Audit scripts `ops/scripts/worker/audit_queues.py`, watchdog tools, capacity planning docs. **|**
-**References:** Settings spec §6, LLM registry spec §2.4. *
+**References:** Settings spec §6, LLM registry spec §2.4.
 
 - Daily queue audits catch runaway jobs and coordinate with agent owners for mitigation.
 - Weekly watchdog verifications ensure metrics, SSE, and logs reflect automation health.

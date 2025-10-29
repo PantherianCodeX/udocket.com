@@ -7,6 +7,7 @@ version: 0.1-draft
 status: implementable
 classification: Confidential
 last_updated: 2025-10-29
+updated_by: Documentation Team
 owners:
   - Security Engineering
   - Platform Architecture
@@ -16,11 +17,8 @@ approvers:
 reviewers:
   - QA Engineering Lead
   - SRE Manager
-adr_index: docs/adr/README.md
-related_adrs:
-  - ADR-0001-guardian-ready-quarantine.md
-  - ADR-0003-api-versioning-and-sunset.md
-  - ADR-0004-localization-and-policy-engine.md
+approved_by: 
+approved_date: 
 header-includes:
   - |
     <style>
@@ -63,6 +61,7 @@ ______________________________________________________________________
 | Status | implementable |
 | Classification | Confidential |
 | Last updated | 2025-10-29 |
+| Updated by | Documentation Team |
 | Owners | Security Engineering; Platform Architecture |
 | Reviewers | QA Engineering Lead; SRE Manager |
 | Approvers | Architecture Steering Committee; Security Review Board |
@@ -93,7 +92,7 @@ ______________________________________________________________________
 - **Structure:** Sections follow the standard 0–10 service template; appendices referenced here live in the ops runbook catalog and Settings registry key maps.
 - **Maintenance:** Run `python scripts/docs/lint_docs.py` and `python scripts/docs/link_check.py --strict` before proposing signer changes. Signing policy or PKI updates require ADR references in the PR.
 - **Change protocol:** Modifying signature policies, TSA/OCSP profiles, or trust-root rotations demands dual approval (Security + Architecture) and an update to this spec plus the relevant runbooks.
-- **References:** TDD §7.2 (summary), ADR-0001, ADR-0003, ADR-0004, Ops runbooks `RB-SIGN-*`.
+- **References:** TDD §7.2 (summary), ADR-0001, ADR-0002, ADR-0003, Ops runbooks `RB-SIGN-*`.
 - **Contacts:** Security Engineering (service owner), Platform Architecture (co-owner), on-call list `signer-oncall@`.
 
 ______________________________________________________________________
@@ -106,7 +105,7 @@ ______________________________________________________________________
 **Failures & handling:** TSA/OCSP outages, trust-root drift, or FIPS attestation failures block portal release and trigger runbooks (§5, §8). **|**
 **Observability:** Grafana “Signer & TSA” and “Deliverable Signatures” dashboards monitor latency, TSA drift, OCSP freshness, and policy violations; CI jobs verify FIPS posture. **|**
 **Breadcrumbs:** Implementation `apps/platform/operations/signer.py`, policy resolver `apps/platform/operations/signer_policy.py`, security guard `packages/udocket_core/security/fips_guard.py`, tests `tests/platform/operations/test_signer_modes.py`, `tests/platform/operations/test_signature_policy.py`. **|**
-**References:** §2 Responsibilities, §4 State management, §5 Failure modes, §7 Security & compliance, ADR-0003. *
+**References:** §2 Responsibilities, §4 State management, §5 Failure modes, §7 Security & compliance, ADR-0002.
 
 - Signing pipeline converts canonical TXT/MD/JSON into PDF/A (or JWS) envelopes, applies platform signature + TSA token, and records signature manifests for Guardian, portal, and audit surfaces.
 - Trust roots (`sign.trust_roots[]`) and signature policies (`sign.signature_policies[]`) are governed via Settings activations; rotations emit audit artifacts `SIGN_TRUST_ROOTS@<version>`.
@@ -172,7 +171,7 @@ ______________________________________________________________________
 **State:** Certificates + key identifiers persist in Settings (`sign.trust_roots[]`, `sign.hsm.key_id`), manifest metadata, and audit artifacts `SIGN_TRUST_ROOTS@<version>`. **|**
 **Failures & handling:** Attestation failure, expired CMVP certificate, or key drift halts signing, triggers `RB-SIGN-TRUSTROTATE`, and pages Security. **|**
 **Observability:** Metrics `sign_hsm_attestation_status`, `sign_trust_root_version`, CI job `ci-fips-scan`, and runbook evidence stored under `ops/security/key_rotation/`. **|**
-**References:** §7 Security & compliance, §8 Operational notes, ADR-0003. **|**
+**References:** §7 Security & compliance, §8 Operational notes, ADR-0002. **|**
 **Breadcrumbs:** HSM integration `apps/platform/operations/signer_hsm.py`, trust-root rotation script `ops/scripts/security/rotate_signing_keys.py`, tests `tests/platform/operations/test_signer_modes.py::test_pkcs7_and_cades`.
 
 - Settings `sign.trust_mode ∈ {internal, hybrid, external}` controls certificate exposure. Default `hybrid` issues platform signatures plus qualified provider cross-certification; `external` restricts to public PKI for regulated deployments; `internal` reserved for sandbox/private clusters.
@@ -326,7 +325,7 @@ ______________________________________________________________________
 **Failures & handling:** Missing metrics or stale dashboards block releases per docs lint and Observability checklists. **|**
 **Observability:** Metrics `signer_request_latency_seconds`, `signer_error_total`, `tsa_time_drift_seconds`, `ocsp_latency_seconds`, `signature_policy_violation_total`, `client_ack_pending_total`, `crypto_fips_mode{service}`. **|**
 **Breadcrumbs:** Observability config `infra/observability/dashboards/signer.json`, alert rules `infra/monitoring/signer-prometheus-rules.yaml`, tests `tests/observability/test_signer_metrics.py`. **|**
-**References:** §5 Failure modes, §8 Operational notes, Appendix D telemetry schema. *
+**References:** §5 Failure modes, §8 Operational notes, Appendix D telemetry schema.
 
 ______________________________________________________________________
 
@@ -338,7 +337,7 @@ ______________________________________________________________________
 **Failures & handling:** Waiver expiry, certificate drift, or module deprecation escalate to Security incidents; traffic halted until compliance restored. **|**
 **Observability:** Alerts `crypto_fips_waiver_active_total`, `signature_policy_waiver_expiring_total`, `sign_trust_root_expiring_total`; CI job `ci-fips-scan` validates code changes. **|**
 **Breadcrumbs:** Security guard `packages/udocket_core/security/fips_guard.py`, waiver automation `ops/scripts/security/check_signer_waivers.py`, tests `tests/security/test_fips_guard.py`. **|**
-**References:** ADR-0003, §5 Failure modes, §8 Operational notes. *
+**References:** ADR-0002, §5 Failure modes, §8 Operational notes.
 
 - Startup attestation validates module self-tests, CMVP certificate ID (`security.crypto.expected_cert_id`), and DRBG source; failures abort boot.
 - Only FIPS-approved algorithms permitted under FIPS mode; static analysis (`scripts/security/fips_cipher_lint.py`) blocks disallowed primitives.
@@ -366,7 +365,7 @@ ______________________________________________________________________
 **Failures & handling:** Missing evidence or unstaffed rotations trigger incident review; signing remains paused until posture restored. **|**
 **Observability:** PagerDuty response metrics, dashboards “Signer & TSA”, alert `signer_operator_coverage_gap_total`. **|**
 **Breadcrumbs:** Roster files, freeze calendar, App.O decision logs. **|**
-**References:** §7 Security & compliance, `RB-SIGN-FIPS`. *
+**References:** §7 Security & compliance, `RB-SIGN-FIPS`.
 
 - Startup attestation validates CMVP certificate IDs (`security.crypto.expected_cert_id`), DRBG source, and HSM availability before pods accept work; failures abort boot.
 - FIPS-required tenants pin signer pods to dedicated node pools and verify hardware AES, DRBG, and HSM slots via readiness probes.
@@ -381,7 +380,7 @@ ______________________________________________________________________
 **Failures & handling:** Missing annotations or misrouted alerts require follow-up tasks and lint updates. **|**
 **Observability:** Grafana “Signer & TSA”, PagerDuty routing, synthetic TSA/OCSP checks. **|**
 **Breadcrumbs:** Alert rule files, PagerDuty service configs, runbook catalog. **|**
-**References:** §5 Failure modes, §6 Observability, `RB-SIGN-TSA`. *
+**References:** §5 Failure modes, §6 Observability, `RB-SIGN-TSA`.
 
 - `signer_tsa_error_total` / `signer_ocsp_unknown_total` → `RB-SIGN-TSA` for TSA/OCSP outage response.
 - `signer_hsm_attestation_status{status="failed"}` → `RB-SIGN-FIPS` before restoring queue processing.
@@ -396,7 +395,7 @@ ______________________________________________________________________
 **Failures & handling:** Stale runbooks or missing drill evidence block release sign-off until refreshed. **|**
 **Observability:** Docs lint, PagerDuty analytics, Ops governance dashboards. **|**
 **Breadcrumbs:** Runbook files, rotation scripts, drill tracker. **|**
-**References:** `RB-SIGN-TSA`, `RB-SIGN-FIPS`, `RB-SIGN-ACK`, `RB-SIGN-TRUSTROTATE`. *
+**References:** `RB-SIGN-TSA`, `RB-SIGN-FIPS`, `RB-SIGN-ACK`, `RB-SIGN-TRUSTROTATE`.
 
 #### 8.3.1 Runbook Index (informative)
 
@@ -436,7 +435,7 @@ ______________________________________________________________________
 **Failures & handling:** Rotation failures revert to prior key version and execute `RB-SIGN-TRUSTROTATE`; failed replays quarantine affected deliverables until resolved. **|**
 **Observability:** Metrics `sign_trust_root_version`, replay divergence counters, CI job `ci-fips-scan`. **|**
 **Breadcrumbs:** Rotation scripts, replay tooling, evidence archives. **|**
-**References:** §4 State management, `RB-SIGN-TRUSTROTATE`. *
+**References:** §4 State management, `RB-SIGN-TRUSTROTATE`.
 
 - Pre-rotation checklist ensures HSM slot capacity, certificate bundles, and change approval before promoting new keys.
 - Post-rotation smoke tests re-sign representative artifacts and validate OCSP/TSA status before releasing queue holds.
@@ -450,7 +449,7 @@ ______________________________________________________________________
 **Failures & handling:** Missing checklist evidence or overdue waivers halt deployment until mitigated; acknowledgement backlog triggers `RB-SIGN-ACK`. **|**
 **Observability:** Deployment guard `scripts/ci/check_signer_release.py`, metrics `signer_release_gate_blocked_total`, `signer_ack_pending_total`. **|**
 **Breadcrumbs:** Release tooling, waiver logs, acknowledgement workflows. **|**
-**References:** §7 Security & compliance, Notifications spec §7, Guardian spec §5. *
+**References:** §7 Security & compliance, Notifications spec §7, Guardian spec §5.
 
 - Release gate automation validates TSA/OCSP dashboards, signer queue depth, and waiver status before allowing cutover.
 - Daily jobs reconcile client acknowledgement SLAs and notify Portal when outstanding signatures remain.
@@ -466,7 +465,7 @@ ______________________________________________________________________
 **Failures & handling:** Upstream configuration drift or downstream enforcement gaps trigger runbooks (Settings diff, Guardian quarantine, Portal ack remediation). **|**
 **Observability:** Dashboards “Settings Adoption”, “Guardian Residency Enforcement”, “Portal Acknowledgements”, alerts `signer_dependency_drift_total`. **|**
 **Breadcrumbs:** Integration code `apps/platform/operations/signer_guardian_bridge.py`, Settings activation `apps/platform/settings/services/signature.py`, Portal ack controller `apps/platform/portal/client_ack.py`. **|**
-**References:** Settings spec §6, Guardian spec §5, Reference Manager spec §4. *
+**References:** Settings spec §6, Guardian spec §5, Reference Manager spec §4.
 
 | Dependency | Interface / artifact | Responsibilities | Notes |
 | --- | --- | --- | --- |

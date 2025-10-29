@@ -7,14 +7,15 @@ version: <0.1-draft>
 status: <Provisional/Implementable/Implemented>
 classification: <Confidential>
 last_updated: <1970-01-01>
+updated_by: <Editor or team responsible for latest update>
 owners:
   - <Teams accountable for day-to-day ownership>
 reviewers:
   - <Roles or committees that sign off on changes>
 approvers:
   - <Stakeholders providing technical/operational review>
-approved by: 
-approved date: 
+approved_by: 
+approved_date: 
 header-includes:
   - |
     <style>
@@ -63,6 +64,7 @@ ______________________________________________________________________
 | Status | <Provisional/Implementable/Implemented> |
 | Classification | <Confidential> |
 | Last updated | <1970-01-01> |
+| Updated by | <Editor or team responsible for latest update> |
 | Owners | <Teams accountable for day-to-day ownership> |
 | Reviewers | <Stakeholders providing technical/operational review> |
 | Approvers | <Roles or committees that sign off on changes> |

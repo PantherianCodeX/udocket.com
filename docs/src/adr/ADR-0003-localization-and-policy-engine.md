@@ -1,4 +1,4 @@
-# ADR-0004 — Localization & Policy Engine (LPE) control/data plane split
+# ADR-0003 — Localization & Policy Engine (LPE) control/data plane split
 
 - **Status:** Accepted
 - **Date:** 2025-10-12

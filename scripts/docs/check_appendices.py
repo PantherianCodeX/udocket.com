@@ -7,7 +7,7 @@ import argparse
 import sys
 from collections import OrderedDict
 from pathlib import Path
-from typing import Iterable, Iterator
+from typing import Iterable, Iterator, Sequence
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 ROOT_DIR = SCRIPT_DIR.parent.parent
@@ -20,18 +20,23 @@ from scripts.docs import doc_utils  # type: ignore  # noqa: E402
 DEFAULT_ROOT = Path("docs/src/overview/tdd/appendices")
 DOCUMENT_CONTROLS_HEADER = "## Document Controls"
 
-FIELD_MAPPINGS = [
-    ("Authors", "authors"),
-    ("Version", "version"),
-    ("Status", "status"),
-    ("Classification", "classification"),
-    ("Last updated", "last_updated"),
-    ("Owners", "owners"),
-    ("Reviewers", "reviewers"),
-    ("Approvers", "approvers"),
+FieldMapping = tuple[str, tuple[str, ...]]
+
+FIELD_MAPPINGS: list[FieldMapping] = [
+    ("Authors", ("authors", "author")),
+    ("Version", ("version",)),
+    ("Status", ("status",)),
+    ("Classification", ("classification",)),
+    ("Last updated", ("last_updated", "last-update")),
+    ("Updated by", ("updated_by", "updated-by")),
+    ("Owners", ("owners", "owner")),
+    ("Reviewers", ("reviewers", "reviewer")),
+    ("Approvers", ("approvers", "approver")),
 ]
 
 OPTIONAL_FIELDS = {"Approved by", "Approved date"}
+EXCLUDED_FRONT_MATTER_KEYS = {"title", "subtitle", "header-includes"}
+BASE_FIELD_ALIASES = {alias for _, aliases in FIELD_MAPPINGS for alias in aliases}
 
 
 def parse_args() -> argparse.Namespace:
@@ -67,12 +72,26 @@ def collect_targets(paths: Iterable[Path]) -> Iterator[Path]:
                 yield resolved
 
 
+def _select_first(front_matter: dict[str, object], keys: Sequence[str]) -> str:
+    for key in keys:
+        if key in front_matter:
+            return doc_utils.stringify(front_matter.get(key, ""))
+    return ""
+
+
 def expected_fields(front_matter: dict[str, object]) -> "OrderedDict[str, str]":
     base: "OrderedDict[str, str]" = OrderedDict()
-    for label, key in FIELD_MAPPINGS:
-        base[label] = doc_utils.stringify(front_matter.get(key, ""))
+    for label, keys in FIELD_MAPPINGS:
+        base[label] = _select_first(front_matter, keys)
     base["Approved by"] = doc_utils.stringify(front_matter.get("approved_by", ""))
     base["Approved date"] = doc_utils.stringify(front_matter.get("approved_date", ""))
+    for key, value in front_matter.items():
+        if key in EXCLUDED_FRONT_MATTER_KEYS or key in BASE_FIELD_ALIASES or key in {"approved_by", "approved_date"}:
+            continue
+        normalized = key.replace("_", " ").replace("-", " ").title()
+        if normalized in base:
+            continue
+        base[normalized] = doc_utils.stringify(value)
     return base
 
 

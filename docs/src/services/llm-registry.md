@@ -7,6 +7,7 @@ version: 0.1-draft
 status: implementable
 classification: Confidential
 last_updated: 2025-10-29
+updated_by: Documentation Team
 owners:
   - Platform Architecture
   - Security Engineering
@@ -17,9 +18,8 @@ approvers:
 reviewers:
   - QA Engineering Lead
   - FinOps Manager
-adr_index: docs/adr/README.md
-related_adrs:
-  - ADR-0004-localization-and-policy-engine.md
+approved_by: 
+approved_date: 
 header-includes:
   - |
     <style>
@@ -62,6 +62,7 @@ ______________________________________________________________________
 | Status | implementable |
 | Classification | Confidential |
 | Last updated | 2025-10-29 |
+| Updated by | Documentation Team |
 | Owners | Platform Architecture; Security Engineering; Applied AI Programs |
 | Reviewers | QA Engineering Lead; FinOps Manager |
 | Approvers | Architecture Steering Committee; Security Review Board |
@@ -91,7 +92,7 @@ ______________________________________________________________________
 - **Scope:** LLM provider catalog, selection orchestration, residency safeguards, moderation, reproducibility, and FinOps controls governing Analyze/Compose lanes and other agent workloads.
 - **Structure:** Follows the standard 0–10 template; subsections are marked (binding/normative/informative) per policy vocabulary. Appendices live in ops runbooks for golden sets and moderation configs.
 - **Maintenance:** Run `python scripts/docs/lint_docs.py` before submitting changes. Update golden-set fixtures and moderation configs referenced here when models, prompts, or safety settings change.
-- **Change protocol:** Any PR touching `llm.providers[]`, `llm.models[]`, failover logic, moderation, or FinOps guardrails must cite this spec and ADR-0004. Security + Architecture approval required for provider additions or residency waivers.
+- **Change protocol:** Any PR touching `llm.providers[]`, `llm.models[]`, failover logic, moderation, or FinOps guardrails must cite this spec and ADR-0003. Security + Architecture approval required for provider additions or residency waivers.
 - **References:** TDD §8 summary, LPE spec §2 (PolicyContext), Settings spec §2 (activation), Ops runbooks RB-LLM-003/RB-LLM-JB.
 - **Contacts:** Platform Architecture (catalog), Security Engineering (safety/residency), Applied AI Programs (golden sets, moderation).
 
@@ -384,7 +385,7 @@ ______________________________________________________________________
 **Failures & handling:** Missing metrics or stale dashboards block releases until Observability sign-off; docs lint validates references. **|**
 **Observability:** Dashboards “LLM Residency & Failover”, “LLM Safety & Moderation”, “FinOps – LLM Cost & Circuit”; Alertmanager routes `alert_llm_circuit_open`, `llm_moderation_error_total`, `finops_deploy_gate_failed_total`. **|**
 **Breadcrumbs:** Dashboard configs `infra/observability/dashboards/llm_residency.json`, `llm_safety.json`, `finops_llm.json`; alert rules `infra/monitoring/llm-prometheus-rules.yaml`. **|**
-**References:** TDD §12 Observability dashboards, TDD §8.7 FinOps guard. *
+**References:** TDD §12 Observability dashboards, TDD §8.7 FinOps guard.
 
 - Cost dashboards surface `llm_cost_estimate_total`, `finops_cost_per_case_usd`, MoM regression panels, top N expensive cases, budget forecasts, and logging volume views (`logging_bytes_ingested_total`, budget vs actual per service).
 - Alerts cover regression > threshold (default 10 %), monthly cap risk, cost forecast drift, and sustained logging budget overages; all alerts route to Product/SRE with runbook IDs (`RB-LLM-FINOPS`, `RB-LOG-007`).
@@ -401,7 +402,7 @@ ______________________________________________________________________
 **Failures & handling:** Provider policy drift, HIPAA violations, or prompt retention misconfigurations trigger Security incidents and RB-LLM-COMPLIANCE. **|**
 **Observability:** Alerts `provider_data_policy_drift_total`, `llm_policy_block_total`, `hipaa_prompt_retention_violation_total`; audit events `LLM_POLICY_BLOCK`, `HIPAA_EXCERPT_BLOCK`. **|**
 **Breadcrumbs:** Security guard `packages/udocket_core/llm/policy_guard.py`, HIPAA purge script `scripts/privacy/purge_evidence_store.py`, tests `tests/udocket_core/llm/test_policy_guard.py`. **|**
-**References:** TDD §12 (security policies), Guardian spec §5, Appendix O (waivers). *
+**References:** TDD §12 (security policies), Guardian spec §5, Appendix O (waivers).
 
 - Providers must operate in residency-approved regions (enforced via §2.1.1) and disable prompt retention/training per contract.
 - HIPAA environments require prompt retention mode settings and evidence store redaction; downgrades require `FIPS_MODE_EXCEPTION`/`HIPAA_PROMPT_EXCEPTION` waivers with ≤7 day expiry.
@@ -428,7 +429,7 @@ ______________________________________________________________________
 **Failures & handling:** Missing parity evidence or unstaffed shifts trigger incident review; registry remains locked in fail-safe mode until posture restored. **|**
 **Observability:** PagerDuty analytics, dashboards “LLM Residency & Failover”, alert `llm_circuit_state{state="open"}`. **|**
 **Breadcrumbs:** Roster files, freeze calendars, App.O decision logs, provider audit archives. **|**
-**References:** §2 Responsibilities, §6 Observability, `RB-LLM-003`. *
+**References:** §2 Responsibilities, §6 Observability, `RB-LLM-003`.
 
 - Weekly parity review confirms fallback chains still meet quality, residency, and cost targets; failures open waivers and block new activations.
 - Golden-set jailbreak runs monitored daily; regressions halt releases until RB-LLM-JB completes.
@@ -442,7 +443,7 @@ ______________________________________________________________________
 **Failures & handling:** Missing annotations or suppressed routes require corrective PRs and governance review. **|**
 **Observability:** Dashboards “LLM Residency & Failover”, “LLM Safety & Moderation”, “FinOps – LLM Cost & Circuit”, synthetic replay jobs. **|**
 **Breadcrumbs:** Alert rule files, PagerDuty service “LLM Registry SLO”, SIEM integrations. **|**
-**References:** §5 Failure modes, `RB-LLM-003`, `RB-LLM-JB`, `RB-LLM-FINOPS`, `RB-LLM-REPLAY`. *
+**References:** §5 Failure modes, `RB-LLM-003`, `RB-LLM-JB`, `RB-LLM-FINOPS`, `RB-LLM-REPLAY`.
 
 - `alert_llm_circuit_open` / `llm_region_fallback_total` spikes invoke `RB-LLM-003` for provider failover.
 - `llm_moderation_error_total` / `llm_content_flagged_total` spikes activate `RB-LLM-JB`.
@@ -457,7 +458,7 @@ ______________________________________________________________________
 **Failures & handling:** Missing evidence or outdated steps block release sign-off until updated. **|**
 **Observability:** Docs lint, drill calendar `ops/change/llm_rotations.ics`, Ops governance dashboards. **|**
 **Breadcrumbs:** Runbook catalog, drill scheduler, automation scripts. **|**
-**References:** `RB-LLM-003`, `RB-LLM-JB`, `RB-LLM-FINOPS`, `RB-LLM-REPLAY`. *
+**References:** `RB-LLM-003`, `RB-LLM-JB`, `RB-LLM-FINOPS`, `RB-LLM-REPLAY`.
 
 #### 8.3.1 Runbook Index (informative)
 
@@ -497,7 +498,7 @@ ______________________________________________________________________
 **Failures & handling:** Missing evidence or residency attestations block activation; replay mismatches escalate via `RB-LLM-REPLAY`. **|**
 **Observability:** Metrics `llm_provider_activation_total`, `llm_replay_divergence_total`, CI parity tests. **|**
 **Breadcrumbs:** Provider onboarding scripts `ops/scripts/llm/onboard_provider.py`, parity verification tooling `scripts/ci/golden_set_jailbreak.sh`. **|**
-**References:** §2 Responsibilities, §4 State management, Settings spec §5. *
+**References:** §2 Responsibilities, §4 State management, Settings spec §5.
 
 - Provider migrations follow change tickets with parity evidence hash (`fallback.evidence_sha256`) and residency attestations.
 - Replay migrations compare envelope hashes and content fingerprints before promoting new defaults.
@@ -511,7 +512,7 @@ ______________________________________________________________________
 **Failures & handling:** Missed audits trigger `RB-LLM-JB` or `RB-LLM-FINOPS` follow-up; stale parity evidence blocks provider activation. **|**
 **Observability:** Metrics `llm_content_flagged_total`, `finops_mom_regression_flag`, dashboards “LLM Safety & Moderation”, “FinOps – LLM Cost & Circuit”. **|**
 **Breadcrumbs:** Audit scripts `ops/scripts/llm/run_golden_set.py`, moderation tuning playbooks, FinOps guard tooling. **|**
-**References:** §5 Failure modes, §4 State management, Notifications spec §2.3 (alert fan-out). *
+**References:** §5 Failure modes, §4 State management, Notifications spec §2.3 (alert fan-out).
 
 - Daily golden-set jobs review jailbreak, safety, and fairness results; failures halt releases pending remediation.
 - Weekly parity review ensures fallback chains still meet quality/residency/cost criteria; evidence hashed and archived.

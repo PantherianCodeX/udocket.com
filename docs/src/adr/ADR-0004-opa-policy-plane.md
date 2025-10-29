@@ -1,4 +1,4 @@
-# ADR-0005 — Open Policy Agent policy plane for residency & HIPAA enforcement
+# ADR-0004 — Open Policy Agent policy plane for residency & HIPAA enforcement
 
 - **Status:** Accepted
 - **Date:** 2025-10-12

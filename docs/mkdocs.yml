@@ -83,6 +83,6 @@ nav:
 - ADR:
   - Overview: adr/README.md
   - Guardian READY/QUARANTINED: adr/ADR-0001-guardian-ready-quarantine.md
-  - API Versioning & Sunset: adr/ADR-0003-api-versioning-and-sunset.md
-  - Localization & Policy Engine: adr/ADR-0004-localization-and-policy-engine.md
-  - OPA Policy Plane: adr/ADR-0005-opa-policy-plane.md
+  - API Versioning & Sunset: adr/ADR-0002-api-versioning-and-sunset.md
+  - Localization & Policy Engine: adr/ADR-0003-localization-and-policy-engine.md
+  - OPA Policy Plane: adr/ADR-0004-opa-policy-plane.md

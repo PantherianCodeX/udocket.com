@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -23,6 +24,7 @@ version: 0.2
 status: implementable
 classification: Confidential
 last_updated: 2025-10-30
+updated_by: Documentation Team
 owners:
   - Platform Engineering
 reviewers:
@@ -39,12 +41,13 @@ review_notes:
 ## Document controls
 
 | Field | Value |
-| ----- | ----- |
+| --- | --- |
 | Authors | Alice |
 | Version | 0.1 |
 | Status | provisional |
 | Classification | Internal |
 | Last updated | 2025-10-01 |
+| Updated by |  |
 | Owners | Platform |
 | Reviewers | Doc Guild |
 | Approvers | ASC |
@@ -118,6 +121,7 @@ def test_sync_updates_document_controls(tmp_path: Path) -> None:
     assert table["Status"] == "implementable"
     assert table["Classification"] == "Confidential"
     assert table["Last updated"] == "2025-10-30"
+    assert table["Updated by"] == "Documentation Team"
     assert table["Owners"] == "Platform Engineering"
     assert table["Reviewers"] == "Documentation Guild"
     assert table["Approvers"] == "Architecture Steering Committee"
@@ -137,6 +141,7 @@ version: 0.2
 status: implementable
 classification: Confidential
 last_updated: 2025-10-30
+updated_by: Documentation Team
 owners:
   - Platform Engineering
 reviewers:
@@ -153,12 +158,13 @@ review_notes:
 ## Document controls
 
 | Field | Value |
-| ----- | ----- |
+| --- | --- |
 | Authors | Alice; Bob |
 | Version | 0.2 |
 | Status | implementable |
 | Classification | Confidential |
 | Last updated | 2025-10-30 |
+| Updated by | Documentation Team |
 | Owners | Platform Engineering |
 | Reviewers | Documentation Guild |
 | Approvers | Architecture Steering Committee |
@@ -205,6 +211,7 @@ author: Alice
     table = _read_table(doc)
     assert table["Authors"] == "Alice"
     assert table["Version"] == ""
+    assert table["Updated by"] == ""
     assert "Approvers" in table
 
 
@@ -234,6 +241,7 @@ version: 0.2
 status: implementable
 classification: Confidential
 last_updated: 2025-10-30
+updated_by: Documentation Team
 owners:
   - Platform Engineering
 reviewers:
@@ -263,6 +271,7 @@ Body text.
     assert updated is True
     table = _read_table(doc)
     assert table["Reviewers"] == "Documentation Guild"
+    assert table["Updated by"] == "Documentation Team"
     assert "Approvers" in table
 
 
@@ -292,6 +301,9 @@ author: Alice
 def test_main_handles_no_targets(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
     monkeypatch.setattr(sdc, "parse_args", lambda: argparse.Namespace(paths=[Path("/nope")]))
     monkeypatch.setattr(sdc, "collect_targets", lambda paths: iter([]))
+    def _fail(*args: object, **kwargs: object) -> None:
+        raise AssertionError("should not run")
+    monkeypatch.setattr(sdc.subprocess, "run", _fail)
 
     rc = sdc.main()
 
@@ -305,6 +317,9 @@ def test_main_aborts_without_yaml(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
     monkeypatch.setattr(sdc, "parse_args", lambda: argparse.Namespace(paths=[doc]))
     monkeypatch.setattr(sdc, "collect_targets", lambda paths: iter([doc]))
     monkeypatch.setattr(doc_utils, "yaml", None)
+    def _fail(*args: object, **kwargs: object) -> None:
+        raise AssertionError("should not run")
+    monkeypatch.setattr(sdc.subprocess, "run", _fail)
 
     rc = sdc.main()
 
@@ -317,9 +332,38 @@ def test_main_runs_and_updates(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, 
     doc = _write_doc(tmp_path)
     monkeypatch.setattr(sdc, "parse_args", lambda: argparse.Namespace(paths=[doc]))
     monkeypatch.setattr(sdc, "collect_targets", lambda paths: iter([doc]))
+    calls: list[tuple[list[str], dict[str, object]]] = []
+
+    def _fake_run(cmd: list[str], **kwargs: object) -> SimpleNamespace:
+        calls.append((cmd, kwargs))
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(sdc.subprocess, "run", _fake_run)
 
     rc = sdc.main()
 
     captured = capsys.readouterr()
     assert rc == 0
+    assert calls and calls[0][0][2] == "--frontmatter"
+    assert calls[0][0][3] == str(doc.resolve())
+    assert calls[0][1]["cwd"] == str(sdc.ROOT_DIR)
     assert "completed (1 file(s) updated)" in captured.out
+
+
+def test_main_returns_failure_when_verification_fails(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    doc = _write_doc(tmp_path)
+    monkeypatch.setattr(sdc, "parse_args", lambda: argparse.Namespace(paths=[doc]))
+    monkeypatch.setattr(sdc, "collect_targets", lambda paths: iter([doc]))
+
+    def _fake_run(cmd: list[str], **kwargs: object) -> SimpleNamespace:
+        return SimpleNamespace(returncode=2)
+
+    monkeypatch.setattr(sdc.subprocess, "run", _fake_run)
+
+    rc = sdc.main()
+
+    captured = capsys.readouterr()
+    assert rc == 2
+    assert "verification via check_structure failed" in captured.err

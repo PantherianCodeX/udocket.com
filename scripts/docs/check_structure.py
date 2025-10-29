@@ -24,7 +24,6 @@ from __future__ import annotations
 import argparse
 import re
 import sys
-from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
@@ -40,37 +39,30 @@ TEMPLATE_NAME = "_template.md"
 HEADING_RE = re.compile(r"^(#{2,6})\s+(.*)")
 PREAMBLE_RE = re.compile(r"^\*\*(.+?):\*\*\s*(.*)$")
 DOCUMENT_CONTROLS_HEADER = "## Document Controls"
-FIELD_MAPPINGS: List[Tuple[str, str]] = [
-    ("Authors", "author"),
-    ("Version", "version"),
-    ("Status", "status"),
-    ("Classification", "classification"),
-    ("Last updated", "last_updated"),
-    ("Owners", "owners"),
-    ("Reviewers", "reviewers"),
-    ("Approvers", "approvers"),
-]
-OPTIONAL_CONTROL_FIELDS = {"Approved by", "Approved date"}
 EXCLUDED_FRONT_MATTER_KEYS = {
     "title",
     "subtitle",
     "header-includes",
-    "adr_index",
-    "related_adrs",
+}
+OPTIONAL_CONTROL_KEYS = {"approved_by", "approved_date"}
+
+REQUIRED_FRONT_MATTER_KEYS = {
+    "title",
+    "subtitle",
+    "authors",
+    "version",
+    "status",
+    "classification",
+    "last_updated",
+    "updated_by",
+    "owners",
+    "reviewers",
+    "approvers",
+    "approved_by",
+    "approved_date",
 }
 
-LABEL_NORMALISATION = {
-    "failure modes & handling": "Failures & handling",
-    "failure mode & handling": "Failures & handling",
-    "failures & handling": "Failures & handling",
-    "handling": "Failures & handling",
-    "purpose": "Purpose",
-    "contract": "Contract",
-    "state": "State",
-    "observability": "Observability",
-    "breadcrumbs": "Breadcrumbs",
-    "references": "References",
-}
+LOWERCASE_WORDS = {"and", "or", "the", "a", "an", "of", "in", "on", "for", "to", "with", "by"}
 
 
 @dataclass(frozen=True)
@@ -80,6 +72,92 @@ class SectionSpec:
     title: str
     preamble_order: Tuple[str, ...]
     preamble_requires_marker: Dict[str, bool]
+
+
+def normalize_key(value: str) -> str:
+    tokens = re.findall(r"[a-z0-9]+", value.lower())
+    return "_".join(token for token in tokens if token)
+
+
+def key_variants(raw_key: str) -> Tuple[str, ...]:
+    base = normalize_key(raw_key)
+    variants: List[str] = []
+    if base:
+        variants.append(base)
+        if base.endswith("s") and not base.endswith("ss"):
+            trimmed = base[:-1]
+            if trimmed:
+                variants.append(trimmed)
+        elif not base.endswith("s"):
+            variants.append(f"{base}s")
+    return tuple(dict.fromkeys(variants))
+
+
+def format_label(key: str) -> str:
+    parts = re.split(r"[_\s-]+", key.strip())
+    words: List[str] = []
+    for index, part in enumerate(parts):
+        if not part:
+            continue
+        lower = part.lower()
+        if index > 0 and lower in LOWERCASE_WORDS:
+            words.append(lower)
+        else:
+            words.append(part.capitalize())
+    return " ".join(words) if words else key
+
+
+def build_front_matter_index(front_matter: Dict[str, Any]) -> Dict[str, List[str]]:
+    index: Dict[str, List[str]] = {}
+    for key in front_matter:
+        primary = normalize_key(key)
+        variants = key_variants(key)
+        if primary and primary not in variants:
+            variants = (primary, *variants)
+        for variant in variants:
+            if not variant:
+                continue
+            index.setdefault(variant, []).append(key)
+    return index
+
+
+def find_section_header(lines: Sequence[str], header: str) -> int:
+    for idx, line in enumerate(lines):
+        if line.strip().lower() == header.lower():
+            return idx
+    raise ValueError(f"missing '{header}' section")
+
+
+def extract_table_rows(lines: Sequence[str], start_idx: int) -> List[str]:
+    rows: List[str] = []
+    idx = start_idx + 1
+    while idx < len(lines):
+        stripped = lines[idx].lstrip()
+        if stripped.startswith("|"):
+            break
+        idx += 1
+    while idx < len(lines):
+        stripped = lines[idx].lstrip()
+        if not stripped.startswith("|"):
+            break
+        rows.append(stripped)
+        idx += 1
+    return rows
+
+
+def parse_table(rows: Sequence[str]) -> Tuple[str, str, List[Tuple[str, str]]]:
+    if len(rows) < 2:
+        raise ValueError("document controls table incomplete")
+    header_row = rows[0]
+    separator_row = rows[1]
+    data: List[Tuple[str, str]] = []
+    for raw in rows[2:]:
+        cells = [cell.strip() for cell in raw.strip().strip("|").split("|")]
+        if len(cells) < 2:
+            continue
+        field, value = cells[0], cells[1]
+        data.append((field, value))
+    return header_row, separator_row, data
 
 
 def parse_args() -> argparse.Namespace:
@@ -96,6 +174,11 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=None,
         help="Override `_template.md` path (defaults to nearest ancestor of first target)",
+    )
+    parser.add_argument(
+        "--frontmatter",
+        action="store_true",
+        help="Only validate front matter and document controls",
     )
     return parser.parse_args()
 
@@ -157,7 +240,7 @@ def gather_preamble(lines: Sequence[str], start_idx: int) -> List[Tuple[int, str
         if not m:
             break
         label_raw, body = m.groups()
-        label = LABEL_NORMALISATION.get(label_raw.lower(), label_raw)
+        label = label_raw.strip()
         entries.append((idx, label, body.strip()))
         idx += 1
     return entries
@@ -175,6 +258,44 @@ def build_template_spec(template_path: Path) -> List[SectionSpec]:
             marker_map[label] = body.endswith("**|**")
         specs.append(SectionSpec(numbering, level, title, order, marker_map))
     return specs
+
+
+def ensure_template_requirements(template_path: Path) -> None:
+    lines = template_path.read_text(encoding="utf-8").splitlines()
+    front_matter = doc_utils.parse_front_matter(lines)
+    if not front_matter:
+        raise RuntimeError(f"{template_path}: template missing usable front matter")
+    index = build_front_matter_index(front_matter)
+    missing_keys = sorted(key for key in REQUIRED_FRONT_MATTER_KEYS if key not in index)
+    if missing_keys:
+        joined = ", ".join(missing_keys)
+        raise RuntimeError(f"{template_path}: front matter missing required keys: {joined}")
+
+    try:
+        header_idx = find_section_header(lines, DOCUMENT_CONTROLS_HEADER)
+    except ValueError as exc:  # pragma: no cover - template must always comply
+        raise RuntimeError(f"{template_path}: {exc}") from exc
+
+    rows = extract_table_rows(lines, header_idx)
+    if len(rows) < 2:
+        raise RuntimeError(f"{template_path}: document controls table incomplete")
+    header_row, _, table_data = parse_table(rows)
+    if "Field" not in header_row or "Value" not in header_row:
+        raise RuntimeError(f"{template_path}: document controls header must contain 'Field' and 'Value'")
+
+    label_keys: set[str] = set()
+    for label, _ in table_data:
+        normalized = normalize_key(label)
+        label_keys.add(normalized)
+        label_keys.update(key_variants(normalized))
+    excluded = {normalize_key(key) for key in EXCLUDED_FRONT_MATTER_KEYS}
+    required_controls = [key for key in REQUIRED_FRONT_MATTER_KEYS if key not in excluded]
+    missing_controls = [key for key in required_controls if key not in label_keys]
+    if missing_controls:
+        formatted = ", ".join(format_label(key) for key in missing_controls)
+        raise RuntimeError(
+            f"{template_path}: document controls table missing required rows for: {formatted}"
+        )
 
 
 def walk_targets(paths: Iterable[Path]) -> Iterator[Path]:
@@ -196,92 +317,99 @@ def walk_targets(paths: Iterable[Path]) -> Iterator[Path]:
             if resolved.name != TEMPLATE_NAME and resolved not in seen:
                 seen.add(resolved)
                 yield resolved
-def _expected_control_fields(front_matter: Dict[str, Any]) -> Tuple["OrderedDict[str, str]", "OrderedDict[str, str]"]:
-    base: "OrderedDict[str, str]" = OrderedDict()
-    for label, key in FIELD_MAPPINGS:
-        base[label] = doc_utils.stringify(front_matter.get(key, ""))
-    base["Approved by"] = doc_utils.stringify(front_matter.get("approved_by", ""))
-    base["Approved date"] = doc_utils.stringify(front_matter.get("approved_date", ""))
-
-    base_keys = {key for _, key in FIELD_MAPPINGS}
-    base_keys.update({"approved_by", "approved_date"})
-    additional: "OrderedDict[str, str]" = OrderedDict()
-    for key, value in front_matter.items():
-        if key in base_keys or key in EXCLUDED_FRONT_MATTER_KEYS:
-            continue
-        label = key.replace("_", " ").replace("-", " ").title()
-        additional[label] = doc_utils.stringify(value)
-    return base, additional
-
-
 def check_document_controls(path: Path, lines: Sequence[str]) -> List[str]:
     errors: List[str] = []
     front_matter = doc_utils.parse_front_matter(lines)
+    if not front_matter:
+        errors.append(f"{path}: missing or invalid YAML front matter")
+        return errors
+
+    front_index = build_front_matter_index(front_matter)
+    missing_required = [key for key in REQUIRED_FRONT_MATTER_KEYS if key not in front_index]
+    if missing_required:
+        errors.append(
+            f"{path}: front matter missing required keys: "
+            f"{', '.join(format_label(key) for key in missing_required)}"
+        )
+
     try:
-        header_idx = next(i for i, line in enumerate(lines) if line.strip().lower() == DOCUMENT_CONTROLS_HEADER.lower())
-    except StopIteration:
+        header_idx = find_section_header(lines, DOCUMENT_CONTROLS_HEADER)
+    except ValueError:
         errors.append(f"{path}: missing '{DOCUMENT_CONTROLS_HEADER}' section")
         return errors
 
-    rows: List[str] = []
-    idx = header_idx + 1
-    while idx < len(lines) and not lines[idx].strip():
-        idx += 1
-    while idx < len(lines) and lines[idx].startswith("|"):
-        rows.append(lines[idx])
-        idx += 1
-
-    if len(rows) < 3:
+    rows = extract_table_rows(lines, header_idx)
+    if len(rows) < 2:
         errors.append(f"{path}: document controls table incomplete")
         return errors
 
-    header = rows[0]
-    if "Field" not in header or "Value" not in header:
+    try:
+        header_row, _, table_data = parse_table(rows)
+    except ValueError as exc:
+        errors.append(f"{path}: {exc}")
+        return errors
+
+    if "Field" not in header_row or "Value" not in header_row:
         errors.append(f"{path}: document controls table missing 'Field'/'Value' header")
 
-    fields_present: Dict[str, str] = {}
-    for row in rows[2:]:  # skip header and separator
-        cells = [cell.strip() for cell in row.strip().strip("|").split("|")]
-        if len(cells) < 2:
+    table_map: Dict[str, Tuple[str, str]] = {}
+    duplicates: List[str] = []
+    for label, value in table_data:
+        normalized = normalize_key(label)
+        if normalized in table_map:
+            duplicates.append(label)
             continue
-        field, value = cells[0], cells[1]
-        fields_present[field] = value
+        table_map[normalized] = (label, value)
+    if duplicates:
+        joined = ", ".join(duplicates)
+        errors.append(f"{path}: document controls contains duplicate fields: {joined}")
 
-    base_fields, additional_fields = _expected_control_fields(front_matter or {})
-    expected_map: "OrderedDict[str, str]" = OrderedDict()
-    expected_map.update(base_fields)
-    expected_map.update(additional_fields)
-
-    for field in base_fields:
-        if field not in fields_present:
-            errors.append(f"{path}: document controls missing field '{field}'")
-    if front_matter:
-        for label, key in FIELD_MAPPINGS:
-            if not doc_utils.stringify(front_matter.get(key, "")).strip():
-                errors.append(f"{path}: front matter missing '{label}' value")
-    for field, expected in additional_fields.items():
-        if expected.strip() and field not in fields_present:
-            errors.append(f"{path}: document controls missing field '{field}'")
-
-    for field, expected in expected_map.items():
-        if field not in fields_present:
+    excluded = {normalize_key(item) for item in EXCLUDED_FRONT_MATTER_KEYS}
+    matched_labels: set[str] = set()
+    for key, value in front_matter.items():
+        normalized_key = normalize_key(key)
+        if normalized_key in excluded:
             continue
-        value = fields_present[field].strip()
-        expected_clean = expected.strip()
-        if expected_clean and value != expected_clean:
-            errors.append(
-                f"{path}: document controls field '{field}' value '{value}' does not match front matter '{expected_clean}'"
-            )
-        if not expected_clean and field not in OPTIONAL_CONTROL_FIELDS and value:
-            errors.append(
-                f"{path}: document controls field '{field}' contains '{value}' but front matter is blank"
-            )
-        if expected_clean and not value and field not in OPTIONAL_CONTROL_FIELDS:
-            errors.append(f"{path}: document controls field '{field}' must not be empty")
 
-    for field in fields_present:
-        if field not in expected_map and field not in OPTIONAL_CONTROL_FIELDS:
-            errors.append(f"{path}: document controls has unexpected field '{field}'")
+        expected = doc_utils.stringify(value).strip()
+        if not expected and normalized_key not in OPTIONAL_CONTROL_KEYS:
+            errors.append(f"{path}: front matter key '{key}' must not be empty")
+
+        variants = key_variants(key)
+        match: Optional[Tuple[str, str]] = None
+        match_norm: Optional[str] = None
+        for variant in variants:
+            if variant in table_map:
+                match_norm = variant
+                match = table_map[variant]
+                break
+
+        if match is None:
+            errors.append(f"{path}: document controls missing field '{format_label(key)}'")
+            continue
+
+        matched_labels.add(match_norm or normalize_key(match[0]))
+        label, present_value = match
+        actual_value = present_value.strip()
+
+        if expected and not actual_value:
+            errors.append(f"{path}: document controls field '{label}' must not be empty")
+        elif not expected and actual_value:
+            errors.append(
+                f"{path}: document controls field '{label}' contains '{actual_value}' but front matter is blank"
+            )
+        elif expected and actual_value and expected != actual_value:
+            errors.append(
+                f"{path}: document controls field '{label}' value '{actual_value}' does not match front matter '{expected}'"
+            )
+
+    optional_labels = OPTIONAL_CONTROL_KEYS
+    for normalized, (label, _) in table_map.items():
+        if normalized in matched_labels:
+            continue
+        if normalized in optional_labels:
+            continue
+        errors.append(f"{path}: document controls has unexpected field '{label}'")
 
     return errors
 
@@ -328,8 +456,6 @@ def validate_sections(path: Path, template_specs: List[SectionSpec], lines: Sequ
 
         # Enforce title case (excluding suffix) for headings
         def _is_title_case(text: str) -> bool:
-            lowercase_allowed = {"and", "or", "the", "a", "an", "of", "in", "on", "for", "to", "with", "by"}
-
             words = [word for word in text.split() if word]
             for index, word in enumerate(words):
                 if word[0].isdigit():
@@ -339,7 +465,7 @@ def validate_sections(path: Path, template_specs: List[SectionSpec], lines: Sequ
                     continue
                 if cleaned.isupper():
                     continue
-                if index > 0 and cleaned.lower() in lowercase_allowed:
+                if index > 0 and cleaned.lower() in LOWERCASE_WORDS:
                     continue
                 if not cleaned[0].isupper():
                     return False
@@ -395,21 +521,30 @@ def main() -> int:
         print("No markdown targets found.", file=sys.stderr)
         return 1
 
-    template_path = find_template(targets[0], args.template)
-    template_specs = build_template_spec(template_path)
+    template_specs: List[SectionSpec] = []
+    if args.frontmatter:
+        template_path = None
+    else:
+        template_path = find_template(targets[0], args.template)
+        ensure_template_requirements(template_path)
+        template_specs = build_template_spec(template_path)
 
     issues: List[str] = []
     for target in targets:
         lines = target.read_text(encoding="utf-8").splitlines()
         issues.extend(check_document_controls(target, lines))
-        issues.extend(validate_sections(target, template_specs, lines))
+        if not args.frontmatter:
+            issues.extend(validate_sections(target, template_specs, lines))
 
     if issues:
         for issue in issues:
             print(issue)
         return 1
 
-    print("All service specifications comply with the template.")
+    if args.frontmatter:
+        print("All documents have synced front matter and document controls.")
+    else:
+        print("All service specifications comply with the template.")
     return 0
 
 

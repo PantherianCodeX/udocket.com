@@ -10,7 +10,7 @@
 **Failures & handling:** Stale runbooks or missing drill evidence block release sign-off until refreshed. **|**
 **Observability:** Docs lint, PagerDuty analytics, Ops governance dashboards. **|**
 **Breadcrumbs:** Runbook files, rotation scripts, drill tracker. **|**
-**References:** `RB-SIGN-TSA`, `RB-SIGN-FIPS`, `RB-SIGN-ACK`, `RB-SIGN-TRUSTROTATE`. *
+**References:** `RB-SIGN-TSA`, `RB-SIGN-FIPS`, `RB-SIGN-ACK`, `RB-SIGN-TRUSTROTATE`.
 
 ### Digital Signer — 8.3.1 Runbook Index (informative)
 
@@ -368,7 +368,7 @@ The catalog enumerates each runbook with owner, verification cadence, and Ops ca
 **Failures & handling:** Missing or stale steps block deployment sign-off; responders raise follow-up tasks to refresh runbooks before closing incidents. **|**
 **Observability:** Post-incident retros, quarterly tabletop exercises, and docs lint verify runbook coverage. **|**
 **Breadcrumbs:** Runbooks `ops/runbooks/settings/*.md`, automation scripts under `ops/scripts/settings/`, tests `tests/platform/settings/test_runbook_integrity.py`. **|**
-**References:** §5 Failure modes, §8.1 Operational posture, Appendix B metrics, ADR-0004. *
+**References:** §5 Failure modes, §8.1 Operational posture, Appendix B metrics, ADR-0003. *
 
 ### Settings Registry — 8.3.1 Runbook Index (informative)
 
