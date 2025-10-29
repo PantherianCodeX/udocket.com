@@ -81,22 +81,25 @@
       if (img.complete) sizeToViewport();
       else img.addEventListener('load', function onload() { img.removeEventListener('load', onload); sizeToViewport(); });
 
-      container.addEventListener(
-        'wheel',
-        function (event) {
-          if (event.ctrlKey) {
-            return;
-          }
-          event.preventDefault();
-          var rect = img.getBoundingClientRect();
-          var focal = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+      var root = container.closest('.glightbox-container') || document.body;
+      var updateZoomed = function () {
+        var s = panzoom.getScale();
+        if (s > 1.01) root.classList.add('glb-zoomed'); else root.classList.remove('glb-zoomed');
+      };
+
+      container.addEventListener('wheel', function (event) {
+        if (event.ctrlKey) return;
+        event.preventDefault();
+        try {
+          panzoom.zoomWithWheel(event, { step: SCALE_STEP, maxScale: MAX_SCALE, minScale: MIN_SCALE, animate: false });
+        } catch (e) {
           var scale = panzoom.getScale();
-          var direction = event.deltaY < 0 ? 1 : -1;
-          var targetScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, scale + direction * SCALE_STEP));
-          panzoom.zoom(targetScale, { animate: false, focal: focal });
-        },
-        { passive: false }
-      );
+          var dir = event.deltaY < 0 ? 1 : -1;
+          var target = Math.max(MIN_SCALE, Math.min(MAX_SCALE, scale + dir * SCALE_STEP));
+          panzoom.zoom(target, { animate: false, focal: { clientX: event.clientX, clientY: event.clientY } });
+        }
+        updateZoomed();
+      }, { passive: false });
 
       container.addEventListener('pointerdown', function () {
         img.classList.add('is-panning');
@@ -117,6 +120,7 @@
           focal: { clientX: event.clientX, clientY: event.clientY }
         });
         if (targetScale === 1) sizeToViewport();
+        updateZoomed();
       });
     }
 
